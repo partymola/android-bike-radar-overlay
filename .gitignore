@@ -1,0 +1,23 @@
+# Build / IDE artefacts
+.gradle/
+.gradle-cache/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+.DS_Store
+debug.keystore
+
+# Android captures + radar log files
+captures/
+
+# Local-only working directory for drafts, ride annotations, and
+# research. Not part of the public repo.
+notes/
+
+# Local-only reference material and tooling outputs that must never
+# enter git history.
+*.java
+do-not-commit/

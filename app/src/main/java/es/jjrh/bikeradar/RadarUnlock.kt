@@ -51,6 +51,7 @@ object RadarUnlock {
         // 2f11 (SETTINGS_ACK) INDICATE — WRITE_REQ to 2f11 returns 0xFD without it.
         if (!subscribeCccd(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_RX, clog)) return false
         if (!subscribeCccd(gatt, queue, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK, clog)) return false
+        delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
         // Battery read + CCCD subscribe. Without this the radar stays in
         // legacy V1 mode after a successful AMV handshake.
@@ -65,7 +66,7 @@ object RadarUnlock {
             it.size >= 2 && it[1].toInt() == 0x06
         }
         if (rOpen == null) { clog("ABORT: AMV open reply never arrived"); return false }
-        delay(60)
+        delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
         // AMV cmd 04 — reply carries enumerate prefix at byte 13.
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "00000000000000414d56040000")

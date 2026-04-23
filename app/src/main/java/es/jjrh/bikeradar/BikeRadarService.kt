@@ -17,7 +17,10 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.pm.ServiceInfo
@@ -73,6 +76,48 @@ class BikeRadarService : Service() {
     private var radarJob: Job? = null
     @Volatile var radarGattActive = false
 
+    // MAC currently being driven by the radar link, exposed so the bond-state
+    // receiver can match the right device. Null when no link is active.
+    @Volatile private var currentRadarMac: String? = null
+
+    // True when the user un-paired the radar in system settings. The reconnect
+    // loop in runRadarConnection bails out instead of looping forever; cleared
+    // when the user re-pairs (next bond state == BONDED) or restarts the app.
+    @Volatile private var bondLost = false
+
+    // Last time the V2 stream produced a frame, set inside the decode loop and
+    // read by the watchdog. 0 means no frame has been seen yet on this link.
+    @Volatile private var lastV2FrameMs: Long = 0L
+
+    // Set true when the current connection reaches the V2 decode loop. Read
+    // by runRadarConnection after connectAndRun returns to decide whether to
+    // reset the reconnect backoff.
+    @Volatile private var lastConnectionReachedDecode = false
+
+    private var bondReceiverRegistered = false
+    private val bondReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            else
+                @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            val mac = device?.address ?: return
+            val expected = currentRadarMac ?: return
+            if (!mac.equals(expected, ignoreCase = true)) return
+            val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+            when (state) {
+                BluetoothDevice.BOND_NONE -> onRadarBondLost(mac)
+                BluetoothDevice.BOND_BONDED -> {
+                    if (bondLost) {
+                        Log.i(TAG_RADAR, "radar re-paired ($mac); allowing reconnect")
+                        bondLost = false
+                    }
+                }
+            }
+        }
+    }
+
     // Overlay refs for orientation change updates (set/cleared on Main thread)
     @Volatile private var overlayWm: WindowManager? = null
     @Volatile private var overlayViewRef: RadarOverlayView? = null
@@ -100,6 +145,7 @@ class BikeRadarService : Service() {
         pruneCaptureLogs()
         schedulePauseExpiry()
         registerEventScan()
+        registerBondReceiver()
         scope.launch { kickstartFromCache() }
     }
 
@@ -127,6 +173,7 @@ class BikeRadarService : Service() {
         super.onDestroy()
         pauseExpiryJob?.cancel()
         unregisterEventScan()
+        unregisterBondReceiver()
         closeCaptureLog()
         RadarStateBus.clear()
         scope.cancel()
@@ -321,8 +368,68 @@ class BikeRadarService : Service() {
 
     // ── radar link ────────────────────────────────────────────────────────────
 
+    private fun registerBondReceiver() {
+        if (bondReceiverRegistered) return
+        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(bondReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(bondReceiver, filter)
+        }
+        bondReceiverRegistered = true
+    }
+
+    private fun unregisterBondReceiver() {
+        if (!bondReceiverRegistered) return
+        try { unregisterReceiver(bondReceiver) } catch (_: Throwable) {}
+        bondReceiverRegistered = false
+    }
+
+    /**
+     * Called when the radar's bond is removed in system Bluetooth settings.
+     * Stops the reconnect loop (which would otherwise spin forever against a
+     * peer that will refuse the LESC handshake) and posts a notification so
+     * the user knows why the link went silent.
+     */
+    private fun onRadarBondLost(mac: String) {
+        Log.w(TAG_RADAR, "radar bond removed ($mac); stopping reconnect loop")
+        bondLost = true
+        radarJob?.cancel()
+        radarJob = null
+        radarGattActive = false
+        currentRadarMac = null
+        notifyBondLost()
+    }
+
+    private fun notifyBondLost() {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        ensureNotificationChannel()
+        val piFlags = if (Build.VERSION.SDK_INT >= 23)
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        val openSettings = PendingIntent.getActivity(
+            this, BOND_NOTIF_REQ,
+            Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            piFlags,
+        )
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Bike Radar")
+            .setContentText("Radar pairing was removed. Re-pair in Bluetooth settings to resume.")
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openSettings)
+            .build()
+        nm.notify(NOTIF_BOND_LOST_ID, notif)
+    }
+
     private fun maybeStartRadarLink(name: String, mac: String) {
         if (radarJob?.isActive == true) return
+        if (bondLost) {
+            Log.d(TAG_RADAR, "skip radar link start: bond lost, waiting for re-pair")
+            return
+        }
         Log.i(TAG_RADAR, "starting radar link to $name $mac")
         radarJob = scope.launch { runRadarConnection(mac, name) }
     }
@@ -357,14 +464,44 @@ class BikeRadarService : Service() {
             btMgr.adapter?.getRemoteDevice(mac)
         } catch (_: Throwable) { null } ?: return
 
-        while (true) {
-            Log.i(TAG_RADAR, "connect attempt to $name $mac")
-            val quickReconnect = connectAndRun(device, name)
-            radarGattActive = false
-            RadarStateBus.clear()
-            val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else RADAR_RECONNECT_MS
-            Log.i(TAG_RADAR, "reconnecting in ${delayMs}ms" + if (quickReconnect) " (post-ABORT)" else "")
-            kotlinx.coroutines.delay(delayMs)
+        currentRadarMac = mac
+        var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+        try {
+            while (true) {
+                if (bondLost) {
+                    Log.i(TAG_RADAR, "bond lost for $mac; reconnect loop suspended")
+                    return
+                }
+                Log.i(TAG_RADAR, "connect attempt to $name $mac")
+                lastConnectionReachedDecode = false
+                val quickReconnect = connectAndRun(device, name)
+                radarGattActive = false
+                RadarStateBus.clear()
+                if (bondLost) {
+                    Log.i(TAG_RADAR, "bond lost during attempt; exiting reconnect loop")
+                    return
+                }
+                if (lastConnectionReachedDecode) {
+                    // Healthy session — reset the backoff so the next reconnect
+                    // is fast.
+                    backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+                }
+                val delayMs = when {
+                    quickReconnect -> RADAR_QUICK_RECONNECT_MS
+                    else -> backoffMs
+                }
+                val tag = when {
+                    quickReconnect -> " (post-ABORT)"
+                    else -> " (backoff=${backoffMs}ms)"
+                }
+                Log.i(TAG_RADAR, "reconnecting in ${delayMs}ms$tag")
+                kotlinx.coroutines.delay(delayMs)
+                if (!quickReconnect) {
+                    backoffMs = (backoffMs * 2).coerceAtMost(RADAR_RECONNECT_BACKOFF_MAX_MS)
+                }
+            }
+        } finally {
+            currentRadarMac = null
         }
     }
 
@@ -375,6 +512,7 @@ class BikeRadarService : Service() {
         val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
         var gatt: BluetoothGatt? = null
         var overlayJob: Job? = null
+        var watchdogJob: Job? = null
         var cacheRefreshed = false
 
         val cb = object : BluetoothGattCallback() {
@@ -580,9 +718,35 @@ class BikeRadarService : Service() {
             val v2Dec = RadarV2Decoder()
             var v2FrameCount = 0
 
+            // Mark this connection as healthy so the reconnect loop resets
+            // its backoff. Initialise the watchdog clock to "now" so we give
+            // the first frame a fair chance to arrive.
+            lastConnectionReachedDecode = true
+            lastV2FrameMs = System.currentTimeMillis()
+
+            // Data-flow watchdog: if no V2 frame arrives for V2_FRAME_STALL_MS,
+            // tear down the GATT so the outer loop can reconnect. Catches the
+            // case where the stack thinks we are still connected but the radar
+            // has gone silent.
+            val capturedGatt = gatt
+            watchdogJob = scope.launch {
+                while (true) {
+                    delay(V2_WATCHDOG_TICK_MS)
+                    val last = lastV2FrameMs
+                    if (last == 0L) continue
+                    val ageMs = System.currentTimeMillis() - last
+                    if (ageMs > V2_FRAME_STALL_MS) {
+                        Log.w(TAG_RADAR, "V2 stream silent for ${ageMs}ms; tearing down GATT")
+                        try { capturedGatt.disconnect() } catch (_: Throwable) {}
+                        return@launch
+                    }
+                }
+            }
+
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.RADAR_V2 -> {
+                        lastV2FrameMs = System.currentTimeMillis()
                         if (v2FrameCount++ == 0) Log.i(TAG_RADAR, "first V2 frame: ${bytes.toHex()}")
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
@@ -597,6 +761,7 @@ class BikeRadarService : Service() {
             }
             false
         } finally {
+            watchdogJob?.cancel()
             overlayJob?.cancel()
             queue.cancel()
             queueJob.cancel()
@@ -856,6 +1021,8 @@ class BikeRadarService : Service() {
         private const val TAG_RADAR = "BikeRadar.Radar"
         const val CHANNEL_ID = "bike_radar_min"
         const val NOTIF_ID = 1
+        const val NOTIF_BOND_LOST_ID = 2
+        private const val BOND_NOTIF_REQ = 0xB1CE
         private const val PREFS_THROTTLE = "bike_radar_throttle"
         private const val KEY_KNOWN = "known_devices"
         private const val KEY_LAST_TS = "last_ts"
@@ -870,8 +1037,20 @@ class BikeRadarService : Service() {
 
         const val THROTTLE_MS = 5 * 60 * 1000L
         const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
-        const val RADAR_RECONNECT_MS = 5_000L
+
+        // Reconnect backoff: starts fast, doubles on each consecutive failure,
+        // caps at 8 s. Resets to the initial value once a connection reaches
+        // the V2 decode loop. Quick-reconnect (post-handshake-ABORT) bypasses
+        // backoff entirely.
+        const val RADAR_RECONNECT_BACKOFF_INITIAL_MS = 1_000L
+        const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
         const val RADAR_QUICK_RECONNECT_MS = 1_500L
+
+        // V2 data-flow watchdog: if no V2 notification has been observed for
+        // V2_FRAME_STALL_MS, the link is considered stuck and the GATT is
+        // torn down so the outer loop reconnects.
+        const val V2_WATCHDOG_TICK_MS = 2_000L
+        const val V2_FRAME_STALL_MS = 5_000L
         const val BATTERY_HA_HEARTBEAT_MS = 5 * 60 * 1000L
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
         const val MAX_CAPTURE_LOGS = 500

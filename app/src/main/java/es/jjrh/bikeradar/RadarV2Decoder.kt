@@ -76,12 +76,6 @@ class RadarV2Decoder(
         val staleMs: Long,
         val speedRefRangeY: Float,
         val speedRefTs: Long,
-        /** False until the radar has ever emitted a non-(0,0) template on
-         *  bytes [5]/[6] for this tid. Unlocked tracks are still ingested so
-         *  stale-prune works, but are suppressed from snapshots — they are
-         *  the dominant source of false phantom renders (tid 0x89 on the
-         *  2026-04-21 capture spent its entire 8-frame life unlocked). */
-        val locked: Boolean,
         /** VehicleSize currently committed to the overlay. Upgrades apply
          *  immediately; downgrades require [DOWNGRADE_FRAMES] consecutive
          *  frames at the smaller size. Prevents mid-overtake box-size flips
@@ -89,12 +83,6 @@ class RadarV2Decoder(
         val committedSize: VehicleSize,
         val downgradeCandidate: VehicleSize?,
         val downgradeFrames: Int,
-        /** Consecutive negative-sign byte[2] frames seen but not yet
-         *  committed to isBehind=true. Entering isBehind is debounced by
-         *  [BEHIND_ENTRY_FRAMES]; exiting is instant on any positive-sign
-         *  frame. Protects against firmware edge-oscillation when a
-         *  target paces the bike at distance≈0. */
-        val pendingBehindFrames: Int = 0,
     )
 
     private val tracks = HashMap<Int, Track>()
@@ -124,9 +112,6 @@ class RadarV2Decoder(
             val off = HEADER_SIZE + i * TARGET_SIZE
             val tid = payload[off].toInt() and 0xFF
 
-            val b5 = payload[off + 5].toInt() and 0xFF
-            val b6 = payload[off + 6].toInt() and 0xFF
-
             // 24-bit little-endian packed range field over bytes [2..4]:
             //   bits 0..10  = rangeX (11-bit signed, x0.1 m, -204.8..+204.7 m)
             //   bits 11..23 = rangeY (13-bit signed, x0.1 m, -409.6..+409.5 m)
@@ -149,23 +134,16 @@ class RadarV2Decoder(
             // matching the prior decoder's filter semantics: filtered out of
             // overlay + alert paths because the rear radar can't reliably
             // track once a target is in front.
-            val signSaysAhead = rangeYSigned < 0f
-            val newPendingBehindFrames =
-                if (signSaysAhead) (prev?.pendingBehindFrames ?: 0) + 1 else 0
-            val isBehind = signSaysAhead && newPendingBehindFrames >= BEHIND_ENTRY_FRAMES
+            val isBehind = rangeYSigned < 0f
 
-            val rangeY = kotlin.math.abs(rangeYSigned)
+            val rangeY = abs(rangeYSigned)
             val effectiveDistance = rangeY.roundToInt()
             val rangeX = rangeXSigned
 
             val rawSpeedMs: Int
             val newRefRangeY: Float
             val newRefTs: Long
-            // Transitioning from an in-front zone to behind (or vice versa)
-            // makes frame-to-frame rangeY delta meaningless for velocity,
-            // so reset the speed reference at the crossover.
-            val sideFlipped = prev != null && prev.vehicle.isBehind != isBehind
-            if (prev == null || sideFlipped) {
+            if (prev == null) {
                 rawSpeedMs = 0
                 newRefRangeY = rangeY
                 newRefTs = now
@@ -197,9 +175,6 @@ class RadarV2Decoder(
 
             val stale = if (abs(speedMs) > MOVING_SPEED_MS) STALE_MOVING_MS else STALE_PARKED_MS
 
-            val frameLocked = b5 != 0 || b6 != 0
-            val locked = prev?.locked == true || frameLocked
-
             val debounced = debounceSize(prev, rawSize)
 
             tracks[tid] = Track(
@@ -215,11 +190,9 @@ class RadarV2Decoder(
                 staleMs = stale,
                 speedRefRangeY = newRefRangeY,
                 speedRefTs = newRefTs,
-                locked = locked,
                 committedSize = debounced.committed,
                 downgradeCandidate = debounced.candidate,
                 downgradeFrames = debounced.frames,
-                pendingBehindFrames = newPendingBehindFrames,
             )
             changed = true
         }
@@ -270,7 +243,6 @@ class RadarV2Decoder(
     private fun snapshot(now: Long): RadarState =
         RadarState(
             vehicles = tracks.values
-                .filter { it.locked }
                 .map { it.vehicle }
                 .sortedBy { it.distanceM },
             timestamp = now,
@@ -310,6 +282,5 @@ class RadarV2Decoder(
         /** Consecutive frames required at a smaller size before committing a
          *  downgrade. ~90 ms per frame observed, so 5 ~= 450 ms. */
         const val DOWNGRADE_FRAMES = 5
-        const val BEHIND_ENTRY_FRAMES = 2
     }
 }

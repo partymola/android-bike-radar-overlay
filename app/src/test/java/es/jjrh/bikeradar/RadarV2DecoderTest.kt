@@ -10,18 +10,16 @@ import org.junit.Test
 
 /**
  * Unit tests for RadarV2Decoder. Packet byte layout (9 bytes per target):
- *   [0] tid uint8
- *   [1] class uint8  (16=CLASS_LOW=BIKE, 36=CLASS_HIGH=TRUCK, else CAR)
- *   [2] rangeY int8   x0.1m, signed: positive = ahead, negative = behind.
- *                     Magnitude × 0.1 = distance, max 12.7 m. (Agent C
- *                     decoder; see decoder-audit-2026-04-22.md.)
- *   [3] bits 0..2: redundant lagged sign flag for b2 (not consulted).
- *       bits 3..7: chirp / sub-frame counter; not decoded.
- *   [4] rangeX int8   x0.1m (positive = right)
- *   [5] length class template (not decoded)
- *   [6] width class template (not decoded)
- *   [7] speedY int8   x0.5 m/s (negative = approaching)
- *   [8] 0x80 sentinel
+ *   [0]    tid uint8
+ *   [1]    class uint8  (16=CLASS_LOW=BIKE, 36=CLASS_HIGH=TRUCK, else CAR)
+ *   [2..4] 24-bit packed range field (little-endian):
+ *            bits 0..10  = rangeX (11-bit signed, x0.1 m)
+ *            bits 11..23 = rangeY (13-bit signed, x0.1 m)
+ *          Positive rangeY = behind the bike (rear radar typical case).
+ *   [5]    length class template
+ *   [6]    width class template
+ *   [7]    speedY int8   x0.5 m/s (negative = approaching)
+ *   [8]    speedX int8   x0.5 m/s, 0x80 sentinel = no lateral velocity
  *
  * Header bytes prepended to all target packets: 0x02 0x00 (non-status, non-device-status).
  */
@@ -60,8 +58,7 @@ class RadarV2DecoderTest {
     }
 
     @Test fun statusFramePrunesStaleMovingTrack() {
-        // Two positive-s8 frames to establish a moving forward track without
-        // tripping the isBehind side-flip (which would reset the speed ref).
+        // Two positive-rangeY frames to establish a moving track.
         decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
         now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
         // 10.0 m -> 5.0 m over ~200ms -> ~25 m/s closing -> STALE_MOVING_MS window.
@@ -74,8 +71,8 @@ class RadarV2DecoderTest {
     // ── stale-window logic ───────────────────────────────────────────────────
 
     @Test fun movingTrackDropsAfterShortWindow() {
-        // Two positive-s8 frames (no isBehind side-flip) so the speed ref
-        // accumulates and classifies the track as moving.
+        // Two positive-rangeY frames so the speed ref accumulates and
+        // classifies the track as moving.
         decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
         now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
         // 10.0 m -> 5.0 m over ~200ms -> ~25 m/s closing
@@ -155,77 +152,67 @@ class RadarV2DecoderTest {
         assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
-    // ── Agent C distance encoding (signed int8 byte[2]) ──────────────────────
+    // ── distance / sign encoding ─────────────────────────────────────────────
 
-    @Test fun b2PositiveDecodesAsMagnitudeTimes01() {
+    @Test fun positiveRangeYIsBehindTheBike() {
+        // Positive rangeY = target behind the bike (rear radar typical case).
         val state = decoder.feed(packet(target(tid = 1, rangeY = 10)))
         assertEquals(1, state!!.vehicles.single().distanceM)
-        assertFalse(state.vehicles.single().isBehind)
+        assertFalse("positive rangeY must not be flagged isBehind (post-overtake)",
+            state.vehicles.single().isBehind)
     }
 
-    @Test fun b2NegativeDecodesAsBehindAtMagnitude() {
-        // b2=200 (s8=-56) → 5.6 m behind. Needs 2 frames for isBehind commit.
-        decoder.feed(packet(target(tid = 1, rangeY = 200)))
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 200)))
+    @Test fun negativeRangeYIsAheadAfterOvertake() {
+        // Negative rangeY = target has passed the bike and is now in front.
+        // isBehind flips on a single frame (no debounce).
+        val state = decoder.feed(packet(target(tid = 1, rangeY = -56)))
         val v = state!!.vehicles.single()
         assertEquals(6, v.distanceM)
-        assertTrue(v.isBehind)
+        assertTrue("negative rangeY must flag isBehind on first frame", v.isBehind)
     }
 
-    @Test fun behindZoneRequiresDebounce() {
-        // Single negative-s8 frame after a forward frame must NOT flip isBehind.
+    @Test fun behindFlagFlipsInstantlyAfterOvertake() {
+        // Approaching from behind, then post-overtake: a single negative-rangeY
+        // frame flips isBehind without any debounce.
         decoder.feed(packet(target(tid = 5, rangeY = 10, speedYhalf = -6)))
         now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        val state = decoder.feed(packet(target(tid = 5, rangeY = 250, speedYhalf = -6)))
-        assertFalse("single behind frame must not flip isBehind", state!!.vehicles.single().isBehind)
+        val state = decoder.feed(packet(target(tid = 5, rangeY = -25, speedYhalf = -6)))
+        assertTrue("isBehind flips on the first negative-rangeY frame",
+            state!!.vehicles.single().isBehind)
     }
 
-    @Test fun behindCommitsAfterTwoFrames() {
-        decoder.feed(packet(target(tid = 5, rangeY = 10, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        decoder.feed(packet(target(tid = 5, rangeY = 249, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        val state = decoder.feed(packet(target(tid = 5, rangeY = 245, speedYhalf = -6)))
-        val v = state!!.vehicles.single()
-        assertTrue(v.isBehind)
-        assertEquals(1, v.distanceM)  // |s8(245)| = 11 → 1.1 m, rounds to 1
-    }
-
-    @Test fun behindExitIsInstant() {
-        decoder.feed(packet(target(tid = 5, rangeY = 10, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        decoder.feed(packet(target(tid = 5, rangeY = 249, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        decoder.feed(packet(target(tid = 5, rangeY = 245, speedYhalf = -6)))  // committed
+    @Test fun behindFlagClearsInstantlyOnPositiveRangeY() {
+        // After committing isBehind, a single positive-rangeY frame clears it.
+        decoder.feed(packet(target(tid = 5, rangeY = -25, speedYhalf = -6)))
         now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
         val state = decoder.feed(packet(target(tid = 5, rangeY = 5, speedYhalf = -6)))
         assertFalse(state!!.vehicles.single().isBehind)
     }
 
-    @Test fun maxBehindIs12Point8m() {
-        // s8(128) = -128 → 12.8 m, the most-negative value the channel encodes.
-        decoder.feed(packet(target(tid = 1, rangeY = 128)))
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 128)))
+    @Test fun rangeYAtChannelEdgeDecodesAsBehind() {
+        // The most-negative value in a 13-bit signed field is -4096 → 409.6 m
+        // ahead. Pick -128 (12.8 m ahead) so distance fits a small int comfortably.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = -128)))
         val v = state!!.vehicles.single()
         assertTrue(v.isBehind)
         assertEquals(13, v.distanceM)
     }
 
-    @Test fun extendedTailgaterStaysClassifiedBehind() {
-        // Apr-18 replay regression (tid 167 scenario): sustained negative-s8
-        // track must end up isBehind with magnitude under 5 m.
-        val sequence = listOf(254, 252, 250, 230, 240, 250, 248, 252, 255)
+    @Test fun extendedTailgaterStaysBehindBike() {
+        // Sustained close-range behind-bike track (close tailgater) must stay
+        // not-isBehind (i.e. NOT post-overtake) and within 5 m.
+        val sequence = listOf(40, 30, 20, 25, 30, 20, 25, 35, 40)
         var lastState: RadarState? = null
-        for (b2 in sequence) {
+        for (ry in sequence) {
             now += 100
-            lastState = decoder.feed(packet(target(tid = 167, rangeY = b2)))
+            lastState = decoder.feed(packet(target(tid = 167, rangeY = ry)))
         }
         val v = lastState!!.vehicles.single()
-        assertTrue("sustained behind track must end up isBehind", v.isBehind)
+        assertFalse("close-following positive-rangeY track must not be isBehind", v.isBehind)
         assertTrue("close-tailgater distance must stay <=5 m", v.distanceM <= 5)
     }
 
-    @Test fun positiveB2ApproachIsMonotonic() {
+    @Test fun positiveRangeYApproachIsMonotonic() {
         val samples = listOf(100, 80, 60, 40, 20, 5)
         var lastDistance: Int? = null
         for (ry in samples) {
@@ -252,22 +239,19 @@ class RadarV2DecoderTest {
     /**
      * Builds a 9-byte target struct matching RadarV2Decoder's byte layout.
      * [rangeY] is the 13-bit signed rangeY value in 0.1 m units
-     * (-4096..+4095, i.e. ±409.5 m). Positive = behind the bike (typical
+     * (-4096..+4095, i.e. +-409.5 m). Positive = behind the bike (typical
      * for a rear radar); negative = ahead of bike (post-overtake).
-     * [rangeX] is the 11-bit signed rangeX value (-1024..+1023, ±102.3 m).
+     * [rangeX] is the 11-bit signed rangeX value (-1024..+1023, +-102.3 m).
      * They are packed into bytes [2..4] little-endian: bits 0..10 = rangeX,
      * bits 11..23 = rangeY.
      *
-     * [templateLocked] controls bytes [5] and [6]: true defaults to the observed
-     * `(16, 7)` post-lock tuple so targets appear in snapshots; false sets `(0, 0)`
-     * for pre-lock gate tests.
+     * Bytes [5] and [6] default to the observed (16, 7) class-template tuple.
      */
     private fun target(
         tid: Int,
         rangeY: Int,
         cls: Int = RadarV2Decoder.CLASS_NORMAL,
         rangeX: Int = 0,
-        templateLocked: Boolean = true,
         speedYhalf: Int = 0,
     ): ByteArray {
         require(rangeY in -4096..4095) { "rangeY must be -4096..4095, got $rangeY" }
@@ -278,45 +262,17 @@ class RadarV2DecoderTest {
         val b2 = packed and 0xFF
         val b3 = (packed shr 8) and 0xFF
         val b4 = (packed shr 16) and 0xFF
-        val b5 = if (templateLocked) 16 else 0
-        val b6 = if (templateLocked) 7 else 0
         return byteArrayOf(
             tid.toByte(),
             cls.toByte(),
             b2.toByte(),
             b3.toByte(),
             b4.toByte(),
-            b5.toByte(),
-            b6.toByte(),
+            16,
+            7,
             speedYhalf.toByte(),
             0x80.toByte(),
         )
-    }
-
-    // ── lock gate (byte[5]/byte[6] template) ─────────────────────────────────
-
-    @Test fun unlockedTargetDoesNotAppearInSnapshot() {
-        // b5=b6=0 means "no template yet". Suppress from overlay snapshot to
-        // avoid drawing phantoms (seen e.g. as tid 0x89 on 2026-04-21, 8 frames
-        // all at (0,0), classed LOW near 7m — rendered as a bike that was never
-        // really there).
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, templateLocked = false)))
-        assertNotNull("target frame must still emit a snapshot for liveness", state)
-        assertTrue("unlocked target must not appear in vehicles list", state!!.isClear)
-    }
-
-    @Test fun trackBecomesVisibleOnceTemplateLocks() {
-        decoder.feed(packet(target(tid = 1, rangeY = 100, templateLocked = false)))
-        val locked = decoder.feed(packet(target(tid = 1, rangeY = 100, templateLocked = true)))
-        assertEquals(1, locked!!.vehicles.size)
-    }
-
-    @Test fun trackStaysVisibleAfterTemplateReturnsToZero() {
-        // Real-world behaviour: firmware sometimes flips (b5,b6) back to (0,0)
-        // mid-track. Once we've seen a lock we trust it — no re-hiding.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, templateLocked = true)))
-        val reUnlocked = decoder.feed(packet(target(tid = 1, rangeY = 100, templateLocked = false)))
-        assertEquals(1, reUnlocked!!.vehicles.size)
     }
 
     // ── class debounce (asymmetric) ──────────────────────────────────────────

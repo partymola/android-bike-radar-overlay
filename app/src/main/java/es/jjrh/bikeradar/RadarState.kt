@@ -19,6 +19,14 @@ data class Vehicle(
      * frame; these tracks are excluded from alert and overlay rendering.
      */
     val isBehind: Boolean = false,
+    /**
+     * Lateral closing speed in metres per second, as reported by the radar
+     * in target byte[8] (signed int8 x 0.5 m/s). Sign matches [lateralPos]:
+     * positive = the target is moving rightward relative to the bike.
+     * Null when the radar emits its 0x80 sentinel ("no lateral velocity
+     * available") for that frame.
+     */
+    val speedXMs: Int? = null,
 ) {
     val speedKmh: Int get() = (speedMs * 3.6).toInt()
 }

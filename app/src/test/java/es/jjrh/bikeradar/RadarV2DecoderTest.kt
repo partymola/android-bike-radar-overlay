@@ -239,6 +239,8 @@ class RadarV2DecoderTest {
      * bits 11..23 = rangeY.
      *
      * Bytes [5] and [6] default to the observed (16, 7) class-template tuple.
+     * [speedXraw] is the raw byte[8] uint8 (0..255). Default 0x80 = the
+     * radar's "no lateral velocity" sentinel.
      */
     private fun target(
         tid: Int,
@@ -246,9 +248,11 @@ class RadarV2DecoderTest {
         cls: Int = RadarV2Decoder.CLASS_NORMAL,
         rangeX: Int = 0,
         speedYhalf: Int = 0,
+        speedXraw: Int = 0x80,
     ): ByteArray {
         require(rangeY in -4096..4095) { "rangeY must be -4096..4095, got $rangeY" }
         require(rangeX in -1024..1023) { "rangeX must be -1024..1023, got $rangeX" }
+        require(speedXraw in 0..0xFF) { "speedXraw must be 0..0xFF, got $speedXraw" }
         val rxBits = rangeX and 0x7FF                 // 11 bits
         val ryBits = rangeY and 0x1FFF                // 13 bits
         val packed = (ryBits shl 11) or rxBits        // 24-bit packed
@@ -264,8 +268,29 @@ class RadarV2DecoderTest {
             16,
             7,
             speedYhalf.toByte(),
-            0x80.toByte(),
+            speedXraw.toByte(),
         )
+    }
+
+    // ── lateral speed (byte[8]) ──────────────────────────────────────────────
+
+    @Test fun positiveSpeedXIsRightward() {
+        // raw=0x14 (+20) -> +10 m/s rightward.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedXraw = 0x14)))
+        assertEquals(10, state!!.vehicles.single().speedXMs)
+    }
+
+    @Test fun negativeSpeedXIsLeftward() {
+        // raw=0xEC (-20 as signed int8) -> -10 m/s leftward.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedXraw = 0xEC)))
+        assertEquals(-10, state!!.vehicles.single().speedXMs)
+    }
+
+    @Test fun lateralVelocitySentinelDecodesAsNull() {
+        // raw=0x80 sentinel means "no lateral velocity available".
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedXraw = 0x80)))
+        assertNull("0x80 sentinel must yield null speedXMs",
+            state!!.vehicles.single().speedXMs)
     }
 
     // ── class debounce (asymmetric) ──────────────────────────────────────────

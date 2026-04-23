@@ -140,6 +140,13 @@ class RadarV2Decoder(
 
             val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
 
+            val speedXRaw = payload[off + 8].toInt() and 0xFF
+            val speedXMs: Int? = if (speedXRaw == LATERAL_VELOCITY_SENTINEL) {
+                null
+            } else {
+                (payload[off + 8].toInt() * 0.5f).roundToInt()
+            }
+
             val rawSize = classifySize(payload[off + 1].toInt() and 0xFF)
             val lateralPos = (rangeX / LATERAL_FULL_M).coerceIn(-1f, 1f)
 
@@ -155,6 +162,7 @@ class RadarV2Decoder(
                     size = debounced.committed,
                     lateralPos = lateralPos,
                     isBehind = isBehind,
+                    speedXMs = speedXMs,
                 ),
                 lastSeen = now,
                 staleMs = stale,
@@ -247,5 +255,8 @@ class RadarV2Decoder(
         /** Consecutive frames required at a smaller size before committing a
          *  downgrade. ~90 ms per frame observed, so 5 ~= 450 ms. */
         const val DOWNGRADE_FRAMES = 5
+        /** Raw byte[8] value the radar emits when no lateral velocity is
+         *  available for that target. Decoded as a null [Vehicle.speedXMs]. */
+        const val LATERAL_VELOCITY_SENTINEL = 0x80
     }
 }

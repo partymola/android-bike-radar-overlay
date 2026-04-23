@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="31" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_CONNECT"
+        tools:targetApi="31" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE"
+        tools:targetApi="34" />
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS"
+        tools:targetApi="33" />
+
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BikeRadar"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.BikeRadar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".BikeRadarService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <receiver
+            android:name=".BatteryScanReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="es.jjrh.bikeradar.BATTERY_SCAN_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".RemoteControlReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.jjrh.bikeradar.DEV_REPLAY" />
+                <action android:name="es.jjrh.bikeradar.DEV_SYNTH" />
+                <action android:name="es.jjrh.bikeradar.PAUSE_1H" />
+                <action android:name="es.jjrh.bikeradar.RESUME" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".DebugOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="shortService"
+            tools:targetApi="34" />
+
+        <service
+            android:name=".ReplayService"
+            android:exported="false"
+            android:foregroundServiceType="shortService"
+            tools:targetApi="34" />
+
+        <service
+            android:name=".SyntheticScenarioService"
+            android:exported="false"
+            android:foregroundServiceType="shortService"
+            tools:targetApi="34" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

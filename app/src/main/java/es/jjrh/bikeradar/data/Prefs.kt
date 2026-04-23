@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+package es.jjrh.bikeradar.data
+
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+/** Tri-state so the upgrader / onboarding flow can distinguish "hasn't
+ *  been asked yet" from "explicitly said no". */
+enum class DashcamOwnership { UNANSWERED, YES, NO }
+
+data class PrefsSnapshot(
+    val firstRunComplete: Boolean,
+    val serviceEnabled: Boolean,
+    val alertVolume: Int,
+    val alertMaxDistanceM: Int,
+    val visualMaxDistanceM: Int,
+    val pausedUntilEpochMs: Long,
+    val devModeUnlocked: Boolean,
+    val haLastValidatedEpochMs: Long,
+    val batteryLowThresholdPct: Int,
+    val batteryShowLabels: Boolean,
+    val dashcamOwnership: DashcamOwnership,
+    val dashcamMac: String?,
+    val dashcamDisplayName: String?,
+    val dashcamWarnWhenOff: Boolean,
+)
+
+class Prefs(context: Context) {
+
+    private val sp: SharedPreferences =
+        context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    var firstRunComplete: Boolean
+        get() = sp.getBoolean(KEY_FIRST_RUN_COMPLETE, false)
+        set(v) { sp.edit().putBoolean(KEY_FIRST_RUN_COMPLETE, v).apply() }
+
+    var serviceEnabled: Boolean
+        get() = sp.getBoolean(KEY_SERVICE_ENABLED, true)
+        set(v) { sp.edit().putBoolean(KEY_SERVICE_ENABLED, v).apply() }
+
+    var alertVolume: Int
+        get() = sp.getInt(KEY_ALERT_VOLUME, 50)
+        set(v) { sp.edit().putInt(KEY_ALERT_VOLUME, v).apply() }
+
+    var alertMaxDistanceM: Int
+        get() = sp.getInt(KEY_ALERT_MAX_DISTANCE_M, 20)
+        set(v) { sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v).apply() }
+
+    var visualMaxDistanceM: Int
+        get() = sp.getInt(KEY_VISUAL_MAX_DISTANCE_M, 50)
+        set(v) { sp.edit().putInt(KEY_VISUAL_MAX_DISTANCE_M, v).apply() }
+
+    var pausedUntilEpochMs: Long
+        get() = sp.getLong(KEY_PAUSED_UNTIL_EPOCH_MS, 0L)
+        set(v) { sp.edit().putLong(KEY_PAUSED_UNTIL_EPOCH_MS, v).apply() }
+
+    var devModeUnlocked: Boolean
+        get() = sp.getBoolean(KEY_DEV_MODE_UNLOCKED, false)
+        set(v) { sp.edit().putBoolean(KEY_DEV_MODE_UNLOCKED, v).apply() }
+
+    var haLastValidatedEpochMs: Long
+        get() = sp.getLong(KEY_HA_LAST_VALIDATED_EPOCH_MS, 0L)
+        set(v) { sp.edit().putLong(KEY_HA_LAST_VALIDATED_EPOCH_MS, v).apply() }
+
+    var batteryLowThresholdPct: Int
+        get() = sp.getInt(KEY_BATTERY_LOW_THRESHOLD_PCT, 20)
+        set(v) { sp.edit().putInt(KEY_BATTERY_LOW_THRESHOLD_PCT, v).apply() }
+
+    var batteryShowLabels: Boolean
+        get() = sp.getBoolean(KEY_BATTERY_SHOW_LABELS, false)
+        set(v) { sp.edit().putBoolean(KEY_BATTERY_SHOW_LABELS, v).apply() }
+
+    var dashcamOwnership: DashcamOwnership
+        get() = runCatching {
+            DashcamOwnership.valueOf(
+                sp.getString(KEY_DASHCAM_OWNERSHIP, DashcamOwnership.UNANSWERED.name)!!
+            )
+        }.getOrDefault(DashcamOwnership.UNANSWERED)
+        set(v) { sp.edit().putString(KEY_DASHCAM_OWNERSHIP, v.name).apply() }
+
+    var dashcamMac: String?
+        get() = sp.getString(KEY_DASHCAM_MAC, null)
+        set(v) { sp.edit().putString(KEY_DASHCAM_MAC, v).apply() }
+
+    var dashcamDisplayName: String?
+        get() = sp.getString(KEY_DASHCAM_DISPLAY_NAME, null)
+        set(v) { sp.edit().putString(KEY_DASHCAM_DISPLAY_NAME, v).apply() }
+
+    var dashcamWarnWhenOff: Boolean
+        get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
+        set(v) { sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply() }
+
+    val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
+
+    fun snapshot(): PrefsSnapshot = PrefsSnapshot(
+        firstRunComplete = firstRunComplete,
+        serviceEnabled = serviceEnabled,
+        alertVolume = alertVolume,
+        alertMaxDistanceM = alertMaxDistanceM,
+        visualMaxDistanceM = visualMaxDistanceM,
+        pausedUntilEpochMs = pausedUntilEpochMs,
+        devModeUnlocked = devModeUnlocked,
+        haLastValidatedEpochMs = haLastValidatedEpochMs,
+        batteryLowThresholdPct = batteryLowThresholdPct,
+        batteryShowLabels = batteryShowLabels,
+        dashcamOwnership = dashcamOwnership,
+        dashcamMac = dashcamMac,
+        dashcamDisplayName = dashcamDisplayName,
+        dashcamWarnWhenOff = dashcamWarnWhenOff,
+    )
+
+    val flow: Flow<PrefsSnapshot> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            trySend(snapshot())
+        }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        send(snapshot())
+        awaitClose { sp.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
+
+    fun dumpAll(): String = buildString {
+        appendLine("first_run_complete=$firstRunComplete")
+        appendLine("service_enabled=$serviceEnabled")
+        appendLine("alert_volume=$alertVolume")
+        appendLine("alert_max_distance_m=$alertMaxDistanceM")
+        appendLine("visual_max_distance_m=$visualMaxDistanceM")
+        appendLine("paused_until_epoch_ms=$pausedUntilEpochMs")
+        appendLine("dev_mode_unlocked=$devModeUnlocked")
+        appendLine("ha_last_validated_epoch_ms=$haLastValidatedEpochMs")
+        appendLine("battery_low_threshold_pct=$batteryLowThresholdPct")
+        appendLine("battery_show_labels=$batteryShowLabels")
+        appendLine("dashcam_ownership=$dashcamOwnership")
+        appendLine("dashcam_mac=${dashcamMac ?: "<none>"}")
+        appendLine("dashcam_display_name=${dashcamDisplayName ?: "<none>"}")
+        appendLine("dashcam_warn_when_off=$dashcamWarnWhenOff")
+    }
+
+    companion object {
+        private const val FILE = "bike_radar_prefs"
+        const val KEY_FIRST_RUN_COMPLETE = "first_run_complete"
+        const val KEY_SERVICE_ENABLED = "service_enabled"
+        const val KEY_ALERT_VOLUME = "alert_volume"
+        const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"
+        const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
+        const val KEY_PAUSED_UNTIL_EPOCH_MS = "paused_until_epoch_ms"
+        const val KEY_DEV_MODE_UNLOCKED = "dev_mode_unlocked"
+        const val KEY_HA_LAST_VALIDATED_EPOCH_MS = "ha_last_validated_epoch_ms"
+        const val KEY_BATTERY_LOW_THRESHOLD_PCT = "battery_low_threshold_pct"
+        const val KEY_BATTERY_SHOW_LABELS = "battery_show_labels"
+        const val KEY_DASHCAM_OWNERSHIP = "dashcam_ownership"
+        const val KEY_DASHCAM_MAC = "dashcam_mac"
+        const val KEY_DASHCAM_DISPLAY_NAME = "dashcam_display_name"
+        const val KEY_DASHCAM_WARN_WHEN_OFF = "dashcam_warn_when_off"
+    }
+}

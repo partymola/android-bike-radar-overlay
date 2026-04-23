@@ -13,10 +13,11 @@ data class Vehicle(
     /** -1.0 = full left, 0.0 = same lane / centre, +1.0 = full right */
     val lateralPos: Float = 0f,
     /**
-     * True when the target has just overtaken the rider and is now behind
-     * the bike. `distanceM` in this case is the distance *behind* (0-25 m),
-     * not the distance in front. Set when the V2 decoder sees a zone-7
-     * frame; these tracks are excluded from alert and overlay rendering.
+     * True when the target has overtaken the rider and is now ahead of the
+     * bike (rangeY < 0 in the V2 packed range field). `distanceM` in this
+     * case is the absolute distance ahead, not behind. These tracks are
+     * excluded from alert and overlay rendering because the rear radar
+     * cannot reliably follow a target once it is in front of the rider.
      */
     val isBehind: Boolean = false,
     /**

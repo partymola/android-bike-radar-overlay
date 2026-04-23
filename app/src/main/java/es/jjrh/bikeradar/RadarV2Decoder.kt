@@ -5,65 +5,36 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Stateful decoder for the V2 radar notify stream (Garmin 6a4e3204).
+ * Stateful decoder for the V2 radar notify stream on characteristic
+ * `6a4e3204`.
  *
  * Packet layout:
- *   [2-byte LE header] + N * [9-byte target struct]
+ *   [2-byte little-endian header] + N * [9-byte target struct]
  *
  * Header bits:
- *   0x0001 -> status/ack frame, no target payload (skip).
- *   0x0004 -> device-status frame, no targets (skip).
- *   Anything else -> decode N targets from body.
+ *   0x0001 -> status/ack frame, no target payload.
+ *   0x0004 -> device-status frame; the final byte is the rider's own bike
+ *             speed, scaled by 0.25 km/h.
+ *   Anything else -> body is N consecutive 9-byte target structs.
  *
- * Target struct (9 bytes). Agent C model (2026-04-22 audit):
- *
- *   distance_m = abs(int8(byte[2])) * 0.1
- *   isBehind   = int8(byte[2]) < 0
- *
- * H4 (a "signed-zone-counter" reading of `byte[3] & 7`) was tried and
- * rejected on 2026-04-23. Two pieces of decisive counter-evidence:
- *
- * (1) On the cleanest H4-fits-the-data track (tid 128, 50 frames of
- *     monotone b3_lo 0→1→2 stepping), H4 says the target recedes from
- *     15 m to 66 m at +8.5 m/s, while the radar's independently encoded
- *     byte[7] (speed_y) reports a stable -5 to -6 m/s closing — a 14 m/s
- *     sign-flipped contradiction sustained over 50 frames.
- *
- * (2) Sentinel frames (b2=0, b3_lo=0; 3.4 % of all data) appear mid-track
- *     with rx and vy unchanged from the surrounding frames. Under H4 the
- *     target teleports up to 47 m in one frame. Under Agent C the same
- *     transition is bounded.
- *
- * The H4 crosstab (zone_count derived from b2 wraps vs b3_lo) is
- * tautological: both quantities derive from b2's sign, so the
- * "correlation" is rederivation, not independent evidence.
- *
- * Conclusion: V2 is a ±12.7 m close-range alert stream; tracks beyond
- * that range are not in this characteristic. The 820's 175 m advertised
- * range must be in V1 (6a4e3203, which we cannot subscribe to without
- * killing V2) or another characteristic.
- *
+ * Target struct (9 bytes):
  *   [0]    uint8  targetId       radar-assigned track ID (stable across frames)
  *   [1]    uint8  targetClass    see CLASS_* constants
- *   [2]    int8   rangeY         signed longitudinal offset, x0.1 m,
- *                                 -12.8..+12.7 m. Negative = behind.
- *   [3]    bits 0..2              redundant lagged sign flag for b2 sign.
- *                                 Not consulted - the b2 sign is authoritative.
- *          bits 3..7              uniform 0..31, probably a chirp / sub-frame
- *                                 counter. Not decoded.
- *   [4]    int8   rangeX         lateral offset, x0.1 m, -12.8..+12.7 m
- *                                 (positive = vehicle on the right)
- *   [5]    uint8  length         class template, x0.25 m (not a real measurement)
- *   [6]    uint8  width          class template, x0.25 m (not a real measurement)
- *   [7]    int8   speedY         claimed approach velocity, x0.5 m/s. Poor
- *                                 frame-delta correlation under any decoder;
- *                                 we recompute from frame-to-frame rangeY
- *                                 instead.
- *   [8]    uint8  0x80           constant sentinel across all observed samples
+ *   [2..4] 24-bit little-endian packed range field:
+ *            bits 0..10  = rangeX (11-bit signed, x0.1 m)
+ *            bits 11..23 = rangeY (13-bit signed, x0.1 m)
+ *          For this rear radar, rangeY > 0 means the target is behind the
+ *          bike (the dominant case); rangeY < 0 means a target that has
+ *          overtaken and is now ahead of the rider. Positive rangeX = right.
+ *   [5]    uint8  length         class template, x0.25 m
+ *   [6]    uint8  width          class template, x0.25 m
+ *   [7]    int8   speedY         signed closing speed, x0.5 m/s
+ *                                 (negative = approaching).
+ *   [8]    int8   speedX         signed lateral speed, x0.5 m/s; raw 0x80
+ *                                 is a sentinel meaning "no lateral
+ *                                 velocity available".
  *
- * We compute speedY from frame-to-frame delta of rangeY rather than trusting
- * byte[7], because the frame-to-frame delta is naturally smoothed by the
- * SPEED_DT_MIN/MAX windowing and byte[7]'s scale is only x0.5 m/s.
+ * See PROTOCOL.md in the bike-radar-docs sibling repo for the full spec.
  *
  * Not thread-safe; call from a single coroutine.
  */
@@ -128,9 +99,9 @@ class RadarV2Decoder(
             // 24-bit little-endian packed range field over bytes [2..4]:
             //   bits 0..10  = rangeX (11-bit signed, x0.1 m, -204.8..+204.7 m)
             //   bits 11..23 = rangeY (13-bit signed, x0.1 m, -409.6..+409.5 m)
-            // For this rear radar, rangeY > 0 means behind the bike (the
-            // dominant case at ~99% of frames); rangeY < 0 indicates a
-            // target that has overtaken and is now in front of the rider.
+            // For this rear radar, rangeY > 0 means behind the bike;
+            // rangeY < 0 indicates a target that has overtaken and is now
+            // in front of the rider.
             val prev = tracks[tid]
             val b2 = payload[off + 2].toInt() and 0xFF
             val b3 = payload[off + 3].toInt() and 0xFF
@@ -143,10 +114,9 @@ class RadarV2Decoder(
             val rangeXSigned = rxSigned * 0.1f
             val rangeYSigned = rySigned * 0.1f
 
-            // isBehind here means "target ahead of bike" (post-overtake),
-            // matching the prior decoder's filter semantics: filtered out of
-            // overlay + alert paths because the rear radar can't reliably
-            // track once a target is in front.
+            // isBehind means "target ahead of bike" (post-overtake);
+            // the overlay and alert paths filter these out because the rear
+            // radar cannot reliably track once a target is in front.
             val isBehind = rangeYSigned < 0f
 
             val rangeY = abs(rangeYSigned)

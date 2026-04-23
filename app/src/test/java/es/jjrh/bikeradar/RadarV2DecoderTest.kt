@@ -9,19 +9,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for RadarV2Decoder. Packet byte layout (9 bytes per target):
+ * Unit tests for [RadarV2Decoder]. Packet byte layout (9 bytes per target):
  *   [0]    tid uint8
  *   [1]    class uint8  (16=CLASS_LOW=BIKE, 36=CLASS_HIGH=TRUCK, else CAR)
- *   [2..4] 24-bit packed range field (little-endian):
+ *   [2..4] 24-bit little-endian packed range field:
  *            bits 0..10  = rangeX (11-bit signed, x0.1 m)
  *            bits 11..23 = rangeY (13-bit signed, x0.1 m)
- *          Positive rangeY = behind the bike (rear radar typical case).
+ *          Positive rangeY = behind the bike (rear radar typical case);
+ *          negative = post-overtake (target now ahead of the rider).
  *   [5]    length class template
  *   [6]    width class template
  *   [7]    speedY int8   x0.5 m/s (negative = approaching)
- *   [8]    speedX int8   x0.5 m/s, 0x80 sentinel = no lateral velocity
+ *   [8]    speedX int8   x0.5 m/s; raw 0x80 = sentinel "no lateral velocity"
  *
- * Header bytes prepended to all target packets: 0x02 0x00 (non-status, non-device-status).
+ * Header bytes prepended to all target packets: 0x02 0x00 (non-status,
+ * non-device-status). See PROTOCOL.md in the bike-radar-docs sibling repo
+ * for the full spec.
  */
 class RadarV2DecoderTest {
 

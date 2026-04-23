@@ -4,7 +4,9 @@ package es.jjrh.bikeradar.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,12 +65,23 @@ fun AboutScreen(navController: NavController) {
             // painterResource can't inflate adaptive-icon XML (R.mipmap.ic_launcher
             // resolves to mipmap-anydpi-v26/ic_launcher.xml on API 26+ and throws
             // "Only VectorDrawables and rasterized asset types are supported").
-            // The foreground layer is a raster PNG and loads cleanly.
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = "Bike Radar app icon",
-                modifier = Modifier.size(128.dp),
-            )
+            // The foreground PNG is designed with a baked-in white background
+            // to match the launcher's adaptive-icon composition; mirror that
+            // here with a rounded white tile so the logo reads the same on
+            // the About screen's dark surface as it does on the launcher.
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = "Bike Radar app icon",
+                    modifier = Modifier.size(90.dp),
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Bike Radar", style = MaterialTheme.typography.headlineSmall)
             Text(

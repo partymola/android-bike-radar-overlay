@@ -85,6 +85,10 @@ class RadarV2Decoder(
 
     private val tracks = HashMap<Int, Track>()
 
+    /** Rider's own bike speed in km/h, last reported by a device-status
+     *  frame (byte[len-1] x 0.25 km/h). Null until the first such frame. */
+    private var lastBikeSpeedKmh: Int? = null
+
     /**
      * Feed one notification payload. Returns the new [RadarState] if the
      * packet changed anything visible, else null (pure-status frame).
@@ -95,7 +99,18 @@ class RadarV2Decoder(
         val header = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
         val isStatus = header and STATUS_FRAME_BIT != 0
         val isDeviceStatus = header and DEVICE_STATUS_BIT != 0
-        if (isStatus || isDeviceStatus) {
+        if (isDeviceStatus) {
+            // Device-status frame carries the rider's own bike speed in the
+            // final byte, scaled by 0.25 km/h. Always emit a snapshot so
+            // bikeSpeedKmh propagates even when no targets changed.
+            if (payload.size > HEADER_SIZE) {
+                val raw = payload[payload.size - 1].toInt() and 0xFF
+                lastBikeSpeedKmh = (raw * 0.25f).roundToInt()
+            }
+            pruneStale(now)
+            return snapshot(now)
+        }
+        if (isStatus) {
             return if (pruneStale(now)) snapshot(now) else null
         }
         ingestTargets(payload, now)
@@ -223,10 +238,12 @@ class RadarV2Decoder(
                 .sortedBy { it.distanceM },
             timestamp = now,
             source = DataSource.V2,
+            bikeSpeedKmh = lastBikeSpeedKmh,
         )
 
     fun reset() {
         tracks.clear()
+        lastBikeSpeedKmh = null
     }
 
     private fun classifySize(cls: Int): VehicleSize = when (cls) {

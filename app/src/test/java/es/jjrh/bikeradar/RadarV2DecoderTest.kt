@@ -52,9 +52,13 @@ class RadarV2DecoderTest {
         assertNull("status frame with no tracks should return null", state)
     }
 
-    @Test fun deviceStatusFrameReturnsNullWhenNoStaleTracks() {
-        val state = decoder.feed(byteArrayOf(0x04, 0x00))  // DEVICE_STATUS_BIT
-        assertNull("device-status frame with no tracks should return null", state)
+    @Test fun deviceStatusFrameAlwaysEmitsSnapshot() {
+        // Device-status frames carry the rider's own bike speed in the final
+        // byte; always emit a snapshot so bikeSpeedKmh propagates downstream
+        // even when no targets are present.
+        val state = decoder.feed(byteArrayOf(0x04, 0x00, 0x00))  // DEVICE_STATUS_BIT, speed=0
+        assertNotNull("device-status frame must always emit a snapshot", state)
+        assertEquals(0, state!!.bikeSpeedKmh)
     }
 
     @Test fun statusFramePrunesStaleMovingTrack() {
@@ -291,6 +295,29 @@ class RadarV2DecoderTest {
         val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedXraw = 0x80)))
         assertNull("0x80 sentinel must yield null speedXMs",
             state!!.vehicles.single().speedXMs)
+    }
+
+    // ── device-status frame (rider bike speed) ───────────────────────────────
+
+    @Test fun deviceStatusFrameUpdatesBikeSpeedKmh() {
+        // raw=0x50 (80) -> 80 * 0.25 = 20 km/h.
+        val state = decoder.feed(byteArrayOf(0x04, 0x00, 0x50))
+        assertNotNull(state)
+        assertEquals(20, state!!.bikeSpeedKmh)
+    }
+
+    @Test fun bikeSpeedKmhPersistsAcrossTargetFrames() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 0x50))   // 20 km/h
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100)))
+        assertEquals("subsequent target snapshots carry the last bike speed",
+            20, state!!.bikeSpeedKmh)
+    }
+
+    @Test fun resetClearsBikeSpeedKmh() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 0x50))   // 20 km/h
+        decoder.reset()
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100)))
+        assertNull("reset() must clear bikeSpeedKmh", state!!.bikeSpeedKmh)
     }
 
     // ── class debounce (asymmetric) ──────────────────────────────────────────

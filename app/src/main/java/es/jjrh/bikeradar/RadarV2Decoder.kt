@@ -74,8 +74,6 @@ class RadarV2Decoder(
         val vehicle: Vehicle,
         val lastSeen: Long,
         val staleMs: Long,
-        val speedRefRangeY: Float,
-        val speedRefTs: Long,
         /** VehicleSize currently committed to the overlay. Upgrades apply
          *  immediately; downgrades require [DOWNGRADE_FRAMES] consecutive
          *  frames at the smaller size. Prevents mid-overtake box-size flips
@@ -140,35 +138,7 @@ class RadarV2Decoder(
             val effectiveDistance = rangeY.roundToInt()
             val rangeX = rangeXSigned
 
-            val rawSpeedMs: Int
-            val newRefRangeY: Float
-            val newRefTs: Long
-            if (prev == null) {
-                rawSpeedMs = 0
-                newRefRangeY = rangeY
-                newRefTs = now
-            } else {
-                val dtRefMs = now - prev.speedRefTs
-                when {
-                    dtRefMs > SPEED_DT_MAX_MS -> {
-                        rawSpeedMs = 0
-                        newRefRangeY = rangeY
-                        newRefTs = now
-                    }
-                    dtRefMs < SPEED_DT_MIN_MS -> {
-                        rawSpeedMs = prev.vehicle.speedMs
-                        newRefRangeY = prev.speedRefRangeY
-                        newRefTs = prev.speedRefTs
-                    }
-                    else -> {
-                        val slope = (prev.speedRefRangeY - rangeY) * 1000f / dtRefMs
-                        rawSpeedMs = slope.roundToInt().coerceIn(-SPEED_CAP_MS, SPEED_CAP_MS)
-                        newRefRangeY = rangeY
-                        newRefTs = now
-                    }
-                }
-            }
-            val speedMs = rawSpeedMs
+            val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
 
             val rawSize = classifySize(payload[off + 1].toInt() and 0xFF)
             val lateralPos = (rangeX / LATERAL_FULL_M).coerceIn(-1f, 1f)
@@ -188,8 +158,6 @@ class RadarV2Decoder(
                 ),
                 lastSeen = now,
                 staleMs = stale,
-                speedRefRangeY = newRefRangeY,
-                speedRefTs = newRefTs,
                 committedSize = debounced.committed,
                 downgradeCandidate = debounced.candidate,
                 downgradeFrames = debounced.frames,
@@ -275,9 +243,6 @@ class RadarV2Decoder(
         const val MOVING_SPEED_MS = 1
         const val STALE_MOVING_MS = 800L
         const val STALE_PARKED_MS = 5000L
-        const val SPEED_DT_MIN_MS = 150L
-        const val SPEED_DT_MAX_MS = 1500L
-        const val SPEED_CAP_MS = 30
         const val LATERAL_FULL_M = 3.0f
         /** Consecutive frames required at a smaller size before committing a
          *  downgrade. ~90 ms per frame observed, so 5 ~= 450 ms. */

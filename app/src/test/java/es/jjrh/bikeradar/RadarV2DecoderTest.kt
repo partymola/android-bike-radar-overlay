@@ -58,11 +58,8 @@ class RadarV2DecoderTest {
     }
 
     @Test fun statusFramePrunesStaleMovingTrack() {
-        // Two positive-rangeY frames to establish a moving track.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        // 10.0 m -> 5.0 m over ~200ms -> ~25 m/s closing -> STALE_MOVING_MS window.
-        decoder.feed(packet(target(tid = 1, rangeY = 50, cls = RadarV2Decoder.CLASS_NORMAL)))
+        // Approaching at -25 m/s (speedYhalf=-50) classifies the track as moving.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
         now += RadarV2Decoder.STALE_MOVING_MS + 200
         val state = decoder.feed(byteArrayOf(0x01, 0x00))
         assertTrue("status frame must age out stale moving tracks", state?.isClear == true)
@@ -71,12 +68,8 @@ class RadarV2DecoderTest {
     // ── stale-window logic ───────────────────────────────────────────────────
 
     @Test fun movingTrackDropsAfterShortWindow() {
-        // Two positive-rangeY frames so the speed ref accumulates and
-        // classifies the track as moving.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
-        // 10.0 m -> 5.0 m over ~200ms -> ~25 m/s closing
-        decoder.feed(packet(target(tid = 1, rangeY = 50, cls = RadarV2Decoder.CLASS_NORMAL)))
+        // Approaching at -25 m/s (speedYhalf=-50) classifies the track as moving.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
 
         now += RadarV2Decoder.STALE_MOVING_MS + 200
         val dropped = decoder.feed(emptyPacket())
@@ -175,7 +168,7 @@ class RadarV2DecoderTest {
         // Approaching from behind, then post-overtake: a single negative-rangeY
         // frame flips isBehind without any debounce.
         decoder.feed(packet(target(tid = 5, rangeY = 10, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
+        now += 200
         val state = decoder.feed(packet(target(tid = 5, rangeY = -25, speedYhalf = -6)))
         assertTrue("isBehind flips on the first negative-rangeY frame",
             state!!.vehicles.single().isBehind)
@@ -184,7 +177,7 @@ class RadarV2DecoderTest {
     @Test fun behindFlagClearsInstantlyOnPositiveRangeY() {
         // After committing isBehind, a single positive-rangeY frame clears it.
         decoder.feed(packet(target(tid = 5, rangeY = -25, speedYhalf = -6)))
-        now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
+        now += 200
         val state = decoder.feed(packet(target(tid = 5, rangeY = 5, speedYhalf = -6)))
         assertFalse(state!!.vehicles.single().isBehind)
     }
@@ -216,7 +209,7 @@ class RadarV2DecoderTest {
         val samples = listOf(100, 80, 60, 40, 20, 5)
         var lastDistance: Int? = null
         for (ry in samples) {
-            now += RadarV2Decoder.SPEED_DT_MIN_MS + 50
+            now += 200
             val state = decoder.feed(packet(target(tid = 9, rangeY = ry)))
             val d = state!!.vehicles.single().distanceM
             val prev = lastDistance

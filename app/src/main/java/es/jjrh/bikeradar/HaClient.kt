@@ -136,6 +136,58 @@ class HaClient(private val baseUrl: String, private val token: String) {
     suspend fun publishBatteryState(slug: String, pct: Int): Boolean =
         publishMqtt("varia/$slug/battery", pct.toString(), retain = true)
 
+    /**
+     * Publishes the HA MQTT-Discovery config for the close-pass event
+     * entity. Uses HA's native `event` platform (discrete, time-stamped
+     * events with payload attributes, and a built-in history view) rather
+     * than a sensor with json_attributes_topic — close passes are
+     * discrete occurrences, not a continuous state.
+     *
+     * Idempotent: the discovery topic is retained, so republishing on
+     * every service start is a no-op on the HA side. Call once per
+     * session if the feature is enabled.
+     */
+    suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
+        val topic = "$DISCOVERY_PREFIX/event/varia_${slug}_close_pass/config"
+        val clean = cleanDeviceName(deviceName)
+        val eventTopic = "varia/$slug/close_pass"
+        val payload = JSONObject()
+            .put("object_id", "varia_${slug}_close_pass")
+            .put("unique_id", "varia_${slug}_close_pass")
+            .put("name", "Close pass")
+            .put("has_entity_name", true)
+            .put("state_topic", eventTopic)
+            .put("event_types", JSONArray().put("close_pass"))
+            .put("value_template", "{{ value_json.event_type }}")
+            .put("json_attributes_topic", eventTopic)
+            .put(
+                "device",
+                JSONObject()
+                    .put("identifiers", JSONArray().put("varia_$slug"))
+                    .put("name", "Varia $clean")
+                    .put("manufacturer", "Garmin")
+                    .put("model", "Varia")
+                    .put("via_device", "varia_reader"),
+            )
+            .toString()
+        return publishMqtt(topic, payload, retain = true)
+    }
+
+    /**
+     * Publishes a single close-pass event. Two writes: one non-retained
+     * event to the main topic (consumed by HA's event entity + HA
+     * Recorder / InfluxDB if the MQTT bridge is wired), and one retained
+     * write to `/last` so a fresh dashboard card has something to
+     * display on load without waiting for the next overtake.
+     */
+    suspend fun publishClosePassEvent(slug: String, eventJson: JSONObject): Boolean {
+        val topic = "varia/$slug/close_pass"
+        val payload = JSONObject(eventJson.toString()).put("event_type", "close_pass").toString()
+        val ok1 = publishMqtt(topic, payload, retain = false)
+        val ok2 = publishMqtt("$topic/last", payload, retain = true)
+        return ok1 && ok2
+    }
+
     companion object {
         private const val TAG = "BikeRadar"
         private const val DISCOVERY_PREFIX = "homeassistant"

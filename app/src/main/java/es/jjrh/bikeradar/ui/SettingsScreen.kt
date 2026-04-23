@@ -93,6 +93,10 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
     var walkAwayThreshold by remember { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
     var adaptiveAlerts by remember { mutableStateOf(prefs.adaptiveAlertsEnabled) }
     var precog by remember { mutableStateOf(prefs.precogEnabled) }
+    var closePassLogging by remember { mutableStateOf(prefs.closePassLoggingEnabled) }
+    var closePassEmitMinX by remember { mutableStateOf(prefs.closePassEmitMinRangeXM) }
+    var closePassRiderFloor by remember { mutableIntStateOf(prefs.closePassRiderSpeedFloorKmh) }
+    var closePassClosingFloor by remember { mutableIntStateOf(prefs.closePassClosingSpeedFloorMs) }
     var showPicker by remember { mutableStateOf(false) }
     var alertDist by remember { mutableIntStateOf(prefs.alertMaxDistanceM) }
     var visualDist by remember { mutableIntStateOf(prefs.visualMaxDistanceM) }
@@ -470,6 +474,70 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save") }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Log close passes",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Publish an event to Home Assistant each time a car passes within the chosen lateral distance. Strict gates — only genuine overtakes at <1 m are logged. Build a route-quality dataset over time.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = closePassLogging,
+                    onCheckedChange = {
+                        closePassLogging = it
+                        prefs.closePassLoggingEnabled = it
+                    },
+                )
+            }
+            if (closePassLogging) {
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text("Emit threshold", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Publish only when the minimum lateral clearance drops below ${String.format(java.util.Locale.US, "%.1f", closePassEmitMinX)} m.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = closePassEmitMinX,
+                        onValueChange = { closePassEmitMinX = it },
+                        valueRange = 0.5f..2.0f,
+                        steps = 14,  // 0.1 m increments
+                        onValueChangeFinished = {
+                            prefs.closePassEmitMinRangeXM = closePassEmitMinX
+                        },
+                    )
+                    Text("Minimum rider speed: ${closePassRiderFloor} km/h", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = closePassRiderFloor.toFloat(),
+                        onValueChange = { closePassRiderFloor = it.toInt() },
+                        valueRange = 5f..30f,
+                        steps = 4,
+                        onValueChangeFinished = {
+                            prefs.closePassRiderSpeedFloorKmh = closePassRiderFloor
+                        },
+                    )
+                    Text("Minimum closing speed: ${closePassClosingFloor} m/s", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = closePassClosingFloor.toFloat(),
+                        onValueChange = { closePassClosingFloor = it.toInt() },
+                        valueRange = 3f..15f,
+                        steps = 11,
+                        onValueChangeFinished = {
+                            prefs.closePassClosingSpeedFloorMs = closePassClosingFloor
+                        },
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Experimental")

@@ -673,6 +673,8 @@ class BikeRadarService : Service() {
                 val view = RadarOverlayView(this@BikeRadarService)
                 val beeper = AlertBeeper().also { it.setVolumePct(prefs.alertVolume) }
                 val alerts = AlertDecider()
+                val closePassDetector = ClosePassDetector()
+                var closePassDiscoveryPublished = false
                 val sessionStartMs = System.currentTimeMillis()
                 var seenDashcamThisSession = false
                 var lastLoggedDashcamStatus: DashcamStatus? = null
@@ -755,6 +757,51 @@ class BikeRadarService : Service() {
                             }
                         } else {
                             alerts.reset()
+                        }
+
+                        // Close-pass detection: strict-gated per-track state
+                        // machine that only emits an event for genuine
+                        // overtakes at <1 m (default). Runs regardless of
+                        // the pause state — pause silences the beeper but
+                        // doesn't turn off data logging. Config is re-read
+                        // every frame so Settings changes take effect
+                        // immediately without losing per-track state.
+                        val cpConfig = ClosePassDetector.Config(
+                            enabled = prefs.closePassLoggingEnabled && ha.isConfigured(),
+                            riderSpeedFloorKmh = prefs.closePassRiderSpeedFloorKmh,
+                            closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs,
+                            emitMinRangeXM = prefs.closePassEmitMinRangeXM,
+                        )
+                        val cpEvents = closePassDetector.decide(
+                            state.vehicles, state.bikeSpeedKmh, now, cpConfig,
+                        )
+                        if (cpEvents.isNotEmpty()) {
+                            val radarMac = currentRadarMac
+                            val radarSlug = radarMac?.let { macToSlug[it] }
+                                ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
+                            if (radarSlug != null) {
+                                launch {
+                                    if (!closePassDiscoveryPublished) {
+                                        val name = prefs.dashcamDisplayName ?: "rearvue"
+                                        ha.publishClosePassDiscovery(radarSlug, name)
+                                        closePassDiscoveryPublished = true
+                                    }
+                                    for (ev in cpEvents) {
+                                        val json = org.json.JSONObject()
+                                            .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())
+                                            .put("min_range_x_m", String.format(Locale.US, "%.2f", ev.minRangeXM).toFloat())
+                                            .put("side", ev.side.name.lowercase(Locale.ROOT))
+                                            .put("range_y_at_min_m", String.format(Locale.US, "%.1f", ev.rangeYAtMinM).toFloat())
+                                            .put("closing_speed_kmh", ev.closingSpeedKmh)
+                                            .put("rider_speed_kmh", ev.riderSpeedKmh)
+                                            .put("vehicle_size", ev.vehicleSize.name)
+                                            .put("threshold_m", ev.thresholdArmedM)
+                                            .put("severity", ev.severity.name.lowercase(Locale.ROOT))
+                                        val ok = ha.publishClosePassEvent(radarSlug, json)
+                                        if (!ok) Log.w(TAG, "close-pass publish failed")
+                                    }
+                                }
+                            }
                         }
                     }
                 } finally {

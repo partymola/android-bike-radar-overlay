@@ -31,6 +31,10 @@ data class PrefsSnapshot(
     val walkAwayAlarmThresholdSec: Int,
     val adaptiveAlertsEnabled: Boolean,
     val precogEnabled: Boolean,
+    val closePassLoggingEnabled: Boolean,
+    val closePassEmitMinRangeXM: Float,
+    val closePassRiderSpeedFloorKmh: Int,
+    val closePassClosingSpeedFloorMs: Int,
 )
 
 class Prefs(context: Context) {
@@ -136,6 +140,35 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_PRECOG, false)
         set(v) { sp.edit().putBoolean(KEY_PRECOG, v).apply() }
 
+    /** Master toggle for close-pass event logging to Home Assistant.
+     *  Off by default; opt-in because the feature is only useful if
+     *  the user actually wants the dataset and has HA wired up. */
+    var closePassLoggingEnabled: Boolean
+        get() = sp.getBoolean(KEY_CLOSE_PASS_ENABLED, false)
+        set(v) { sp.edit().putBoolean(KEY_CLOSE_PASS_ENABLED, v).apply() }
+
+    /** Advanced: emit an event only if the minimum lateral clearance
+     *  dropped below this many metres. Default 1.0 m keeps the
+     *  dataset focused on genuinely-unsafe passes; noise rejected
+     *  here rather than filtered downstream. */
+    var closePassEmitMinRangeXM: Float
+        get() = sp.getFloat(KEY_CLOSE_PASS_EMIT_MIN_X_M, 1.0f).coerceIn(0.3f, 2.0f)
+        set(v) { sp.edit().putFloat(KEY_CLOSE_PASS_EMIT_MIN_X_M, v.coerceIn(0.3f, 2.0f)).apply() }
+
+    /** Advanced: minimum rider bike speed (km/h) for the detector to
+     *  arm. Filters stationary-rider scenarios (red lights, pushing
+     *  the bike) where nearby traffic doesn't count as an overtake. */
+    var closePassRiderSpeedFloorKmh: Int
+        get() = sp.getInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, 15).coerceIn(5, 30)
+        set(v) { sp.edit().putInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, v.coerceIn(5, 30)).apply() }
+
+    /** Advanced: minimum closing speed (m/s) for the detector to arm.
+     *  Filters lane-matched cruising and filtering — if the vehicle
+     *  isn't genuinely overtaking, it's not a close pass. */
+    var closePassClosingSpeedFloorMs: Int
+        get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
+        set(v) { sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -157,6 +190,10 @@ class Prefs(context: Context) {
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
         precogEnabled = precogEnabled,
+        closePassLoggingEnabled = closePassLoggingEnabled,
+        closePassEmitMinRangeXM = closePassEmitMinRangeXM,
+        closePassRiderSpeedFloorKmh = closePassRiderSpeedFloorKmh,
+        closePassClosingSpeedFloorMs = closePassClosingSpeedFloorMs,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -187,6 +224,10 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("precog_enabled=$precogEnabled")
+        appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
+        appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
+        appendLine("close_pass_rider_floor_kmh=$closePassRiderSpeedFloorKmh")
+        appendLine("close_pass_closing_floor_ms=$closePassClosingSpeedFloorMs")
     }
 
     companion object {
@@ -209,5 +250,9 @@ class Prefs(context: Context) {
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_PRECOG = "precog_enabled"
+        const val KEY_CLOSE_PASS_ENABLED = "close_pass_logging_enabled"
+        const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"
+        const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
+        const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
     }
 }

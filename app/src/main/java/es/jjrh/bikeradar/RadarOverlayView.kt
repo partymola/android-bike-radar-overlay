@@ -39,6 +39,16 @@ class RadarOverlayView(context: Context) : View(context) {
     private val tailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         strokeWidth = dp(3f); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
     }
+    /** Hollow outline used for [Vehicle.isAlongsideStationary] targets
+     *  (parked car next to a crawling rider). Thinner stroke + neutral
+     *  grey is the pre-attentive cue for "noted, not a threat" - the
+     *  rider's eye lands on filled coloured boxes for active threats
+     *  instead. See decoder companion gate constants for trigger logic. */
+    private val parkedOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(1.8f)
+        color = Color.argb(180, 200, 200, 200)
+    }
     private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
         textSize  = dp(12f)
@@ -182,6 +192,21 @@ class RadarOverlayView(context: Context) : View(context) {
             val halfW   = vehicleHalfWidth(v.size)
             val halfH   = vehicleHalfHeight(v.size)
             val centreY = distToY(v.distanceM.toFloat(), riderBottom, bottomY)
+
+            if (v.isAlongsideStationary) {
+                // Edge-dock hollow render. X snaps to the nearest panel
+                // edge (side from sign(lateralPos)); Y stays true. No
+                // fill, no tail, no class colour - the box outline alone
+                // says "vehicle present, not a threat". The moment the
+                // decoder drops the flag, the next frame paints a filled
+                // coloured box at the true X and the visual jump is the
+                // attention cue.
+                val edgeX = if (v.lateralPos >= 0f) trackX + maxLateralPx else trackX - maxLateralPx
+                val rect = RectF(edgeX - halfW, centreY - halfH, edgeX + halfW, centreY + halfH)
+                canvas.drawRoundRect(rect, dp(3f), dp(3f), parkedOutlinePaint)
+                continue
+            }
+
             val centreX = trackX + v.lateralPos * maxLateralPx
             val color   = speedColor(v.speedKmh)
 

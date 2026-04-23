@@ -205,4 +205,33 @@ class AlertDeciderTest {
             assertEquals(AlertDecider.Event.None, d.decide(vs, alertMax, c.tick()))
         }
     }
+
+    @Test fun `alongside-stationary track is excluded from close set`() {
+        // Parked car next to a crawling rider would meet the close-zone
+        // distance test but is gated out by the decoder's
+        // isAlongsideStationary flag and must not produce a beep.
+        val d = AlertDecider()
+        val c = Clock()
+        val parked = Vehicle(id = 1, distanceM = 5, speedMs = 0, isAlongsideStationary = true)
+        d.decide(listOf(parked), alertMax, c.tick())
+        val ev = d.decide(listOf(parked), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `flag dropping promotes alongside track back into alerts`() {
+        // Decoder drops isAlongsideStationary when the target starts
+        // closing or the rider speeds up. From the alert path's
+        // perspective the track first appears as an active threat -
+        // sustain frames must accrue from that point and a beep fires.
+        val d = AlertDecider()
+        val c = Clock()
+        val docked = Vehicle(id = 1, distanceM = 5, speedMs = 0, isAlongsideStationary = true)
+        d.decide(listOf(docked), alertMax, c.tick())
+        d.decide(listOf(docked), alertMax, c.tick())
+        // Target now active (flag dropped). Two sustain frames -> beep.
+        val active = Vehicle(id = 1, distanceM = 5, speedMs = -3, isAlongsideStationary = false)
+        d.decide(listOf(active), alertMax, c.tick())
+        val ev = d.decide(listOf(active), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
 }

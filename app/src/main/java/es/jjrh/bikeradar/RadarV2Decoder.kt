@@ -36,6 +36,12 @@ import kotlin.math.roundToInt
  *
  * See PROTOCOL.md in the bike-radar-docs sibling repo for the full spec.
  *
+ * The decoder additionally annotates each emitted [Vehicle] with
+ * [Vehicle.isAlongsideStationary] when it represents a near-stationary
+ * vehicle next to a slow-moving rider (parked car / queued traffic in the
+ * adjacent lane). The flag is recomputed every snapshot from the gating
+ * constants in this class's companion.
+ *
  * Not thread-safe; call from a single coroutine.
  */
 class RadarV2Decoder(
@@ -44,6 +50,9 @@ class RadarV2Decoder(
     private data class Track(
         val vehicle: Vehicle,
         val lastSeen: Long,
+        /** Monotonic millis the first time this tid appeared. Used by the
+         *  alongside-stationary dwell-time gate; never updated. */
+        val firstSeen: Long,
         val staleMs: Long,
         /** VehicleSize currently committed to the overlay. Upgrades apply
          *  immediately; downgrades require [DOWNGRADE_FRAMES] consecutive
@@ -150,6 +159,7 @@ class RadarV2Decoder(
                     speedXMs = speedXMs,
                 ),
                 lastSeen = now,
+                firstSeen = prev?.firstSeen ?: now,
                 staleMs = stale,
                 committedSize = debounced.committed,
                 downgradeCandidate = debounced.candidate,
@@ -201,15 +211,34 @@ class RadarV2Decoder(
         return tracks.size != before
     }
 
-    private fun snapshot(now: Long): RadarState =
-        RadarState(
+    private fun snapshot(now: Long): RadarState {
+        // Alongside-stationary detection is gated on rider speed too, so it
+        // is computed at snapshot time (not in ingestTargets) - that way
+        // each emitted snapshot reflects the most recent device-status
+        // bikeSpeedKmh against every track's current state. Null bike speed
+        // defaults to "not slow" so the dock never activates without
+        // confirmation that the rider is crawling.
+        val riderSlow =
+            (lastBikeSpeedKmh ?: (ALONGSIDE_RIDER_SLOW_KMH + 1)) <= ALONGSIDE_RIDER_SLOW_KMH
+        return RadarState(
             vehicles = tracks.values
-                .map { it.vehicle }
+                .map { t ->
+                    val v = t.vehicle
+                    val lateralM = abs(v.lateralPos) * LATERAL_FULL_M
+                    val alongside = riderSlow
+                        && abs(v.speedMs) <= STATIONARY_SPEED_MS
+                        && v.distanceM <= ALONGSIDE_RANGE_Y_M
+                        && lateralM >= ALONGSIDE_MIN_LATERAL_M
+                        && (now - t.firstSeen) >= ALONGSIDE_MIN_DURATION_MS
+                        && !v.isBehind
+                    if (alongside) v.copy(isAlongsideStationary = true) else v
+                }
                 .sortedBy { it.distanceM },
             timestamp = now,
             source = DataSource.V2,
             bikeSpeedKmh = lastBikeSpeedKmh,
         )
+    }
 
     fun reset() {
         tracks.clear()
@@ -245,5 +274,36 @@ class RadarV2Decoder(
         /** Raw byte[8] value the radar emits when no lateral velocity is
          *  available for that target. Decoded as a null [Vehicle.speedXMs]. */
         const val LATERAL_VELOCITY_SENTINEL = 0x80
+
+        // ── Alongside-stationary gate ────────────────────────────────────
+        // Parked / queued vehicles in the next lane while the rider crawls
+        // past sit on the radar at very close range with ~zero closing
+        // speed for many seconds, and their class-sized filled boxes end
+        // up overlapping the rider chevron at the top of the panel.
+        // Gating these into a hollow edge-docked render needs ALL of
+        // these constants to hold; the moment any breaks, the next
+        // snapshot reverts to a normal filled box (the visual jump is
+        // the attention cue that the target has just woken up).
+        /** |speedY| <= this rounds to "near-stationary" given the radar's
+         *  0.5 m/s quantisation. Same value as [MOVING_SPEED_MS] on
+         *  purpose - they share the "is this thing moving" boundary. */
+        const val STATIONARY_SPEED_MS = 1
+        /** Maximum rangeY (m) for the alongside dock to consider a target.
+         *  Beyond this the target box is too far down the panel to ever
+         *  collide with the rider chevron, so normal rendering is fine. */
+        const val ALONGSIDE_RANGE_Y_M = 8
+        /** Minimum |rangeX| (m) for the alongside dock. A target dead
+         *  behind the rider is not the parked-car case - it might be a
+         *  follower and must keep its centre-lane render. */
+        const val ALONGSIDE_MIN_LATERAL_M = 0.5f
+        /** Rider's own bike speed (km/h) below which the dock activates.
+         *  At cruising speed even truly parked cars sweep past quickly and
+         *  never linger over the chevron; only crawling traffic produces
+         *  the multi-second overlap that motivated this rule. */
+        const val ALONGSIDE_RIDER_SLOW_KMH = 10
+        /** Minimum dwell time (ms) on a track before the dock activates.
+         *  Prevents the visual mode from flipping for a brief slow target
+         *  that's about to start closing. */
+        const val ALONGSIDE_MIN_DURATION_MS = 3000L
     }
 }

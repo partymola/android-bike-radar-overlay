@@ -345,6 +345,101 @@ class RadarV2DecoderTest {
         assertEquals(VehicleSize.BIKE, finalState!!.vehicles.single().size)
     }
 
+    // ── alongside-stationary gate ────────────────────────────────────────────
+
+    /** Helper: drive `tid` at the same fixed-stationary alongside position
+     *  for ALONGSIDE_MIN_DURATION_MS+1 of wall time, then return the final
+     *  vehicle snapshot. Slow rider speed must already be set. */
+    private fun pinAlongside(tid: Int, rangeY: Int = 50, rangeX: Int = 10): Vehicle {
+        // First frame establishes firstSeen=now.
+        decoder.feed(packet(target(tid = tid, rangeY = rangeY, rangeX = rangeX)))
+        // Second frame at now + duration+1 -> dwell gate should hold.
+        now += RadarV2Decoder.ALONGSIDE_MIN_DURATION_MS + 1
+        val state = decoder.feed(packet(target(tid = tid, rangeY = rangeY, rangeX = rangeX)))
+        return state!!.vehicles.single { it.id == tid }
+    }
+
+    @Test fun alongsideStationaryFlagsParkedNextLaneCarOnSlowRider() {
+        // Rider at 5 km/h (raw=20 -> 20 * 0.25 = 5).
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))
+        // Target 5 m behind, 1 m to the right, stationary.
+        val v = pinAlongside(tid = 1, rangeY = 50, rangeX = 10)
+        assertTrue("dwell+slow+lateral+close+stationary must set flag", v.isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryRequiresMinDuration() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        // Single-frame appearance -> dwell gate must reject.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10)))
+        assertFalse("first frame must not flag - dwell gate not yet met",
+            state!!.vehicles.single().isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryRequiresSlowRider() {
+        // Rider at 30 km/h (raw=120 -> 120 * 0.25 = 30) - well above gate.
+        decoder.feed(byteArrayOf(0x04, 0x00, 120.toByte()))
+        val v = pinAlongside(tid = 1, rangeY = 50, rangeX = 10)
+        assertFalse("rider above ALONGSIDE_RIDER_SLOW_KMH must not dock",
+            v.isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryRequiresLateralOffset() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        // rangeX=0 -> dead behind, not alongside.
+        val v = pinAlongside(tid = 1, rangeY = 50, rangeX = 0)
+        assertFalse("centred target must not dock - it might be a follower",
+            v.isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryRequiresClose() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        // 20 m back is well beyond ALONGSIDE_RANGE_Y_M.
+        val v = pinAlongside(tid = 1, rangeY = 200, rangeX = 10)
+        assertFalse("target beyond ALONGSIDE_RANGE_Y_M must not dock",
+            v.isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryRequiresStationarySpeed() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        // First frame at stationary position to establish firstSeen.
+        decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10, speedYhalf = 0)))
+        now += RadarV2Decoder.ALONGSIDE_MIN_DURATION_MS + 1
+        // Second frame: now closing at -3 m/s (raw -6 -> -3 m/s). Must not dock.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10, speedYhalf = -6)))
+        assertFalse("non-stationary target must not dock",
+            state!!.vehicles.single().isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryWithoutBikeSpeedDefaultsToFalse() {
+        // No device-status frame fed -> lastBikeSpeedKmh is null. Safe
+        // default is "not slow" so the dock never activates without
+        // confirmation that the rider is crawling.
+        val v = pinAlongside(tid = 1, rangeY = 50, rangeX = 10)
+        assertFalse("null bike speed must default to not-slow", v.isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryClearsWhenTargetStartsClosing() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        // Pin alongside long enough to set the flag.
+        val docked = pinAlongside(tid = 1, rangeY = 50, rangeX = 10)
+        assertTrue("precondition: must be docked", docked.isAlongsideStationary)
+        // Same track, now closing at -3 m/s -> flag must drop the same frame.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10, speedYhalf = -6)))
+        assertFalse("flag must drop the moment target starts closing",
+            state!!.vehicles.single().isAlongsideStationary)
+    }
+
+    @Test fun alongsideStationaryClearsWhenRiderAccelerates() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 20))    // 5 km/h
+        val docked = pinAlongside(tid = 1, rangeY = 50, rangeX = 10)
+        assertTrue("precondition: must be docked", docked.isAlongsideStationary)
+        // Rider speeds up - same target, but bikeSpeedKmh now 30.
+        decoder.feed(byteArrayOf(0x04, 0x00, 120.toByte()))   // 30 km/h
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10)))
+        assertFalse("flag must drop once rider exceeds slow threshold",
+            state!!.vehicles.single().isAlongsideStationary)
+    }
+
     @Test fun downgradeCounterResetsOnUpgrade() {
         // HIGH -> NORMAL (downgrade proposal) -> HIGH (cancels proposal) ->
         // back to HIGH is stable; a single later NORMAL should not commit.

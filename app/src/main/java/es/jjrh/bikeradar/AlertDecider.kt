@@ -53,7 +53,14 @@ class AlertDecider(
     private var beepPending: Boolean = false
 
     fun decide(vehicles: List<Vehicle>, alertMaxM: Int, nowMs: Long): Event {
-        val close = vehicles.filter { !it.isBehind && it.distanceM in 0..alertMaxM }
+        // Skip alongside-stationary tracks (parked car / queued traffic next
+        // to a crawling rider). The decoder gates these on rider speed +
+        // dwell time + zero closing speed, so they are by construction
+        // not threats - beeping for them would be the audio equivalent of
+        // the chevron-overlap problem the visual dock was added to fix.
+        val close = vehicles.filter {
+            !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMaxM
+        }
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
 

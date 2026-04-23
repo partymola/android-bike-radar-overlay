@@ -28,6 +28,18 @@ data class Vehicle(
      * available") for that frame.
      */
     val speedXMs: Int? = null,
+    /**
+     * True when this target is a near-stationary vehicle alongside the
+     * rider (parked car / queued traffic in the next lane while the rider
+     * crawls past). The decoder sets this when range, lateral offset,
+     * closing speed, rider speed, and dwell-time gates all hold; see
+     * [RadarV2Decoder] companion constants. The overlay renders these as
+     * edge-docked hollow outlines instead of filled centre-lane boxes.
+     * Recomputed every snapshot - flips back to false the moment any
+     * gate breaks (e.g. the target starts closing), and the resulting
+     * pop back to a normal filled box is the rider's attention cue.
+     */
+    val isAlongsideStationary: Boolean = false,
 ) {
     val speedKmh: Int get() = (speedMs * 3.6).toInt()
 }

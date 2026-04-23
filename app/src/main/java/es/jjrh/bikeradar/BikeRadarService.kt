@@ -94,6 +94,33 @@ class BikeRadarService : Service() {
     // reset the reconnect backoff.
     @Volatile private var lastConnectionReachedDecode = false
 
+    // ── Walk-away alarm state ────────────────────────────────────────────────
+    // See WalkAwayDecider for the decision logic. The service owns all
+    // mutable fields and samples them from a separate 2 s tick coroutine so
+    // the alarm can evaluate while the radar is disconnected and no
+    // RadarState is flowing.
+    /** Monotonic ms of the last radar GATT disconnect. Null when radar is
+     *  currently connected or has never been off this session. */
+    @Volatile private var radarOffSinceMs: Long? = null
+    /** Running total of ms the radar has been CONNECTED this session, used
+     *  as the cold-start grace gate. */
+    @Volatile private var sessionRadarConnectedMs: Long = 0L
+    /** True once a dashcam advert has been observed after the most recent
+     *  radar-off event; distinguishes "dashcam still on bike" from "rider
+     *  took everything inside" (dashcam went silent as it went out of
+     *  phone range). Cleared on radar reconnect. */
+    @Volatile private var dashcamSeenSinceRadarOff = false
+    /** Monotonic ms of the last walk-away notification fire. Null until
+     *  first fire this session. Cleared on radar reconnect and on
+     *  auto-dismiss. */
+    @Volatile private var lastWalkAwayFireMs: Long? = null
+    /** True when the user tapped Dismiss (or the notification itself) on
+     *  the last walk-away fire; blocks refire until radar reconnects. */
+    @Volatile private var walkAwayDismissed = false
+    /** Single-slot job that clears [walkAwayDismissed] after a snooze
+     *  window expires, re-arming the decider. */
+    private var walkAwaySnoozeJob: Job? = null
+
     private var bondReceiverRegistered = false
     private val bondReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -147,6 +174,7 @@ class BikeRadarService : Service() {
         registerEventScan()
         registerBondReceiver()
         scope.launch { kickstartFromCache() }
+        launchWalkAwayTick()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -164,6 +192,30 @@ class BikeRadarService : Service() {
             ACTION_FORCE_RECONNECT -> {
                 Log.i(TAG_RADAR, "force reconnect requested")
                 radarJob?.cancel()
+            }
+            ACTION_WALKAWAY_DISMISS -> {
+                Log.i(TAG, "walk-away dismissed")
+                walkAwayDismissed = true
+                walkAwaySnoozeJob?.cancel()
+                walkAwaySnoozeJob = null
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIF_WALKAWAY_ID)
+            }
+            ACTION_WALKAWAY_SNOOZE -> {
+                Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
+                walkAwayDismissed = true
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIF_WALKAWAY_ID)
+                walkAwaySnoozeJob?.cancel()
+                walkAwaySnoozeJob = scope.launch {
+                    delay(WALKAWAY_SNOOZE_MS)
+                    // Clear both gates so the decider can re-evaluate
+                    // cleanly: treat the snooze as a full re-arm for this
+                    // episode rather than "it's been 2 minutes, fire
+                    // again immediately".
+                    walkAwayDismissed = false
+                    lastWalkAwayFireMs = null
+                }
             }
         }
         return START_STICKY
@@ -927,6 +979,162 @@ class BikeRadarService : Service() {
                 NotificationChannel(CHANNEL_ID, "Bike Radar", NotificationManager.IMPORTANCE_MIN)
             )
         }
+        if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
+            // HIGH importance + distinctive vibration pattern so the rider
+            // can distinguish the walk-away alert from an ordinary app
+            // notification through a pocket, without having to escalate
+            // to the DND-bypass channels.
+            val ch = NotificationChannel(
+                WALKAWAY_CHANNEL_ID,
+                "Dashcam left on bike",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description =
+                    "Alerts when the radar turns off but the dashcam is still broadcasting from the bike."
+                enableVibration(true)
+                vibrationPattern = WALKAWAY_VIBRATE_PATTERN
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+            }
+            nm.createNotificationChannel(ch)
+        }
+    }
+
+    // ── walk-away alarm ──────────────────────────────────────────────────────
+
+    private fun launchWalkAwayTick() {
+        scope.launch {
+            var prevTickMs = System.currentTimeMillis()
+            while (true) {
+                delay(WALKAWAY_TICK_MS)
+                val now = System.currentTimeMillis()
+                val elapsed = now - prevTickMs
+                prevTickMs = now
+                tickWalkAwayState(now, elapsed)
+                evaluateWalkAway(now)
+            }
+        }
+    }
+
+    private fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
+        if (radarGattActive) {
+            if (radarOffSinceMs != null) {
+                // Clean reconnect: clear the off-episode flags so the next
+                // disconnect episode starts fresh, and cancel any live
+                // notification so the rider isn't still seeing a stale
+                // alert after walking back to the bike.
+                radarOffSinceMs = null
+                dashcamSeenSinceRadarOff = false
+                walkAwayDismissed = false
+                walkAwaySnoozeJob?.cancel()
+                walkAwaySnoozeJob = null
+                lastWalkAwayFireMs = null
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIF_WALKAWAY_ID)
+            }
+            sessionRadarConnectedMs += elapsedMs
+        } else if (radarOffSinceMs == null) {
+            radarOffSinceMs = nowMs
+        }
+
+        // Once the radar is off, watch the dashcam battery bus for a
+        // fresh advert to mark the "still on the bike" gate.
+        val offAt = radarOffSinceMs
+        if (offAt != null && !dashcamSeenSinceRadarOff) {
+            val slug = resolveDashcamSlug()
+            val entry = slug?.let { BatteryStateBus.entries.value[it] }
+            if (entry != null && entry.readAtMs > offAt) {
+                dashcamSeenSinceRadarOff = true
+            }
+        }
+    }
+
+    private fun evaluateWalkAway(nowMs: Long) {
+        val slug = resolveDashcamSlug()
+        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
+        val input = WalkAwayDecider.Input(
+            nowMs = nowMs,
+            config = WalkAwayDecider.Config(
+                // Gate on both the dedicated toggle AND the dashcam-warn
+                // master switch. If the rider explicitly said "don't
+                // warn me about the dashcam at all" we respect that.
+                enabled = prefs.walkAwayAlarmEnabled && prefs.dashcamWarnWhenOff
+                    && slug != null,
+                thresholdMs = prefs.walkAwayAlarmThresholdSec * 1000L,
+            ),
+            radarConnected = radarGattActive,
+            radarOffSinceMs = radarOffSinceMs,
+            dashcamLastAdvertMs = dashcamLastAdvertMs,
+            dashcamHasAdvertedSinceRadarOff = dashcamSeenSinceRadarOff,
+            sessionTotalRadarConnectedMs = sessionRadarConnectedMs,
+            lastFireMs = lastWalkAwayFireMs,
+            dismissedForEpisode = walkAwayDismissed,
+        )
+        when (WalkAwayDecider.decide(input)) {
+            WalkAwayDecider.Action.FIRE -> {
+                postWalkAwayNotification()
+                lastWalkAwayFireMs = nowMs
+            }
+            WalkAwayDecider.Action.AUTO_DISMISS -> {
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIF_WALKAWAY_ID)
+                lastWalkAwayFireMs = null
+            }
+            WalkAwayDecider.Action.NONE -> {}
+        }
+    }
+
+    private fun resolveDashcamSlug(): String? {
+        val mac = prefs.dashcamMac ?: return null
+        return macToSlug[mac]
+            ?: macToSlug[mac.uppercase(Locale.ROOT)]
+            ?: prefs.dashcamDisplayName?.let { slug(it) }
+    }
+
+    private fun postWalkAwayNotification() {
+        val piFlags = if (Build.VERSION.SDK_INT >= 23)
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        val dismissPi = PendingIntent.getBroadcast(
+            this, NOTIF_WALKAWAY_DISMISS_REQ,
+            Intent(this, RemoteControlReceiver::class.java).apply {
+                action = RemoteControlReceiver.ACTION_WALKAWAY_DISMISS
+            },
+            piFlags,
+        )
+        val snoozePi = PendingIntent.getBroadcast(
+            this, NOTIF_WALKAWAY_SNOOZE_REQ,
+            Intent(this, RemoteControlReceiver::class.java).apply {
+                action = RemoteControlReceiver.ACTION_WALKAWAY_SNOOZE
+            },
+            piFlags,
+        )
+        val notif = NotificationCompat.Builder(this, WALKAWAY_CHANNEL_ID)
+            .setContentTitle("Dashcam left on bike")
+            .setContentText(
+                "Radar is off but the dashcam is still on your bike. " +
+                    "Battery draining, easy to forget.",
+            )
+            .setSmallIcon(R.drawable.ic_videocam_off)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .setVibrate(WALKAWAY_VIBRATE_PATTERN)
+            .addAction(0, "Dismiss", dismissPi)
+            .addAction(0, "Remind in 2 min", snoozePi)
+            // Tapping the notification body is treated as Dismiss; swipe-
+            // dismiss via setDeleteIntent also marks the episode handled.
+            .setContentIntent(dismissPi)
+            .setDeleteIntent(dismissPi)
+            .build()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_WALKAWAY_ID, notif)
     }
 
     private fun buildNotification(): Notification {
@@ -1020,9 +1228,13 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         const val CHANNEL_ID = "bike_radar_min"
+        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway"
         const val NOTIF_ID = 1
         const val NOTIF_BOND_LOST_ID = 2
+        const val NOTIF_WALKAWAY_ID = 3
         private const val BOND_NOTIF_REQ = 0xB1CE
+        private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
+        private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
         private const val PREFS_THROTTLE = "bike_radar_throttle"
         private const val KEY_KNOWN = "known_devices"
         private const val KEY_LAST_TS = "last_ts"
@@ -1031,6 +1243,8 @@ class BikeRadarService : Service() {
         const val ACTION_READ_DEVICE = "es.jjrh.bikeradar.READ_DEVICE"
         const val ACTION_UPDATE_NOTIF = "es.jjrh.bikeradar.UPDATE_NOTIF"
         const val ACTION_FORCE_RECONNECT = "es.jjrh.bikeradar.FORCE_RECONNECT"
+        const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
+        const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
         const val EXTRA_MAC = "mac"
         const val EXTRA_NAME = "name"
         private const val NOTIF_ACTION_REQ = 0xB1CD
@@ -1062,6 +1276,13 @@ class BikeRadarService : Service() {
         const val DASHCAM_TICK_MS = 2_000L
         const val DASHCAM_FRESH_MS = 30_000L
         const val DASHCAM_COLD_START_MS = 10_000L
+
+        // Walk-away alarm tick cadence + snooze. Tick interval matches the
+        // dashcam status tick so the feature reacts on the same cadence
+        // riders already expect for the "dashcam off" indicator.
+        const val WALKAWAY_TICK_MS = 2_000L
+        const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
+        private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

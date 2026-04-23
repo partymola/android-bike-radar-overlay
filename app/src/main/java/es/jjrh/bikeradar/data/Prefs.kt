@@ -27,6 +27,8 @@ data class PrefsSnapshot(
     val dashcamMac: String?,
     val dashcamDisplayName: String?,
     val dashcamWarnWhenOff: Boolean,
+    val walkAwayAlarmEnabled: Boolean,
+    val walkAwayAlarmThresholdSec: Int,
 )
 
 class Prefs(context: Context) {
@@ -94,6 +96,23 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
         set(v) { sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply() }
 
+    /** Master toggle for the walk-away alarm (radar-off-while-dashcam-
+     *  on notification). Default on: asymmetric cost - false positive
+     *  is one swipe, false negative is a drained or stolen dashcam. */
+    var walkAwayAlarmEnabled: Boolean
+        get() = sp.getBoolean(KEY_WALKAWAY_ENABLED, true)
+        set(v) { sp.edit().putBoolean(KEY_WALKAWAY_ENABLED, v).apply() }
+
+    /** Threshold in seconds for the walk-away alarm. Min 15 s (any
+     *  tighter races the radar reconnect loop), max 120 s (beyond
+     *  that the rider is too far from the bike to act). Default 30 s
+     *  is a compromise between caution (longer waits cover the
+     *  rider's final lock-up fiddle) and urgency (shorter waits
+     *  catch the rider before they walk out of earshot). */
+    var walkAwayAlarmThresholdSec: Int
+        get() = sp.getInt(KEY_WALKAWAY_THRESHOLD_SEC, 30).coerceIn(15, 120)
+        set(v) { sp.edit().putInt(KEY_WALKAWAY_THRESHOLD_SEC, v.coerceIn(15, 120)).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -111,6 +130,8 @@ class Prefs(context: Context) {
         dashcamMac = dashcamMac,
         dashcamDisplayName = dashcamDisplayName,
         dashcamWarnWhenOff = dashcamWarnWhenOff,
+        walkAwayAlarmEnabled = walkAwayAlarmEnabled,
+        walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -137,6 +158,8 @@ class Prefs(context: Context) {
         appendLine("dashcam_mac=${dashcamMac ?: "<none>"}")
         appendLine("dashcam_display_name=${dashcamDisplayName ?: "<none>"}")
         appendLine("dashcam_warn_when_off=$dashcamWarnWhenOff")
+        appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
+        appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
     }
 
     companion object {
@@ -155,5 +178,7 @@ class Prefs(context: Context) {
         const val KEY_DASHCAM_MAC = "dashcam_mac"
         const val KEY_DASHCAM_DISPLAY_NAME = "dashcam_display_name"
         const val KEY_DASHCAM_WARN_WHEN_OFF = "dashcam_warn_when_off"
+        const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
+        const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
     }
 }

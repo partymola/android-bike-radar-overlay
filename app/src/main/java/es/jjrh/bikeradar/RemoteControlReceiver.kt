@@ -46,6 +46,12 @@ class RemoteControlReceiver : BroadcastReceiver() {
                 Log.i(TAG, "resumed")
                 updateServiceNotification(ctx)
             }
+            ACTION_WALKAWAY_DISMISS -> {
+                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_DISMISS)
+            }
+            ACTION_WALKAWAY_SNOOZE -> {
+                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_SNOOZE)
+            }
             else -> Log.w(TAG, "unknown action $action")
         }
     }
@@ -64,6 +70,13 @@ class RemoteControlReceiver : BroadcastReceiver() {
         })
     }
 
+    private fun forwardToService(ctx: Context, serviceAction: String) {
+        ContextCompat.startForegroundService(
+            ctx,
+            Intent(ctx, BikeRadarService::class.java).apply { action = serviceAction },
+        )
+    }
+
     companion object {
         private const val TAG = "BikeRadar.Remote"
 
@@ -71,5 +84,7 @@ class RemoteControlReceiver : BroadcastReceiver() {
         const val ACTION_DEV_SYNTH = "es.jjrh.bikeradar.DEV_SYNTH"
         const val ACTION_PAUSE_1H = "es.jjrh.bikeradar.PAUSE_1H"
         const val ACTION_RESUME = "es.jjrh.bikeradar.RESUME"
+        const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
+        const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
     }
 }

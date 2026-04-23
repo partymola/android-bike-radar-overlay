@@ -89,6 +89,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
     var dashcamMac by remember { mutableStateOf(prefs.dashcamMac) }
     var dashcamDisplayName by remember { mutableStateOf(prefs.dashcamDisplayName) }
     var dashcamWarn by remember { mutableStateOf(prefs.dashcamWarnWhenOff) }
+    var walkAwayEnabled by remember { mutableStateOf(prefs.walkAwayAlarmEnabled) }
+    var walkAwayThreshold by remember { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
     var showPicker by remember { mutableStateOf(false) }
     var alertDist by remember { mutableIntStateOf(prefs.alertMaxDistanceM) }
     var visualDist by remember { mutableIntStateOf(prefs.visualMaxDistanceM) }
@@ -245,6 +247,51 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                         enabled = dashcamMac != null,
                         onCheckedChange = { dashcamWarn = it; prefs.dashcamWarnWhenOff = it },
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Warn if dashcam is left running",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (dashcamMac == null || !dashcamWarn)
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Notify when the radar turns off but the dashcam is still on the bike.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = walkAwayEnabled,
+                        enabled = dashcamMac != null && dashcamWarn,
+                        onCheckedChange = {
+                            walkAwayEnabled = it
+                            prefs.walkAwayAlarmEnabled = it
+                        },
+                    )
+                }
+                if (walkAwayEnabled && dashcamMac != null && dashcamWarn) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(
+                            "Wait ${walkAwayThreshold}s before alerting",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Slider(
+                            value = walkAwayThreshold.toFloat(),
+                            onValueChange = { walkAwayThreshold = it.toInt() },
+                            valueRange = 15f..120f,
+                            steps = 6,  // 15 / 30 / 45 / 60 / 75 / 90 / 105 / 120
+                            onValueChangeFinished = {
+                                prefs.walkAwayAlarmThresholdSec = walkAwayThreshold
+                            },
+                        )
+                    }
                 }
             }
             if (showPicker) {

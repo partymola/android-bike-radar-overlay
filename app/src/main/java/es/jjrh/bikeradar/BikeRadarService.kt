@@ -700,6 +700,8 @@ class BikeRadarService : Service() {
 
                         view.setVisualMaxM(prefs.visualMaxDistanceM)
                         view.setAlertMaxM(prefs.alertMaxDistanceM)
+                        view.setAdaptiveAlerts(prefs.adaptiveAlertsEnabled)
+                        view.setPrecog(prefs.precogEnabled)
                         view.setState(state)
 
                         val threshold = prefs.batteryLowThresholdPct

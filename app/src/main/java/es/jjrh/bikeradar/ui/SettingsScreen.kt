@@ -91,6 +91,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
     var dashcamWarn by remember { mutableStateOf(prefs.dashcamWarnWhenOff) }
     var walkAwayEnabled by remember { mutableStateOf(prefs.walkAwayAlarmEnabled) }
     var walkAwayThreshold by remember { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
+    var adaptiveAlerts by remember { mutableStateOf(prefs.adaptiveAlertsEnabled) }
+    var precog by remember { mutableStateOf(prefs.precogEnabled) }
     var showPicker by remember { mutableStateOf(false) }
     var alertDist by remember { mutableIntStateOf(prefs.alertMaxDistanceM) }
     var visualDist by remember { mutableIntStateOf(prefs.visualMaxDistanceM) }
@@ -148,6 +150,30 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 onValueChange = { alertDist = it.toInt() },
                 onValueChangeFinished = { prefs.alertMaxDistanceM = alertDist },
             )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Adaptive alert colours",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Scale amber/red thresholds by your bike speed: more sensitive when stopped, less when cruising.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = adaptiveAlerts,
+                    onCheckedChange = {
+                        adaptiveAlerts = it
+                        prefs.adaptiveAlertsEnabled = it
+                    },
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Overlay")
@@ -444,6 +470,39 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save") }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsSectionHeader("Experimental")
+            Text(
+                "Features still being tested. May be jittery or change without notice.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Precog",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Render each vehicle 1 s into the future — see where overtakers are going, not just where they are. Uses the radar's speed + lateral-velocity signals. Can jitter when lateral velocity is noisy.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = precog,
+                    onCheckedChange = {
+                        precog = it
+                        prefs.precogEnabled = it
+                    },
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Permissions")

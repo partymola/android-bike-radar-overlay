@@ -29,6 +29,8 @@ data class PrefsSnapshot(
     val dashcamWarnWhenOff: Boolean,
     val walkAwayAlarmEnabled: Boolean,
     val walkAwayAlarmThresholdSec: Int,
+    val adaptiveAlertsEnabled: Boolean,
+    val precogEnabled: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -113,6 +115,27 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_WALKAWAY_THRESHOLD_SEC, 30).coerceIn(15, 120)
         set(v) { sp.edit().putInt(KEY_WALKAWAY_THRESHOLD_SEC, v.coerceIn(15, 120)).apply() }
 
+    /** When true, the closing-speed colour bands on the overlay scale
+     *  with the rider's own bike speed: a stopped rider sees amber /
+     *  red sooner (any approach feels threatening when you can't move),
+     *  a cruising rider sees them later (a 40 km/h closer is just
+     *  traffic when you're doing 30). Covers the walk-of-shame case
+     *  — puncture by the roadside — without a separate feature. */
+    var adaptiveAlertsEnabled: Boolean
+        get() = sp.getBoolean(KEY_ADAPTIVE_ALERTS, true)
+        set(v) { sp.edit().putBoolean(KEY_ADAPTIVE_ALERTS, v).apply() }
+
+    /** Experimental. When true, the overlay renders each vehicle at its
+     *  predicted position 1 s from now (extrapolated from the decoder's
+     *  closing speed + lateral velocity) rather than its current
+     *  position. Turns a position-only view into an intent view:
+     *  overtakers swinging wide show that swing a second before it
+     *  happens. Default off because the prediction can look jittery
+     *  when lateral velocity is noisy. */
+    var precogEnabled: Boolean
+        get() = sp.getBoolean(KEY_PRECOG, false)
+        set(v) { sp.edit().putBoolean(KEY_PRECOG, v).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -132,6 +155,8 @@ class Prefs(context: Context) {
         dashcamWarnWhenOff = dashcamWarnWhenOff,
         walkAwayAlarmEnabled = walkAwayAlarmEnabled,
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
+        adaptiveAlertsEnabled = adaptiveAlertsEnabled,
+        precogEnabled = precogEnabled,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -160,6 +185,8 @@ class Prefs(context: Context) {
         appendLine("dashcam_warn_when_off=$dashcamWarnWhenOff")
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
+        appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
+        appendLine("precog_enabled=$precogEnabled")
     }
 
     companion object {
@@ -180,5 +207,7 @@ class Prefs(context: Context) {
         const val KEY_DASHCAM_WARN_WHEN_OFF = "dashcam_warn_when_off"
         const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
+        const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
+        const val KEY_PRECOG = "precog_enabled"
     }
 }

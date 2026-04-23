@@ -73,6 +73,8 @@ class RadarOverlayView(context: Context) : View(context) {
 
     private var visualMaxM: Int = DEFAULT_VISUAL_MAX_M
     private var alertMaxM: Int = 20
+    private var adaptiveAlerts: Boolean = true
+    private var precog: Boolean = false
 
     // Battery warning state: slugs currently below threshold
     private var batteryLowSlugs: Set<String> = emptySet()
@@ -120,6 +122,18 @@ class RadarOverlayView(context: Context) : View(context) {
         postInvalidate()
     }
 
+    fun setAdaptiveAlerts(enabled: Boolean) {
+        if (enabled == adaptiveAlerts) return
+        adaptiveAlerts = enabled
+        postInvalidate()
+    }
+
+    fun setPrecog(enabled: Boolean) {
+        if (enabled == precog) return
+        precog = enabled
+        postInvalidate()
+    }
+
     fun setBatteryLow(lowSlugs: Set<String>, showLabels: Boolean) {
         if (lowSlugs == batteryLowSlugs && showLabels == batteryShowLabels) return
         batteryLowSlugs = lowSlugs
@@ -153,7 +167,13 @@ class RadarOverlayView(context: Context) : View(context) {
             canvas.drawText(label, dp(6f), dp(14f), timePaint)
         }
 
-        if (!clear && state.vehicles.any { it.speedKmh >= 50 }) {
+        // Cache adaptive thresholds for this frame: one computation, one
+        // read of state.bikeSpeedKmh, then the per-vehicle loop just
+        // passes closing-speed in.
+        val bikeKmh = state.bikeSpeedKmh
+        val (amberKmh, redKmh) = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
+
+        if (!clear && state.vehicles.any { it.speedKmh >= redKmh }) {
             val half = dangerBorderPaint.strokeWidth / 2f
             canvas.drawRoundRect(
                 RectF(half, half, w - half, h - half),
@@ -188,10 +208,32 @@ class RadarOverlayView(context: Context) : View(context) {
 
         for (v in state.vehicles) {
             if (v.isBehind) continue
-            if (v.distanceM > visualMaxM) continue
+
+            // Precog: render each vehicle at its predicted position one
+            // PRECOG_LOOKAHEAD_S from now, extrapolated from the radar's
+            // speedY + speedXMs fields. The visual jump from current to
+            // 1 s ahead is the point — overtakers swinging wide show the
+            // swing a beat before it happens. Targets predicted to have
+            // passed the rider drop out of the frame; they're about to
+            // stop being useful to track.
+            val rangeYm: Float
+            val lateralMeters: Float
+            if (precog) {
+                val predRangeY = v.distanceM + v.speedMs * PRECOG_LOOKAHEAD_S
+                if (predRangeY <= 0f) continue
+                val currentLateralM = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
+                val predLateralM = currentLateralM + (v.speedXMs ?: 0) * PRECOG_LOOKAHEAD_S
+                rangeYm = predRangeY
+                lateralMeters = predLateralM
+            } else {
+                rangeYm = v.distanceM.toFloat()
+                lateralMeters = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
+            }
+            if (rangeYm > visualMaxM) continue
+
             val halfW   = vehicleHalfWidth(v.size)
             val halfH   = vehicleHalfHeight(v.size)
-            val centreY = distToY(v.distanceM.toFloat(), riderBottom, bottomY)
+            val centreY = distToY(rangeYm, riderBottom, bottomY)
 
             if (v.isAlongsideStationary) {
                 // Edge-dock hollow render. X snaps to the nearest panel
@@ -207,11 +249,12 @@ class RadarOverlayView(context: Context) : View(context) {
                 continue
             }
 
-            val centreX = trackX + v.lateralPos * maxLateralPx
-            val color   = speedColor(v.speedKmh)
+            val clampedLateral = (lateralMeters / RadarV2Decoder.LATERAL_FULL_M).coerceIn(-1f, 1f)
+            val centreX = trackX + clampedLateral * maxLateralPx
+            val color   = speedColor(v.speedKmh, amberKmh, redKmh)
 
             val tailLen = (v.speedMs * dp(3f)).coerceIn(dp(6f), dp(40f))
-            val distFactor = distanceAlphaFactor(v.distanceM.toFloat())
+            val distFactor = distanceAlphaFactor(rangeYm)
             val r = Color.red(color); val g = Color.green(color); val b = Color.blue(color)
 
             tailPaint.color = Color.argb((210 * distFactor).toInt(), r, g, b)
@@ -349,10 +392,26 @@ class RadarOverlayView(context: Context) : View(context) {
         return 1f - 0.7f * frac
     }
 
-    private fun speedColor(kmh: Int): Int = when {
-        kmh < 25 -> Color.rgb(50, 200, 70)
-        kmh < 50 -> Color.rgb(230, 170, 20)
-        else     -> Color.rgb(220, 40, 40)
+    private fun speedColor(closingKmh: Int, amberKmh: Int, redKmh: Int): Int = when {
+        closingKmh < amberKmh -> Color.rgb(50, 200, 70)
+        closingKmh < redKmh   -> Color.rgb(230, 170, 20)
+        else                  -> Color.rgb(220, 40, 40)
+    }
+
+    /** Scales the amber / red closing-speed bands by rider speed so that a
+     *  stopped rider (puncture at roadside, traffic-light stop) sees
+     *  alarming colours earlier, and a cruising rider doesn't get coloured
+     *  warnings for every vehicle that happens to be overtaking. At
+     *  bikeSpeed = 0 the bands collapse toward the classic "anything
+     *  approaching is worth watching" mode; at 30 km/h they stay near the
+     *  legacy static thresholds. Slightly superlinear past 30 so fast
+     *  descenders don't drown in red boxes. Null bike speed (no device-
+     *  status frame yet) falls back to the static bands. */
+    private fun adaptiveSpeedBands(bikeSpeedKmh: Int?): Pair<Int, Int> {
+        val s = bikeSpeedKmh ?: return FIXED_SPEED_BANDS
+        val amber = (15 + s / 2).coerceAtLeast(10)
+        val red   = (30 + s).coerceAtLeast(20)
+        return amber to red
     }
 
     private fun dp(v: Float) =
@@ -362,6 +421,17 @@ class RadarOverlayView(context: Context) : View(context) {
         const val MIN_VISUAL_MAX_M = 10
         const val MAX_VISUAL_MAX_M = 80
         const val DEFAULT_VISUAL_MAX_M = 50
+
+        /** Lookahead horizon used when Precog rendering is enabled. One
+         *  second is long enough for the swing-out of an overtaker to be
+         *  visible before it happens, but short enough that the
+         *  quantised 0.5 m/s velocity data doesn't make predictions
+         *  jitter wildly. */
+        private const val PRECOG_LOOKAHEAD_S = 1.0f
+        /** Fixed closing-speed bands used when adaptive alerts are off
+         *  or bikeSpeedKmh is null. Tuned for a typical urban cruising
+         *  rider (~20-25 km/h). */
+        private val FIXED_SPEED_BANDS = 25 to 50
 
         private const val RIDER_WIDTH_DP  = 20f
         private const val RIDER_HEIGHT_DP = 24f

@@ -73,8 +73,10 @@ decoders in both Python and Kotlin live there.
 ## Gotchas
 
 - APK reinstall (`adb install -r`) kills the app process without running
-  `onDestroy`, so Bluedroid retains a half-open GATT. `RadarUnlock.forceReconnect()`
-  auto-heals by closing + reopening GATT once on first handshake ABORT.
+  `onDestroy`, so Bluedroid retains a half-open GATT. The next handshake
+  ABORT triggers a GATT `disconnect()` + `close()` in `runRadarConnection`,
+  and the outer reconnect loop picks up a fresh connection via the
+  quick-reconnect path (bypasses the normal backoff; ~1.5 s recovery).
 - Never subscribe the CCCD of `6a4e3203` (V1 radar char). Subscribing locks
   the radar into V1-only mode and suppresses V2.
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for

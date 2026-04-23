@@ -10,6 +10,26 @@ See [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTO
 and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
 repository for the wire protocol, reference decoders, and unit tests.
 
+## Status
+
+Alpha. Personal project. Tested only against the author's own hardware
+(Garmin Varia RearVue 820 + Pixel 10 Pro XL on Android 16). No
+guarantee it works on any other device, any other Android version, or
+any future firmware.
+
+## Use at your own risk
+
+This app displays rear-radar information intended to supplement, not
+replace, rear observation. It is not a replacement for a rear-view
+mirror, direct observation, or safe riding practice. Treat anything
+shown on the overlay as advisory only, and never rely on it alone for
+safety-critical decisions. Always shoulder-check before manoeuvring.
+
+The GPL-3.0 licence (see `LICENSE`) disclaims warranty to the extent
+permitted by applicable law. Not affiliated with or endorsed by
+Garmin. Bug reports welcome; please include device + Android version
++ firmware.
+
 ## Requirements
 
 - Android phone (tested on Pixel 10 Pro XL / Android 16). `minSdk = 31`,

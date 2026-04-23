@@ -327,6 +327,29 @@ class BikeRadarService : Service() {
         radarJob = scope.launch { runRadarConnection(mac, name) }
     }
 
+    /**
+     * Invokes the hidden BluetoothGatt.refresh() method via reflection.
+     *
+     * Known Android workaround for stale GATT cache after a firmware-side
+     * service change; widely used in OSS BLE projects (Punch Through,
+     * Stack Overflow). Android caches the remote GATT database between
+     * connections; if the peer's services have changed since the cache
+     * was populated, service discovery returns the stale list. The
+     * @hide refresh() method clears that cache so the next
+     * discoverServices() sees the live characteristics.
+     *
+     * The method is @hide and could in theory be removed in a future
+     * Android release, so the call is wrapped in try/catch and the
+     * caller falls back to the original behaviour on failure.
+     */
+    private fun refreshGattCache(gatt: BluetoothGatt): Boolean = try {
+        val method = BluetoothGatt::class.java.getMethod("refresh")
+        method.invoke(gatt) as? Boolean ?: false
+    } catch (t: Throwable) {
+        Log.w(TAG_RADAR, "BluetoothGatt.refresh() unavailable: $t")
+        false
+    }
+
     @SuppressLint("MissingPermission")
     private suspend fun runRadarConnection(mac: String, name: String) {
         val btMgr = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager ?: return
@@ -352,6 +375,7 @@ class BikeRadarService : Service() {
         val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
         var gatt: BluetoothGatt? = null
         var overlayJob: Job? = null
+        var cacheRefreshed = false
 
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -369,9 +393,24 @@ class BikeRadarService : Service() {
             }
 
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                clog("# services discovered status=$status")
+                clog("# services discovered status=$status services=${g.services.size}")
+                val ok = status == BluetoothGatt.GATT_SUCCESS
+                val radarPresent = g.getService(Uuids.SVC_RADAR) != null
+                if (ok && !cacheRefreshed && (g.services.isEmpty() || !radarPresent)) {
+                    // Stale GATT cache from a prior session can leave the
+                    // service list empty or missing the radar service even
+                    // when the connection is healthy. Clear the cache and
+                    // re-discover once before reporting failure.
+                    cacheRefreshed = true
+                    val refreshed = refreshGattCache(g)
+                    clog("# stale cache detected, refresh=$refreshed, retrying discoverServices")
+                    if (refreshed) {
+                        g.discoverServices()
+                        return
+                    }
+                }
                 if (!servicesReady.isCompleted) {
-                    servicesReady.complete(status == BluetoothGatt.GATT_SUCCESS)
+                    servicesReady.complete(ok)
                 }
             }
 

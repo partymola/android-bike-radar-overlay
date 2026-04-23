@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -166,43 +167,66 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
 
     // ── private ───────────────────────────────────────────────────────────────
 
+    /**
+     * The synchronous Android GATT-submit calls (writeDescriptor,
+     * readCharacteristic, writeCharacteristic, requestMtu) sometimes return
+     * false transiently when the stack is briefly busy with internal
+     * housekeeping. Retrying the submit a few times with a small gap
+     * recovers the op without bubbling a spurious failure to the caller.
+     * Only after [SUBMIT_RETRY_ATTEMPTS] consecutive false returns do we
+     * complete the op as failed.
+     */
     @SuppressLint("MissingPermission")
-    private fun dispatch(op: Op) {
+    private suspend fun dispatch(op: Op) {
         when (op) {
             is Op.CccdWrite -> {
-                @Suppress("DEPRECATION")
-                op.gatt.writeDescriptor(op.descriptor)
+                val ok = retrySubmit {
+                    @Suppress("DEPRECATION")
+                    op.gatt.writeDescriptor(op.descriptor)
+                }
+                if (!ok) op.result.complete(false)
             }
             is Op.Read -> {
-                val ok = op.gatt.readCharacteristic(op.char)
+                val ok = retrySubmit { op.gatt.readCharacteristic(op.char) }
                 if (!ok) op.result.complete(null)
             }
             is Op.Write -> {
-                val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    val type = if (op.noResponse)
-                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                    else
-                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                    op.gatt.writeCharacteristic(op.char, op.bytes, type)
-                    true
-                } else {
-                    @Suppress("DEPRECATION")
-                    op.char.writeType = if (op.noResponse)
-                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                    else
-                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                    @Suppress("DEPRECATION")
-                    op.char.value = op.bytes
-                    @Suppress("DEPRECATION")
-                    op.gatt.writeCharacteristic(op.char)
+                val ok = retrySubmit {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val type = if (op.noResponse)
+                            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                        else
+                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        // BluetoothStatusCodes.SUCCESS = 0 on API 33+; using
+                        // the literal avoids a class reference on API 31/32.
+                        op.gatt.writeCharacteristic(op.char, op.bytes, type) == 0
+                    } else {
+                        @Suppress("DEPRECATION")
+                        op.char.writeType = if (op.noResponse)
+                            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                        else
+                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        @Suppress("DEPRECATION")
+                        op.char.value = op.bytes
+                        @Suppress("DEPRECATION")
+                        op.gatt.writeCharacteristic(op.char)
+                    }
                 }
                 if (!ok) op.result.complete(false)
             }
             is Op.Mtu -> {
-                val ok = op.gatt.requestMtu(op.mtu)
+                val ok = retrySubmit { op.gatt.requestMtu(op.mtu) }
                 if (!ok) op.result.complete(-1)
             }
         }
+    }
+
+    private suspend fun retrySubmit(submit: () -> Boolean): Boolean {
+        repeat(SUBMIT_RETRY_ATTEMPTS) { attempt ->
+            if (submit()) return true
+            if (attempt < SUBMIT_RETRY_ATTEMPTS - 1) delay(SUBMIT_RETRY_GAP_MS)
+        }
+        return false
     }
 
     private fun completeAny(op: Op, timedOut: Boolean) {
@@ -217,5 +241,12 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
     companion object {
         private const val TAG = "BleOpQueue"
         const val DEFAULT_TIMEOUT_MS = 5000L
+
+        // Per-op submit retry: tolerates transient false returns from the
+        // Android stack while it is briefly busy. 5 attempts at 50 ms
+        // covers the typical 100-200 ms recovery window without unduly
+        // blocking the queue.
+        private const val SUBMIT_RETRY_ATTEMPTS = 5
+        private const val SUBMIT_RETRY_GAP_MS = 50L
     }
 }

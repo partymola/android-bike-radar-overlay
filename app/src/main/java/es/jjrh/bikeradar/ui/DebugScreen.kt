@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,10 +41,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
@@ -84,6 +89,7 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
     var synthRunning by remember { mutableStateOf(SyntheticScenarioService.isRunning) }
+    var stateLogExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -162,6 +168,7 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
                     ) { Text(if (synthRunning) "Stop Synthetic" else "Synthetic") }
                 }
             }
+            item { DebugSectionHeader("Service control") }
             item {
                 OutlinedButton(
                     onClick = {
@@ -201,7 +208,7 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
                             Toast.makeText(ctx, "State 50% sent", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Send 50%") }
+                    ) { Text("Send battery 50%") }
                 }
             }
 
@@ -224,7 +231,7 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
                         OutlinedButton(onClick = { shareFile(ctx, f) }) { Text("Share") }
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
             if (logFiles.isEmpty()) {
                 item { Text("No capture logs yet.", style = MaterialTheme.typography.bodySmall) }
@@ -240,12 +247,41 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
             }
 
             // ── Raw state viewer ──────────────────────────────────────────────
-            item { DebugSectionHeader("Radar state log (last 200)") }
-            items(stateLog) { entry ->
-                Text(entry, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { stateLogExpanded = !stateLogExpanded }
+                        .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Radar state log (${stateLog.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        letterSpacing = 0.5.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Icon(
+                        if (stateLogExpanded) Icons.Default.KeyboardArrowUp
+                        else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                    )
+                }
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
-            if (stateLog.isEmpty()) {
-                item { Text("No states received yet.", style = MaterialTheme.typography.bodySmall) }
+            if (stateLogExpanded) {
+                items(stateLog) { entry ->
+                    Text(entry, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
+                }
+                if (stateLog.isEmpty()) {
+                    item { Text("No states received yet.", style = MaterialTheme.typography.bodySmall) }
+                }
             }
 
             // ── Dev mode lock ─────────────────────────────────────────────────
@@ -267,10 +303,19 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
 @Composable
 private fun DebugSectionHeader(title: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            letterSpacing = 0.5.sp,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 

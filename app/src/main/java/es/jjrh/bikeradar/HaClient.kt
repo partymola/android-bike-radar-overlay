@@ -86,6 +86,56 @@ class HaClient(private val baseUrl: String, private val token: String) {
         }
     }
 
+    /**
+     * Probes whether HA's MQTT integration is loaded by calling
+     * `mqtt.publish` with an empty retained message to a probe topic.
+     * HA returns 2xx when the service exists (even if the broker is
+     * temporarily offline, HA accepts the call and queues). A 400 or
+     * 404 typically means the MQTT integration hasn't been set up.
+     * ping() verifies HA reachability; this verifies the downstream
+     * feature path the app actually depends on.
+     */
+    suspend fun probeMqttService(): Result<String> {
+        if (!isConfigured()) return Result.failure(Exception("Not configured"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL("${baseUrl.trimEnd('/')}/api/services/mqtt/publish")
+                val body = JSONObject()
+                    .put("topic", "varia/_probe")
+                    .put("payload", "")
+                    .put("retain", true)
+                    .put("qos", 0)
+                    .toString()
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                }
+                try {
+                    conn.outputStream.use { it.write(body.toByteArray()) }
+                    val code = conn.responseCode
+                    when {
+                        code in 200..299 -> Result.success("MQTT OK")
+                        code == 400 || code == 404 -> Result.failure(
+                            Exception("HA's MQTT integration is not enabled"),
+                        )
+                        code == 401 || code == 403 -> Result.failure(
+                            Exception("Token rejected for mqtt.publish"),
+                        )
+                        else -> Result.failure(Exception("MQTT probe HTTP $code"))
+                    }
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (t: Throwable) {
+                Result.failure(t)
+            }
+        }
+    }
+
     suspend fun publishBatteryDiscovery(slug: String, deviceName: String): Boolean {
         val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_battery/config"
         val clean = cleanDeviceName(deviceName)

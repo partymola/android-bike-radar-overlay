@@ -53,8 +53,30 @@ Garmin. Bug reports welcome; please include device + Android version
 - A rear-radar BLE head unit that speaks V1 (cleartext) or V2 (bonded).
   V2 requires a one-time LE Secure Connections pair via Android's own
   Bluetooth settings; the app does not attempt `createBond()` itself.
-- Optional: a Home Assistant instance with the MQTT integration enabled.
-  Without HA the radar overlay still works; battery pushes silently no-op.
+- Optional: Home Assistant for battery reporting and close-pass
+  logging. See below for the bare-minimum HA-side set-up; the radar
+  overlay works standalone without it.
+
+## Home Assistant prerequisites (optional)
+
+If you want the app to push radar + dashcam battery and close-pass
+events into HA, the HA side needs:
+
+1. An MQTT broker reachable from HA — e.g. the official
+   [Mosquitto add-on](https://www.home-assistant.io/integrations/mqtt/)
+   on HA OS / Supervised, or any external broker.
+2. HA's MQTT integration enabled and connected to that broker
+   (**Settings → Devices & Services → Add Integration → MQTT**).
+3. A long-lived access token for the account you want the app to
+   act as (**user profile → Security → Long-lived access tokens**).
+
+No extra configuration is required beyond that — the app publishes
+via MQTT Discovery on HA's default `homeassistant/` prefix, so
+entities appear automatically. Dashboards, automations and
+Grafana/InfluxDB are up to you.
+
+If the MQTT broker or the MQTT integration is missing, HA pushes
+silently no-op. The in-app "Test and save" button surfaces this.
 
 ## Build
 

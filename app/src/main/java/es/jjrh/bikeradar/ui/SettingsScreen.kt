@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BuildConfig
 import es.jjrh.bikeradar.HaClient
@@ -80,7 +81,11 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
     var tokenField by remember { mutableStateOf(creds.token) }
     var tokenVisible by remember { mutableStateOf(false) }
     var pingResult by remember { mutableStateOf<Result<String>?>(null) }
+    var mqttResult by remember { mutableStateOf<Result<String>?>(null) }
     var pinging by remember { mutableStateOf(false) }
+    var haConfigured by remember {
+        mutableStateOf(creds.baseUrl.isNotBlank() && creds.token.isNotBlank())
+    }
 
     var alertVol by remember { mutableIntStateOf(prefs.alertVolume) }
     var batteryThreshold by remember { mutableIntStateOf(prefs.batteryLowThresholdPct) }
@@ -142,7 +147,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 label = "Alert volume",
                 value = alertVol.toFloat(),
                 range = 0f..100f,
-                display = "$alertVol",
+                display = "$alertVol%",
+                helper = "System beep volume for approach alerts. 0 silences audio; the overlay still flashes.",
                 onValueChange = { alertVol = it.toInt() },
                 onValueChangeFinished = { prefs.alertVolume = alertVol },
             )
@@ -150,7 +156,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 label = "Alert distance",
                 value = alertDist.toFloat(),
                 range = 10f..40f,
-                display = "${alertDist}m",
+                display = "$alertDist m",
+                helper = "Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.",
                 onValueChange = { alertDist = it.toInt() },
                 onValueChangeFinished = { prefs.alertMaxDistanceM = alertDist },
             )
@@ -178,6 +185,92 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                     },
                 )
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Log close passes to Home Assistant",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (haConfigured) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        if (haConfigured)
+                            "Publish an event to HA when a vehicle overtakes inside the lateral distance you set below. Strict gates — only genuine close passes count. Builds a route-safety dataset over time."
+                        else
+                            "Requires Home Assistant — set it up below.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = closePassLogging,
+                    enabled = haConfigured,
+                    onCheckedChange = {
+                        closePassLogging = it
+                        prefs.closePassLoggingEnabled = it
+                    },
+                )
+            }
+            if (closePassLogging) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                  Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text("Lateral clearance threshold", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Publish only when the minimum lateral clearance drops below ${String.format(java.util.Locale.US, "%.1f", closePassEmitMinX)} m.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = closePassEmitMinX,
+                        onValueChange = { closePassEmitMinX = it },
+                        valueRange = 0.5f..2.0f,
+                        steps = 14,  // 0.1 m increments
+                        onValueChangeFinished = {
+                            prefs.closePassEmitMinRangeXM = closePassEmitMinX
+                        },
+                    )
+                    Text("Minimum rider speed: $closePassRiderFloor km/h", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Detector ignores stationary-rider situations (red lights, pushing the bike).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = closePassRiderFloor.toFloat(),
+                        onValueChange = { closePassRiderFloor = it.toInt() },
+                        valueRange = 5f..30f,
+                        steps = 4,
+                        onValueChangeFinished = {
+                            prefs.closePassRiderSpeedFloorKmh = closePassRiderFloor
+                        },
+                    )
+                    Text("Minimum closing speed: $closePassClosingFloor m/s", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Roughly ${(closePassClosingFloor * 3.6).toInt()} km/h of relative approach speed.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = closePassClosingFloor.toFloat(),
+                        onValueChange = { closePassClosingFloor = it.toInt() },
+                        valueRange = 3f..15f,
+                        steps = 11,
+                        onValueChangeFinished = {
+                            prefs.closePassClosingSpeedFloorMs = closePassClosingFloor
+                        },
+                    )
+                  }  // end inner Column in close-pass card
+                }  // end close-pass Card
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Overlay")
@@ -185,7 +278,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 label = "Visual distance",
                 value = visualDist.toFloat(),
                 range = 10f..80f,
-                display = "${visualDist}m",
+                display = "$visualDist m",
+                helper = "Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.",
                 onValueChange = { visualDist = it.toInt() },
                 onValueChangeFinished = { prefs.visualMaxDistanceM = visualDist },
             )
@@ -193,7 +287,8 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 label = "Battery low threshold",
                 value = batteryThreshold.toFloat(),
                 range = 10f..50f,
-                display = "${batteryThreshold}%",
+                display = "$batteryThreshold%",
+                helper = "Flag the radar or dashcam as low when its battery drops below this.",
                 onValueChange = { batteryThreshold = it.toInt() },
                 onValueChangeFinished = { prefs.batteryLowThresholdPct = batteryThreshold },
             )
@@ -202,8 +297,14 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Label low-battery device on overlay", style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Label low-battery device on overlay", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Show 'RADAR 12%' or 'DASHCAM 8%' on screen instead of a silent warning tint.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Switch(
                     checked = batteryShowLabels,
                     onCheckedChange = { batteryShowLabels = it; prefs.batteryShowLabels = it },
@@ -238,6 +339,7 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 )
             }
             if (dashcamOwnership == es.jjrh.bikeradar.data.DashcamOwnership.YES) {
+              Column(modifier = Modifier.padding(start = 12.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -249,9 +351,7 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Device", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            dashcamDisplayName?.let {
-                                "$it  ${dashcamMac ?: ""}".trim()
-                            } ?: "Not selected — tap to pick",
+                            dashcamDisplayName ?: "Not selected — tap to pick",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -278,51 +378,59 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                         onCheckedChange = { dashcamWarn = it; prefs.dashcamWarnWhenOff = it },
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Warn if dashcam is left running",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (dashcamMac == null || !dashcamWarn)
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            "Notify when the radar turns off but the dashcam is still on the bike.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = walkAwayEnabled,
-                        enabled = dashcamMac != null && dashcamWarn,
-                        onCheckedChange = {
-                            walkAwayEnabled = it
-                            prefs.walkAwayAlarmEnabled = it
-                        },
-                    )
-                }
-                if (walkAwayEnabled && dashcamMac != null && dashcamWarn) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text(
-                            "Wait ${walkAwayThreshold}s before alerting",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Slider(
-                            value = walkAwayThreshold.toFloat(),
-                            onValueChange = { walkAwayThreshold = it.toInt() },
-                            valueRange = 15f..120f,
-                            steps = 6,  // 15 / 30 / 45 / 60 / 75 / 90 / 105 / 120
-                            onValueChangeFinished = {
-                                prefs.walkAwayAlarmThresholdSec = walkAwayThreshold
+                if (dashcamWarn && dashcamMac != null) {
+                  Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Warn if dashcam is left running",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "Notify when the radar turns off but the dashcam is still on the bike.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = walkAwayEnabled,
+                            onCheckedChange = {
+                                walkAwayEnabled = it
+                                prefs.walkAwayAlarmEnabled = it
                             },
                         )
                     }
+                    if (walkAwayEnabled) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                                Text(
+                                    "Wait $walkAwayThreshold seconds before alerting",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Slider(
+                                    value = walkAwayThreshold.toFloat(),
+                                    onValueChange = { walkAwayThreshold = it.toInt() },
+                                    valueRange = 15f..120f,
+                                    steps = 6,  // 15 / 30 / 45 / 60 / 75 / 90 / 105 / 120
+                                    onValueChangeFinished = {
+                                        prefs.walkAwayAlarmThresholdSec = walkAwayThreshold
+                                    },
+                                )
+                            }
+                        }
+                    }
+                  }
                 }
+              }  // end dashcam-YES indent Column
             }
             if (showPicker) {
                 DashcamPickerDialog(
@@ -350,13 +458,22 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Status:", style = MaterialTheme.typography.bodyMedium)
-                AssistChip(onClick = {}, label = { Text(bondStatus) })
+                AssistChip(
+                    onClick = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
+                    label = { Text(bondStatus) },
+                )
             }
             OutlinedButton(
                 onClick = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Open Bluetooth settings") }
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+              Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -373,33 +490,27 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                     )
                 }
                 AnimatedVisibility(visible = troubleshootingExpanded) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                         val cmd = "adb shell dumpsys bluetooth_manager | grep -E 'PairingAlgorithm|le_encrypted'"
                         Text(
-                            "Verify LESC bond (run on PC):",
+                            "For developers: verify your pair used LE Secure Connections. Skip if the radar shows live data. Run this on a PC with ADB:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            ),
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    cmd,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                IconButton(onClick = {
-                                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    cm.setPrimaryClip(ClipData.newPlainText("cmd", cmd))
-                                    Toast.makeText(ctx, "Copied", Toast.LENGTH_SHORT).show()
+                            Text(
+                                cmd,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = {
+                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("cmd", cmd))
+                                Toast.makeText(ctx, "Copied", Toast.LENGTH_SHORT).show()
                                 }) {
                                     Text("\u2398", style = MaterialTheme.typography.labelLarge)
                                 }
@@ -444,100 +555,59 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 Button(
                     onClick = {
                         pinging = true
+                        val url = urlField.trim()
+                        val tok = tokenField.trim()
                         scope.launch(Dispatchers.IO) {
-                            val r = HaClient(urlField.trim(), tokenField.trim()).ping()
-                            if (r.isSuccess) prefs.haLastValidatedEpochMs = System.currentTimeMillis()
-                            pingResult = r
+                            val client = HaClient(url, tok)
+                            val pr = client.ping()
+                            pingResult = pr
+                            if (pr.isSuccess) {
+                                creds.save(url, tok)
+                                prefs.haLastValidatedEpochMs = System.currentTimeMillis()
+                                haConfigured = true
+                                mqttResult = client.probeMqttService()
+                            } else {
+                                mqttResult = null
+                            }
                             pinging = false
                         }
                     },
                     enabled = !pinging && urlField.isNotBlank() && tokenField.isNotBlank(),
-                ) { Text(if (pinging) "Testing..." else "Test connection") }
-
-                pingResult?.let { r ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(if (r.isSuccess) "OK" else (r.exceptionOrNull()?.message ?: "Error")) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (r.isSuccess) androidx.compose.ui.graphics.Color(0xFF2E7D32)
-                            else MaterialTheme.colorScheme.errorContainer,
-                            labelColor = if (r.isSuccess) androidx.compose.ui.graphics.Color.White
-                            else MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                    )
-                }
+                ) { Text(if (pinging) "Testing..." else "Test and save") }
+            }
+            pingResult?.let { r ->
+                AssistChip(
+                    onClick = {},
+                    label = { Text(if (r.isSuccess) "HA: saved" else "HA: ${r.exceptionOrNull()?.message ?: "error"}") },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (r.isSuccess) androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                        else MaterialTheme.colorScheme.errorContainer,
+                        labelColor = if (r.isSuccess) androidx.compose.ui.graphics.Color.White
+                        else MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                )
+            }
+            mqttResult?.let { r ->
+                AssistChip(
+                    onClick = {},
+                    label = { Text(if (r.isSuccess) "MQTT: ready" else "MQTT: ${r.exceptionOrNull()?.message ?: "error"}") },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (r.isSuccess) androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                        else MaterialTheme.colorScheme.tertiaryContainer,
+                        labelColor = if (r.isSuccess) androidx.compose.ui.graphics.Color.White
+                        else MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                )
             }
             Button(
                 onClick = {
                     creds.save(urlField.trim(), tokenField.trim())
-                    Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show()
+                    haConfigured = urlField.isNotBlank() && tokenField.isNotBlank()
+                    Toast.makeText(ctx, "Saved without testing", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save") }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Log close passes",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "Publish an event to Home Assistant each time a car passes within the chosen lateral distance. Strict gates — only genuine overtakes at <1 m are logged. Build a route-quality dataset over time.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = closePassLogging,
-                    onCheckedChange = {
-                        closePassLogging = it
-                        prefs.closePassLoggingEnabled = it
-                    },
-                )
-            }
-            if (closePassLogging) {
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text("Emit threshold", style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        "Publish only when the minimum lateral clearance drops below ${String.format(java.util.Locale.US, "%.1f", closePassEmitMinX)} m.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Slider(
-                        value = closePassEmitMinX,
-                        onValueChange = { closePassEmitMinX = it },
-                        valueRange = 0.5f..2.0f,
-                        steps = 14,  // 0.1 m increments
-                        onValueChangeFinished = {
-                            prefs.closePassEmitMinRangeXM = closePassEmitMinX
-                        },
-                    )
-                    Text("Minimum rider speed: ${closePassRiderFloor} km/h", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = closePassRiderFloor.toFloat(),
-                        onValueChange = { closePassRiderFloor = it.toInt() },
-                        valueRange = 5f..30f,
-                        steps = 4,
-                        onValueChangeFinished = {
-                            prefs.closePassRiderSpeedFloorKmh = closePassRiderFloor
-                        },
-                    )
-                    Text("Minimum closing speed: ${closePassClosingFloor} m/s", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = closePassClosingFloor.toFloat(),
-                        onValueChange = { closePassClosingFloor = it.toInt() },
-                        valueRange = 3f..15f,
-                        steps = 11,
-                        onValueChangeFinished = {
-                            prefs.closePassClosingSpeedFloorMs = closePassClosingFloor
-                        },
-                    )
-                }
-            }
+                enabled = urlField.isNotBlank() && tokenField.isNotBlank(),
+            ) { Text("Save without testing") }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Experimental")
@@ -547,40 +617,49 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Precog",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "Render each vehicle 1 s into the future — see where overtakers are going, not just where they are. Uses the radar's speed + lateral-velocity signals. Can jitter when lateral velocity is noisy.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Predict overtake paths (1 s lookahead)",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Render each vehicle 1 second into the future — see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = precog,
+                        onCheckedChange = {
+                            precog = it
+                            prefs.precogEnabled = it
+                        },
                     )
                 }
-                Switch(
-                    checked = precog,
-                    onCheckedChange = {
-                        precog = it
-                        prefs.precogEnabled = it
-                    },
-                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionHeader("Permissions")
             var permsRefresh by remember { mutableIntStateOf(0) }
-            PERMISSIONS.forEach { spec ->
-                PermissionCard(
-                    spec = spec,
-                    refresh = permsRefresh,
-                    onRefresh = { permsRefresh++ },
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PERMISSIONS.forEach { spec ->
+                    PermissionCard(
+                        spec = spec,
+                        refresh = permsRefresh,
+                        onRefresh = { permsRefresh++ },
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -591,15 +670,19 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
+            letterSpacing = 0.5.sp,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 4.dp),
         )
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -611,6 +694,7 @@ private fun SettingsSliderRow(
     display: String,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
+    helper: String? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -619,6 +703,13 @@ private fun SettingsSliderRow(
         ) {
             Text(label, style = MaterialTheme.typography.bodyMedium)
             Text(display, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        if (helper != null) {
+            Text(
+                helper,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Slider(
             value = value,

@@ -44,6 +44,13 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # Pinned to match the AGP 8.2.2 supported range. Newer Gradle 9.x
+          # tightens configuration-resolution rules in ways that AGP 8.2
+          # isn't compatible with ("Cannot mutate the dependencies of
+          # configuration ... after the configuration was resolved"). Bump
+          # in lockstep with any AGP upgrade in app/build.gradle.kts.
+          gradle-version: '8.6'
 
       - name: Decode release keystore into runner temp
         env:

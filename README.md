@@ -10,6 +10,22 @@ See [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTO
 and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
 repository for the wire protocol, reference decoders, and unit tests.
 
+## Screenshots
+
+<p align="left">
+  <img src="screenshots/01-main.png" width="200" alt="Main screen" />
+  <img src="screenshots/02-settings-radar-alerts.png" width="200" alt="Radar and alerts settings" />
+  <img src="screenshots/03-settings-dashcam-walkaway.png" width="200" alt="Dashcam walk-away settings" />
+  <img src="screenshots/04-settings-home-assistant.png" width="200" alt="Home Assistant settings" />
+  <img src="screenshots/05-settings-permissions.png" width="200" alt="Permissions settings" />
+  <img src="screenshots/06-about.png" width="200" alt="About screen" />
+  <img src="screenshots/07-debug.png" width="200" alt="Debug screen (developer mode)" />
+  <img src="screenshots/08-debug-state-log.png" width="200" alt="Debug state log (developer mode)" />
+</p>
+
+Static UI screenshots; live radar overlay screenshots coming soon.
+Debug screen is hidden behind a three-tap long-press unlock on the app title.
+
 ## Status
 
 Alpha. Personal project. Tested only against the author's own hardware

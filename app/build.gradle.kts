@@ -62,11 +62,37 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Release signing reads from env vars so CI can inject a keystore
+        // without the paths or passwords ever appearing in committed files.
+        // Local release builds work too if the same vars are set in the shell.
+        val releaseKsPath = System.getenv("ANDROID_KEYSTORE_PATH")
+        val releaseKsPass = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+        val releaseKeyPass = System.getenv("ANDROID_KEY_PASSWORD")
+        if (
+            releaseKsPath != null &&
+            releaseKsPass != null &&
+            releaseKeyAlias != null &&
+            releaseKeyPass != null
+        ) {
+            create("release") {
+                storeFile = file(releaseKsPath)
+                storePassword = releaseKsPass
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPass
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            val release = signingConfigs.findByName("release")
+            // If the release signing config is wired up (env vars present),
+            // use it. Otherwise fall back to debug signing so a local
+            // developer can still produce a release-variant APK for
+            // inspection without needing the production keystore.
+            signingConfig = release ?: signingConfigs.getByName("debug")
         }
     }
 

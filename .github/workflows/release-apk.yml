@@ -1,0 +1,82 @@
+name: Release APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    name: Keyword scan on tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Scan tag commit message
+        run: |
+          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
+          hits=$(git log -1 --format='%B' HEAD | grep -nEi "$regex" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Dangerous keywords in the tag's commit message"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+
+  build:
+    name: Build + publish signed APK
+    needs: scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode release keystore into runner temp
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Missing ANDROID_KEYSTORE_BASE64 secret"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --console=plain --no-daemon
+
+      - name: Rename APK with tag
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk \
+             "bike-radar-${{ github.ref_name }}.apk"
+
+      - name: Create GitHub Release and attach APK
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bike-radar-${{ github.ref_name }}.apk
+          generate_release_notes: true
+          # Any tag with a dash in it (e.g. v0.1.0-alpha, v1.0-rc1) is
+          # marked as prerelease; bare semver tags are full releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: Wipe keystore from runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"

@@ -106,6 +106,36 @@ and reuses it across rebuilds so `adb install -r` keeps working.
    Pair new device** while the radar is in pair mode. The app detects
    the bond automatically and starts tracking.
 
+## Releases
+
+Signed APKs are published as GitHub Releases when a tag matching
+`v*` is pushed. The release workflow builds from a clean checkout,
+signs with a release keystore held as repo secrets, and attaches
+the APK to the Release. Tags containing a hyphen (e.g. `v0.1.0-alpha`,
+`v1.0-rc1`) are marked as prereleases; bare semver tags are full
+releases.
+
+To cut a release:
+
+```bash
+# Bump versionCode / versionName in app/build.gradle.kts, commit.
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The workflow needs these GitHub repo secrets to exist:
+
+- `ANDROID_KEYSTORE_BASE64` — the release keystore, base64-encoded
+- `ANDROID_KEYSTORE_PASSWORD` — keystore password
+- `ANDROID_KEY_ALIAS` — key alias inside the keystore
+- `ANDROID_KEY_PASSWORD` — key password
+
+Local release builds pick the same env variables up from the
+shell (with `ANDROID_KEYSTORE_PATH` pointing at the keystore
+file on disk) and otherwise fall back to the debug signing config
+so the `release` variant can still be built for inspection
+without the production key.
+
 ## License
 
 GPL-3.0-or-later. See [`LICENSE`](./LICENSE).

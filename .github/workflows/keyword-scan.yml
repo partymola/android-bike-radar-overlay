@@ -1,0 +1,62 @@
+name: Keyword scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scan:
+    name: Commit message + diff keyword scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine scan range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          else
+            # First push of a branch — scan back to the initial commit.
+            echo "base=$(git rev-list --max-parents=0 HEAD | tail -1)" >> "$GITHUB_OUTPUT"
+            echo "head=HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan commit messages
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD: ${{ steps.range.outputs.head }}
+        run: |
+          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
+          hits=$(git log --format='%H%n%B%n---%n' "$BASE..$HEAD" 2>/dev/null | grep -nEi "$regex" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Dangerous keywords in commit message(s) in push range:"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+
+      - name: Scan added lines (excluding this workflow's regex)
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD: ${{ steps.range.outputs.head }}
+        run: |
+          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
+          # Exclude this workflow file itself — the regex string would otherwise
+          # self-trigger on its own introduction / edits.
+          hits=$(git log -p "$BASE..$HEAD" -- . ':(exclude).github/workflows/' 2>/dev/null \
+            | awk '/^\+\+\+/{next} /^\+/{print}' \
+            | grep -nEi "$regex" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Dangerous keywords in newly-added lines in push range:"
+            printf '%s\n' "$hits"
+            exit 1
+          fi

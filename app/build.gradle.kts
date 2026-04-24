@@ -17,18 +17,23 @@ tasks.register("ensureDebugKeystore") {
     outputs.file(debugKeystoreFile)
     doLast {
         if (!debugKeystoreFile.exists()) {
-            exec {
-                commandLine(
-                    "keytool", "-genkeypair", "-v",
-                    "-keystore", debugKeystoreFile.absolutePath,
-                    "-storepass", "android",
-                    "-keypass", "android",
-                    "-alias", "androiddebugkey",
-                    "-dname", "CN=Android Debug,O=Android,C=US",
-                    "-keyalg", "RSA",
-                    "-keysize", "2048",
-                    "-validity", "10000",
-                )
+            // Use ProcessBuilder rather than Gradle's exec{}/commandLine{}
+            // because those Project-level APIs were removed in Gradle 9.
+            // ProcessBuilder is JDK-native and stable across versions.
+            val process = ProcessBuilder(
+                "keytool", "-genkeypair", "-v",
+                "-keystore", debugKeystoreFile.absolutePath,
+                "-storepass", "android",
+                "-keypass", "android",
+                "-alias", "androiddebugkey",
+                "-dname", "CN=Android Debug,O=Android,C=US",
+                "-keyalg", "RSA",
+                "-keysize", "2048",
+                "-validity", "10000",
+            ).inheritIO().start()
+            val code = process.waitFor()
+            if (code != 0) {
+                throw GradleException("keytool exited with status $code while generating debug.keystore")
             }
         }
     }

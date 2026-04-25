@@ -234,4 +234,111 @@ class AlertDeciderTest {
         val ev = d.decide(listOf(active), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
     }
+
+    // ── stationary-suppress gate ─────────────────────────────────────────
+
+    @Test fun `stationary rider suppresses beep after dwell`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        // First frame with rider at 0 km/h - sets lastNotStationary to now.
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        // 2 s later, sustain + dwell both satisfied. Beep would normally
+        // fire; stationary suppresses it to None.
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `stationary rider still hears clear`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        // Establish sustain + beep while moving.
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedKmh = 20)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedKmh = 20)
+        // Rider stops; dwell completes.
+        c.jump(3000)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        // Close zone empties - Clear must still fire even though rider is stationary.
+        val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.Clear, ev)
+    }
+
+    @Test fun `rider moving beeps normally with speed provided`() {
+        // Positive control: passing a non-null, above-threshold bikeSpeedKmh
+        // must not break the normal beep path.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 20)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 20)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `stationary suppress requires dwell`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        // Speed drops to 0 on frame 1; dwell clock starts now.
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        // 100 ms later - dwell not satisfied, beep must still fire.
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `null speed treated as not stationary`() {
+        // No device-status frame has arrived yet; defaulting to not-stationary
+        // is the safe choice so beeps aren't silenced without evidence the
+        // rider has actually stopped.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = null)
+        c.jump(3000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = null)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `gate releases on stationary-to-moving transition`() {
+        // After dwell+suppress, rolling off restores beeps without a
+        // delayed cooldown gap (the suppressed beep must not have
+        // consumed the cooldown).
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        val suppressed = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, suppressed)
+        // Rider rolls off; same car still close. beepPending was preserved
+        // through the suppression, so the beep fires same frame.
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 20)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `brief speed blip mid-stop resets dwell`() {
+        // Radar speed has 1-2 km/h post-stop noise that the threshold of 2
+        // absorbs. But a single sample clearly above threshold (5 km/h
+        // here) must reset the dwell - otherwise long stops with momentary
+        // wake-ups would suppress incorrectly.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(1500)
+        // Blip - resets dwell.
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 5)
+        c.jump(1500)
+        // Now a car appears - sustain frame 1.
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        // Sustain frame 2. Total elapsed since blip ~1700 ms < 2000 dwell,
+        // so suppress must NOT fire; beep must fire instead.
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `bike speed equal to threshold counts as stationary`() {
+        // Boundary check on the <= semantics: speed exactly at the
+        // threshold (2 km/h) must count as stationary.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 2)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 2)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
 }

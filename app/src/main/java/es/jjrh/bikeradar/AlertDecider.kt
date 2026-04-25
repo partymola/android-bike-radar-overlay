@@ -31,6 +31,11 @@ package es.jjrh.bikeradar
  *  - **Clear chime.** Plays once when the close zone goes from non-empty
  *    to empty, bypassing the cooldown (different timbre, never
  *    overlaps a beep on the speaker).
+ *  - **Stationary suppress.** Once the rider has been at or below
+ *    `stationaryKmhThreshold` for at least `stationaryDwellMs` of
+ *    wall-clock time, Beep events are mapped to None. Clear still
+ *    fires. Lets the rider sit at a traffic light without beep/clear
+ *    loops from the queue of stopped cars behind them.
  *
  * Threading: instances are not thread-safe; serialise calls (the radar
  * stream is naturally single-producer).
@@ -38,6 +43,16 @@ package es.jjrh.bikeradar
 class AlertDecider(
     private val sustainFrames: Int = 2,
     private val minBeepGapMs: Long = 700,
+    /** Rider's bike speed (km/h) at or below this counts as "stationary".
+     *  Set to 2 to stay clear of the device-status byte's stationary
+     *  floor (raw 2 decodes to ~2 km/h, the radar's own doppler noise
+     *  floor above true zero). */
+    private val stationaryKmhThreshold: Int = 2,
+    /** Wall-clock milliseconds the rider's bike speed must stay at or
+     *  below [stationaryKmhThreshold] continuously before Beep events
+     *  get mapped to None. Long enough to skip rolling stops mid-turn,
+     *  short enough to kick in at a normal traffic-light stop. */
+    private val stationaryDwellMs: Long = 2_000L,
 ) {
 
     sealed class Event {
@@ -51,8 +66,31 @@ class AlertDecider(
     private var prevClosestUrgency: Int = 0
     private var lastBeepAtMs: Long = Long.MIN_VALUE / 2  // guarantees first beep fires
     private var beepPending: Boolean = false
+    /** Wall-clock ms of the most recent `decide()` call in which the rider
+     *  was NOT at or below [stationaryKmhThreshold]. Compared against
+     *  `nowMs` each call to decide whether the stationary dwell has been
+     *  satisfied. [NOT_INITIALIZED] until the first call of this session. */
+    private var lastNotStationaryAtMs: Long = NOT_INITIALIZED
 
-    fun decide(vehicles: List<Vehicle>, alertMaxM: Int, nowMs: Long): Event {
+    fun decide(
+        vehicles: List<Vehicle>,
+        alertMaxM: Int,
+        nowMs: Long,
+        bikeSpeedKmh: Int? = null,
+    ): Event {
+        // Rider-stationary gate. Track when the rider was last observed NOT
+        // stationary; once that was more than stationaryDwellMs ago, Beep
+        // events get mapped to None (Clear still fires). On the very first
+        // call we initialise lastNotStationaryAtMs to nowMs so the dwell is
+        // measured from now, not from 1970.
+        val isBelowThreshold =
+            bikeSpeedKmh != null && bikeSpeedKmh <= stationaryKmhThreshold
+        if (lastNotStationaryAtMs == NOT_INITIALIZED || !isBelowThreshold) {
+            lastNotStationaryAtMs = nowMs
+        }
+        val riderStationary =
+            (nowMs - lastNotStationaryAtMs) >= stationaryDwellMs
+
         // Skip alongside-stationary tracks (parked car / queued traffic next
         // to a crawling rider). The decoder gates these on rider speed +
         // dwell time + zero closing speed, so they are by construction
@@ -97,9 +135,16 @@ class AlertDecider(
                 Event.Clear
             }
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
-                lastBeepAtMs = nowMs
-                beepPending = false
-                Event.Beep(closestUrgency)
+                if (riderStationary) {
+                    // Inaudible - don't consume the audio-spacing cooldown
+                    // or clear beepPending. When the rider rolls off, the
+                    // next decide() call can fire same-frame.
+                    Event.None
+                } else {
+                    lastBeepAtMs = nowMs
+                    beepPending = false
+                    Event.Beep(closestUrgency)
+                }
             }
             else -> Event.None
         }
@@ -115,6 +160,7 @@ class AlertDecider(
         prevClosestUrgency = 0
         lastBeepAtMs = Long.MIN_VALUE / 2
         beepPending = false
+        lastNotStationaryAtMs = NOT_INITIALIZED
     }
 
     private fun urgencyFor(distM: Int, alertMaxM: Int): Int {
@@ -124,5 +170,16 @@ class AlertDecider(
             distM <= 2f * third  -> 2
             else                 -> 1
         }
+    }
+
+    companion object {
+        /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`
+         *  call has yet been processed this session". The first call
+         *  replaces it with `nowMs` so dwell starts counting from there.
+         *  Cannot reuse the `Long.MIN_VALUE / 2` idiom that [lastBeepAtMs]
+         *  uses: `nowMs - Long.MIN_VALUE / 2` overflows positive on the
+         *  first call and would satisfy `>= stationaryDwellMs`
+         *  immediately, silencing the first beep. */
+        private const val NOT_INITIALIZED: Long = Long.MIN_VALUE
     }
 }

@@ -750,7 +750,7 @@ class BikeRadarService : Service() {
                         view.setDashcamStatus(status, dashcamSlug)
 
                         if (!prefs.isPaused) {
-                            when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now)) {
+                            when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedKmh)) {
                                 is AlertDecider.Event.Beep -> beeper.play(ev.count)
                                 AlertDecider.Event.Clear   -> beeper.playClear()
                                 AlertDecider.Event.None    -> {}

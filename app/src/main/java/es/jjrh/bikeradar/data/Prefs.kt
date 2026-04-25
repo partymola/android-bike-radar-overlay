@@ -35,6 +35,9 @@ data class PrefsSnapshot(
     val closePassEmitMinRangeXM: Float,
     val closePassRiderSpeedFloorKmh: Int,
     val closePassClosingSpeedFloorMs: Int,
+    val nextUxOnboarding: Boolean,
+    val nextUxMain: Boolean,
+    val nextUxSettings: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -169,6 +172,25 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
         set(v) { sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply() }
 
+    /** Per-screen feature flags for the in-progress UX redesign. When
+     *  true, the corresponding NavHost route renders the Next composable
+     *  instead of the original. Default off so freshly-installed builds
+     *  always show the stable UX; the user opts into each redesigned
+     *  screen via the Debug screen, can flip back at any time, and the
+     *  flag (plus the V1 code path) is removed once the screen is
+     *  graduated. */
+    var nextUxOnboarding: Boolean
+        get() = sp.getBoolean(KEY_NEXT_UX_ONBOARDING, false)
+        set(v) { sp.edit().putBoolean(KEY_NEXT_UX_ONBOARDING, v).apply() }
+
+    var nextUxMain: Boolean
+        get() = sp.getBoolean(KEY_NEXT_UX_MAIN, false)
+        set(v) { sp.edit().putBoolean(KEY_NEXT_UX_MAIN, v).apply() }
+
+    var nextUxSettings: Boolean
+        get() = sp.getBoolean(KEY_NEXT_UX_SETTINGS, false)
+        set(v) { sp.edit().putBoolean(KEY_NEXT_UX_SETTINGS, v).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -194,6 +216,9 @@ class Prefs(context: Context) {
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
         closePassRiderSpeedFloorKmh = closePassRiderSpeedFloorKmh,
         closePassClosingSpeedFloorMs = closePassClosingSpeedFloorMs,
+        nextUxOnboarding = nextUxOnboarding,
+        nextUxMain = nextUxMain,
+        nextUxSettings = nextUxSettings,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -228,6 +253,9 @@ class Prefs(context: Context) {
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
         appendLine("close_pass_rider_floor_kmh=$closePassRiderSpeedFloorKmh")
         appendLine("close_pass_closing_floor_ms=$closePassClosingSpeedFloorMs")
+        appendLine("next_ux_onboarding=$nextUxOnboarding")
+        appendLine("next_ux_main=$nextUxMain")
+        appendLine("next_ux_settings=$nextUxSettings")
     }
 
     companion object {
@@ -254,5 +282,8 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
+        const val KEY_NEXT_UX_ONBOARDING = "next_ux_onboarding"
+        const val KEY_NEXT_UX_MAIN = "next_ux_main"
+        const val KEY_NEXT_UX_SETTINGS = "next_ux_settings"
     }
 }

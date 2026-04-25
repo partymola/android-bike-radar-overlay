@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -97,6 +98,7 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
     var synthRunning by remember { mutableStateOf(SyntheticScenarioService.isRunning) }
     var screenshotRunning by remember { mutableStateOf(ScreenshotCaptureService.isRunning) }
     var stateLogExpanded by remember { mutableStateOf(false) }
+    val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
 
     val projectionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -249,6 +251,43 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
                 }
             }
 
+            // ── Experimental UX ───────────────────────────────────────────────
+            item { DebugSectionHeader("Experimental UX") }
+            item {
+                Text(
+                    "Per-screen toggles for the in-progress UX redesign. Flip on " +
+                        "to render the redesigned screen, off to return to the " +
+                        "current one. Both versions read the same persisted state.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            item {
+                NextUxRow(
+                    label = "Onboarding",
+                    sublabel = if (prefsSnap.nextUxOnboarding) "redesigned" else "current",
+                    checked = prefsSnap.nextUxOnboarding,
+                    onChange = { prefs.nextUxOnboarding = it },
+                )
+            }
+            item {
+                NextUxRow(
+                    label = "Main",
+                    sublabel = if (prefsSnap.nextUxMain) "redesigned" else "current",
+                    checked = prefsSnap.nextUxMain,
+                    onChange = { prefs.nextUxMain = it },
+                )
+            }
+            item {
+                NextUxRow(
+                    label = "Settings",
+                    sublabel = if (prefsSnap.nextUxSettings) "redesigned" else "current",
+                    checked = prefsSnap.nextUxSettings,
+                    onChange = { prefs.nextUxSettings = it },
+                )
+            }
+
             // ── Manual HA push ────────────────────────────────────────────────
             item { DebugSectionHeader("Manual HA push") }
             item {
@@ -363,6 +402,30 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
+    }
+}
+
+@Composable
+private fun NextUxRow(
+    label: String,
+    sublabel: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                sublabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

@@ -12,6 +12,9 @@ import kotlin.math.sin
  * Generates radar alert tones.
  *   play(1..3) -> 1/2/3 sharp 3200 Hz beeps separated by short gaps.
  *   playClear() -> softer two-tone descent (1100 -> 700 Hz) for "all clear".
+ *   playUrgent() -> rapid 4-pulse 3800 Hz pattern with tight 50 ms gaps,
+ *                   intentionally distinct from play(3) so the rider
+ *                   recognises the stationary-safety-override case.
  *
  * Volume is user-controlled via [setVolumePct] (0..100, default 50). Values
  * map through a perceptual curve so sliding below ~50 actually reduces
@@ -26,6 +29,7 @@ class AlertBeeper {
 
     private val tracks = Array(3) { i -> buildBeepTrack(i + 1) }
     private val clearTrack = buildClearTrack()
+    private val urgentTrack = buildUrgentTrack()
 
     private var volumePct = DEFAULT_VOLUME_PCT
     init { applyVolume() }
@@ -39,6 +43,10 @@ class AlertBeeper {
         playOnce(clearTrack)
     }
 
+    fun playUrgent() {
+        playOnce(urgentTrack)
+    }
+
     fun setVolumePct(pct: Int) {
         volumePct = pct.coerceIn(0, 100)
         applyVolume()
@@ -47,6 +55,7 @@ class AlertBeeper {
     fun release() {
         tracks.forEach { it.release() }
         clearTrack.release()
+        urgentTrack.release()
     }
 
     private fun playOnce(track: AudioTrack) {
@@ -59,6 +68,7 @@ class AlertBeeper {
         val g = linear * linear
         tracks.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
+        urgentTrack.setVolume(g)
     }
 
     private fun buildBeepTrack(count: Int): AudioTrack {
@@ -87,6 +97,25 @@ class AlertBeeper {
         hi.copyInto(buf, pos); pos += hi.size
         gap.copyInto(buf, pos); pos += gap.size
         lo.copyInto(buf, pos)
+        return makeTrack(buf)
+    }
+
+    private fun buildUrgentTrack(): AudioTrack {
+        // 4 beeps at 3800 Hz, 70 ms tone, 50 ms gap. Faster cadence and
+        // higher pitch than play(3) so the rider recognises this as the
+        // stationary-safety-override pattern, not a normal close-approach
+        // beep.
+        val toneSamples = sampleRate * 70 / 1000
+        val gapSamples  = sampleRate * 50 / 1000
+        val tone        = generateTone(toneSamples, 3800f)
+        val gap         = ShortArray(gapSamples)
+        val count = 4
+        val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
+        var pos = 0
+        repeat(count) { i ->
+            tone.copyInto(buf, pos); pos += toneSamples
+            if (i < count - 1) { gap.copyInto(buf, pos); pos += gapSamples }
+        }
         return makeTrack(buf)
     }
 

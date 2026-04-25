@@ -9,6 +9,9 @@ class AlertDeciderTest {
     private fun car(id: Int, distanceM: Int, isBehind: Boolean = false) =
         Vehicle(id = id, distanceM = distanceM, speedMs = 5, isBehind = isBehind)
 
+    private fun closingCar(id: Int, distanceM: Int, speedMs: Int) =
+        Vehicle(id = id, distanceM = distanceM, speedMs = speedMs)
+
     private val alertMax = 21
 
     /** Frame time helper: each call advances `now` by `dtMs` and returns the
@@ -339,6 +342,120 @@ class AlertDeciderTest {
         d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 2)
         c.jump(2000)
         val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedKmh = 2)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    // ── stationary safety override ───────────────────────────────────────
+
+    @Test fun `stationary plus close plus fast-closing fires UrgentApproach`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        // Establish stationary state (no cars yet, just dwell).
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        // Car at near-third proximity (5 m, alertMax=21 -> near-third = 7),
+        // closing at -8 m/s (below the -5 override threshold).
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+    }
+
+    @Test fun `stationary plus close plus slow-closing stays suppressed`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        // Same proximity but only -3 m/s (above -5, so not "fast-closing").
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -3)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `stationary plus far plus fast-closing stays suppressed`() {
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        // Closing fast (-8 m/s) but at 15 m - outside near-third for
+        // alertMax=21 (near-third = 7). Override does NOT fire.
+        val v = closingCar(id = 1, distanceM = 15, speedMs = -8)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `moving rider with fast-closing car beeps normally not urgent`() {
+        // Override only applies to stationary riders. A moving rider gets
+        // the normal Beep at the appropriate urgency.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 20)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 20)
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `urgent override does not fire on isBehind tracks`() {
+        // Negative control: an overtaken track (isBehind=true) is filtered
+        // out of the close set before the stableClose computation, so it
+        // can't trigger the safety override regardless of its closing
+        // speed. Pins this guarantee against future filter refactors.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        val ahead = Vehicle(id = 1, distanceM = 5, speedMs = -8, isBehind = true)
+        d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `escalation from slow to fast triggers UrgentApproach`() {
+        // Realistic scenario: a vehicle approaching slowly enough to be
+        // suppressed, then suddenly closing fast (driver realises late and
+        // brakes hard, or didn't see the queue). Same tid; once closing
+        // crosses the threshold the override fires next frame.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        val slow = closingCar(id = 1, distanceM = 5, speedMs = -3)
+        d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val sustainedSlow = d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.None, sustainedSlow)
+        // Same tid now closing fast.
+        val fast = closingCar(id = 1, distanceM = 5, speedMs = -8)
+        val ev = d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+    }
+
+    @Test fun `urgent override threshold inclusive at -6 m_per_s`() {
+        // Boundary check: speedMs exactly at SAFETY_OVERRIDE_CLOSING_MS
+        // (-6) must fire (<= semantics).
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -6)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+    }
+
+    @Test fun `urgent override threshold excludes -5 m_per_s`() {
+        // Boundary check: speedMs just above the threshold (-5, one
+        // quantum less negative than -6) must NOT fire. This is what
+        // guards against the radar-noise-flap regime described in the
+        // SAFETY_OVERRIDE_CLOSING_MS KDoc.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedKmh = 0)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -5)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedKmh = 0)
         assertEquals(AlertDecider.Event.None, ev)
     }
 }

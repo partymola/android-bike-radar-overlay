@@ -751,9 +751,10 @@ class BikeRadarService : Service() {
 
                         if (!prefs.isPaused) {
                             when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedKmh)) {
-                                is AlertDecider.Event.Beep -> beeper.play(ev.count)
-                                AlertDecider.Event.Clear   -> beeper.playClear()
-                                AlertDecider.Event.None    -> {}
+                                is AlertDecider.Event.Beep           -> beeper.play(ev.count)
+                                AlertDecider.Event.Clear             -> beeper.playClear()
+                                AlertDecider.Event.UrgentApproach    -> beeper.playUrgent()
+                                AlertDecider.Event.None              -> {}
                             }
                         } else {
                             alerts.reset()

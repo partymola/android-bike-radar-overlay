@@ -36,6 +36,13 @@ package es.jjrh.bikeradar
  *    wall-clock time, Beep events are mapped to None. Clear still
  *    fires. Lets the rider sit at a traffic light without beep/clear
  *    loops from the queue of stopped cars behind them.
+ *  - **Stationary safety override.** While stationary-suppressed, an
+ *    [Event.UrgentApproach] (distinct audio) fires anyway when any
+ *    close vehicle is at near-third proximity AND closing faster than
+ *    [SAFETY_OVERRIDE_CLOSING_MS]. Catches a vehicle that isn't
+ *    braking for the queue ahead - the only case where alerting a
+ *    stopped rider is still useful (rider has a chance to dismount or
+ *    move out of the line of impact).
  *
  * Threading: instances are not thread-safe; serialise calls (the radar
  * stream is naturally single-producer).
@@ -58,6 +65,12 @@ class AlertDecider(
     sealed class Event {
         data class Beep(val count: Int) : Event()
         object Clear : Event()
+        /** Stationary-suppress override: rider is stopped AND a close
+         *  vehicle is closing faster than [SAFETY_OVERRIDE_CLOSING_MS]
+         *  at near-third proximity. Audible regardless of the suppress
+         *  gate; the audio is intentionally distinct from a normal Beep
+         *  so the rider knows this is the impact-warning case. */
+        object UrgentApproach : Event()
         object None : Event()
     }
 
@@ -135,15 +148,32 @@ class AlertDecider(
                 Event.Clear
             }
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
-                if (riderStationary) {
-                    // Inaudible - don't consume the audio-spacing cooldown
-                    // or clear beepPending. When the rider rolls off, the
-                    // next decide() call can fire same-frame.
-                    Event.None
-                } else {
-                    lastBeepAtMs = nowMs
-                    beepPending = false
-                    Event.Beep(closestUrgency)
+                val anyImminentImpact = stableClose.any { v ->
+                    v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
+                        v.distanceM <= alertMaxM / 3
+                }
+                when {
+                    riderStationary && !anyImminentImpact -> {
+                        // Inaudible - don't consume the audio-spacing
+                        // cooldown or clear beepPending. When the rider
+                        // rolls off, the next decide() call can fire
+                        // same-frame.
+                        Event.None
+                    }
+                    riderStationary && anyImminentImpact -> {
+                        // Override the suppress: the rider is stopped AND
+                        // a vehicle is closing fast at near-third
+                        // proximity. UrgentApproach (distinct audio) fires
+                        // regardless of the suppress gate.
+                        lastBeepAtMs = nowMs
+                        beepPending = false
+                        Event.UrgentApproach
+                    }
+                    else -> {
+                        lastBeepAtMs = nowMs
+                        beepPending = false
+                        Event.Beep(closestUrgency)
+                    }
                 }
             }
             else -> Event.None
@@ -181,5 +211,22 @@ class AlertDecider(
          *  first call and would satisfy `>= stationaryDwellMs`
          *  immediately, silencing the first beep. */
         private const val NOT_INITIALIZED: Long = Long.MIN_VALUE
+
+        /** Closing speed (m/s, signed; negative = approaching) at or
+         *  below which a stationary rider's suppress gate is overridden,
+         *  when paired with near-third proximity.
+         *
+         *  Decoded `speedMs` is integer m/s (RadarV2Decoder rounds the
+         *  raw 0.5 m/s LSBs to Int), so legal closing values are
+         *  -7, -6, -5, ... A naive choice of -5 lands the threshold
+         *  on the radar's quantisation noise: a target whose real
+         *  closing speed sits near 5 m/s would oscillate between
+         *  rounded -5 (fires) and rounded -4 (does not), causing the
+         *  override to flap frame-to-frame. -6 is one quantum stricter
+         *  and corresponds to a real closing speed of >=5.5 m/s
+         *  (~20 km/h), which matches "vehicle still going at urban
+         *  cruising speed without braking for the queue" better than
+         *  -5 (~18 km/h) does. */
+        const val SAFETY_OVERRIDE_CLOSING_MS = -6
     }
 }

@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -55,6 +60,7 @@ import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.ReplayService
+import es.jjrh.bikeradar.ScreenshotCaptureService
 import es.jjrh.bikeradar.SyntheticScenarioService
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -89,13 +95,33 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
     var synthRunning by remember { mutableStateOf(SyntheticScenarioService.isRunning) }
+    var screenshotRunning by remember { mutableStateOf(ScreenshotCaptureService.isRunning) }
     var stateLogExpanded by remember { mutableStateOf(false) }
+
+    val projectionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val intent = Intent(ctx, ScreenshotCaptureService::class.java).apply {
+                action = ScreenshotCaptureService.ACTION_START
+                putExtra(ScreenshotCaptureService.EXTRA_RESULT_CODE, result.resultCode)
+                putExtra(ScreenshotCaptureService.EXTRA_RESULT_DATA, result.data)
+            }
+            ctx.startForegroundServiceCompat(intent)
+            screenshotRunning = true
+            Toast.makeText(ctx, "Screenshot capture armed", Toast.LENGTH_SHORT).show()
+        } else {
+            screenshotRunning = false
+            Toast.makeText(ctx, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
             replayRunning = ReplayService.isRunning
             synthRunning = SyntheticScenarioService.isRunning
+            screenshotRunning = ScreenshotCaptureService.isRunning
         }
     }
 
@@ -181,6 +207,46 @@ fun DebugScreen(navController: NavController, prefs: Prefs) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Force radar reconnect") }
+            }
+
+            // ── Screenshot capture ────────────────────────────────────────────
+            item { DebugSectionHeader("Screenshot capture") }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Periodic screenshots",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            "Captures the screen once a minute while the radar overlay is active. " +
+                                "Saved to the app's files dir under screenshots/.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = screenshotRunning,
+                        onCheckedChange = { wantOn ->
+                            if (wantOn) {
+                                val mpm = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                    as MediaProjectionManager
+                                projectionLauncher.launch(mpm.createScreenCaptureIntent())
+                            } else {
+                                ctx.startService(
+                                    Intent(ctx, ScreenshotCaptureService::class.java).apply {
+                                        action = ScreenshotCaptureService.ACTION_STOP
+                                    }
+                                )
+                                screenshotRunning = false
+                            }
+                        },
+                    )
+                }
             }
 
             // ── Manual HA push ────────────────────────────────────────────────
@@ -365,4 +431,8 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
 
 private fun Context.startForegroundServiceCompat(cls: Class<*>) {
     androidx.core.content.ContextCompat.startForegroundService(this, Intent(this, cls))
+}
+
+private fun Context.startForegroundServiceCompat(intent: Intent) {
+    androidx.core.content.ContextCompat.startForegroundService(this, intent)
 }

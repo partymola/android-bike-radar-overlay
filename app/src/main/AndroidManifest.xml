@@ -22,6 +22,9 @@
         android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE"
         tools:targetApi="34" />
     <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+        tools:targetApi="34" />
+    <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS"
         tools:targetApi="33" />
 
@@ -99,6 +102,12 @@
             android:name=".SyntheticScenarioService"
             android:exported="false"
             android:foregroundServiceType="shortService"
+            tools:targetApi="34" />
+
+        <service
+            android:name=".ScreenshotCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection"
             tools:targetApi="34" />
 
         <provider

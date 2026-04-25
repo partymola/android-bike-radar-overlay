@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+@file:Suppress("DEPRECATION")
+
 package es.jjrh.bikeradar.data
 
 import android.content.Context

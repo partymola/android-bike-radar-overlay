@@ -156,7 +156,7 @@ class RadarV2Decoder(
                 prev != null &&
                 abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
 
-            val rangeX = if (lateralUnknown && prev != null) {
+            val rangeX = if (lateralUnknown) {
                 prev.vehicle.lateralPos * LATERAL_FULL_M
             } else {
                 rangeXSigned

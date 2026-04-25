@@ -1,4 +1,4 @@
-FROM gradle:8.5-jdk17
+FROM gradle:9.4.1-jdk17
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk
@@ -15,7 +15,7 @@ RUN set -eux; \
     mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest; \
     rm commandlinetools-linux-11076708_latest.zip; \
     yes | sdkmanager --licenses > /dev/null; \
-    sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"; \
+    sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"; \
     chmod -R a+rwX $ANDROID_HOME
 
 WORKDIR /workspace

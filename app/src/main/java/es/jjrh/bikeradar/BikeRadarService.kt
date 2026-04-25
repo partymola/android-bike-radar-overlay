@@ -868,7 +868,7 @@ class BikeRadarService : Service() {
             queue.cancel()
             queueJob.cancel()
             radarGattActive = false
-            try { gatt?.disconnect() } catch (_: Throwable) {}
+            try { gatt.disconnect() } catch (_: Throwable) {}
             closeCaptureLog()
         }
     }

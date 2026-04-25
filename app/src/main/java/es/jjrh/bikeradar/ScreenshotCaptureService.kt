@@ -265,7 +265,7 @@ class ScreenshotCaptureService : Service() {
                 padded.copyPixelsFromBuffer(buffer)
                 if (rowPadding == 0) padded
                 else Bitmap.createBitmap(padded, 0, 0, widthPx, heightPx).also {
-                    padded?.recycle()
+                    padded.recycle()
                     padded = null
                 }
             }

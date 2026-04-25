@@ -14,7 +14,11 @@ import kotlin.math.roundToInt
  * Header bits:
  *   0x0001 -> status/ack frame, no target payload.
  *   0x0004 -> device-status frame; the final byte is the rider's own bike
- *             speed, scaled by 0.25 km/h.
+ *             speed. Scaling is empirical (not documented in the canonical
+ *             protocol spec): 0.25 m/s per LSB (= 0.9 km/h per LSB).
+ *             Stationary floor is raw 2 (doppler noise floor, not true
+ *             zero); observed ceiling raw 50 appears to be a firmware
+ *             clamp.
  *   Anything else -> body is N consecutive 9-byte target structs.
  *
  * Target struct (9 bytes):
@@ -66,7 +70,8 @@ class RadarV2Decoder(
     private val tracks = HashMap<Int, Track>()
 
     /** Rider's own bike speed in km/h, last reported by a device-status
-     *  frame (byte[len-1] x 0.25 km/h). Null until the first such frame. */
+     *  frame (byte[len-1] x 0.9 km/h; native resolution 0.25 m/s per LSB).
+     *  Null until the first such frame. */
     private var lastBikeSpeedKmh: Int? = null
 
     /**
@@ -80,12 +85,13 @@ class RadarV2Decoder(
         val isStatus = header and STATUS_FRAME_BIT != 0
         val isDeviceStatus = header and DEVICE_STATUS_BIT != 0
         if (isDeviceStatus) {
-            // Device-status frame carries the rider's own bike speed in the
-            // final byte, scaled by 0.25 km/h. Always emit a snapshot so
-            // bikeSpeedKmh propagates even when no targets changed.
+            // Device-status frame carries the rider's own bike speed in
+            // the final byte, scaled by 0.9 km/h (0.25 m/s per LSB).
+            // Always emit a snapshot so bikeSpeedKmh propagates even
+            // when no targets changed.
             if (payload.size > HEADER_SIZE) {
                 val raw = payload[payload.size - 1].toInt() and 0xFF
-                lastBikeSpeedKmh = (raw * 0.25f).roundToInt()
+                lastBikeSpeedKmh = (raw * 0.9f).roundToInt()
             }
             pruneStale(now)
             return snapshot(now)

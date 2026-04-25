@@ -53,8 +53,9 @@ data class RadarState(
      *  the overlay uses null to decide whether to render the t+... label. */
     val scenarioTimeMs: Long? = null,
     /** Rider's own bike speed in km/h, sourced from the radar's
-     *  device-status frame (byte[len-1] x 0.25 km/h). Null until the first
-     *  device-status frame has been received in the current session. */
+     *  device-status frame (byte[len-1] x 0.9 km/h; native resolution
+     *  0.25 m/s per LSB). Null until the first device-status frame has
+     *  been received in the current session. */
     val bikeSpeedKmh: Int? = null,
 ) {
     val isClear: Boolean get() = vehicles.isEmpty()

@@ -143,6 +143,26 @@ class ClosePassDetector {
             // passing and we either already emitted or no longer care).
             if (v.isBehind) continue
 
+            // Skip targets the decoder has flagged as alongside-stationary
+            // (parked / queued vehicle next to a slow rider). The decoder
+            // applies dwell + lateral + closing-speed gates upstream; an
+            // alongside flag means this is not an overtake and shouldn't
+            // influence min-rangeX tracking. Without this skip, a real
+            // overtake that ends with the rider braking to a junction
+            // stop alongside the just-overtaken vehicle (both then
+            // near-stationary at the junction) would have its minRangeX
+            // falsely pulled toward zero by the close alongside frames,
+            // emitting a bogus close-pass event when the track
+            // terminates.
+            if (v.isAlongsideStationary) continue
+
+            // Skip frames where the decoder couldn't determine lateral
+            // position reliably. The decoder's lateralUnknown flag fires
+            // on far-range frames where the radar emits its rangeXBits=0
+            // sentinel; without this skip those frames pull min-rangeX
+            // to zero artificially.
+            if (v.lateralUnknown) continue
+
             // Arm the track if all gates pass.
             if (!state.armed) {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM

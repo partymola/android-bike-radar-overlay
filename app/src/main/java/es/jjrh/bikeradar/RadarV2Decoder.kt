@@ -136,7 +136,31 @@ class RadarV2Decoder(
 
             val rangeY = abs(rangeYSigned)
             val effectiveDistance = rangeY.roundToInt()
-            val rangeX = rangeXSigned
+
+            // Lateral-unknown sentinel: the radar emits rxBits = 0 on a
+            // far track when it briefly loses lateral confidence. At
+            // rangeY < 10 m a literal 0 is plausible (target dead
+            // behind), so the sentinel only applies at rangeY >= 10 m.
+            // Requiring the previous frame to have a non-centred lateral
+            // position confirms this is a discontinuity, not a target
+            // that has actually been centred throughout. When detected,
+            // carry the previous lateralPos forward so visual consumers
+            // see continuity; the flag tells downstream gates
+            // (close-pass detector) that the lateral data on this frame
+            // isn't usable. Once the flag fires for a track, the
+            // held-over saturated lateralPos becomes the next frame's
+            // `prev`, so the detection propagates across the entire run
+            // of zero readings without a per-track state machine.
+            val lateralUnknown = rxBits == 0 &&
+                rangeY >= LATERAL_UNKNOWN_MIN_RANGE_Y_M &&
+                prev != null &&
+                abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
+
+            val rangeX = if (lateralUnknown && prev != null) {
+                prev.vehicle.lateralPos * LATERAL_FULL_M
+            } else {
+                rangeXSigned
+            }
 
             val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
 
@@ -163,6 +187,7 @@ class RadarV2Decoder(
                     lateralPos = lateralPos,
                     isBehind = isBehind,
                     speedXMs = speedXMs,
+                    lateralUnknown = lateralUnknown,
                 ),
                 lastSeen = now,
                 firstSeen = prev?.firstSeen ?: now,
@@ -311,5 +336,19 @@ class RadarV2Decoder(
          *  Prevents the visual mode from flipping for a brief slow target
          *  that's about to start closing. */
         const val ALONGSIDE_MIN_DURATION_MS = 3000L
+
+        // ── Lateral-unknown sentinel ─────────────────────────────────────
+        /** rangeY (m) at or above which `rangeXBits = 0` is treated as
+         *  the radar's "lateral-unknown" signal rather than a real
+         *  centred target. Below this distance a literal zero is
+         *  plausible (target directly behind), so the sentinel doesn't
+         *  apply. */
+        const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
+        /** Previous frame's |lateralPos| floor for the lateral-unknown
+         *  detection. The bug shows up as a discontinuity from a
+         *  saturated lateral (|pos| ~= 1.0 -> 0.0 in one frame); a
+         *  threshold of 0.5 (= 1.5 m off-centre) ensures we only flag
+         *  when there's a real prior lateral signal to fall back to. */
+        const val LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD = 0.5f
     }
 }

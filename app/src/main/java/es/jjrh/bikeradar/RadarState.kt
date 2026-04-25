@@ -40,6 +40,17 @@ data class Vehicle(
      * pop back to a normal filled box is the rider's attention cue.
      */
     val isAlongsideStationary: Boolean = false,
+    /**
+     * True when the radar's lateral channel reported `rangeXBits = 0`
+     * for a far track (rangeY >= 10 m) whose previous frame had a
+     * non-centred lateral position. This is the radar's
+     * "lateral-unknown" sentinel: instead of a real lateral reading
+     * the firmware emits a hard zero. The decoder carries forward the
+     * previous frame's [lateralPos] so visual consumers see continuity,
+     * and downstream gates (close-pass detection) should skip frames
+     * with this flag because the lateral data is unreliable.
+     */
+    val lateralUnknown: Boolean = false,
 ) {
     val speedKmh: Int get() = (speedMs * 3.6).toInt()
 }

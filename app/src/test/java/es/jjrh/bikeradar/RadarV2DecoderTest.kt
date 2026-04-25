@@ -300,6 +300,71 @@ class RadarV2DecoderTest {
             state!!.vehicles.single().speedXMs)
     }
 
+    // ── lateral-unknown sentinel (rxBits=0 at far rangeY) ────────────────────
+
+    @Test fun lateralUnknownFiresOnSnapFromSaturated() {
+        // Frame 1: target saturated to the right (rangeX raw=30 -> 3.0 m,
+        // lateralPos clamped to +1.0).
+        decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 30)))
+        // Frame 2: rxBits=0 at rangeY=20 m with prev saturated -> sentinel.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))
+        val v = state!!.vehicles.single()
+        assertTrue("lateralUnknown must flag on the snap", v.lateralUnknown)
+        // lateralPos must be carried forward from the previous frame, not
+        // emitted as the literal 0 the radar's sentinel would imply.
+        assertEquals(1.0f, v.lateralPos, 0.0001f)
+    }
+
+    @Test fun lateralUnknownDoesNotFireAtCloseRange() {
+        // Below the 10 m sentinel cutoff (rangeY raw=80 -> 8.0 m), a
+        // literal rxBits=0 is plausible (target dead behind), so the
+        // flag must NOT fire even if the previous frame was saturated.
+        decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 30)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 80, rangeX = 0)))
+        assertFalse("close-range rxBits=0 must not flag lateral-unknown",
+            state!!.vehicles.single().lateralUnknown)
+    }
+
+    @Test fun lateralUnknownDoesNotFireOnFirstFrame() {
+        // No previous frame -> no discontinuity to detect; the flag must
+        // not fire on track initiation, even at far range with rxBits=0.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))
+        assertFalse("first-frame rxBits=0 must not flag lateral-unknown",
+            state!!.vehicles.single().lateralUnknown)
+    }
+
+    @Test fun lateralUnknownDoesNotFireWhenPrevWasCentred() {
+        // Two consecutive centred frames at far range. The second frame's
+        // rxBits=0 lines up with a previous centred lateralPos, so this
+        // is a consistently-centred target (not a snap) and the flag
+        // must not fire. Without the prev-was-non-centred guard, every
+        // centred far target would be falsely flagged as unknown and
+        // close-pass arming would be silently suppressed.
+        decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))
+        assertFalse("consistent-centred far target must not flag lateral-unknown",
+            state!!.vehicles.single().lateralUnknown)
+    }
+
+    @Test fun lateralUnknownFiresAtRangeYEquals10m() {
+        // Boundary check: rangeY exactly at the 10 m threshold (raw=100)
+        // must fire (>=  semantics), provided the other gates pass.
+        decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 30)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, rangeX = 0)))
+        assertTrue("rangeY=10m exactly must fire on >= semantics",
+            state!!.vehicles.single().lateralUnknown)
+    }
+
+    @Test fun lateralUnknownFiresAtPrevLateralPosEquals0_5() {
+        // Boundary check: prev.|lateralPos| exactly at the 0.5 threshold
+        // must fire (>= semantics). rangeX=15 raw -> 1.5 m -> lateralPos
+        // = 1.5 / 3.0 = exactly 0.5.
+        decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 15)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))
+        assertTrue("prev.|lateralPos|=0.5 exactly must fire on >= semantics",
+            state!!.vehicles.single().lateralUnknown)
+    }
+
     // ── device-status frame (rider bike speed) ───────────────────────────────
 
     @Test fun deviceStatusFrameUpdatesBikeSpeedKmh() {

@@ -18,6 +18,8 @@ class ClosePassDetectorTest {
         size: VehicleSize = VehicleSize.CAR,
         lateralPos: Float = 0.2f,    // 0.6 m right
         isBehind: Boolean = false,
+        isAlongsideStationary: Boolean = false,
+        lateralUnknown: Boolean = false,
     ) = Vehicle(
         id = id,
         distanceM = distanceM,
@@ -25,6 +27,8 @@ class ClosePassDetectorTest {
         size = size,
         lateralPos = lateralPos,
         isBehind = isBehind,
+        isAlongsideStationary = isAlongsideStationary,
+        lateralUnknown = lateralUnknown,
     )
 
     private fun drive(
@@ -185,6 +189,78 @@ class ClosePassDetectorTest {
         }
         val secondEvents = drive(d, secondFrames, config = longCooldown)
         assertTrue("cooldown should suppress the second emit", secondEvents.isEmpty())
+    }
+
+    // ── alongside-stationary skip ────────────────────────────────────────────
+
+    @Test fun `real overtake ending in mutual junction stop does not emit`() {
+        // tid 1 is a genuine overtake whose closest frame stays above
+        // the 1.0 m emit threshold. The rider then brakes to a junction
+        // stop alongside the just-overtaken vehicle; both end up
+        // near-stationary at the junction so the decoder flags the
+        // continuing track as isAlongsideStationary. Without the
+        // alongside-stationary skip, the close alongside frame's
+        // |rx|=0.1 m would falsely pull minRangeX below the emit
+        // threshold and the terminate path would fire a bogus GRAZING
+        // event. With the skip, min stays at the genuine overtake's
+        // 1.14 m and the event is correctly suppressed.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            // Real overtake phase: arms at 1.41 m, drives to 1.14 m min.
+            listOf(veh(distanceM = 25, lateralPos = 0.47f)) to 0L,
+            listOf(veh(distanceM = 20, lateralPos = 0.45f)) to 100L,
+            listOf(veh(distanceM = 15, lateralPos = 0.4f)) to 200L,
+            listOf(veh(distanceM = 10, lateralPos = 0.38f)) to 300L,
+            listOf(veh(distanceM = 5, lateralPos = 0.4f)) to 400L,
+            // Alongside phase: same tid, now stationary alongside the
+            // rider. This frame would falsely pull min to 0.1 m without
+            // the skip.
+            listOf(
+                veh(
+                    distanceM = 5,
+                    speedMs = 0,
+                    size = VehicleSize.TRUCK,
+                    lateralPos = 0.033f,  // 0.1 m right
+                    isAlongsideStationary = true,
+                ),
+            ) to 500L,
+            // Track drops; terminate path runs.
+            emptyList<Vehicle>() to 600L,
+        )
+        val events = drive(d, frames)
+        assertTrue("alongside frame must not pull min below the emit threshold", events.isEmpty())
+    }
+
+    // ── lateral-unknown skip ─────────────────────────────────────────────────
+
+    @Test fun `lateral-unknown frames do not pollute min tracking`() {
+        // Track armed on a real overtake whose closest frame stayed above
+        // the 1.0 m emit threshold. A subsequent far-range frame fires the
+        // decoder's lateralUnknown flag (radar's rxBits=0 sentinel). The
+        // detector must skip that frame; otherwise its raw |rx|=0 would
+        // pull min-rangeX to zero and the terminate path would emit a
+        // bogus GRAZING event.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            // Real overtake phase: arms at 1.41 m, drives to 1.14 m min.
+            listOf(veh(distanceM = 25, lateralPos = 0.47f)) to 0L,
+            listOf(veh(distanceM = 20, lateralPos = 0.45f)) to 100L,
+            listOf(veh(distanceM = 15, lateralPos = 0.4f)) to 200L,
+            listOf(veh(distanceM = 10, lateralPos = 0.38f)) to 300L,
+            // Far-range frame with lateralUnknown=true and a raw |rx|=0
+            // that would falsely update min if the detector didn't skip it.
+            listOf(
+                veh(
+                    distanceM = 25,
+                    lateralPos = 0f,
+                    lateralUnknown = true,
+                ),
+            ) to 400L,
+            // Track drops; terminate path runs.
+            emptyList<Vehicle>() to 500L,
+        )
+        val events = drive(d, frames)
+        assertTrue("lateral-unknown frame must not pollute min tracking", events.isEmpty())
     }
 
     // ── disabled ─────────────────────────────────────────────────────────────

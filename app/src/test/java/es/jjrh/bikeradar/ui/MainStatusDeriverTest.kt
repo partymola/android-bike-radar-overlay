@@ -17,9 +17,18 @@ class MainStatusDeriverTest {
         dashcamWarnWhenOff: Boolean = false,
         dashcamFresh: Boolean = false,
         dashcamDisplayName: String? = null,
+        serviceEnabled: Boolean = true,
     ) = MainStatusInputs(
-        firstRunComplete, pausedUntilEpochMs, hasBond, radarFresh,
-        haErrorRecent, dashcamOwned, dashcamWarnWhenOff, dashcamFresh, dashcamDisplayName,
+        firstRunComplete = firstRunComplete,
+        pausedUntilEpochMs = pausedUntilEpochMs,
+        hasBond = hasBond,
+        radarFresh = radarFresh,
+        haErrorRecent = haErrorRecent,
+        dashcamOwned = dashcamOwned,
+        dashcamWarnWhenOff = dashcamWarnWhenOff,
+        dashcamFresh = dashcamFresh,
+        dashcamDisplayName = dashcamDisplayName,
+        serviceEnabled = serviceEnabled,
     )
 
     private fun derive(inputs: MainStatusInputs, now: Long = 100L) =
@@ -114,5 +123,37 @@ class MainStatusDeriverTest {
         assertEquals(MainStatusIcon.Sensors, s.icon)
         assertEquals(MainStatusTone.Neutral, s.tone)
         assertEquals("Waiting for radar", s.headline)
+    }
+
+    @Test fun serviceStoppedFiresWhenServiceDisabled() {
+        val s = derive(baseInputs(serviceEnabled = false))
+        assertEquals(MainStatusIcon.PlayCircle, s.icon)
+        assertEquals(MainStatusTone.Neutral, s.tone)
+        assertEquals("Service stopped", s.headline)
+        assertEquals("Tap Start to begin", s.subtitle)
+    }
+
+    @Test fun serviceStoppedBeatsPausedAndNotPaired() {
+        // All three would fire — service-stopped must win because a
+        // stopped service means nothing is scanning, so saying "not
+        // paired" or "paused" would be misdirection.
+        val s = derive(
+            baseInputs(
+                serviceEnabled = false,
+                pausedUntilEpochMs = 200L,
+                hasBond = false,
+            ),
+            now = 100L,
+        )
+        assertEquals("Service stopped", s.headline)
+    }
+
+    @Test fun firstRunStillBeatsServiceStopped() {
+        // !firstRunComplete && !serviceEnabled is a corner case (a
+        // first-run user with service-disabled prefs from a previous
+        // install state) — first-run should still win so the user is
+        // walked through onboarding rather than seeing a Start CTA.
+        val s = derive(baseInputs(firstRunComplete = false, serviceEnabled = false))
+        assertEquals("Let's set up your radar", s.headline)
     }
 }

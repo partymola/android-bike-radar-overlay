@@ -38,6 +38,13 @@ data class MainStatusInputs(
     val dashcamWarnWhenOff: Boolean,
     val dashcamFresh: Boolean,
     val dashcamDisplayName: String?,
+    /** True when the user has the foreground service enabled (default).
+     *  When false the rider has explicitly turned off all radar tracking
+     *  via Settings; the deriver surfaces a "Service stopped" status with
+     *  a Start CTA so the rider can re-enable it from the home screen
+     *  without digging through settings. Defaults to true to preserve
+     *  existing call-site behaviour. */
+    val serviceEnabled: Boolean = true,
 )
 
 object MainStatusDeriver {
@@ -45,16 +52,22 @@ object MainStatusDeriver {
     /**
      * Priority order, first match wins:
      *  1. First-run setup
-     *  2. User-paused
-     *  3. Radar not paired
-     *  4. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  5. Radar live but HA unreachable
-     *  6. Radar live, all good
-     *  7. Paired but radar stale
+     *  2. Service stopped (user toggled the foreground service off)
+     *  3. User-paused
+     *  4. Radar not paired
+     *  5. Radar live but dashcam off  (rider-safety beats HA connectivity)
+     *  6. Radar live but HA unreachable
+     *  7. Radar live, all good
+     *  8. Paired but radar stale
      *
      * DashcamOff is intentionally ranked above HaDown: HA is background
      * telemetry, the dashcam is the rear-view recording the rider needs.
      * If both fire simultaneously the dashcam warning wins.
+     *
+     * Service-stopped beats Paused/NotPaired because if the service isn't
+     * running there's no scanning happening at all — telling the rider
+     * the radar is "not paired" when the real cause is that they turned
+     * the whole thing off would be misdirection.
      */
     fun derive(
         inputs: MainStatusInputs,
@@ -67,6 +80,14 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Good,
                 headline = "Let's set up your radar",
                 subtitle = "Tap Settings to begin",
+            )
+        }
+        if (!inputs.serviceEnabled) {
+            return MainStatus(
+                icon = MainStatusIcon.PlayCircle,
+                tone = MainStatusTone.Neutral,
+                headline = "Service stopped",
+                subtitle = "Tap Start to begin",
             )
         }
         if (nowMs < inputs.pausedUntilEpochMs) {

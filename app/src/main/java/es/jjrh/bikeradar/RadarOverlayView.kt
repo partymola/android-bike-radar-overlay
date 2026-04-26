@@ -55,19 +55,23 @@ class RadarOverlayView(context: Context) : View(context) {
         color     = Color.argb(220, 220, 220, 220)
         typeface  = android.graphics.Typeface.MONOSPACE
     }
-    /** Dotted line showing where the user-configured alert max distance
+    /** Dashed line showing where the user-configured alert max distance
      *  sits against the full visualisation window. Anything above the line
-     *  (closer than alertMaxM) beeps; anything below is drawn but silent. */
+     *  (closer than alertMaxM) beeps; anything below is drawn but silent.
+     *  Dashed pattern signals "threshold, not boundary"; longer dashes +
+     *  higher alpha than the original 1.5dp/150-alpha so it reads against
+     *  light map backgrounds (Flow's beige roads, satellite imagery) at
+     *  a glance. */
     private val alertLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = dp(1.5f)
-        color = Color.argb(150, 220, 160, 40)
-        pathEffect = android.graphics.DashPathEffect(floatArrayOf(dp(4f), dp(4f)), 0f)
+        strokeWidth = dp(2f)
+        color = Color.argb(210, 230, 170, 40)
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(dp(6f), dp(5f)), 0f)
     }
     private val alertLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.RIGHT
-        textSize  = dp(9f)
-        color     = Color.argb(180, 220, 160, 40)
+        textSize  = dp(10f)
+        color     = Color.argb(230, 230, 170, 40)
         typeface  = android.graphics.Typeface.MONOSPACE
     }
 
@@ -371,16 +375,21 @@ class RadarOverlayView(context: Context) : View(context) {
         canvas.restoreToCount(sc)
     }
 
+    /** Box half-widths shrunk ~20 % from the original 4/9/14 dp values.
+     *  Two adjacent CAR boxes at the same range now leave headroom inside
+     *  the 130 dp panel instead of stacking visually; the smaller footprint
+     *  also leaves more map showing through, which helps orientation when
+     *  the rider glances at the overlay during a turn. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
-        VehicleSize.BIKE  -> dp(4f)
-        VehicleSize.CAR   -> dp(9f)
-        VehicleSize.TRUCK -> dp(14f)
+        VehicleSize.BIKE  -> dp(3f)
+        VehicleSize.CAR   -> dp(7f)
+        VehicleSize.TRUCK -> dp(11f)
     }
 
     private fun vehicleHalfHeight(size: VehicleSize): Float = when (size) {
-        VehicleSize.BIKE  -> dp(11f)
-        VehicleSize.CAR   -> dp(15f)
-        VehicleSize.TRUCK -> dp(22f)
+        VehicleSize.BIKE  -> dp(9f)
+        VehicleSize.CAR   -> dp(12f)
+        VehicleSize.TRUCK -> dp(18f)
     }
 
     /** 0m -> topY (rider), visualMaxM -> bottomY (farthest). */

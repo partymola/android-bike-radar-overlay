@@ -186,12 +186,11 @@ class RadarOverlayView(context: Context) : View(context) {
         val bottomY = h - dp(20f)
 
         if (clear) {
+            // No vehicles to overpaint, so the rider can draw early.
             drawRider(canvas, riderAlpha, trackX, topY)
             drawBatteryWarning(canvas, w, h)
             return
         }
-
-        drawRider(canvas, riderAlpha, trackX, topY)
 
         val riderBottom = topY + dp(RIDER_HEIGHT_DP) + dp(4f)
 
@@ -267,6 +266,12 @@ class RadarOverlayView(context: Context) : View(context) {
             boxStrokePaint.color = Color.argb((255 * distFactor).toInt(), r, g, b)
             canvas.drawRoundRect(rect, dp(3f), dp(3f), boxStrokePaint)
         }
+
+        // Rider chevron sits above every vehicle box so a target painted
+        // at rangeY ≈ 0 / lateral ≈ 0 (e.g. a parked car alongside a
+        // crawling rider whose alongside-stationary gate didn't fire)
+        // can never obscure the self-marker.
+        drawRider(canvas, riderAlpha, trackX, topY)
 
         // Painted last so it sits on top of the rider and any vehicles that
         // happen to be at the same lateral position. drawBatteryWarning is a
@@ -438,7 +443,6 @@ class RadarOverlayView(context: Context) : View(context) {
         private const val RIDER_NOTCH_FRAC = 0.67f
 
         private val COLOR_AMBER     = Color.rgb(230, 150, 20)
-        private val COLOR_AMBER_DIM = Color.argb(130, 230, 150, 20)
         private val COLOR_RED       = Color.rgb(220, 40, 40)
     }
 }

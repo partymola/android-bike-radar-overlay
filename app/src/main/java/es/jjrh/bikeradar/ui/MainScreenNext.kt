@@ -695,7 +695,7 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "We can warn you on the overlay if you forget to switch it on.",
+                text = "The overlay shows its battery and flags when it stops broadcasting.",
                 color = br.fgMuted,
                 fontSize = 12.sp,
             )

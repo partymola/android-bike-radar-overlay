@@ -209,7 +209,7 @@ private fun PermissionsStepNext(onContinue: () -> Unit) {
                 tint = br.brand,
                 mark = "Step 1 of 3",
                 title = "Grant permissions",
-                sub = "So the app can reach your bike over Bluetooth.",
+                sub = "A few system permissions so the app can connect, stay running, and show alerts.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -221,7 +221,7 @@ private fun PermissionsStepNext(onContinue: () -> Unit) {
             }
         }
         FooterCta(
-            label = if (requiredGranted) "Continue" else "Grant the required ones first",
+            label = "Continue",
             enabled = requiredGranted,
             onClick = onContinue,
         )
@@ -254,8 +254,8 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                 icon = Icons.Default.Home,
                 tint = Color(0xFFFF8A3D),
                 mark = "Step 2 of 3 · Optional",
-                title = "Send battery to Home Assistant",
-                sub = "Battery levels publish to HA so it can warn you the night before a ride. Skip if you don't use it.",
+                title = "Connect to Home Assistant",
+                sub = "Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders. Skip if you don't use HA.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -389,7 +389,7 @@ private fun PairingStepNext(
                 tint = br.brand,
                 mark = "Step 3 of 3",
                 title = "Pair your devices",
-                sub = "Pairing uses Android's Bluetooth flow — not this app. Put your radar in pair mode (hold the button until the LED blinks red), then tap below.",
+                sub = "Pairing happens in Android's Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap below.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -445,7 +445,7 @@ private fun PairingStepNext(
                             bonded = picked,
                             detail = if (picked)
                                 "${prefsSnap.dashcamDisplayName ?: "Picked"} · ${prefsSnap.dashcamMac}"
-                            else "Got a Bluetooth dashcam (e.g. Garmin Varia Vue)?",
+                            else "Got a Bluetooth dashcam?",
                             primaryCta = if (picked) "Change device" else "Pick device",
                             primaryCtaIcon = null,
                             onPrimary = {
@@ -557,7 +557,7 @@ private fun DashcamUnansweredCardNext(onSetUp: () -> Unit, onSkip: () -> Unit) {
                 .padding(10.dp),
         ) {
             Text(
-                text = "Got a Bluetooth dashcam (e.g. Garmin Varia Vue)? The overlay can warn you if you forget to switch it on.",
+                text = "Got a Bluetooth dashcam? The overlay shows its battery and flags when it stops broadcasting.",
                 color = br.fgMuted,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,

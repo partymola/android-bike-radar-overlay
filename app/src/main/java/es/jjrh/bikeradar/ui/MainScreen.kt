@@ -322,7 +322,7 @@ private fun DashcamPrompt(onYes: () -> Unit, onNo: () -> Unit) {
             Text("Do you run a dashcam?", style = MaterialTheme.typography.titleSmall)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "We can warn you on the overlay if you forget to switch it on.",
+                "The overlay shows its battery and flags when it stops broadcasting.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

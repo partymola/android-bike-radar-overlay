@@ -72,7 +72,7 @@ internal val PERMISSIONS = buildList {
     add(PermissionSpec(
         listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),
         "Nearby devices",
-        "Find and connect to your bike's radar and front light over Bluetooth.",
+        "Scan for and connect to your radar and dashcam over Bluetooth.",
         required = true,
     ))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -86,7 +86,7 @@ internal val PERMISSIONS = buildList {
     add(PermissionSpec(
         emptyList(),
         "Draw over other apps",
-        "Draw the radar overlay on top of your cycling app. Without this the radar data still goes to Home Assistant.",
+        "Draw the radar overlay on top of your cycling app. Without this the alerts still play, but you won't see the overlay.",
         required = false,
     ))
 }
@@ -165,7 +165,7 @@ private fun PermissionsStep(onNext: () -> Unit) {
     ) {
         Text("Permissions", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Grant these so the app can reach your bike over Bluetooth.",
+            "A few system permissions so the app can connect, stay running, and show alerts.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -302,7 +302,7 @@ private fun HaCredentialsStep(onNext: () -> Unit, onSkip: () -> Unit) {
     ) {
         Text("Home Assistant", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Battery levels are published to HA via MQTT. Skip if you don't use Home Assistant.",
+            "Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders. Skip if you don't use HA.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -330,8 +330,8 @@ private fun PairingStep(prefs: Prefs, onFinish: () -> Unit) {
     ) {
         Text("Pair your radar", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Pairing uses Android's built-in Bluetooth flow, not this app. " +
-            "Put the radar in pair mode (hold button until LED blinks red), then tap below.",
+            "Pairing happens in Android's Bluetooth settings, not in this app. " +
+            "Put the radar in pair mode (check the manual if unsure), then tap below.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -354,8 +354,8 @@ private fun PairingStep(prefs: Prefs, onFinish: () -> Unit) {
                 Text("Front dashcam", style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Got a Bluetooth dashcam (e.g. Garmin Varia Vue)? The overlay " +
-                        "can warn you if you forget to switch it on.",
+                    "Got a Bluetooth dashcam? The overlay shows its battery and " +
+                        "flags when it stops broadcasting.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(modifier = Modifier.height(8.dp))

@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -318,6 +320,58 @@ fun NextSettingsSliderRow(
             onValueChangeFinished = onValueChangeFinished,
             steps = steps,
         )
+    }
+}
+
+/** Outlined button for low-frequency / destructive actions; caller picks the tone. */
+@Composable
+fun NextOutlinedButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tone: Color? = null,
+    leadingIcon: ImageVector? = null,
+) {
+    val br = LocalBrColors.current
+    val effectiveTone = tone ?: br.fg
+    val labelColor = if (enabled) effectiveTone else br.fgDim
+    // hairline2 (14% white alpha) is invisible on bgElev1; fgDim hits ~3.7:1
+    // contrast which clears WCAG 3:1 for non-text UI components.
+    val borderColor = if (enabled) effectiveTone else br.fgDim
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable(
+                enabled = enabled,
+                onClickLabel = label,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = labelColor,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Text(
+                text = label,
+                color = labelColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 

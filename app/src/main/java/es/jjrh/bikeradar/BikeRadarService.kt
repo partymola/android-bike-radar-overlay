@@ -229,6 +229,14 @@ class BikeRadarService : Service() {
         closeCaptureLog()
         RadarStateBus.clear()
         scope.cancel()
+        // Walk-away and bond-lost notifications survive stopForeground; clear
+        // after scope.cancel() so no in-flight coroutine can re-emit them.
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(NOTIF_WALKAWAY_ID)
+        nm.cancel(NOTIF_BOND_LOST_ID)
+        // Companion-object cache survives across service instances within the
+        // same process; clear it so Stop = clean slate for MAC->slug resolution.
+        macToSlug.clear()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

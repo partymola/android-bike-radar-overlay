@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PowerOff
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -26,9 +34,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -60,6 +73,13 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
     var closePassEmitMinX by rememberSaveable { mutableFloatStateOf(prefs.closePassEmitMinRangeXM) }
     var closePassRiderFloor by rememberSaveable { mutableIntStateOf(prefs.closePassRiderSpeedFloorKmh) }
     var closePassClosingFloor by rememberSaveable { mutableIntStateOf(prefs.closePassClosingSpeedFloorMs) }
+    // serviceEnabled is binary and atomic — no in-progress drag state to mirror —
+    // so derive from prefs.flow instead of a local rememberSaveable. Keeps the
+    // Danger-zone row honest if anything else (future MainScreen action,
+    // BootReceiver edge case) flips the pref while Settings is composed.
+    val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
+    val serviceEnabled = prefsSnap.serviceEnabled
+    var showStopDialog by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
@@ -193,7 +213,82 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 }
             }
 
+            // Indefinite kill-switch (survives reboot). Pause is the time-bounded variant.
+            NextSettingsSectionLabel("Danger zone")
+            NextSettingsRowGroup {
+                if (serviceEnabled) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        NextOutlinedButton(
+                            label = "Stop scanning",
+                            tone = br.danger,
+                            leadingIcon = Icons.Default.PowerSettingsNew,
+                            onClick = { showStopDialog = true },
+                        )
+                        Text(
+                            text = "Shuts down radar, overlay, and HA updates until you start them again. No auto-start on reboot. Use Pause for a quiet hour instead.",
+                            color = br.fgDim,
+                            fontSize = 12.sp,
+                        )
+                    }
+                } else {
+                    Box(modifier = Modifier.semantics(mergeDescendants = true) { }) {
+                        NextSettingsRow(
+                            icon = Icons.Default.PowerOff,
+                            iconTint = br.fgMuted,
+                            title = "Scanning stopped",
+                            subtitle = "Start it again from the home screen.",
+                            onClick = {},
+                            clickable = false,
+                            chevron = false,
+                            isLast = true,
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(28.dp))
+        }
+
+        if (showStopDialog) {
+            val cancelFocus = remember { FocusRequester() }
+            // M3 AlertDialog doesn't auto-focus the dismiss button; force Cancel as default.
+            LaunchedEffect(Unit) { cancelFocus.requestFocus() }
+            AlertDialog(
+                onDismissRequest = { showStopDialog = false },
+                title = { Text("Stop scanning?") },
+                text = {
+                    Text(
+                        "The radar, overlay, and Home Assistant updates stop until " +
+                            "you start them again from the home screen — including " +
+                            "after a reboot. Use Pause if you only need a quiet hour."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            prefs.serviceEnabled = false
+                            // Clear any pending pause window so re-arm doesn't
+                            // land back in a stale Paused state.
+                            prefs.pausedUntilEpochMs = 0L
+                            ctx.stopService(Intent(ctx, BikeRadarService::class.java))
+                            showStopDialog = false
+                        },
+                    ) { Text("Stop scanning", color = br.danger) }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showStopDialog = false },
+                        modifier = Modifier
+                            .focusRequester(cancelFocus)
+                            .focusable(),
+                    ) { Text("Cancel") }
+                },
+            )
         }
     }
 }

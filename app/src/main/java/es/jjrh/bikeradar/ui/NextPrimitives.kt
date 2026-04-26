@@ -228,7 +228,7 @@ fun BatteryChip(
 //
 // JSX `Chip`: pill with mono uppercase text. Two variants: `solid` (fg
 // on a coloured background) and ghost (coloured fg on a 14% tinted
-// background). Used for "BONDED", "OPTIONAL", "VUE", etc.
+// background). Used for "PAIRED", "OPTIONAL", "VUE", etc.
 
 @Composable
 fun NextChip(
@@ -599,13 +599,13 @@ fun HeroIcon(
     }
 }
 
-// ── BondedChip — green status pill used in onboarding & system card ─
+// ── PairedChip — green status pill used in onboarding & system card ─
 //
-// JSX `DeviceRow` bonded variant (onboarding.jsx): a small `BONDED`
-// green pill with a leading dot.
+// Small `PAIRED` green pill with a leading dot, drawn beside a device
+// row when it has a system Bluetooth bond.
 
 @Composable
-fun BondedChip(modifier: Modifier = Modifier) {
+fun PairedChip(modifier: Modifier = Modifier) {
     val br = LocalBrColors.current
     Row(
         modifier = modifier
@@ -622,7 +622,7 @@ fun BondedChip(modifier: Modifier = Modifier) {
                 .background(br.safe),
         )
         Text(
-            text = "BONDED",
+            text = "PAIRED",
             color = br.safe,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,

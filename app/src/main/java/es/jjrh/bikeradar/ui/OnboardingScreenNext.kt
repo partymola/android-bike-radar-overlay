@@ -367,6 +367,7 @@ private fun PairingStepNext(
 
     var radarBonded by remember { mutableStateOf(hasRadarBondNext(ctx)) }
     var radarMac by remember { mutableStateOf(currentRadarMacNext(ctx)) }
+    var radarLocalName by remember { mutableStateOf(currentRadarLocalNameNext(ctx)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -374,6 +375,7 @@ private fun PairingStepNext(
                 delay(2_000)
                 radarBonded = hasRadarBondNext(ctx)
                 radarMac = currentRadarMacNext(ctx)
+                radarLocalName = currentRadarLocalNameNext(ctx)
             }
         }
     }
@@ -403,7 +405,7 @@ private fun PairingStepNext(
                     optionalLabel = false,
                     bonded = radarBonded,
                     detail = if (radarBonded)
-                        "Bonded · ${radarMac ?: "Rear radar"}"
+                        "Paired · ${radarLocalName ?: radarMac ?: "Rear radar"}"
                     else "No paired radar yet. Open Bluetooth settings to pair your rear radar.",
                     primaryCta = "Open Bluetooth settings",
                     primaryCtaIcon = Icons.Default.Bluetooth,
@@ -638,7 +640,7 @@ private fun DeviceRowNext(
                     Text(text = subtitle, color = br.fgDim, fontSize = 11.sp)
                 }
             }
-            if (bonded) BondedChip()
+            if (bonded) PairedChip()
         }
         Spacer(modifier = Modifier.height(10.dp))
         Box(
@@ -886,4 +888,13 @@ private fun currentRadarMacNext(ctx: Context): String? = try {
         val n = dev.name?.lowercase() ?: ""
         n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
     }?.address
+} catch (_: Throwable) { null }
+
+@SuppressLint("MissingPermission")
+private fun currentRadarLocalNameNext(ctx: Context): String? = try {
+    val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
+        val n = dev.name?.lowercase() ?: ""
+        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+    }?.name
 } catch (_: Throwable) { null }

@@ -248,11 +248,6 @@ private fun haSubtitle(configured: Boolean, health: HaHealth): String = when {
     else -> "Connected"
 }
 
-private fun experimentalSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {
-    val on = listOfNotNull(
-        if (snap.precogEnabled) "Precog" else null,
-        if (snap.closePassLoggingEnabled) "Close-pass logging" else null,
-    )
-    return if (on.isEmpty()) "All off" else "${on.joinToString(", ")} on"
-}
+private fun experimentalSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String =
+    if (snap.precogEnabled) "Precog on" else "All off"
 

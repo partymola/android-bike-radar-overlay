@@ -119,6 +119,12 @@ android {
             applicationIdSuffix = ".onbtest"
             versionNameSuffix = "-onbtest"
             buildConfigField("boolean", "DEFAULT_NEXT_UX_ONBOARDING", "true")
+            // The point of onbtest is to walk Onboarding from genuine
+            // fresh-install state. Wipe the local.properties HA seed
+            // so the variant doesn't pre-fill JJ's real creds and
+            // can't accidentally hit real HA via "Test connection".
+            buildConfigField("String", "HA_BASE_URL", "\"\"")
+            buildConfigField("String", "HA_TOKEN", "\"\"")
         }
     }
 

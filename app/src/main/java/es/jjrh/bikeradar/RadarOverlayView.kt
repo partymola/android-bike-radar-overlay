@@ -307,12 +307,16 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     private fun drawBatteryWarning(canvas: Canvas, w: Float, h: Float) {
-        // Warning sits on the right edge, vertically centred on the rider
-        // emoji's actual drawn pixels. Both the camera-off glyph and the
-        // fallback low-battery dot/letter are drawn centred on (cx, cy).
+        // Warning sits at the bottom-centre of the panel. The top of
+        // the panel is the rider's primary glance zone (chevron + the
+        // closest threats); pushing system / status info to the bottom
+        // keeps that zone uncluttered. Bottom band is the "rear horizon"
+        // — only the most-distant vehicles render here, so the
+        // occasional overlap with a far-back box is preferable to
+        // stealing attention near the rider mark.
         val iconSize = dp(22f)
-        val cx = w - iconSize / 2f - dp(10f)
-        val cy = measureRiderCenterY(dp(20f))
+        val cx = w / 2f
+        val cy = h - iconSize / 2f - dp(8f)
         val status = dashcamStatus
 
         val selectedDashcam = dashcamSlug
@@ -370,10 +374,6 @@ class RadarOverlayView(context: Context) : View(context) {
         d.alpha = alpha
         d.draw(canvas)
     }
-
-    /** Vertical centre of the rider chevron given its apex y. */
-    private fun measureRiderCenterY(tipTopY: Float): Float =
-        tipTopY + dp(RIDER_HEIGHT_DP) / 2f
 
     /** Upward-pointing nav chevron ("self" marker on a top-down radar).
      *  Apex points in the direction of travel; the inverted-V notch on

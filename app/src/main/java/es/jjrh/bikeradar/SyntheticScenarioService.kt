@@ -92,12 +92,14 @@ class SyntheticScenarioService : Service() {
                 val elapsed = SystemClock.elapsedRealtime() - start
                 if (elapsed >= TOTAL_MS) break
                 val vehicles = scriptAt(elapsed)
+                val bikeKmh = bikeSpeedAt(elapsed)
                 RadarStateBus.publish(
                     RadarState(
                         vehicles = vehicles,
                         timestamp = System.currentTimeMillis(),
                         source = DataSource.V2,
                         scenarioTimeMs = elapsed,
+                        bikeSpeedKmh = bikeKmh,
                     )
                 )
                 if (!dashcamPushed && elapsed >= DASHCAM_PUSH_MS) {
@@ -170,7 +172,74 @@ class SyntheticScenarioService : Service() {
         if (t in 56.0..56.05) {
             out.add(Vehicle(id = 9, distanceM = 15, speedMs = 10, lateralPos = 0f))
         }
+
+        // Extra "rush hour" overlap density between t=10 and t=30 to
+        // exercise the box-shrink and the renderer-side stationary
+        // suppression. id=10 is a parked-in-next-lane case that should
+        // edge-dock once the rider speed gate flips on at t=10.
+        if (t in 12.0..28.0) {
+            out.add(
+                Vehicle(
+                    id = 10, distanceM = 4, speedMs = 0, size = VehicleSize.CAR,
+                    lateralPos = -0.65f, speedXMs = 0,
+                )
+            )
+        }
+        if (t in 8.0..22.0) {
+            val d = 60.0 - 4.0 * (t - 8.0)
+            if (d >= 0) out.add(
+                Vehicle(
+                    id = 11, distanceM = d.toInt().coerceAtLeast(0), speedMs = 4,
+                    lateralPos = 0.55f, speedXMs = 0,
+                )
+            )
+        }
+        if (t in 14.0..22.0) {
+            val d = 50.0 - 6.0 * (t - 14.0)
+            if (d >= 0) out.add(
+                Vehicle(
+                    id = 12, distanceM = d.toInt().coerceAtLeast(0), speedMs = 8,
+                    size = VehicleSize.BIKE, lateralPos = -0.4f, speedXMs = 0,
+                )
+            )
+        }
+        if (t in 18.0..28.0) {
+            val d = 70.0 - 9.0 * (t - 18.0)
+            if (d >= 0) out.add(
+                Vehicle(
+                    id = 13, distanceM = d.toInt().coerceAtLeast(0), speedMs = 12,
+                    size = VehicleSize.TRUCK, lateralPos = 0.65f, speedXMs = 0,
+                )
+            )
+        }
+        // Second peak around t=46..54 — close-pass-grade encounter.
+        if (t in 46.0..50.0) {
+            val d = 30.0 - 7.0 * (t - 46.0)
+            if (d >= 0) out.add(
+                Vehicle(
+                    id = 14, distanceM = d.toInt().coerceAtLeast(0), speedMs = 13,
+                    size = VehicleSize.CAR, lateralPos = 0.15f, speedXMs = 0,
+                )
+            )
+        }
         return out
+    }
+
+    /** Bike speed schedule for the demo: rider is crawling through the
+     *  rush-hour window (t 10..30 s) so the renderer-side parked-car
+     *  gate can fire on id=10, then accelerates back up to a normal
+     *  cruise speed for the rest of the run. Null in the warm-up
+     *  window mirrors a real device-status delay before the first
+     *  speed frame arrives. */
+    private fun bikeSpeedAt(tMs: Long): Int? {
+        val t = tMs / 1000.0
+        return when {
+            t < 5.0 -> null
+            t < 10.0 -> 18
+            t < 30.0 -> 5
+            t < 40.0 -> 12
+            else -> 22
+        }
     }
 
     private fun buildNotification(): Notification =

@@ -47,6 +47,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -133,12 +136,17 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(500)
-            replayRunning = ReplayService.isRunning
-            synthRunning = SyntheticScenarioService.isRunning
-            screenshotRunning = ScreenshotCaptureService.isRunning
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // Service-state poll pauses with the screen — no point waking
+    // up the static fields every half-second from the background.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(500)
+                replayRunning = ReplayService.isRunning
+                synthRunning = SyntheticScenarioService.isRunning
+                screenshotRunning = ScreenshotCaptureService.isRunning
+            }
         }
     }
 

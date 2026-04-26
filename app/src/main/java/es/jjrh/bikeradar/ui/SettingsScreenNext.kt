@@ -224,9 +224,8 @@ private fun SystemHealthChip(
         Text(text = label, color = br.fgMuted, fontSize = 12.sp)
         if (battery != null) BatteryChip(pct = battery.pct)
         else Text(
-            text = "—",
+            text = "Not seen",
             color = br.fgFaint,
-            fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
         )
     }

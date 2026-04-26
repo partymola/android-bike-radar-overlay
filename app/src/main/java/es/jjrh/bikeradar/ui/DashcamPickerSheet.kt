@@ -41,6 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -93,11 +96,16 @@ private fun DashcamPickerSheetBody(
     val br = LocalBrColors.current
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
+    val lifecycleOwner = LocalLifecycleOwner.current
     var devices by remember { mutableStateOf(listBondedNext(ctx, batteryEntries.keys)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(2_000L)
-            devices = listBondedNext(ctx, batteryEntries.keys)
+    // Bonded-device list refreshes only while the picker is on
+    // screen — no point hitting BluetoothAdapter while paused.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(2_000L)
+                devices = listBondedNext(ctx, batteryEntries.keys)
+            }
         }
     }
 

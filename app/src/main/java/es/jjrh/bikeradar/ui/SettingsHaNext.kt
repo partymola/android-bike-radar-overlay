@@ -246,9 +246,8 @@ private fun ConnectionStateCard(connected: Boolean, health: HaHealth) {
             Text(
                 text = subtitle,
                 color = br.fgMuted,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
             )
         }
     }

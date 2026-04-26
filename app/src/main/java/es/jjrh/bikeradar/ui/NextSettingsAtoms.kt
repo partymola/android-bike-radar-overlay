@@ -150,7 +150,10 @@ fun NextSettingsRow(
                 }
             }
             if (rightContent != null) rightContent()
-            if (chevron) {
+            // A chevron implies the row navigates somewhere, so suppress
+            // it on non-clickable rows even if the caller forgot to pair
+            // the two flags.
+            if (chevron && clickable) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,

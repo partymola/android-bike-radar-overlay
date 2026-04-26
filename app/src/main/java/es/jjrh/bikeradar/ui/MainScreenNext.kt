@@ -51,6 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -115,21 +118,30 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
     val haHealth by HaHealthBus.state.collectAsState()
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
+    // Pollers below use repeatOnLifecycle(RESUMED) so they pause when
+    // the screen is off / app backgrounded — there's no value in
+    // ticking the bond check or wall-clock when the user can't see
+    // the result, and it lets Doze idle the device cleanly.
+    val lifecycleOwner = LocalLifecycleOwner.current
     var hasBond by remember { mutableStateOf(hasRearBondNext(ctx)) }
     var btEnabled by remember { mutableStateOf(isBluetoothEnabledNext(ctx)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5_000)
-            hasBond = hasRearBondNext(ctx)
-            btEnabled = isBluetoothEnabledNext(ctx)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(5_000)
+                hasBond = hasRearBondNext(ctx)
+                btEnabled = isBluetoothEnabledNext(ctx)
+            }
         }
     }
 
     var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(2_000)
-            tickNowMs = System.currentTimeMillis()
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(2_000)
+                tickNowMs = System.currentTimeMillis()
+            }
         }
     }
 
@@ -413,12 +425,12 @@ private fun dotForStatus(
 @Composable
 private fun BluetoothOffBanner(onTap: () -> Unit) {
     val br = LocalBrColors.current
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(LocalBrShapes.current.r3))
+            .clip(RoundedCornerShape(LocalBrShapes.current.r3))
             .background(br.danger.copy(alpha = 0.10f))
-            .border(1.dp, br.danger.copy(alpha = 0.30f), androidx.compose.foundation.shape.RoundedCornerShape(LocalBrShapes.current.r3))
+            .border(1.dp, br.danger.copy(alpha = 0.30f), RoundedCornerShape(LocalBrShapes.current.r3))
             .clickable(onClick = onTap)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {

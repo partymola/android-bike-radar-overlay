@@ -56,17 +56,11 @@ android {
         // bumping targetSdk to 36 would opt the app into Android 16
         // runtime behaviour changes, which is a separate decision.
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
 
         buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
         buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
-        // Per-build default for the redesigned-onboarding flag. Production
-        // stays gated until the ride-test task confirms it. The onbtest
-        // buildType overrides this to true so the variant renders Onboarding-Next
-        // on a fresh install. Remove this when the V1 fall-back cleanup task
-        // graduates Onboarding-Next.
-        buildConfigField("boolean", "DEFAULT_NEXT_UX_ONBOARDING", "false")
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -110,7 +104,7 @@ android {
             // inspection without needing the production keystore.
             signingConfig = release ?: signingConfigs.getByName("debug")
         }
-        // Throwaway variant for walking through Onboarding-Next without
+        // Throwaway variant for walking through Onboarding without
         // touching the production install's prefs / paired devices.
         // applicationIdSuffix lets it install side-by-side; the strings
         // override at src/onbtest/res relabels the launcher.
@@ -118,7 +112,6 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".onbtest"
             versionNameSuffix = "-onbtest"
-            buildConfigField("boolean", "DEFAULT_NEXT_UX_ONBOARDING", "true")
             // The point of onbtest is to walk Onboarding from genuine
             // fresh-install state. Wipe the local.properties HA seed
             // so the variant doesn't pre-fill JJ's real creds and

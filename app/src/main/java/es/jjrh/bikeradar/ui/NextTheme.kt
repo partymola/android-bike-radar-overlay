@@ -16,15 +16,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Bike Radar redesign theme. Wraps content in a Material 3 dark color
- * scheme derived from the mockup's `tokens.js` palette and exposes the
- * full set of mockup tokens through [LocalBrColors] for code that needs
+ * Bike Radar theme. Wraps content in a Material 3 dark color scheme
+ * derived from the mockup's `tokens.js` palette and exposes the full
+ * set of mockup tokens through [LocalBrColors] for code that needs
  * tokens M3 doesn't have a slot for (fgMuted, fgDim, brandGlow, status
  * colours, dashcam tint, etc).
- *
- * The V1 [BikeRadarTheme] continues to be used by the V1 screens; this
- * theme is applied only inside `*Next` composables. Both coexist behind
- * the per-screen `nextUx*` Prefs flags.
  */
 
 /**

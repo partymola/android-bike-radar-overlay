@@ -77,12 +77,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Redesigned Debug screen, themed with the same NextTheme + atoms used
- * by the rest of the redesign. Functionally equivalent to V1
- * `DebugScreen.kt`: scenario controls (Replay / Synthetic), service
- * control, screenshot capture, experimental UX toggles, manual HA
- * push, capture-log list with share, diagnostic bundle, radar-state
- * log, lock-developer-mode.
+ * Debug screen: scenario controls (Replay / Synthetic), service control,
+ * screenshot capture, manual HA push, capture-log list with share,
+ * diagnostic bundle, radar-state log, lock-developer-mode.
  */
 @Composable
 fun DebugScreenNext(navController: NavController, prefs: Prefs) {
@@ -250,37 +247,6 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
                             screenshotRunning = false
                         }
                     },
-                )
-            }
-
-            // Experimental UX
-            NextSettingsSectionLabel("Experimental UX")
-            Text(
-                text = "Per-screen toggles for the in-progress UX redesign. Flip on to render the redesigned screen, off to return to the current one.",
-                color = br.fgDim,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-            )
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
-                    title = "Onboarding",
-                    subtitle = if (prefsSnap.nextUxOnboarding) "Redesigned" else "Current",
-                    checked = prefsSnap.nextUxOnboarding,
-                    onCheckedChange = { prefs.nextUxOnboarding = it },
-                )
-                NextSettingsToggleRow(
-                    title = "Main",
-                    subtitle = if (prefsSnap.nextUxMain) "Redesigned" else "Current",
-                    checked = prefsSnap.nextUxMain,
-                    onCheckedChange = { prefs.nextUxMain = it },
-                )
-                NextSettingsToggleRow(
-                    title = "Settings",
-                    subtitle = if (prefsSnap.nextUxSettings) "Redesigned" else "Current",
-                    checked = prefsSnap.nextUxSettings,
-                    onCheckedChange = { prefs.nextUxSettings = it },
-                    isLast = true,
                 )
             }
 

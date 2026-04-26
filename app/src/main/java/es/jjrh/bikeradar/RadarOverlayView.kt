@@ -238,7 +238,30 @@ class RadarOverlayView(context: Context) : View(context) {
             val halfH   = vehicleHalfHeight(v.size)
             val centreY = distToY(rangeYm, riderBottom, bottomY)
 
-            if (v.isAlongsideStationary) {
+            // Renderer-side fallback for the parked-car-in-the-next-lane
+            // case the decoder gate doesn't catch (e.g. dwell-time too
+            // strict — the overlap-zone log captured a vehicle that sat
+            // on the chevron for 68 s while the decoder dwell window
+            // hadn't tripped). Strict subset of the decoder gate plus a
+            // few additional safety guards so a tailgater never gets
+            // edge-docked: requires a clearly off-centre target
+            // (|lateral| > 0.3 ≈ 0.9 m, vs decoder's 0.5 m), known
+            // longitudinal AND lateral velocity ≤ 1 m/s, close range,
+            // confirmed-slow rider, in-behind frame, and not stale
+            // carry-forward lateral. Falls back to the normal filled
+            // box if any gate is missing data.
+            val bikeKmhSnap = state.bikeSpeedKmh
+            val lateralMsSnap = v.speedXMs
+            val rendererStationary = !v.isAlongsideStationary &&
+                !v.isBehind &&
+                !v.lateralUnknown &&
+                kotlin.math.abs(v.speedMs) <= RadarV2Decoder.STATIONARY_SPEED_MS &&
+                v.distanceM in 0..RadarV2Decoder.ALONGSIDE_RANGE_Y_M &&
+                kotlin.math.abs(v.lateralPos) > RENDERER_STATIONARY_MIN_LATERAL &&
+                bikeKmhSnap != null && bikeKmhSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_KMH &&
+                lateralMsSnap != null && kotlin.math.abs(lateralMsSnap) <= RENDERER_STATIONARY_MAX_LATERAL_MS
+
+            if (v.isAlongsideStationary || rendererStationary) {
                 // Edge-dock hollow render. X snaps to the nearest panel
                 // edge (side from sign(lateralPos)); Y stays true. No
                 // fill, no tail, no class colour - the box outline alone
@@ -435,6 +458,22 @@ class RadarOverlayView(context: Context) : View(context) {
         const val MIN_VISUAL_MAX_M = 10
         const val MAX_VISUAL_MAX_M = 80
         const val DEFAULT_VISUAL_MAX_M = 50
+
+        // Render-time parked-car gate. Range / rider-speed / longitudinal
+        // thresholds are sourced from the decoder companion so the gate
+        // stays in lockstep if the decoder is retuned. Lateral position
+        // and lateral-velocity thresholds are deliberately tighter than
+        // the decoder so the renderer remains a strict subset.
+        /** |lateralPos| > 0.3 ≈ 0.9 m off the rider's own lane (decoder
+         *  uses 0.5 m). Anything within 0.9 m of centre stays a filled
+         *  box so a stationary tailgater never gets edge-docked. */
+        private const val RENDERER_STATIONARY_MIN_LATERAL = 0.3f
+        /** ≤ 1 m/s lateral drift; the decoder doesn't gate on lateral
+         *  velocity (it relies on dwell), so this is an extra
+         *  renderer-only guard against targets weaving toward the
+         *  rider being suppressed mid-swerve. Vehicle.speedXMs is in
+         *  m/s after the decoder's LSB conversion. */
+        private const val RENDERER_STATIONARY_MAX_LATERAL_MS = 1
 
         /** Lookahead horizon used when Precog rendering is enabled. One
          *  second is long enough for the swing-out of an overtaker to be

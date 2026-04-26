@@ -27,6 +27,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
@@ -62,12 +63,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -263,6 +267,11 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                     onChange = { urlField = it },
                     placeholder = "https://homeassistant.local:8123",
                     mono = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                        autoCorrectEnabled = false,
+                    ),
                 )
                 FieldNext(
                     label = "Long-lived access token",
@@ -282,6 +291,11 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                         }
                     },
                     hint = "Profile → Security → Long-lived access tokens, in HA.",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                        autoCorrectEnabled = false,
+                    ),
                 )
                 Box(
                     modifier = Modifier
@@ -353,11 +367,14 @@ private fun PairingStepNext(
 
     var radarBonded by remember { mutableStateOf(hasRadarBondNext(ctx)) }
     var radarMac by remember { mutableStateOf(currentRadarMacNext(ctx)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(2_000)
-            radarBonded = hasRadarBondNext(ctx)
-            radarMac = currentRadarMacNext(ctx)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(2_000)
+                radarBonded = hasRadarBondNext(ctx)
+                radarMac = currentRadarMacNext(ctx)
+            }
         }
     }
 
@@ -386,8 +403,8 @@ private fun PairingStepNext(
                     optionalLabel = false,
                     bonded = radarBonded,
                     detail = if (radarBonded)
-                        "Bonded · ${radarMac ?: "Varia RTL515"}"
-                    else "No paired radar yet. Open Bluetooth settings to pair your Varia or Magene rear unit.",
+                        "Bonded · ${radarMac ?: "Rear radar"}"
+                    else "No paired radar yet. Open Bluetooth settings to pair your rear radar.",
                     primaryCta = "Open Bluetooth settings",
                     primaryCtaIcon = Icons.Default.Bluetooth,
                     onPrimary = {
@@ -717,6 +734,7 @@ private fun FieldNext(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: @Composable (() -> Unit)? = null,
     hint: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
     val br = LocalBrColors.current
     Column {
@@ -735,6 +753,7 @@ private fun FieldNext(
             singleLine = true,
             visualTransformation = visualTransformation,
             trailingIcon = trailingIcon,
+            keyboardOptions = keyboardOptions,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = br.fg,
                 unfocusedTextColor = br.fg,

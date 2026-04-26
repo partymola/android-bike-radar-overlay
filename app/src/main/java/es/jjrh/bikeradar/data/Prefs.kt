@@ -172,23 +172,24 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
         set(v) { sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply() }
 
-    /** Per-screen feature flags for the in-progress UX redesign. When
-     *  true, the corresponding NavHost route renders the Next composable
-     *  instead of the original. Default off so freshly-installed builds
-     *  always show the stable UX; the user opts into each redesigned
-     *  screen via the Debug screen, can flip back at any time, and the
-     *  flag (plus the V1 code path) is removed once the screen is
-     *  graduated. */
+    /** Per-screen feature flags for the UX redesign. When true, the
+     *  corresponding NavHost route renders the Next composable instead
+     *  of the original. The user can flip any of these from the Debug
+     *  screen, and each flag (plus its V1 code path) is removed once
+     *  the screen is fully graduated. Defaults reflect the current
+     *  shipping state: Main + Settings (and Debug, which rides the
+     *  Settings flag) ship redesigned; Onboarding still defaults to
+     *  the original flow until it has been ride-tested. */
     var nextUxOnboarding: Boolean
         get() = sp.getBoolean(KEY_NEXT_UX_ONBOARDING, false)
         set(v) { sp.edit().putBoolean(KEY_NEXT_UX_ONBOARDING, v).apply() }
 
     var nextUxMain: Boolean
-        get() = sp.getBoolean(KEY_NEXT_UX_MAIN, false)
+        get() = sp.getBoolean(KEY_NEXT_UX_MAIN, true)
         set(v) { sp.edit().putBoolean(KEY_NEXT_UX_MAIN, v).apply() }
 
     var nextUxSettings: Boolean
-        get() = sp.getBoolean(KEY_NEXT_UX_SETTINGS, false)
+        get() = sp.getBoolean(KEY_NEXT_UX_SETTINGS, true)
         set(v) { sp.edit().putBoolean(KEY_NEXT_UX_SETTINGS, v).apply() }
 
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs

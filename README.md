@@ -14,13 +14,16 @@ repository for the wire protocol, reference decoders, and unit tests.
 
 <p align="left">
   <img src="screenshots/01-main.png" width="200" alt="Main screen" />
-  <img src="screenshots/02-settings-radar-alerts.png" width="200" alt="Radar and alerts settings" />
-  <img src="screenshots/03-settings-dashcam-walkaway.png" width="200" alt="Dashcam walk-away settings" />
-  <img src="screenshots/04-settings-home-assistant.png" width="200" alt="Home Assistant settings" />
-  <img src="screenshots/05-settings-permissions.png" width="200" alt="Permissions settings" />
-  <img src="screenshots/06-about.png" width="200" alt="About screen" />
-  <img src="screenshots/07-debug.png" width="200" alt="Debug screen (developer mode)" />
-  <img src="screenshots/08-debug-state-log.png" width="200" alt="Debug state log (developer mode)" />
+  <img src="screenshots/02-settings.png" width="200" alt="Settings home" />
+  <img src="screenshots/03-radar-alerts.png" width="200" alt="Radar and alerts settings" />
+  <img src="screenshots/04-dashcam.png" width="200" alt="Dashcam settings" />
+  <img src="screenshots/05-home-assistant.png" width="200" alt="Home Assistant settings" />
+  <img src="screenshots/06-permissions.png" width="200" alt="Permissions settings" />
+  <img src="screenshots/07-experimental.png" width="200" alt="Experimental settings" />
+  <img src="screenshots/08-debug.png" width="200" alt="Debug screen (developer mode)" />
+  <img src="screenshots/09-about.png" width="200" alt="About screen" />
+  <img src="screenshots/10-licences.png" width="200" alt="Open source licences" />
+  <img src="screenshots/11-privacy.png" width="200" alt="Privacy notice" />
 </p>
 
 Static UI screenshots; live radar overlay screenshots coming soon.

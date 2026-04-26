@@ -61,6 +61,12 @@ android {
 
         buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
         buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
+        // Per-build default for the redesigned-onboarding flag. Production
+        // stays gated until the ride-test task confirms it. The onbtest
+        // buildType overrides this to true so the variant renders Onboarding-Next
+        // on a fresh install. Remove this when the V1 fall-back cleanup task
+        // graduates Onboarding-Next.
+        buildConfigField("boolean", "DEFAULT_NEXT_UX_ONBOARDING", "false")
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -103,6 +109,16 @@ android {
             // developer can still produce a release-variant APK for
             // inspection without needing the production keystore.
             signingConfig = release ?: signingConfigs.getByName("debug")
+        }
+        // Throwaway variant for walking through Onboarding-Next without
+        // touching the production install's prefs / paired devices.
+        // applicationIdSuffix lets it install side-by-side; the strings
+        // override at src/onbtest/res relabels the launcher.
+        create("onbtest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".onbtest"
+            versionNameSuffix = "-onbtest"
+            buildConfigField("boolean", "DEFAULT_NEXT_UX_ONBOARDING", "true")
         }
     }
 

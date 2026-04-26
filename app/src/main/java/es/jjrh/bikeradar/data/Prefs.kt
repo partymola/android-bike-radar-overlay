@@ -3,6 +3,7 @@ package es.jjrh.bikeradar.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import es.jjrh.bikeradar.BuildConfig
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -181,7 +182,7 @@ class Prefs(context: Context) {
      *  Settings flag) ship redesigned; Onboarding still defaults to
      *  the original flow until it has been ride-tested. */
     var nextUxOnboarding: Boolean
-        get() = sp.getBoolean(KEY_NEXT_UX_ONBOARDING, false)
+        get() = sp.getBoolean(KEY_NEXT_UX_ONBOARDING, BuildConfig.DEFAULT_NEXT_UX_ONBOARDING)
         set(v) { sp.edit().putBoolean(KEY_NEXT_UX_ONBOARDING, v).apply() }
 
     var nextUxMain: Boolean

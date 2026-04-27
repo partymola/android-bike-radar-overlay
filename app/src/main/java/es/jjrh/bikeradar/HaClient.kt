@@ -49,6 +49,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
             try {
                 conn.outputStream.use { it.write(body.toByteArray()) }
                 val code = conn.responseCode
+                drainAndReturn(conn, code)
                 if (code !in 200..299) {
                     Log.w(TAG, "HA mqtt/publish $topic -> $code")
                 }
@@ -56,8 +57,6 @@ class HaClient(private val baseUrl: String, private val token: String) {
             } catch (t: Throwable) {
                 Log.w(TAG, "HA mqtt/publish $topic failed: ${t.javaClass.simpleName}: ${t.message}")
                 false
-            } finally {
-                conn.disconnect()
             }
         }
     }
@@ -73,13 +72,10 @@ class HaClient(private val baseUrl: String, private val token: String) {
                     connectTimeout = 5000
                     readTimeout = 5000
                 }
-                try {
-                    val code = conn.responseCode
-                    if (code in 200..299) Result.success("OK ($code)")
-                    else Result.failure(Exception("HTTP $code"))
-                } finally {
-                    conn.disconnect()
-                }
+                val code = conn.responseCode
+                drainAndReturn(conn, code)
+                if (code in 200..299) Result.success("OK ($code)")
+                else Result.failure(Exception("HTTP $code"))
             } catch (t: Throwable) {
                 Result.failure(t)
             }
@@ -114,25 +110,39 @@ class HaClient(private val baseUrl: String, private val token: String) {
                     readTimeout = 5000
                     doOutput = true
                 }
-                try {
-                    conn.outputStream.use { it.write(body.toByteArray()) }
-                    val code = conn.responseCode
-                    when {
-                        code in 200..299 -> Result.success("MQTT OK")
-                        code == 400 || code == 404 -> Result.failure(
-                            Exception("HA's MQTT integration is not enabled"),
-                        )
-                        code == 401 || code == 403 -> Result.failure(
-                            Exception("Token rejected for mqtt.publish"),
-                        )
-                        else -> Result.failure(Exception("MQTT probe HTTP $code"))
-                    }
-                } finally {
-                    conn.disconnect()
+                conn.outputStream.use { it.write(body.toByteArray()) }
+                val code = conn.responseCode
+                drainAndReturn(conn, code)
+                when {
+                    code in 200..299 -> Result.success("MQTT OK")
+                    code == 400 || code == 404 -> Result.failure(
+                        Exception("HA's MQTT integration is not enabled"),
+                    )
+                    code == 401 || code == 403 -> Result.failure(
+                        Exception("Token rejected for mqtt.publish"),
+                    )
+                    else -> Result.failure(Exception("MQTT probe HTTP $code"))
                 }
             } catch (t: Throwable) {
                 Result.failure(t)
             }
+        }
+    }
+
+    /**
+     * Read the response stream to completion so the underlying TCP socket
+     * can be returned to the JDK keep-alive pool. Without this (or with
+     * `disconnect()`) every publish opens a fresh TCP+TLS connection and
+     * fully wakes the radio - which dominates background battery cost when
+     * the heartbeat fires every 5 minutes for the whole ride.
+     */
+    private fun drainAndReturn(conn: HttpURLConnection, code: Int) {
+        try {
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            stream?.use { while (it.read() != -1) Unit }
+        } catch (_: Throwable) {
+            // Body draining is best-effort; if it fails the keep-alive
+            // pool just won't reuse this socket. No correctness impact.
         }
     }
 

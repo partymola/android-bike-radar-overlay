@@ -130,4 +130,30 @@ class WalkAwayDeciderTest {
         val stale = input(nowMs = now, lastFireMs = now - 11 * 60_000L)
         assertEquals(WalkAwayDecider.Action.AUTO_DISMISS, WalkAwayDecider.decide(stale))
     }
+
+    @Test fun `auto-dismisses when dashcam goes silent after a fire`() {
+        // Rider was alerted, then turned the dashcam off. The reason
+        // for the notification is gone, so the system-tray entry must
+        // be cancelled before the autoDismissAfterFireMs timeout.
+        val now = 11 * 60_000L
+        val firedThenSilenced = input(
+            nowMs = now,
+            lastFireMs = now - 60_000L,
+            dashcamLastAdvertMs = now - (config.dashcamFreshMs + 1_000L),
+        )
+        assertEquals(WalkAwayDecider.Action.AUTO_DISMISS, WalkAwayDecider.decide(firedThenSilenced))
+    }
+
+    @Test fun `dashcam-silent dismiss is gated on a prior fire`() {
+        // If the dashcam is silent but we never fired, there's no
+        // notification to cancel and the regular gates apply (here:
+        // dashcam not fresh -> NONE, not AUTO_DISMISS).
+        val now = 11 * 60_000L
+        val silentNoFire = input(
+            nowMs = now,
+            lastFireMs = null,
+            dashcamLastAdvertMs = now - (config.dashcamFreshMs + 1_000L),
+        )
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(silentNoFire))
+    }
 }

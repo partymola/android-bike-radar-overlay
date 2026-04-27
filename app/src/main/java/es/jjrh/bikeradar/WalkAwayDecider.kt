@@ -89,6 +89,15 @@ object WalkAwayDecider {
         val c = i.config
         if (!c.enabled) return Action.NONE
 
+        // If the rider has already been alerted and now turns the
+        // dashcam off, the alert's reason is gone - cancel the
+        // notification right away rather than leaving it up until
+        // autoDismissAfterFireMs. Checked before the rate-limit and
+        // auto-dismiss-after-fire gates so it wins over both.
+        if (i.lastFireMs != null && i.nowMs - i.dashcamLastAdvertMs > c.dashcamFreshMs) {
+            return Action.AUTO_DISMISS
+        }
+
         // Auto-dismiss a stale, still-live notification first. Runs
         // ahead of the rate limit so a fire that's been ignored for
         // autoDismissAfterFireMs is cleared and not just silenced.

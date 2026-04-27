@@ -17,8 +17,13 @@ import kotlin.math.roundToInt
  *             speed. Scaling is empirical (not documented in the canonical
  *             protocol spec): 0.25 m/s per LSB (= 0.9 km/h per LSB).
  *             Stationary floor is raw 2 (doppler noise floor, not true
- *             zero); observed ceiling raw 50 appears to be a firmware
- *             clamp.
+ *             zero). Observed ceiling is raw 63 (~56.7 km/h) as a
+ *             single-frame peak; bits 6-7 have never been set across
+ *             6,499 device-status frames, so the field may be a 6-bit
+ *             value with reserved upper bits or a plain uint8 whose
+ *             range is never exercised. Accept the full uint8 range to
+ *             stay robust either way. See PROTOCOL.md for the full
+ *             evidence base.
  *   Anything else -> body is N consecutive 9-byte target structs.
  *
  * Target struct (9 bytes):

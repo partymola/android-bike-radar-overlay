@@ -260,7 +260,7 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
             Spacer(modifier = Modifier.height(12.dp))
 
             // Close-passes stats card (synthetic — see DEC-007).
-            ClosePassStatsCard()
+            ClosePassStatsCard(loggingEnabled = prefsSnap.closePassLoggingEnabled)
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -607,39 +607,28 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
 // to the mockup's number + sparkline + segmented control.
 
 @Composable
-private fun ClosePassStatsCard() {
+private fun ClosePassStatsCard(loggingEnabled: Boolean) {
     val br = LocalBrColors.current
     NextCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
             SectionLabel("Close passes")
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "0",
+                color = br.fgDim,
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.Light,
+                fontSize = 38.sp,
+                letterSpacing = (-1).sp,
+            )
+            if (!loggingEnabled) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "0",
+                    text = "Enable Settings → Radar & alerts → Log to Home Assistant to start counting overtakes inside your set lateral threshold.",
                     color = br.fgDim,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight.Light,
-                    fontSize = 38.sp,
-                    letterSpacing = (-1).sp,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "No close passes recorded yet",
-                        color = br.fg,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "Enable Settings → Radar & alerts → Log to Home Assistant to start counting overtakes inside your set lateral threshold.",
-                        color = br.fgDim,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
-                    )
-                }
             }
         }
     }

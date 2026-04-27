@@ -283,6 +283,18 @@ class BikeRadarService : Service() {
             Log.d(TAG, "skip $name (throttled); marked seen")
             return
         }
+        launchBatteryRead(name, mac)
+    }
+
+    /**
+     * Real GATT battery read, bypassing the SharedPrefs throttle but still
+     * gated by [ATTEMPT_COOLDOWN_MS] so back-to-back fires from different
+     * paths don't stack. Use this for liveness probes (e.g. dashcam
+     * periodic refresh) where [scheduleRead]'s `markSeen` shortcut
+     * would falsely keep the entry fresh without an actual sighting.
+     */
+    private fun launchBatteryRead(name: String, mac: String) {
+        val now = System.currentTimeMillis()
         val lastAttempt = attemptInFlight[mac] ?: 0L
         if (now - lastAttempt < ATTEMPT_COOLDOWN_MS) {
             Log.d(TAG, "skip $name (attempt in flight)")
@@ -736,6 +748,20 @@ class BikeRadarService : Service() {
                         )
                         val dashcamEntry = dashcamSlug?.let { batteries[it] }
                         if (dashcamEntry != null) seenDashcamThisSession = true
+
+                        // Periodic real-GATT refresh for the dashcam.
+                        // See DASHCAM_REFRESH_MS docstring for why this
+                        // is necessary even when battery scanning is
+                        // active. Goes through launchBatteryRead so the
+                        // glyph reflects an actual probe, not a
+                        // markSeen shortcut.
+                        val dashcamMac = prefs.dashcamMac
+                        val dashcamName = prefs.dashcamDisplayName
+                        if (dashcamMac != null && !dashcamName.isNullOrEmpty()) {
+                            val ageMs = dashcamEntry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
+                            if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(dashcamName, dashcamMac)
+                        }
+
                         val status = DashcamStatusDeriver.derive(
                             config = cfg,
                             entries = batteries,
@@ -1355,6 +1381,19 @@ class BikeRadarService : Service() {
         const val DASHCAM_TICK_MS = 2_000L
         const val DASHCAM_FRESH_MS = 30_000L
         const val DASHCAM_COLD_START_MS = 10_000L
+        // Some dashcams (Garmin Vue) don't put the 0xfe1f service UUID
+        // in their adverts, so the controller-level scan filter never
+        // wakes BatteryScanReceiver and there's no advert-driven
+        // markSeen path. Without a periodic probe the entry ages past
+        // DASHCAM_FRESH_MS within seconds of the cold-start kickstart
+        // read, flipping the glyph to Dropped. The dashcam-status
+        // ticker fires a real GATT read every DASHCAM_REFRESH_MS so
+        // the glyph reflects whether the camera is actually responding
+        // - bumping readAtMs via the throttle path's markSeen would
+        // falsely keep it green for up to THROTTLE_MS after a power-off,
+        // defeating the alarm. Set just under DASHCAM_FRESH_MS so a
+        // single failed probe is enough to flip the glyph red.
+        const val DASHCAM_REFRESH_MS = 20_000L
 
         // Walk-away alarm tick cadence + snooze. Tick interval matches the
         // dashcam status tick so the feature reacts on the same cadence

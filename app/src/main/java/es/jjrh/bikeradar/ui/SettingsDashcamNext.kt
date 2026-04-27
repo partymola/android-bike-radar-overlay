@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -190,7 +194,33 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                             subtitle = "Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).",
                             checked = prefsSnap.walkAwayAlarmEnabled,
                             onCheckedChange = { prefs.walkAwayAlarmEnabled = it },
+                            isLast = !prefsSnap.walkAwayAlarmEnabled,
                         )
+                        if (prefsSnap.walkAwayAlarmEnabled) {
+                            val nm = remember(ctx) { ctx.getSystemService(NotificationManager::class.java) }
+                            val canBypassDnd = nm
+                                ?.getNotificationChannel(BikeRadarService.WALKAWAY_CHANNEL_ID)
+                                ?.canBypassDnd() == true
+                            NextSettingsRow(
+                                icon = Icons.Default.NotificationsActive,
+                                iconTint = br.dashcam,
+                                title = "Override Do Not Disturb",
+                                subtitle = if (canBypassDnd) {
+                                    "Currently allowed. Alarm will sound even with DND on."
+                                } else {
+                                    "Tap to allow this alarm to play through DND in system settings."
+                                },
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                                        putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                                        putExtra(Settings.EXTRA_CHANNEL_ID, BikeRadarService.WALKAWAY_CHANNEL_ID)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    ctx.startActivity(intent)
+                                },
+                                isLast = true,
+                            )
+                        }
                     }
                     if (prefsSnap.walkAwayAlarmEnabled) {
                         Spacer(modifier = Modifier.height(6.dp))

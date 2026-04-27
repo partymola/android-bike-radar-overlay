@@ -175,6 +175,7 @@ class BikeRadarService : Service() {
         registerBondReceiver()
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
+        launchDashcamRefresh()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -719,13 +720,6 @@ class BikeRadarService : Service() {
                         val dashcamEntry = dashcamSlug?.let { batteries[it] }
                         if (dashcamEntry != null) seenDashcamThisSession = true
 
-                        val dashcamMac = prefs.dashcamMac
-                        val dashcamName = prefs.dashcamDisplayName
-                        if (dashcamMac != null && !dashcamName.isNullOrEmpty()) {
-                            val ageMs = dashcamEntry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
-                            if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(dashcamName, dashcamMac)
-                        }
-
                         val cfg = DashcamStatusDeriver.Config(
                             warnWhenOff = prefs.dashcamWarnWhenOff,
                             selectedSlug = dashcamSlug,
@@ -1069,11 +1063,18 @@ class BikeRadarService : Service() {
                 NotificationChannel(CHANNEL_ID, "Bike Radar", NotificationManager.IMPORTANCE_MIN)
             )
         }
+        // Drop the legacy walk-away channel so a user who installed an
+        // earlier build (which created the channel without sound) gets
+        // the new alarm-grade channel below; once a channel exists, its
+        // sound/importance can't be changed except by deleting it.
+        if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID_LEGACY) != null) {
+            nm.deleteNotificationChannel(WALKAWAY_CHANNEL_ID_LEGACY)
+        }
         if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
-            // HIGH importance + distinctive vibration pattern so the rider
-            // can distinguish the walk-away alert from an ordinary app
-            // notification through a pocket, without having to escalate
-            // to the DND-bypass channels.
+            // HIGH importance, distinctive vibration, alarm-stream
+            // sound: the rider has typically pocketed the phone and
+            // walked off, so anything quieter than alarm-grade is
+            // unreliable through fabric and ambient noise.
             val ch = NotificationChannel(
                 WALKAWAY_CHANNEL_ID,
                 "Dashcam left on bike",
@@ -1084,14 +1085,45 @@ class BikeRadarService : Service() {
                 enableVibration(true)
                 vibrationPattern = WALKAWAY_VIBRATE_PATTERN
                 setSound(
-                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.RingtoneManager.getDefaultUri(
+                        android.media.RingtoneManager.TYPE_ALARM,
+                    ),
                     android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
                         .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
             }
             nm.createNotificationChannel(ch)
+        }
+    }
+
+    // ── dashcam liveness probe ───────────────────────────────────────────────
+
+    /**
+     * Periodic real-GATT probe of the configured dashcam, decoupled from
+     * the radar connection's overlay coroutine. The collector inside
+     * overlayJob only runs while the radar is connected; once the radar
+     * disconnects, that coroutine is cancelled and its dashcam refresh
+     * dies with it. The walk-away alarm and the in-app main-page glyph
+     * (which reads BatteryStateBus directly) both need the dashcam
+     * entry to keep advancing across the disconnect, so this lives at
+     * service scope and runs from onCreate to onDestroy.
+     */
+    private fun launchDashcamRefresh() {
+        scope.launch {
+            while (true) {
+                val mac = prefs.dashcamMac
+                val name = prefs.dashcamDisplayName
+                if (mac != null && !name.isNullOrEmpty()) {
+                    val slug = resolveDashcamSlug()
+                    val entry = slug?.let { BatteryStateBus.entries.value[it] }
+                    val now = System.currentTimeMillis()
+                    val ageMs = entry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
+                    if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(name, mac)
+                }
+                delay(DASHCAM_TICK_MS)
+            }
         }
     }
 
@@ -1331,7 +1363,10 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         const val CHANNEL_ID = "bike_radar_min"
-        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway"
+        // v2 channel created with alarm-stream sound; the v1 legacy id
+        // is deleted on channel-ensure so an upgrade picks up sound.
+        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v2"
+        private const val WALKAWAY_CHANNEL_ID_LEGACY = "bike_radar_walkaway"
         const val NOTIF_ID = 1
         const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3

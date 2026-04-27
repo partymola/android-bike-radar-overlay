@@ -186,8 +186,8 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                     NextSettingsSectionLabel("Walk-away alarm")
                     NextSettingsRowGroup {
                         NextSettingsToggleRow(
-                            title = "Alert if dashcam keeps recording",
-                            subtitle = "Phone vibrates + beeps when you walk out of range with the camera still on.",
+                            title = "Alert if dashcam remains on",
+                            subtitle = "Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).",
                             checked = prefsSnap.walkAwayAlarmEnabled,
                             onCheckedChange = { prefs.walkAwayAlarmEnabled = it },
                         )

@@ -17,6 +17,11 @@ gradle assembleDebug --console=plain --no-daemon
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Releases: pushing a `v*` tag (e.g. `v0.2.0-alpha`) triggers
+`.github/workflows/release-apk.yml`, which builds a release-signed APK and
+publishes a GitHub Release. Tags containing `-` (alpha/rc/...) are marked
+pre-release automatically.
+
 **Build-dir permission gotcha:** if `:app:testDebugUnitTest` fails with
 `Unable to delete directory .../test-results/...`, a previous container left
 root-owned files. Clean with:
@@ -81,6 +86,10 @@ decoders in both Python and Kotlin live there.
   the radar into V1-only mode and suppresses V2.
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
   LESC; the app never calls it. User must pair once via system Settings.
+- To test Onboarding without destroying your production install's pairing
+  state, build the `onbtest` buildType (`gradle :app:assembleOnbtest`). It
+  installs side-by-side under `es.jjrh.bikeradar.onbtest` with its own
+  SharedPreferences and zeroed HA seed.
 
 ## Contributing
 

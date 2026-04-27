@@ -702,6 +702,55 @@ class BikeRadarService : Service() {
                 try {
                     combine(RadarStateBus.state, BatteryStateBus.entries, ticker) { s, b, _ -> s to b }
                         .collect { (state, batteries) ->
+                        val now = System.currentTimeMillis()
+
+                        // Dashcam refresh + status update runs regardless
+                        // of radar state. The walk-away alarm path
+                        // specifically depends on the dashcam entry
+                        // staying current AFTER the radar goes off, and
+                        // the in-app main page glyph reads BatteryStateBus
+                        // directly - both would silently desync if the
+                        // refresh sat below the radar-NONE early return.
+                        val dashcamSlug = prefs.dashcamMac?.let { mac ->
+                            macToSlug[mac]
+                                ?: macToSlug[mac.uppercase(Locale.ROOT)]
+                                ?: prefs.dashcamDisplayName?.let { slug(it) }
+                        }
+                        val dashcamEntry = dashcamSlug?.let { batteries[it] }
+                        if (dashcamEntry != null) seenDashcamThisSession = true
+
+                        val dashcamMac = prefs.dashcamMac
+                        val dashcamName = prefs.dashcamDisplayName
+                        if (dashcamMac != null && !dashcamName.isNullOrEmpty()) {
+                            val ageMs = dashcamEntry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
+                            if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(dashcamName, dashcamMac)
+                        }
+
+                        val cfg = DashcamStatusDeriver.Config(
+                            warnWhenOff = prefs.dashcamWarnWhenOff,
+                            selectedSlug = dashcamSlug,
+                        )
+                        val status = DashcamStatusDeriver.derive(
+                            config = cfg,
+                            entries = batteries,
+                            nowMs = now,
+                            sessionStartMs = sessionStartMs,
+                            seenThisSession = seenDashcamThisSession,
+                            freshMs = DASHCAM_FRESH_MS,
+                            coldStartMs = DASHCAM_COLD_START_MS,
+                        )
+                        if (status != lastLoggedDashcamStatus) {
+                            Log.i(TAG_RADAR, "dashcam status=$status " +
+                                "warn=${prefs.dashcamWarnWhenOff} " +
+                                "mac=${prefs.dashcamMac ?: "-"} slug=${dashcamSlug ?: "-"} " +
+                                "entries=${batteries.size} " +
+                                "seen=$seenDashcamThisSession " +
+                                "ageMs=${dashcamEntry?.let { now - it.readAtMs } ?: -1L} " +
+                                "sessionAgeMs=${now - sessionStartMs}")
+                            lastLoggedDashcamStatus = status
+                        }
+                        view.setDashcamStatus(status, dashcamSlug)
+
                         if (state.source == DataSource.NONE) return@collect
 
                         if (!overlayAdded) {
@@ -727,61 +776,10 @@ class BikeRadarService : Service() {
                         view.setState(state)
 
                         val threshold = prefs.batteryLowThresholdPct
-                        val now = System.currentTimeMillis()
                         val lowSlugs = batteries.values
                             .filter { it.pct < threshold && now - it.readAtMs < BATTERY_STALE_MS }
                             .map { it.slug }.toSet()
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
-
-                        // Prefer the map (authoritative, refreshed on every advert so it
-                        // tracks name renames). Fall back to deriving from the stored display
-                        // name so the indicator still works when the dashcam has not
-                        // advertised this session — which is the entire point of the feature.
-                        val dashcamSlug = prefs.dashcamMac?.let { mac ->
-                            macToSlug[mac]
-                                ?: macToSlug[mac.uppercase(Locale.ROOT)]
-                                ?: prefs.dashcamDisplayName?.let { slug(it) }
-                        }
-                        val cfg = DashcamStatusDeriver.Config(
-                            warnWhenOff = prefs.dashcamWarnWhenOff,
-                            selectedSlug = dashcamSlug,
-                        )
-                        val dashcamEntry = dashcamSlug?.let { batteries[it] }
-                        if (dashcamEntry != null) seenDashcamThisSession = true
-
-                        // Periodic real-GATT refresh for the dashcam.
-                        // See DASHCAM_REFRESH_MS docstring for why this
-                        // is necessary even when battery scanning is
-                        // active. Goes through launchBatteryRead so the
-                        // glyph reflects an actual probe, not a
-                        // markSeen shortcut.
-                        val dashcamMac = prefs.dashcamMac
-                        val dashcamName = prefs.dashcamDisplayName
-                        if (dashcamMac != null && !dashcamName.isNullOrEmpty()) {
-                            val ageMs = dashcamEntry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
-                            if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(dashcamName, dashcamMac)
-                        }
-
-                        val status = DashcamStatusDeriver.derive(
-                            config = cfg,
-                            entries = batteries,
-                            nowMs = now,
-                            sessionStartMs = sessionStartMs,
-                            seenThisSession = seenDashcamThisSession,
-                            freshMs = DASHCAM_FRESH_MS,
-                            coldStartMs = DASHCAM_COLD_START_MS,
-                        )
-                        if (status != lastLoggedDashcamStatus) {
-                            Log.i(TAG_RADAR, "dashcam status=$status " +
-                                "warn=${prefs.dashcamWarnWhenOff} " +
-                                "mac=${prefs.dashcamMac ?: "-"} slug=${dashcamSlug ?: "-"} " +
-                                "entries=${batteries.size} " +
-                                "seen=$seenDashcamThisSession " +
-                                "ageMs=${dashcamEntry?.let { now - it.readAtMs } ?: -1L} " +
-                                "sessionAgeMs=${now - sessionStartMs}")
-                            lastLoggedDashcamStatus = status
-                        }
-                        view.setDashcamStatus(status, dashcamSlug)
 
                         if (!prefs.isPaused) {
                             when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedKmh)) {

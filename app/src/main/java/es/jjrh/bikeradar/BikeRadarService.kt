@@ -457,7 +457,7 @@ class BikeRadarService : Service() {
         bondLost = true
         radarJob?.cancel()
         radarJob = null
-        radarGattActive = false
+        markRadarDisconnected()
         currentRadarMac = null
         notifyBondLost()
     }
@@ -535,7 +535,7 @@ class BikeRadarService : Service() {
                 Log.i(TAG_RADAR, "connect attempt to $name $mac")
                 lastConnectionReachedDecode = false
                 val quickReconnect = connectAndRun(device, name)
-                radarGattActive = false
+                markRadarDisconnected()
                 RadarStateBus.clear()
                 if (bondLost) {
                     Log.i(TAG_RADAR, "bond lost during attempt; exiting reconnect loop")
@@ -581,7 +581,7 @@ class BikeRadarService : Service() {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
-                        radarGattActive = false
+                        markRadarDisconnected()
                         queue.cancel()
                         notifyChannel.close()
                         if (!servicesReady.isCompleted) servicesReady.complete(false)
@@ -658,7 +658,7 @@ class BikeRadarService : Service() {
             val ok = servicesReady.await()
             if (!ok) { clog("# services discovery failed"); return false }
 
-            radarGattActive = true
+            markRadarConnected()
             Log.i(TAG_RADAR, "connected, running handshake")
 
             val handshakeOk = RadarUnlock.runHandshake(gatt, queue, notifyChannel) { msg ->
@@ -875,7 +875,7 @@ class BikeRadarService : Service() {
             overlayJob?.cancel()
             queue.cancel()
             queueJob.cancel()
-            radarGattActive = false
+            markRadarDisconnected()
             try { gatt.disconnect() } catch (_: Throwable) {}
             closeCaptureLog()
         }
@@ -948,9 +948,17 @@ class BikeRadarService : Service() {
                 .setServiceUuid(ParcelUuid(UUID.fromString("0000fe1f-0000-1000-8000-00805f9b34fb")))
                 .build()
         )
+        // FIRST_MATCH + MATCH_LOST: host process wakes once when a known
+        // device appears and once when it disappears, instead of for every
+        // advert (~1 Hz/device under ALL_MATCHES). Battery values for the
+        // radar still refresh continuously via its GATT 0x2a19 notify;
+        // dashcam battery refreshes on each new presence episode.
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .setCallbackType(
+                ScanSettings.CALLBACK_TYPE_FIRST_MATCH or
+                    ScanSettings.CALLBACK_TYPE_MATCH_LOST
+            )
             .build()
         val rc = try {
             scanner.startScan(filters, settings, buildScanPendingIntent())
@@ -959,7 +967,7 @@ class BikeRadarService : Service() {
         }
         scanRegistered = (rc == 0)
         val offloaded = try { mgr.adapter.isOffloadedFilteringSupported } catch (_: Throwable) { false }
-        Log.i(TAG, "event scan registered rc=$rc offloaded=$offloaded (all-matches mode)")
+        Log.i(TAG, "event scan registered rc=$rc offloaded=$offloaded (first-match+match-lost)")
     }
 
     @SuppressLint("MissingPermission")
@@ -1069,7 +1077,12 @@ class BikeRadarService : Service() {
         scope.launch {
             var prevTickMs = System.currentTimeMillis()
             while (true) {
-                delay(WALKAWAY_TICK_MS)
+                // Only the off-episode path needs 2 s cadence; the connected
+                // path just needs to clear stale state once after reconnect,
+                // and the never-paired-in-session path needs nothing at all.
+                // Slow ticks 15× when idle to drop background CPU wake-ups.
+                val activeTracking = radarOffSinceMs != null
+                delay(if (activeTracking) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS)
                 val now = System.currentTimeMillis()
                 val elapsed = now - prevTickMs
                 prevTickMs = now
@@ -1079,26 +1092,34 @@ class BikeRadarService : Service() {
         }
     }
 
-    private fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
-        if (radarGattActive) {
-            if (radarOffSinceMs != null) {
-                // Clean reconnect: clear the off-episode flags so the next
-                // disconnect episode starts fresh, and cancel any live
-                // notification so the rider isn't still seeing a stale
-                // alert after walking back to the bike.
-                radarOffSinceMs = null
-                dashcamSeenSinceRadarOff = false
-                walkAwayDismissed = false
-                walkAwaySnoozeJob?.cancel()
-                walkAwaySnoozeJob = null
-                lastWalkAwayFireMs = null
-                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.cancel(NOTIF_WALKAWAY_ID)
-            }
-            sessionRadarConnectedMs += elapsedMs
-        } else if (radarOffSinceMs == null) {
-            radarOffSinceMs = nowMs
+    /** Off-instant is stamped at the actual disconnect callback so it
+     *  isn't tied to tick cadence (the idle tick is 30 s; that would
+     *  drift the walk-away threshold by up to 30 s). Clean-reconnect
+     *  cleanup likewise fires at the connection-success site, not
+     *  lazily on the next tick. */
+    private fun markRadarConnected() {
+        if (radarOffSinceMs != null) {
+            radarOffSinceMs = null
+            dashcamSeenSinceRadarOff = false
+            walkAwayDismissed = false
+            walkAwaySnoozeJob?.cancel()
+            walkAwaySnoozeJob = null
+            lastWalkAwayFireMs = null
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(NOTIF_WALKAWAY_ID)
         }
+        radarGattActive = true
+    }
+
+    private fun markRadarDisconnected() {
+        radarGattActive = false
+        if (radarOffSinceMs == null) {
+            radarOffSinceMs = System.currentTimeMillis()
+        }
+    }
+
+    private fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
+        if (radarGattActive) sessionRadarConnectedMs += elapsedMs
 
         // Once the radar is off, watch the dashcam battery bus for a
         // fresh advert to mark the "still on the bike" gate.
@@ -1339,6 +1360,11 @@ class BikeRadarService : Service() {
         // dashcam status tick so the feature reacts on the same cadence
         // riders already expect for the "dashcam off" indicator.
         const val WALKAWAY_TICK_MS = 2_000L
+        // 30 s when no off-episode is in progress: tick still fires often
+        // enough to clear post-reconnect cleanup state within a few seconds
+        // of action, but doesn't wake the IO dispatcher every 2 s during
+        // long parked periods.
+        const val WALKAWAY_IDLE_TICK_MS = 30_000L
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
         private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
 

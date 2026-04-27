@@ -226,6 +226,8 @@ class ScreenshotCaptureService : Service() {
             handler.post { stopSelf() }
             return
         }
+        Log.i(TAG, "captureLoop entered; interval=${CAPTURE_INTERVAL_MS}ms")
+        var ticks = 0
         while (scope.isActive) {
             val state = RadarStateBus.state.value
             val ageMs = System.currentTimeMillis() - state.timestamp
@@ -238,14 +240,26 @@ class ScreenshotCaptureService : Service() {
                 } catch (t: Throwable) {
                     Log.w(TAG, "capture failed: $t")
                 }
+            } else {
+                Log.i(TAG, "tick ${ticks}: overlay not live (source=${state.source} ageMs=$ageMs); skipping frame")
             }
+            ticks++
             delay(CAPTURE_INTERVAL_MS)
         }
+        Log.i(TAG, "captureLoop exited after $ticks ticks; scope.isActive=${scope.isActive}")
     }
 
     private suspend fun captureOnce(outDir: File) {
-        val reader = imageReader ?: return
-        val image = reader.acquireLatestImage() ?: return
+        val reader = imageReader
+        if (reader == null) {
+            Log.w(TAG, "captureOnce: imageReader null, skipping")
+            return
+        }
+        val image = reader.acquireLatestImage()
+        if (image == null) {
+            Log.w(TAG, "captureOnce: acquireLatestImage returned null")
+            return
+        }
         var padded: Bitmap? = null
         val bitmap: Bitmap? = try {
             val plane = image.planes[0]
@@ -290,6 +304,7 @@ class ScreenshotCaptureService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        Log.i(TAG, "onDestroy: tearing down projection rig")
         super.onDestroy()
         // Stop the projection first so the producer surface drains and any
         // in-flight acquireLatestImage() returns promptly. Then cancel the

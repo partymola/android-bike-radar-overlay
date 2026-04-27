@@ -110,6 +110,7 @@ class RadarOverlayView(context: Context) : View(context) {
         )
 
     fun setState(s: RadarState) {
+        if (s == state) return
         state = s
         postInvalidate()
     }
@@ -392,10 +393,14 @@ class RadarOverlayView(context: Context) : View(context) {
         riderPath.lineTo(cx - halfW, baseY)
         riderPath.close()
 
-        val sc = canvas.saveLayerAlpha(null, alpha)
+        // Modulate paint alpha directly instead of saveLayerAlpha to avoid
+        // an offscreen buffer + composite per frame. Stroke paint's base
+        // colour has alpha 220, so scale it the same way the layer would
+        // have (220 * alpha/255) to preserve the original blend.
+        riderFillPaint.alpha = alpha
+        riderStrokePaint.alpha = (220 * alpha + 127) / 255
         canvas.drawPath(riderPath, riderFillPaint)
         canvas.drawPath(riderPath, riderStrokePaint)
-        canvas.restoreToCount(sc)
     }
 
     /** Box half-widths shrunk ~20 % from the original 4/9/14 dp values.

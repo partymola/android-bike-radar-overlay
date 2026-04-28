@@ -57,8 +57,7 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
 
 /**
- * Mockup-fidelity dashcam picker. Replaces the V1
- * `DashcamPickerDialog` modal in the redesigned UX.
+ * Mockup-fidelity dashcam picker.
  *
  * Layout per `dashcam-picker.jsx`:
  *  - Top bar: chevron-back + "Select dashcam"
@@ -435,7 +434,16 @@ private fun FooterButtons(
     }
 }
 
-// ── Bonded BLE list helper (mirrors V1's listBondedBle) ───────────────
+/** Represents a paired BLE device shown in the picker. */
+data class DashcamCandidate(
+    val mac: String,
+    val name: String,
+    /** True if the app has seen battery adverts from this device this session,
+     *  or if its name matches the existing Varia/Vue heuristic. Used for sort
+     *  order so the likely dashcam floats to the top without being the only
+     *  thing shown. */
+    val likely: Boolean,
+)
 
 @SuppressLint("MissingPermission")
 private fun listBondedNext(ctx: Context, seenSlugs: Set<String>): List<DashcamCandidate> {

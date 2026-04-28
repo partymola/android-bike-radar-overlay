@@ -49,17 +49,15 @@ import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
 
 /**
- * Redesigned Settings home. Replaces the V1 long-scroll Settings with a
- * NavHost-routed home that links to per-section sub-screens, matching
- * `settings-screens.jsx`'s `SettingsHome` composition.
+ * Settings home. NavHost-routed home that links to per-section sub-screens,
+ * matching `settings-screens.jsx`'s `SettingsHome` composition.
  *
  * Top: SettingsHeader with chevron-back.
  * Then: System health card (compressed Radar + Cam status).
  * Then: GENERAL section (Radar & alerts, Dashcam, Home Assistant, Permissions).
  * Then: ADVANCED section (Experimental, Debug, About).
  *
- * Each row navigates to its own sub-screen. Debug + About reuse the V1
- * top-level routes; the rest are new routes added to the NavHost.
+ * Each row navigates to its own sub-screen.
  */
 @Composable
 fun SettingsScreenNext(navController: NavController, prefs: Prefs) {

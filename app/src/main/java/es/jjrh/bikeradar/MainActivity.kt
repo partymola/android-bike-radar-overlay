@@ -13,7 +13,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
-import es.jjrh.bikeradar.ui.AboutScreen
 import es.jjrh.bikeradar.ui.DashcamPickerSheet
 import es.jjrh.bikeradar.ui.DebugScreenNext
 import es.jjrh.bikeradar.ui.DevModeState
@@ -82,9 +81,6 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("debug") {
                         DebugScreenNext(navController = navController, prefs = prefs)
-                    }
-                    composable("about") {
-                        AboutScreen(navController = navController)
                     }
                     composable("settings/radar") {
                         SettingsRadarNext(navController = navController, prefs = prefs)

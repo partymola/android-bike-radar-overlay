@@ -96,6 +96,17 @@ private fun SettingsLicensesNextBody(navController: NavController) {
                 ),
             )
 
+            NextSettingsSectionLabel("Audio assets")
+            LicenseGroup(
+                listOf(
+                    LicenseEntry(
+                        "Walk-away alarm tone (bicycle bell)",
+                        "freesound_community on Pixabay (id 32072)",
+                        "Pixabay Content License",
+                    ),
+                ),
+            )
+
             Spacer(modifier = Modifier.height(28.dp))
         }
     }

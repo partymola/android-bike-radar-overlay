@@ -1,0 +1,23 @@
+walkaway_alarm.mp3
+==================
+
+Source URL:    https://pixabay.com/sound-effects//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=32072
+Pixabay ID:    32072
+Author:        freesound_community (Pixabay user 46691455)
+                https://pixabay.com/users/freesound_community-46691455/
+Title:         bicycle_bell
+Licence:       Pixabay Content License
+                https://pixabay.com/service/license-summary/
+
+Pixabay Content License summary:
+- Free to use for commercial and non-commercial purposes.
+- No attribution required (attribution is appreciated but optional).
+- May not be sold or redistributed as a standalone file.
+- May not be used in a way that misrepresents the author.
+
+This file is bundled with bike-radar-overlay, an open-source GPL-3.0+
+Android app. The Pixabay Content License is compatible with GPL-3.0
+distribution because it permits redistribution as part of a larger
+work and does not impose conflicting obligations on the rest of the
+codebase. The asset itself remains under the Pixabay licence; the
+GPL-3.0 covers only the surrounding code.

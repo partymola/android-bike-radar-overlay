@@ -25,7 +25,15 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.os.IBinder
 import android.os.ParcelUuid
 import android.provider.Settings
@@ -120,6 +128,24 @@ class BikeRadarService : Service() {
     /** Single-slot job that clears [walkAwayDismissed] after a snooze
      *  window expires, re-arming the decider. */
     private var walkAwaySnoozeJob: Job? = null
+    /** Looping alarm-stream ringtone played alongside the walk-away
+     *  notification; null when not playing. The notification channel's
+     *  audio attributes are normalised to USAGE_NOTIFICATION on modern
+     *  Pixel/Android, which DND silences even with mBypassDnd=true.
+     *  We play the alarm tone explicitly with USAGE_ALARM so it routes
+     *  through the alarm stream and follows the user's alarm-volume
+     *  policy regardless of DND state. */
+    @Volatile private var walkAwayRingtone: Ringtone? = null
+    /** Audio-focus token held while [walkAwayRingtone] is playing.
+     *  Released in [stopWalkAwayAlarmTone]. */
+    @Volatile private var walkAwayAudioFocusRequest: AudioFocusRequest? = null
+    /** Single-slot job that stops the alarm tone after
+     *  [WALKAWAY_RINGTONE_CAP_MS] even if the user hasn't dismissed.
+     *  The decider's rate limit re-fires the notification later, which
+     *  re-starts the tone for another capped window. Bystander courtesy
+     *  vs missed-alarm trade-off: a series of capped bursts is harder to
+     *  ignore than continuous audio, and less of a nuisance to others. */
+    private var walkAwayRingtoneCapJob: Job? = null
 
     private var bondReceiverRegistered = false
     private val bondReceiver = object : BroadcastReceiver() {
@@ -201,12 +227,14 @@ class BikeRadarService : Service() {
                 walkAwaySnoozeJob = null
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(NOTIF_WALKAWAY_ID)
+                stopWalkAwayAlarmTone()
             }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
                 walkAwayDismissed = true
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(NOTIF_WALKAWAY_ID)
+                stopWalkAwayAlarmTone()
                 walkAwaySnoozeJob?.cancel()
                 walkAwaySnoozeJob = scope.launch {
                     delay(WALKAWAY_SNOOZE_MS)
@@ -229,6 +257,7 @@ class BikeRadarService : Service() {
         unregisterBondReceiver()
         closeCaptureLog()
         RadarStateBus.clear()
+        stopWalkAwayAlarmTone()
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
@@ -1063,18 +1092,27 @@ class BikeRadarService : Service() {
                 NotificationChannel(CHANNEL_ID, "Bike Radar", NotificationManager.IMPORTANCE_MIN)
             )
         }
-        // Drop the legacy walk-away channel so a user who installed an
-        // earlier build (which created the channel without sound) gets
-        // the new alarm-grade channel below; once a channel exists, its
-        // sound/importance can't be changed except by deleting it.
-        if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID_LEGACY) != null) {
-            nm.deleteNotificationChannel(WALKAWAY_CHANNEL_ID_LEGACY)
+        // Drop legacy walk-away channels. Channel properties (sound,
+        // vibration pattern, importance) are immutable post-creation,
+        // so any code change has to migrate to a fresh ID and delete
+        // the old one. The user's per-channel preferences (e.g. Override
+        // Do Not Disturb) reset on this migration; the dashcam settings
+        // row deeplinks back to the new channel for re-grant.
+        WALKAWAY_CHANNEL_IDS_LEGACY.forEach { id ->
+            if (nm.getNotificationChannel(id) != null) {
+                nm.deleteNotificationChannel(id)
+            }
         }
         if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
-            // HIGH importance, distinctive vibration, alarm-stream
-            // sound: the rider has typically pocketed the phone and
-            // walked off, so anything quieter than alarm-grade is
-            // unreliable through fabric and ambient noise.
+            // HIGH importance, no sound and no vibration on the channel.
+            // Both modalities are driven explicitly from the FIRE path:
+            // - audio: Ringtone with USAGE_ALARM (channel sound is
+            //   normalised to USAGE_NOTIFICATION, which DND silences).
+            // - haptics: Vibrator service (channel vibration is
+            //   suppressed under DND when canBypassDnd is false, and
+            //   the migration to v3 resets the user's bypass grant).
+            // Driving both explicitly means the alarm fires through DND
+            // regardless of the user's per-channel preferences.
             val ch = NotificationChannel(
                 WALKAWAY_CHANNEL_ID,
                 "Dashcam left on bike",
@@ -1082,20 +1120,122 @@ class BikeRadarService : Service() {
             ).apply {
                 description =
                     "Alerts when the radar turns off but the dashcam is still broadcasting from the bike."
-                enableVibration(true)
-                vibrationPattern = WALKAWAY_VIBRATE_PATTERN
-                setSound(
-                    android.media.RingtoneManager.getDefaultUri(
-                        android.media.RingtoneManager.TYPE_ALARM,
-                    ),
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
+                enableVibration(false)
+                setSound(null, null)
             }
             nm.createNotificationChannel(ch)
         }
+    }
+
+    // ── walk-away alarm tone ─────────────────────────────────────────────────
+
+    /**
+     * Start the looping alarm-stream tone that accompanies a walk-away
+     * notification. Idempotent: an already-playing call is a no-op so a
+     * refire mid-tone doesn't restart the cap. @Synchronized with
+     * [stopWalkAwayAlarmTone] prevents a concurrent FIRE/DISMISS from
+     * leaving a tone playing past dismissal.
+     */
+    /**
+     * Vibrate the walk-away pattern explicitly via the Vibrator
+     * service. Channel-level vibration is suppressed by DND when the
+     * channel doesn't bypass DND; explicit Vibrator calls are not.
+     */
+    private fun vibrateWalkAwayPattern() {
+        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as? Vibrator
+        }
+        if (vibrator == null || !vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createWaveform(WALKAWAY_VIBRATE_PATTERN, -1)
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        try { vibrator.vibrate(effect, attrs) } catch (t: Throwable) {
+            Log.w(TAG, "vibrate failed: $t")
+        }
+    }
+
+    @Synchronized
+    private fun startWalkAwayAlarmTone() {
+        vibrateWalkAwayPattern()
+        if (walkAwayRingtone?.isPlaying == true) return
+
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        val focusReq = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(attrs)
+            // Empty listener is intentional: a walk-away alarm should
+            // not duck or pause for transient focus loss. The whole
+            // point is to keep alerting until the rider acts.
+            .setOnAudioFocusChangeListener { }
+            .build()
+        if (am.requestAudioFocus(focusReq) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            Log.w(TAG, "walk-away audio focus denied; playing without focus")
+        }
+
+        // Bundled bike-bell sound, attributed in SettingsLicensesNext
+        // ("Audio assets") and in res/raw/walkaway_alarm_license.txt.
+        // Using a bundled asset rather than the system default alarm
+        // (the rider's morning-wakeup tone) so the alarm is recognisable
+        // as a walk-away alert and harder to ignore as routine.
+        val uri = android.net.Uri.parse(
+            "android.resource://${packageName}/${R.raw.walkaway_alarm}",
+        )
+        val rt = try {
+            RingtoneManager.getRingtone(this, uri).apply {
+                audioAttributes = attrs
+                isLooping = true
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "ringtone setup failed: $t")
+            try { am.abandonAudioFocusRequest(focusReq) } catch (_: Throwable) {}
+            return
+        }
+        try {
+            rt.play()
+        } catch (t: Throwable) {
+            Log.w(TAG, "ringtone play failed: $t")
+            try { am.abandonAudioFocusRequest(focusReq) } catch (_: Throwable) {}
+            return
+        }
+
+        // Commit the new state only after play() succeeds, so a partial
+        // setup never leaks a focus token or a half-initialised ringtone.
+        walkAwayAudioFocusRequest = focusReq
+        walkAwayRingtone = rt
+        walkAwayRingtoneCapJob?.cancel()
+        walkAwayRingtoneCapJob = scope.launch {
+            delay(WALKAWAY_RINGTONE_CAP_MS)
+            stopWalkAwayAlarmTone()
+        }
+        Log.i(TAG, "walk-away alarm tone started (cap=${WALKAWAY_RINGTONE_CAP_MS / 1000}s)")
+    }
+
+    /**
+     * Stop the alarm tone and release audio focus. Safe to call
+     * unconditionally - all paths null-check.
+     */
+    @Synchronized
+    private fun stopWalkAwayAlarmTone() {
+        walkAwayRingtoneCapJob?.cancel()
+        walkAwayRingtoneCapJob = null
+        walkAwayRingtone?.let {
+            try { it.stop() } catch (_: Throwable) {}
+        }
+        walkAwayRingtone = null
+        walkAwayAudioFocusRequest?.let { req ->
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            try { am.abandonAudioFocusRequest(req) } catch (_: Throwable) {}
+        }
+        walkAwayAudioFocusRequest = null
     }
 
     // ── dashcam liveness probe ───────────────────────────────────────────────
@@ -1213,11 +1353,13 @@ class BikeRadarService : Service() {
         when (WalkAwayDecider.decide(input)) {
             WalkAwayDecider.Action.FIRE -> {
                 postWalkAwayNotification()
+                startWalkAwayAlarmTone()
                 lastWalkAwayFireMs = nowMs
             }
             WalkAwayDecider.Action.AUTO_DISMISS -> {
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(NOTIF_WALKAWAY_ID)
+                stopWalkAwayAlarmTone()
                 lastWalkAwayFireMs = null
             }
             WalkAwayDecider.Action.NONE -> {}
@@ -1365,8 +1507,11 @@ class BikeRadarService : Service() {
         const val CHANNEL_ID = "bike_radar_min"
         // v2 channel created with alarm-stream sound; the v1 legacy id
         // is deleted on channel-ensure so an upgrade picks up sound.
-        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v2"
-        private const val WALKAWAY_CHANNEL_ID_LEGACY = "bike_radar_walkaway"
+        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
+        private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
+            "bike_radar_walkaway",
+            "bike_radar_walkaway_v2",
+        )
         const val NOTIF_ID = 1
         const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3
@@ -1438,7 +1583,15 @@ class BikeRadarService : Service() {
         // long parked periods.
         const val WALKAWAY_IDLE_TICK_MS = 30_000L
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
-        private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
+        // Pixel native alarm cadence: three 1.5 s pulses with 0.8 s gaps,
+        // ~7 s total. Long enough to feel through fabric, recognisable as
+        // an alarm rather than a routine notification.
+        private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
+        // Cap on a single alarm-tone burst. After this the tone stops on
+        // its own; the decider's rate limit will fire again later and the
+        // tone restarts. Capped-burst pattern is harder to ignore than
+        // continuous audio and less noisy for bystanders.
+        private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

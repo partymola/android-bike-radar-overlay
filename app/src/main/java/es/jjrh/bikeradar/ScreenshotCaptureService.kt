@@ -195,25 +195,41 @@ class ScreenshotCaptureService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Rotation changes the display dimensions. Tear down the current
-        // VirtualDisplay + ImageReader and rebuild at the new size,
-        // otherwise the next capture stretches/clips. Keep the projection
-        // token alive so we don't need fresh user consent.
-        //
-        // This runs on the main thread while the capture coroutine on the
-        // Default dispatcher may be mid-acquire on the old reader. The
-        // catch in [captureLoop] absorbs the resulting IllegalStateException
-        // and the next tick (>= CAPTURE_INTERVAL_MS later) reads the new
-        // reader via @Volatile.
-        val mp = projection ?: return
-        try { virtualDisplay?.release() } catch (_: Throwable) {}
-        virtualDisplay = null
-        try { imageReader?.close() } catch (_: Throwable) {}
-        imageReader = null
-        if (!setupCaptureRig(mp)) {
-            Log.w(TAG, "rebuild after rotation failed; stopping")
-            stopSelf()
+        // Rotation changes the display dimensions. On Android 14+ a
+        // MediaProjection token allows exactly one createVirtualDisplay
+        // call - re-creating throws SecurityException and kills the
+        // session. Resize the existing VirtualDisplay in place and
+        // hot-swap its surface to a fresh ImageReader at the new size
+        // instead. The catch in [captureLoop] absorbs the
+        // IllegalStateException from any in-flight acquire that races
+        // with the surface swap; the next tick reads the new reader
+        // via @Volatile.
+        val vd = virtualDisplay ?: return
+        val metrics = resources.displayMetrics
+        val newW = metrics.widthPixels
+        val newH = metrics.heightPixels
+        if (newW <= 0 || newH <= 0) {
+            Log.w(TAG, "invalid display metrics on rotation ${newW}x$newH")
+            return
         }
+        if (newW == widthPx && newH == heightPx) return
+
+        val newReader = ImageReader.newInstance(
+            newW, newH, PixelFormat.RGBA_8888, MAX_IMAGES,
+        )
+        val oldReader = imageReader
+        try {
+            vd.resize(newW, newH, densityDpi)
+            vd.surface = newReader.surface
+        } catch (t: Throwable) {
+            Log.w(TAG, "resize after rotation failed: $t")
+            try { newReader.close() } catch (_: Throwable) {}
+            return
+        }
+        widthPx = newW
+        heightPx = newH
+        imageReader = newReader
+        try { oldReader?.close() } catch (_: Throwable) {}
     }
 
     private suspend fun captureLoop() {

@@ -73,7 +73,7 @@ class WalkAwayDeciderTest {
     // ── cold-start grace ─────────────────────────────────────────────────────
 
     @Test fun `does not fire before cold-start grace is satisfied`() {
-        val coldStart = input(sessionTotalRadarConnectedMs = 30_000L)
+        val coldStart = input(sessionTotalRadarConnectedMs = 1_000L)
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(coldStart))
     }
 

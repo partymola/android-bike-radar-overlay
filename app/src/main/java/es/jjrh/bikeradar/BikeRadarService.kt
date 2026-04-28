@@ -111,8 +111,14 @@ class BikeRadarService : Service() {
      *  currently connected or has never been off this session. */
     @Volatile private var radarOffSinceMs: Long? = null
     /** Running total of ms the radar has been CONNECTED this session, used
-     *  as the cold-start grace gate. */
+     *  as the cold-start grace gate. Integrated on each connect→disconnect
+     *  transition rather than per-tick, so short-lived connections that
+     *  end within one tick still contribute their full duration. */
     @Volatile private var sessionRadarConnectedMs: Long = 0L
+    /** Monotonic ms of the last connect transition, or null when the
+     *  radar is not currently connected. Set in [markRadarConnected],
+     *  consumed in [markRadarDisconnected]. */
+    @Volatile private var radarConnectStartMs: Long? = null
     /** True once a dashcam advert has been observed after the most recent
      *  radar-off event; distinguishes "dashcam still on bike" from "rider
      *  took everything inside" (dashcam went silent as it went out of
@@ -1304,18 +1310,26 @@ class BikeRadarService : Service() {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(NOTIF_WALKAWAY_ID)
         }
+        radarConnectStartMs = System.currentTimeMillis()
         radarGattActive = true
     }
 
     private fun markRadarDisconnected() {
         radarGattActive = false
+        radarConnectStartMs?.let {
+            sessionRadarConnectedMs += System.currentTimeMillis() - it
+            radarConnectStartMs = null
+        }
         if (radarOffSinceMs == null) {
             radarOffSinceMs = System.currentTimeMillis()
         }
     }
 
     private fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
-        if (radarGattActive) sessionRadarConnectedMs += elapsedMs
+        // sessionRadarConnectedMs is integrated on connect→disconnect
+        // transitions in [markRadarDisconnected], not per-tick. The idle
+        // tick is 30 s; a connection that ends within that window would
+        // never have its duration counted under the old per-tick scheme.
 
         // Once the radar is off, watch the dashcam battery bus for a
         // fresh advert to mark the "still on the bike" gate.

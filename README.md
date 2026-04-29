@@ -26,7 +26,22 @@ repository for the wire protocol, reference decoders, and unit tests.
   <img src="screenshots/11-privacy.png" width="200" alt="Privacy notice" />
 </p>
 
-Static UI screenshots; live radar overlay screenshots coming soon.
+Live overlay during a ride (left column: arrival ETA, distance left,
+arrival charge, current speed; bottom strip: assist mode and battery,
+front-light state and clock; right edge: radar threat ladder, dimmed
+when no targets):
+
+<p align="left">
+  <img src="screenshots/12-overlay-live.png" width="600" alt="Live overlay during a ride" />
+</p>
+
+Map tiles in the live-overlay screenshot are rendered by a separate
+navigation app underneath the overlay. Map tiles &copy; Mapbox, map
+data &copy; OpenStreetMap contributors. The visible eBike assist-mode
+indicator ("TURBO") is part of the Bosch eBike Flow UI; Bosch and
+eBike Flow are trademarks of Robert Bosch GmbH and their incidental
+appearance here does not imply any endorsement.
+
 Debug screen is hidden behind a three-tap long-press unlock on the app title.
 
 ## Status

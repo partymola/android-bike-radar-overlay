@@ -35,8 +35,6 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 - Single foreground service (`BikeRadarService`) handles BLE scan, GATT,
   radar decode, overlay draw, HA MQTT push. No fragments, Compose-only UI.
-- Decoders are stateful per-track and pure JVM (no Android imports) â unit
-  testable with plain JUnit.
 - HA integration is optional; the overlay works standalone.
 - Capture log is always written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
@@ -65,7 +63,7 @@ decoders in both Python and Kotlin live there.
   advertises its local name as "RearVue8", so our matchers have to look
   for it literally).
 - MQTT topic prefixes and HA entity IDs keep the legacy `varia_` prefix on
-  purpose â renaming would break existing subscribers. See
+  purpose — renaming would break existing subscribers. See
   `HaClient.kt:22-23`.
 
 ## Testing
@@ -77,11 +75,10 @@ decoders in both Python and Kotlin live there.
 
 ## Gotchas
 
-- APK reinstall (`adb install -r`) kills the app process without running
-  `onDestroy`, so Bluedroid retains a half-open GATT. The next handshake
-  ABORT triggers a GATT `disconnect()` + `close()` in `runRadarConnection`,
-  and the outer reconnect loop picks up a fresh connection via the
-  quick-reconnect path (bypasses the normal backoff; ~1.5 s recovery).
+- After `adb install -r` the radar GATT may be left half-open;
+  `runRadarConnection`'s ABORT path closes and reconnects automatically
+  (~1.5 s). If the reconnect doesn't happen, see live-testing recovery
+  below.
 - Never subscribe the CCCD of `6a4e3203` (V1 radar char). Subscribing locks
   the radar into V1-only mode and suppresses V2.
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
@@ -90,6 +87,12 @@ decoders in both Python and Kotlin live there.
   state, build the `onbtest` buildType (`gradle :app:assembleOnbtest`). It
   installs side-by-side under `es.jjrh.bikeradar.onbtest` with its own
   SharedPreferences and zeroed HA seed.
+- Live-testing via ADB: `am stopservice .../BikeRadarService` BEFORE
+  `adb install -r` lets `onDestroy` clear the radar GATT cleanly. Post-
+  install, `am force-stop` + `monkey ... LAUNCHER 1` for a clean relaunch.
+  If Bluedroid stays stuck, `svc bluetooth disable && svc bluetooth enable`
+  resets it. Wait for `BikeRadar.Radar: handshake complete` + `first V2
+  frame` in logcat before declaring the app ready to test.
 
 ## Contributing
 

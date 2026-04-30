@@ -731,6 +731,7 @@ class BikeRadarService : Service() {
                 val alerts = AlertDecider()
                 val closePassDetector = ClosePassDetector()
                 var closePassDiscoveryPublished = false
+                var closePassDiscoveryInFlight = false
                 val sessionStartMs = System.currentTimeMillis()
                 var seenDashcamThisSession = false
                 var lastLoggedDashcamStatus: DashcamStatus? = null
@@ -834,6 +835,28 @@ class BikeRadarService : Service() {
                             closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
+                        // Publish discovery eagerly so HA has time to register the
+                        // entity before any non-retained event payload arrives;
+                        // events fired into a not-yet-registered topic get dropped.
+                        // The BLE-advertised name is used (same source as battery
+                        // discovery) so HA derives a stable, device-aligned slug.
+                        // Flip the persisted flag on success only; retry on failure
+                        // if HA was momentarily unreachable. The in-flight guard
+                        // suppresses re-issue while the publish is pending.
+                        if (cpConfig.enabled && !closePassDiscoveryPublished && !closePassDiscoveryInFlight) {
+                            val radarMac = currentRadarMac
+                            val radarSlug = radarMac?.let { macToSlug[it] }
+                                ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
+                            if (radarSlug != null) {
+                                closePassDiscoveryInFlight = true
+                                launch {
+                                    val ok = ha.publishClosePassDiscovery(radarSlug, name)
+                                    if (ok) closePassDiscoveryPublished = true
+                                    else Log.w(TAG, "close-pass discovery publish failed; will retry")
+                                    closePassDiscoveryInFlight = false
+                                }
+                            }
+                        }
                         val cpEvents = closePassDetector.decide(
                             state.vehicles, state.bikeSpeedKmh, now, cpConfig,
                         )
@@ -843,11 +866,6 @@ class BikeRadarService : Service() {
                                 ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
                             if (radarSlug != null) {
                                 launch {
-                                    if (!closePassDiscoveryPublished) {
-                                        val name = prefs.dashcamDisplayName ?: "rearvue"
-                                        ha.publishClosePassDiscovery(radarSlug, name)
-                                        closePassDiscoveryPublished = true
-                                    }
                                     for (ev in cpEvents) {
                                         val json = org.json.JSONObject()
                                             .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())

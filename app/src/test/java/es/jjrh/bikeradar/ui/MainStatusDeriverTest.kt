@@ -18,6 +18,7 @@ class MainStatusDeriverTest {
         dashcamFresh: Boolean = false,
         dashcamDisplayName: String? = null,
         serviceEnabled: Boolean = true,
+        bluetoothEnabled: Boolean = true,
     ) = MainStatusInputs(
         firstRunComplete = firstRunComplete,
         pausedUntilEpochMs = pausedUntilEpochMs,
@@ -29,6 +30,7 @@ class MainStatusDeriverTest {
         dashcamFresh = dashcamFresh,
         dashcamDisplayName = dashcamDisplayName,
         serviceEnabled = serviceEnabled,
+        bluetoothEnabled = bluetoothEnabled,
     )
 
     private fun derive(inputs: MainStatusInputs, now: Long = 100L) =
@@ -154,6 +156,56 @@ class MainStatusDeriverTest {
         // install state) — first-run should still win so the user is
         // walked through onboarding rather than seeing a Start CTA.
         val s = derive(baseInputs(firstRunComplete = false, serviceEnabled = false))
+        assertEquals("Let's set up your radar", s.headline)
+    }
+
+    // ── bluetooth-off ────────────────────────────────────────────────────────
+
+    @Test fun btOffFiresWhenAdapterDisabled() {
+        val s = derive(baseInputs(bluetoothEnabled = false))
+        assertEquals(MainStatusIcon.BluetoothDisabled, s.icon)
+        assertEquals(MainStatusTone.Warn, s.tone)
+        assertEquals("Bluetooth is off", s.headline)
+        assertEquals("Radar is offline", s.subtitle)
+    }
+
+    @Test fun btOffBeatsNotPaired() {
+        // Both would fire — BT-off wins because the bond persists
+        // across BT toggles, so the right prompt is to turn BT back
+        // on, not to go through the system pair flow.
+        val s = derive(baseInputs(bluetoothEnabled = false, hasBond = false))
+        assertEquals("Bluetooth is off", s.headline)
+    }
+
+    @Test fun pausedBeatsBtOff() {
+        // Pause is the user's explicit "alerts silenced for X minutes"
+        // intent. Showing BT-off would deflect from that.
+        val s = derive(
+            baseInputs(bluetoothEnabled = false, pausedUntilEpochMs = 200L),
+            now = 100L,
+        )
+        assertEquals(MainStatusIcon.PauseCircle, s.icon)
+    }
+
+    @Test fun serviceStoppedBeatsBtOff() {
+        // Service-stopped wins because nothing is scanning regardless
+        // of the adapter state.
+        val s = derive(baseInputs(serviceEnabled = false, bluetoothEnabled = false))
+        assertEquals("Service stopped", s.headline)
+    }
+
+    @Test fun btOffWithRadarFreshStillFires() {
+        // radarFresh can lag a BT toggle by up to one decoder timeout
+        // window; the BT-off branch must still win so the rider isn't
+        // told "Radar live" while the adapter is actually off.
+        val s = derive(baseInputs(bluetoothEnabled = false, radarFresh = true))
+        assertEquals("Bluetooth is off", s.headline)
+    }
+
+    @Test fun firstRunBeatsBtOff() {
+        // First-run is the top of the priority list; even with BT off
+        // the user should see onboarding rather than the BT prompt.
+        val s = derive(baseInputs(firstRunComplete = false, bluetoothEnabled = false))
         assertEquals("Let's set up your radar", s.headline)
     }
 }

@@ -45,6 +45,12 @@ data class MainStatusInputs(
      *  without digging through settings. Defaults to true to preserve
      *  existing call-site behaviour. */
     val serviceEnabled: Boolean = true,
+    /** True when the OS Bluetooth adapter is enabled. False is a distinct
+     *  state from "radar not paired": the radar bond persists across BT
+     *  toggles, so the right prompt is "turn BT back on", not "go pair".
+     *  Defaults to true so existing call-sites and tests keep their
+     *  pre-existing behaviour. */
+    val bluetoothEnabled: Boolean = true,
 )
 
 object MainStatusDeriver {
@@ -54,20 +60,24 @@ object MainStatusDeriver {
      *  1. First-run setup
      *  2. Service stopped (user toggled the foreground service off)
      *  3. User-paused
-     *  4. Radar not paired
-     *  5. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  6. Radar live but HA unreachable
-     *  7. Radar live, all good
-     *  8. Paired but radar stale
+     *  4. Bluetooth disabled (adapter off at the OS level)
+     *  5. Radar not paired
+     *  6. Radar live but dashcam off  (rider-safety beats HA connectivity)
+     *  7. Radar live but HA unreachable
+     *  8. Radar live, all good
+     *  9. Paired but radar stale
      *
      * DashcamOff is intentionally ranked above HaDown: HA is background
      * telemetry, the dashcam is the rear-view recording the rider needs.
      * If both fire simultaneously the dashcam warning wins.
      *
-     * Service-stopped beats Paused/NotPaired because if the service isn't
-     * running there's no scanning happening at all — telling the rider
-     * the radar is "not paired" when the real cause is that they turned
-     * the whole thing off would be misdirection.
+     * Service-stopped beats Paused/BtOff/NotPaired because if the service
+     * isn't running there's no scanning happening at all — telling the
+     * rider the radar is "not paired" when the real cause is that they
+     * turned the whole thing off would be misdirection.
+     *
+     * BtOff beats NotPaired because the bond persists across BT toggles;
+     * the right prompt is "turn BT back on", not "go pair".
      */
     fun derive(
         inputs: MainStatusInputs,
@@ -96,6 +106,14 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Info,
                 headline = "Paused until ${formatTime(inputs.pausedUntilEpochMs)}",
                 subtitle = "Alerts are silenced",
+            )
+        }
+        if (!inputs.bluetoothEnabled) {
+            return MainStatus(
+                icon = MainStatusIcon.BluetoothDisabled,
+                tone = MainStatusTone.Warn,
+                headline = "Bluetooth is off",
+                subtitle = "Radar is offline",
             )
         }
         if (!inputs.hasBond) {

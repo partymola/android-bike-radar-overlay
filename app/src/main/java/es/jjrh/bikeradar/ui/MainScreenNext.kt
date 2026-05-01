@@ -176,6 +176,7 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
         dashcamFresh = dashcamFresh,
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         serviceEnabled = prefsSnap.serviceEnabled,
+        bluetoothEnabled = btEnabled,
     )
     val status = MainStatusDeriver.derive(
         inputs,
@@ -184,7 +185,7 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
         },
     )
-    val cta = ctaForNext(inputs, now, btEnabled, navController, ctx, prefs)
+    val cta = ctaForNext(inputs, now, navController, ctx, prefs)
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
@@ -231,9 +232,15 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Bluetooth-off banner — shown once when system BT is off
-            // so we don't duplicate the warning across each system row.
-            if (!btEnabled) {
+            // Bluetooth-off banner — shown only when the hero card is
+            // surfacing something else (service stopped, paused, first-run).
+            // When the hero already says "Bluetooth is off" the banner
+            // would be a third copy of the same prompt. Gated on the icon +
+            // tone pair rather than the headline string so a future copy
+            // tweak doesn't silently break the de-dup.
+            val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
+                status.tone == MainStatusTone.Warn
+            if (!btEnabled && !heroIsBtOff) {
                 BluetoothOffBanner(
                     onTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
                 )
@@ -295,7 +302,6 @@ private data class StatusCtaNext(val label: String, val onClick: () -> Unit)
 private fun ctaForNext(
     inputs: MainStatusInputs,
     nowMs: Long,
-    btEnabled: Boolean,
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
@@ -323,8 +329,13 @@ private fun ctaForNext(
     nowMs < inputs.pausedUntilEpochMs ->
         StatusCtaNext("Resume") { prefs.pausedUntilEpochMs = 0L }
 
+    !inputs.bluetoothEnabled -> StatusCtaNext(
+        label = "Turn on Bluetooth",
+        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+    )
+
     !inputs.hasBond -> StatusCtaNext(
-        label = if (btEnabled) "Pair" else "Turn on Bluetooth",
+        label = "Pair",
         onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
     )
 
@@ -410,7 +421,14 @@ private fun dotForStatus(
             else -> br.fgDim to false
         }
         MainStatusIcon.PauseCircle -> br.fgDim to false
-        MainStatusIcon.BluetoothDisabled -> br.danger to false
+        // BT-off (Warn tone) and Radar-not-paired (Error tone) share this
+        // icon. The dot uses the tone so the two states are visually
+        // distinct: caution amber for "fixable in two taps", danger red
+        // for "needs the system pair flow".
+        MainStatusIcon.BluetoothDisabled -> when (tone) {
+            MainStatusTone.Warn -> br.caution to false
+            else -> br.danger to false
+        }
         MainStatusIcon.Sensors -> br.fgDim to true
         MainStatusIcon.Warning -> br.caution to true
         MainStatusIcon.CheckCircle -> when (tone) {

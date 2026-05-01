@@ -188,11 +188,18 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
     val cta = ctaForNext(inputs, now, navController, ctx, prefs)
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
+        // Outer column: scrollable content takes weight(1f), the Settings
+        // button is anchored at the bottom so it stays in thumb reach
+        // regardless of how much fits above.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
+        ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
         ) {
             // Top bar — BR mark + wordmark only. Long-press the wordmark
             // 3x within 2 s to unlock developer mode (hidden affordance).
@@ -269,18 +276,11 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
             // Close-passes stats card (synthetic — see DEC-007).
             ClosePassStatsCard(loggingEnabled = prefsSnap.closePassLoggingEnabled)
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Full-width Settings button.
-            SettingsButton(onClick = { navController.navigate("settings") })
-
-            Spacer(modifier = Modifier.height(14.dp))
-
             // Dev-mode prompt is preserved on this screen so the rider
             // who hasn't gone through onboarding never lands on a dead
             // end. Shown only when ownership is UNANSWERED.
             if (prefsSnap.dashcamOwnership == DashcamOwnership.UNANSWERED) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 DashcamPromptCard(
                     onYes = {
                         prefs.dashcamOwnership = DashcamOwnership.YES
@@ -288,8 +288,16 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
                     },
                     onNo = { prefs.dashcamOwnership = DashcamOwnership.NO },
                 )
-                Spacer(modifier = Modifier.height(14.dp))
             }
+        }
+
+            // Bottom-anchored Settings button - same horizontal padding
+            // (inherited from outer Column), separated from the scroll
+            // region so the rider's primary nav target is in a stable
+            // thumb position.
+            Spacer(modifier = Modifier.height(16.dp))
+            SettingsButton(onClick = { navController.navigate("settings") })
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }

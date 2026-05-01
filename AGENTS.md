@@ -17,10 +17,12 @@ gradle assembleDebug --console=plain --no-daemon
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Releases: pushing a `v*` tag (e.g. `v0.2.0-alpha`) triggers
-`.github/workflows/release-apk.yml`, which builds a release-signed APK and
-publishes a GitHub Release. Tags containing `-` (alpha/rc/...) are marked
-pre-release automatically.
+Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
+add a top-level entry to `CHANGELOG.md` (Security / UX / Compatibility
+headings — see existing entries for tone), then push a `v*` tag (e.g.
+`v0.4.0-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
+which builds a release-signed APK and publishes a GitHub Release. Tags
+containing `-` (alpha/rc/...) are marked pre-release automatically.
 
 **Build-dir permission gotcha:** if `:app:testDebugUnitTest` fails with
 `Unable to delete directory .../test-results/...`, a previous container left

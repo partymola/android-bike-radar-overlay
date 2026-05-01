@@ -76,8 +76,10 @@ class RadarV2Decoder(
 
     /** Rider's own bike speed in m/s, last reported by a device-status
      *  frame (byte[len-1] x 0.25 m/s per LSB - native protocol resolution).
-     *  Null until the first such frame. */
-    private var lastBikeSpeedMs: Int? = null
+     *  Carried as Float so downstream Float thresholds land on the same
+     *  raw-byte boundaries the prior km/h thresholds did. Null until
+     *  the first such frame. */
+    private var lastBikeSpeedMs: Float? = null
 
     /**
      * Feed one notification payload. Returns the new [RadarState] if the
@@ -96,10 +98,10 @@ class RadarV2Decoder(
             // when no targets changed.
             if (payload.size > HEADER_SIZE) {
                 val raw = payload[payload.size - 1].toInt() and 0xFF
-                // 0.25 m/s per LSB (PROTOCOL.md). Round to integer m/s
-                // for the canonical internal representation; UI converts
-                // to km/h at presentation time.
-                lastBikeSpeedMs = (raw * 0.25f).roundToInt()
+                // 0.25 m/s per LSB (PROTOCOL.md). Keep as Float so the
+                // 0.25-m/s resolution propagates to threshold checks
+                // exactly; UI converts to km/h at presentation time.
+                lastBikeSpeedMs = raw * 0.25f
             }
             pruneStale(now)
             return snapshot(now)
@@ -340,10 +342,11 @@ class RadarV2Decoder(
          *  never linger over the chevron; only crawling traffic produces
          *  the multi-second overlap that motivated this rule. */
         /** Rider speed (m/s) at or below which alongside-stationary
-         *  docking applies. 3 m/s ≈ 10.8 km/h - rederived from the
-         *  legacy 10 km/h gate; integer-quantised so the dwell
-         *  behaviour stays equivalent. */
-        const val ALONGSIDE_RIDER_SLOW_MS = 3
+         *  docking applies. 2.75 m/s catches raw bytes 0..11 inclusive,
+         *  matching the prior 10 km/h gate exactly (raw 11 = 9.9 km/h
+         *  rounded to 10 was at the edge; raw 12 = 10.8 km/h was just
+         *  above). */
+        const val ALONGSIDE_RIDER_SLOW_MS = 2.75f
         /** Minimum dwell time (ms) on a track before the dock activates.
          *  Prevents the visual mode from flipping for a brief slow target
          *  that's about to start closing. */

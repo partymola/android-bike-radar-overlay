@@ -51,10 +51,9 @@ class AlertDecider(
     private val sustainFrames: Int = 2,
     private val minBeepGapMs: Long = 700,
     /** Rider's bike speed (m/s) at or below this counts as "stationary".
-     *  Set to 1 to capture the device-status byte's stationary floor
-     *  (raw 0..6 decodes to 0 or 1 m/s after rounding - the radar's
-     *  own doppler noise floor above true zero). */
-    private val stationaryMsThreshold: Int = 1,
+     *  0.5 m/s catches raw bytes 0..2 inclusive (0, 0.25, 0.5 m/s),
+     *  matching the prior 2 km/h gate exactly. */
+    private val stationaryMsThreshold: Float = 0.5f,
     /** Wall-clock milliseconds the rider's bike speed must stay at or
      *  below [stationaryMsThreshold] continuously before Beep events
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
@@ -89,7 +88,7 @@ class AlertDecider(
         vehicles: List<Vehicle>,
         alertMaxM: Int,
         nowMs: Long,
-        bikeSpeedMs: Int? = null,
+        bikeSpeedMs: Float? = null,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep

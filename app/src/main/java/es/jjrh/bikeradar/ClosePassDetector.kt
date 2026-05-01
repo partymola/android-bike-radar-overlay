@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Pure-JVM per-track state machine that emits a single event for every
@@ -33,9 +34,9 @@ class ClosePassDetector {
         /** Minimum rider bike speed (m/s) for the detector to arm.
          *  Filters out stationary-rider scenarios: red lights with
          *  cross-traffic in a right-turn lane, pushing the bike, etc.
-         *  4 m/s ≈ 14.4 km/h - rederived from the legacy 15 km/h gate;
-         *  rounded down so the gate doesn't silently tighten. */
-        val riderSpeedFloorMs: Int = 4,
+         *  4.25 m/s arms at raw 17+, matching the prior 15 km/h gate
+         *  exactly. */
+        val riderSpeedFloorMs: Float = 4.25f,
         /** Minimum closing speed (m/s) for the detector to arm.
          *  Filters out lane-matched cruising and filtering — if the
          *  vehicle isn't genuinely overtaking, it's not a close pass
@@ -119,7 +120,7 @@ class ClosePassDetector {
      */
     fun decide(
         vehicles: List<Vehicle>,
-        bikeSpeedMs: Int?,
+        bikeSpeedMs: Float?,
         nowMs: Long,
         config: Config,
     ): List<Event> {
@@ -172,10 +173,10 @@ class ClosePassDetector {
                 val sizeOk = v.size == VehicleSize.CAR || v.size == VehicleSize.TRUCK
                 val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
-                // Urban-cruise branch when rider speed <= 8 m/s (≈28.8
-                // km/h, rederived from the legacy 30 km/h cut, rounded
-                // down to keep the urban gate from silently tightening).
-                val armThreshold = if (riderMs <= 8) config.armRangeXUrbanM else config.armRangeXRuralM
+                // Urban-cruise branch when rider speed <= 8.25 m/s
+                // (catches raw 0..33 inclusive, matching the prior
+                // 30 km/h cut exactly).
+                val armThreshold = if (riderMs <= 8.25f) config.armRangeXUrbanM else config.armRangeXRuralM
                 val lateralOk = abs(v.lateralPos * LATERAL_FULL_M) <= armThreshold
                 if (rangeYOk && closingOk && sizeOk && riderOk && framesOk && lateralOk) {
                     state.armed = true
@@ -194,7 +195,7 @@ class ClosePassDetector {
                     // Convert at the boundary: HA wire format keeps km/h
                     // (`rider_speed_kmh`) so historic Recorder/InfluxDB
                     // dashboards aren't broken by the unit migration.
-                    state.riderSpeedAtMinKmh = (riderMs * 3.6f).toInt()
+                    state.riderSpeedAtMinKmh = (riderMs * 3.6f).roundToInt()
                     state.sizeAtMin = v.size
                     state.timestampAtMinMs = nowMs
                 }

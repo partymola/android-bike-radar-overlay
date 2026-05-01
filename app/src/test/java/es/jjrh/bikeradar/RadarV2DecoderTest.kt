@@ -61,7 +61,7 @@ class RadarV2DecoderTest {
         // even when no targets are present.
         val state = decoder.feed(byteArrayOf(0x04, 0x00, 0x00))  // DEVICE_STATUS_BIT, speed=0
         assertNotNull("device-status frame must always emit a snapshot", state)
-        assertEquals(0, state!!.bikeSpeedMs)
+        assertEquals(0f, state!!.bikeSpeedMs!!, 0f)
     }
 
     @Test fun statusFramePrunesStaleMovingTrack() {
@@ -371,14 +371,14 @@ class RadarV2DecoderTest {
         // raw=0x50 (80) -> 80 * 0.25 = 20 m/s (≈72 km/h).
         val state = decoder.feed(byteArrayOf(0x04, 0x00, 0x50))
         assertNotNull(state)
-        assertEquals(20, state!!.bikeSpeedMs)
+        assertEquals(20f, state!!.bikeSpeedMs!!, 0f)
     }
 
     @Test fun bikeSpeedMsPersistsAcrossTargetFrames() {
         decoder.feed(byteArrayOf(0x04, 0x00, 0x50))   // 20 m/s
         val state = decoder.feed(packet(target(tid = 1, rangeY = 100)))
         assertEquals("subsequent target snapshots carry the last bike speed",
-            20, state!!.bikeSpeedMs)
+            20f, state!!.bikeSpeedMs!!, 0f)
     }
 
     @Test fun resetClearsBikeSpeedMs() {

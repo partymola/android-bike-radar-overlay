@@ -65,11 +65,12 @@ data class RadarState(
     val scenarioTimeMs: Long? = null,
     /** Rider's own bike speed in m/s, sourced from the radar's
      *  device-status frame (byte[len-1] x 0.25 m/s per LSB - native
-     *  protocol resolution). Null until the first device-status frame
-     *  has been received in the current session. UI consumers convert
-     *  to km/h at presentation time; HA wire format keeps km/h via a
-     *  conversion at the publish boundary. */
-    val bikeSpeedMs: Int? = null,
+     *  protocol resolution). Carried as Float so threshold comparisons
+     *  in AlertDecider / ClosePassDetector / decoder land on the exact
+     *  raw-byte boundaries the prior km/h thresholds did. Null until
+     *  the first device-status frame has been received in the current
+     *  session. */
+    val bikeSpeedMs: Float? = null,
 ) {
     val isClear: Boolean get() = vehicles.isEmpty()
 }

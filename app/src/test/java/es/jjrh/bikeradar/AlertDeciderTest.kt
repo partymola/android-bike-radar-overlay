@@ -244,11 +244,11 @@ class AlertDeciderTest {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         // First frame with rider at 0 m/s - sets lastNotStationary to now.
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         // 2 s later, sustain + dwell both satisfied. Beep would normally
         // fire; stationary suppresses it to None.
         c.jump(2000)
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
@@ -256,13 +256,13 @@ class AlertDeciderTest {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         // Establish sustain + beep while moving.
-        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 6)
-        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 6)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 6f)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 6f)
         // Rider stops; dwell completes.
         c.jump(3000)
-        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0f)
         // Close zone empties - Clear must still fire even though rider is stationary.
-        val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.Clear, ev)
     }
 
@@ -271,8 +271,8 @@ class AlertDeciderTest {
         // must not break the normal beep path.
         val d = AlertDecider()
         val c = Clock()
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6)
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f)
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
@@ -280,9 +280,9 @@ class AlertDeciderTest {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         // Speed drops to 0 on frame 1; dwell clock starts now.
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         // 100 ms later - dwell not satisfied, beep must still fire.
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
@@ -304,44 +304,44 @@ class AlertDeciderTest {
         // consumed the cooldown).
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
-        val suppressed = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        val suppressed = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, suppressed)
         // Rider rolls off; same car still close. beepPending was preserved
         // through the suppression, so the beep fires same frame.
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f)
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
     @Test fun `brief speed blip mid-stop resets dwell`() {
-        // Radar speed has 0-1 m/s post-stop noise that the threshold of 1
-        // absorbs. But a single sample clearly above threshold (2 m/s
-        // here) must reset the dwell - otherwise long stops with momentary
+        // Radar speed has post-stop noise up to ~0.5 m/s that the threshold
+        // absorbs. A single sample clearly above threshold (2 m/s here)
+        // must reset the dwell - otherwise long stops with momentary
         // wake-ups would suppress incorrectly.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(1500)
         // Blip - resets dwell.
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 2)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 2f)
         c.jump(1500)
         // Now a car appears - sustain frame 1.
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         // Sustain frame 2. Total elapsed since blip ~1700 ms < 2000 dwell,
         // so suppress must NOT fire; beep must fire instead.
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
     @Test fun `bike speed equal to threshold counts as stationary`() {
         // Boundary check on the <= semantics: speed exactly at the
-        // threshold (1 m/s) must count as stationary.
+        // threshold (0.5 m/s) must count as stationary.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 1)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0.5f)
         c.jump(2000)
-        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 1)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0.5f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
@@ -351,38 +351,38 @@ class AlertDeciderTest {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         // Establish stationary state (no cars yet, just dwell).
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         // Car at near-third proximity (5 m, alertMax=21 -> near-third = 7),
         // closing at -8 m/s (below the -5 override threshold).
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.UrgentApproach, ev)
     }
 
     @Test fun `stationary plus close plus slow-closing stays suppressed`() {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         // Same proximity but only -3 m/s (above -5, so not "fast-closing").
         val v = closingCar(id = 1, distanceM = 5, speedMs = -3)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
     @Test fun `stationary plus far plus fast-closing stays suppressed`() {
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         // Closing fast (-8 m/s) but at 15 m - outside near-third for
         // alertMax=21 (near-third = 7). Override does NOT fire.
         val v = closingCar(id = 1, distanceM = 15, speedMs = -8)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
@@ -392,8 +392,8 @@ class AlertDeciderTest {
         val d = AlertDecider()
         val c = Clock()
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6f)
         assertEquals(AlertDecider.Event.Beep(3), ev)
     }
 
@@ -404,11 +404,11 @@ class AlertDeciderTest {
         // speed. Pins this guarantee against future filter refactors.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         val ahead = Vehicle(id = 1, distanceM = 5, speedMs = -8, isBehind = true)
-        d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(ahead), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
@@ -419,15 +419,15 @@ class AlertDeciderTest {
         // crosses the threshold the override fires next frame.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         val slow = closingCar(id = 1, distanceM = 5, speedMs = -3)
-        d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedMs = 0)
-        val sustainedSlow = d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val sustainedSlow = d.decide(listOf(slow), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, sustainedSlow)
         // Same tid now closing fast.
         val fast = closingCar(id = 1, distanceM = 5, speedMs = -8)
-        val ev = d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedMs = 0)
+        val ev = d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.UrgentApproach, ev)
     }
 
@@ -436,11 +436,11 @@ class AlertDeciderTest {
         // (-6) must fire (<= semantics).
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         val v = closingCar(id = 1, distanceM = 5, speedMs = -6)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.UrgentApproach, ev)
     }
 
@@ -451,11 +451,11 @@ class AlertDeciderTest {
         // SAFETY_OVERRIDE_CLOSING_MS KDoc.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         val v = closingCar(id = 1, distanceM = 5, speedMs = -5)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 }

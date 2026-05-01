@@ -231,15 +231,15 @@ class SyntheticScenarioService : Service() {
      *  cruise speed for the rest of the run. Null in the warm-up
      *  window mirrors a real device-status delay before the first
      *  speed frame arrives. The crawl segment uses 2 m/s (~7 km/h):
-     *  comfortably <= ALONGSIDE_RIDER_SLOW_MS = 3 with margin. */
-    private fun bikeSpeedAt(tMs: Long): Int? {
+     *  comfortably <= ALONGSIDE_RIDER_SLOW_MS = 2.75 with margin. */
+    private fun bikeSpeedAt(tMs: Long): Float? {
         val t = tMs / 1000.0
         return when {
             t < 5.0 -> null
-            t < 10.0 -> 5    // 18 km/h
-            t < 30.0 -> 2    // 7 km/h - within alongside-slow gate
-            t < 40.0 -> 3    // 11 km/h
-            else -> 6        // 22 km/h
+            t < 10.0 -> 5f      // 18 km/h
+            t < 30.0 -> 2f      // 7 km/h - within alongside-slow gate
+            t < 40.0 -> 3f      // 11 km/h
+            else -> 6f          // 22 km/h
         }
     }
 

@@ -173,10 +173,10 @@ class Prefs(context: Context) {
 
     /** Same value as [closePassRiderSpeedFloorKmh], converted to m/s
      *  for the detector's m/s-canonical API. Read-only - the slider
-     *  writes km/h. Floor of 1 m/s avoids a zero gate when km/h is
-     *  rounded down past 4 km/h (range starts at 5 km/h anyway). */
-    val closePassRiderSpeedFloorMs: Int
-        get() = (closePassRiderSpeedFloorKmh / 3.6).toInt().coerceAtLeast(1)
+     *  writes km/h. Float so the gate compares at full 0.25-m/s
+     *  resolution. */
+    val closePassRiderSpeedFloorMs: Float
+        get() = closePassRiderSpeedFloorKmh / 3.6f
 
     /** Advanced: minimum closing speed (m/s) for the detector to arm.
      *  Filters lane-matched cruising and filtering — if the vehicle

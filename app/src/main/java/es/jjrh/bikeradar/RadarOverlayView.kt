@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.TypedValue
 import android.view.View
+import kotlin.math.roundToInt
 
 class RadarOverlayView(context: Context) : View(context) {
 
@@ -176,7 +177,7 @@ class RadarOverlayView(context: Context) : View(context) {
         // read of state.bikeSpeedMs, then the per-vehicle loop just
         // passes closing-speed in. Convert to km/h at the presentation
         // boundary - the speed-band thresholds are tuned in km/h.
-        val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).toInt() }
+        val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).roundToInt() }
         val (amberKmh, redKmh) = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
 
         if (!clear && state.vehicles.any { it.speedKmh >= redKmh }) {

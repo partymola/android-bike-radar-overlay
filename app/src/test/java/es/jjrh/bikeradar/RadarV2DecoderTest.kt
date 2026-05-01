@@ -514,6 +514,87 @@ class RadarV2DecoderTest {
         val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
         assertEquals("must still show TRUCK after interleaved flip", VehicleSize.TRUCK, state!!.vehicles.single().size)
     }
+
+    // ── fuzz ─────────────────────────────────────────────────────────────────
+
+    @Test fun feedNeverThrowsOnRandomBytes() {
+        // Lock the property in: feed() must never throw, regardless of payload
+        // shape. Decoder is currently safe (bounds-checked headers, masked & 0xFF
+        // conversions, bounded HashMap, no recursion, no attacker-controlled
+        // allocation), and this test catches any future edit that breaks that.
+        // Three distinct seeds broaden the random walk; each is reproducible
+        // because the seed is fixed.
+        val seeds = longArrayOf(0xCAFEBABEL, 0xDEADBEEFL, 0x0123456789ABCDEFL)
+        for (seed in seeds) {
+            val rng = kotlin.random.Random(seed)
+            var clock = 0L
+            val fuzzDecoder = RadarV2Decoder(nowMs = { clock })
+            repeat(20_000) {
+                clock += 1L
+                val len = rng.nextInt(0, 1024)
+                val bytes = ByteArray(len) { rng.nextInt(256).toByte() }
+                try {
+                    fuzzDecoder.feed(bytes)
+                } catch (t: Throwable) {
+                    throw AssertionError(
+                        "feed threw on seed=$seed len=$len first16=${bytes.take(16).joinToString { "%02x".format(it) }}",
+                        t,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test fun feedNeverThrowsAcrossResets() {
+        // Reset-mid-stream variant: random fuzz interleaved with reset()
+        // calls, to exercise the post-reset state-rebuild path that the
+        // pure-feed loop above doesn't touch.
+        val rng = kotlin.random.Random(0xFEEDFACECAFEL)
+        var clock = 0L
+        val fuzzDecoder = RadarV2Decoder(nowMs = { clock })
+        repeat(10_000) {
+            clock += 1L
+            if (rng.nextInt(50) == 0) fuzzDecoder.reset()
+            val len = rng.nextInt(0, 512)
+            val bytes = ByteArray(len) { rng.nextInt(256).toByte() }
+            try {
+                fuzzDecoder.feed(bytes)
+            } catch (t: Throwable) {
+                throw AssertionError("feed threw post-reset on len=$len", t)
+            }
+        }
+    }
+
+    @Test fun feedNeverThrowsOnEdgeShapes() {
+        // Specific shapes worth pinning explicitly so a regression won't be
+        // missed in the random walk.
+        val decoder = RadarV2Decoder(nowMs = { 0L })
+        val edges = listOf(
+            ByteArray(0),
+            ByteArray(1),
+            ByteArray(2),
+            ByteArray(8),
+            ByteArray(9),
+            ByteArray(11),
+            ByteArray(64) { 0x00 },
+            ByteArray(64) { 0xFF.toByte() },
+            ByteArray(64) { 0x80.toByte() },
+            ByteArray(64) { 0x7F },
+            ByteArray(2048) { 0xAA.toByte() },
+            ByteArray(4096) { ((it * 31) and 0xFF).toByte() },
+            // Header-shaped prefixes paired with garbage payloads.
+            byteArrayOf(0x02, 0x00) + ByteArray(64) { 0xFF.toByte() },
+            byteArrayOf(0x01, 0x00) + ByteArray(64) { 0x80.toByte() },
+            byteArrayOf(0x04, 0x00) + ByteArray(64) { 0x55 },
+        )
+        for ((i, b) in edges.withIndex()) {
+            try {
+                decoder.feed(b)
+            } catch (t: Throwable) {
+                throw AssertionError("feed threw on edge case index=$i len=${b.size}", t)
+            }
+        }
+    }
 }
 
 private fun RadarV2Decoder.tracksForTest(): Map<Int, Any> {

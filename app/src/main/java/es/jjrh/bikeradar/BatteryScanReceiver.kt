@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
@@ -51,6 +53,15 @@ class BatteryScanReceiver : BroadcastReceiver() {
             val name = r.scanRecord?.deviceName ?: r.device?.name ?: continue
             val mac = r.device?.address ?: continue
             if (!matchesVariaName(name)) continue
+            // Defence-in-depth: only act on devices the user has paired
+            // with through the system. Without this gate, a peer
+            // advertising the Garmin company UUID + a name matching the
+            // heuristic could trigger GATT churn or BatteryEntry slug
+            // injection.
+            if (!isBonded(r)) {
+                Log.d(TAG, "skip $name: not bonded")
+                continue
+            }
             Log.i(TAG, "match $name $mac cbType=$callbackType")
 
             val i = Intent(ctx, BikeRadarService::class.java).apply {
@@ -65,6 +76,10 @@ class BatteryScanReceiver : BroadcastReceiver() {
             }
         }
     }
+
+    @SuppressLint("MissingPermission")
+    private fun isBonded(r: ScanResult): Boolean =
+        r.device?.bondState == BluetoothDevice.BOND_BONDED
 
     @Suppress("DEPRECATION", "UNCHECKED_CAST")
     private fun extractResults(intent: Intent): List<ScanResult> {

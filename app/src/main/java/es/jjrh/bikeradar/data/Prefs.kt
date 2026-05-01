@@ -102,6 +102,12 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
         set(v) { sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply() }
 
+    /** Sticky bit set the first time the user dismisses the capture-log
+     *  share warning dialog. Used so the warning only shows once. */
+    var captureLogShareWarningSeen: Boolean
+        get() = sp.getBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, false)
+        set(v) { sp.edit().putBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, v).apply() }
+
     /** Master toggle for the walk-away alarm (radar-off-while-dashcam-
      *  on notification). Default on: asymmetric cost - false positive
      *  is one swipe, false negative is a drained or stolen dashcam. */
@@ -206,6 +212,8 @@ class Prefs(context: Context) {
     }.distinctUntilChanged()
 
     fun dumpAll(): String = buildString {
+        appendLine("# Some identifying fields are redacted (<redacted>);")
+        appendLine("# others (timestamps, thresholds) are not. Review before pasting publicly.")
         appendLine("first_run_complete=$firstRunComplete")
         appendLine("service_enabled=$serviceEnabled")
         appendLine("alert_volume=$alertVolume")
@@ -217,8 +225,9 @@ class Prefs(context: Context) {
         appendLine("battery_low_threshold_pct=$batteryLowThresholdPct")
         appendLine("battery_show_labels=$batteryShowLabels")
         appendLine("dashcam_ownership=$dashcamOwnership")
-        appendLine("dashcam_mac=${dashcamMac ?: "<none>"}")
-        appendLine("dashcam_display_name=${dashcamDisplayName ?: "<none>"}")
+        // Redacted: dashcam MAC + display name are user-identifying; bundle is meant for public issue trackers.
+        appendLine("dashcam_mac=${redactPresence(dashcamMac)}")
+        appendLine("dashcam_display_name=${redactPresence(dashcamDisplayName)}")
         appendLine("dashcam_warn_when_off=$dashcamWarnWhenOff")
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
@@ -254,5 +263,17 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
+        const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
+
+        /**
+         * Replace a sensitive identifier with a presence-only marker for use
+         * in [dumpAll] (the diagnostic bundle gets pasted into public issue
+         * trackers). Returns `<unset>` for null / blank values, `<redacted>`
+         * for anything else. `<redacted>` is the standard term for "we had
+         * a value here and chose not to show it" and won't be mistaken for
+         * a literal stored value.
+         */
+        internal fun redactPresence(value: String?): String =
+            if (value.isNullOrBlank()) "<unset>" else "<redacted>"
     }
 }

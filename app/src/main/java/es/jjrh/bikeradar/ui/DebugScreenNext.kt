@@ -33,8 +33,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -114,6 +116,10 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
     var synthRunning by remember { mutableStateOf(SyntheticScenarioService.isRunning) }
     var screenshotRunning by remember { mutableStateOf(ScreenshotCaptureService.isRunning) }
     var stateLogExpanded by remember { mutableStateOf(false) }
+    // Plain remember: rotation cancels the dialog. File doesn't auto-save
+    // and the worst case is the user re-taps Share and re-sees the warning,
+    // which is fine in a debug screen.
+    var pendingShareFile by remember { mutableStateOf<File?>(null) }
 
     val projectionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -299,7 +305,13 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     for (f in logFiles) {
-                        CaptureLogCard(file = f, onShare = { shareFile(ctx, f) })
+                        CaptureLogCard(file = f, onShare = {
+                            if (prefs.captureLogShareWarningSeen) {
+                                shareFile(ctx, f)
+                            } else {
+                                pendingShareFile = f
+                            }
+                        })
                     }
                 }
             }
@@ -386,6 +398,31 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    pendingShareFile?.let { file ->
+        AlertDialog(
+            onDismissRequest = { pendingShareFile = null },
+            title = { Text("Share this capture log?") },
+            text = {
+                Text(
+                    "This log records the exact time of every radar packet. " +
+                        "Anyone you share it with can work out when and where " +
+                        "you rode, and how often vehicles passed close. Only " +
+                        "share with people you trust.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    prefs.captureLogShareWarningSeen = true
+                    pendingShareFile = null
+                    shareFile(ctx, file)
+                }) { Text("Share anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingShareFile = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

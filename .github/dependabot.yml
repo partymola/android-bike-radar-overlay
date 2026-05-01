@@ -1,0 +1,14 @@
+# Dependabot config for keeping the SHA-pinned third-party Actions
+# in `.github/workflows/*` up to date. Without this, the SHAs would
+# silently drift behind upstream security patches.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - github-actions

@@ -28,8 +28,24 @@ import java.net.URL
 class HaClient(private val baseUrl: String, private val token: String) {
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
+    /**
+     * Returns a Throwable describing why the configured URL is unsafe to send
+     * the bearer token over, or null if the URL is acceptable. HTTPS is always
+     * acceptable; HTTP is acceptable only for LAN hosts. See [HaUrlPolicy].
+     */
+    private fun cleartextRefusal(): Throwable? = when (val r = HaUrlPolicy.validate(baseUrl)) {
+        is HaUrlPolicy.Result.CleartextWanRefused ->
+            SecurityException(HaUrlPolicy.refusalMessage(r.host))
+        HaUrlPolicy.Result.Malformed -> IllegalArgumentException("HA URL malformed")
+        HaUrlPolicy.Result.Empty, HaUrlPolicy.Result.Ok -> null
+    }
+
     suspend fun publishMqtt(topic: String, payload: String, retain: Boolean): Boolean {
         if (!isConfigured()) return false
+        cleartextRefusal()?.let {
+            Log.w(TAG, "HA mqtt/publish $topic refused: ${it.message}")
+            return false
+        }
         return withContext(Dispatchers.IO) {
             val url = URL("${baseUrl.trimEnd('/')}/api/services/mqtt/publish")
             val body = JSONObject()
@@ -63,6 +79,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
 
     suspend fun ping(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
+        cleartextRefusal()?.let { return Result.failure(it) }
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/")
@@ -93,6 +110,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
      */
     suspend fun probeMqttService(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
+        cleartextRefusal()?.let { return Result.failure(it) }
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/services/mqtt/publish")

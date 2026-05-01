@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.HaUrlPolicy
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +86,26 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
     var mqttResult by remember { mutableStateOf<Result<String>?>(null) }
     var pinging by remember { mutableStateOf(false) }
     var haConfigured by remember { mutableStateOf(creds.baseUrl.isNotBlank() && creds.token.isNotBlank()) }
+    // The (url, token) the current chip is reporting on. Set whenever
+    // pingResult is set, cleared when the user edits past it. Lets the
+    // chip-clear logic be exact — independent of Compose's recomposition
+    // timing or any in-flight ping coroutine.
+    var resultForCreds by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    // Clear chip feedback once the user has typed past the URL/token
+    // the chip was reporting on. Comparing pinned values rather than
+    // gating on `!pinging` makes the behaviour independent of timing —
+    // the chip survives any keystroke that didn't change the inputs the
+    // result was for, and an in-flight ping completing later still
+    // pins its own result snapshot.
+    LaunchedEffect(urlField, tokenField) {
+        val pinned = resultForCreds
+        if (pinned != null && pinned != (urlField.trim() to tokenField.trim())) {
+            pingResult = null
+            mqttResult = null
+            resultForCreds = null
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
@@ -145,9 +166,18 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
                     enabled = !pinging && urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        pinging = true
                         val url = urlField.trim()
                         val tok = tokenField.trim()
+                        val refusal = urlRefusalMessage(url)
+                        if (refusal != null) {
+                            // Preserve any previously saved working creds.
+                            // Pill keeps reflecting actual storage state.
+                            pingResult = Result.failure(Exception(refusal))
+                            mqttResult = null
+                            resultForCreds = url to tok
+                            return@BrandButton
+                        }
+                        pinging = true
                         scope.launch(Dispatchers.IO) {
                             val client = HaClient(url, tok)
                             val pr = client.ping()
@@ -160,6 +190,7 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
                             } else {
                                 mqttResult = null
                             }
+                            resultForCreds = url to tok
                             pinging = false
                         }
                     },
@@ -169,9 +200,54 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
                     enabled = urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        creds.save(urlField.trim(), tokenField.trim())
-                        haConfigured = urlField.isNotBlank() && tokenField.isNotBlank()
+                        val url = urlField.trim()
+                        val tok = tokenField.trim()
+                        val refusal = urlRefusalMessage(url)
+                        if (refusal != null) {
+                            pingResult = Result.failure(Exception(refusal))
+                            mqttResult = null
+                            resultForCreds = url to tok
+                            return@GhostButton
+                        }
+                        creds.save(url, tok)
+                        // The "validated" timestamp keys off ping(); a save
+                        // bypassing test must invalidate it, otherwise any
+                        // "creds last verified N days ago" cue misleads.
+                        prefs.haLastValidatedEpochMs = 0L
+                        haConfigured = url.isNotBlank() && tok.isNotBlank()
                         android.widget.Toast.makeText(ctx, "Saved without testing", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                )
+            }
+
+            // Clear button: removes encrypted creds + resets the connected
+            // pill. The privacy screen documents this as the off-switch
+            // for HA publishing; without it, the only way to disconnect
+            // would be uninstalling.
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                GhostButton(
+                    text = "Clear HA configuration",
+                    enabled = haConfigured,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        creds.clear()
+                        prefs.haLastValidatedEpochMs = 0L
+                        urlField = ""
+                        tokenField = ""
+                        haConfigured = false
+                        pingResult = null
+                        mqttResult = null
+                        resultForCreds = null
+                        android.widget.Toast.makeText(
+                            ctx,
+                            "HA configuration cleared",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
                     },
                 )
             }
@@ -213,6 +289,16 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
+}
+
+/**
+ * Pre-network gate. Returns the user-facing refusal message when the URL is
+ * malformed or sends a bearer token in cleartext to a non-LAN host, else null.
+ */
+private fun urlRefusalMessage(url: String): String? = when (val r = HaUrlPolicy.validate(url)) {
+    is HaUrlPolicy.Result.CleartextWanRefused -> HaUrlPolicy.refusalMessage(r.host)
+    HaUrlPolicy.Result.Malformed -> HaUrlPolicy.malformedMessage()
+    HaUrlPolicy.Result.Empty, HaUrlPolicy.Result.Ok -> null
 }
 
 @Composable

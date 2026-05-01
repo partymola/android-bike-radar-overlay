@@ -52,13 +52,14 @@ private fun SettingsPrivacyNextBody(navController: NavController) {
 
                 PrivacySectionLabel("What goes to your Home Assistant")
                 PrivacyP("If you configure HA in Settings, the app publishes the radar's and the dashcam's battery levels to your HA instance via MQTT discovery, plus a close-pass event log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.")
-                PrivacyP("You can stop publishing at any time by clearing the HA URL in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.")
+                PrivacyP("You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.")
 
                 PrivacySectionLabel("Bluetooth")
                 PrivacyP("Pairing happens in Android's system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar and the dashcam. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.")
 
                 PrivacySectionLabel("Networking")
                 PrivacyP("The only network destination the app contacts is the HA URL you provide. There are no analytics endpoints, crash reporters, ad networks, or third-party libraries that phone home.")
+                PrivacyP("If your HA URL points outside your home network, the app requires HTTPS and refuses to send your bearer token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.")
 
                 PrivacySectionLabel("Permissions")
                 PrivacyP("BLUETOOTH_SCAN, BLUETOOTH_CONNECT (radar + dashcam), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts.")

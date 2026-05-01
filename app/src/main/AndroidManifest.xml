@@ -41,6 +41,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BikeRadar"
         android:usesCleartextTraffic="true">
+        <!-- HA URL: cleartext HTTP is allowed at OS level so LAN setups
+             keep working. App-level refusal (HaUrlPolicy) blocks the
+             bearer token from leaving over HTTP to non-LAN hosts. -->
+
 
         <activity
             android:name=".MainActivity"

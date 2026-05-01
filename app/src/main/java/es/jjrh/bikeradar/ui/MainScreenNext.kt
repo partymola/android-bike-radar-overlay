@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -56,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -187,74 +190,156 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
     )
     val cta = ctaForNext(inputs, now, navController, ctx, prefs)
 
+    val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
+        status.tone == MainStatusTone.Warn
+    val showBtOffBanner = !btEnabled && !heroIsBtOff
+    val showDashcamPrompt = prefsSnap.dashcamOwnership == DashcamOwnership.UNANSWERED
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val onWordmarkLongPress = {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastDevTapMs > 2_000L) devTapCount = 0
+        devTapCount++
+        lastDevTapMs = nowMs
+        if (devTapCount >= 3 && !devUnlocked) {
+            DevModeState.unlock(prefs)
+            devTapCount = 0
+            Toast.makeText(ctx, "Developer options enabled", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val onBtBannerTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) }
+    val onSettingsClick = { navController.navigate("settings") }
+    val onDashcamYes = {
+        prefs.dashcamOwnership = DashcamOwnership.YES
+        navController.navigate("settings")
+    }
+    val onDashcamNo = { prefs.dashcamOwnership = DashcamOwnership.NO }
+
+    val radarBattery = batteryEntries.values.firstOrNull { entry ->
+        val n = entry.name.lowercase()
+        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+    }
+    val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
+    val haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown)
+
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
-        // Outer column: scrollable content takes weight(1f), the Settings
-        // button is anchored at the bottom so it stays in thumb reach
-        // regardless of how much fits above.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-        ) {
+        if (isLandscape) {
+            MainScreenLandscape(
+                status = status,
+                cta = cta,
+                btEnabled = btEnabled,
+                showBtOffBanner = showBtOffBanner,
+                showDashcamPrompt = showDashcamPrompt,
+                radarFresh = radarFresh,
+                hasBond = hasBond,
+                dashcamOwned = dashcamOwned,
+                dashcamFresh = dashcamFresh,
+                dashcamPaired = dashcamPaired,
+                dashcamDisplayName = prefsSnap.dashcamDisplayName,
+                radarBattery = radarBattery,
+                dashcamBattery = dashcamBattery,
+                haHealthy = haHealthy,
+                closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+                onWordmarkLongPress = onWordmarkLongPress,
+                onBtBannerTap = onBtBannerTap,
+                onSettingsClick = onSettingsClick,
+                onDashcamYes = onDashcamYes,
+                onDashcamNo = onDashcamNo,
+            )
+        } else {
+            MainScreenPortrait(
+                status = status,
+                cta = cta,
+                btEnabled = btEnabled,
+                showBtOffBanner = showBtOffBanner,
+                showDashcamPrompt = showDashcamPrompt,
+                radarFresh = radarFresh,
+                hasBond = hasBond,
+                dashcamOwned = dashcamOwned,
+                dashcamFresh = dashcamFresh,
+                dashcamPaired = dashcamPaired,
+                dashcamDisplayName = prefsSnap.dashcamDisplayName,
+                radarBattery = radarBattery,
+                dashcamBattery = dashcamBattery,
+                haHealthy = haHealthy,
+                closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+                onWordmarkLongPress = onWordmarkLongPress,
+                onBtBannerTap = onBtBannerTap,
+                onSettingsClick = onSettingsClick,
+                onDashcamYes = onDashcamYes,
+                onDashcamNo = onDashcamNo,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBar(onWordmarkLongPress: () -> Unit) {
+    val br = LocalBrColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 18.dp, start = 4.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        BrMark(size = 26.dp)
+        Text(
+            text = "Bike Radar",
+            color = br.fg,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.2).sp,
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onLongClick = onWordmarkLongPress,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun MainScreenPortrait(
+    status: MainStatus,
+    cta: StatusCtaNext?,
+    btEnabled: Boolean,
+    showBtOffBanner: Boolean,
+    showDashcamPrompt: Boolean,
+    radarFresh: Boolean,
+    hasBond: Boolean,
+    dashcamOwned: Boolean,
+    dashcamFresh: Boolean,
+    dashcamPaired: Boolean,
+    dashcamDisplayName: String?,
+    radarBattery: BatteryEntry?,
+    dashcamBattery: BatteryEntry?,
+    haHealthy: Boolean,
+    closePassLoggingEnabled: Boolean,
+    onWordmarkLongPress: () -> Unit,
+    onBtBannerTap: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onDashcamYes: () -> Unit,
+    onDashcamNo: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+    ) {
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Top bar — BR mark + wordmark only. Long-press the wordmark
-            // 3x within 2 s to unlock developer mode (hidden affordance).
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 18.dp, start = 4.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
-                BrMark(size = 26.dp)
-                Text(
-                    text = "Bike Radar",
-                    color = br.fg,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.2).sp,
-                    modifier = Modifier.combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            val nowMs = System.currentTimeMillis()
-                            if (nowMs - lastDevTapMs > 2_000L) devTapCount = 0
-                            devTapCount++
-                            lastDevTapMs = nowMs
-                            if (devTapCount >= 3 && !devUnlocked) {
-                                DevModeState.unlock(prefs)
-                                devTapCount = 0
-                                Toast.makeText(ctx, "Developer options enabled", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                    ),
-                )
-            }
-
-            // Hero status card.
+            TopBar(onWordmarkLongPress = onWordmarkLongPress)
             HeroStatusCard(status = status, cta = cta)
-
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Bluetooth-off banner — shown only when the hero card is
-            // surfacing something else (service stopped, paused, first-run).
-            // When the hero already says "Bluetooth is off" the banner
-            // would be a third copy of the same prompt. Gated on the icon +
-            // tone pair rather than the headline string so a future copy
-            // tweak doesn't silently break the de-dup.
-            val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
-                status.tone == MainStatusTone.Warn
-            if (!btEnabled && !heroIsBtOff) {
-                BluetoothOffBanner(
-                    onTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
-                )
+            if (showBtOffBanner) {
+                BluetoothOffBanner(onTap = onBtBannerTap)
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
-            // System card.
             SystemCard(
                 radarFresh = radarFresh,
                 hasBond = hasBond,
@@ -262,42 +347,113 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
                 dashcamOwned = dashcamOwned,
                 dashcamFresh = dashcamFresh,
                 dashcamPaired = dashcamPaired,
-                dashcamDisplayName = prefsSnap.dashcamDisplayName,
-                radarBattery = batteryEntries.values.firstOrNull { entry ->
-                    val n = entry.name.lowercase()
-                    n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
-                },
-                dashcamBattery = dashcamSlug?.let { batteryEntries[it] },
-                haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown),
+                dashcamDisplayName = dashcamDisplayName,
+                radarBattery = radarBattery,
+                dashcamBattery = dashcamBattery,
+                haHealthy = haHealthy,
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Close-passes stats card (synthetic — see DEC-007).
-            ClosePassStatsCard(loggingEnabled = prefsSnap.closePassLoggingEnabled)
-
-            // Dev-mode prompt is preserved on this screen so the rider
-            // who hasn't gone through onboarding never lands on a dead
-            // end. Shown only when ownership is UNANSWERED.
-            if (prefsSnap.dashcamOwnership == DashcamOwnership.UNANSWERED) {
+            ClosePassStatsCard(loggingEnabled = closePassLoggingEnabled)
+            if (showDashcamPrompt) {
                 Spacer(modifier = Modifier.height(14.dp))
-                DashcamPromptCard(
-                    onYes = {
-                        prefs.dashcamOwnership = DashcamOwnership.YES
-                        navController.navigate("settings")
-                    },
-                    onNo = { prefs.dashcamOwnership = DashcamOwnership.NO },
-                )
+                DashcamPromptCard(onYes = onDashcamYes, onNo = onDashcamNo)
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingsButton(onClick = onSettingsClick)
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
 
-            // Bottom-anchored Settings button - same horizontal padding
-            // (inherited from outer Column), separated from the scroll
-            // region so the rider's primary nav target is in a stable
-            // thumb position.
-            Spacer(modifier = Modifier.height(16.dp))
-            SettingsButton(onClick = { navController.navigate("settings") })
-            Spacer(modifier = Modifier.height(8.dp))
+/**
+ * Two-column landscape layout balanced 48 / 52: Hero + Close-passes
+ * stack on the left (status + statistics); System card on the right
+ * with Settings pinned to the bottom. TopBar sits full-width above
+ * both columns so card tops align. Both columns scroll independently
+ * as a fallback when prompts (BT-off, dashcam) push content past
+ * the viewport.
+ */
+@Composable
+private fun MainScreenLandscape(
+    status: MainStatus,
+    cta: StatusCtaNext?,
+    btEnabled: Boolean,
+    showBtOffBanner: Boolean,
+    showDashcamPrompt: Boolean,
+    radarFresh: Boolean,
+    hasBond: Boolean,
+    dashcamOwned: Boolean,
+    dashcamFresh: Boolean,
+    dashcamPaired: Boolean,
+    dashcamDisplayName: String?,
+    radarBattery: BatteryEntry?,
+    dashcamBattery: BatteryEntry?,
+    haHealthy: Boolean,
+    closePassLoggingEnabled: Boolean,
+    onWordmarkLongPress: () -> Unit,
+    onBtBannerTap: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onDashcamYes: () -> Unit,
+    onDashcamNo: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+    ) {
+        // Full-width top bar so the wordmark sits at the head of the
+        // app screen, and so the Hero + System card tops align in a
+        // single horizontal line below it.
+        TopBar(onWordmarkLongPress = onWordmarkLongPress)
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(0.48f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                HeroStatusCard(status = status, cta = cta)
+                Spacer(modifier = Modifier.height(12.dp))
+                ClosePassStatsCard(
+                    loggingEnabled = closePassLoggingEnabled,
+                    compact = true,
+                )
+                if (showBtOffBanner) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    BluetoothOffBanner(onTap = onBtBannerTap)
+                }
+                if (showDashcamPrompt) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DashcamPromptCard(onYes = onDashcamYes, onNo = onDashcamNo)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Column(
+                modifier = Modifier
+                    .weight(0.52f)
+                    .fillMaxHeight(),
+            ) {
+                // Right column has no verticalScroll — adding cards here
+                // requires re-checking the viewport math (~360-400 dp
+                // budget on a Pixel landscape after status bar + nav).
+                SystemCard(
+                    radarFresh = radarFresh,
+                    hasBond = hasBond,
+                    btEnabled = btEnabled,
+                    dashcamOwned = dashcamOwned,
+                    dashcamFresh = dashcamFresh,
+                    dashcamPaired = dashcamPaired,
+                    dashcamDisplayName = dashcamDisplayName,
+                    radarBattery = radarBattery,
+                    dashcamBattery = dashcamBattery,
+                    haHealthy = haHealthy,
+                )
+                // Push Settings to the bottom of the right column.
+                Spacer(modifier = Modifier.weight(1f))
+                SettingsButton(onClick = onSettingsClick)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }
@@ -633,7 +789,7 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
 // to the mockup's number + sparkline + segmented control.
 
 @Composable
-private fun ClosePassStatsCard(loggingEnabled: Boolean) {
+private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false) {
     val br = LocalBrColors.current
     NextCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
@@ -647,7 +803,10 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean) {
                 fontSize = 38.sp,
                 letterSpacing = (-1).sp,
             )
-            if (!loggingEnabled) {
+            if (!loggingEnabled && !compact) {
+                // Hidden in compact mode (landscape) so the card doesn't
+                // push the rest of the left column past the viewport on
+                // first-run installs that haven't enabled HA logging.
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Enable Settings → Radar & alerts → Log to Home Assistant to start counting overtakes inside your set lateral threshold.",

@@ -1411,15 +1411,15 @@ class BikeRadarService : Service() {
         else PendingIntent.FLAG_UPDATE_CURRENT
         val dismissPi = PendingIntent.getBroadcast(
             this, NOTIF_WALKAWAY_DISMISS_REQ,
-            Intent(this, RemoteControlReceiver::class.java).apply {
-                action = RemoteControlReceiver.ACTION_WALKAWAY_DISMISS
+            Intent(this, InternalControlReceiver::class.java).apply {
+                action = InternalControlReceiver.ACTION_WALKAWAY_DISMISS
             },
             piFlags,
         )
         val snoozePi = PendingIntent.getBroadcast(
             this, NOTIF_WALKAWAY_SNOOZE_REQ,
-            Intent(this, RemoteControlReceiver::class.java).apply {
-                action = RemoteControlReceiver.ACTION_WALKAWAY_SNOOZE
+            Intent(this, InternalControlReceiver::class.java).apply {
+                action = InternalControlReceiver.ACTION_WALKAWAY_SNOOZE
             },
             piFlags,
         )
@@ -1456,13 +1456,13 @@ class BikeRadarService : Service() {
             "Active"
         }
         val actionLabel = if (paused) "Resume" else "Pause 1h"
-        val actionBroadcast = if (paused) RemoteControlReceiver.ACTION_RESUME else RemoteControlReceiver.ACTION_PAUSE_1H
+        val actionBroadcast = if (paused) InternalControlReceiver.ACTION_RESUME else InternalControlReceiver.ACTION_PAUSE_1H
         val piFlags = if (Build.VERSION.SDK_INT >= 23)
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         else PendingIntent.FLAG_UPDATE_CURRENT
         val actionPi = PendingIntent.getBroadcast(
             this, NOTIF_ACTION_REQ,
-            Intent(this, RemoteControlReceiver::class.java).apply { action = actionBroadcast },
+            Intent(this, InternalControlReceiver::class.java).apply { action = actionBroadcast },
             piFlags,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)

@@ -84,12 +84,12 @@
             <intent-filter>
                 <action android:name="es.jjrh.bikeradar.DEV_REPLAY" />
                 <action android:name="es.jjrh.bikeradar.DEV_SYNTH" />
-                <action android:name="es.jjrh.bikeradar.PAUSE_1H" />
-                <action android:name="es.jjrh.bikeradar.RESUME" />
-                <action android:name="es.jjrh.bikeradar.WALKAWAY_DISMISS" />
-                <action android:name="es.jjrh.bikeradar.WALKAWAY_SNOOZE" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".InternalControlReceiver"
+            android:exported="false" />
 
         <service
             android:name=".DebugOverlayService"

@@ -9,12 +9,13 @@ import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
 /**
- * adb control + notification Pause/Resume actions.
+ * Exported receiver for adb-driven dev actions only (replay + synthetic
+ * scenario). Both branches gate on [Prefs.devModeUnlocked] so broadcasting
+ * at a non-dev install is a no-op beyond a log warning.
  *
- * Dev actions (DEV_REPLAY, DEV_SYNTH) are gated on prefs.devModeUnlocked so
- * broadcasting at a non-dev install is a no-op beyond a log warning.
- *
- * Pause/Resume come from the foreground-service notification action, not adb.
+ * Notification-driven Pause/Resume and walk-away dismiss/snooze live on
+ * the non-exported [InternalControlReceiver] so peer apps cannot reach
+ * them.
  */
 class RemoteControlReceiver : BroadcastReceiver() {
 
@@ -36,22 +37,6 @@ class RemoteControlReceiver : BroadcastReceiver() {
                 startFg(ctx, DebugOverlayService::class.java)
                 startFg(ctx, SyntheticScenarioService::class.java)
             }
-            ACTION_PAUSE_1H -> {
-                prefs.pausedUntilEpochMs = System.currentTimeMillis() + 3_600_000L
-                Log.i(TAG, "paused until ${prefs.pausedUntilEpochMs}")
-                updateServiceNotification(ctx)
-            }
-            ACTION_RESUME -> {
-                prefs.pausedUntilEpochMs = 0L
-                Log.i(TAG, "resumed")
-                updateServiceNotification(ctx)
-            }
-            ACTION_WALKAWAY_DISMISS -> {
-                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_DISMISS)
-            }
-            ACTION_WALKAWAY_SNOOZE -> {
-                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_SNOOZE)
-            }
             else -> Log.w(TAG, "unknown action $action")
         }
     }
@@ -64,27 +49,10 @@ class RemoteControlReceiver : BroadcastReceiver() {
         ctx.stopService(Intent(ctx, cls))
     }
 
-    private fun updateServiceNotification(ctx: Context) {
-        ctx.startService(Intent(ctx, BikeRadarService::class.java).apply {
-            action = BikeRadarService.ACTION_UPDATE_NOTIF
-        })
-    }
-
-    private fun forwardToService(ctx: Context, serviceAction: String) {
-        ContextCompat.startForegroundService(
-            ctx,
-            Intent(ctx, BikeRadarService::class.java).apply { action = serviceAction },
-        )
-    }
-
     companion object {
         private const val TAG = "BikeRadar.Remote"
 
         const val ACTION_DEV_REPLAY = "es.jjrh.bikeradar.DEV_REPLAY"
         const val ACTION_DEV_SYNTH = "es.jjrh.bikeradar.DEV_SYNTH"
-        const val ACTION_PAUSE_1H = "es.jjrh.bikeradar.PAUSE_1H"
-        const val ACTION_RESUME = "es.jjrh.bikeradar.RESUME"
-        const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
-        const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
     }
 }

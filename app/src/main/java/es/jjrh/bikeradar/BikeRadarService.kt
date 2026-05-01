@@ -812,7 +812,7 @@ class BikeRadarService : Service() {
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedKmh)) {
+                            when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedMs)) {
                                 is AlertDecider.Event.Beep           -> beeper.play(ev.count)
                                 AlertDecider.Event.Clear             -> beeper.playClear()
                                 AlertDecider.Event.UrgentApproach    -> beeper.playUrgent()
@@ -831,7 +831,7 @@ class BikeRadarService : Service() {
                         // immediately without losing per-track state.
                         val cpConfig = ClosePassDetector.Config(
                             enabled = prefs.closePassLoggingEnabled && ha.isConfigured(),
-                            riderSpeedFloorKmh = prefs.closePassRiderSpeedFloorKmh,
+                            riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
                             closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
@@ -858,7 +858,7 @@ class BikeRadarService : Service() {
                             }
                         }
                         val cpEvents = closePassDetector.decide(
-                            state.vehicles, state.bikeSpeedKmh, now, cpConfig,
+                            state.vehicles, state.bikeSpeedMs, now, cpConfig,
                         )
                         if (cpEvents.isNotEmpty()) {
                             val radarMac = currentRadarMac

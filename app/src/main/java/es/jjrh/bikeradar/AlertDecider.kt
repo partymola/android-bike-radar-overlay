@@ -32,7 +32,7 @@ package es.jjrh.bikeradar
  *    to empty, bypassing the cooldown (different timbre, never
  *    overlaps a beep on the speaker).
  *  - **Stationary suppress.** Once the rider has been at or below
- *    `stationaryKmhThreshold` for at least `stationaryDwellMs` of
+ *    `stationaryMsThreshold` for at least `stationaryDwellMs` of
  *    wall-clock time, Beep events are mapped to None. Clear still
  *    fires. Lets the rider sit at a traffic light without beep/clear
  *    loops from the queue of stopped cars behind them.
@@ -50,13 +50,13 @@ package es.jjrh.bikeradar
 class AlertDecider(
     private val sustainFrames: Int = 2,
     private val minBeepGapMs: Long = 700,
-    /** Rider's bike speed (km/h) at or below this counts as "stationary".
-     *  Set to 2 to stay clear of the device-status byte's stationary
-     *  floor (raw 2 decodes to ~2 km/h, the radar's own doppler noise
-     *  floor above true zero). */
-    private val stationaryKmhThreshold: Int = 2,
+    /** Rider's bike speed (m/s) at or below this counts as "stationary".
+     *  Set to 1 to capture the device-status byte's stationary floor
+     *  (raw 0..6 decodes to 0 or 1 m/s after rounding - the radar's
+     *  own doppler noise floor above true zero). */
+    private val stationaryMsThreshold: Int = 1,
     /** Wall-clock milliseconds the rider's bike speed must stay at or
-     *  below [stationaryKmhThreshold] continuously before Beep events
+     *  below [stationaryMsThreshold] continuously before Beep events
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
      *  short enough to kick in at a normal traffic-light stop. */
     private val stationaryDwellMs: Long = 2_000L,
@@ -80,7 +80,7 @@ class AlertDecider(
     private var lastBeepAtMs: Long = Long.MIN_VALUE / 2  // guarantees first beep fires
     private var beepPending: Boolean = false
     /** Wall-clock ms of the most recent `decide()` call in which the rider
-     *  was NOT at or below [stationaryKmhThreshold]. Compared against
+     *  was NOT at or below [stationaryMsThreshold]. Compared against
      *  `nowMs` each call to decide whether the stationary dwell has been
      *  satisfied. [NOT_INITIALIZED] until the first call of this session. */
     private var lastNotStationaryAtMs: Long = NOT_INITIALIZED
@@ -89,7 +89,7 @@ class AlertDecider(
         vehicles: List<Vehicle>,
         alertMaxM: Int,
         nowMs: Long,
-        bikeSpeedKmh: Int? = null,
+        bikeSpeedMs: Int? = null,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -97,7 +97,7 @@ class AlertDecider(
         // call we initialise lastNotStationaryAtMs to nowMs so the dwell is
         // measured from now, not from 1970.
         val isBelowThreshold =
-            bikeSpeedKmh != null && bikeSpeedKmh <= stationaryKmhThreshold
+            bikeSpeedMs != null && bikeSpeedMs <= stationaryMsThreshold
         if (lastNotStationaryAtMs == NOT_INITIALIZED || !isBelowThreshold) {
             lastNotStationaryAtMs = nowMs
         }

@@ -63,11 +63,13 @@ data class RadarState(
      *  synthetic). Null when the state is sourced from a live radar link -
      *  the overlay uses null to decide whether to render the t+... label. */
     val scenarioTimeMs: Long? = null,
-    /** Rider's own bike speed in km/h, sourced from the radar's
-     *  device-status frame (byte[len-1] x 0.9 km/h; native resolution
-     *  0.25 m/s per LSB). Null until the first device-status frame has
-     *  been received in the current session. */
-    val bikeSpeedKmh: Int? = null,
+    /** Rider's own bike speed in m/s, sourced from the radar's
+     *  device-status frame (byte[len-1] x 0.25 m/s per LSB - native
+     *  protocol resolution). Null until the first device-status frame
+     *  has been received in the current session. UI consumers convert
+     *  to km/h at presentation time; HA wire format keeps km/h via a
+     *  conversion at the publish boundary. */
+    val bikeSpeedMs: Int? = null,
 ) {
     val isClear: Boolean get() = vehicles.isEmpty()
 }

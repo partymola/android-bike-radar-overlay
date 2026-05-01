@@ -30,10 +30,12 @@ class ClosePassDetector {
     data class Config(
         /** Master on/off. When false, decide() is a no-op. */
         val enabled: Boolean,
-        /** Minimum rider bike speed (km/h) for the detector to arm.
+        /** Minimum rider bike speed (m/s) for the detector to arm.
          *  Filters out stationary-rider scenarios: red lights with
-         *  cross-traffic in a right-turn lane, pushing the bike, etc. */
-        val riderSpeedFloorKmh: Int = 15,
+         *  cross-traffic in a right-turn lane, pushing the bike, etc.
+         *  4 m/s ≈ 14.4 km/h - rederived from the legacy 15 km/h gate;
+         *  rounded down so the gate doesn't silently tighten. */
+        val riderSpeedFloorMs: Int = 4,
         /** Minimum closing speed (m/s) for the detector to arm.
          *  Filters out lane-matched cruising and filtering — if the
          *  vehicle isn't genuinely overtaking, it's not a close pass
@@ -109,7 +111,7 @@ class ClosePassDetector {
      * Feed one snapshot to the detector.
      *
      * @param vehicles the current vehicle list from [RadarState]
-     * @param bikeSpeedKmh rider's own bike speed (null when the decoder
+     * @param bikeSpeedMs rider's own bike speed (null when the decoder
      *   hasn't yet received a device-status frame; the detector is
      *   strictly gated on a known rider speed)
      * @param nowMs monotonic timestamp
@@ -117,12 +119,12 @@ class ClosePassDetector {
      */
     fun decide(
         vehicles: List<Vehicle>,
-        bikeSpeedKmh: Int?,
+        bikeSpeedMs: Int?,
         nowMs: Long,
         config: Config,
     ): List<Event> {
         if (!config.enabled) return emptyList()
-        val riderKmh = bikeSpeedKmh ?: return emptyList()
+        val riderMs = bikeSpeedMs ?: return emptyList()
 
         val emitted = mutableListOf<Event>()
         val currentTids = HashSet<Int>(vehicles.size)
@@ -168,9 +170,12 @@ class ClosePassDetector {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM
                 val closingOk = v.speedMs <= -config.closingSpeedFloorMs
                 val sizeOk = v.size == VehicleSize.CAR || v.size == VehicleSize.TRUCK
-                val riderOk = riderKmh >= config.riderSpeedFloorKmh
+                val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
-                val armThreshold = if (riderKmh <= 30) config.armRangeXUrbanM else config.armRangeXRuralM
+                // Urban-cruise branch when rider speed <= 8 m/s (≈28.8
+                // km/h, rederived from the legacy 30 km/h cut, rounded
+                // down to keep the urban gate from silently tightening).
+                val armThreshold = if (riderMs <= 8) config.armRangeXUrbanM else config.armRangeXRuralM
                 val lateralOk = abs(v.lateralPos * LATERAL_FULL_M) <= armThreshold
                 if (rangeYOk && closingOk && sizeOk && riderOk && framesOk && lateralOk) {
                     state.armed = true
@@ -186,7 +191,10 @@ class ClosePassDetector {
                     state.minRangeXSignedM = v.lateralPos * LATERAL_FULL_M
                     state.minRangeYM = v.distanceM.toFloat()
                     state.closingSpeedAtMinKmh = (abs(v.speedMs) * 3.6f).toInt()
-                    state.riderSpeedAtMinKmh = riderKmh
+                    // Convert at the boundary: HA wire format keeps km/h
+                    // (`rider_speed_kmh`) so historic Recorder/InfluxDB
+                    // dashboards aren't broken by the unit migration.
+                    state.riderSpeedAtMinKmh = (riderMs * 3.6f).toInt()
                     state.sizeAtMin = v.size
                     state.timestampAtMinMs = nowMs
                 }

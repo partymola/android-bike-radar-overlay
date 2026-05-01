@@ -74,10 +74,10 @@ class RadarV2Decoder(
 
     private val tracks = HashMap<Int, Track>()
 
-    /** Rider's own bike speed in km/h, last reported by a device-status
-     *  frame (byte[len-1] x 0.9 km/h; native resolution 0.25 m/s per LSB).
+    /** Rider's own bike speed in m/s, last reported by a device-status
+     *  frame (byte[len-1] x 0.25 m/s per LSB - native protocol resolution).
      *  Null until the first such frame. */
-    private var lastBikeSpeedKmh: Int? = null
+    private var lastBikeSpeedMs: Int? = null
 
     /**
      * Feed one notification payload. Returns the new [RadarState] if the
@@ -92,11 +92,14 @@ class RadarV2Decoder(
         if (isDeviceStatus) {
             // Device-status frame carries the rider's own bike speed in
             // the final byte, scaled by 0.9 km/h (0.25 m/s per LSB).
-            // Always emit a snapshot so bikeSpeedKmh propagates even
+            // Always emit a snapshot so bikeSpeedMs propagates even
             // when no targets changed.
             if (payload.size > HEADER_SIZE) {
                 val raw = payload[payload.size - 1].toInt() and 0xFF
-                lastBikeSpeedKmh = (raw * 0.9f).roundToInt()
+                // 0.25 m/s per LSB (PROTOCOL.md). Round to integer m/s
+                // for the canonical internal representation; UI converts
+                // to km/h at presentation time.
+                lastBikeSpeedMs = (raw * 0.25f).roundToInt()
             }
             pruneStale(now)
             return snapshot(now)
@@ -251,11 +254,11 @@ class RadarV2Decoder(
         // Alongside-stationary detection is gated on rider speed too, so it
         // is computed at snapshot time (not in ingestTargets) - that way
         // each emitted snapshot reflects the most recent device-status
-        // bikeSpeedKmh against every track's current state. Null bike speed
+        // bikeSpeedMs against every track's current state. Null bike speed
         // defaults to "not slow" so the dock never activates without
         // confirmation that the rider is crawling.
         val riderSlow =
-            (lastBikeSpeedKmh ?: (ALONGSIDE_RIDER_SLOW_KMH + 1)) <= ALONGSIDE_RIDER_SLOW_KMH
+            (lastBikeSpeedMs ?: (ALONGSIDE_RIDER_SLOW_MS + 1)) <= ALONGSIDE_RIDER_SLOW_MS
         return RadarState(
             vehicles = tracks.values
                 .map { t ->
@@ -272,13 +275,13 @@ class RadarV2Decoder(
                 .sortedBy { it.distanceM },
             timestamp = now,
             source = DataSource.V2,
-            bikeSpeedKmh = lastBikeSpeedKmh,
+            bikeSpeedMs = lastBikeSpeedMs,
         )
     }
 
     fun reset() {
         tracks.clear()
-        lastBikeSpeedKmh = null
+        lastBikeSpeedMs = null
     }
 
     private fun classifySize(cls: Int): VehicleSize = when (cls) {
@@ -336,7 +339,11 @@ class RadarV2Decoder(
          *  At cruising speed even truly parked cars sweep past quickly and
          *  never linger over the chevron; only crawling traffic produces
          *  the multi-second overlap that motivated this rule. */
-        const val ALONGSIDE_RIDER_SLOW_KMH = 10
+        /** Rider speed (m/s) at or below which alongside-stationary
+         *  docking applies. 3 m/s ≈ 10.8 km/h - rederived from the
+         *  legacy 10 km/h gate; integer-quantised so the dwell
+         *  behaviour stays equivalent. */
+        const val ALONGSIDE_RIDER_SLOW_MS = 3
         /** Minimum dwell time (ms) on a track before the dock activates.
          *  Prevents the visual mode from flipping for a brief slow target
          *  that's about to start closing. */

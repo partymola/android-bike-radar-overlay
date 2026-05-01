@@ -173,9 +173,10 @@ class RadarOverlayView(context: Context) : View(context) {
         }
 
         // Cache adaptive thresholds for this frame: one computation, one
-        // read of state.bikeSpeedKmh, then the per-vehicle loop just
-        // passes closing-speed in.
-        val bikeKmh = state.bikeSpeedKmh
+        // read of state.bikeSpeedMs, then the per-vehicle loop just
+        // passes closing-speed in. Convert to km/h at the presentation
+        // boundary - the speed-band thresholds are tuned in km/h.
+        val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).toInt() }
         val (amberKmh, redKmh) = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
 
         if (!clear && state.vehicles.any { it.speedKmh >= redKmh }) {
@@ -251,7 +252,7 @@ class RadarOverlayView(context: Context) : View(context) {
             // confirmed-slow rider, in-behind frame, and not stale
             // carry-forward lateral. Falls back to the normal filled
             // box if any gate is missing data.
-            val bikeKmhSnap = state.bikeSpeedKmh
+            val bikeMsSnap = state.bikeSpeedMs
             val lateralMsSnap = v.speedXMs
             val rendererStationary = !v.isAlongsideStationary &&
                 !v.isBehind &&
@@ -259,7 +260,7 @@ class RadarOverlayView(context: Context) : View(context) {
                 kotlin.math.abs(v.speedMs) <= RadarV2Decoder.STATIONARY_SPEED_MS &&
                 v.distanceM in 0..RadarV2Decoder.ALONGSIDE_RANGE_Y_M &&
                 kotlin.math.abs(v.lateralPos) > RENDERER_STATIONARY_MIN_LATERAL &&
-                bikeKmhSnap != null && bikeKmhSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_KMH &&
+                bikeMsSnap != null && bikeMsSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_MS &&
                 lateralMsSnap != null && kotlin.math.abs(lateralMsSnap) <= RENDERER_STATIONARY_MAX_LATERAL_MS
 
             if (v.isAlongsideStationary || rendererStationary) {

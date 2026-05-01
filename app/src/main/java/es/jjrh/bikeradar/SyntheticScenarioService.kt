@@ -92,14 +92,14 @@ class SyntheticScenarioService : Service() {
                 val elapsed = SystemClock.elapsedRealtime() - start
                 if (elapsed >= TOTAL_MS) break
                 val vehicles = scriptAt(elapsed)
-                val bikeKmh = bikeSpeedAt(elapsed)
+                val bikeMs = bikeSpeedAt(elapsed)
                 RadarStateBus.publish(
                     RadarState(
                         vehicles = vehicles,
                         timestamp = System.currentTimeMillis(),
                         source = DataSource.V2,
                         scenarioTimeMs = elapsed,
-                        bikeSpeedKmh = bikeKmh,
+                        bikeSpeedMs = bikeMs,
                     )
                 )
                 if (!dashcamPushed && elapsed >= DASHCAM_PUSH_MS) {
@@ -225,20 +225,21 @@ class SyntheticScenarioService : Service() {
         return out
     }
 
-    /** Bike speed schedule for the demo: rider is crawling through the
-     *  rush-hour window (t 10..30 s) so the renderer-side parked-car
+    /** Bike speed schedule for the demo (m/s): rider is crawling through
+     *  the rush-hour window (t 10..30 s) so the renderer-side parked-car
      *  gate can fire on id=10, then accelerates back up to a normal
      *  cruise speed for the rest of the run. Null in the warm-up
      *  window mirrors a real device-status delay before the first
-     *  speed frame arrives. */
+     *  speed frame arrives. The crawl segment uses 2 m/s (~7 km/h):
+     *  comfortably <= ALONGSIDE_RIDER_SLOW_MS = 3 with margin. */
     private fun bikeSpeedAt(tMs: Long): Int? {
         val t = tMs / 1000.0
         return when {
             t < 5.0 -> null
-            t < 10.0 -> 18
-            t < 30.0 -> 5
-            t < 40.0 -> 12
-            else -> 22
+            t < 10.0 -> 5    // 18 km/h
+            t < 30.0 -> 2    // 7 km/h - within alongside-slow gate
+            t < 40.0 -> 3    // 11 km/h
+            else -> 6        // 22 km/h
         }
     }
 

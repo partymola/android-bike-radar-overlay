@@ -34,12 +34,12 @@ class ClosePassDetectorTest {
     private fun drive(
         detector: ClosePassDetector,
         frames: List<Pair<List<Vehicle>, Long>>,
-        bikeSpeedKmh: Int? = 22,
+        bikeSpeedMs: Int? = 7,
         config: ClosePassDetector.Config = baseConfig,
     ): List<ClosePassDetector.Event> {
         val out = mutableListOf<ClosePassDetector.Event>()
         for ((vehicles, ts) in frames) {
-            out.addAll(detector.decide(vehicles, bikeSpeedKmh, ts, config))
+            out.addAll(detector.decide(vehicles, bikeSpeedMs, ts, config))
         }
         return out
     }
@@ -72,8 +72,8 @@ class ClosePassDetectorTest {
         val frames = (0..5).map { i ->
             listOf(veh(distanceM = 20 - i * 2, lateralPos = 0.2f)) to i * 100L
         }
-        // bikeSpeedKmh = 0 — below default floor of 15
-        val events = drive(d, frames, bikeSpeedKmh = 0)
+        // bikeSpeedMs = 0 — below default floor of 4
+        val events = drive(d, frames, bikeSpeedMs = 0)
         assertTrue(events.isEmpty())
     }
 
@@ -82,7 +82,7 @@ class ClosePassDetectorTest {
         val frames = (0..5).map { i ->
             listOf(veh(distanceM = 20 - i * 2, lateralPos = 0.2f)) to i * 100L
         }
-        val events = drive(d, frames, bikeSpeedKmh = null)
+        val events = drive(d, frames, bikeSpeedMs = null)
         assertTrue(events.isEmpty())
     }
 
@@ -285,12 +285,12 @@ class ClosePassDetectorTest {
 private fun ClosePassDetectorTest.drive(
     d: ClosePassDetector,
     frame: List<Pair<Vehicle, Long>>,
-    bikeSpeedKmh: Int? = 22,
+    bikeSpeedMs: Int? = 7,
 ): List<ClosePassDetector.Event> {
     val cfg = ClosePassDetector.Config(enabled = true)
     val out = mutableListOf<ClosePassDetector.Event>()
     for ((v, ts) in frame) {
-        out.addAll(d.decide(listOf(v), bikeSpeedKmh, ts, cfg))
+        out.addAll(d.decide(listOf(v), bikeSpeedMs, ts, cfg))
     }
     return out
 }

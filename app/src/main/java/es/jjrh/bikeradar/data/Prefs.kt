@@ -163,10 +163,20 @@ class Prefs(context: Context) {
 
     /** Advanced: minimum rider bike speed (km/h) for the detector to
      *  arm. Filters stationary-rider scenarios (red lights, pushing
-     *  the bike) where nearby traffic doesn't count as an overtake. */
+     *  the bike) where nearby traffic doesn't count as an overtake.
+     *  Storage stays in km/h - that's the unit the rider thinks in
+     *  and the Settings slider exposes - while the engine consumes
+     *  m/s via [closePassRiderSpeedFloorMs]. */
     var closePassRiderSpeedFloorKmh: Int
         get() = sp.getInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, 15).coerceIn(5, 30)
         set(v) { sp.edit().putInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, v.coerceIn(5, 30)).apply() }
+
+    /** Same value as [closePassRiderSpeedFloorKmh], converted to m/s
+     *  for the detector's m/s-canonical API. Read-only - the slider
+     *  writes km/h. Floor of 1 m/s avoids a zero gate when km/h is
+     *  rounded down past 4 km/h (range starts at 5 km/h anyway). */
+    val closePassRiderSpeedFloorMs: Int
+        get() = (closePassRiderSpeedFloorKmh / 3.6).toInt().coerceAtLeast(1)
 
     /** Advanced: minimum closing speed (m/s) for the detector to arm.
      *  Filters lane-matched cruising and filtering — if the vehicle

@@ -597,7 +597,6 @@ class BikeRadarService : Service() {
                 lastConnectionReachedDecode = false
                 val quickReconnect = connectAndRun(device, name)
                 markRadarDisconnected()
-                RadarStateBus.clear()
                 if (bondLost) {
                     Log.i(TAG_RADAR, "bond lost during attempt; exiting reconnect loop")
                     return
@@ -978,6 +977,7 @@ class BikeRadarService : Service() {
             queue.cancel()
             queueJob.cancel()
             markRadarDisconnected()
+            RadarStateBus.clear()
             closeOnce()
             closeCaptureLog()
         }

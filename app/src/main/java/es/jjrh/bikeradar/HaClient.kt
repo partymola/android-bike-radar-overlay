@@ -3,6 +3,8 @@ package es.jjrh.bikeradar
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -261,9 +263,11 @@ class HaClient(private val baseUrl: String, private val token: String) {
     suspend fun publishClosePassEvent(slug: String, eventJson: JSONObject): Boolean {
         val topic = "varia/$slug/close_pass"
         val payload = JSONObject(eventJson.toString()).put("event_type", "close_pass").toString()
-        val ok1 = publishMqtt(topic, payload, retain = false)
-        val ok2 = publishMqtt("$topic/last", payload, retain = true)
-        return ok1 && ok2
+        return coroutineScope {
+            val j1 = async { publishMqtt(topic, payload, retain = false) }
+            val j2 = async { publishMqtt("$topic/last", payload, retain = true) }
+            j1.await() && j2.await()
+        }
     }
 
     companion object {

@@ -58,8 +58,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
                 requestMethod = "POST"
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "application/json")
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = HA_TIMEOUT_MS
+                readTimeout = HA_TIMEOUT_MS
                 doOutput = true
             }
             try {
@@ -86,8 +86,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     setRequestProperty("Authorization", "Bearer $token")
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = HA_TIMEOUT_MS
+                    readTimeout = HA_TIMEOUT_MS
                 }
                 val code = conn.responseCode
                 drainAndReturn(conn, code)
@@ -124,8 +124,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
                     requestMethod = "POST"
                     setRequestProperty("Authorization", "Bearer $token")
                     setRequestProperty("Content-Type", "application/json")
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = HA_TIMEOUT_MS
+                    readTimeout = HA_TIMEOUT_MS
                     doOutput = true
                 }
                 conn.outputStream.use { it.write(body.toByteArray()) }
@@ -269,5 +269,11 @@ class HaClient(private val baseUrl: String, private val token: String) {
     companion object {
         private const val TAG = "BikeRadar"
         private const val DISCOVERY_PREFIX = "homeassistant"
+        // 3 s connect+read keeps the radio awake at most ~6 s on a failed
+        // publish during a flaky cell handover; the next heartbeat will
+        // retry. HA endpoints used here are mqtt.publish (broker queue
+        // write) and /api/ ping - neither does HA-side processing that
+        // would justify a longer timeout.
+        private const val HA_TIMEOUT_MS = 3000
     }
 }

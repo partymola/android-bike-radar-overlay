@@ -56,6 +56,17 @@
             </intent-filter>
         </activity>
 
+        <!-- No WAKE_LOCK permission and no PowerManager wakelock: the FGS's
+             implicit wakelock is sufficient while the device is awake or
+             actively dozing-light. In Doze (deep), `delay()` ticks driving
+             the V2 watchdog and walk-away timer are deferred until the next
+             maintenance window, so walk-away alerts fire late when the
+             phone has been idle for several minutes. Acceptable trade-off:
+             a wakelock would keep the radio class active in Doze and erase
+             much of the battery budget on parked-phone idle. If this
+             becomes user-visible, request REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+             (intent-based, user must approve in Settings) rather than
+             holding a wakelock from the service. -->
         <service
             android:name=".BikeRadarService"
             android:exported="false"

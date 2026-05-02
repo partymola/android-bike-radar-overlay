@@ -98,14 +98,6 @@ class RadarOverlayView(context: Context) : View(context) {
         color = COLOR_AMBER
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
     }
-    private val dashcamStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = dp(1.8f)
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val dashcamFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
     private val cameraOffDrawable: android.graphics.drawable.Drawable? =
         androidx.core.content.res.ResourcesCompat.getDrawable(
             resources, R.drawable.ic_videocam_off, null

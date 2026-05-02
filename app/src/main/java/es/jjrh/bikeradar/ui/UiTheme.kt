@@ -186,7 +186,7 @@ private val nextTypography: Typography
     }
 
 @Composable
-fun NextTheme(content: @Composable () -> Unit) {
+fun UiTheme(content: @Composable () -> Unit) {
     val br = BrColors.Default
     // Map mockup tokens onto M3 slots so Material 3 components (Button,
     // Card, etc) inherit the right colours. Slot meanings:

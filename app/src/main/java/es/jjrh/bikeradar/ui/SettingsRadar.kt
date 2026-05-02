@@ -47,14 +47,14 @@ import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
 
 @Composable
-fun SettingsRadarNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsRadarNextBody(navController, prefs)
+fun SettingsRadar(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsRadarBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
+private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val creds = remember { HaCredentials(ctx) }
@@ -85,12 +85,12 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Radar & alerts", onBack = { navController.popBackStack() })
+            SettingsHeader("Radar & alerts", onBack = { navController.popBackStack() })
 
             // Alerts group — sliders sit directly on the screen background
             // matching the JSX which puts them outside any card.
-            NextSettingsSectionLabel("Alerts")
-            NextSettingsSliderRow(
+            SettingsSectionLabel("Alerts")
+            SettingsSliderRow(
                 title = "Alert volume",
                 valueDisplay = "$alertVol%",
                 helper = "Beep volume for approach alerts. 0 silences audio; the overlay still flashes.",
@@ -99,7 +99,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 onValueChange = { alertVol = it.toInt() },
                 onValueChangeFinished = { prefs.alertVolume = alertVol },
             )
-            NextSettingsSliderRow(
+            SettingsSliderRow(
                 title = "Alert distance",
                 valueDisplay = "$alertDist m",
                 helper = "Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.",
@@ -108,7 +108,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 onValueChange = { alertDist = it.toInt() },
                 onValueChangeFinished = { prefs.alertMaxDistanceM = alertDist },
             )
-            NextSettingsSliderRow(
+            SettingsSliderRow(
                 title = "Visual distance",
                 valueDisplay = "$visualDist m",
                 helper = "Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.",
@@ -118,9 +118,9 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 onValueChangeFinished = { prefs.visualMaxDistanceM = visualDist },
             )
 
-            NextSettingsSectionLabel("Adaptive")
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsSectionLabel("Adaptive")
+            SettingsRowGroup {
+                SettingsToggleRow(
                     leadingIcon = Icons.Default.Speed,
                     leadingTint = br.brand,
                     title = "Adaptive alert colours",
@@ -130,9 +130,9 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
-            NextSettingsSectionLabel("Battery warnings")
-            NextNestedCard {
-                NextSettingsSliderRow(
+            SettingsSectionLabel("Battery warnings")
+            NestedCard {
+                SettingsSliderRow(
                     title = "Low-battery threshold",
                     valueDisplay = "$batteryThreshold%",
                     helper = "Show an amber warning beside the rider when any paired device drops below this level.",
@@ -145,8 +145,8 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsRowGroup {
+                SettingsToggleRow(
                     title = "Show device labels",
                     subtitle = "Show 'RADAR 12%' or 'DASHCAM 8%' on screen instead of a silent warning tint.",
                     checked = batteryShowLabels,
@@ -154,9 +154,9 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
-            NextSettingsSectionLabel("Close-pass logging")
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsSectionLabel("Close-pass logging")
+            SettingsRowGroup {
+                SettingsToggleRow(
                     leadingIcon = Icons.Default.Home,
                     leadingTint = br.safe,
                     title = "Log to Home Assistant",
@@ -171,9 +171,9 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
 
             if (closePassLogging) {
                 Spacer(modifier = Modifier.height(8.dp))
-                NextNestedCard {
+                NestedCard {
                     Column {
-                        NextSettingsSliderRow(
+                        SettingsSliderRow(
                             title = "Lateral clearance threshold",
                             valueDisplay = "${String.format(Locale.US, "%.1f", closePassEmitMinX)} m",
                             helper = "Only publish when the minimum lateral clearance drops below this distance.",
@@ -185,7 +185,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                             paddingHorizontal = 0.dp,
                             paddingBottom = 14.dp,
                         )
-                        NextSettingsSliderRow(
+                        SettingsSliderRow(
                             title = "Minimum rider speed",
                             valueDisplay = "$closePassRiderFloor km/h",
                             helper = "Detector ignores stationary-rider situations (red lights, pushing the bike).",
@@ -197,7 +197,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                             paddingHorizontal = 0.dp,
                             paddingBottom = 14.dp,
                         )
-                        NextSettingsSliderRow(
+                        SettingsSliderRow(
                             title = "Minimum closing speed",
                             valueDisplay = "$closePassClosingFloor m/s",
                             helper = "Roughly ${(closePassClosingFloor * 3.6).toInt()} km/h of relative approach speed.",
@@ -214,8 +214,8 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Indefinite kill-switch (survives reboot). Pause is the time-bounded variant.
-            NextSettingsSectionLabel("Danger zone")
-            NextSettingsRowGroup {
+            SettingsSectionLabel("Danger zone")
+            SettingsRowGroup {
                 if (serviceEnabled) {
                     Column(
                         modifier = Modifier
@@ -223,7 +223,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        NextOutlinedButton(
+                        BrOutlinedButton(
                             label = "Stop scanning",
                             tone = br.danger,
                             leadingIcon = Icons.Default.PowerSettingsNew,
@@ -237,7 +237,7 @@ private fun SettingsRadarNextBody(navController: NavController, prefs: Prefs) {
                     }
                 } else {
                     Box(modifier = Modifier.semantics(mergeDescendants = true) { }) {
-                        NextSettingsRow(
+                        SettingsRow(
                             icon = Icons.Default.PowerOff,
                             iconTint = br.fgMuted,
                             title = "Scanning stopped",

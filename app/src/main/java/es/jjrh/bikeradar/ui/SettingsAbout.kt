@@ -36,14 +36,14 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BuildConfig
 
 @Composable
-fun SettingsAboutNext(navController: NavController) {
-    NextTheme {
-        SettingsAboutNextBody(navController)
+fun SettingsAbout(navController: NavController) {
+    UiTheme {
+        SettingsAboutBody(navController)
     }
 }
 
 @Composable
-private fun SettingsAboutNextBody(navController: NavController) {
+private fun SettingsAboutBody(navController: NavController) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
 
@@ -51,7 +51,7 @@ private fun SettingsAboutNextBody(navController: NavController) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("About", onBack = { navController.popBackStack() })
+            SettingsHeader("About", onBack = { navController.popBackStack() })
 
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
@@ -107,23 +107,23 @@ private fun SettingsAboutNextBody(navController: NavController) {
                 }
             }
 
-            NextSettingsSectionLabel("Legal")
-            NextSettingsRowGroup {
-                NextSettingsRow(
+            SettingsSectionLabel("Legal")
+            SettingsRowGroup {
+                SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
                     title = "Open source licences",
                     subtitle = "Every dependency the app ships with",
                     onClick = { navController.navigate("settings/licenses") },
                 )
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Lock,
                     iconTint = br.fgMuted,
                     title = "Privacy",
                     subtitle = "What stays on the phone, what doesn't",
                     onClick = { navController.navigate("settings/privacy") },
                 )
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
                     title = "Not affiliated with Garmin",

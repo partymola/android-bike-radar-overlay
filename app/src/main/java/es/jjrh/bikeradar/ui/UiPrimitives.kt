@@ -47,18 +47,19 @@ import kotlin.math.max
  * handoff bundle. Structure mirrors the JSX so cross-referencing is
  * straightforward; rendering uses idiomatic Compose / Material 3 APIs.
  *
- * Tokens come from [LocalBrColors] (set up by [NextTheme]). Don't
+ * Tokens come from [LocalBrColors] (set up by [UiTheme]). Don't
  * hardcode hex values here — read from the composition local.
  */
 
-// ── NextCard — the canonical surface in the redesign ─────────────────
+// ── BrCard — the canonical surface in the redesign ──────────────────
 //
 // JSX `Card` (ui.jsx): solid background T.bgElev1, 14dp radius,
 // 1px hairline border, optional 3dp left accent strip. Used everywhere
-// for the cards that organise content.
+// for the cards that organise content. Prefixed `Br` to avoid colliding
+// with `androidx.compose.material3.Card` on auto-import.
 
 @Composable
-fun NextCard(
+fun BrCard(
     modifier: Modifier = Modifier,
     accent: Color? = null,
     contentPadding: Dp = 0.dp,
@@ -224,14 +225,16 @@ fun BatteryChip(
     }
 }
 
-// ── NextChip ──────────────────────────────────────────────────────────
+// ── BrChip ───────────────────────────────────────────────────────────
 //
 // JSX `Chip`: pill with mono uppercase text. Two variants: `solid` (fg
 // on a coloured background) and ghost (coloured fg on a 14% tinted
-// background). Used for "PAIRED", "OPTIONAL", "VUE", etc.
+// background). Used for "PAIRED", "OPTIONAL", "VUE", etc. Prefixed `Br`
+// to avoid colliding with `androidx.compose.material3` chip APIs on
+// auto-import.
 
 @Composable
-fun NextChip(
+fun BrChip(
     text: String,
     color: Color,
     solid: Boolean = false,
@@ -281,13 +284,15 @@ fun SectionLabel(
     )
 }
 
-// ── NextToggle ────────────────────────────────────────────────────────
+// ── BrToggle ─────────────────────────────────────────────────────────
 //
 // JSX `Toggle` (settings-screens.jsx): 40x24 pill with brand-coloured
 // background when on, bgElev3 when off, 20x20 white knob. Anim 150ms.
+// Prefixed `Br` to avoid colliding with any future `material3` toggle
+// API on auto-import.
 
 @Composable
-fun NextToggle(
+fun BrToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
@@ -324,16 +329,18 @@ fun NextToggle(
     }
 }
 
-// ── NextSlider ────────────────────────────────────────────────────────
+// ── BrSlider ─────────────────────────────────────────────────────────
 //
 // JSX `Slider` (settings-screens.jsx): 3dp track in bgElev3, brand-fill
 // up to value, 20dp white thumb with shadow. We render Material 3's
 // Slider with custom SliderColors so it looks like the mockup but
 // keeps Material's gesture handling (which V1 relied on inside a
 // vertically-scrolling Column to avoid horizontal-drag conflicts).
+// Prefixed `Br` to avoid colliding with `androidx.compose.material3.Slider`
+// on auto-import.
 
 @Composable
-fun NextSlider(
+fun BrSlider(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
@@ -481,14 +488,16 @@ fun Telemetry(
     }
 }
 
-// ── NextSegmentedControl ─────────────────────────────────────────────
+// ── BrSegmentedControl ───────────────────────────────────────────────
 //
 // JSX uses a flex row of buttons inside a small bg-tinted frame. The
 // selected option has bgElev2 fill, others are transparent. Used for
 // the year / month / week selector on the close-pass stats card.
+// Prefixed `Br` for symmetry with the rest of the Br* primitive set
+// even though no current M3 API shadows the bare name.
 
 @Composable
-fun NextSegmentedControl(
+fun BrSegmentedControl(
     options: List<Pair<String, String>>, // value -> label
     selected: String,
     onSelect: (String) -> Unit,
@@ -645,7 +654,7 @@ fun WithContentColor(color: Color, content: @Composable () -> Unit) {
 
 // Shared helper: theme-aware horizontal divider line used inside cards.
 @Composable
-fun NextHairline(modifier: Modifier = Modifier) {
+fun Hairline(modifier: Modifier = Modifier) {
     val br = LocalBrColors.current
     Box(
         modifier = modifier

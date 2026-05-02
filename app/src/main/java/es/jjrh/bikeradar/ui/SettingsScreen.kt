@@ -60,14 +60,14 @@ import java.util.Locale
  * Each row navigates to its own sub-screen.
  */
 @Composable
-fun SettingsScreenNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsScreenNextBody(navController, prefs)
+fun SettingsScreen(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsScreenBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsScreenNextBody(navController: NavController, prefs: Prefs) {
+private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val devUnlocked by DevModeState.unlocked.collectAsState()
@@ -97,35 +97,35 @@ private fun SettingsScreenNextBody(navController: NavController, prefs: Prefs) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader(title = "Settings", onBack = { navController.popBackStack() })
+            SettingsHeader(title = "Settings", onBack = { navController.popBackStack() })
 
             // System health card (the small one at the top of Settings)
             SystemHealthBar(radarBattery = radarBattery, dashcamBattery = dashcamBattery)
 
-            NextSettingsSectionLabel("General")
-            NextSettingsRowGroup {
-                NextSettingsRow(
+            SettingsSectionLabel("General")
+            SettingsRowGroup {
+                SettingsRow(
                     icon = Icons.Default.Sensors,
                     iconTint = br.brand,
                     title = "Radar & alerts",
                     subtitle = "Volume ${prefsSnap.alertVolume}% · alert at ${prefsSnap.alertMaxDistanceM} m",
                     onClick = { navController.navigate("settings/radar") },
                 )
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Videocam,
                     iconTint = br.dashcam,
                     title = "Dashcam",
                     subtitle = dashcamSubtitle(prefsSnap),
                     onClick = { navController.navigate("settings/dashcam") },
                 )
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Home,
                     iconTint = br.safe,
                     title = "Home Assistant",
                     subtitle = haSubtitle(haConfigured, haHealth),
                     onClick = { navController.navigate("settings/ha") },
                 )
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Shield,
                     iconTint = if (requiredMissing > 0) br.danger else br.caution,
                     title = "Permissions",
@@ -137,9 +137,9 @@ private fun SettingsScreenNextBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
-            NextSettingsSectionLabel("Advanced")
-            NextSettingsRowGroup {
-                NextSettingsRow(
+            SettingsSectionLabel("Advanced")
+            SettingsRowGroup {
+                SettingsRow(
                     icon = Icons.Default.FlashOn,
                     iconTint = br.brand,
                     title = "Experimental",
@@ -147,7 +147,7 @@ private fun SettingsScreenNextBody(navController: NavController, prefs: Prefs) {
                     onClick = { navController.navigate("settings/experimental") },
                 )
                 if (devUnlocked) {
-                    NextSettingsRow(
+                    SettingsRow(
                         icon = Icons.Default.Terminal,
                         iconTint = br.fgMuted,
                         title = "Debug",
@@ -155,7 +155,7 @@ private fun SettingsScreenNextBody(navController: NavController, prefs: Prefs) {
                         onClick = { navController.navigate("debug") },
                     )
                 }
-                NextSettingsRow(
+                SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
                     title = "About",

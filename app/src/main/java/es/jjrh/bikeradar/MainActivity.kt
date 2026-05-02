@@ -14,20 +14,20 @@ import androidx.navigation.navArgument
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ui.DashcamPickerSheet
-import es.jjrh.bikeradar.ui.DebugScreenNext
+import es.jjrh.bikeradar.ui.DebugScreen
 import es.jjrh.bikeradar.ui.DevModeState
-import es.jjrh.bikeradar.ui.MainScreenNext
-import es.jjrh.bikeradar.ui.NextTheme
-import es.jjrh.bikeradar.ui.OnboardingScreenNext
-import es.jjrh.bikeradar.ui.SettingsAboutNext
-import es.jjrh.bikeradar.ui.SettingsDashcamNext
-import es.jjrh.bikeradar.ui.SettingsExperimentalNext
-import es.jjrh.bikeradar.ui.SettingsHaNext
-import es.jjrh.bikeradar.ui.SettingsLicensesNext
-import es.jjrh.bikeradar.ui.SettingsPermissionsNext
-import es.jjrh.bikeradar.ui.SettingsPrivacyNext
-import es.jjrh.bikeradar.ui.SettingsRadarNext
-import es.jjrh.bikeradar.ui.SettingsScreenNext
+import es.jjrh.bikeradar.ui.MainScreen
+import es.jjrh.bikeradar.ui.UiTheme
+import es.jjrh.bikeradar.ui.OnboardingScreen
+import es.jjrh.bikeradar.ui.SettingsAbout
+import es.jjrh.bikeradar.ui.SettingsDashcam
+import es.jjrh.bikeradar.ui.SettingsExperimental
+import es.jjrh.bikeradar.ui.SettingsHa
+import es.jjrh.bikeradar.ui.SettingsLicenses
+import es.jjrh.bikeradar.ui.SettingsPermissions
+import es.jjrh.bikeradar.ui.SettingsPrivacy
+import es.jjrh.bikeradar.ui.SettingsRadar
+import es.jjrh.bikeradar.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            NextTheme {
+            UiTheme {
                 val navController = rememberNavController()
                 val startDest = if (prefs.firstRunComplete) "main" else "onboarding"
                 NavHost(navController = navController, startDestination = startDest) {
@@ -67,44 +67,44 @@ class MainActivity : ComponentActivity() {
                                 popUpTo("onboarding") { inclusive = true }
                             }
                         }
-                        OnboardingScreenNext(
+                        OnboardingScreen(
                             navController = navController,
                             prefs = prefs,
                             onFinished = onFinished,
                         )
                     }
                     composable("main") {
-                        MainScreenNext(navController = navController, prefs = prefs)
+                        MainScreen(navController = navController, prefs = prefs)
                     }
                     composable("settings") {
-                        SettingsScreenNext(navController = navController, prefs = prefs)
+                        SettingsScreen(navController = navController, prefs = prefs)
                     }
                     composable("debug") {
-                        DebugScreenNext(navController = navController, prefs = prefs)
+                        DebugScreen(navController = navController, prefs = prefs)
                     }
                     composable("settings/radar") {
-                        SettingsRadarNext(navController = navController, prefs = prefs)
+                        SettingsRadar(navController = navController, prefs = prefs)
                     }
                     composable("settings/dashcam") {
-                        SettingsDashcamNext(navController = navController, prefs = prefs)
+                        SettingsDashcam(navController = navController, prefs = prefs)
                     }
                     composable("settings/ha") {
-                        SettingsHaNext(navController = navController, prefs = prefs)
+                        SettingsHa(navController = navController, prefs = prefs)
                     }
                     composable("settings/permissions") {
-                        SettingsPermissionsNext(navController = navController, prefs = prefs)
+                        SettingsPermissions(navController = navController, prefs = prefs)
                     }
                     composable("settings/experimental") {
-                        SettingsExperimentalNext(navController = navController, prefs = prefs)
+                        SettingsExperimental(navController = navController, prefs = prefs)
                     }
                     composable("settings/about") {
-                        SettingsAboutNext(navController = navController)
+                        SettingsAbout(navController = navController)
                     }
                     composable("settings/licenses") {
-                        SettingsLicensesNext(navController = navController)
+                        SettingsLicenses(navController = navController)
                     }
                     composable("settings/privacy") {
-                        SettingsPrivacyNext(navController = navController)
+                        SettingsPrivacy(navController = navController)
                     }
                     composable(
                         route = "dashcam-picker?fromOnboarding={fromOnboarding}",

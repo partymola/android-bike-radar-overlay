@@ -60,14 +60,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsHaNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsHaNextBody(navController, prefs)
+fun SettingsHa(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsHaBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
+private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val scope = rememberCoroutineScope()
@@ -111,7 +111,7 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Home Assistant", onBack = { navController.popBackStack() })
+            SettingsHeader("Home Assistant", onBack = { navController.popBackStack() })
 
             // Connection state pill
             val connected = haConfigured && haHealth !is HaHealth.Error
@@ -260,13 +260,13 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     pingResult?.let { r ->
-                        NextChip(
+                        BrChip(
                             text = if (r.isSuccess) "HA: saved" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
                             color = if (r.isSuccess) br.safe else br.danger,
                         )
                     }
                     mqttResult?.let { r ->
-                        NextChip(
+                        BrChip(
                             text = if (r.isSuccess) "MQTT: ready" else "MQTT: ${r.exceptionOrNull()?.message ?: "error"}",
                             color = if (r.isSuccess) br.safe else br.caution,
                         )
@@ -278,8 +278,8 @@ private fun SettingsHaNextBody(navController: NavController, prefs: Prefs) {
             // entries the app is known to publish; live count would
             // require a query we don't run yet). The status dot reflects
             // whether HA is currently reachable, not the entity value.
-            NextSettingsSectionLabel("Published entities")
-            NextSettingsRowGroup {
+            SettingsSectionLabel("Published entities")
+            SettingsRowGroup {
                 EntityRow(name = "sensor.bike_radar_battery", value = "—", connected = connected, isLast = false)
                 EntityRow(name = "sensor.bike_dashcam_battery", value = "—", connected = connected, isLast = false)
                 EntityRow(name = "event.bike_close_pass", value = "events", connected = connected, isLast = false)

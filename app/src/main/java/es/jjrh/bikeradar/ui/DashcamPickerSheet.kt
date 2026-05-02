@@ -80,7 +80,7 @@ fun DashcamPickerSheet(
     prefs: Prefs,
     fromOnboarding: Boolean,
 ) {
-    NextTheme {
+    UiTheme {
         DashcamPickerSheetBody(navController, prefs, fromOnboarding)
     }
 }
@@ -96,14 +96,14 @@ private fun DashcamPickerSheetBody(
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    var devices by remember { mutableStateOf(listBondedNext(ctx, batteryEntries.keys)) }
+    var devices by remember { mutableStateOf(listBonded(ctx, batteryEntries.keys)) }
     // Bonded-device list refreshes only while the picker is on
     // screen — no point hitting BluetoothAdapter while paused.
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 delay(2_000L)
-                devices = listBondedNext(ctx, batteryEntries.keys)
+                devices = listBonded(ctx, batteryEntries.keys)
             }
         }
     }
@@ -120,8 +120,8 @@ private fun DashcamPickerSheetBody(
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top bar (matches NextSettingsHeader)
-            NextSettingsHeader("Select dashcam", onBack = { navController.popBackStack() })
+            // Top bar (matches SettingsHeader)
+            SettingsHeader("Select dashcam", onBack = { navController.popBackStack() })
 
             // Explainer banner
             ExplainerBanner()
@@ -136,7 +136,7 @@ private fun DashcamPickerSheetBody(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             ) {
                 item("none") {
-                    PickerRowNext(
+                    PickerRow(
                         title = "None — I don't have one",
                         subtitle = null,
                         tag = null,
@@ -150,7 +150,7 @@ private fun DashcamPickerSheetBody(
                         PickerSectionLabel("Likely matches")
                     }
                     items(likely, key = { "l-" + it.mac }) { d ->
-                        PickerRowNext(
+                        PickerRow(
                             title = d.name,
                             subtitle = d.mac,
                             tag = "Vue",
@@ -165,7 +165,7 @@ private fun DashcamPickerSheetBody(
                         PickerSectionLabel("Other paired devices")
                     }
                     items(other, key = { "o-" + it.mac }) { d ->
-                        PickerRowNext(
+                        PickerRow(
                             title = d.name,
                             subtitle = d.mac,
                             tag = null,
@@ -288,7 +288,7 @@ private fun PickerSectionLabel(text: String) {
 }
 
 @Composable
-private fun PickerRowNext(
+private fun PickerRow(
     title: String,
     subtitle: String?,
     tag: String?,
@@ -446,7 +446,7 @@ data class DashcamCandidate(
 )
 
 @SuppressLint("MissingPermission")
-private fun listBondedNext(ctx: Context, seenSlugs: Set<String>): List<DashcamCandidate> {
+private fun listBonded(ctx: Context, seenSlugs: Set<String>): List<DashcamCandidate> {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     val bonded: Set<BluetoothDevice> = try {
         mgr?.adapter?.bondedDevices ?: emptySet()

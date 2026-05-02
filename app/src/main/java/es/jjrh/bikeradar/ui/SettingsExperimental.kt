@@ -24,14 +24,14 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.data.Prefs
 
 @Composable
-fun SettingsExperimentalNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsExperimentalNextBody(navController, prefs)
+fun SettingsExperimental(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsExperimentalBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsExperimentalNextBody(navController: NavController, prefs: Prefs) {
+private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs) {
     val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
 
@@ -39,7 +39,7 @@ private fun SettingsExperimentalNextBody(navController: NavController, prefs: Pr
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Experimental", onBack = { navController.popBackStack() })
+            SettingsHeader("Experimental", onBack = { navController.popBackStack() })
 
             Text(
                 text = "Features still being tested. May be jittery or change without notice.",
@@ -49,8 +49,8 @@ private fun SettingsExperimentalNextBody(navController: NavController, prefs: Pr
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsRowGroup {
+                SettingsToggleRow(
                     leadingIcon = Icons.Default.FlashOn,
                     leadingTint = br.brand,
                     title = "Predict overtake paths (1 s lookahead)",

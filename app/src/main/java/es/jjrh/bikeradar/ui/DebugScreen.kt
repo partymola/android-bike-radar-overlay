@@ -84,14 +84,14 @@ import java.util.Locale
  * diagnostic bundle, radar-state log, lock-developer-mode.
  */
 @Composable
-fun DebugScreenNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        DebugScreenNextBody(navController, prefs)
+fun DebugScreen(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        DebugScreenBody(navController, prefs)
     }
 }
 
 @Composable
-private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
+private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val scope = rememberCoroutineScope()
@@ -173,10 +173,10 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Debug", onBack = { navController.popBackStack() })
+            SettingsHeader("Debug", onBack = { navController.popBackStack() })
 
             // Scenarios
-            NextSettingsSectionLabel("Scenarios")
+            SettingsSectionLabel("Scenarios")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -216,7 +216,7 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Service control
-            NextSettingsSectionLabel("Service control")
+            SettingsSectionLabel("Service control")
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
                     text = "Force radar reconnect",
@@ -233,9 +233,9 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Screenshot capture
-            NextSettingsSectionLabel("Screenshot capture")
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsSectionLabel("Screenshot capture")
+            SettingsRowGroup {
+                SettingsToggleRow(
                     title = "Periodic screenshots",
                     subtitle = "Capture the screen every minute while the radar overlay is active. Saved to the app's files dir under screenshots/.",
                     checked = screenshotRunning,
@@ -257,7 +257,7 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Manual HA push
-            NextSettingsSectionLabel("Manual HA push")
+            SettingsSectionLabel("Manual HA push")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -291,7 +291,7 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Capture logs
-            NextSettingsSectionLabel("Capture logs")
+            SettingsSectionLabel("Capture logs")
             if (logFiles.isEmpty()) {
                 Text(
                     text = "No capture logs yet.",
@@ -317,7 +317,7 @@ private fun DebugScreenNextBody(navController: NavController, prefs: Prefs) {
             }
 
             // Diagnostics
-            NextSettingsSectionLabel("Diagnostics")
+            SettingsSectionLabel("Diagnostics")
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
                     text = "Copy diagnostic bundle",

@@ -104,14 +104,14 @@ import java.util.Locale
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MainScreenNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        MainScreenNextBody(navController, prefs)
+fun MainScreen(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        MainScreenBody(navController, prefs)
     }
 }
 
 @Composable
-private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
+private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val devUnlocked by DevModeState.unlocked.collectAsState()
@@ -126,14 +126,14 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
     // ticking the bond check or wall-clock when the user can't see
     // the result, and it lets Doze idle the device cleanly.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasBond by remember { mutableStateOf(hasRearBondNext(ctx)) }
-    var btEnabled by remember { mutableStateOf(isBluetoothEnabledNext(ctx)) }
+    var hasBond by remember { mutableStateOf(hasRearBond(ctx)) }
+    var btEnabled by remember { mutableStateOf(isBluetoothEnabled(ctx)) }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 delay(5_000)
-                hasBond = hasRearBondNext(ctx)
-                btEnabled = isBluetoothEnabledNext(ctx)
+                hasBond = hasRearBond(ctx)
+                btEnabled = isBluetoothEnabled(ctx)
             }
         }
     }
@@ -188,7 +188,7 @@ private fun MainScreenNextBody(navController: NavController, prefs: Prefs) {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
         },
     )
-    val cta = ctaForNext(inputs, now, navController, ctx, prefs)
+    val cta = ctaFor(inputs, now, navController, ctx, prefs)
 
     val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
         status.tone == MainStatusTone.Warn
@@ -303,7 +303,7 @@ private fun TopBar(onWordmarkLongPress: () -> Unit) {
 @Composable
 private fun MainScreenPortrait(
     status: MainStatus,
-    cta: StatusCtaNext?,
+    cta: StatusCta?,
     btEnabled: Boolean,
     showBtOffBanner: Boolean,
     showDashcamPrompt: Boolean,
@@ -376,7 +376,7 @@ private fun MainScreenPortrait(
 @Composable
 private fun MainScreenLandscape(
     status: MainStatus,
-    cta: StatusCtaNext?,
+    cta: StatusCta?,
     btEnabled: Boolean,
     showBtOffBanner: Boolean,
     showDashcamPrompt: Boolean,
@@ -460,20 +460,20 @@ private fun MainScreenLandscape(
 
 // ── Hero status card ─────────────────────────────────────────────────
 
-private data class StatusCtaNext(val label: String, val onClick: () -> Unit)
+private data class StatusCta(val label: String, val onClick: () -> Unit)
 
 @Composable
-private fun ctaForNext(
+private fun ctaFor(
     inputs: MainStatusInputs,
     nowMs: Long,
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
-): StatusCtaNext? = when {
+): StatusCta? = when {
     !inputs.firstRunComplete ->
-        StatusCtaNext("Set up") { navController.navigate("onboarding") }
+        StatusCta("Set up") { navController.navigate("onboarding") }
 
-    !inputs.serviceEnabled -> StatusCtaNext("Start scanning") {
+    !inputs.serviceEnabled -> StatusCta("Start scanning") {
         prefs.serviceEnabled = true
         if (Permissions.hasRequiredForService(ctx)) {
             ContextCompat.startForegroundService(
@@ -491,14 +491,14 @@ private fun ctaForNext(
     }
 
     nowMs < inputs.pausedUntilEpochMs ->
-        StatusCtaNext("Resume") { prefs.pausedUntilEpochMs = 0L }
+        StatusCta("Resume") { prefs.pausedUntilEpochMs = 0L }
 
-    !inputs.bluetoothEnabled -> StatusCtaNext(
+    !inputs.bluetoothEnabled -> StatusCta(
         label = "Turn on Bluetooth",
         onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
     )
 
-    !inputs.hasBond -> StatusCtaNext(
+    !inputs.hasBond -> StatusCta(
         label = "Pair",
         onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
     )
@@ -509,10 +509,10 @@ private fun ctaForNext(
 }
 
 @Composable
-private fun HeroStatusCard(status: MainStatus, cta: StatusCtaNext?) {
+private fun HeroStatusCard(status: MainStatus, cta: StatusCta?) {
     val br = LocalBrColors.current
     val (dotColor, pulse) = dotForStatus(status.tone, status.icon, br)
-    NextCard(modifier = Modifier.fillMaxWidth()) {
+    BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
@@ -705,7 +705,7 @@ private fun SystemCard(
         dot = if (haHealthy) br.safe else br.caution,
     )
 
-    NextCard(modifier = Modifier.fillMaxWidth()) {
+    BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             SectionLabel("System")
             Spacer(modifier = Modifier.height(10.dp))
@@ -787,7 +787,7 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
 @Composable
 private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false) {
     val br = LocalBrColors.current
-    NextCard(modifier = Modifier.fillMaxWidth()) {
+    BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
             SectionLabel("Close passes")
             Spacer(modifier = Modifier.height(10.dp))
@@ -855,7 +855,7 @@ private fun SettingsButton(onClick: () -> Unit) {
 @Composable
 private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
     val br = LocalBrColors.current
-    NextCard(modifier = Modifier.fillMaxWidth()) {
+    BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = "Do you run a dashcam?",
@@ -901,7 +901,7 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
 // ── BLE helpers (mirror V1's hasRearBond) ────────────────────────────
 
 @SuppressLint("MissingPermission")
-private fun hasRearBondNext(ctx: Context): Boolean = try {
+private fun hasRearBond(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.any { dev ->
         val n = dev.name?.lowercase() ?: ""
@@ -909,7 +909,7 @@ private fun hasRearBondNext(ctx: Context): Boolean = try {
     } == true
 } catch (_: Throwable) { false }
 
-private fun isBluetoothEnabledNext(ctx: Context): Boolean = try {
+private fun isBluetoothEnabled(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.isEnabled == true
 } catch (_: Throwable) { false }

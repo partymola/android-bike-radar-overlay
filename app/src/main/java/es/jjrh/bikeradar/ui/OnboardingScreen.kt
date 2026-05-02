@@ -92,19 +92,19 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OnboardingScreenNext(
+fun OnboardingScreen(
     navController: NavController,
     prefs: Prefs,
     onFinished: () -> Unit,
 ) {
-    NextTheme {
-        OnboardingScreenNextBody(navController, prefs, onFinished)
+    UiTheme {
+        OnboardingScreenBody(navController, prefs, onFinished)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun OnboardingScreenNextBody(
+private fun OnboardingScreenBody(
     navController: NavController,
     prefs: Prefs,
     onFinished: () -> Unit,
@@ -123,15 +123,15 @@ private fun OnboardingScreenNextBody(
             userScrollEnabled = false,
         ) { page ->
             when (page) {
-                0 -> PermissionsStepNext(
+                0 -> PermissionsStep(
                     onContinue = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
-                1 -> HaStepNext(
+                1 -> HaStep(
                     onContinue = { scope.launch { pagerState.animateScrollToPage(2) } },
                     onSkip = { scope.launch { pagerState.animateScrollToPage(2) } },
                     prefs = prefs,
                 )
-                2 -> PairingStepNext(
+                2 -> PairingStep(
                     navController = navController,
                     prefs = prefs,
                     onFinish = onFinished,
@@ -180,7 +180,7 @@ private fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
 // ── Step 0 — Permissions ─────────────────────────────────────────────
 
 @Composable
-private fun PermissionsStepNext(onContinue: () -> Unit) {
+private fun PermissionsStep(onContinue: () -> Unit) {
     val br = LocalBrColors.current
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -216,7 +216,7 @@ private fun PermissionsStepNext(onContinue: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for ((spec, granted) in states) {
-                    PermissionCardNext(spec = spec, granted = granted, onChanged = { refresh++ })
+                    PermissionCard(spec = spec, granted = granted, onChanged = { refresh++ })
                 }
             }
         }
@@ -231,7 +231,7 @@ private fun PermissionsStepNext(onContinue: () -> Unit) {
 // ── Step 1 — Home Assistant ──────────────────────────────────────────
 
 @Composable
-private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
+private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val scope = rememberCoroutineScope()
@@ -261,7 +261,7 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                FieldNext(
+                Field(
                     label = "Base URL",
                     value = urlField,
                     onChange = { urlField = it },
@@ -273,7 +273,7 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                         autoCorrectEnabled = false,
                     ),
                 )
-                FieldNext(
+                Field(
                     label = "Long-lived access token",
                     value = tokenField,
                     onChange = { tokenField = it },
@@ -336,7 +336,7 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
                     }
                 }
                 pingResult?.let { r ->
-                    NextChip(
+                    BrChip(
                         text = if (r.isSuccess) "HA: saved" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
                         color = if (r.isSuccess) br.safe else br.danger,
                     )
@@ -356,7 +356,7 @@ private fun HaStepNext(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs)
 // ── Step 2 — Pairing ─────────────────────────────────────────────────
 
 @Composable
-private fun PairingStepNext(
+private fun PairingStep(
     navController: NavController,
     prefs: Prefs,
     onFinish: () -> Unit,
@@ -365,17 +365,17 @@ private fun PairingStepNext(
     val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
 
-    var radarBonded by remember { mutableStateOf(hasRadarBondNext(ctx)) }
-    var radarMac by remember { mutableStateOf(currentRadarMacNext(ctx)) }
-    var radarLocalName by remember { mutableStateOf(currentRadarLocalNameNext(ctx)) }
+    var radarBonded by remember { mutableStateOf(hasRadarBond(ctx)) }
+    var radarMac by remember { mutableStateOf(currentRadarMac(ctx)) }
+    var radarLocalName by remember { mutableStateOf(currentRadarLocalName(ctx)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 delay(2_000)
-                radarBonded = hasRadarBondNext(ctx)
-                radarMac = currentRadarMacNext(ctx)
-                radarLocalName = currentRadarLocalNameNext(ctx)
+                radarBonded = hasRadarBond(ctx)
+                radarMac = currentRadarMac(ctx)
+                radarLocalName = currentRadarLocalName(ctx)
             }
         }
     }
@@ -398,7 +398,7 @@ private fun PairingStepNext(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Radar device row (always required).
-                DeviceRowNext(
+                DeviceRow(
                     icon = Icons.Default.Sensors,
                     tint = br.brand,
                     title = "Rear radar",
@@ -416,7 +416,7 @@ private fun PairingStepNext(
 
                 // Dashcam row, three sub-states matching the JSX.
                 when (prefsSnap.dashcamOwnership) {
-                    DashcamOwnership.UNANSWERED -> DashcamUnansweredCardNext(
+                    DashcamOwnership.UNANSWERED -> DashcamUnansweredCard(
                         onSetUp = {
                             prefs.dashcamOwnership = DashcamOwnership.YES
                         },
@@ -424,7 +424,7 @@ private fun PairingStepNext(
                             prefs.dashcamOwnership = DashcamOwnership.NO
                         },
                     )
-                    DashcamOwnership.NO -> DeviceRowNext(
+                    DashcamOwnership.NO -> DeviceRow(
                         icon = Icons.Default.Videocam,
                         tint = br.dashcam,
                         title = "Front dashcam",
@@ -438,7 +438,7 @@ private fun PairingStepNext(
                     )
                     DashcamOwnership.YES -> {
                         val picked = prefsSnap.dashcamMac != null
-                        DeviceRowNext(
+                        DeviceRow(
                             icon = Icons.Default.Videocam,
                             tint = br.dashcam,
                             title = "Front dashcam",
@@ -510,7 +510,7 @@ private fun PairingStepNext(
 }
 
 @Composable
-private fun DashcamUnansweredCardNext(onSetUp: () -> Unit, onSkip: () -> Unit) {
+private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
     val br = LocalBrColors.current
     Column(
         modifier = Modifier
@@ -594,7 +594,7 @@ private fun DashcamUnansweredCardNext(onSetUp: () -> Unit, onSkip: () -> Unit) {
 }
 
 @Composable
-private fun DeviceRowNext(
+private fun DeviceRow(
     icon: ImageVector,
     tint: Color,
     title: String,
@@ -727,7 +727,7 @@ private fun StepHeroBlock(
 }
 
 @Composable
-private fun FieldNext(
+private fun Field(
     label: String,
     value: String,
     onChange: (String) -> Unit,
@@ -873,7 +873,7 @@ private fun FooterCtaDual(
 // ── BLE helpers ──────────────────────────────────────────────────────
 
 @SuppressLint("MissingPermission")
-private fun hasRadarBondNext(ctx: Context): Boolean = try {
+private fun hasRadarBond(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.any { dev ->
         val n = dev.name?.lowercase() ?: ""
@@ -882,7 +882,7 @@ private fun hasRadarBondNext(ctx: Context): Boolean = try {
 } catch (_: Throwable) { false }
 
 @SuppressLint("MissingPermission")
-private fun currentRadarMacNext(ctx: Context): String? = try {
+private fun currentRadarMac(ctx: Context): String? = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
         val n = dev.name?.lowercase() ?: ""
@@ -891,7 +891,7 @@ private fun currentRadarMacNext(ctx: Context): String? = try {
 } catch (_: Throwable) { null }
 
 @SuppressLint("MissingPermission")
-private fun currentRadarLocalNameNext(ctx: Context): String? = try {
+private fun currentRadarLocalName(ctx: Context): String? = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
         val n = dev.name?.lowercase() ?: ""

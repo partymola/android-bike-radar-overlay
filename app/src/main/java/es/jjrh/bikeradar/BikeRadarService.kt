@@ -1205,7 +1205,7 @@ class BikeRadarService : Service() {
             Log.w(TAG, "walk-away audio focus denied; playing without focus")
         }
 
-        // Bundled bike-bell sound, attributed in SettingsLicensesNext
+        // Bundled bike-bell sound, attributed in SettingsLicenses
         // ("Audio assets") and in res/raw/walkaway_alarm_license.txt.
         // Using a bundled asset rather than the system default alarm
         // (the rider's morning-wakeup tone) so the alarm is recognisable

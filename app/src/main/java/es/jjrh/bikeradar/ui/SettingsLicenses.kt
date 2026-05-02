@@ -36,20 +36,20 @@ import androidx.navigation.NavController
  * implementation deps, plus the language and platform.
  */
 @Composable
-fun SettingsLicensesNext(navController: NavController) {
-    NextTheme {
-        SettingsLicensesNextBody(navController)
+fun SettingsLicenses(navController: NavController) {
+    UiTheme {
+        SettingsLicensesBody(navController)
     }
 }
 
 @Composable
-private fun SettingsLicensesNextBody(navController: NavController) {
+private fun SettingsLicensesBody(navController: NavController) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Open source licences", onBack = { navController.popBackStack() })
+            SettingsHeader("Open source licences", onBack = { navController.popBackStack() })
 
             Text(
                 text = "Bike Radar is itself GPL-3.0-or-later. Every third-party " +
@@ -61,7 +61,7 @@ private fun SettingsLicensesNextBody(navController: NavController) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
             )
 
-            NextSettingsSectionLabel("Language & runtime")
+            SettingsSectionLabel("Language & runtime")
             LicenseGroup(
                 listOf(
                     LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0"),
@@ -69,7 +69,7 @@ private fun SettingsLicensesNextBody(navController: NavController) {
                 ),
             )
 
-            NextSettingsSectionLabel("Android platform")
+            SettingsSectionLabel("Android platform")
             LicenseGroup(
                 listOf(
                     LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
@@ -80,14 +80,14 @@ private fun SettingsLicensesNextBody(navController: NavController) {
                 ),
             )
 
-            NextSettingsSectionLabel("UI")
+            SettingsSectionLabel("UI")
             LicenseGroup(
                 listOf(
                     LicenseEntry("Jetpack Compose UI / Material 3 / Material Icons Extended", "The Android Open Source Project", "Apache 2.0"),
                 ),
             )
 
-            NextSettingsSectionLabel("Build & test")
+            SettingsSectionLabel("Build & test")
             LicenseGroup(
                 listOf(
                     LicenseEntry("Android Gradle Plugin", "Google", "Apache 2.0"),
@@ -96,7 +96,7 @@ private fun SettingsLicensesNextBody(navController: NavController) {
                 ),
             )
 
-            NextSettingsSectionLabel("Audio assets")
+            SettingsSectionLabel("Audio assets")
             LicenseGroup(
                 listOf(
                     LicenseEntry(

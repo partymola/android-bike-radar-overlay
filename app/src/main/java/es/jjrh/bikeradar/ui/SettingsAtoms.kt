@@ -35,11 +35,13 @@ import androidx.compose.material3.Text
 /**
  * Shared atoms for the redesigned Settings flow. Mirrors the JSX
  * `SettingsHeader`, `Row`, `SectionLabel`, `Toggle` patterns in
- * `settings-screens.jsx`. Used by SettingsHome + every sub-screen.
+ * `settings-screens.jsx` (the JSX names are unprefixed; the Compose
+ * ports use `Br*` for the colliding subset). Used by SettingsHome +
+ * every sub-screen.
  */
 
 @Composable
-fun NextSettingsHeader(
+fun SettingsHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -81,7 +83,7 @@ fun NextSettingsHeader(
  * NOT included — call sites add their own vertical breathing room.
  */
 @Composable
-fun NextSettingsSectionLabel(text: String) {
+fun SettingsSectionLabel(text: String) {
     val br = LocalBrColors.current
     Text(
         text = text.uppercase(),
@@ -100,7 +102,7 @@ fun NextSettingsSectionLabel(text: String) {
  * settings-screens.jsx.
  */
 @Composable
-fun NextSettingsRow(
+fun SettingsRow(
     icon: ImageVector,
     iconTint: Color,
     title: String,
@@ -177,11 +179,11 @@ fun NextSettingsRow(
 }
 
 /**
- * Card that wraps a group of NextSettingsRow children. Shared frame
- * with the mockup's GENERAL/ADVANCED row groupings.
+ * Card that wraps a group of SettingsRow children. Shared frame with
+ * the mockup's GENERAL/ADVANCED row groupings.
  */
 @Composable
-fun NextSettingsRowGroup(
+fun SettingsRowGroup(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -198,12 +200,12 @@ fun NextSettingsRowGroup(
 }
 
 /**
- * Toggle row used inside sub-screens — title + sub + Switch on the
+ * Toggle row used inside sub-screens — title + sub + [BrToggle] on the
  * right. Border-bottom hairline unless `isLast`. Matches the JSX `Row`
  * variant with a `right={<Toggle/>}` and `chevron={false}`.
  */
 @Composable
-fun NextSettingsToggleRow(
+fun SettingsToggleRow(
     title: String,
     subtitle: String?,
     checked: Boolean,
@@ -249,7 +251,7 @@ fun NextSettingsToggleRow(
                     )
                 }
             }
-            NextToggle(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+            BrToggle(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
         }
         if (!isLast) {
             Box(
@@ -266,11 +268,11 @@ fun NextSettingsToggleRow(
 /**
  * Slider-with-helper card used in radar/alerts and dashcam sub-screens.
  * Mockup shows: title row + "value" right-aligned in mono brand colour,
- * helper subtitle below in `fgDim`, then NextSlider, all inside the
+ * helper subtitle below in `fgDim`, then Slider, all inside the
  * surrounding card.
  */
 @Composable
-fun NextSettingsSliderRow(
+fun SettingsSliderRow(
     title: String,
     valueDisplay: String,
     helper: String?,
@@ -313,7 +315,7 @@ fun NextSettingsSliderRow(
             )
         }
         Spacer(modifier = Modifier.height(10.dp))
-        NextSlider(
+        BrSlider(
             value = value,
             valueRange = valueRange,
             onValueChange = onValueChange,
@@ -323,9 +325,13 @@ fun NextSettingsSliderRow(
     }
 }
 
-/** Outlined button for low-frequency / destructive actions; caller picks the tone. */
+/**
+ * Outlined button for low-frequency / destructive actions; caller picks
+ * the tone. Prefixed `Br` to avoid colliding with
+ * `androidx.compose.material3.OutlinedButton` on auto-import.
+ */
 @Composable
-fun NextOutlinedButton(
+fun BrOutlinedButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -377,7 +383,7 @@ fun NextOutlinedButton(
 
 /** A simple framed nested card (for slider groupings). */
 @Composable
-fun NextNestedCard(
+fun NestedCard(
     modifier: Modifier = Modifier,
     paddingHorizontal: Dp = 16.dp,
     paddingVertical: Dp = 14.dp,

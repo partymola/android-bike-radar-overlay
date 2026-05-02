@@ -26,14 +26,14 @@ import androidx.navigation.NavController
  * instance, configured by the user, and nowhere else.
  */
 @Composable
-fun SettingsPrivacyNext(navController: NavController) {
-    NextTheme {
-        SettingsPrivacyNextBody(navController)
+fun SettingsPrivacy(navController: NavController) {
+    UiTheme {
+        SettingsPrivacyBody(navController)
     }
 }
 
 @Composable
-private fun SettingsPrivacyNextBody(navController: NavController) {
+private fun SettingsPrivacyBody(navController: NavController) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
@@ -41,7 +41,7 @@ private fun SettingsPrivacyNextBody(navController: NavController) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Privacy", onBack = { navController.popBackStack() })
+            SettingsHeader("Privacy", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 PrivacyP("Bike Radar is a self-hosted companion. The app collects no telemetry, runs no analytics, and sends no data to anyone other than the Home Assistant instance you configure.")
 

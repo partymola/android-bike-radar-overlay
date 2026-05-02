@@ -55,14 +55,14 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.data.Prefs
 
 @Composable
-fun SettingsPermissionsNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsPermissionsNextBody(navController, prefs)
+fun SettingsPermissions(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsPermissionsBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsPermissionsNextBody(navController: NavController, @Suppress("UNUSED_PARAMETER") prefs: Prefs) {
+private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNUSED_PARAMETER") prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
 
@@ -86,14 +86,14 @@ private fun SettingsPermissionsNextBody(navController: NavController, @Suppress(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Permissions", onBack = { navController.popBackStack() })
+            SettingsHeader("Permissions", onBack = { navController.popBackStack() })
 
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for ((spec, granted) in states) {
-                    PermissionCardNext(spec, granted, onChanged = { refreshTick++ })
+                    PermissionCard(spec, granted, onChanged = { refreshTick++ })
                 }
             }
 
@@ -103,7 +103,7 @@ private fun SettingsPermissionsNextBody(navController: NavController, @Suppress(
 }
 
 @Composable
-internal fun PermissionCardNext(spec: PermissionSpec, granted: Boolean, onChanged: () -> Unit) {
+internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: () -> Unit) {
     val br = LocalBrColors.current
     val ctx = LocalContext.current
     val activity = ctx as? Activity

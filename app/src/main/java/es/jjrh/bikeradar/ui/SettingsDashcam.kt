@@ -49,14 +49,14 @@ import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
 
 @Composable
-fun SettingsDashcamNext(navController: NavController, prefs: Prefs) {
-    NextTheme {
-        SettingsDashcamNextBody(navController, prefs)
+fun SettingsDashcam(navController: NavController, prefs: Prefs) {
+    UiTheme {
+        SettingsDashcamBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) {
+private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
@@ -77,11 +77,11 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            NextSettingsHeader("Dashcam", onBack = { navController.popBackStack() })
+            SettingsHeader("Dashcam", onBack = { navController.popBackStack() })
 
             // Ownership toggle (top section before any device card)
-            NextSettingsRowGroup {
-                NextSettingsToggleRow(
+            SettingsRowGroup {
+                SettingsToggleRow(
                     title = "I have a front dashcam",
                     subtitle = if (prefsSnap.dashcamOwnership == DashcamOwnership.YES)
                         "Set up your dashcam below."
@@ -174,9 +174,9 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                     }
                 }
 
-                NextSettingsSectionLabel("Behaviour")
-                NextSettingsRowGroup {
-                    NextSettingsToggleRow(
+                SettingsSectionLabel("Behaviour")
+                SettingsRowGroup {
+                    SettingsToggleRow(
                         title = "Warn on overlay when dashcam is off",
                         subtitle = "Show a camera-off icon next to the rider when no Vue advert is seen.",
                         checked = prefsSnap.dashcamWarnWhenOff,
@@ -186,9 +186,9 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                 }
 
                 if (prefsSnap.dashcamMac != null && prefsSnap.dashcamWarnWhenOff) {
-                    NextSettingsSectionLabel("Walk-away alarm")
-                    NextSettingsRowGroup {
-                        NextSettingsToggleRow(
+                    SettingsSectionLabel("Walk-away alarm")
+                    SettingsRowGroup {
+                        SettingsToggleRow(
                             title = "Alert if dashcam remains on",
                             subtitle = "Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).",
                             checked = prefsSnap.walkAwayAlarmEnabled,
@@ -200,7 +200,7 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                             val canBypassDnd = nm
                                 ?.getNotificationChannel(BikeRadarService.WALKAWAY_CHANNEL_ID)
                                 ?.canBypassDnd() == true
-                            NextSettingsRow(
+                            SettingsRow(
                                 icon = Icons.Default.NotificationsActive,
                                 iconTint = br.dashcam,
                                 title = "Override Do Not Disturb",
@@ -223,8 +223,8 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                     }
                     if (prefsSnap.walkAwayAlarmEnabled) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        NextNestedCard {
-                            NextSettingsSliderRow(
+                        NestedCard {
+                            SettingsSliderRow(
                                 title = "Out-of-range threshold",
                                 valueDisplay = "${walkAwayThreshold} s",
                                 helper = "How long the dashcam must be unreachable before the alarm fires.",

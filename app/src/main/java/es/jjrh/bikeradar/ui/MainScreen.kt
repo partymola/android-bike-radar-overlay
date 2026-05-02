@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,8 +61,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -787,7 +791,11 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
     val br = LocalBrColors.current
     val count by ClosePassStateBus.sessionCount.collectAsState()
     BrCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
+                .animateContentSize(),
+        ) {
             SectionLabel("Close passes")
             Spacer(modifier = Modifier.height(10.dp))
             Text(
@@ -797,6 +805,12 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
                 fontWeight = FontWeight.Light,
                 fontSize = 38.sp,
                 letterSpacing = (-1).sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics {
+                    contentDescription = "$count close passes this ride"
+                },
             )
             if (loggingEnabled || count > 0) {
                 Spacer(modifier = Modifier.height(2.dp))

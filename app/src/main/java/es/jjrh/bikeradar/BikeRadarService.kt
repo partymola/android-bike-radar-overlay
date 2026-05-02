@@ -288,10 +288,15 @@ class BikeRadarService : Service() {
         val known = loadKnownDevices()
         for ((name, mac) in known) scheduleRead(name, mac)
 
-        val fresh = scanForDevices()
+        // Always-on PendingIntent scan (registerEventScan) covers ongoing
+        // discovery and post-pairing recovery via BatteryScanReceiver, so
+        // the active kickstart is only needed when the cache is empty
+        // (first-run or post-clear).
+        if (known.isNotEmpty()) return
+
+        val fresh = scanForDevices(timeoutMs = 3_000)
         if (fresh.isNotEmpty()) {
-            val merged = (known + fresh).distinctBy { it.second }
-            saveKnownDevices(merged)
+            saveKnownDevices(fresh)
             for ((name, mac) in fresh) scheduleRead(name, mac)
         }
     }
@@ -904,6 +909,16 @@ class BikeRadarService : Service() {
             // the first frame a fair chance to arrive.
             lastConnectionReachedDecode = true
             lastV2FrameMs = System.currentTimeMillis()
+
+            // Drop the connection interval from BALANCED to LOW_POWER once
+            // the V2 stream is up: the radar pushes notifications at its own
+            // cadence, so a tighter interval just wastes the phone radio.
+            try {
+                val ok = gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
+                if (!ok) Log.w(TAG_RADAR, "requestConnectionPriority(LOW_POWER) returned false")
+            } catch (t: Throwable) {
+                Log.w(TAG_RADAR, "requestConnectionPriority threw: $t")
+            }
 
             // Data-flow watchdog: if no V2 frame arrives for V2_FRAME_STALL_MS,
             // tear down the GATT so the outer loop can reconnect. Catches the

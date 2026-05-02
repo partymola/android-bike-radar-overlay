@@ -3,6 +3,7 @@ package es.jjrh.bikeradar
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothGatt
+import android.util.Log
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -43,6 +44,14 @@ object RadarUnlock {
         notifies: Channel<Pair<UUID, ByteArray>>,
         clog: (String) -> Unit,
     ): Boolean {
+        // Abort early if the TX write characteristic is absent. Without this check,
+        // writeNoResp calls silently drop when GATT returns a successful but incomplete
+        // service list, causing the handshake to report success while V2 never unlocks.
+        if (gatt.getService(Uuids.SVC_CONFIG)?.getCharacteristic(Uuids.HANDSHAKE_TX) == null) {
+            clog("ABORT: HANDSHAKE_TX characteristic not found — GATT service list incomplete")
+            return false
+        }
+
         queue.requestMtu(gatt, 247)
         delay(100)
 
@@ -183,7 +192,10 @@ object RadarUnlock {
         charUuid: UUID,
         hex: String,
     ) {
-        val ch = gatt.getService(svcUuid)?.getCharacteristic(charUuid) ?: return
+        val ch = gatt.getService(svcUuid)?.getCharacteristic(charUuid) ?: run {
+            Log.w("BikeRadar", "writeNoResp: char not found ${charUuid.toString().substring(4, 8)}")
+            return
+        }
         queue.write(gatt, ch, hex.hexToBytes(), noResponse = true)
     }
 

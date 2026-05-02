@@ -45,4 +45,23 @@
 
 ## v0.3.0-alpha — 2026-04-29
 
-Earlier releases not retroactively documented.
+### UX
+
+- Walk-away alarm is audible and bypasses Do Not Disturb, with a
+  Settings toggle under Dashcam.
+- Walk-away alert auto-dismisses when the dashcam comes back online.
+- Removed the V1 UI surface; only V2 radars are supported.
+- Cleaner empty state on the close-pass card.
+
+### Stability
+
+- Periodic screenshots no longer die on screen rotation.
+- Walk-away alarm no longer blocked by a mis-counted radar idle time.
+- Dashcam glyph refresh runs independently of radar state.
+- Home Assistant HTTP connections kept alive across publishes.
+- Overlay redraws skip identical states to reduce CPU.
+
+## Earlier releases
+
+v0.2.0-alpha and earlier are not retroactively documented in this
+file; see the release notes on GitHub.

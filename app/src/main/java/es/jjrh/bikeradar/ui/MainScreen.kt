@@ -142,7 +142,10 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                delay(2_000)
+                // Freshness boundaries on this screen are 10s (radar) and
+                // 30s (dashcam); a 5s tick keeps detection latency well
+                // under those thresholds while halving the recompose rate.
+                delay(5_000)
                 tickNowMs = System.currentTimeMillis()
             }
         }

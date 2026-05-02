@@ -433,12 +433,21 @@ class BikeRadarService : Service() {
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->
                 var done = false
+                var gattClosed = false
+                var gatt: BluetoothGatt? = null
+                fun closeOnce() {
+                    if (gattClosed) return
+                    gattClosed = true
+                    val g = gatt ?: return
+                    try { g.disconnect() } catch (_: Throwable) {}
+                    try { g.close() } catch (_: Throwable) {}
+                }
                 val cb = object : BluetoothGattCallback() {
                     override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
                         when (newState) {
                             BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                             BluetoothProfile.STATE_DISCONNECTED -> {
-                                g.close()
+                                closeOnce()
                                 if (!done) { done = true; cont.resume(null) }
                             }
                         }
@@ -467,14 +476,12 @@ class BikeRadarService : Service() {
                         g.disconnect()
                     }
                 }
-                val gatt = device.connectGatt(this@BikeRadarService, false, cb, BluetoothDevice.TRANSPORT_LE)
+                gatt = device.connectGatt(this@BikeRadarService, false, cb, BluetoothDevice.TRANSPORT_LE)
                 if (gatt == null) {
                     if (!done) { done = true; cont.resume(null) }
                     return@suspendCancellableCoroutine
                 }
-                cont.invokeOnCancellation {
-                    try { gatt.disconnect(); gatt.close() } catch (_: Throwable) {}
-                }
+                cont.invokeOnCancellation { closeOnce() }
             }
         }
     }

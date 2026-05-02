@@ -64,6 +64,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 class BikeRadarService : Service() {
@@ -78,7 +79,7 @@ class BikeRadarService : Service() {
     private val discoveredSlugs = ConcurrentHashMap.newKeySet<String>()
     private val lastHaPublishMs = ConcurrentHashMap<String, Long>()
     private val lastPublishedPct = ConcurrentHashMap<String, Int>()
-    private var scanRegistered = false
+    @Volatile private var scanRegistered = false
 
     // Radar link state
     @Volatile private var radarJob: Job? = null
@@ -132,8 +133,11 @@ class BikeRadarService : Service() {
      *  the last walk-away fire; blocks refire until radar reconnects. */
     @Volatile private var walkAwayDismissed = false
     /** Single-slot job that clears [walkAwayDismissed] after a snooze
-     *  window expires, re-arming the decider. */
-    private var walkAwaySnoozeJob: Job? = null
+     *  window expires, re-arming the decider. AtomicReference makes
+     *  the cancel-then-replace pattern atomic across the main thread
+     *  (notification action handlers) and GATT callback / IO threads
+     *  (lifecycle transitions in [markRadarConnected]). */
+    private val walkAwaySnoozeJob = AtomicReference<Job?>(null)
     /** Looping alarm-stream ringtone played alongside the walk-away
      *  notification; null when not playing. The notification channel's
      *  audio attributes are normalised to USAGE_NOTIFICATION on modern
@@ -229,8 +233,7 @@ class BikeRadarService : Service() {
             ACTION_WALKAWAY_DISMISS -> {
                 Log.i(TAG, "walk-away dismissed")
                 walkAwayDismissed = true
-                walkAwaySnoozeJob?.cancel()
-                walkAwaySnoozeJob = null
+                walkAwaySnoozeJob.getAndSet(null)?.cancel()
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(NOTIF_WALKAWAY_ID)
                 stopWalkAwayAlarmTone()
@@ -241,8 +244,7 @@ class BikeRadarService : Service() {
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(NOTIF_WALKAWAY_ID)
                 stopWalkAwayAlarmTone()
-                walkAwaySnoozeJob?.cancel()
-                walkAwaySnoozeJob = scope.launch {
+                val newJob = scope.launch {
                     delay(WALKAWAY_SNOOZE_MS)
                     // Clear both gates so the decider can re-evaluate
                     // cleanly: treat the snooze as a full re-arm for this
@@ -251,6 +253,7 @@ class BikeRadarService : Service() {
                     walkAwayDismissed = false
                     lastWalkAwayFireMs = null
                 }
+                walkAwaySnoozeJob.getAndSet(newJob)?.cancel()
             }
         }
         return START_STICKY
@@ -813,6 +816,7 @@ class BikeRadarService : Service() {
                                     clog("# overlay added")
                                 } catch (t: Throwable) {
                                     clog("# overlay addView failed: $t")
+                                    Log.w(TAG_RADAR, "overlay addView failed (permission TOCTOU?): $t")
                                 }
                             } else {
                                 clog("# overlay: SYSTEM_ALERT_WINDOW not granted")
@@ -907,12 +911,12 @@ class BikeRadarService : Service() {
                     }
                 } finally {
                     beeper.release()
-                    overlayWm = null
-                    overlayViewRef = null
                     if (overlayAdded) {
                         try { wm.removeView(view); clog("# overlay removed") }
                         catch (t: Throwable) { Log.w(TAG_RADAR, "removeView failed: $t") }
                     }
+                    overlayWm = null
+                    overlayViewRef = null
                 }
             }
 
@@ -1359,8 +1363,7 @@ class BikeRadarService : Service() {
             radarOffSinceMs = null
             dashcamSeenSinceRadarOff = false
             walkAwayDismissed = false
-            walkAwaySnoozeJob?.cancel()
-            walkAwaySnoozeJob = null
+            walkAwaySnoozeJob.getAndSet(null)?.cancel()
             lastWalkAwayFireMs = null
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(NOTIF_WALKAWAY_ID)

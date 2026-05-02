@@ -881,6 +881,7 @@ class BikeRadarService : Service() {
                             state.vehicles, state.bikeSpeedMs, now, cpConfig,
                         )
                         if (cpEvents.isNotEmpty()) {
+                            ClosePassStateBus.increment(cpEvents.size)
                             val radarMac = currentRadarMac
                             val radarSlug = radarMac?.let { macToSlug[it] }
                                 ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }

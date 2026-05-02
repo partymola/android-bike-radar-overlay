@@ -69,6 +69,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.ClosePassStateBus
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -780,32 +781,36 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
 }
 
 // ── Close-pass stats card ─────────────────────────────────────────────
-//
-// The repo doesn't yet persist close-pass history (events stream
-// straight to HA via MQTT and aren't kept locally). With nothing to
-// visualise, the card renders an empty state matching what the user
-// would actually see today. Once a local store lands the layout flips
-// to the mockup's number + sparkline + segmented control.
 
 @Composable
 private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false) {
     val br = LocalBrColors.current
+    val count by ClosePassStateBus.sessionCount.collectAsState()
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)) {
             SectionLabel("Close passes")
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "0",
-                color = br.fgDim,
+                text = count.toString(),
+                color = if (count > 0) br.fg else br.fgDim,
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Light,
                 fontSize = 38.sp,
                 letterSpacing = (-1).sp,
             )
-            if (!loggingEnabled && !compact) {
-                // Hidden in compact mode (landscape) so the card doesn't
-                // push the rest of the left column past the viewport on
-                // first-run installs that haven't enabled HA logging.
+            if (loggingEnabled || count > 0) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "this ride",
+                    color = br.fgDim,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                )
+            }
+            // Hidden in compact mode (landscape) so the card doesn't
+            // push the rest of the left column past the viewport on
+            // first-run installs that haven't enabled HA logging.
+            if (!loggingEnabled && count == 0 && !compact) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Enable Settings → Radar & alerts → Log to Home Assistant to start counting overtakes inside your set lateral threshold.",

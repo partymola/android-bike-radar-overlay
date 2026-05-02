@@ -854,7 +854,7 @@ class BikeRadarService : Service() {
                                 ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
                             if (radarSlug != null) {
                                 closePassDiscoveryInFlight = true
-                                launch {
+                                launch(Dispatchers.IO) {
                                     val ok = ha.publishClosePassDiscovery(radarSlug, name)
                                     if (ok) closePassDiscoveryPublished = true
                                     else Log.w(TAG, "close-pass discovery publish failed; will retry")
@@ -870,7 +870,7 @@ class BikeRadarService : Service() {
                             val radarSlug = radarMac?.let { macToSlug[it] }
                                 ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
                             if (radarSlug != null) {
-                                launch {
+                                launch(Dispatchers.IO) {
                                     for (ev in cpEvents) {
                                         val json = org.json.JSONObject()
                                             .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())

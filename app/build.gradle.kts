@@ -56,8 +56,8 @@ android {
         // bumping targetSdk to 36 would opt the app into Android 16
         // runtime behaviour changes, which is a separate decision.
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.0-alpha"
+        versionCode = 7
+        versionName = "0.4.1-alpha"
 
         buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
         buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")

@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4.1-alpha — 2026-05-02
+
+### Stability
+
+- The radar reconnects reliably after `adb install -r` (or any process replacement) without needing a Bluetooth power-cycle. The previous build left a stack-side GATT intention orphaned across process death and triple-opened on every fresh service start.
+
+### Power
+
+- Overlay redraws use a single shared `RectF` instead of allocating four per frame.
+- Status dots no longer pulse on screens where state is already conveyed by colour or label.
+- Active BLE kickstart scan only runs when the device cache is empty.
+- `CONNECTION_PRIORITY_LOW_POWER` requested once the V2 stream is established.
+- HA close-pass publishes hop to `Dispatchers.IO` immediately.
+- MainScreen recomposition cadence halved (5 s wall-clock tick).
+- HA HTTP timeouts trimmed to 3 s.
+
+### Internal
+
+- UI files renamed: the `*Next` suffix is gone; six primitives that collide with `androidx.compose.material3` (Card, Chip, Slider, Toggle, OutlinedButton, SegmentedControl) take the existing `Br` prefix.
+- New `tools/bike-radar-test.sh` helper for live-testing via ADB.
+
+### Compatibility
+
+- No migration. SharedPreferences, paired devices, HA credentials, and overlay positioning unchanged.
+
 ## v0.4.0-alpha — 2026-05-01
 
 ### Security

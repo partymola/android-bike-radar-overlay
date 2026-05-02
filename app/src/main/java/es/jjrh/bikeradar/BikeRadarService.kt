@@ -81,7 +81,7 @@ class BikeRadarService : Service() {
     private var scanRegistered = false
 
     // Radar link state
-    private var radarJob: Job? = null
+    @Volatile private var radarJob: Job? = null
     @Volatile var radarGattActive = false
 
     // MAC currently being driven by the radar link, exposed so the bond-state
@@ -307,7 +307,7 @@ class BikeRadarService : Service() {
         // Always try to keep the radar link alive for rear devices.
         if (isRearDevice(name)) maybeStartRadarLink(name, mac)
 
-        if (radarGattActive && isRearDevice(name)) {
+        if (isRearDevice(name) && (radarGattActive || radarJob?.isActive == true)) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
             return
         }
@@ -537,6 +537,7 @@ class BikeRadarService : Service() {
         nm.notify(NOTIF_BOND_LOST_ID, notif)
     }
 
+    @Synchronized
     private fun maybeStartRadarLink(name: String, mac: String) {
         if (radarJob?.isActive == true) return
         if (bondLost) {
@@ -627,6 +628,14 @@ class BikeRadarService : Service() {
         var overlayJob: Job? = null
         var watchdogJob: Job? = null
         var cacheRefreshed = false
+        var gattClosed = false
+        fun closeOnce() {
+            if (gattClosed) return
+            gattClosed = true
+            val g = gatt ?: return
+            try { g.disconnect() } catch (_: Throwable) {}
+            try { g.close() } catch (_: Throwable) {}
+        }
 
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -638,7 +647,7 @@ class BikeRadarService : Service() {
                         queue.cancel()
                         notifyChannel.close()
                         if (!servicesReady.isCompleted) servicesReady.complete(false)
-                        g.close()
+                        closeOnce()
                     }
                 }
             }
@@ -962,7 +971,7 @@ class BikeRadarService : Service() {
             queue.cancel()
             queueJob.cancel()
             markRadarDisconnected()
-            try { gatt.disconnect() } catch (_: Throwable) {}
+            closeOnce()
             closeCaptureLog()
         }
     }

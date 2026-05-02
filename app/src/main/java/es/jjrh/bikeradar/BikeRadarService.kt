@@ -1310,7 +1310,12 @@ class BikeRadarService : Service() {
             while (true) {
                 val mac = prefs.dashcamMac
                 val name = prefs.dashcamDisplayName
-                if (mac != null && !name.isNullOrEmpty()) {
+                val gateOpen = IdleGate.shouldRefreshDashcam(
+                    radarGattActive = radarGattActive,
+                    radarOffSinceMs = radarOffSinceMs,
+                    nowMs = System.currentTimeMillis(),
+                )
+                if (gateOpen && mac != null && !name.isNullOrEmpty()) {
                     val slug = resolveDashcamSlug()
                     val entry = slug?.let { BatteryStateBus.entries.value[it] }
                     val now = System.currentTimeMillis()

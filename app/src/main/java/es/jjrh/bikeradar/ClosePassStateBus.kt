@@ -9,4 +9,10 @@ object ClosePassStateBus {
     val sessionCount: StateFlow<Int> = _sessionCount
 
     fun increment(n: Int = 1) { _sessionCount.value += n }
+
+    /** Called by [BikeRadarService.onCreate] so the home screen's
+     *  "this ride" counter starts at 0 each time the service launches.
+     *  Without this, the counter accumulates across rides within a single
+     *  process lifetime and the label is misleading. */
+    fun reset() { _sessionCount.value = 0 }
 }

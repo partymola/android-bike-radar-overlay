@@ -193,6 +193,7 @@ class BikeRadarService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        ClosePassStateBus.reset()
         prefs = Prefs(this)
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()

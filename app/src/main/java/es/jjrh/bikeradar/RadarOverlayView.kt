@@ -33,6 +33,7 @@ class RadarOverlayView(context: Context) : View(context) {
         color = Color.argb(220, 20, 20, 20)
     }
     private val riderPath = android.graphics.Path()
+    private val tmpRect = RectF()
     private val boxFillPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val boxStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeWidth = dp(2.5f)
@@ -164,8 +165,8 @@ class RadarOverlayView(context: Context) : View(context) {
         val riderAlpha = if (clear) 200 else 255
 
         bgPaint.color = Color.argb(bgAlpha, 10, 10, 10)
-        val bgRect = RectF(0f, 0f, w, h)
-        canvas.drawRoundRect(bgRect, dp(8f), dp(8f), bgPaint)
+        tmpRect.set(0f, 0f, w, h)
+        canvas.drawRoundRect(tmpRect, dp(8f), dp(8f), bgPaint)
 
         state.scenarioTimeMs?.let { ms ->
             val secs = (ms / 1000).toInt()
@@ -182,10 +183,8 @@ class RadarOverlayView(context: Context) : View(context) {
 
         if (!clear && state.vehicles.any { it.speedKmh >= redKmh }) {
             val half = dangerBorderPaint.strokeWidth / 2f
-            canvas.drawRoundRect(
-                RectF(half, half, w - half, h - half),
-                dp(8f), dp(8f), dangerBorderPaint
-            )
+            tmpRect.set(half, half, w - half, h - half)
+            canvas.drawRoundRect(tmpRect, dp(8f), dp(8f), dangerBorderPaint)
         }
 
         val trackX  = w / 2f
@@ -273,8 +272,8 @@ class RadarOverlayView(context: Context) : View(context) {
                 // coloured box at the true X and the visual jump is the
                 // attention cue.
                 val edgeX = if (v.lateralPos >= 0f) trackX + maxLateralPx else trackX - maxLateralPx
-                val rect = RectF(edgeX - halfW, centreY - halfH, edgeX + halfW, centreY + halfH)
-                canvas.drawRoundRect(rect, dp(3f), dp(3f), parkedOutlinePaint)
+                tmpRect.set(edgeX - halfW, centreY - halfH, edgeX + halfW, centreY + halfH)
+                canvas.drawRoundRect(tmpRect, dp(3f), dp(3f), parkedOutlinePaint)
                 continue
             }
 
@@ -290,11 +289,13 @@ class RadarOverlayView(context: Context) : View(context) {
             canvas.drawLine(centreX, centreY + halfH, centreX, centreY + halfH + tailLen, tailPaint)
 
             boxFillPaint.color = Color.argb((220 * distFactor).toInt(), r, g, b)
-            val rect = RectF(centreX - halfW, centreY - halfH, centreX + halfW, centreY + halfH)
-            canvas.drawRoundRect(rect, dp(3f), dp(3f), boxFillPaint)
+            tmpRect.set(centreX - halfW, centreY - halfH, centreX + halfW, centreY + halfH)
+            canvas.drawRoundRect(tmpRect, dp(3f), dp(3f), boxFillPaint)
 
             boxStrokePaint.color = Color.argb((255 * distFactor).toInt(), r, g, b)
-            canvas.drawRoundRect(rect, dp(3f), dp(3f), boxStrokePaint)
+            // tmpRect still holds the box rect from the fill above; do not
+            // mutate it between fill and stroke.
+            canvas.drawRoundRect(tmpRect, dp(3f), dp(3f), boxStrokePaint)
         }
 
         // Rider chevron sits above every vehicle box so a target painted

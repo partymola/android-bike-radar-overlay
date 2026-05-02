@@ -378,7 +378,7 @@ private fun RefreshIndicator() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        StatusDot(color = br.fgDim, pulse = true, size = 6.dp)
+        StatusDot(color = br.fgDim, size = 6.dp)
         Text(
             text = "REFRESHING EVERY 2 s",
             color = br.fgDim,

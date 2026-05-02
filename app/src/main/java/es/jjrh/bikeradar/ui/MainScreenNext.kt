@@ -655,7 +655,7 @@ private fun SystemCard(
 
     // Three-state device vocabulary (from the UX converger):
     //   Not paired      — grey hollow ring
-    //   No signal       — amber, slow pulse
+    //   No signal       — amber
     //   Live            — green, solid
     // Plus: BT off shown ONCE as a card-level banner, never per-row.
     //
@@ -675,7 +675,6 @@ private fun SystemCard(
             radarFresh -> br.safe
             else -> br.caution
         },
-        pulse = hasBond && btEnabled && !radarFresh,
         hollow = !btEnabled || !hasBond,
     )
 
@@ -694,7 +693,6 @@ private fun SystemCard(
             dashcamFresh -> br.safe
             else -> br.caution
         },
-        pulse = dashcamOwned && dashcamPaired && !dashcamFresh,
         hollow = !dashcamOwned || !dashcamPaired,
     )
 
@@ -705,7 +703,6 @@ private fun SystemCard(
         muted = !haHealthy,
         battery = null,
         dot = if (haHealthy) br.safe else br.caution,
-        pulse = false,
     )
 
     NextCard(modifier = Modifier.fillMaxWidth()) {
@@ -726,7 +723,6 @@ private data class SystemRow(
     val muted: Boolean,
     val battery: Int?,
     val dot: Color,
-    val pulse: Boolean,
     val hollow: Boolean = false,
 )
 
@@ -776,7 +772,7 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
                 if (row.battery != null) BatteryChip(pct = row.battery)
             }
         }
-        StatusDot(color = row.dot, pulse = row.pulse, hollow = row.hollow, size = 7.dp)
+        StatusDot(color = row.dot, hollow = row.hollow, size = 7.dp)
     }
 }
 

@@ -149,7 +149,6 @@ private fun SettingsDashcamNextBody(navController: NavController, prefs: Prefs) 
                                         dashcamConnected -> br.safe
                                         else -> br.caution
                                     },
-                                    pulse = !notPaired && !dashcamConnected,
                                     hollow = notPaired,
                                     size = 6.dp,
                                 )

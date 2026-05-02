@@ -316,7 +316,7 @@ private fun ConnectionStateCard(connected: Boolean, health: HaHealth) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        StatusDot(color = accent, pulse = connected, size = 8.dp)
+        StatusDot(color = accent, size = 8.dp)
         Column {
             Text(
                 text = if (connected) "Connected" else "Not configured",

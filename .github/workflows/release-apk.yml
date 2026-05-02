@@ -75,10 +75,31 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk \
              "bike-radar-${{ github.ref_name }}.apk"
 
+      - name: Extract CHANGELOG section for tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v tag="$TAG" '
+            /^## / {
+              in_section = ($2 == tag)
+              next
+            }
+            in_section { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::No CHANGELOG section for $TAG — add a top-level ## $TAG entry before tagging"
+            exit 1
+          fi
+          echo "----- release notes -----"
+          cat release-notes.md
+          echo "-------------------------"
+
       - name: Create GitHub Release and attach APK
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           files: bike-radar-${{ github.ref_name }}.apk
+          body_path: release-notes.md
+          # Appends "Full Changelog" compare link below body_path.
           generate_release_notes: true
           # Any tag with a dash in it (e.g. v0.1.0-alpha, v1.0-rc1) is
           # marked as prerelease; bare semver tags are full releases.

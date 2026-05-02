@@ -153,15 +153,17 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        RadarStateBus.state.collect { s ->
-            val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.ROOT).format(Date())
-            val ageMs = if (s.timestamp > 0L) System.currentTimeMillis() - s.timestamp else -1L
-            val src = if (s.source == DataSource.V2) "v=2" else "v=?"
-            val n = s.vehicles.size
-            val entry = "$ts  $src  n=$n  age=${ageMs}ms"
-            if (stateLog.size >= 200) stateLog.removeAt(0)
-            stateLog.add(entry)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            RadarStateBus.state.collect { s ->
+                val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.ROOT).format(Date())
+                val ageMs = if (s.timestamp > 0L) System.currentTimeMillis() - s.timestamp else -1L
+                val src = if (s.source == DataSource.V2) "v=2" else "v=?"
+                val n = s.vehicles.size
+                val entry = "$ts  $src  n=$n  age=${ageMs}ms"
+                if (stateLog.size >= 200) stateLog.removeAt(0)
+                stateLog.add(entry)
+            }
         }
     }
 

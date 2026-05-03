@@ -136,6 +136,17 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
+    // JVM unit tests under app/src/test resolve against the merged Android
+    // resources/manifest (so Robolectric can inflate views, and Compose
+    // tests can find the activity in AndroidManifest.xml). isReturnDefaultValues
+    // makes unmocked Android stubs return defaults instead of throwing —
+    // useful for smoke tests that touch APIs we don't shadow.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 kotlin {
@@ -164,6 +175,12 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

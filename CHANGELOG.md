@@ -20,8 +20,10 @@
 
 ### Internal
 
-- JVM test suite expanded to 288 tests (Robolectric). New coverage: service and activity boot smoke; all 13 Compose screens composed synchronously; gate-matrix tests for `BootReceiver`, `InternalControlReceiver`, and `RemoteControlReceiver`; `HaClient` short-circuit guards; pipeline replay through decoder → detector → accumulator; `HaCredentials` round-trip.
+- JVM test suite expanded to 288 Robolectric tests. New coverage: service and activity boot smoke; all 13 Compose screens composed synchronously; gate-matrix tests for `BootReceiver`, `InternalControlReceiver`, and `RemoteControlReceiver`; `HaClient` short-circuit guards; pipeline replay through decoder → detector → accumulator; `HaCredentials` round-trip.
 - `HaCredentials` crypto extracted to a `Cryptor` interface (`AndroidKeyStoreCryptor` in production, `InMemoryCryptor` in tests). Removes the requirement for a real AndroidKeyStore in JVM tests.
+- 11 Paparazzi screenshot tests for `RadarOverlayView`. Goldens cover: empty, single vehicle, close-approach danger border, multiple vehicles, mixed sizes, alongside-stationary hollow outline, battery-low badge, dashcam-missing/dropped icons, scenario replay label, and alert threshold line. No device required. Run locally with `:app:verifyPaparazziDebug` before pushing UI changes; CI runs the Robolectric suite only (Paparazzi's pre-release layoutlib loader is too unreliable on cold-cache JVMs).
+- Build upgraded to Java 21 (required for Paparazzi 2.x layoutlib rendering engine).
 
 ### Compatibility
 

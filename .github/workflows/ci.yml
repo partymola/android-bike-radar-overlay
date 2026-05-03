@@ -32,6 +32,8 @@ jobs:
           gradle-version: '9.4.1'
 
       - name: Run JVM unit tests
+        # Paparazzi screenshot tests are excluded from this task and run
+        # locally via `:app:verifyPaparazziDebug`. See app/build.gradle.kts.
         run: gradle :app:testDebugUnitTest --console=plain --no-daemon
 
   # Real-APK boot smoke — runs only on pushes to main (not PRs) to avoid

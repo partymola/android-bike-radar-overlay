@@ -10,7 +10,15 @@ docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
   -e GRADLE_USER_HOME=/gradle-cache \
   -w /workspace bike-radar-builder \
-  gradle :app:testDebugUnitTest --console=plain --no-daemon      # unit tests
+  gradle :app:testDebugUnitTest --console=plain --no-daemon   # unit tests (what CI runs)
+
+# Screenshot regression check (local only — Paparazzi SNAPSHOT loader is
+# unreliable on cold-cache JVMs, so CI can't run it):
+docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
+  -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
+  -e GRADLE_USER_HOME=/gradle-cache \
+  -w /workspace bike-radar-builder \
+  gradle :app:verifyPaparazziDebug --console=plain --no-daemon
 
 # ...or assembleDebug for a full APK:
 gradle assembleDebug --console=plain --no-daemon
@@ -70,7 +78,14 @@ decoders in both Python and Kotlin live there.
 
 ## Testing
 
-- All decoder logic is pure JVM; test with `:app:testDebugUnitTest`.
+- All decoder logic is pure JVM; test with `:app:testDebugUnitTest`. This is
+  what CI runs (Robolectric only). Paparazzi screenshot tests are excluded
+  from this task because Paparazzi 2.0.0-SNAPSHOT's layoutlib loader fails
+  on cold-cache JVMs.
+- Locally, run `:app:verifyPaparazziDebug` to compare against golden PNGs.
+  This is the QC gate before any push that touches `app/src/main/**`.
+- To regenerate goldens: `:app:recordPaparazziDebug --rerun-tasks`. Commit
+  the updated PNGs under `app/src/test/snapshots/images/`.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

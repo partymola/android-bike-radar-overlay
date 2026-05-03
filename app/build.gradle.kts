@@ -156,6 +156,21 @@ kotlin {
     }
 }
 
+// Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`
+// task. They run via `:app:verifyPaparazziDebug` (or `:recordPaparazziDebug`)
+// instead. Reason: Paparazzi 2.0.0-SNAPSHOT ships a layoutlib whose JNI
+// loader fails in cold-cache JVMs (e.g. CI), even though direct dlopen of
+// the same .so works. Removing this exclusion would break `gradle test` on
+// every fresh checkout. Drop the exclusion once Paparazzi alpha05 ships.
+//
+// `withType<Test>().matching` defers until AGP registers the unit-test task,
+// so the configuration doesn't fail with "task not found".
+tasks.withType<Test>().matching { it.name == "testDebugUnitTest" }.configureEach {
+    filter {
+        excludeTestsMatching("es.jjrh.bikeradar.RadarOverlayViewTest")
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.appcompat:appcompat:1.7.1")

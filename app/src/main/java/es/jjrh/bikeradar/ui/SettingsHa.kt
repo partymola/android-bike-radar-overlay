@@ -185,6 +185,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                             if (pr.isSuccess) {
                                 creds.save(url, tok)
                                 prefs.haLastValidatedEpochMs = System.currentTimeMillis()
+                                prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
                                 haConfigured = true
                                 mqttResult = client.probeMqttService()
                             } else {
@@ -214,6 +215,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                         // bypassing test must invalidate it, otherwise any
                         // "creds last verified N days ago" cue misleads.
                         prefs.haLastValidatedEpochMs = 0L
+                        prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
                         haConfigured = url.isNotBlank() && tok.isNotBlank()
                         android.widget.Toast.makeText(ctx, "Saved without testing", android.widget.Toast.LENGTH_SHORT).show()
                     },
@@ -237,6 +239,10 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                     onClick = {
                         creds.clear()
                         prefs.haLastValidatedEpochMs = 0L
+                        // Reset the onboarding intent flag so a fresh
+                        // re-trigger (or onbtest variant) shows the chooser
+                        // again rather than landing on an empty fields form.
+                        prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.UNSET
                         urlField = ""
                         tokenField = ""
                         haConfigured = false

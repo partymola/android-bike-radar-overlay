@@ -12,6 +12,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  *  been asked yet" from "explicitly said no". */
 enum class DashcamOwnership { UNANSWERED, YES, NO }
 
+/** Tri-state mirror of [DashcamOwnership] for the Home Assistant step.
+ *  UNSET = onboarding hasn't asked the user; YES = user opted in (fields
+ *  visible); NO = user opted out (skip card visible). The HA step is
+ *  optional, so existing installs default to UNSET and the onboarding
+ *  treats saved creds as implicit YES without writing the flag. */
+enum class HaIntent { UNSET, YES, NO }
+
 data class PrefsSnapshot(
     val firstRunComplete: Boolean,
     val serviceEnabled: Boolean,
@@ -27,6 +34,7 @@ data class PrefsSnapshot(
     val dashcamMac: String?,
     val dashcamDisplayName: String?,
     val dashcamWarnWhenOff: Boolean,
+    val haIntent: HaIntent,
     val walkAwayAlarmEnabled: Boolean,
     val walkAwayAlarmThresholdSec: Int,
     val adaptiveAlertsEnabled: Boolean,
@@ -89,6 +97,12 @@ class Prefs(context: Context) {
             )
         }.getOrDefault(DashcamOwnership.UNANSWERED)
         set(v) { sp.edit().putString(KEY_DASHCAM_OWNERSHIP, v.name).apply() }
+
+    var haIntent: HaIntent
+        get() = runCatching {
+            HaIntent.valueOf(sp.getString(KEY_HA_INTENT, HaIntent.UNSET.name)!!)
+        }.getOrDefault(HaIntent.UNSET)
+        set(v) { sp.edit().putString(KEY_HA_INTENT, v.name).apply() }
 
     var dashcamMac: String?
         get() = sp.getString(KEY_DASHCAM_MAC, null)
@@ -202,6 +216,7 @@ class Prefs(context: Context) {
         dashcamMac = dashcamMac,
         dashcamDisplayName = dashcamDisplayName,
         dashcamWarnWhenOff = dashcamWarnWhenOff,
+        haIntent = haIntent,
         walkAwayAlarmEnabled = walkAwayAlarmEnabled,
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
@@ -239,6 +254,7 @@ class Prefs(context: Context) {
         appendLine("dashcam_mac=${redactPresence(dashcamMac)}")
         appendLine("dashcam_display_name=${redactPresence(dashcamDisplayName)}")
         appendLine("dashcam_warn_when_off=$dashcamWarnWhenOff")
+        appendLine("ha_intent=$haIntent")
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
@@ -265,6 +281,7 @@ class Prefs(context: Context) {
         const val KEY_DASHCAM_MAC = "dashcam_mac"
         const val KEY_DASHCAM_DISPLAY_NAME = "dashcam_display_name"
         const val KEY_DASHCAM_WARN_WHEN_OFF = "dashcam_warn_when_off"
+        const val KEY_HA_INTENT = "ha_intent"
         const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"

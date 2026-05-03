@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -31,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Home
@@ -60,6 +62,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -77,6 +83,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
+import es.jjrh.bikeradar.data.HaIntent
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -249,66 +256,78 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
     var pinging by remember { mutableStateOf(false) }
     val canSubmit = urlField.isNotBlank() && tokenField.isNotBlank()
 
+    val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
+    // Treat existing saved creds as implicit YES so legacy installs (or
+    // anyone who configured HA in Settings) skip the chooser entirely.
+    val effectiveIntent = when {
+        prefsSnap.haIntent == HaIntent.NO -> HaIntent.NO
+        prefsSnap.haIntent == HaIntent.YES || creds.isConfigured() -> HaIntent.YES
+        else -> HaIntent.UNSET
+    }
+    val onContinueSaving: () -> Unit = {
+        if (canSubmit) {
+            creds.save(urlField.trim(), tokenField.trim())
+            prefs.haIntent = HaIntent.YES
+            // Confirm the silent save unless the user just tested — otherwise
+            // a successful Test connection chip is followed by a redundant
+            // "Saved without testing" toast.
+            if (pingResult?.isSuccess != true) {
+                android.widget.Toast.makeText(
+                    ctx,
+                    "Saved without testing",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+        onContinue()
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // No "Optional" mark on this step — the chooser owns the
+            // decision now, so duplicating optionality in the hero would
+            // suggest a separate skip path that doesn't exist.
             StepHeroBlock(
                 icon = Icons.Default.Home,
                 tint = Color(0xFFFF8A3D),
-                mark = "Step 2 of 3 · Optional",
+                mark = "Step 2 of 3",
                 title = "Connect to Home Assistant",
-                sub = "Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders. Skip if you don't use HA.",
+                sub = "Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Field(
-                    label = "Base URL",
-                    value = urlField,
-                    onChange = { urlField = it },
-                    placeholder = "https://homeassistant.local:8123",
-                    mono = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Next,
-                        autoCorrectEnabled = false,
-                    ),
-                )
-                Field(
-                    label = "Long-lived access token",
-                    value = tokenField,
-                    onChange = { tokenField = it },
-                    placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
-                    mono = true,
-                    visualTransformation = if (tokenVisible) VisualTransformation.None
-                    else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                            Icon(
-                                imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (tokenVisible) "Hide token" else "Show token",
-                                tint = br.fgMuted,
-                            )
-                        }
-                    },
-                    hint = "Profile → Security → Long-lived access tokens, in HA.",
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done,
-                        autoCorrectEnabled = false,
-                    ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-                        .clickable(enabled = canSubmit && !pinging) {
+                when (effectiveIntent) {
+                    HaIntent.UNSET -> HaIntentChooser(
+                        onUseHa = { prefs.haIntent = HaIntent.YES },
+                        onNotForMe = { prefs.haIntent = HaIntent.NO },
+                    )
+                    HaIntent.YES -> HaFieldsBlock(
+                        urlField = urlField,
+                        onUrlChange = {
+                            urlField = it
+                            // A successful ping is no longer trustworthy
+                            // once the URL changes — without invalidating
+                            // it, onContinueSaving would suppress the
+                            // "Saved without testing" toast on stale creds.
+                            pingResult = null
+                        },
+                        tokenField = tokenField,
+                        onTokenChange = {
+                            tokenField = it
+                            pingResult = null
+                        },
+                        tokenVisible = tokenVisible,
+                        onToggleTokenVisible = { tokenVisible = !tokenVisible },
+                        pingResult = pingResult,
+                        pinging = pinging,
+                        canSubmit = canSubmit,
+                        onTest = {
                             pinging = true
                             scope.launch(Dispatchers.IO) {
                                 val client = HaClient(urlField.trim(), tokenField.trim())
@@ -316,45 +335,298 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                                 if (pingResult?.isSuccess == true) {
                                     creds.save(urlField.trim(), tokenField.trim())
                                     prefs.haLastValidatedEpochMs = System.currentTimeMillis()
+                                    prefs.haIntent = HaIntent.YES
                                 }
                                 pinging = false
                             }
                         },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FlashOn,
-                            contentDescription = null,
-                            tint = br.brand,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Text(
-                            text = if (pinging) "Testing…" else "Test connection",
-                            color = br.fg,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-                pingResult?.let { r ->
-                    BrChip(
-                        text = if (r.isSuccess) "HA: saved" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
-                        color = if (r.isSuccess) br.safe else br.danger,
+                        onChangeIntent = {
+                            // Tapping the "change" pill must actually return
+                            // the user to the chooser. Without clearing creds
+                            // + local field state, `effectiveIntent` keeps
+                            // re-deriving YES via the implicit-creds rule and
+                            // the pill looks inert for legacy installs.
+                            creds.clear()
+                            prefs.haLastValidatedEpochMs = 0L
+                            urlField = ""
+                            tokenField = ""
+                            pingResult = null
+                            prefs.haIntent = HaIntent.UNSET
+                        },
+                    )
+                    HaIntent.NO -> HaSkippedCard(
+                        onChangeMind = { prefs.haIntent = HaIntent.UNSET },
                     )
                 }
             }
         }
-        FooterCtaDual(
-            primary = "Continue",
-            secondary = "Skip for now",
-            primaryEnabled = true, // optional step — Continue is always allowed
-            onPrimary = onContinue,
-            onSecondary = onSkip,
+        // Footer is intent-aware. UNSET: chooser drives nav, no footer.
+        // YES with empty/partial fields: dual CTA so the user can still
+        // bail via Skip-for-now. YES with both fields filled: only
+        // Continue — the user has clearly opted into HA, and Skip-for-now
+        // would silently discard typed creds. The "change" pill remains
+        // the bail path. NO: single Continue.
+        when (effectiveIntent) {
+            HaIntent.UNSET -> Unit
+            HaIntent.YES -> if (canSubmit) {
+                FooterCta(
+                    label = "Continue",
+                    enabled = true,
+                    onClick = onContinueSaving,
+                )
+            } else {
+                FooterCtaDual(
+                    primary = "Continue",
+                    secondary = "Skip for now",
+                    primaryEnabled = false,
+                    onPrimary = onContinueSaving,
+                    onSecondary = onSkip,
+                )
+            }
+            HaIntent.NO -> FooterCta(
+                label = "Continue",
+                enabled = true,
+                onClick = onContinue,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HaIntentChooser(onUseHa: () -> Unit, onNotForMe: () -> Unit) {
+    val br = LocalBrColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        IntentCard(
+            title = "I use Home Assistant",
+            subtitle = "Set up the URL and token now.",
+            filled = true,
+            onClick = onUseHa,
         )
+        IntentCard(
+            title = "Not for me",
+            subtitle = "Skip this step. The app works without HA.",
+            filled = false,
+            onClick = onNotForMe,
+        )
+        Text(
+            text = "You can change this later from Settings → Home Assistant.",
+            color = br.fgDim,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun IntentCard(
+    title: String,
+    subtitle: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
+    val br = LocalBrColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (filled) br.brand.copy(alpha = 0.12f) else br.bgElev1)
+            .border(
+                1.dp,
+                if (filled) br.brand.copy(alpha = 0.40f) else br.hairline,
+                RoundedCornerShape(12.dp),
+            )
+            .semantics(mergeDescendants = true) { role = Role.Button }
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = br.fg,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    color = br.fgMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                )
+            }
+            // Trailing chevron makes the tappability obvious — two stacked
+            // cards with similar weight read as ambient panels otherwise.
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = br.fgMuted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HaFieldsBlock(
+    urlField: String,
+    onUrlChange: (String) -> Unit,
+    tokenField: String,
+    onTokenChange: (String) -> Unit,
+    tokenVisible: Boolean,
+    onToggleTokenVisible: () -> Unit,
+    pingResult: Result<String>?,
+    pinging: Boolean,
+    canSubmit: Boolean,
+    onTest: () -> Unit,
+    onChangeIntent: () -> Unit,
+) {
+    val br = LocalBrColors.current
+    // Selected-state pill: keeps the user's pick visible and one tap away
+    // from reverting, without taking the screen space a full chooser card
+    // would. heightIn ensures a reasonable tap target.
+    Box(
+        modifier = Modifier
+            .heightIn(min = 36.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(br.brand.copy(alpha = 0.12f))
+            .border(1.dp, br.brand.copy(alpha = 0.30f), RoundedCornerShape(999.dp))
+            .semantics { role = Role.Button }
+            .clickable(onClick = onChangeIntent)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Using Home Assistant · change",
+            color = br.fg,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+    Field(
+        label = "Base URL",
+        value = urlField,
+        onChange = onUrlChange,
+        placeholder = "https://homeassistant.local:8123",
+        mono = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Next,
+            autoCorrectEnabled = false,
+        ),
+    )
+    Field(
+        label = "Long-lived access token",
+        value = tokenField,
+        onChange = onTokenChange,
+        placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
+        mono = true,
+        visualTransformation = if (tokenVisible) VisualTransformation.None
+        else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = onToggleTokenVisible) {
+                Icon(
+                    imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                    tint = br.fgMuted,
+                )
+            }
+        },
+        hint = "In HA: Profile → Security → Long-lived access tokens.",
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done,
+            autoCorrectEnabled = false,
+        ),
+    )
+    val testEnabled = canSubmit && !pinging
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(br.bgElev2)
+            .clickable(enabled = testEnabled, onClick = onTest),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.FlashOn,
+                contentDescription = null,
+                tint = if (testEnabled) br.brand else br.fgDim,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = if (pinging) "Testing…" else "Test connection",
+                color = if (testEnabled) br.fg else br.fgDim,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+    pingResult?.let { r ->
+        BrChip(
+            text = if (r.isSuccess) "HA: connected" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
+            color = if (r.isSuccess) br.safe else br.danger,
+        )
+    }
+    // When fields are incomplete, the dual footer shows a disabled
+    // Continue with no inline reason. A muted hint here makes the
+    // gating explicit without crowding the populated state.
+    if (!canSubmit && pingResult == null) {
+        Text(
+            text = "Enter URL and token to continue.",
+            color = br.fgDim,
+            fontSize = 11.sp,
+        )
+    }
+}
+
+@Composable
+private fun HaSkippedCard(onChangeMind: () -> Unit) {
+    val br = LocalBrColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(br.bgElev1)
+            .border(1.dp, br.hairline, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+    ) {
+        Text(
+            text = "Skipped",
+            color = br.fg,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "You can add Home Assistant any time from Settings → Home Assistant.",
+            color = br.fgMuted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .height(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
+                .semantics { role = Role.Button }
+                .clickable(onClick = onChangeMind)
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Use Home Assistant",
+                color = br.fg,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -674,6 +946,12 @@ private fun DeviceRow(
                 fontSize = if (bonded) 11.sp else 12.sp,
                 lineHeight = if (bonded) 16.sp else 17.sp,
                 letterSpacing = if (bonded) 0.3.sp else 0.sp,
+                modifier = if (bonded) {
+                    // Without context the screen-reader hears just the bare
+                    // device name in monospace. The visual PairedChip
+                    // alongside isn't part of this Text's a11y subtree.
+                    Modifier.semantics { contentDescription = "Paired with $detail" }
+                } else Modifier,
             )
         }
         if (detailHint != null) {

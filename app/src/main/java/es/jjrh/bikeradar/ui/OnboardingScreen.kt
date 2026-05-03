@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -113,6 +114,10 @@ private fun OnboardingScreenBody(
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { 3 })
 
+    BackHandler(enabled = pagerState.currentPage > 0) {
+        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         // Top bar: progress + Skip
         TopProgress(currentPage = pagerState.currentPage, onSkip = onFinished)
@@ -209,7 +214,7 @@ private fun PermissionsStep(onContinue: () -> Unit) {
                 tint = br.brand,
                 mark = "Step 1 of 3",
                 title = "Grant permissions",
-                sub = "A few system permissions so the app can connect, stay running, and show alerts.",
+                sub = "System permissions so the app can find your devices, post a status notification, and draw the overlay.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -228,7 +233,7 @@ private fun PermissionsStep(onContinue: () -> Unit) {
     }
 }
 
-// ── Step 1 — Home Assistant ──────────────────────────────────────────
+// ── Step 2 — Home Assistant ──────────────────────────────────────────
 
 @Composable
 private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
@@ -391,13 +396,16 @@ private fun PairingStep(
                 tint = br.brand,
                 mark = "Step 3 of 3",
                 title = "Pair your devices",
-                sub = "Pairing happens in Android's Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap below.",
+                sub = "Pairing happens in Android's Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap Open Bluetooth settings.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Radar device row (always required).
+                // Radar device row (always required). When already bonded
+                // we hide the CTA and the detail-prefix — the chip alone
+                // signals state, and re-pairing belongs in Settings, not
+                // onboarding.
                 DeviceRow(
                     icon = Icons.Default.Sensors,
                     tint = br.brand,
@@ -405,10 +413,13 @@ private fun PairingStep(
                     optionalLabel = false,
                     bonded = radarBonded,
                     detail = if (radarBonded)
-                        "Paired · ${radarLocalName ?: radarMac ?: "Rear radar"}"
-                    else "No paired radar yet. Open Bluetooth settings to pair your rear radar.",
-                    primaryCta = "Open Bluetooth settings",
-                    primaryCtaIcon = Icons.Default.Bluetooth,
+                        (radarLocalName ?: radarMac ?: "Rear radar")
+                    else "Not paired yet. The pairing screen is in Android's Bluetooth settings.",
+                    detailHint = if (!radarBonded)
+                        "After pairing, press back to return here."
+                    else null,
+                    primaryCta = if (!radarBonded) "Open Bluetooth settings" else null,
+                    primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
                     onPrimary = {
                         ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
                     },
@@ -417,22 +428,24 @@ private fun PairingStep(
                 // Dashcam row, three sub-states matching the JSX.
                 when (prefsSnap.dashcamOwnership) {
                     DashcamOwnership.UNANSWERED -> DashcamUnansweredCard(
-                        onSetUp = {
-                            prefs.dashcamOwnership = DashcamOwnership.YES
-                        },
-                        onSkip = {
-                            prefs.dashcamOwnership = DashcamOwnership.NO
-                        },
+                        // Pick device opens the picker without flipping
+                        // ownership first — that way a brief recompose into
+                        // the YES-not-picked state never paints, and backing
+                        // out of the picker leaves the user on the original
+                        // unanswered card (pink button still pink). The
+                        // picker writes ownership=YES on a successful save.
+                        onSetUp = { navController.navigate("dashcam-picker?fromOnboarding=true") },
+                        onSkip = { prefs.dashcamOwnership = DashcamOwnership.NO },
                     )
                     DashcamOwnership.NO -> DeviceRow(
                         icon = Icons.Default.Videocam,
                         tint = br.dashcam,
                         title = "Front dashcam",
                         optionalLabel = true,
-                        subtitle = "Optional · you said you don't have one",
+                        subtitle = "You said you don't have one",
                         bonded = false,
-                        detail = "You can set this up later in Settings → Dashcam if you change your mind.",
-                        primaryCta = "Actually, I do",
+                        detail = "Change your mind any time from Settings → Dashcam.",
+                        primaryCta = "I do have one",
                         primaryCtaIcon = null,
                         onPrimary = { prefs.dashcamOwnership = DashcamOwnership.UNANSWERED },
                     )
@@ -443,11 +456,11 @@ private fun PairingStep(
                             tint = br.dashcam,
                             title = "Front dashcam",
                             optionalLabel = true,
-                            subtitle = "Optional · warns you if it's off",
+                            subtitle = if (picked) "Warns you if it's off" else null,
                             bonded = picked,
                             detail = if (picked)
                                 "${prefsSnap.dashcamDisplayName ?: "Picked"} · ${prefsSnap.dashcamMac}"
-                            else "Got a Bluetooth dashcam?",
+                            else "Pick the dashcam you ride with to enable off-warnings.",
                             primaryCta = if (picked) "Change device" else "Pick device",
                             primaryCtaIcon = null,
                             onPrimary = {
@@ -459,35 +472,37 @@ private fun PairingStep(
                     }
                 }
 
-                // Hint — single Text with an inline span (AnnotatedString)
-                // for the bolder "Settings → Dashcam" clause so it flows
-                // correctly on any phone width.
-                val hintText = androidx.compose.ui.text.buildAnnotatedString {
-                    append("You can come back to this later in ")
-                    pushStyle(
-                        androidx.compose.ui.text.SpanStyle(
-                            color = br.fg,
-                            fontWeight = FontWeight.Medium,
+                // Hint shown in UNANSWERED / YES states. NO already says
+                // the same thing in its detail box, so we'd be repeating
+                // ourselves.
+                if (prefsSnap.dashcamOwnership != DashcamOwnership.NO) {
+                    val hintText = androidx.compose.ui.text.buildAnnotatedString {
+                        append("You can come back to this later in ")
+                        pushStyle(
+                            androidx.compose.ui.text.SpanStyle(
+                                color = br.fg,
+                                fontWeight = FontWeight.Medium,
+                            )
                         )
-                    )
-                    append("Settings → Dashcam")
-                    pop()
-                    append(".")
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(br.bgElev1)
-                        .border(1.dp, br.hairline, RoundedCornerShape(10.dp))
-                        .padding(12.dp),
-                ) {
-                    Text(
-                        text = hintText,
-                        color = br.fgMuted,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
-                    )
+                        append("Settings → Dashcam")
+                        pop()
+                        append(".")
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(br.bgElev1)
+                            .border(1.dp, br.hairline, RoundedCornerShape(10.dp))
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = hintText,
+                            color = br.fgMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
                 }
             }
         }
@@ -498,7 +513,7 @@ private fun PairingStep(
         Column(modifier = Modifier.fillMaxWidth()) {
             if (!radarBonded) {
                 Text(
-                    text = "You can pair the radar later in Settings.",
+                    text = "You can pair the radar later from Bluetooth settings.",
                     color = br.fgDim,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
@@ -569,14 +584,14 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
-                    .weight(1.4f)
+                    .weight(1f)
                     .height(40.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(br.dashcam)
                     .clickable(onClick = onSetUp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = "Set it up", color = br.bg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "Pick device", color = br.bg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Box(
                 modifier = Modifier
@@ -602,6 +617,7 @@ private fun DeviceRow(
     subtitle: String? = null,
     bonded: Boolean,
     detail: String,
+    detailHint: String? = null,
     primaryCta: String?,
     primaryCtaIcon: ImageVector?,
     onPrimary: () -> Unit,
@@ -660,6 +676,15 @@ private fun DeviceRow(
                 letterSpacing = if (bonded) 0.3.sp else 0.sp,
             )
         }
+        if (detailHint != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = detailHint,
+                color = br.fgDim,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            )
+        }
         if (primaryCta != null || extraAction != null) {
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -693,11 +718,13 @@ private fun DeviceRow(
                     Box(
                         modifier = Modifier
                             .height(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                             .clickable(onClick = onExtra)
                             .padding(horizontal = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(text = extraAction, color = br.fgMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text(text = extraAction, color = br.fg, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }

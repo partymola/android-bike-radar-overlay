@@ -153,7 +153,7 @@ private fun DashcamPickerSheetBody(
                         PickerRow(
                             title = d.name,
                             subtitle = d.mac,
-                            tag = "Vue",
+                            tag = null,
                             selected = selectedMac.equals(d.mac, ignoreCase = true),
                             onSelect = { selectedMac = d.mac },
                         )
@@ -225,8 +225,12 @@ private fun DashcamPickerSheetBody(
                     prefs.dashcamDisplayName = name
                     if (selectedMac == null) {
                         prefs.dashcamWarnWhenOff = false
-                    } else if (fromOnboarding) {
-                        prefs.dashcamWarnWhenOff = true
+                    } else {
+                        // Picking a real device implies ownership; this lets
+                        // onboarding flip from the UNANSWERED card to the
+                        // picked DeviceRow without a flicker on entry.
+                        prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
+                        if (fromOnboarding) prefs.dashcamWarnWhenOff = true
                     }
                     navController.popBackStack()
                 },
@@ -265,7 +269,7 @@ private fun ExplainerBanner() {
             )
         }
         Text(
-            text = "Likely matches are paired devices whose name fits the Vue/Varia pattern or that have advertised battery this session.",
+            text = "Likely matches are paired devices whose name looks like a cycling dashcam or that have advertised battery this session.",
             color = br.fgMuted,
             fontSize = 12.sp,
             lineHeight = 17.sp,

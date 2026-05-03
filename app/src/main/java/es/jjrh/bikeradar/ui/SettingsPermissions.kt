@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -171,9 +170,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    if (!spec.required) {
-                        Mark(text = "Optional")
-                    }
+                    spec.markLabel?.let { Mark(text = it) }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
@@ -182,22 +179,6 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
                 )
-            }
-            if (granted) {
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(br.safe),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = br.bg,
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
             }
         }
         if (!granted) {

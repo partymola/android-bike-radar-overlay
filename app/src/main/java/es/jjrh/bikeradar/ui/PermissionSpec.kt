@@ -17,6 +17,8 @@ internal data class PermissionSpec(
     val title: String,
     val rationale: String,
     val required: Boolean,
+    // Optional badge text shown next to the title. null = no badge.
+    val markLabel: String? = null,
 )
 
 internal val PERMISSIONS = buildList {
@@ -30,15 +32,20 @@ internal val PERMISSIONS = buildList {
         add(PermissionSpec(
             listOf(Manifest.permission.POST_NOTIFICATIONS),
             "Notifications",
-            "Show a silent status notification while the service runs.",
+            "Post the silent service notification and any ride alerts.",
             required = true,
         ))
     }
+    // Overlay permission is gated by a separate Settings intent, so onboarding
+    // does not block on it; the app still works (alerts only) without it.
+    // Marked Recommended rather than Optional because without it the user
+    // never sees the overlay, which is the app's primary surface.
     add(PermissionSpec(
         emptyList(),
         "Draw over other apps",
-        "Draw the radar overlay on top of your cycling app. Without this the alerts still play, but you won't see the overlay.",
+        "Draw the radar overlay on top of whatever's on screen. Without this, alerts still play but you won't see the overlay.",
         required = false,
+        markLabel = "Recommended",
     ))
 }
 

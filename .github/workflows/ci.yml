@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast JVM tests — runs on every push and PR.
+  unit-tests:
+    name: JVM unit tests (Robolectric)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e  # v6.1.0
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Run JVM unit tests
+        run: gradle :app:testDebugUnitTest --console=plain --no-daemon
+
+  # Real-APK boot smoke — runs only on pushes to main (not PRs) to avoid
+  # spending 5+ minutes on an emulator for every PR iteration. Gated on
+  # unit-tests so the emulator is never spun up for a broken build.
+  #
+  # What this catches that the JVM suite cannot: missing manifest entries,
+  # ProGuard/R8 class stripping, AndroidKeyStore first-use failures,
+  # permission requests that throw at startup, immediate crashes in
+  # Application or Activity onCreate that only surface on a real Dalvik/ART VM.
+  #
+  # What this does NOT cover: BLE (scanner is null on the stock emulator),
+  # the SYSTEM_ALERT_WINDOW overlay (permission not granted automatically),
+  # or any logic tested by the Robolectric suite.
+  boot-smoke:
+    name: APK boot smoke (API 34 emulator)
+    needs: unit-tests
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e  # v6.1.0
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --console=plain --no-daemon
+
+      - name: Enable KVM hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install APK and verify boot on Android emulator
+        uses: reactivecircus/android-emulator-runner@9b78b339fcface67c267bcf3f3af3fd5430c6401  # v2.33.0
+        with:
+          api-level: 34
+          arch: x86_64
+          # AOSP (default) target boots faster than google_apis and has no
+          # Play Services dependency — sufficient for a boot-alive check.
+          target: default
+          script: |
+            set -e
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n es.jjrh.bikeradar/.MainActivity
+            sleep 5
+            pid=$(adb shell pidof es.jjrh.bikeradar || true)
+            if [ -z "$pid" ]; then
+              echo "::error::App process not alive 5 s after launch — likely a boot crash"
+              adb logcat -d -s AndroidRuntime:E BikeRadar:E | tail -30
+              exit 1
+            fi
+            echo "OK: app alive at PID $pid"

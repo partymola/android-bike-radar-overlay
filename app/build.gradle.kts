@@ -52,11 +52,7 @@ android {
     defaultConfig {
         applicationId = "es.jjrh.bikeradar"
         minSdk = 31
-        // targetSdk stays at 35 (Android 15) for now - bumping
-        // compileSdk to 36 only satisfies the new AndroidX deps;
-        // bumping targetSdk to 36 would opt the app into Android 16
-        // runtime behaviour changes, which is a separate decision.
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 8
         versionName = "0.5.0-alpha"
 

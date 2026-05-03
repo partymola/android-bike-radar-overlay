@@ -24,6 +24,7 @@
 - `HaCredentials` crypto extracted to a `Cryptor` interface (`AndroidKeyStoreCryptor` in production, `InMemoryCryptor` in tests). Removes the requirement for a real AndroidKeyStore in JVM tests.
 - 11 Paparazzi screenshot tests for `RadarOverlayView`. Goldens cover: empty, single vehicle, close-approach danger border, multiple vehicles, mixed sizes, alongside-stationary hollow outline, battery-low badge, dashcam-missing/dropped icons, scenario replay label, and alert threshold line. No device required. Run locally with `:app:verifyPaparazziDebug` before pushing UI changes; CI runs the Robolectric suite only (Paparazzi's pre-release layoutlib loader is too unreliable on cold-cache JVMs).
 - Build upgraded to Java 21 (required for Paparazzi 2.x layoutlib rendering engine).
+- `targetSdk` bumped from 35 to 36 (Android 16). Robolectric pinned to SDK 35 via `app/src/test/resources/robolectric.properties` because Robolectric 4.14's SDK 36 runtime ships incomplete shadows.
 
 ### Compatibility
 

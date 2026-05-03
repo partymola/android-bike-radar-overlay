@@ -20,9 +20,8 @@
 
 ### Internal
 
-- Replay test feeds a captured 30 s V2 byte stream through `RadarV2Decoder` to catch multi-frame regressions the synthetic tests miss.
-- `androidTest` infrastructure wired (Compose UI tests can't run on Android 16 yet — espresso-core's input injector calls a removed `InputManager.getInstance()`); lifecycle gate tests live as JVM unit tests.
-- New `RideStatsAccumulator` with 24 JVM tests.
+- JVM test suite expanded to 288 tests (Robolectric). New coverage: service and activity boot smoke; all 13 Compose screens composed synchronously; gate-matrix tests for `BootReceiver`, `InternalControlReceiver`, and `RemoteControlReceiver`; `HaClient` short-circuit guards; pipeline replay through decoder → detector → accumulator; `HaCredentials` round-trip.
+- `HaCredentials` crypto extracted to a `Cryptor` interface (`AndroidKeyStoreCryptor` in production, `InMemoryCryptor` in tests). Removes the requirement for a real AndroidKeyStore in JVM tests.
 
 ### Compatibility
 

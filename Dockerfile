@@ -1,4 +1,4 @@
-FROM gradle:9.4.1-jdk17
+FROM gradle:9.4.1-jdk21
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk

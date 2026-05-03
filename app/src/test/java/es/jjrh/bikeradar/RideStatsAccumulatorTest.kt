@@ -120,16 +120,25 @@ class RideStatsAccumulatorTest {
         a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f))))   // 1.5 m
         a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.3f))))   // 0.9 m
         a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.4f))))   // 1.2 m
-        val s = a.snapshot()
-        assertTrue("expected ~0.9 m, got ${s.minLateralClearanceM}",
-            s.minLateralClearanceM in 0.85f..0.95f)
+        val m = a.snapshot().minLateralClearanceM
+        assertNotNull(m)
+        assertTrue("expected ~0.9 m, got $m", m!! in 0.85f..0.95f)
     }
 
     @Test
-    fun minLateralIsZeroWhenNoVehiclesObserved() {
+    fun minLateralIsNullWhenNoVehiclesObserved() {
         val a = acc()
         a.observeFrame(radarState(emptyList()))
-        assertEquals(0f, a.snapshot().minLateralClearanceM, 0.001f)
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun peakClosingIsNullWhenNoApproachingVehicleObserved() {
+        val a = acc()
+        a.observeFrame(radarState(emptyList()))
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 0))))   // stationary
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 5))))   // receding
+        assertNull(a.snapshot().peakClosingKmh)
     }
 
     @Test
@@ -139,9 +148,9 @@ class RideStatsAccumulatorTest {
             veh(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
             veh(2, lateralPos = 0.4f),                                // 1.2 m
         )))
-        val s = a.snapshot()
-        assertTrue("alongside-stationary must not pull min; got ${s.minLateralClearanceM}",
-            s.minLateralClearanceM in 1.15f..1.25f)
+        val m = a.snapshot().minLateralClearanceM
+        assertNotNull(m)
+        assertTrue("alongside-stationary must not pull min; got $m", m!! in 1.15f..1.25f)
     }
 
     // ── distance ridden ──────────────────────────────────────────────────────
@@ -273,13 +282,14 @@ class RideStatsAccumulatorTest {
             a.observeClosePass(closeEvent(closingKmh = kmh))
         }
         val p90 = a.snapshot().closingSpeedP90Kmh
-        assertTrue("p90 of 20..70 should sit near 60-65, got $p90", p90 in 60..65)
+        assertNotNull(p90)
+        assertTrue("p90 of 20..70 should sit near 60-65, got $p90", p90!! in 60..65)
     }
 
     @Test
-    fun p90IsZeroWithNoSamples() {
+    fun p90IsNullWithNoSamples() {
         val a = acc()
-        assertEquals(0, a.snapshot().closingSpeedP90Kmh)
+        assertNull(a.snapshot().closingSpeedP90Kmh)
     }
 
     // ── change detection ─────────────────────────────────────────────────────

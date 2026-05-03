@@ -332,18 +332,21 @@ class HaClient(private val baseUrl: String, private val token: String) {
      * `ride_started_at`).
      */
     suspend fun publishRideSummaryState(slug: String, snapshot: RideStatsSnapshot): Boolean {
+        // Nullable fields are omitted from the JSON when they have no data
+        // yet. The discovery template's `default('unknown')` then renders
+        // the entity as Unknown in HA rather than a misleading 0.
         val payload = JSONObject()
             .put("overtakes_total", snapshot.overtakesTotal)
             .put("close_pass_count", snapshot.closePassCount)
             .put("grazing_count", snapshot.grazingCount)
             .put("hgv_close_pass_count", snapshot.hgvClosePassCount)
-            .put("peak_closing_kmh", snapshot.peakClosingKmh)
-            .put("closing_speed_p90_kmh", snapshot.closingSpeedP90Kmh)
-            .put("min_lateral_clearance_m", snapshot.minLateralClearanceM.toDouble())
             .put("distance_ridden_km", snapshot.distanceRiddenKm.toDouble())
             .put("exposure_seconds", snapshot.exposureSeconds)
             .put("close_pass_conversion_rate", snapshot.closePassConversionRatePct.toDouble())
             .put("ride_started_at", java.time.Instant.ofEpochMilli(snapshot.rideStartedAtMs).toString())
+        snapshot.peakClosingKmh?.let { payload.put("peak_closing_kmh", it) }
+        snapshot.closingSpeedP90Kmh?.let { payload.put("closing_speed_p90_kmh", it) }
+        snapshot.minLateralClearanceM?.let { payload.put("min_lateral_clearance_m", it.toDouble()) }
         snapshot.tightestPass?.let { tp ->
             payload.put(
                 "tightest_pass",

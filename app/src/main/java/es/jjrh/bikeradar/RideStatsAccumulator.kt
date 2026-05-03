@@ -22,10 +22,12 @@ class RideStatsAccumulator(
 ) {
     val rideStartedAtMs: Long = nowMsProvider()
 
-    // Per-frame state.
+    // Per-frame state. Nullable for measurement-class fields that have no
+    // sensible "no data" zero value: a ride with no observed vehicles should
+    // surface "unknown" in HA, not a misleading 0 m / 0 km/h.
     private val seenTrackIds = HashSet<Int>()
-    private var peakClosingKmh: Int = 0
-    private var minLateralM: Float = Float.MAX_VALUE
+    private var peakClosingKmh: Int? = null
+    private var minLateralM: Float? = null
     private var distanceRiddenM: Double = 0.0
     private var exposureMs: Long = 0L
     private var lastFrameMs: Long? = null
@@ -93,7 +95,8 @@ class RideStatsAccumulator(
             // peakClosingKmh: only consider approaching targets (negative speedMs).
             if (v.speedMs < 0) {
                 val closingKmh = (-v.speedMs * MS_TO_KMH).toInt()
-                if (closingKmh > peakClosingKmh) {
+                val current = peakClosingKmh
+                if (current == null || closingKmh > current) {
                     peakClosingKmh = closingKmh
                     generation++
                 }
@@ -101,7 +104,8 @@ class RideStatsAccumulator(
 
             if (!v.isAlongsideStationary) {
                 val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
-                if (lateralM < minLateralM) {
+                val current = minLateralM
+                if (current == null || lateralM < current) {
                     minLateralM = lateralM
                     generation++
                 }
@@ -147,21 +151,15 @@ class RideStatsAccumulator(
         } else {
             0f
         }
-        val effectiveMinLateralM = if (minLateralM == Float.MAX_VALUE) {
-            // No vehicles observed yet; report 0 so HA doesn't display
-            // Float.MAX_VALUE. Consumer should interpret with overtakes_total.
-            0f
-        } else {
-            minLateralM
-        }
+        val p90 = if (closingSpeedSamples.isEmpty()) null else percentile(closingSpeedSamples, 0.9)
         return RideStatsSnapshot(
             overtakesTotal = totalOvertakes,
             closePassCount = closePassCount,
             grazingCount = grazingCount,
             hgvClosePassCount = hgvClosePassCount,
             peakClosingKmh = peakClosingKmh,
-            closingSpeedP90Kmh = percentile(closingSpeedSamples, 0.9),
-            minLateralClearanceM = effectiveMinLateralM,
+            closingSpeedP90Kmh = p90,
+            minLateralClearanceM = minLateralM,
             distanceRiddenKm = (distanceRiddenM / 1000.0).toFloat(),
             exposureSeconds = exposureMs / 1000L,
             closePassConversionRatePct = conversionRatePct,
@@ -171,7 +169,7 @@ class RideStatsAccumulator(
     }
 
     private fun percentile(samples: List<Int>, p: Double): Int {
-        if (samples.isEmpty()) return 0
+        require(samples.isNotEmpty())
         val sorted = samples.sorted()
         val rank = (p * (sorted.size - 1)).coerceAtLeast(0.0)
         val lo = rank.toInt()
@@ -191,9 +189,12 @@ data class RideStatsSnapshot(
     val closePassCount: Int,
     val grazingCount: Int,
     val hgvClosePassCount: Int,
-    val peakClosingKmh: Int,
-    val closingSpeedP90Kmh: Int,
-    val minLateralClearanceM: Float,
+    /** Null until the first approaching vehicle is observed. */
+    val peakClosingKmh: Int?,
+    /** Null until the first close-pass event fires. */
+    val closingSpeedP90Kmh: Int?,
+    /** Null until the first vehicle is observed. */
+    val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,
     val exposureSeconds: Long,
     val closePassConversionRatePct: Float,

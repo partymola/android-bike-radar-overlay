@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.5.0-alpha — 2026-05-03
+
+### Features
+
+- **Live close-pass count on the home screen.** The stats card now shows the actual count of close-pass events for the current ride instead of a permanent zero. Resets when the service starts.
+- **Per-ride summary published to Home Assistant.** Ten new MQTT-discovery sensors per radar device (`overtakes_total`, `close_pass_count`, `grazing_count`, `hgv_close_pass_count`, `peak_closing_kmh`, `closing_speed_p90_kmh`, `min_lateral_clearance_m`, `distance_ridden_km`, `exposure_seconds`, `close_pass_conversion_rate`) plus a `tightest_pass` JSON attribute. Auto-discovers under the same HA device card as the existing battery and close-pass entities; vanilla HA + MQTT integration is enough, no YAML required. Published every 60 s when state changes; sensors flip to `unavailable` ten minutes past the last update.
+
+### Reliability
+
+- Handshake aborts early when the GATT service list is incomplete instead of silently completing without unlocking the V2 frame stream.
+- Radar state bus is cleared in the `connectAndRun` finally block, eliminating a window where stale vehicle data persisted through reconnect backoff.
+- Close-pass event and `/last` retained topic publish concurrently rather than back-to-back, halving HA round-trip on every event.
+- `BatteryStateBus` updates use atomic `MutableStateFlow.update`; concurrent battery readings can no longer drop each other.
+- `walkAwaySnoozeJob` switched to `AtomicReference` so cancel-then-replace is atomic across notification action handlers and GATT-callback threads.
+- Overlay teardown reorders `removeView` before nulling the service-level refs; `addView` failures now log to logcat as well as the capture log.
+- DebugScreen pauses radar-state log collection when off-screen.
+- BLE dashcam reader tightens GATT close idempotency; dashcam ticker idles after 15 minutes of radar disconnect.
+
+### Internal
+
+- Replay test feeds a captured 30 s V2 byte stream through `RadarV2Decoder` to catch multi-frame regressions the synthetic tests miss.
+- `androidTest` infrastructure wired (Compose UI tests can't run on Android 16 yet — espresso-core's input injector calls a removed `InputManager.getInstance()`); lifecycle gate tests live as JVM unit tests.
+- New `RideStatsAccumulator` with 24 JVM tests.
+
+### Compatibility
+
+- No migration. SharedPreferences, paired devices, HA credentials, overlay positioning, and the existing battery + close-pass MQTT topics are unchanged. The new ride-summary entities appear automatically in HA on first publish.
+
 ## v0.4.1-alpha — 2026-05-02
 
 ### Stability

@@ -81,6 +81,12 @@ class BikeRadarService : Service() {
     private val lastPublishedPct = ConcurrentHashMap<String, Int>()
     @Volatile private var scanRegistered = false
 
+    // Per-ride statistics. Reset on each onCreate so "this ride" begins
+    // when the service starts. Published to HA via the periodic loop
+    // started below.
+    private var rideStats = RideStatsAccumulator()
+    private val rideSummaryDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
+
     // Radar link state
     @Volatile private var radarJob: Job? = null
     @Volatile var radarGattActive = false
@@ -194,6 +200,8 @@ class BikeRadarService : Service() {
     override fun onCreate() {
         super.onCreate()
         ClosePassStateBus.reset()
+        rideStats = RideStatsAccumulator()
+        rideSummaryDiscoveredSlugs.clear()
         prefs = Prefs(this)
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
@@ -213,6 +221,7 @@ class BikeRadarService : Service() {
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
         launchDashcamRefresh()
+        launchRideSummaryPublishLoop()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -807,6 +816,8 @@ class BikeRadarService : Service() {
 
                         if (state.source == DataSource.NONE) return@collect
 
+                        rideStats.observeFrame(state)
+
                         if (!overlayAdded) {
                             if (Settings.canDrawOverlays(this@BikeRadarService)) {
                                 try {
@@ -887,6 +898,7 @@ class BikeRadarService : Service() {
                         )
                         if (cpEvents.isNotEmpty()) {
                             ClosePassStateBus.increment(cpEvents.size)
+                            for (ev in cpEvents) rideStats.observeClosePass(ev)
                             val radarMac = currentRadarMac
                             val radarSlug = radarMac?.let { macToSlug[it] }
                                 ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
@@ -984,6 +996,9 @@ class BikeRadarService : Service() {
             queueJob.cancel()
             markRadarDisconnected()
             RadarStateBus.clear()
+            // Fire-and-forget final flush of the ride summary so HA sees
+            // the latest values before the next reconnect's backoff delay.
+            scope.launch(Dispatchers.IO) { publishRideSummaryIfChanged() }
             closeOnce()
             closeCaptureLog()
         }
@@ -1354,6 +1369,51 @@ class BikeRadarService : Service() {
         }
     }
 
+    private fun launchRideSummaryPublishLoop() {
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(RIDE_SUMMARY_PUBLISH_PERIOD_MS)
+                publishRideSummaryIfChanged()
+            }
+        }
+    }
+
+    /**
+     * Publishes the current ride-summary snapshot if anything changed since
+     * the last successful publish. Called periodically by the publish loop
+     * and ad-hoc on radar disconnect for a snappier final value.
+     *
+     * Discovery is published once per slug per service lifetime, gated by
+     * [rideSummaryDiscoveredSlugs]. A discovery failure is rolled back so
+     * the next call retries.
+     */
+    private suspend fun publishRideSummaryIfChanged() {
+        if (!ha.isConfigured()) return
+        if (!rideStats.changedSinceLast()) return
+        val mac = currentRadarMac ?: return
+        val slug = macToSlug[mac]
+            ?: macToSlug[mac.uppercase(Locale.ROOT)]
+            ?: return
+        val deviceName = loadKnownDevices()
+            .firstOrNull { it.second.equals(mac, ignoreCase = true) }
+            ?.first
+            ?: "radar"
+
+        if (rideSummaryDiscoveredSlugs.add(slug)) {
+            val ok = ha.publishRideSummaryDiscovery(slug, deviceName)
+            if (!ok) {
+                rideSummaryDiscoveredSlugs.remove(slug)
+                Log.w(TAG, "ride-summary discovery publish failed; will retry")
+                return
+            }
+            Log.i(TAG, "ride-summary discovery published for $slug")
+        }
+
+        val ok = ha.publishRideSummaryState(slug, rideStats.snapshot())
+        if (ok) rideStats.markPublished()
+        else Log.w(TAG, "ride-summary state publish failed")
+    }
+
     /** Off-instant is stamped at the actual disconnect callback so it
      *  isn't tied to tick cadence (the idle tick is 30 s; that would
      *  drift the walk-away threshold by up to 30 s). Clean-reconnect
@@ -1622,6 +1682,12 @@ class BikeRadarService : Service() {
         const val V2_WATCHDOG_TICK_MS = 2_000L
         const val V2_FRAME_STALL_MS = 5_000L
         const val BATTERY_HA_HEARTBEAT_MS = 5 * 60 * 1000L
+
+        // Ride-summary publish cadence. The accumulator only changes on
+        // radar events, so most ticks short-circuit via changedSinceLast.
+        // 60 s is fine-grained enough that a close-pass shows up in HA
+        // within a minute, while still cheap when the rider is parked.
+        const val RIDE_SUMMARY_PUBLISH_PERIOD_MS = 60_000L
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
         const val MAX_CAPTURE_LOGS = 500
         const val MIN_USEFUL_LOG_BYTES = 500L

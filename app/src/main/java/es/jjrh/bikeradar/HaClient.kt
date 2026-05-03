@@ -270,6 +270,104 @@ class HaClient(private val baseUrl: String, private val token: String) {
         }
     }
 
+    /**
+     * Publishes the HA MQTT-Discovery config for the per-ride summary
+     * sensors. Ten sensors share the single retained state topic
+     * `varia/<slug>/ride_summary` and decompose its JSON via value_template,
+     * so one MQTT message updates every sensor atomically. All sensors
+     * sit under the same `device.identifiers` as the battery + close-pass
+     * entities so they group on a single HA device card.
+     *
+     * `expire_after: 600` flips each sensor to `unavailable` ten minutes
+     * after the last publish, so stale ride numbers do not sit on the
+     * dashboard once the rider has put the bike away.
+     */
+    suspend fun publishRideSummaryDiscovery(slug: String, deviceName: String): Boolean {
+        val clean = cleanDeviceName(deviceName)
+        val stateTopic = "varia/$slug/ride_summary"
+        val device = JSONObject()
+            .put("identifiers", JSONArray().put("varia_$slug"))
+            .put("name", "Varia $clean")
+            .put("manufacturer", "Garmin")
+            .put("model", "Varia")
+            .put("via_device", "varia_reader")
+        val sensors = listOf(
+            RideSummarySensor("overtakes_total",          "Overtakes",                     "total_increasing", null,       null,    null),
+            RideSummarySensor("close_pass_count",         "Close passes",                  "total_increasing", null,       null,    null),
+            RideSummarySensor("grazing_count",            "Grazing passes",                "total_increasing", null,       null,    null),
+            RideSummarySensor("hgv_close_pass_count",     "HGV close passes",              "total_increasing", null,       null,    null),
+            RideSummarySensor("peak_closing_kmh",         "Peak closing speed",            "measurement",      "speed",    "km/h",  null),
+            RideSummarySensor("closing_speed_p90_kmh",    "Closing speed (p90)",           "measurement",      "speed",    "km/h",  null),
+            RideSummarySensor("min_lateral_clearance_m",  "Tightest clearance",            "measurement",      "distance", "m",     2),
+            RideSummarySensor("distance_ridden_km",       "Distance ridden",               "total_increasing", "distance", "km",    2),
+            RideSummarySensor("exposure_seconds",         "Time with traffic",             "total_increasing", "duration", "s",     null),
+            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate",  "measurement",      null,       "%",     1),
+        )
+        var allOk = true
+        for (s in sensors) {
+            val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_${s.field}/config"
+            val payload = JSONObject()
+                .put("object_id", "varia_${slug}_${s.field}")
+                .put("unique_id", "varia_${slug}_${s.field}")
+                .put("name", s.displayName)
+                .put("has_entity_name", true)
+                .put("state_topic", stateTopic)
+                .put("value_template", "{{ value_json.${s.field} | default('unknown') }}")
+                .put("json_attributes_topic", stateTopic)
+                .put("state_class", s.stateClass)
+                .put("expire_after", RIDE_SUMMARY_EXPIRE_AFTER_S)
+                .put("device", device)
+            if (s.deviceClass != null) payload.put("device_class", s.deviceClass)
+            if (s.unit != null) payload.put("unit_of_measurement", s.unit)
+            if (s.precision != null) payload.put("suggested_display_precision", s.precision)
+            if (!publishMqtt(topic, payload.toString(), retain = true)) allOk = false
+        }
+        return allOk
+    }
+
+    /**
+     * Publishes the current ride-summary snapshot to the shared state topic.
+     * The retained JSON includes scalar fields (read by each sensor's
+     * value_template) plus structured attributes (`tightest_pass`,
+     * `ride_started_at`).
+     */
+    suspend fun publishRideSummaryState(slug: String, snapshot: RideStatsSnapshot): Boolean {
+        val payload = JSONObject()
+            .put("overtakes_total", snapshot.overtakesTotal)
+            .put("close_pass_count", snapshot.closePassCount)
+            .put("grazing_count", snapshot.grazingCount)
+            .put("hgv_close_pass_count", snapshot.hgvClosePassCount)
+            .put("peak_closing_kmh", snapshot.peakClosingKmh)
+            .put("closing_speed_p90_kmh", snapshot.closingSpeedP90Kmh)
+            .put("min_lateral_clearance_m", snapshot.minLateralClearanceM.toDouble())
+            .put("distance_ridden_km", snapshot.distanceRiddenKm.toDouble())
+            .put("exposure_seconds", snapshot.exposureSeconds)
+            .put("close_pass_conversion_rate", snapshot.closePassConversionRatePct.toDouble())
+            .put("ride_started_at", java.time.Instant.ofEpochMilli(snapshot.rideStartedAtMs).toString())
+        snapshot.tightestPass?.let { tp ->
+            payload.put(
+                "tightest_pass",
+                JSONObject()
+                    .put("ts", java.time.Instant.ofEpochMilli(tp.tsMs).toString())
+                    .put("side", tp.side.name.lowercase())
+                    .put("vehicle_size", tp.vehicleSize.name)
+                    .put("clearance_m", tp.clearanceM.toDouble())
+                    .put("closing_kmh", tp.closingKmh)
+                    .put("range_y_m", tp.rangeYAtMinM.toDouble()),
+            )
+        }
+        return publishMqtt("varia/$slug/ride_summary", payload.toString(), retain = true)
+    }
+
+    private data class RideSummarySensor(
+        val field: String,
+        val displayName: String,
+        val stateClass: String,
+        val deviceClass: String?,
+        val unit: String?,
+        val precision: Int?,
+    )
+
     companion object {
         private const val TAG = "BikeRadar"
         private const val DISCOVERY_PREFIX = "homeassistant"
@@ -279,5 +377,10 @@ class HaClient(private val baseUrl: String, private val token: String) {
         // write) and /api/ ping - neither does HA-side processing that
         // would justify a longer timeout.
         private const val HA_TIMEOUT_MS = 3000
+
+        // 10 minutes. Past this, the ride-summary sensors flip to
+        // `unavailable` so HA dashboards don't show stale numbers from the
+        // last ride forever.
+        private const val RIDE_SUMMARY_EXPIRE_AFTER_S = 600
     }
 }

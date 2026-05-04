@@ -115,100 +115,101 @@ class RadarV2Decoder(
 
     private fun ingestTargets(payload: ByteArray, now: Long): Boolean {
         var changed = pruneStale(now)
-        val bodyLen = payload.size - HEADER_SIZE
-        val n = bodyLen / TARGET_SIZE
-        for (i in 0 until n) {
+        val n = (payload.size - HEADER_SIZE) / TARGET_SIZE
+        repeat(n) { i ->
             val off = HEADER_SIZE + i * TARGET_SIZE
             val tid = payload[off].toInt() and 0xFF
-
-            // 24-bit little-endian packed range field over bytes [2..4]:
-            //   bits 0..10  = rangeX (11-bit signed, x0.1 m, -204.8..+204.7 m)
-            //   bits 11..23 = rangeY (13-bit signed, x0.1 m, -409.6..+409.5 m)
-            // For this rear radar, rangeY > 0 means behind the bike;
-            // rangeY < 0 indicates a target that has overtaken and is now
-            // in front of the rider.
-            val prev = tracks[tid]
-            val b2 = payload[off + 2].toInt() and 0xFF
-            val b3 = payload[off + 3].toInt() and 0xFF
-            val b4 = payload[off + 4].toInt() and 0xFF
-            val packed = (b4 shl 16) or (b3 shl 8) or b2
-            val rxBits = packed and 0x7FF
-            val rxSigned = if ((packed and 0x400) != 0) rxBits - 2048 else rxBits
-            val ryBits = (packed shr 11) and 0x1FFF
-            val rySigned = if (((packed shr 11) and 0x1000) != 0) ryBits - 8192 else ryBits
-            val rangeXSigned = rxSigned * 0.1f
-            val rangeYSigned = rySigned * 0.1f
-
-            // isBehind means "target ahead of bike" (post-overtake);
-            // the overlay and alert paths filter these out because the rear
-            // radar cannot reliably track once a target is in front.
-            val isBehind = rangeYSigned < 0f
-
-            val rangeY = abs(rangeYSigned)
-            val effectiveDistance = rangeY.roundToInt()
-
-            // Lateral-unknown sentinel: the radar emits rxBits = 0 on a
-            // far track when it briefly loses lateral confidence. At
-            // rangeY < 10 m a literal 0 is plausible (target dead
-            // behind), so the sentinel only applies at rangeY >= 10 m.
-            // Requiring the previous frame to have a non-centred lateral
-            // position confirms this is a discontinuity, not a target
-            // that has actually been centred throughout. When detected,
-            // carry the previous lateralPos forward so visual consumers
-            // see continuity; the flag tells downstream gates
-            // (close-pass detector) that the lateral data on this frame
-            // isn't usable. Once the flag fires for a track, the
-            // held-over saturated lateralPos becomes the next frame's
-            // `prev`, so the detection propagates across the entire run
-            // of zero readings without a per-track state machine.
-            val lateralUnknown = rxBits == 0 &&
-                rangeY >= LATERAL_UNKNOWN_MIN_RANGE_Y_M &&
-                prev != null &&
-                abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
-
-            val rangeX = if (lateralUnknown) {
-                prev.vehicle.lateralPos * LATERAL_FULL_M
-            } else {
-                rangeXSigned
-            }
-
-            val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
-
-            val speedXRaw = payload[off + 8].toInt() and 0xFF
-            val speedXMs: Int? = if (speedXRaw == LATERAL_VELOCITY_SENTINEL) {
-                null
-            } else {
-                (payload[off + 8].toInt() * 0.5f).roundToInt()
-            }
-
-            val rawSize = classifySize(payload[off + 1].toInt() and 0xFF)
-            val lateralPos = (rangeX / LATERAL_FULL_M).coerceIn(-1f, 1f)
-
-            val stale = if (abs(speedMs) > MOVING_SPEED_MS) STALE_MOVING_MS else STALE_PARKED_MS
-
-            val debounced = debounceSize(prev, rawSize)
-
-            tracks[tid] = Track(
-                vehicle = Vehicle(
-                    id = tid,
-                    distanceM = effectiveDistance,
-                    speedMs = speedMs,
-                    size = debounced.committed,
-                    lateralPos = lateralPos,
-                    isBehind = isBehind,
-                    speedXMs = speedXMs,
-                    lateralUnknown = lateralUnknown,
-                ),
-                lastSeen = now,
-                firstSeen = prev?.firstSeen ?: now,
-                staleMs = stale,
-                committedSize = debounced.committed,
-                downgradeCandidate = debounced.candidate,
-                downgradeFrames = debounced.frames,
-            )
+            tracks[tid] = decodeTarget(payload, off, tid, tracks[tid], now)
             changed = true
         }
         return changed
+    }
+
+    private fun decodeTarget(payload: ByteArray, off: Int, tid: Int, prev: Track?, now: Long): Track {
+        // 24-bit little-endian packed range field over bytes [2..4]:
+        //   bits 0..10  = rangeX (11-bit signed, x0.1 m, -204.8..+204.7 m)
+        //   bits 11..23 = rangeY (13-bit signed, x0.1 m, -409.6..+409.5 m)
+        // For this rear radar, rangeY > 0 means behind the bike;
+        // rangeY < 0 indicates a target that has overtaken and is now
+        // in front of the rider.
+        val b2 = payload[off + 2].toInt() and 0xFF
+        val b3 = payload[off + 3].toInt() and 0xFF
+        val b4 = payload[off + 4].toInt() and 0xFF
+        val packed = (b4 shl 16) or (b3 shl 8) or b2
+        val rxBits = packed and 0x07FF
+        val rxSigned = if ((packed and 0x0400) != 0) rxBits - 0x0800 else rxBits
+        val ryBits = (packed shr 11) and 0x1FFF
+        val rySigned = if (((packed shr 11) and 0x1000) != 0) ryBits - 0x2000 else ryBits
+        val rangeXSigned = rxSigned * 0.1f
+        val rangeYSigned = rySigned * 0.1f
+
+        // isBehind means "target ahead of bike" (post-overtake);
+        // the overlay and alert paths filter these out because the rear
+        // radar cannot reliably track once a target is in front.
+        val isBehind = rangeYSigned < 0f
+
+        val rangeY = abs(rangeYSigned)
+        val effectiveDistance = rangeY.roundToInt()
+
+        // Lateral-unknown sentinel: the radar emits rxBits = 0 on a
+        // far track when it briefly loses lateral confidence. At
+        // rangeY < 10 m a literal 0 is plausible (target dead
+        // behind), so the sentinel only applies at rangeY >= 10 m.
+        // Requiring the previous frame to have a non-centred lateral
+        // position confirms this is a discontinuity, not a target
+        // that has actually been centred throughout. When detected,
+        // carry the previous lateralPos forward so visual consumers
+        // see continuity; the flag tells downstream gates
+        // (close-pass detector) that the lateral data on this frame
+        // isn't usable. Once the flag fires for a track, the
+        // held-over saturated lateralPos becomes the next frame's
+        // `prev`, so the detection propagates across the entire run
+        // of zero readings without a per-track state machine.
+        val lateralUnknown = rxBits == 0 &&
+            rangeY >= LATERAL_UNKNOWN_MIN_RANGE_Y_M &&
+            prev != null &&
+            abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
+
+        val rangeX = if (lateralUnknown) {
+            prev.vehicle.lateralPos * LATERAL_FULL_M
+        } else {
+            rangeXSigned
+        }
+
+        val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
+
+        val speedXRaw = payload[off + 8].toInt() and 0xFF
+        val speedXMs: Int? = if (speedXRaw == LATERAL_VELOCITY_SENTINEL) {
+            null
+        } else {
+            (payload[off + 8].toInt() * 0.5f).roundToInt()
+        }
+
+        val rawSize = classifySize(payload[off + 1].toInt() and 0xFF)
+        val lateralPos = (rangeX / LATERAL_FULL_M).coerceIn(-1f, 1f)
+
+        val stale = if (abs(speedMs) > MOVING_SPEED_MS) STALE_MOVING_MS else STALE_PARKED_MS
+
+        val debounced = debounceSize(prev, rawSize)
+
+        return Track(
+            vehicle = Vehicle(
+                id = tid,
+                distanceM = effectiveDistance,
+                speedMs = speedMs,
+                size = debounced.committed,
+                lateralPos = lateralPos,
+                isBehind = isBehind,
+                speedXMs = speedXMs,
+                lateralUnknown = lateralUnknown,
+            ),
+            lastSeen = now,
+            firstSeen = prev?.firstSeen ?: now,
+            staleMs = stale,
+            committedSize = debounced.committed,
+            downgradeCandidate = debounced.candidate,
+            downgradeFrames = debounced.frames,
+        )
     }
 
     private data class SizeDebounceResult(
@@ -244,11 +245,7 @@ class RadarV2Decoder(
 
     private fun pruneStale(now: Long): Boolean {
         val before = tracks.size
-        val it = tracks.entries.iterator()
-        while (it.hasNext()) {
-            val t = it.next().value
-            if (now - t.lastSeen > t.staleMs) it.remove()
-        }
+        tracks.values.removeAll { now - it.lastSeen > it.staleMs }
         return tracks.size != before
     }
 

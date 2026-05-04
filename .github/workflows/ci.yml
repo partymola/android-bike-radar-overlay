@@ -87,15 +87,12 @@ jobs:
           # AOSP (default) target boots faster than google_apis and has no
           # Play Services dependency — sufficient for a boot-alive check.
           target: default
+          # reactivecircus/android-emulator-runner runs each line of `script`
+          # in its own `sh -c` invocation, so multi-line `if/then/fi` doesn't
+          # survive. Each step has to stand alone or chain with `&&` / `;`.
           script: |
             set -e
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n es.jjrh.bikeradar/.MainActivity
             sleep 5
-            pid=$(adb shell pidof es.jjrh.bikeradar || true)
-            if [ -z "$pid" ]; then
-              echo "::error::App process not alive 5 s after launch — likely a boot crash"
-              adb logcat -d -s AndroidRuntime:E BikeRadar:E | tail -30
-              exit 1
-            fi
-            echo "OK: app alive at PID $pid"
+            pid=$(adb shell pidof es.jjrh.bikeradar || true); if [ -z "$pid" ]; then echo "::error::App process not alive 5 s after launch — likely a boot crash"; adb logcat -d -s AndroidRuntime:E BikeRadar:E | tail -30; exit 1; fi; echo "OK: app alive at PID $pid"

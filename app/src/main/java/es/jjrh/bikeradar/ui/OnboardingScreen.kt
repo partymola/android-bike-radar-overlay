@@ -393,7 +393,7 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
 }
 
 @Composable
-private fun HaIntentChooser(onUseHa: () -> Unit, onNotForMe: () -> Unit) {
+internal fun HaIntentChooser(onUseHa: () -> Unit, onNotForMe: () -> Unit) {
     val br = LocalBrColors.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         IntentCard(
@@ -468,7 +468,7 @@ private fun IntentCard(
 }
 
 @Composable
-private fun HaFieldsBlock(
+internal fun HaFieldsBlock(
     urlField: String,
     onUrlChange: (String) -> Unit,
     tokenField: String,
@@ -586,7 +586,7 @@ private fun HaFieldsBlock(
 }
 
 @Composable
-private fun HaSkippedCard(onChangeMind: () -> Unit) {
+internal fun HaSkippedCard(onChangeMind: () -> Unit) {
     val br = LocalBrColors.current
     Column(
         modifier = Modifier

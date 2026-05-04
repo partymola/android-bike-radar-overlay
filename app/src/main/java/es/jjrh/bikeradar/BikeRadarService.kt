@@ -155,6 +155,12 @@ class BikeRadarService : Service() {
     /** Audio-focus token held while [walkAwayRingtone] is playing.
      *  Released in [stopWalkAwayAlarmTone]. */
     @Volatile private var walkAwayAudioFocusRequest: AudioFocusRequest? = null
+    /** Pre-alert STREAM_ALARM volume, captured before the walk-away tone
+     *  forces the alarm stream to max so the rider can't sleep through a
+     *  forgotten-dashcam alert just because their alarm slider was low.
+     *  Restored in [stopWalkAwayAlarmTone]. Null when no override is in
+     *  effect. */
+    @Volatile private var walkAwaySavedAlarmVolume: Int? = null
     /** Single-slot job that stops the alarm tone after
      *  [WALKAWAY_RINGTONE_CAP_MS] even if the user hasn't dismissed.
      *  The decider's rate limit re-fires the notification later, which
@@ -1275,11 +1281,39 @@ class BikeRadarService : Service() {
             try { am.abandonAudioFocusRequest(focusReq) } catch (_: Throwable) {}
             return
         }
+        // Force the alarm stream to max for the duration of the alert.
+        // Mirrors the alarm-clock pattern: a rider whose phone alarm
+        // volume is set low for sleep shouldn't lose a £200 dashcam to
+        // their bedside-tone preference. Saved level is restored in
+        // stopWalkAwayAlarmTone. Best-effort; some OEMs reject volume
+        // writes from background services and that's fine.
+        val savedAlarmVolume = try {
+            am.getStreamVolume(AudioManager.STREAM_ALARM)
+        } catch (_: Throwable) { null }
+        if (savedAlarmVolume != null) {
+            try {
+                am.setStreamVolume(
+                    AudioManager.STREAM_ALARM,
+                    am.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                    0,
+                )
+            } catch (t: Throwable) {
+                Log.w(TAG, "alarm-stream max-out failed: $t")
+            }
+        }
+
         try {
             rt.play()
         } catch (t: Throwable) {
             Log.w(TAG, "ringtone play failed: $t")
             try { am.abandonAudioFocusRequest(focusReq) } catch (_: Throwable) {}
+            // Roll back the alarm-stream override so a play() failure
+            // doesn't leave the rider's morning alarm stuck at max.
+            if (savedAlarmVolume != null) {
+                try {
+                    am.setStreamVolume(AudioManager.STREAM_ALARM, savedAlarmVolume, 0)
+                } catch (_: Throwable) {}
+            }
             return
         }
 
@@ -1287,6 +1321,7 @@ class BikeRadarService : Service() {
         // setup never leaks a focus token or a half-initialised ringtone.
         walkAwayAudioFocusRequest = focusReq
         walkAwayRingtone = rt
+        walkAwaySavedAlarmVolume = savedAlarmVolume
         walkAwayRingtoneCapJob?.cancel()
         walkAwayRingtoneCapJob = scope.launch {
             delay(WALKAWAY_RINGTONE_CAP_MS)
@@ -1307,11 +1342,19 @@ class BikeRadarService : Service() {
             try { it.stop() } catch (_: Throwable) {}
         }
         walkAwayRingtone = null
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
         walkAwayAudioFocusRequest?.let { req ->
-            val am = getSystemService(AUDIO_SERVICE) as AudioManager
             try { am.abandonAudioFocusRequest(req) } catch (_: Throwable) {}
         }
         walkAwayAudioFocusRequest = null
+        walkAwaySavedAlarmVolume?.let { saved ->
+            try {
+                am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+            } catch (t: Throwable) {
+                Log.w(TAG, "alarm-stream restore failed: $t")
+            }
+        }
+        walkAwaySavedAlarmVolume = null
     }
 
     // ── dashcam liveness probe ───────────────────────────────────────────────

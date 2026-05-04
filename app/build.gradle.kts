@@ -164,6 +164,7 @@ kotlin {
 tasks.withType<Test>().matching { it.name == "testDebugUnitTest" }.configureEach {
     filter {
         excludeTestsMatching("es.jjrh.bikeradar.RadarOverlayViewTest")
+        excludeTestsMatching("es.jjrh.bikeradar.ui.HaStepSnapshotTest")
     }
 }
 

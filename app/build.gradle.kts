@@ -53,8 +53,8 @@ android {
         applicationId = "es.jjrh.bikeradar"
         minSdk = 31
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.5.0-alpha"
+        versionCode = 9
+        versionName = "0.5.1-alpha"
 
         buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
         buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.1-alpha — 2026-05-04
+
+### UX
+
+- **Onboarding now asks whether you use Home Assistant before showing fields.** The HA step opens with a "Do you use Home Assistant?" chooser. Yes reveals the URL/token fields with a "Using HA" pill above them; No shows a Skipped card with a one-tap revert; the chooser stays put until you pick. Existing installs with saved credentials skip the chooser and land directly on the fields.
+- **Onboarding polish across permissions, pairing, and dashcam picker.** Swipe-back returns to the previous onboarding step instead of exiting. Step 1 drops a duplicate granted-permission chip and re-labels the overlay badge from Optional to Recommended. Step 3's dashcam picker opens directly from the unanswered card and writes ownership on save, replacing a confusing two-tap flow; bonded radars hide the Open Bluetooth settings button; unbonded radars get a return-from-Settings cue.
+
+### Reliability
+
+- The forgotten-dashcam alert (the alarm that fires when the radar shuts off but the dashcam is still broadcasting from the bike) is now reliably loud. The alert plays on the system alarm channel, so a phone whose alarm volume is set low for sleep no longer produces a near-silent tone. While the tone plays, the app forces the alarm volume to its maximum and restores the prior level when the alert ends. If the OS denies the volume change (e.g. under Do Not Disturb), the tone still plays at the current level.
+
+### Compatibility
+
+- No migration needed. SharedPreferences, paired devices, HA credentials, and overlay positioning are unchanged. A new `ha_intent` preference defaults to "unset"; existing installs with saved HA credentials are treated as opted-in and skip the new chooser. The forgotten-dashcam alert temporarily forces the system alarm volume to maximum while the tone plays and restores the prior level when it ends.
+
+### Internal
+
+- `HaStepSnapshotTest` excluded from `:app:testDebugUnitTest` alongside `RadarOverlayViewTest`, restoring the green build on cold-cache JVMs (CI included). Both Paparazzi tests run via `:app:verifyPaparazziDebug` locally; the exclusion can drop when Paparazzi alpha05 ships.
+- Paparazzi screenshot goldens added for the four HA onboarding step branches (unset chooser, Yes empty fields, Yes prefilled, No skipped).
+
 ## v0.5.0-alpha — 2026-05-03
 
 ### Features

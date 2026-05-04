@@ -103,7 +103,8 @@ decoders in both Python and Kotlin live there.
 - To test Onboarding without destroying your production install's pairing
   state, build the `onbtest` buildType (`gradle :app:assembleOnbtest`). It
   installs side-by-side under `es.jjrh.bikeradar.onbtest` with its own
-  SharedPreferences and zeroed HA seed.
+  SharedPreferences and zeroed HA seed. Uninstall when done:
+  `adb uninstall es.jjrh.bikeradar.onbtest`.
 - Live-testing via ADB: `am stopservice .../BikeRadarService` BEFORE
   `adb install -r` lets `onDestroy` clear the radar GATT cleanly. Post-
   install, `am force-stop` + `monkey ... LAUNCHER 1` for a clean relaunch.
@@ -116,6 +117,9 @@ decoders in both Python and Kotlin live there.
 - GPL-3.0-or-later. Don't copy non-GPL-compatible code.
 - Protocol corrections go to the `bike-radar-docs` repo, not this one.
 - Decoder behaviour changes must add or update unit tests.
+- Commit subjects use the conventional-commits prefixes already
+  visible in `git log`: `ui:`, `test:`, `build:`, `ci:`, `docs(...):`,
+  `fix:`, with optional scope like `ui(onboarding):`.
 
 ## Local-only notes (not in this repo)
 

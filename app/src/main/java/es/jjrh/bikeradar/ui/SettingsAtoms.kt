@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.CameraLightMode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -112,6 +113,7 @@ fun SettingsRow(
     rightContent: @Composable (() -> Unit)? = null,
     chevron: Boolean = true,
     clickable: Boolean = true,
+    enabled: Boolean = true,
 ) {
     val br = LocalBrColors.current
     Column(
@@ -143,12 +145,12 @@ fun SettingsRow(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, color = br.fg, fontSize = 14.sp)
+                Text(text = title, color = if (enabled) br.fg else br.fgMuted, fontSize = 14.sp)
                 if (subtitle != null) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
-                        color = br.fgDim,
+                        color = if (enabled) br.fgDim else br.fgFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -401,4 +403,13 @@ fun NestedCard(
             content()
         }
     }
+}
+
+internal fun CameraLightMode.displayName(): String = when (this) {
+    CameraLightMode.HIGH -> "High"
+    CameraLightMode.MEDIUM -> "Medium"
+    CameraLightMode.LOW -> "Low"
+    CameraLightMode.NIGHT_FLASH -> "Night flash"
+    CameraLightMode.DAY_FLASH -> "Day flash"
+    CameraLightMode.OFF -> "Off"
 }

@@ -20,6 +20,7 @@ import es.jjrh.bikeradar.ui.MainScreen
 import es.jjrh.bikeradar.ui.UiTheme
 import es.jjrh.bikeradar.ui.OnboardingScreen
 import es.jjrh.bikeradar.ui.SettingsAbout
+import es.jjrh.bikeradar.ui.SettingsCameraLight
 import es.jjrh.bikeradar.ui.SettingsDashcam
 import es.jjrh.bikeradar.ui.SettingsExperimental
 import es.jjrh.bikeradar.ui.SettingsHa
@@ -81,6 +82,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("debug") {
                         DebugScreen(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/camera-light") {
+                        SettingsCameraLight(navController = navController, prefs = prefs)
                     }
                     composable("settings/radar") {
                         SettingsRadar(navController = navController, prefs = prefs)

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -43,6 +44,7 @@ import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -104,6 +106,13 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
 
             SettingsSectionLabel("General")
             SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.Default.WbSunny,
+                    iconTint = br.brand,
+                    title = "Front light auto-mode",
+                    subtitle = cameraLightSubtitle(prefsSnap),
+                    onClick = { navController.navigate("settings/camera-light") },
+                )
                 SettingsRow(
                     icon = Icons.Default.Sensors,
                     iconTint = br.brand,
@@ -228,6 +237,10 @@ private fun SystemHealthChip(
         )
     }
 }
+
+private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String =
+    if (!snap.autoLightModeEnabled) "Off"
+    else "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
 
 private fun dashcamSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.dashcamOwnership) {
     DashcamOwnership.UNANSWERED -> "Set up your dashcam"

@@ -725,9 +725,10 @@ class BikeRadarService : Service() {
             val sunsetMs = SunsetCalculator.sunsetEpochMs(today)
             val afterSunset = sunsetMs != null && nowMs >= sunsetMs
             val initialMode = if (afterSunset) prefs.cameraLightNightMode else prefs.cameraLightDayMode
-            val applied = controller.setMode(initialMode)
+            val applied = applyModeWithRetry(controller, initialMode)
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away" else "unknown"
             Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
+            if (!applied) postLightModeFailNotification(initialMode)
 
             if (sunsetMs != null && nowMs < sunsetMs) {
                 val msToSunset = sunsetMs - nowMs
@@ -735,8 +736,9 @@ class BikeRadarService : Service() {
                     kotlinx.coroutines.delay(msToSunset)
                     if (cameraLightGattActive) {
                         val nightMode = prefs.cameraLightNightMode
-                        val nightOk = controller.setMode(nightMode)
+                        val nightOk = applyModeWithRetry(controller, nightMode)
                         Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
+                        if (!nightOk) postLightModeFailNotification(nightMode)
                     }
                 }
             }
@@ -1204,6 +1206,58 @@ class BikeRadarService : Service() {
         }
     }
 
+    // ── camera light failure feedback ─────────────────────────────────────────
+
+    /**
+     * Attempts [controller.setMode] up to 3 times with increasing delays.
+     * Returns true on the first success; false if all 3 attempts fail.
+     */
+    private suspend fun applyModeWithRetry(
+        controller: CameraLightController,
+        mode: CameraLightMode,
+    ): Boolean {
+        if (controller.setMode(mode)) return true
+        kotlinx.coroutines.delay(500 + (100 * (Math.random() * 2 - 1)).toLong())
+        if (controller.setMode(mode)) return true
+        kotlinx.coroutines.delay(1500 + (300 * (Math.random() * 2 - 1)).toLong())
+        return controller.setMode(mode)
+    }
+
+    private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
+        val modeName = when (mode) {
+            CameraLightMode.HIGH -> "High"
+            CameraLightMode.MEDIUM -> "Medium"
+            CameraLightMode.LOW -> "Low"
+            CameraLightMode.NIGHT_FLASH -> "Night flash"
+            CameraLightMode.DAY_FLASH -> "Day flash"
+            CameraLightMode.OFF -> "Off"
+        }
+
+        ensureNotificationChannel()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
+            .setContentTitle("Front light")
+            .setContentText("Couldn't switch to $modeName - check connection.")
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
+            .build()
+        nm.notify(NOTIF_LIGHT_FAIL_ID, notif)
+
+        // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
+        var tg: android.media.ToneGenerator? = null
+        try {
+            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
+            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
+            kotlinx.coroutines.delay(600)
+        } catch (_: Exception) {
+        } finally {
+            tg?.release()
+        }
+    }
+
     // ── capture log ───────────────────────────────────────────────────────────
 
     private fun openCaptureLog() {
@@ -1379,6 +1433,20 @@ class BikeRadarService : Service() {
                 nm.deleteNotificationChannel(id)
             }
         }
+        if (nm.getNotificationChannel(LIGHT_FAIL_CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    LIGHT_FAIL_CHANNEL_ID,
+                    "Front light",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Alerts when the front camera/light mode could not be applied."
+                    enableVibration(true)
+                    vibrationPattern = LIGHT_FAIL_VIBRATE_PATTERN
+                }
+            )
+        }
+
         if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
             // HIGH importance, no sound and no vibration on the channel.
             // Both modalities are driven explicitly from the FIRE path:
@@ -1879,6 +1947,7 @@ class BikeRadarService : Service() {
         // v2 channel created with alarm-stream sound; the v1 legacy id
         // is deleted on channel-ensure so an upgrade picks up sound.
         const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
+        const val LIGHT_FAIL_CHANNEL_ID = "bike_radar_light_fail"
         private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
             "bike_radar_walkaway",
             "bike_radar_walkaway_v2",
@@ -1886,6 +1955,7 @@ class BikeRadarService : Service() {
         const val NOTIF_ID = 1
         const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3
+        const val NOTIF_LIGHT_FAIL_ID = 4
         private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
         private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
@@ -1964,6 +2034,7 @@ class BikeRadarService : Service() {
         // ~7 s total. Long enough to feel through fabric, recognisable as
         // an alarm rather than a routine notification.
         private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
+        private val LIGHT_FAIL_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
         // Cap on a single alarm-tone burst. After this the tone stops on
         // its own; the decider's rate limit will fire again later and the
         // tone restarts. Capped-burst pattern is harder to ignore than

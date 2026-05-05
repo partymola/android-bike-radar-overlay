@@ -118,9 +118,14 @@ object RadarUnlock {
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}03"); delay(100)
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}04"); delay(170)
 
-        // Front camera only: 0x18 sub-mode toggle required before capability exchange.
+        // Front camera path ends here: the 0x18 sub-mode toggle is the last handshake
+        // step, and mode-set writes can proceed directly on SETTINGS_ACK. The AMV
+        // cmd 01+16, device-ID push, and capability exchange below are rear-radar
+        // specific (needed to unlock the V2 measurement stream).
         if (deviceVariant == DeviceVariant.FRONT_CAMERA) {
             if (!runSubmodeToggle(gatt, queue, notifies, txUuid, rxUuid, clog)) return false
+            clog("front camera handshake complete")
+            return true
         }
 
         // AMV cmd 01 + 16 back-to-back. Await both replies then the device-ID push.
@@ -128,10 +133,12 @@ object RadarUnlock {
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56160000")
 
         val r16 = awaitNotify(notifies, rxUuid, 1200) {
-            it.size >= 14 && it[1].toInt() == 0x01 && it[10].toInt() == 0x16
+            it.size >= 11 && it[1].toInt() == 0x01 && it[10].toInt() == 0x16
         }
         if (r16 == null) { clog("ABORT: AMV 16 reply never arrived"); return false }
-        val pfxCmd = "%02x".format(r16[13].toInt() and 0xff)
+        // Front camera firmware 5.80 returns a 13-byte cmd-16 reply with no pfxCmd byte.
+        // Fall back to a safe default (00) when the reply is too short to carry one.
+        val pfxCmd = if (r16.size >= 14) "%02x".format(r16[13].toInt() and 0xff) else "00"
         clog("pfxCmd=$pfxCmd reply=${r16.toHex()}")
 
         // Device-ID push frame: byte 0 >= 0x80, size > 20.
@@ -199,32 +206,26 @@ object RadarUnlock {
     ): Boolean {
         val svc = Uuids.SVC_CONFIG
 
-        // Frame 1: SS=0x00, PP=0x02 → expect reply trailer 82 01 00
-        writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_1)
-        val r1 = awaitNotify(notifies, rxUuid, 1000) {
-            it.size >= 3 &&
-                it[it.size - 3] == 0x82.toByte() &&
-                it[it.size - 2] == 0x01.toByte() &&
-                it.last() == 0x00.toByte()
+        // Reply format observed on firmware 5.80: `00 01 [6 zero pad] 41 4d 56 18 [status]`.
+        // Match any reply carrying the 0x18 opcode at byte 11. Each frame gets its own
+        // await so the sequence drives the device's internal state advance.
+        val matcher: (ByteArray) -> Boolean = {
+            it.size >= 12 && it[10].toInt() == 0x56 && it[11].toInt() == 0x18
         }
-        if (r1 == null) { clog("ABORT: 0x18 toggle frame 1 reply timed out or mismatched"); return false }
+
+        writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_1)
+        val r1 = awaitNotify(notifies, rxUuid, 1000, matcher)
+        if (r1 == null) { clog("ABORT: 0x18 toggle frame 1 reply never arrived"); return false }
         clog("0x18 toggle frame 1 ok: ${r1.toHex()}")
 
-        // Frame 2: SS=0x02, PP=0x82 → expect reply ending in 00
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_2)
-        val r2 = awaitNotify(notifies, rxUuid, 1000) { it.isNotEmpty() && it.last() == 0x00.toByte() }
-        if (r2 == null) { clog("ABORT: 0x18 toggle frame 2 reply timed out or mismatched"); return false }
+        val r2 = awaitNotify(notifies, rxUuid, 1000, matcher)
+        if (r2 == null) { clog("ABORT: 0x18 toggle frame 2 reply never arrived"); return false }
         clog("0x18 toggle frame 2 ok: ${r2.toHex()}")
 
-        // Frame 3: SS=0x00, PP=0x02 → expect reply trailer 83 01 00 (state advanced)
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_3)
-        val r3 = awaitNotify(notifies, rxUuid, 1000) {
-            it.size >= 3 &&
-                it[it.size - 3] == 0x83.toByte() &&
-                it[it.size - 2] == 0x01.toByte() &&
-                it.last() == 0x00.toByte()
-        }
-        if (r3 == null) { clog("ABORT: 0x18 toggle frame 3 reply timed out or mismatched"); return false }
+        val r3 = awaitNotify(notifies, rxUuid, 1000, matcher)
+        if (r3 == null) { clog("ABORT: 0x18 toggle frame 3 reply never arrived"); return false }
         clog("0x18 toggle frame 3 ok: ${r3.toHex()}")
 
         return true
@@ -286,7 +287,10 @@ object RadarUnlock {
         matches: (ByteArray) -> Boolean = { true },
     ): ByteArray? = withTimeoutOrNull(timeoutMs) {
         for ((uuid, bytes) in notifies) {
-            if (uuid == charUuid && matches(bytes)) return@withTimeoutOrNull bytes
+            if (uuid == charUuid) {
+                Log.d("BikeRadar.RadarUnlock", "rx ${charUuid.toString().substring(4, 8)}: ${bytes.toHex()}")
+                if (matches(bytes)) return@withTimeoutOrNull bytes
+            }
         }
         null
     }

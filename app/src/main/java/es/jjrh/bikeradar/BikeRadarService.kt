@@ -697,6 +697,7 @@ class BikeRadarService : Service() {
 
         val queueJob = scope.launch { queue.run() }
 
+        var sunsetJob: Job? = null
         return try {
             val ok = servicesReady.await()
             if (!ok) { Log.w(TAG_LIGHT, "service discovery failed"); return false }
@@ -719,9 +720,26 @@ class BikeRadarService : Service() {
             if (ch14 != null) queue.writeCccd(gatt, ch14)
 
             val controller = CameraLightController(gatt, queue)
-            val mode = prefs.cameraLightDayMode
-            val applied = controller.setMode(mode)
-            Log.i(TAG_LIGHT, "initial mode=$mode applied=$applied")
+            val nowMs = System.currentTimeMillis()
+            val today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/London"))
+            val sunsetMs = SunsetCalculator.sunsetEpochMs(today)
+            val afterSunset = sunsetMs != null && nowMs >= sunsetMs
+            val initialMode = if (afterSunset) prefs.cameraLightNightMode else prefs.cameraLightDayMode
+            val applied = controller.setMode(initialMode)
+            val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away" else "unknown"
+            Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
+
+            if (sunsetMs != null && nowMs < sunsetMs) {
+                val msToSunset = sunsetMs - nowMs
+                sunsetJob = scope.launch {
+                    kotlinx.coroutines.delay(msToSunset)
+                    if (cameraLightGattActive) {
+                        val nightMode = prefs.cameraLightNightMode
+                        val nightOk = controller.setMode(nightMode)
+                        Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
+                    }
+                }
+            }
 
             val lightMac = gatt.device?.address
             val lightSlug = slug(name)
@@ -743,6 +761,7 @@ class BikeRadarService : Service() {
             false
         } finally {
             cameraLightGattActive = false
+            sunsetJob?.cancel()
             queueJob.cancel()
             queue.cancel()
             closeOnce()

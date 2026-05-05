@@ -39,6 +39,13 @@ enum class DeviceVariant { RADAR, FRONT_CAMERA }
  */
 object RadarUnlock {
 
+    // 0x18 sub-mode toggle frame payloads (FRONT_CAMERA handshake path).
+    // Format: 00 SS 00 00 00 00 00 00 41 4d 56 18 PP (13 bytes).
+    // Named so tests can pin the exact bytes without accessing the private send path.
+    internal const val SUBMODE_FRAME_1 = "0000000000000000414d561802" // SS=00, PP=02
+    internal const val SUBMODE_FRAME_2 = "0002000000000000414d561882" // SS=02, PP=82
+    internal const val SUBMODE_FRAME_3 = "0000000000000000414d561802" // SS=00, PP=02 (state advanced)
+
     // Phone-side device-ID payload. Three length-prefixed strings:
     // client-name, vendor, model. Length and structure must match what
     // the head unit expects; the client-name itself is not validated by
@@ -193,7 +200,7 @@ object RadarUnlock {
         val svc = Uuids.SVC_CONFIG
 
         // Frame 1: SS=0x00, PP=0x02 → expect reply trailer 82 01 00
-        writeNoResp(gatt, queue, svc, txUuid, "0000000000000000414d561802")
+        writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_1)
         val r1 = awaitNotify(notifies, rxUuid, 1000) {
             it.size >= 3 &&
                 it[it.size - 3] == 0x82.toByte() &&
@@ -204,13 +211,13 @@ object RadarUnlock {
         clog("0x18 toggle frame 1 ok: ${r1.toHex()}")
 
         // Frame 2: SS=0x02, PP=0x82 → expect reply ending in 00
-        writeNoResp(gatt, queue, svc, txUuid, "0002000000000000414d561882")
+        writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_2)
         val r2 = awaitNotify(notifies, rxUuid, 1000) { it.isNotEmpty() && it.last() == 0x00.toByte() }
         if (r2 == null) { clog("ABORT: 0x18 toggle frame 2 reply timed out or mismatched"); return false }
         clog("0x18 toggle frame 2 ok: ${r2.toHex()}")
 
         // Frame 3: SS=0x00, PP=0x02 → expect reply trailer 83 01 00 (state advanced)
-        writeNoResp(gatt, queue, svc, txUuid, "0000000000000000414d561802")
+        writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_3)
         val r3 = awaitNotify(notifies, rxUuid, 1000) {
             it.size >= 3 &&
                 it[it.size - 3] == 0x83.toByte() &&

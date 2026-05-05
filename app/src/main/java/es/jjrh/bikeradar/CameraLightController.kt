@@ -47,6 +47,9 @@ class CameraLightController(
     }
 
     companion object {
+        /** Returns the 3-byte payload for a SETTINGS_ACK write: `07 00 NN` where NN = ordinal+1. */
+        fun encodeWrite(mode: CameraLightMode): ByteArray = byteArrayOf(0x07, 0x00, (mode.ordinal + 1).toByte())
+
         /**
          * Parses a SETTINGS_14 notify value into a [CameraLightMode].
          * Returns null for any frame that is not a 3-byte mode-state packet

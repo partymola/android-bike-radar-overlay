@@ -94,6 +94,9 @@ class BikeRadarService : Service() {
     // Front camera/light link state
     @Volatile private var cameraLightJob: Job? = null
     @Volatile private var cameraLightGattActive = false
+    @Volatile private var cameraLightUserOverride = false
+    @Volatile private var cameraLightLastWrittenMode: CameraLightMode? = null
+    @Volatile private var cameraLightOffSinceMs: Long? = null
 
     // MAC currently being driven by the radar link, exposed so the bond-state
     // receiver can match the right device. Null when no link is active.
@@ -703,6 +706,14 @@ class BikeRadarService : Service() {
             if (!ok) { Log.w(TAG_LIGHT, "service discovery failed"); return false }
 
             cameraLightGattActive = true
+            val offSince = cameraLightOffSinceMs
+            if (offSince != null &&
+                System.currentTimeMillis() - offSince >= CAMERA_LIGHT_OVERRIDE_DEADBAND_MS
+            ) {
+                cameraLightUserOverride = false
+                Log.i(TAG_LIGHT, "override cleared after ${(System.currentTimeMillis() - offSince) / 1000}s off")
+            }
+            cameraLightOffSinceMs = null
             Log.i(TAG_LIGHT, "connected, running handshake")
 
             val handshakeOk = RadarUnlock.runHandshake(
@@ -725,20 +736,26 @@ class BikeRadarService : Service() {
             val sunsetMs = SunsetCalculator.sunsetEpochMs(today)
             val afterSunset = sunsetMs != null && nowMs >= sunsetMs
             val initialMode = if (afterSunset) prefs.cameraLightNightMode else prefs.cameraLightDayMode
-            val applied = applyModeWithRetry(controller, initialMode)
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away" else "unknown"
-            Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
-            if (!applied) postLightModeFailNotification(initialMode)
+            if (!cameraLightUserOverride) {
+                val applied = applyModeWithRetry(controller, initialMode)
+                Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
+                if (applied) cameraLightLastWrittenMode = initialMode
+                else postLightModeFailNotification(initialMode)
+            } else {
+                Log.i(TAG_LIGHT, "initial mode skipped (manual override active) sunset=$sunsetLog")
+            }
 
             if (sunsetMs != null && nowMs < sunsetMs) {
                 val msToSunset = sunsetMs - nowMs
                 sunsetJob = scope.launch {
                     kotlinx.coroutines.delay(msToSunset)
-                    if (cameraLightGattActive) {
+                    if (cameraLightGattActive && !cameraLightUserOverride) {
                         val nightMode = prefs.cameraLightNightMode
                         val nightOk = applyModeWithRetry(controller, nightMode)
                         Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
-                        if (!nightOk) postLightModeFailNotification(nightMode)
+                        if (nightOk) cameraLightLastWrittenMode = nightMode
+                        else postLightModeFailNotification(nightMode)
                     }
                 }
             }
@@ -755,14 +772,20 @@ class BikeRadarService : Service() {
                         if (!prefs.isPaused) maybePublishBatteryToHa(name, pct)
                     }
                     Uuids.SETTINGS_14 -> {
-                        val mode = CameraLightController.parseModeStateNotify(bytes)
-                        if (mode != null) Log.d(TAG_LIGHT, "mode-state notify: $mode")
+                        val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
+                        Log.d(TAG_LIGHT, "mode-state notify: $mode")
+                        val expected = cameraLightLastWrittenMode
+                        if (expected != null && mode != expected && !cameraLightUserOverride) {
+                            cameraLightUserOverride = true
+                            Log.i(TAG_LIGHT, "override detected: expected=$expected device=$mode")
+                        }
                     }
                 }
             }
             false
         } finally {
             cameraLightGattActive = false
+            if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = System.currentTimeMillis()
             sunsetJob?.cancel()
             queueJob.cancel()
             queue.cancel()
@@ -2040,6 +2063,8 @@ class BikeRadarService : Service() {
         // tone restarts. Capped-burst pattern is harder to ignore than
         // continuous audio and less noisy for bystanders.
         private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
+        // Override detection: blips shorter than this are treated as the same ride session.
+        private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

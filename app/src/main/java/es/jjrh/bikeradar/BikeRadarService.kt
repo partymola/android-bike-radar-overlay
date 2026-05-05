@@ -97,6 +97,7 @@ class BikeRadarService : Service() {
     @Volatile private var cameraLightUserOverride = false
     @Volatile private var cameraLightLastWrittenMode: CameraLightMode? = null
     @Volatile private var cameraLightOffSinceMs: Long? = null
+    private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     // MAC currently being driven by the radar link, exposed so the bond-state
     // receiver can match the right device. Null when no link is active.
@@ -730,6 +731,15 @@ class BikeRadarService : Service() {
             val ch14 = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_14)
             if (ch14 != null) queue.writeCccd(gatt, ch14)
 
+            val lightSlugEarly = slug(name)
+            val lightMacEarly = gatt.device?.address
+            if (lightMacEarly != null) macToSlug[lightMacEarly] = lightSlugEarly
+            if (ha.isConfigured() && frontModeDiscoveredSlugs.add(lightSlugEarly)) {
+                if (!ha.publishFrontModeDiscovery(lightSlugEarly, name)) {
+                    frontModeDiscoveredSlugs.remove(lightSlugEarly)
+                }
+            }
+
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
             val today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/London"))
@@ -740,8 +750,10 @@ class BikeRadarService : Service() {
             if (!cameraLightUserOverride) {
                 val applied = applyModeWithRetry(controller, initialMode)
                 Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
-                if (applied) cameraLightLastWrittenMode = initialMode
-                else postLightModeFailNotification(initialMode)
+                if (applied) {
+                    cameraLightLastWrittenMode = initialMode
+                    if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, initialMode.name)
+                } else postLightModeFailNotification(initialMode)
             } else {
                 Log.i(TAG_LIGHT, "initial mode skipped (manual override active) sunset=$sunsetLog")
             }
@@ -754,21 +766,19 @@ class BikeRadarService : Service() {
                         val nightMode = prefs.cameraLightNightMode
                         val nightOk = applyModeWithRetry(controller, nightMode)
                         Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
-                        if (nightOk) cameraLightLastWrittenMode = nightMode
-                        else postLightModeFailNotification(nightMode)
+                        if (nightOk) {
+                            cameraLightLastWrittenMode = nightMode
+                            if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, nightMode.name)
+                        } else postLightModeFailNotification(nightMode)
                     }
                 }
             }
-
-            val lightMac = gatt.device?.address
-            val lightSlug = slug(name)
-            if (lightMac != null) macToSlug[lightMac] = lightSlug
 
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        BatteryStateBus.update(BatteryEntry(lightSlug, name, pct))
+                        BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
                         if (!prefs.isPaused) maybePublishBatteryToHa(name, pct)
                     }
                     Uuids.SETTINGS_14 -> {
@@ -779,6 +789,7 @@ class BikeRadarService : Service() {
                             cameraLightUserOverride = true
                             Log.i(TAG_LIGHT, "override detected: expected=$expected device=$mode")
                         }
+                        if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
                     }
                 }
             }

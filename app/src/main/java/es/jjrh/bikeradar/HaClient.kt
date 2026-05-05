@@ -217,6 +217,39 @@ class HaClient(private val baseUrl: String, private val token: String) {
         publishMqtt("varia/$slug/battery", pct.toString(), retain = true)
 
     /**
+     * Publishes the MQTT-Discovery config for the front-camera/light mode entity.
+     * Idempotent: the retained discovery topic is a no-op on re-publish.
+     * Publish-only: no setter topic is registered so a compromised broker
+     * cannot remote-control the light.
+     */
+    suspend fun publishFrontModeDiscovery(slug: String, deviceName: String): Boolean {
+        val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_front_mode/config"
+        val clean = cleanDeviceName(deviceName)
+        val payload = JSONObject()
+            .put("object_id", "varia_${slug}_front_mode")
+            .put("unique_id", "varia_${slug}_front_mode")
+            .put("name", "Front mode")
+            .put("has_entity_name", true)
+            .put("state_topic", "varia/$slug/front_mode")
+            .put("icon", "mdi:car-light-high")
+            .put(
+                "device",
+                JSONObject()
+                    .put("identifiers", JSONArray().put("varia_$slug"))
+                    .put("name", "Varia $clean")
+                    .put("manufacturer", "Garmin")
+                    .put("model", "Varia")
+                    .put("via_device", "varia_reader"),
+            )
+            .toString()
+        return publishMqtt(topic, payload, retain = true)
+    }
+
+    /** Publishes the current front-camera/light mode as a retained state value. */
+    suspend fun publishFrontModeState(slug: String, modeName: String): Boolean =
+        publishMqtt("varia/$slug/front_mode", modeName, retain = true)
+
+    /**
      * Publishes the HA MQTT-Discovery config for the close-pass event
      * entity. Uses HA's native `event` platform (discrete, time-stamped
      * events with payload attributes, and a built-in history view) rather

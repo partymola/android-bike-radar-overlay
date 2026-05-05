@@ -45,6 +45,8 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 - Single foreground service (`BikeRadarService`) handles BLE scan, GATT,
   radar decode, overlay draw, HA MQTT push. No fragments, Compose-only UI.
+- The app connects to two BLE device classes: the rear radar and the front
+  camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - HA integration is optional; the overlay works standalone.
 - Capture log is always written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
@@ -55,7 +57,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 |------|------|
 | `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Unified foreground service |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
-| `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | Scripted AMV 04 handshake to enable V2 |
+| `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
 | `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |
 
@@ -98,6 +100,11 @@ decoders in both Python and Kotlin live there.
   below.
 - Never subscribe the CCCD of `6a4e3203` (V1 radar char). Subscribing locks
   the radar into V1-only mode and suppresses V2.
+- AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
+  TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
+  Mixing the pairs causes silent handshake failure — the device accepts the
+  writes but never responds correctly. `RadarUnlock.DeviceVariant` selects
+  the right pair (`RADAR` or `FRONT_CAMERA`).
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
   LESC; the app never calls it. User must pair once via system Settings.
 - To test Onboarding without destroying your production install's pairing

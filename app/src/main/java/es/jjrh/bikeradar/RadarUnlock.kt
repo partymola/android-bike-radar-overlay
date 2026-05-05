@@ -10,9 +10,21 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 /**
- * AMV 04 unlock handshake for the 6a4e3204 (V2 measurement) stream.
- * Drives the command/reply channel on 6a4e2800 (TX=2821 WRITE-NO-RESP,
- * RX=2811 NOTIFY).
+ * Two BLE device classes share this handshake: the rear radar (TX=2821/RX=2811)
+ * and the front camera/light (TX=2820/RX=2810). [DeviceVariant] selects the pair.
+ * Mixing the UUID pairs causes silent handshake failure.
+ */
+enum class DeviceVariant { RADAR, FRONT_CAMERA }
+
+/**
+ * AMV 04 unlock handshake.
+ *
+ * Rear radar (RADAR variant): drives 6a4e2800 (TX=2821, RX=2811) and ends with
+ * DIS-CCCD-DIS to unlock the 3204 V2 stream.
+ *
+ * Front camera/light (FRONT_CAMERA variant): drives 6a4e2800 (TX=2820, RX=2810), inserts
+ * the 0x18 sub-mode toggle after enum 00..04, and skips the DIS-CCCD-DIS tail
+ * (not needed for light control).
  *
  * Session-dynamic values:
  *   pfxEnum — byte 13 of AMV cmd-04 reply → prefix for enumerate commands 00..04
@@ -20,7 +32,7 @@ import java.util.UUID
  *   base    — byte 0 of device-pushed device-ID frame → substituted as e0/e1 in
  *             capability frames (seen as 0xe0 or 0xd0 across sessions)
  *
- * Returns true on success (3204 stream should now flow).
+ * Returns true on success.
  * Returns false on any ABORT — caller must close + reopen GATT (APK-reinstall
  * self-heal: Bluedroid keeps a half-open GATT reference on SIGKILL; reopening
  * clears it). Log fingerprint: "# script: ABORT" then "# gatt reopened".
@@ -42,13 +54,18 @@ object RadarUnlock {
         gatt: BluetoothGatt,
         queue: BleOpQueue,
         notifies: Channel<Pair<UUID, ByteArray>>,
+        deviceVariant: DeviceVariant = DeviceVariant.RADAR,
         clog: (String) -> Unit,
     ): Boolean {
+        val txUuid = if (deviceVariant == DeviceVariant.FRONT_CAMERA) Uuids.CHAR_2820 else Uuids.HANDSHAKE_TX
+        val rxUuid = if (deviceVariant == DeviceVariant.FRONT_CAMERA) Uuids.CHAR_2810 else Uuids.HANDSHAKE_RX
+
         // Abort early if the TX write characteristic is absent. Without this check,
         // writeNoResp calls silently drop when GATT returns a successful but incomplete
-        // service list, causing the handshake to report success while V2 never unlocks.
-        if (gatt.getService(Uuids.SVC_CONFIG)?.getCharacteristic(Uuids.HANDSHAKE_TX) == null) {
-            clog("ABORT: HANDSHAKE_TX characteristic not found — GATT service list incomplete")
+        // service list, causing the handshake to report success while the device never
+        // unlocks.
+        if (gatt.getService(Uuids.SVC_CONFIG)?.getCharacteristic(txUuid) == null) {
+            clog("ABORT: handshake TX characteristic not found — GATT service list incomplete")
             return false
         }
 
@@ -56,9 +73,9 @@ object RadarUnlock {
         delay(100)
 
         // Pre-handshake subscriptions.
-        // 2811 (HANDSHAKE_RX) NOTIFY — handshake reply channel, must come first.
+        // RX NOTIFY — handshake reply channel, must come first.
         // 2f11 (SETTINGS_ACK) INDICATE — WRITE_REQ to 2f11 returns 0xFD without it.
-        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_RX, clog)) return false
+        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONFIG, rxUuid, clog)) return false
         if (!subscribeCccd(gatt, queue, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK, clog)) return false
         delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
@@ -70,16 +87,16 @@ object RadarUnlock {
         delay(400)
 
         // Open AMV session. Reply opcode = 0x06.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "00050000000000414d560000")
-        val rOpen = awaitNotify(notifies, Uuids.HANDSHAKE_RX, 800) {
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00050000000000414d560000")
+        val rOpen = awaitNotify(notifies, rxUuid, 800) {
             it.size >= 2 && it[1].toInt() == 0x06
         }
         if (rOpen == null) { clog("ABORT: AMV open reply never arrived"); return false }
         delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
         // AMV cmd 04 — reply carries enumerate prefix at byte 13.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "00000000000000414d56040000")
-        val r04 = awaitNotify(notifies, Uuids.HANDSHAKE_RX, 1000) {
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56040000")
+        val r04 = awaitNotify(notifies, rxUuid, 1000) {
             it.size >= 14 && it[1].toInt() == 0x01 && it[10].toInt() == 0x04
         }
         if (r04 == null) { clog("ABORT: AMV 04 reply never arrived"); return false }
@@ -88,17 +105,22 @@ object RadarUnlock {
         delay(50)
 
         // Enumerate commands 00..04.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxEnum}00"); delay(80)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxEnum}01"); delay(180)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxEnum}02"); delay(90)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxEnum}03"); delay(100)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxEnum}04"); delay(170)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}00"); delay(80)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}01"); delay(180)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}02"); delay(90)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}03"); delay(100)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}04"); delay(170)
+
+        // Front camera only: 0x18 sub-mode toggle required before capability exchange.
+        if (deviceVariant == DeviceVariant.FRONT_CAMERA) {
+            if (!runSubmodeToggle(gatt, queue, notifies, txUuid, rxUuid, clog)) return false
+        }
 
         // AMV cmd 01 + 16 back-to-back. Await both replies then the device-ID push.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "00000000000000414d56010002"); delay(5)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "00000000000000414d56160000")
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56010002"); delay(5)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56160000")
 
-        val r16 = awaitNotify(notifies, Uuids.HANDSHAKE_RX, 1200) {
+        val r16 = awaitNotify(notifies, rxUuid, 1200) {
             it.size >= 14 && it[1].toInt() == 0x01 && it[10].toInt() == 0x16
         }
         if (r16 == null) { clog("ABORT: AMV 16 reply never arrived"); return false }
@@ -106,7 +128,7 @@ object RadarUnlock {
         clog("pfxCmd=$pfxCmd reply=${r16.toHex()}")
 
         // Device-ID push frame: byte 0 >= 0x80, size > 20.
-        val devId = awaitNotify(notifies, Uuids.HANDSHAKE_RX, 1500) {
+        val devId = awaitNotify(notifies, rxUuid, 1500) {
             it.size > 20 && (it[0].toInt() and 0xff) >= 0x80
         }
         if (devId == null) { clog("ABORT: device-ID frame never arrived"); return false }
@@ -116,36 +138,87 @@ object RadarUnlock {
         clog("base=$e0 baseE1=$e1 devId=${devId.toHex()}")
         delay(20)
 
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX, "${pfxCmd}0119000000"); delay(15)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxCmd}0119000000"); delay(15)
 
         // Capability exchange — minimal common-denominator across 4 captured sessions
         // (2026-04-17 multi-session HCI diff). Single-byte probes inconsistent across
         // sessions, removed to match the common denominator.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX,
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
             "${e0}4000023f058813a013029608ffffffffffff9b2fffff$DEVICE_ID_SUFFIX"); delay(180)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX,
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
             "${e0}81000209010481ba13039de900"); delay(130)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX,
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
             "${e0}820002130432800c010101010101010380100404f66a00"); delay(110)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX,
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
             "${e0}c3000218032b8101010101010204010102040101046a024203d21000"); delay(85)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_TX,
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
             "${e1}44000211010482b41301010101010101010398dd00"); delay(60)
 
-        clog("handshake complete — observing for 3204")
+        clog("handshake complete")
 
-        // Post-handshake: DIS reads flanking the 3204 CCCD subscribe.
-        // Order as observed from a reference session; DIS-CCCD-DIS
-        // ordering is what the radar expects to unlock V2 reliably.
-        delay(80)
-        readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_MODEL_NUMBER, clog)
-        delay(140)
-        if (!subscribeCccd(gatt, queue, Uuids.SVC_RADAR, Uuids.RADAR_V2, clog)) return false
-        delay(140)
-        readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_FIRMWARE_REV, clog)
-        delay(90)
-        readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_SERIAL_NUMBER, clog)
-        clog("DIS-CCCD-DIS sequence complete — observing 3204")
+        if (deviceVariant == DeviceVariant.RADAR) {
+            // Post-handshake: DIS reads flanking the 3204 CCCD subscribe.
+            // Order as observed from a reference session; DIS-CCCD-DIS
+            // ordering is what the radar expects to unlock V2 reliably.
+            clog("handshake complete — observing for 3204")
+            delay(80)
+            readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_MODEL_NUMBER, clog)
+            delay(140)
+            if (!subscribeCccd(gatt, queue, Uuids.SVC_RADAR, Uuids.RADAR_V2, clog)) return false
+            delay(140)
+            readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_FIRMWARE_REV, clog)
+            delay(90)
+            readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_SERIAL_NUMBER, clog)
+            clog("DIS-CCCD-DIS sequence complete — observing 3204")
+        }
+
+        return true
+    }
+
+    /**
+     * Three-frame 0x18 sub-mode toggle required after enum 00..04 during the
+     * front-camera/light handshake. Awaits a reply after each frame and aborts
+     * on timeout or unexpected trailer.
+     *
+     * Frame format: 00 SS 00 00 00 00 00 00 41 4d 56 18 PP
+     */
+    private suspend fun runSubmodeToggle(
+        gatt: BluetoothGatt,
+        queue: BleOpQueue,
+        notifies: Channel<Pair<UUID, ByteArray>>,
+        txUuid: UUID,
+        rxUuid: UUID,
+        clog: (String) -> Unit,
+    ): Boolean {
+        val svc = Uuids.SVC_CONFIG
+
+        // Frame 1: SS=0x00, PP=0x02 → expect reply trailer 82 01 00
+        writeNoResp(gatt, queue, svc, txUuid, "0000000000000000414d561802")
+        val r1 = awaitNotify(notifies, rxUuid, 1000) {
+            it.size >= 3 &&
+                it[it.size - 3] == 0x82.toByte() &&
+                it[it.size - 2] == 0x01.toByte() &&
+                it.last() == 0x00.toByte()
+        }
+        if (r1 == null) { clog("ABORT: 0x18 toggle frame 1 reply timed out or mismatched"); return false }
+        clog("0x18 toggle frame 1 ok: ${r1.toHex()}")
+
+        // Frame 2: SS=0x02, PP=0x82 → expect reply ending in 00
+        writeNoResp(gatt, queue, svc, txUuid, "0002000000000000414d561882")
+        val r2 = awaitNotify(notifies, rxUuid, 1000) { it.isNotEmpty() && it.last() == 0x00.toByte() }
+        if (r2 == null) { clog("ABORT: 0x18 toggle frame 2 reply timed out or mismatched"); return false }
+        clog("0x18 toggle frame 2 ok: ${r2.toHex()}")
+
+        // Frame 3: SS=0x00, PP=0x02 → expect reply trailer 83 01 00 (state advanced)
+        writeNoResp(gatt, queue, svc, txUuid, "0000000000000000414d561802")
+        val r3 = awaitNotify(notifies, rxUuid, 1000) {
+            it.size >= 3 &&
+                it[it.size - 3] == 0x83.toByte() &&
+                it[it.size - 2] == 0x01.toByte() &&
+                it.last() == 0x00.toByte()
+        }
+        if (r3 == null) { clog("ABORT: 0x18 toggle frame 3 reply timed out or mismatched"); return false }
+        clog("0x18 toggle frame 3 ok: ${r3.toHex()}")
 
         return true
     }

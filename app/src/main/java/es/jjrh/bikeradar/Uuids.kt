@@ -30,7 +30,7 @@ object Uuids {
     val SVC_CONTROL: UUID = UUID.fromString("6a4e2f00-667b-11e3-949a-0800200c9a66")
     val SETTINGS_ACK: UUID = UUID.fromString("6a4e2f11-667b-11e3-949a-0800200c9a66")  // INDICATE
     val SETTINGS_12: UUID = UUID.fromString("6a4e2f12-667b-11e3-949a-0800200c9a66")   // NOTIFY
-    val SETTINGS_14: UUID = UUID.fromString("6a4e2f14-667b-11e3-949a-0800200c9a66")   // INDICATE
+    val SETTINGS_14: UUID = UUID.fromString("6a4e2f14-667b-11e3-949a-0800200c9a66")   // NOTIFY
 
     // Other config-service chars referenced in the handshake sequence
     val CHAR_2803: UUID = UUID.fromString("6a4e2803-667b-11e3-949a-0800200c9a66")

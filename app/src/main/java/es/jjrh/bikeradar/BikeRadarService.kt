@@ -702,6 +702,7 @@ class BikeRadarService : Service() {
         val queueJob = scope.launch { queue.run() }
 
         var sunsetJob: Job? = null
+        var sunriseJob: Job? = null
         return try {
             val ok = servicesReady.await()
             if (!ok) { Log.w(TAG_LIGHT, "service discovery failed"); return false }
@@ -743,9 +744,13 @@ class BikeRadarService : Service() {
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
             val today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/London"))
+            val sunriseMs = SunsetCalculator.sunriseEpochMs(today)
             val sunsetMs = SunsetCalculator.sunsetEpochMs(today)
-            val afterSunset = sunsetMs != null && nowMs >= sunsetMs
-            val initialMode = if (afterSunset) prefs.cameraLightNightMode else prefs.cameraLightDayMode
+            // It's night if we're before today's sunrise (still in last night) or
+            // after today's sunset (already in this night).
+            val isNight = (sunriseMs != null && nowMs < sunriseMs) ||
+                (sunsetMs != null && nowMs >= sunsetMs)
+            val initialMode = if (isNight) prefs.cameraLightNightMode else prefs.cameraLightDayMode
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away" else "unknown"
             if (!cameraLightUserOverride) {
                 val applied = applyModeWithRetry(controller, initialMode)
@@ -758,7 +763,12 @@ class BikeRadarService : Service() {
                 Log.i(TAG_LIGHT, "initial mode skipped (manual override active) sunset=$sunsetLog")
             }
 
-            if (sunsetMs != null && nowMs < sunsetMs) {
+            // Schedule the next solar transition. If currently in daytime and today's
+            // sunset is in the future, schedule the dusk flip to night mode. If
+            // currently in night and today's sunrise is in the future (i.e., we're
+            // before sunrise rather than after sunset), schedule the dawn flip to
+            // day mode. Either way, the flip only fires if no manual override.
+            if (!isNight && sunsetMs != null && nowMs < sunsetMs) {
                 val msToSunset = sunsetMs - nowMs
                 sunsetJob = scope.launch {
                     kotlinx.coroutines.delay(msToSunset)
@@ -770,6 +780,21 @@ class BikeRadarService : Service() {
                             cameraLightLastWrittenMode = nightMode
                             if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, nightMode.name)
                         } else postLightModeFailNotification(nightMode)
+                    }
+                }
+            }
+            if (isNight && sunriseMs != null && nowMs < sunriseMs) {
+                val msToSunrise = sunriseMs - nowMs
+                sunriseJob = scope.launch {
+                    kotlinx.coroutines.delay(msToSunrise)
+                    if (cameraLightGattActive && !cameraLightUserOverride) {
+                        val dayMode = prefs.cameraLightDayMode
+                        val dayOk = applyModeWithRetry(controller, dayMode)
+                        Log.i(TAG_LIGHT, "sunrise mode=$dayMode applied=$dayOk")
+                        if (dayOk) {
+                            cameraLightLastWrittenMode = dayMode
+                            if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, dayMode.name)
+                        } else postLightModeFailNotification(dayMode)
                     }
                 }
             }
@@ -798,6 +823,7 @@ class BikeRadarService : Service() {
             cameraLightGattActive = false
             if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = System.currentTimeMillis()
             sunsetJob?.cancel()
+            sunriseJob?.cancel()
             queueJob.cancel()
             queue.cancel()
             closeOnce()

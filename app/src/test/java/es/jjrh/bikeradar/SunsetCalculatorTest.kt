@@ -42,6 +42,37 @@ class SunsetCalculatorTest {
     }
 
     @Test
+    fun summerSolsticeSunrise2026() {
+        // London, 2026-06-21: sunrise ~04:43 BST. Algorithm accuracy ±5 min.
+        val ms = SunsetCalculator.sunriseEpochMs(LocalDate.of(2026, 6, 21))
+        assertNotNull("summer solstice sunrise should not return null", ms)
+        val zdt = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms!!), london)
+        val h = zdt.hour; val m = zdt.minute
+        assertTrue("expected ~04:43 BST ±5 min, got $h:$m", h == 4 && m in 38..48)
+    }
+
+    @Test
+    fun winterSolsticeSunrise2026() {
+        // London, 2026-12-21: sunrise ~08:04 GMT. Algorithm accuracy ±5 min.
+        val ms = SunsetCalculator.sunriseEpochMs(LocalDate.of(2026, 12, 21))
+        assertNotNull("winter solstice sunrise should not return null", ms)
+        val zdt = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms!!), london)
+        val h = zdt.hour; val m = zdt.minute
+        assertTrue("expected ~08:04 GMT ±5 min, got $h:$m", h == 8 && m in 0..9)
+    }
+
+    @Test
+    fun sunriseAlwaysBeforeSunset() {
+        // Sanity: on any given day, sunrise must come before sunset.
+        for (date in listOf(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 21), LocalDate.of(2026, 12, 21))) {
+            val rise = SunsetCalculator.sunriseEpochMs(date)
+            val set = SunsetCalculator.sunsetEpochMs(date)
+            assertNotNull(rise); assertNotNull(set)
+            assertTrue("sunrise should precede sunset on $date", rise!! < set!!)
+        }
+    }
+
+    @Test
     fun sunsetEpochMsMatchesZdt() {
         val date = LocalDate.of(2026, 6, 21)
         val ms = SunsetCalculator.sunsetEpochMs(date)

@@ -30,8 +30,17 @@ object SunsetCalculator {
      * Returns null if the sun does not set on that date (polar night / midnight sun),
      * which cannot occur at London's latitude but is handled defensively.
      */
-    fun sunsetEpochMs(date: LocalDate): Long? {
-        val utcMinutes = sunsetUtcMinutes(date.year, date.monthValue, date.dayOfMonth)
+    fun sunsetEpochMs(date: LocalDate): Long? =
+        eventEpochMs(date, sunset = true)
+
+    /** Sunrise on [date] for the hardcoded London location, as epoch milliseconds. */
+    fun sunriseEpochMs(date: LocalDate): Long? =
+        eventEpochMs(date, sunset = false)
+
+    private fun eventEpochMs(date: LocalDate, sunset: Boolean): Long? {
+        val utcMinutes =
+            (if (sunset) sunsetUtcMinutes(date.year, date.monthValue, date.dayOfMonth)
+            else sunriseUtcMinutes(date.year, date.monthValue, date.dayOfMonth))
             ?: return null
         val h = (utcMinutes / 60).toLong()
         val m = (utcMinutes % 60).toLong()
@@ -49,7 +58,13 @@ object SunsetCalculator {
 
     // ── NOAA formula chain ───────────────────────────────────────────────────
 
-    private fun sunsetUtcMinutes(year: Int, month: Int, day: Int): Double? {
+    private fun sunsetUtcMinutes(year: Int, month: Int, day: Int): Double? =
+        sunEventUtcMinutes(year, month, day, sign = +1.0)
+
+    private fun sunriseUtcMinutes(year: Int, month: Int, day: Int): Double? =
+        sunEventUtcMinutes(year, month, day, sign = -1.0)
+
+    private fun sunEventUtcMinutes(year: Int, month: Int, day: Int, sign: Double): Double? {
         val t = julianCentury(julianDay(year, month, day))
         val sunDecRad = Math.toRadians(sunDeclination(t))
         val latRad = Math.toRadians(LONDON_LAT_DEG)
@@ -59,7 +74,7 @@ object SunsetCalculator {
         if (cosHa > 1.0 || cosHa < -1.0) return null
         val hourAngleDeg = Math.toDegrees(Math.acos(cosHa))
         val noonUtc = solarNoonUtcMinutes(t)
-        return noonUtc + hourAngleDeg * 4.0
+        return noonUtc + sign * hourAngleDeg * 4.0
     }
 
     private fun solarNoonUtcMinutes(t: Double): Double =

@@ -91,6 +91,10 @@ class BikeRadarService : Service() {
     @Volatile private var radarJob: Job? = null
     @Volatile var radarGattActive = false
 
+    // Front camera/light link state
+    @Volatile private var cameraLightJob: Job? = null
+    @Volatile private var cameraLightGattActive = false
+
     // MAC currently being driven by the radar link, exposed so the bond-state
     // receiver can match the right device. Null when no link is active.
     @Volatile private var currentRadarMac: String? = null
@@ -278,6 +282,7 @@ class BikeRadarService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         pauseExpiryJob?.cancel()
+        cameraLightJob?.cancel()
         unregisterEventScan()
         unregisterBondReceiver()
         closeCaptureLog()
@@ -328,6 +333,15 @@ class BikeRadarService : Service() {
 
         if (isRearDevice(name) && (radarGattActive || radarJob?.isActive == true)) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
+            return
+        }
+
+        // Start or gate the camera light link when this is the configured dashcam.
+        val isDashcam = prefs.dashcamMac?.equals(mac, ignoreCase = true) == true
+        if (isDashcam && prefs.autoLightModeEnabled) maybeStartCameraLightLink(name, mac)
+        if (isDashcam && (cameraLightGattActive || cameraLightJob?.isActive == true)) {
+            BatteryStateBus.markSeen(slug(name), System.currentTimeMillis())
+            Log.d(TAG, "skip $name (camera light gatt active)")
             return
         }
 
@@ -572,6 +586,167 @@ class BikeRadarService : Service() {
         }
         Log.i(TAG_RADAR, "starting radar link to $name $mac")
         radarJob = scope.launch { runRadarConnection(mac, name) }
+    }
+
+    @Synchronized
+    private fun maybeStartCameraLightLink(name: String, mac: String) {
+        if (cameraLightJob?.isActive == true) return
+        Log.i(TAG_LIGHT, "starting camera light link to $name $mac")
+        cameraLightJob = scope.launch { runCameraLightConnection(mac, name) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun runCameraLightConnection(mac: String, name: String) {
+        val btMgr = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager ?: return
+        val device = try {
+            btMgr.adapter?.getRemoteDevice(mac)
+        } catch (_: Throwable) { null } ?: return
+
+        var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+        try {
+            while (true) {
+                if (!prefs.autoLightModeEnabled) {
+                    Log.i(TAG_LIGHT, "auto light mode disabled; exiting link")
+                    return
+                }
+                Log.i(TAG_LIGHT, "connect attempt to $name $mac")
+                val quickReconnect = connectAndRunCameraLight(device, name)
+                cameraLightGattActive = false
+                val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else backoffMs
+                Log.i(TAG_LIGHT, "reconnecting in ${delayMs}ms")
+                kotlinx.coroutines.delay(delayMs)
+                if (!quickReconnect) {
+                    backoffMs = (backoffMs * 2).coerceAtMost(RADAR_RECONNECT_BACKOFF_MAX_MS)
+                } else {
+                    backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+                }
+            }
+        } finally {
+            cameraLightGattActive = false
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun connectAndRunCameraLight(device: BluetoothDevice, name: String): Boolean {
+        val notifyChannel = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        val queue = BleOpQueue()
+        val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        var gatt: BluetoothGatt? = null
+        var gattClosed = false
+        fun closeOnce() {
+            if (gattClosed) return
+            gattClosed = true
+            val g = gatt ?: return
+            try { g.disconnect() } catch (_: Throwable) {}
+            try { g.close() } catch (_: Throwable) {}
+        }
+
+        val cb = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+                when (newState) {
+                    BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        cameraLightGattActive = false
+                        queue.cancel()
+                        notifyChannel.close()
+                        if (!servicesReady.isCompleted) servicesReady.complete(false)
+                        closeOnce()
+                    }
+                }
+            }
+
+            override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+                if (!servicesReady.isCompleted) servicesReady.complete(status == BluetoothGatt.GATT_SUCCESS)
+            }
+
+            override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+                queue.onDescriptorWrite(d, status)
+            }
+
+            @Deprecated("API < 33 compat")
+            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+                @Suppress("DEPRECATION")
+                queue.onCharacteristicRead(ch, ch.value ?: ByteArray(0), status)
+            }
+
+            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+                queue.onCharacteristicRead(ch, value, status)
+            }
+
+            override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+                queue.onCharacteristicWrite(ch, status)
+            }
+
+            override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+                queue.onMtuChanged(mtu, status)
+            }
+
+            @Deprecated("API < 33 compat")
+            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
+                @Suppress("DEPRECATION")
+                notifyChannel.trySend(ch.uuid to (ch.value ?: ByteArray(0)))
+            }
+
+            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
+                notifyChannel.trySend(ch.uuid to value)
+            }
+        }
+
+        gatt = device.connectGatt(this, true, cb, BluetoothDevice.TRANSPORT_LE)
+        if (gatt == null) { Log.w(TAG_LIGHT, "connectGatt returned null"); return false }
+
+        val queueJob = scope.launch { queue.run() }
+
+        return try {
+            val ok = servicesReady.await()
+            if (!ok) { Log.w(TAG_LIGHT, "service discovery failed"); return false }
+
+            cameraLightGattActive = true
+            Log.i(TAG_LIGHT, "connected, running handshake")
+
+            val handshakeOk = RadarUnlock.runHandshake(
+                gatt, queue, notifyChannel, DeviceVariant.FRONT_CAMERA,
+            ) { msg -> Log.d(TAG_LIGHT, msg) }
+
+            if (!handshakeOk) {
+                Log.w(TAG_LIGHT, "handshake failed; closing for quick reconnect")
+                gatt.disconnect()
+                return true
+            }
+
+            Log.i(TAG_LIGHT, "handshake complete; subscribing mode-state notify")
+            val ch14 = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_14)
+            if (ch14 != null) queue.writeCccd(gatt, ch14)
+
+            val controller = CameraLightController(gatt, queue)
+            val mode = prefs.cameraLightDayMode
+            val applied = controller.setMode(mode)
+            Log.i(TAG_LIGHT, "initial mode=$mode applied=$applied")
+
+            val lightMac = gatt.device?.address
+            val lightSlug = slug(name)
+            if (lightMac != null) macToSlug[lightMac] = lightSlug
+
+            for ((uuid, bytes) in notifyChannel) {
+                when (uuid) {
+                    Uuids.CHAR_BATTERY -> {
+                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                        BatteryStateBus.update(BatteryEntry(lightSlug, name, pct))
+                        if (!prefs.isPaused) maybePublishBatteryToHa(name, pct)
+                    }
+                    Uuids.SETTINGS_14 -> {
+                        val mode = CameraLightController.parseModeStateNotify(bytes)
+                        if (mode != null) Log.d(TAG_LIGHT, "mode-state notify: $mode")
+                    }
+                }
+            }
+            false
+        } finally {
+            cameraLightGattActive = false
+            queueJob.cancel()
+            queue.cancel()
+            closeOnce()
+        }
     }
 
     /**
@@ -1680,6 +1855,7 @@ class BikeRadarService : Service() {
     companion object {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
+        private const val TAG_LIGHT = "BikeRadar.Light"
         const val CHANNEL_ID = "bike_radar_min"
         // v2 channel created with alarm-stream sound; the v1 legacy id
         // is deleted on channel-ensure so an upgrade picks up sound.

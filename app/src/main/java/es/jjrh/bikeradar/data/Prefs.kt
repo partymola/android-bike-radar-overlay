@@ -3,6 +3,7 @@ package es.jjrh.bikeradar.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import es.jjrh.bikeradar.CameraLightMode
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -43,6 +44,9 @@ data class PrefsSnapshot(
     val closePassEmitMinRangeXM: Float,
     val closePassRiderSpeedFloorKmh: Int,
     val closePassClosingSpeedFloorMs: Int,
+    val autoLightModeEnabled: Boolean,
+    val cameraLightDayMode: CameraLightMode,
+    val cameraLightNightMode: CameraLightMode,
 )
 
 class Prefs(context: Context) {
@@ -199,6 +203,26 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
         set(v) { sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply() }
 
+    /** Master toggle for front camera/light auto-mode. Default off: opt-in feature.
+     *  When off, no BLE writes are sent to the light regardless of other settings. */
+    var autoLightModeEnabled: Boolean
+        get() = sp.getBoolean(KEY_AUTO_LIGHT_MODE, false)
+        set(v) { sp.edit().putBoolean(KEY_AUTO_LIGHT_MODE, v).apply() }
+
+    /** Light mode applied at front camera/light connect time (before local sunset). */
+    var cameraLightDayMode: CameraLightMode
+        get() = runCatching {
+            CameraLightMode.valueOf(sp.getString(KEY_CAMERA_LIGHT_DAY_MODE, CameraLightMode.DAY_FLASH.name)!!)
+        }.getOrDefault(CameraLightMode.DAY_FLASH)
+        set(v) { sp.edit().putString(KEY_CAMERA_LIGHT_DAY_MODE, v.name).apply() }
+
+    /** Light mode applied at local sunset. */
+    var cameraLightNightMode: CameraLightMode
+        get() = runCatching {
+            CameraLightMode.valueOf(sp.getString(KEY_CAMERA_LIGHT_NIGHT_MODE, CameraLightMode.LOW.name)!!)
+        }.getOrDefault(CameraLightMode.LOW)
+        set(v) { sp.edit().putString(KEY_CAMERA_LIGHT_NIGHT_MODE, v.name).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -225,6 +249,9 @@ class Prefs(context: Context) {
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
         closePassRiderSpeedFloorKmh = closePassRiderSpeedFloorKmh,
         closePassClosingSpeedFloorMs = closePassClosingSpeedFloorMs,
+        autoLightModeEnabled = autoLightModeEnabled,
+        cameraLightDayMode = cameraLightDayMode,
+        cameraLightNightMode = cameraLightNightMode,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -263,6 +290,9 @@ class Prefs(context: Context) {
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
         appendLine("close_pass_rider_floor_kmh=$closePassRiderSpeedFloorKmh")
         appendLine("close_pass_closing_floor_ms=$closePassClosingSpeedFloorMs")
+        appendLine("auto_light_mode_enabled=$autoLightModeEnabled")
+        appendLine("camera_light_day_mode=$cameraLightDayMode")
+        appendLine("camera_light_night_mode=$cameraLightNightMode")
     }
 
     companion object {
@@ -291,6 +321,9 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
+        const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
+        const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"
+        const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"
 
         /**
          * Replace a sensitive identifier with a presence-only marker for use

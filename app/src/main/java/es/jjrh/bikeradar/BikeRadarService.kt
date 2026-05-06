@@ -620,7 +620,9 @@ class BikeRadarService : Service() {
                 Log.i(TAG_LIGHT, "reconnecting in ${delayMs}ms")
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(RADAR_RECONNECT_BACKOFF_MAX_MS)
+                    backoffMs = (backoffMs * 2).coerceAtMost(
+                        reconnectBackoffCap(System.currentTimeMillis(), radarOffSinceMs),
+                    )
                 } else {
                     backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
                 }
@@ -892,7 +894,9 @@ class BikeRadarService : Service() {
                 Log.i(TAG_RADAR, "reconnecting in ${delayMs}ms$tag")
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(RADAR_RECONNECT_BACKOFF_MAX_MS)
+                    backoffMs = (backoffMs * 2).coerceAtMost(
+                        reconnectBackoffCap(System.currentTimeMillis(), radarOffSinceMs),
+                    )
                 }
             }
         } finally {
@@ -2043,6 +2047,24 @@ class BikeRadarService : Service() {
         const val RADAR_RECONNECT_BACKOFF_INITIAL_MS = 1_000L
         const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
         const val RADAR_QUICK_RECONNECT_MS = 1_500L
+
+        // After the radar has been offline past this threshold, the cap
+        // relaxes to LONG_OFFLINE_MAX_MS. At the steady-state 8 s ceiling
+        // a parked-overnight bike would otherwise trigger ~10,800 GATT
+        // opens per 24 h; 60 s lets the radio idle while still picking up
+        // the radar within one cycle of return.
+        const val RADAR_LONG_OFFLINE_THRESHOLD_MS = 30 * 60 * 1000L
+        const val RADAR_RECONNECT_BACKOFF_LONG_OFFLINE_MAX_MS = 60_000L
+
+        @androidx.annotation.VisibleForTesting
+        internal fun reconnectBackoffCap(now: Long, offSinceMs: Long?): Long {
+            if (offSinceMs == null) return RADAR_RECONNECT_BACKOFF_MAX_MS
+            return if (now - offSinceMs > RADAR_LONG_OFFLINE_THRESHOLD_MS) {
+                RADAR_RECONNECT_BACKOFF_LONG_OFFLINE_MAX_MS
+            } else {
+                RADAR_RECONNECT_BACKOFF_MAX_MS
+            }
+        }
 
         // V2 data-flow watchdog: if no V2 notification has been observed for
         // V2_FRAME_STALL_MS, the link is considered stuck and the GATT is

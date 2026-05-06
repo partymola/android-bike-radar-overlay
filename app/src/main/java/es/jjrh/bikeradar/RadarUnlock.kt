@@ -206,12 +206,10 @@ object RadarUnlock {
     ): Boolean {
         val svc = Uuids.SVC_CONFIG
 
-        // Reply format observed on firmware 5.80: `00 01 [6 zero pad] 41 4d 56 18 [status]`.
-        // Match any reply carrying the 0x18 opcode at byte 11. Each frame gets its own
-        // await so the sequence drives the device's internal state advance.
-        val matcher: (ByteArray) -> Boolean = {
-            it.size >= 12 && it[10].toInt() == 0x56 && it[11].toInt() == 0x18
-        }
+        // Each frame gets its own await; [matchSubmodeReply] keeps the
+        // wire invariant (full AMV signature at bytes 8-10 + 0x18 opcode
+        // at byte 11) testable without driving a fake notify channel.
+        val matcher: (ByteArray) -> Boolean = ::matchSubmodeReply
 
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_1)
         val r1 = awaitNotify(notifies, rxUuid, 1000, matcher)
@@ -232,6 +230,22 @@ object RadarUnlock {
     }
 
     // ── private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Pin for AMV `0x18` reply frames observed on firmware 5.80:
+     * `00 01 [6 zero pad] 41 4d 56 18 [status]`. Match on the full
+     * `AMV` signature at bytes 8-10 plus the `0x18` opcode at byte 11.
+     * Trailing status bytes vary across frames and across sessions and
+     * must NOT be checked. Internal so [BleHandshakeReplyMatchTest]
+     * can pin the byte positions without driving a fake notify channel.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun matchSubmodeReply(bytes: ByteArray): Boolean =
+        bytes.size >= 12 &&
+            bytes[8].toInt() == 0x41 &&
+            bytes[9].toInt() == 0x4d &&
+            bytes[10].toInt() == 0x56 &&
+            bytes[11].toInt() == 0x18
 
     private suspend fun subscribeCccd(
         gatt: BluetoothGatt,

@@ -66,6 +66,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var alertVol by rememberSaveable { mutableIntStateOf(prefs.alertVolume) }
     var alertDist by rememberSaveable { mutableIntStateOf(prefs.alertMaxDistanceM) }
     var visualDist by rememberSaveable { mutableIntStateOf(prefs.visualMaxDistanceM) }
+    var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
     var batteryThreshold by rememberSaveable { mutableIntStateOf(prefs.batteryLowThresholdPct) }
     var batteryShowLabels by rememberSaveable { mutableStateOf(prefs.batteryShowLabels) }
@@ -108,6 +109,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 onValueChange = { alertDist = it.toInt() },
                 onValueChangeFinished = { prefs.alertMaxDistanceM = alertDist },
             )
+            SettingsSectionLabel("Overlay")
             SettingsSliderRow(
                 title = "Visual distance",
                 valueDisplay = "$visualDist m",
@@ -116,6 +118,15 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 valueRange = 10f..80f,
                 onValueChange = { visualDist = it.toInt() },
                 onValueChangeFinished = { prefs.visualMaxDistanceM = visualDist },
+            )
+            SettingsSliderRow(
+                title = "Overlay opacity",
+                valueDisplay = "${(overlayOpacity * 100).toInt()}%",
+                helper = "Lower values let the underlying app (map, navigation) show through more.",
+                value = overlayOpacity,
+                valueRange = 0.4f..1.0f,
+                onValueChange = { overlayOpacity = it },
+                onValueChangeFinished = { prefs.overlayOpacity = overlayOpacity },
             )
 
             SettingsSectionLabel("Adaptive")

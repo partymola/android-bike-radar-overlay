@@ -26,6 +26,7 @@ data class PrefsSnapshot(
     val alertVolume: Int,
     val alertMaxDistanceM: Int,
     val visualMaxDistanceM: Int,
+    val overlayOpacity: Float,
     val pausedUntilEpochMs: Long,
     val devModeUnlocked: Boolean,
     val haLastValidatedEpochMs: Long,
@@ -73,6 +74,13 @@ class Prefs(context: Context) {
     var visualMaxDistanceM: Int
         get() = sp.getInt(KEY_VISUAL_MAX_DISTANCE_M, 50)
         set(v) { sp.edit().putInt(KEY_VISUAL_MAX_DISTANCE_M, v).apply() }
+
+    /** Fill opacity for the on-screen overlay (0.4..1.0). Lower values
+     *  let the underlying app (map, navigation) show through more.
+     *  Default 1.0 preserves the pre-feature look. */
+    var overlayOpacity: Float
+        get() = sp.getFloat(KEY_OVERLAY_OPACITY, 1.0f).coerceIn(0.4f, 1.0f)
+        set(v) { sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.4f, 1.0f)).apply() }
 
     var pausedUntilEpochMs: Long
         get() = sp.getLong(KEY_PAUSED_UNTIL_EPOCH_MS, 0L)
@@ -231,6 +239,7 @@ class Prefs(context: Context) {
         alertVolume = alertVolume,
         alertMaxDistanceM = alertMaxDistanceM,
         visualMaxDistanceM = visualMaxDistanceM,
+        overlayOpacity = overlayOpacity,
         pausedUntilEpochMs = pausedUntilEpochMs,
         devModeUnlocked = devModeUnlocked,
         haLastValidatedEpochMs = haLastValidatedEpochMs,
@@ -271,6 +280,7 @@ class Prefs(context: Context) {
         appendLine("alert_volume=$alertVolume")
         appendLine("alert_max_distance_m=$alertMaxDistanceM")
         appendLine("visual_max_distance_m=$visualMaxDistanceM")
+        appendLine("overlay_opacity=$overlayOpacity")
         appendLine("paused_until_epoch_ms=$pausedUntilEpochMs")
         appendLine("dev_mode_unlocked=$devModeUnlocked")
         appendLine("ha_last_validated_epoch_ms=$haLastValidatedEpochMs")
@@ -302,6 +312,7 @@ class Prefs(context: Context) {
         const val KEY_ALERT_VOLUME = "alert_volume"
         const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"
         const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
+        const val KEY_OVERLAY_OPACITY = "overlay_opacity"
         const val KEY_PAUSED_UNTIL_EPOCH_MS = "paused_until_epoch_ms"
         const val KEY_DEV_MODE_UNLOCKED = "dev_mode_unlocked"
         const val KEY_HA_LAST_VALIDATED_EPOCH_MS = "ha_last_validated_epoch_ms"

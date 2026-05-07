@@ -1102,6 +1102,7 @@ class BikeRadarService : Service() {
                         }
 
                         view.setVisualMaxM(prefs.visualMaxDistanceM)
+                        view.alpha = prefs.overlayOpacity
                         view.setAlertMaxM(prefs.alertMaxDistanceM)
                         view.setAdaptiveAlerts(prefs.adaptiveAlertsEnabled)
                         view.setPrecog(prefs.precogEnabled)

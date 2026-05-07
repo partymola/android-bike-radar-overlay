@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.6.0 — 2026-05-07
+
+### Features
+
+- **Front-camera light auto-mode.** The app now drives a paired front-camera light: chosen mode follows sunrise / sunset times computed from the rider's location, with manual-override detection so a rider's button press doesn't fight the app's mode choice. New Settings screen exposes day-mode / night-mode pickers and the auto-mode toggle. Mode state publishes to Home Assistant as `sensor.varia_<slug>_front_mode`. Verified on firmware 5.80.
+
+### UX
+
+- **Overlay dimmer slider.** A new Settings → Radar & alerts → Overlay section gathers Visual distance and a 4-stop "Off / Light / Medium / Strong" overlay dimmer. Visual distance moved out of the Alerts section since it controls the overlay's render cutoff, not audio alerts. The dimmer multiplies the View's alpha on top of the existing per-paint alphas: "Off" (the default) preserves the prior look; lower stops dim the overlay further so an underlying map or navigation app shows through.
+- **Configurable reconnect-backoff long-offline tier.** When the radar has been out of range past a user-set threshold (default 30 min), the reconnect interval relaxes to a user-set cap (default 30 s) so the BLE stack idles overnight instead of hammering GATT opens at the steady-state 8 s ceiling. New "Connection" section in Settings exposes both knobs.
+
+### Reliability
+
+- **Front-camera handshake more robust against spurious notifies.** The sub-mode-toggle reply matcher now requires the full `41 4d 56 18` AMV-signature-plus-opcode at bytes 8-11 (previously only byte 10 + byte 11), so a stray notification with coincidental bytes at those offsets can no longer be mistaken for the genuine reply.
+- **Front-camera handshake adapted to firmware 5.80.** The 13-byte cmd-16 reply on this firmware carries no `pfxCmd` byte; the device-ID push frame the rear radar emits is absent on the camera. The handshake now terminates cleanly after the `0x18` sub-mode toggle's third reply rather than waiting indefinitely.
+
+### Diagnostics
+
+- **Phone-battery trace logged into per-ride capture log.** Battery level (percent), temperature (decicelsius), and charging state are sampled on every level change and on a 60 s heartbeat. Read from the cached sticky broadcast — no continuous receiver, no extra wake-ups. Cross-references with radar / dashcam / handshake events in the same log for post-ride battery analysis. `dumpsys batterystats` remains authoritative for per-uid mAh attribution.
+
+### Internal
+
+- **Paparazzi golden coverage expanded from 4 to 13 UI surfaces / 46 snapshot variants.** Onboarding (permissions, pairing, HA), main screen chrome, dashcam picker, debug screen, all settings sub-screens. Each surface gains a stateless `internal` leaf (`SettingsRadarContent`, `MainScreenContent`, `DashcamPickerContent`, etc.) called from the snapshot test with stub state; production bodies forward to the leaves with no behaviour change.
+- New JVM unit tests: `BleHandshakeReplyMatchTest`, `ReconnectBackoffTest`, `PhoneBatteryLogTest`, `OverlayDimLabelTest`, plus camera-light encoder and notify-parser tests.
+- `/qc` skill updated: the UX reviewer now visually inspects every added or modified Paparazzi PNG in the diff before passing.
+
+### Compatibility
+
+- No migration. SharedPreferences, paired devices, HA credentials, and overlay positioning unchanged. New prefs (`overlay_opacity`, `radar_long_offline_threshold_min`, `radar_long_offline_cap_sec`, `auto_light_mode_enabled`, `camera_light_day_mode`, `camera_light_night_mode`) default to values that preserve prior behaviour.
+
 ## v0.5.1-alpha — 2026-05-04
 
 ### UX

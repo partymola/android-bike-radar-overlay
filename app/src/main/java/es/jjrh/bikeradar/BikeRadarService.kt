@@ -9,6 +9,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothDevice
+import android.os.BatteryManager
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -125,6 +126,11 @@ class BikeRadarService : Service() {
     /** Monotonic ms of the last radar GATT disconnect. Null when radar is
      *  currently connected or has never been off this session. */
     @Volatile private var radarOffSinceMs: Long? = null
+
+    // Throttle for the phone-battery capture-log line. Logged on level
+    // changes and otherwise no more than once per PHONE_BATTERY_LOG_PERIOD_MS.
+    @Volatile private var lastPhoneBatteryLogMs: Long = 0L
+    @Volatile private var lastPhoneBatteryLevel: Int = -1
     /** Running total of ms the radar has been CONNECTED this session, used
      *  as the cold-start grace gate. Integrated on each connect→disconnect
      *  transition rather than per-tick, so short-lived connections that
@@ -621,7 +627,12 @@ class BikeRadarService : Service() {
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
                     backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(System.currentTimeMillis(), radarOffSinceMs),
+                        reconnectBackoffCap(
+                            now = System.currentTimeMillis(),
+                            offSinceMs = radarOffSinceMs,
+                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
+                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
+                        ),
                     )
                 } else {
                     backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
@@ -895,7 +906,12 @@ class BikeRadarService : Service() {
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
                     backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(System.currentTimeMillis(), radarOffSinceMs),
+                        reconnectBackoffCap(
+                            now = System.currentTimeMillis(),
+                            offSinceMs = radarOffSinceMs,
+                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
+                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
+                        ),
                     )
                 }
             }
@@ -1039,6 +1055,36 @@ class BikeRadarService : Service() {
                     combine(RadarStateBus.state, BatteryStateBus.entries, ticker) { s, b, _ -> s to b }
                         .collect { (state, batteries) ->
                         val now = System.currentTimeMillis()
+
+                        // Phone battery snapshot via the cached sticky broadcast - a
+                        // continuous BATTERY_CHANGED receiver would itself add
+                        // wake-ups against the same wake-up budget the rest of
+                        // this loop is sized against. Log on level change or
+                        // every PHONE_BATTERY_LOG_PERIOD_MS, whichever comes
+                        // first; cross-references with the radar/dashcam events
+                        // in the same capture log.
+                        registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.let { battery ->
+                            val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                            val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+                            val pct = if (level < 0 || scale <= 0) -1 else (level * 100) / scale
+                            if (shouldLogPhoneBattery(
+                                    now = now,
+                                    lastLogMs = lastPhoneBatteryLogMs,
+                                    lastLevelPct = lastPhoneBatteryLevel,
+                                    currentLevelPct = pct,
+                                    periodMs = PHONE_BATTERY_LOG_PERIOD_MS,
+                                )) {
+                                clog(formatPhoneBatteryLog(
+                                    unixMs = now,
+                                    level = level,
+                                    scale = scale,
+                                    tempDc = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE),
+                                    plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0),
+                                ))
+                                lastPhoneBatteryLevel = pct
+                                lastPhoneBatteryLogMs = now
+                            }
+                        }
 
                         // Dashcam refresh + status update runs regardless
                         // of radar state. The walk-away alarm path
@@ -2049,22 +2095,50 @@ class BikeRadarService : Service() {
         const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
         const val RADAR_QUICK_RECONNECT_MS = 1_500L
 
-        // After the radar has been offline past this threshold, the cap
-        // relaxes to LONG_OFFLINE_MAX_MS. At the steady-state 8 s ceiling
-        // a parked-overnight bike would otherwise trigger ~10,800 GATT
-        // opens per 24 h; 60 s lets the radio idle while still picking up
-        // the radar within one cycle of return.
-        const val RADAR_LONG_OFFLINE_THRESHOLD_MS = 30 * 60 * 1000L
-        const val RADAR_RECONNECT_BACKOFF_LONG_OFFLINE_MAX_MS = 60_000L
-
+        // After the radar has been offline past `longOfflineThresholdMs`,
+        // the cap relaxes to `longOfflineCapMs`. At the steady-state 8 s
+        // ceiling a parked-overnight bike would otherwise trigger ~10,800
+        // GATT opens per 24 h; the longer cap lets the radio idle while
+        // still picking up the radar within one cycle of return.
         @androidx.annotation.VisibleForTesting
-        internal fun reconnectBackoffCap(now: Long, offSinceMs: Long?): Long {
+        internal fun reconnectBackoffCap(
+            now: Long,
+            offSinceMs: Long?,
+            longOfflineThresholdMs: Long,
+            longOfflineCapMs: Long,
+        ): Long {
             if (offSinceMs == null) return RADAR_RECONNECT_BACKOFF_MAX_MS
-            return if (now - offSinceMs > RADAR_LONG_OFFLINE_THRESHOLD_MS) {
-                RADAR_RECONNECT_BACKOFF_LONG_OFFLINE_MAX_MS
+            return if (now - offSinceMs > longOfflineThresholdMs) {
+                longOfflineCapMs
             } else {
                 RADAR_RECONNECT_BACKOFF_MAX_MS
             }
+        }
+
+        // Phone-battery sample written into the capture log on level changes
+        // and at most once per heartbeat period. The capture-log line is
+        // comment-prefixed so existing decoders skip it cleanly.
+        const val PHONE_BATTERY_LOG_PERIOD_MS = 60_000L
+
+        @androidx.annotation.VisibleForTesting
+        internal fun shouldLogPhoneBattery(
+            now: Long,
+            lastLogMs: Long,
+            lastLevelPct: Int,
+            currentLevelPct: Int,
+            periodMs: Long,
+        ): Boolean = currentLevelPct != lastLevelPct || (now - lastLogMs >= periodMs)
+
+        @androidx.annotation.VisibleForTesting
+        internal fun formatPhoneBatteryLog(
+            unixMs: Long,
+            level: Int,
+            scale: Int,
+            tempDc: Int,
+            plugged: Int,
+        ): String {
+            val pct = if (level < 0 || scale <= 0) -1 else (level * 100) / scale
+            return "# phone t=$unixMs level=$pct temp_dc=$tempDc charging=${plugged != 0}"
         }
 
         // V2 data-flow watchdog: if no V2 notification has been observed for

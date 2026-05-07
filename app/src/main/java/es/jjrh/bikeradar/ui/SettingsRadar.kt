@@ -74,6 +74,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var closePassEmitMinX by rememberSaveable { mutableFloatStateOf(prefs.closePassEmitMinRangeXM) }
     var closePassRiderFloor by rememberSaveable { mutableIntStateOf(prefs.closePassRiderSpeedFloorKmh) }
     var closePassClosingFloor by rememberSaveable { mutableIntStateOf(prefs.closePassClosingSpeedFloorMs) }
+    var radarLongOfflineThreshold by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineThresholdMinutes) }
+    var radarLongOfflineCap by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineCapSec) }
     // serviceEnabled is binary and atomic — no in-progress drag state to mirror —
     // so derive from prefs.flow instead of a local rememberSaveable. Keeps the
     // Danger-zone row honest if anything else (future MainScreen action,
@@ -116,6 +118,12 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         closePassClosingFloor = closePassClosingFloor,
         onClosePassClosingFloorChange = { closePassClosingFloor = it },
         onClosePassClosingFloorFinished = { prefs.closePassClosingSpeedFloorMs = closePassClosingFloor },
+        radarLongOfflineThreshold = radarLongOfflineThreshold,
+        onRadarLongOfflineThresholdChange = { radarLongOfflineThreshold = it },
+        onRadarLongOfflineThresholdFinished = { prefs.radarLongOfflineThresholdMinutes = radarLongOfflineThreshold },
+        radarLongOfflineCap = radarLongOfflineCap,
+        onRadarLongOfflineCapChange = { radarLongOfflineCap = it },
+        onRadarLongOfflineCapFinished = { prefs.radarLongOfflineCapSec = radarLongOfflineCap },
         onStopScanningClick = { showStopDialog = true },
     )
 
@@ -164,6 +172,18 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
  * locked without Prefs scaffolding. The body wires the saveable
  * slider/toggle state and the stop-scanning dialog.
  */
+/**
+ * Map the slider value (0.5..1.0 multiplier) to the 4-step user-facing
+ * label. The slider is stepped at 4 stops so the float lands close to
+ * one of these regardless of jitter.
+ */
+internal fun overlayDimLabel(opacity: Float): String = when {
+    opacity >= 0.95f -> "Off"
+    opacity >= 0.78f -> "Light"
+    opacity >= 0.6f -> "Medium"
+    else -> "Strong"
+}
+
 @Composable
 internal fun SettingsRadarContent(
     navController: NavController,
@@ -199,6 +219,12 @@ internal fun SettingsRadarContent(
     closePassClosingFloor: Int,
     onClosePassClosingFloorChange: (Int) -> Unit,
     onClosePassClosingFloorFinished: () -> Unit,
+    radarLongOfflineThreshold: Int,
+    onRadarLongOfflineThresholdChange: (Int) -> Unit,
+    onRadarLongOfflineThresholdFinished: () -> Unit,
+    radarLongOfflineCap: Int,
+    onRadarLongOfflineCapChange: (Int) -> Unit,
+    onRadarLongOfflineCapFinished: () -> Unit,
     onStopScanningClick: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -240,11 +266,12 @@ internal fun SettingsRadarContent(
                 onValueChangeFinished = onVisualDistFinished,
             )
             SettingsSliderRow(
-                title = "Overlay opacity",
-                valueDisplay = "${(overlayOpacity * 100).toInt()}%",
-                helper = "Lower values let the underlying app (map, navigation) show through more.",
+                title = "Overlay dimmer",
+                valueDisplay = overlayDimLabel(overlayOpacity),
+                helper = "Fade the overlay so a map or navigation app underneath stays readable. \"Off\" leaves the overlay at its full look.",
                 value = overlayOpacity,
-                valueRange = 0.4f..1.0f,
+                valueRange = 0.5f..1.0f,
+                steps = 2,
                 onValueChange = onOverlayOpacityChange,
                 onValueChangeFinished = onOverlayOpacityFinished,
             )
@@ -260,6 +287,26 @@ internal fun SettingsRadarContent(
                     onCheckedChange = onAdaptiveChange,
                 )
             }
+
+            SettingsSectionLabel("Connection")
+            SettingsSliderRow(
+                title = "Idle radar after",
+                valueDisplay = "$radarLongOfflineThreshold min",
+                helper = "Once the radar has been out of range this long, the reconnect interval relaxes to the value below to let the BLE stack idle while the bike is parked.",
+                value = radarLongOfflineThreshold.toFloat(),
+                valueRange = 5f..120f,
+                onValueChange = { onRadarLongOfflineThresholdChange(it.toInt()) },
+                onValueChangeFinished = onRadarLongOfflineThresholdFinished,
+            )
+            SettingsSliderRow(
+                title = "Idle reconnect interval",
+                valueDisplay = "$radarLongOfflineCap s",
+                helper = "How often to retry the connection while the radar is idled out. Longer values save battery overnight; shorter values pick up the radar faster when you come back.",
+                value = radarLongOfflineCap.toFloat(),
+                valueRange = 5f..120f,
+                onValueChange = { onRadarLongOfflineCapChange(it.toInt()) },
+                onValueChangeFinished = onRadarLongOfflineCapFinished,
+            )
 
             SettingsSectionLabel("Battery warnings")
             NestedCard {

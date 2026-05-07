@@ -27,6 +27,8 @@ data class PrefsSnapshot(
     val alertMaxDistanceM: Int,
     val visualMaxDistanceM: Int,
     val overlayOpacity: Float,
+    val radarLongOfflineThresholdMinutes: Int,
+    val radarLongOfflineCapSec: Int,
     val pausedUntilEpochMs: Long,
     val devModeUnlocked: Boolean,
     val haLastValidatedEpochMs: Long,
@@ -75,12 +77,29 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_VISUAL_MAX_DISTANCE_M, 50)
         set(v) { sp.edit().putInt(KEY_VISUAL_MAX_DISTANCE_M, v).apply() }
 
-    /** Fill opacity for the on-screen overlay (0.4..1.0). Lower values
-     *  let the underlying app (map, navigation) show through more.
-     *  Default 1.0 preserves the pre-feature look. */
+    /** Fill multiplier for the on-screen overlay (0.5..1.0). Acts on top
+     *  of the per-paint alphas in [RadarOverlayView], so 1.0 leaves the
+     *  overlay at its pre-feature look and lower values dim it on top of
+     *  that. Floor of 0.5 keeps close-pass alerts legible against bright
+     *  underlying maps. */
     var overlayOpacity: Float
-        get() = sp.getFloat(KEY_OVERLAY_OPACITY, 1.0f).coerceIn(0.4f, 1.0f)
-        set(v) { sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.4f, 1.0f)).apply() }
+        get() = sp.getFloat(KEY_OVERLAY_OPACITY, 1.0f).coerceIn(0.5f, 1.0f)
+        set(v) { sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.5f, 1.0f)).apply() }
+
+    /** After the radar has been offline this many minutes, the reconnect
+     *  loop relaxes its backoff cap to [radarLongOfflineCapSec]. Lets
+     *  the BLE stack idle during overnight parking instead of hammering
+     *  GATT opens at the steady-state 8 s ceiling. */
+    var radarLongOfflineThresholdMinutes: Int
+        get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, 30).coerceIn(5, 120)
+        set(v) { sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, v.coerceIn(5, 120)).apply() }
+
+    /** Backoff cap once the radar has been offline past
+     *  [radarLongOfflineThresholdMinutes]. Higher = longer idle and a
+     *  slower reconnect when the radar comes back. */
+    var radarLongOfflineCapSec: Int
+        get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, 30).coerceIn(5, 120)
+        set(v) { sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, v.coerceIn(5, 120)).apply() }
 
     var pausedUntilEpochMs: Long
         get() = sp.getLong(KEY_PAUSED_UNTIL_EPOCH_MS, 0L)
@@ -240,6 +259,8 @@ class Prefs(context: Context) {
         alertMaxDistanceM = alertMaxDistanceM,
         visualMaxDistanceM = visualMaxDistanceM,
         overlayOpacity = overlayOpacity,
+        radarLongOfflineThresholdMinutes = radarLongOfflineThresholdMinutes,
+        radarLongOfflineCapSec = radarLongOfflineCapSec,
         pausedUntilEpochMs = pausedUntilEpochMs,
         devModeUnlocked = devModeUnlocked,
         haLastValidatedEpochMs = haLastValidatedEpochMs,
@@ -281,6 +302,8 @@ class Prefs(context: Context) {
         appendLine("alert_max_distance_m=$alertMaxDistanceM")
         appendLine("visual_max_distance_m=$visualMaxDistanceM")
         appendLine("overlay_opacity=$overlayOpacity")
+        appendLine("radar_long_offline_threshold_min=$radarLongOfflineThresholdMinutes")
+        appendLine("radar_long_offline_cap_sec=$radarLongOfflineCapSec")
         appendLine("paused_until_epoch_ms=$pausedUntilEpochMs")
         appendLine("dev_mode_unlocked=$devModeUnlocked")
         appendLine("ha_last_validated_epoch_ms=$haLastValidatedEpochMs")
@@ -313,6 +336,8 @@ class Prefs(context: Context) {
         const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"
         const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
         const val KEY_OVERLAY_OPACITY = "overlay_opacity"
+        const val KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN = "radar_long_offline_threshold_min"
+        const val KEY_RADAR_LONG_OFFLINE_CAP_SEC = "radar_long_offline_cap_sec"
         const val KEY_PAUSED_UNTIL_EPOCH_MS = "paused_until_epoch_ms"
         const val KEY_DEV_MODE_UNLOCKED = "dev_mode_unlocked"
         const val KEY_HA_LAST_VALIDATED_EPOCH_MS = "ha_last_validated_epoch_ms"

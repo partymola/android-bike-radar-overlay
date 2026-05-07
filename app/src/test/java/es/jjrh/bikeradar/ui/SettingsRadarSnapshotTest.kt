@@ -65,6 +65,12 @@ class SettingsRadarSnapshotTest {
                     closePassClosingFloor = 6,
                     onClosePassClosingFloorChange = {},
                     onClosePassClosingFloorFinished = {},
+                    radarLongOfflineThreshold = 30,
+                    onRadarLongOfflineThresholdChange = {},
+                    onRadarLongOfflineThresholdFinished = {},
+                    radarLongOfflineCap = 30,
+                    onRadarLongOfflineCapChange = {},
+                    onRadarLongOfflineCapFinished = {},
                     onStopScanningClick = {},
                 )
             }

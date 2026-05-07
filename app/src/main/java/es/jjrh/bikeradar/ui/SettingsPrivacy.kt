@@ -48,7 +48,7 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 PrivacySectionLabel("What stays on your phone")
                 PrivacyP("Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android's app-private storage and never leave the device.")
                 PrivacyP("Your Home Assistant base URL and long-lived bearer token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The encryption key never leaves the secure element. An attacker with raw filesystem access (e.g. `adb pull`) recovers only ciphertext.")
-                PrivacyP("Per-ride capture logs (radar packets, BLE characteristic notifications) are written to the app's external files dir under `bike-radar-capture-*.log`. They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.")
+                PrivacyP("Per-ride capture logs (radar packets, BLE characteristic notifications, phone-battery samples) are written to the app's external files dir under `bike-radar-capture-*.log`. They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.")
 
                 PrivacySectionLabel("What goes to your Home Assistant")
                 PrivacyP("If you configure HA in Settings, the app publishes the radar's and the dashcam's battery levels to your HA instance via MQTT discovery, plus a close-pass event log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.")

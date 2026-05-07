@@ -71,7 +71,6 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
-    val br = LocalBrColors.current
     val devUnlocked by DevModeState.unlocked.collectAsState()
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val haHealth by HaHealthBus.state.collectAsState()
@@ -93,6 +92,39 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val grantedCount = PERMISSIONS.count { isSpecGranted(ctx, it) }
     val requiredMissing = PERMISSIONS.count { it.required && !isSpecGranted(ctx, it) }
 
+    SettingsMenuBody(
+        navController = navController,
+        devUnlocked = devUnlocked,
+        prefsSnap = prefsSnap,
+        radarBattery = radarBattery,
+        dashcamBattery = dashcamBattery,
+        haConfigured = haConfigured,
+        haHealth = haHealth,
+        permissionsGrantedCount = grantedCount,
+        permissionsRequiredMissing = requiredMissing,
+        permissionsTotal = PERMISSIONS.size,
+    )
+}
+
+/**
+ * Stateless leaf — renders the Settings home menu from already-derived
+ * state. Visible to snapshot tests so the visual contract can be locked
+ * without `LocalContext`, the radar/HA/battery buses, or `HaCredentials`.
+ */
+@Composable
+internal fun SettingsMenuBody(
+    navController: NavController,
+    devUnlocked: Boolean,
+    prefsSnap: es.jjrh.bikeradar.data.PrefsSnapshot,
+    radarBattery: BatteryEntry?,
+    dashcamBattery: BatteryEntry?,
+    haConfigured: Boolean,
+    haHealth: HaHealth,
+    permissionsGrantedCount: Int,
+    permissionsRequiredMissing: Int,
+    permissionsTotal: Int,
+) {
+    val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier
@@ -136,11 +168,11 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
                 )
                 SettingsRow(
                     icon = Icons.Default.Shield,
-                    iconTint = if (requiredMissing > 0) br.danger else br.caution,
+                    iconTint = if (permissionsRequiredMissing > 0) br.danger else br.caution,
                     title = "Permissions",
-                    subtitle = if (requiredMissing > 0)
-                        "$requiredMissing of ${PERMISSIONS.size} need action"
-                    else "All granted ($grantedCount of ${PERMISSIONS.size})",
+                    subtitle = if (permissionsRequiredMissing > 0)
+                        "$permissionsRequiredMissing of $permissionsTotal need action"
+                    else "All granted ($permissionsGrantedCount of $permissionsTotal)",
                     onClick = { navController.navigate("settings/permissions") },
                     isLast = true,
                 )

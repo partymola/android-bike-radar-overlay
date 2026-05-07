@@ -178,44 +178,28 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             SettingsHeader("Debug", onBack = { navController.popBackStack() })
 
             // Scenarios
-            SettingsSectionLabel("Scenarios")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DbgPrimaryButton(
-                    text = if (replayRunning) "Stop Replay" else "Replay",
-                    active = replayRunning,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        if (replayRunning) {
-                            ctx.stopService(Intent(ctx, ReplayService::class.java))
-                            ctx.stopService(Intent(ctx, DebugOverlayService::class.java))
-                        } else {
-                            ctx.stopService(Intent(ctx, SyntheticScenarioService::class.java))
-                            startForegroundServiceCompat(ctx, Intent(ctx, DebugOverlayService::class.java))
-                            startForegroundServiceCompat(ctx, Intent(ctx, ReplayService::class.java))
-                        }
-                    },
-                )
-                DbgPrimaryButton(
-                    text = if (synthRunning) "Stop Synthetic" else "Synthetic",
-                    active = synthRunning,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        if (synthRunning) {
-                            ctx.stopService(Intent(ctx, SyntheticScenarioService::class.java))
-                            ctx.stopService(Intent(ctx, DebugOverlayService::class.java))
-                        } else {
-                            ctx.stopService(Intent(ctx, ReplayService::class.java))
-                            startForegroundServiceCompat(ctx, Intent(ctx, DebugOverlayService::class.java))
-                            startForegroundServiceCompat(ctx, Intent(ctx, SyntheticScenarioService::class.java))
-                        }
-                    },
-                )
-            }
+            DebugScenarioControls(
+                replayRunning = replayRunning,
+                syntheticRunning = synthRunning,
+                onStartReplay = {
+                    ctx.stopService(Intent(ctx, SyntheticScenarioService::class.java))
+                    startForegroundServiceCompat(ctx, Intent(ctx, DebugOverlayService::class.java))
+                    startForegroundServiceCompat(ctx, Intent(ctx, ReplayService::class.java))
+                },
+                onStopReplay = {
+                    ctx.stopService(Intent(ctx, ReplayService::class.java))
+                    ctx.stopService(Intent(ctx, DebugOverlayService::class.java))
+                },
+                onStartSynthetic = {
+                    ctx.stopService(Intent(ctx, ReplayService::class.java))
+                    startForegroundServiceCompat(ctx, Intent(ctx, DebugOverlayService::class.java))
+                    startForegroundServiceCompat(ctx, Intent(ctx, SyntheticScenarioService::class.java))
+                },
+                onStopSynthetic = {
+                    ctx.stopService(Intent(ctx, SyntheticScenarioService::class.java))
+                    ctx.stopService(Intent(ctx, DebugOverlayService::class.java))
+                },
+            )
 
             // Service control
             SettingsSectionLabel("Service control")
@@ -293,30 +277,16 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             }
 
             // Capture logs
-            SettingsSectionLabel("Capture logs")
-            if (logFiles.isEmpty()) {
-                Text(
-                    text = "No capture logs yet.",
-                    color = br.fgDim,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                )
-            } else {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (f in logFiles) {
-                        CaptureLogCard(file = f, onShare = {
-                            if (prefs.captureLogShareWarningSeen) {
-                                shareFile(ctx, f)
-                            } else {
-                                pendingShareFile = f
-                            }
-                        })
+            DebugCaptureLogList(
+                logFiles = logFiles,
+                onShare = { f ->
+                    if (prefs.captureLogShareWarningSeen) {
+                        shareFile(ctx, f)
+                    } else {
+                        pendingShareFile = f
                     }
-                }
-            }
+                },
+            )
 
             // Diagnostics
             SettingsSectionLabel("Diagnostics")
@@ -425,6 +395,74 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 TextButton(onClick = { pendingShareFile = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/**
+ * Stateless leaf rendering the Replay/Synthetic scenario buttons.
+ * Body owns the [ReplayService] / [SyntheticScenarioService] state
+ * polling and the start/stop intent dispatch; this composable just
+ * renders the row and routes taps to the appropriate callback.
+ */
+@Composable
+internal fun DebugScenarioControls(
+    replayRunning: Boolean,
+    syntheticRunning: Boolean,
+    onStartReplay: () -> Unit,
+    onStopReplay: () -> Unit,
+    onStartSynthetic: () -> Unit,
+    onStopSynthetic: () -> Unit,
+) {
+    SettingsSectionLabel("Scenarios")
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DbgPrimaryButton(
+            text = if (replayRunning) "Stop Replay" else "Replay",
+            active = replayRunning,
+            modifier = Modifier.weight(1f),
+            onClick = if (replayRunning) onStopReplay else onStartReplay,
+        )
+        DbgPrimaryButton(
+            text = if (syntheticRunning) "Stop Synthetic" else "Synthetic",
+            active = syntheticRunning,
+            modifier = Modifier.weight(1f),
+            onClick = if (syntheticRunning) onStopSynthetic else onStartSynthetic,
+        )
+    }
+}
+
+/**
+ * Stateless leaf rendering the capture-log file list with per-row
+ * share buttons. Body owns the disk enumeration of log files and the
+ * share-warning dialog; this composable just renders the list.
+ */
+@Composable
+internal fun DebugCaptureLogList(
+    logFiles: List<File>,
+    onShare: (File) -> Unit,
+) {
+    val br = LocalBrColors.current
+    SettingsSectionLabel("Capture logs")
+    if (logFiles.isEmpty()) {
+        Text(
+            text = "No capture logs yet.",
+            color = br.fgDim,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+    } else {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (f in logFiles) {
+                CaptureLogCard(file = f, onShare = { onShare(f) })
+            }
+        }
     }
 }
 

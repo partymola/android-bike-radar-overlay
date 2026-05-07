@@ -58,7 +58,6 @@ fun SettingsDashcam(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
-    val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
@@ -73,6 +72,73 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
 
     var walkAwayThreshold by rememberSaveable { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
 
+    val nm = remember(ctx) { ctx.getSystemService(NotificationManager::class.java) }
+    val canBypassDnd = nm
+        ?.getNotificationChannel(BikeRadarService.WALKAWAY_CHANNEL_ID)
+        ?.canBypassDnd() == true
+
+    SettingsDashcamContent(
+        navController = navController,
+        ownership = prefsSnap.dashcamOwnership,
+        dashcamMac = prefsSnap.dashcamMac,
+        dashcamDisplayName = prefsSnap.dashcamDisplayName,
+        dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
+        dashcamConnected = dashcamConnected,
+        dashcamBatteryPct = if (dashcamConnected) dashcamBattery?.pct else null,
+        walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
+        walkAwayThreshold = walkAwayThreshold,
+        canBypassDnd = canBypassDnd,
+        onOwnershipChange = { on ->
+            prefs.dashcamOwnership = if (on) DashcamOwnership.YES else DashcamOwnership.NO
+            if (!on) {
+                prefs.dashcamMac = null
+                prefs.dashcamDisplayName = null
+                prefs.dashcamWarnWhenOff = false
+            }
+        },
+        onPickDeviceClick = { navController.navigate("dashcam-picker") },
+        onWarnWhenOffChange = { prefs.dashcamWarnWhenOff = it },
+        onWalkAwayEnabledChange = { prefs.walkAwayAlarmEnabled = it },
+        onWalkAwayThresholdChange = { walkAwayThreshold = it },
+        onWalkAwayThresholdFinished = { prefs.walkAwayAlarmThresholdSec = walkAwayThreshold },
+        onOverrideDndClick = {
+            val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                putExtra(Settings.EXTRA_CHANNEL_ID, BikeRadarService.WALKAWAY_CHANNEL_ID)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+        },
+    )
+}
+
+/**
+ * Stateless leaf — renders the Dashcam settings screen from
+ * already-derived state. No `LocalContext`, no `Prefs`, no
+ * `NotificationManager`. Visible to snapshot tests so the visual
+ * contract can be locked across the three ownership states.
+ */
+@Composable
+internal fun SettingsDashcamContent(
+    navController: NavController,
+    ownership: DashcamOwnership,
+    dashcamMac: String?,
+    dashcamDisplayName: String?,
+    dashcamWarnWhenOff: Boolean,
+    dashcamConnected: Boolean,
+    dashcamBatteryPct: Int?,
+    walkAwayAlarmEnabled: Boolean,
+    walkAwayThreshold: Int,
+    canBypassDnd: Boolean,
+    onOwnershipChange: (Boolean) -> Unit,
+    onPickDeviceClick: () -> Unit,
+    onWarnWhenOffChange: (Boolean) -> Unit,
+    onWalkAwayEnabledChange: (Boolean) -> Unit,
+    onWalkAwayThresholdChange: (Int) -> Unit,
+    onWalkAwayThresholdFinished: () -> Unit,
+    onOverrideDndClick: () -> Unit,
+) {
+    val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -83,22 +149,15 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
             SettingsRowGroup {
                 SettingsToggleRow(
                     title = "I have a front dashcam",
-                    subtitle = if (prefsSnap.dashcamOwnership == DashcamOwnership.YES)
+                    subtitle = if (ownership == DashcamOwnership.YES)
                         "Set up your dashcam below."
                     else "Turn this on if you want to track a Bluetooth dashcam alongside the radar.",
-                    checked = prefsSnap.dashcamOwnership == DashcamOwnership.YES,
-                    onCheckedChange = { on ->
-                        prefs.dashcamOwnership = if (on) DashcamOwnership.YES else DashcamOwnership.NO
-                        if (!on) {
-                            prefs.dashcamMac = null
-                            prefs.dashcamDisplayName = null
-                            prefs.dashcamWarnWhenOff = false
-                        }
-                    },
+                    checked = ownership == DashcamOwnership.YES,
+                    onCheckedChange = onOwnershipChange,
                 )
             }
 
-            if (prefsSnap.dashcamOwnership == DashcamOwnership.YES) {
+            if (ownership == DashcamOwnership.YES) {
                 Spacer(modifier = Modifier.height(14.dp))
                 // Device pairing card matching the JSX 'rich device summary'.
                 Column(
@@ -128,7 +187,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = prefsSnap.dashcamDisplayName ?: "Not selected",
+                                text = dashcamDisplayName ?: "Not selected",
                                 color = br.fg,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
@@ -142,7 +201,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                val notPaired = prefsSnap.dashcamMac == null
+                                val notPaired = dashcamMac == null
                                 StatusDot(
                                     color = when {
                                         notPaired -> br.fgDim
@@ -152,8 +211,8 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                                     hollow = notPaired,
                                     size = 6.dp,
                                 )
-                                if (dashcamConnected) {
-                                    BatteryChip(pct = dashcamBattery.pct)
+                                if (dashcamConnected && dashcamBatteryPct != null) {
+                                    BatteryChip(pct = dashcamBatteryPct)
                                 }
                             }
                         }
@@ -161,11 +220,11 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
-                                .clickable { navController.navigate("dashcam-picker") }
+                                .clickable(onClick = onPickDeviceClick)
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) {
                             Text(
-                                text = if (prefsSnap.dashcamMac == null) "Pick" else "Change",
+                                text = if (dashcamMac == null) "Pick" else "Change",
                                 color = br.fg,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -179,27 +238,23 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                     SettingsToggleRow(
                         title = "Warn on overlay when dashcam is off",
                         subtitle = "Show a camera-off icon next to the rider when no Vue advert is seen.",
-                        checked = prefsSnap.dashcamWarnWhenOff,
-                        enabled = prefsSnap.dashcamMac != null,
-                        onCheckedChange = { prefs.dashcamWarnWhenOff = it },
+                        checked = dashcamWarnWhenOff,
+                        enabled = dashcamMac != null,
+                        onCheckedChange = onWarnWhenOffChange,
                     )
                 }
 
-                if (prefsSnap.dashcamMac != null && prefsSnap.dashcamWarnWhenOff) {
+                if (dashcamMac != null && dashcamWarnWhenOff) {
                     SettingsSectionLabel("Walk-away alarm")
                     SettingsRowGroup {
                         SettingsToggleRow(
                             title = "Alert if dashcam remains on",
                             subtitle = "Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).",
-                            checked = prefsSnap.walkAwayAlarmEnabled,
-                            onCheckedChange = { prefs.walkAwayAlarmEnabled = it },
-                            isLast = !prefsSnap.walkAwayAlarmEnabled,
+                            checked = walkAwayAlarmEnabled,
+                            onCheckedChange = onWalkAwayEnabledChange,
+                            isLast = !walkAwayAlarmEnabled,
                         )
-                        if (prefsSnap.walkAwayAlarmEnabled) {
-                            val nm = remember(ctx) { ctx.getSystemService(NotificationManager::class.java) }
-                            val canBypassDnd = nm
-                                ?.getNotificationChannel(BikeRadarService.WALKAWAY_CHANNEL_ID)
-                                ?.canBypassDnd() == true
+                        if (walkAwayAlarmEnabled) {
                             SettingsRow(
                                 icon = Icons.Default.NotificationsActive,
                                 iconTint = br.dashcam,
@@ -209,19 +264,12 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                                 } else {
                                     "Tap to allow this alarm to play through DND in system settings."
                                 },
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
-                                        putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                                        putExtra(Settings.EXTRA_CHANNEL_ID, BikeRadarService.WALKAWAY_CHANNEL_ID)
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    ctx.startActivity(intent)
-                                },
+                                onClick = onOverrideDndClick,
                                 isLast = true,
                             )
                         }
                     }
-                    if (prefsSnap.walkAwayAlarmEnabled) {
+                    if (walkAwayAlarmEnabled) {
                         Spacer(modifier = Modifier.height(6.dp))
                         NestedCard {
                             SettingsSliderRow(
@@ -231,8 +279,8 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
                                 value = walkAwayThreshold.toFloat(),
                                 valueRange = 15f..120f,
                                 steps = 6,
-                                onValueChange = { walkAwayThreshold = it.toInt() },
-                                onValueChangeFinished = { prefs.walkAwayAlarmThresholdSec = walkAwayThreshold },
+                                onValueChange = { onWalkAwayThresholdChange(it.toInt()) },
+                                onValueChangeFinished = onWalkAwayThresholdFinished,
                                 paddingHorizontal = 0.dp,
                                 paddingBottom = 0.dp,
                             )

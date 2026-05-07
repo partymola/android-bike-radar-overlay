@@ -82,6 +82,126 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     val serviceEnabled = prefsSnap.serviceEnabled
     var showStopDialog by rememberSaveable { mutableStateOf(false) }
 
+    SettingsRadarContent(
+        navController = navController,
+        haConfigured = haConfigured,
+        serviceEnabled = serviceEnabled,
+        alertVol = alertVol,
+        onAlertVolChange = { alertVol = it },
+        onAlertVolFinished = { prefs.alertVolume = alertVol },
+        alertDist = alertDist,
+        onAlertDistChange = { alertDist = it },
+        onAlertDistFinished = { prefs.alertMaxDistanceM = alertDist },
+        visualDist = visualDist,
+        onVisualDistChange = { visualDist = it },
+        onVisualDistFinished = { prefs.visualMaxDistanceM = visualDist },
+        overlayOpacity = overlayOpacity,
+        onOverlayOpacityChange = { overlayOpacity = it },
+        onOverlayOpacityFinished = { prefs.overlayOpacity = overlayOpacity },
+        adaptive = adaptive,
+        onAdaptiveChange = { adaptive = it; prefs.adaptiveAlertsEnabled = it },
+        batteryThreshold = batteryThreshold,
+        onBatteryThresholdChange = { batteryThreshold = it },
+        onBatteryThresholdFinished = { prefs.batteryLowThresholdPct = batteryThreshold },
+        batteryShowLabels = batteryShowLabels,
+        onBatteryShowLabelsChange = { batteryShowLabels = it; prefs.batteryShowLabels = it },
+        closePassLogging = closePassLogging,
+        onClosePassLoggingChange = { closePassLogging = it; prefs.closePassLoggingEnabled = it },
+        closePassEmitMinX = closePassEmitMinX,
+        onClosePassEmitMinXChange = { closePassEmitMinX = it },
+        onClosePassEmitMinXFinished = { prefs.closePassEmitMinRangeXM = closePassEmitMinX },
+        closePassRiderFloor = closePassRiderFloor,
+        onClosePassRiderFloorChange = { closePassRiderFloor = it },
+        onClosePassRiderFloorFinished = { prefs.closePassRiderSpeedFloorKmh = closePassRiderFloor },
+        closePassClosingFloor = closePassClosingFloor,
+        onClosePassClosingFloorChange = { closePassClosingFloor = it },
+        onClosePassClosingFloorFinished = { prefs.closePassClosingSpeedFloorMs = closePassClosingFloor },
+        onStopScanningClick = { showStopDialog = true },
+    )
+
+    if (showStopDialog) {
+        val cancelFocus = remember { FocusRequester() }
+        // M3 AlertDialog doesn't auto-focus the dismiss button; force Cancel as default.
+        LaunchedEffect(Unit) { cancelFocus.requestFocus() }
+        AlertDialog(
+            onDismissRequest = { showStopDialog = false },
+            title = { Text("Stop scanning?") },
+            text = {
+                Text(
+                    "The radar, overlay, and Home Assistant updates stop until " +
+                        "you start them again from the home screen — including " +
+                        "after a reboot. Use Pause if you only need a quiet hour."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        prefs.serviceEnabled = false
+                        // Clear any pending pause window so re-arm doesn't
+                        // land back in a stale Paused state.
+                        prefs.pausedUntilEpochMs = 0L
+                        ctx.stopService(Intent(ctx, BikeRadarService::class.java))
+                        showStopDialog = false
+                    },
+                ) { Text("Stop scanning", color = br.danger) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showStopDialog = false },
+                    modifier = Modifier
+                        .focusRequester(cancelFocus)
+                        .focusable(),
+                ) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/**
+ * Stateless leaf — renders the scrolling Settings → Radar & alerts
+ * content from already-derived UI state. No `rememberSaveable`, no
+ * `Prefs`. Visible to snapshot tests so the visual contract can be
+ * locked without Prefs scaffolding. The body wires the saveable
+ * slider/toggle state and the stop-scanning dialog.
+ */
+@Composable
+internal fun SettingsRadarContent(
+    navController: NavController,
+    haConfigured: Boolean,
+    serviceEnabled: Boolean,
+    alertVol: Int,
+    onAlertVolChange: (Int) -> Unit,
+    onAlertVolFinished: () -> Unit,
+    alertDist: Int,
+    onAlertDistChange: (Int) -> Unit,
+    onAlertDistFinished: () -> Unit,
+    visualDist: Int,
+    onVisualDistChange: (Int) -> Unit,
+    onVisualDistFinished: () -> Unit,
+    overlayOpacity: Float,
+    onOverlayOpacityChange: (Float) -> Unit,
+    onOverlayOpacityFinished: () -> Unit,
+    adaptive: Boolean,
+    onAdaptiveChange: (Boolean) -> Unit,
+    batteryThreshold: Int,
+    onBatteryThresholdChange: (Int) -> Unit,
+    onBatteryThresholdFinished: () -> Unit,
+    batteryShowLabels: Boolean,
+    onBatteryShowLabelsChange: (Boolean) -> Unit,
+    closePassLogging: Boolean,
+    onClosePassLoggingChange: (Boolean) -> Unit,
+    closePassEmitMinX: Float,
+    onClosePassEmitMinXChange: (Float) -> Unit,
+    onClosePassEmitMinXFinished: () -> Unit,
+    closePassRiderFloor: Int,
+    onClosePassRiderFloorChange: (Int) -> Unit,
+    onClosePassRiderFloorFinished: () -> Unit,
+    closePassClosingFloor: Int,
+    onClosePassClosingFloorChange: (Int) -> Unit,
+    onClosePassClosingFloorFinished: () -> Unit,
+    onStopScanningClick: () -> Unit,
+) {
+    val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -97,8 +217,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 helper = "Beep volume for approach alerts. 0 silences audio; the overlay still flashes.",
                 value = alertVol.toFloat(),
                 valueRange = 0f..100f,
-                onValueChange = { alertVol = it.toInt() },
-                onValueChangeFinished = { prefs.alertVolume = alertVol },
+                onValueChange = { onAlertVolChange(it.toInt()) },
+                onValueChangeFinished = onAlertVolFinished,
             )
             SettingsSliderRow(
                 title = "Alert distance",
@@ -106,8 +226,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 helper = "Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.",
                 value = alertDist.toFloat(),
                 valueRange = 10f..40f,
-                onValueChange = { alertDist = it.toInt() },
-                onValueChangeFinished = { prefs.alertMaxDistanceM = alertDist },
+                onValueChange = { onAlertDistChange(it.toInt()) },
+                onValueChangeFinished = onAlertDistFinished,
             )
             SettingsSectionLabel("Overlay")
             SettingsSliderRow(
@@ -116,8 +236,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 helper = "Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.",
                 value = visualDist.toFloat(),
                 valueRange = 10f..80f,
-                onValueChange = { visualDist = it.toInt() },
-                onValueChangeFinished = { prefs.visualMaxDistanceM = visualDist },
+                onValueChange = { onVisualDistChange(it.toInt()) },
+                onValueChangeFinished = onVisualDistFinished,
             )
             SettingsSliderRow(
                 title = "Overlay opacity",
@@ -125,8 +245,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 helper = "Lower values let the underlying app (map, navigation) show through more.",
                 value = overlayOpacity,
                 valueRange = 0.4f..1.0f,
-                onValueChange = { overlayOpacity = it },
-                onValueChangeFinished = { prefs.overlayOpacity = overlayOpacity },
+                onValueChange = onOverlayOpacityChange,
+                onValueChangeFinished = onOverlayOpacityFinished,
             )
 
             SettingsSectionLabel("Adaptive")
@@ -137,7 +257,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                     title = "Adaptive alert colours",
                     subtitle = "Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.",
                     checked = adaptive,
-                    onCheckedChange = { adaptive = it; prefs.adaptiveAlertsEnabled = it },
+                    onCheckedChange = onAdaptiveChange,
                 )
             }
 
@@ -149,8 +269,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                     helper = "Show an amber warning beside the rider when any paired device drops below this level.",
                     value = batteryThreshold.toFloat(),
                     valueRange = 10f..50f,
-                    onValueChange = { batteryThreshold = it.toInt() },
-                    onValueChangeFinished = { prefs.batteryLowThresholdPct = batteryThreshold },
+                    onValueChange = { onBatteryThresholdChange(it.toInt()) },
+                    onValueChangeFinished = onBatteryThresholdFinished,
                     paddingHorizontal = 0.dp,
                     paddingBottom = 0.dp,
                 )
@@ -161,7 +281,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                     title = "Show device labels",
                     subtitle = "Show 'RADAR 12%' or 'DASHCAM 8%' on screen instead of a silent warning tint.",
                     checked = batteryShowLabels,
-                    onCheckedChange = { batteryShowLabels = it; prefs.batteryShowLabels = it },
+                    onCheckedChange = onBatteryShowLabelsChange,
                 )
             }
 
@@ -176,7 +296,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                     else "Requires Home Assistant — set it up below.",
                     checked = closePassLogging,
                     enabled = haConfigured,
-                    onCheckedChange = { closePassLogging = it; prefs.closePassLoggingEnabled = it },
+                    onCheckedChange = onClosePassLoggingChange,
                 )
             }
 
@@ -191,8 +311,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                             value = closePassEmitMinX,
                             valueRange = 0.5f..2.0f,
                             steps = 14,
-                            onValueChange = { closePassEmitMinX = it },
-                            onValueChangeFinished = { prefs.closePassEmitMinRangeXM = closePassEmitMinX },
+                            onValueChange = onClosePassEmitMinXChange,
+                            onValueChangeFinished = onClosePassEmitMinXFinished,
                             paddingHorizontal = 0.dp,
                             paddingBottom = 14.dp,
                         )
@@ -203,8 +323,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                             value = closePassRiderFloor.toFloat(),
                             valueRange = 5f..30f,
                             steps = 4,
-                            onValueChange = { closePassRiderFloor = it.toInt() },
-                            onValueChangeFinished = { prefs.closePassRiderSpeedFloorKmh = closePassRiderFloor },
+                            onValueChange = { onClosePassRiderFloorChange(it.toInt()) },
+                            onValueChangeFinished = onClosePassRiderFloorFinished,
                             paddingHorizontal = 0.dp,
                             paddingBottom = 14.dp,
                         )
@@ -215,8 +335,8 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                             value = closePassClosingFloor.toFloat(),
                             valueRange = 3f..15f,
                             steps = 11,
-                            onValueChange = { closePassClosingFloor = it.toInt() },
-                            onValueChangeFinished = { prefs.closePassClosingSpeedFloorMs = closePassClosingFloor },
+                            onValueChange = { onClosePassClosingFloorChange(it.toInt()) },
+                            onValueChangeFinished = onClosePassClosingFloorFinished,
                             paddingHorizontal = 0.dp,
                             paddingBottom = 0.dp,
                         )
@@ -238,7 +358,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                             label = "Stop scanning",
                             tone = br.danger,
                             leadingIcon = Icons.Default.PowerSettingsNew,
-                            onClick = { showStopDialog = true },
+                            onClick = onStopScanningClick,
                         )
                         Text(
                             text = "Shuts down radar, overlay, and HA updates until you start them again. No auto-start on reboot. Use Pause for a quiet hour instead.",
@@ -263,43 +383,6 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-        }
-
-        if (showStopDialog) {
-            val cancelFocus = remember { FocusRequester() }
-            // M3 AlertDialog doesn't auto-focus the dismiss button; force Cancel as default.
-            LaunchedEffect(Unit) { cancelFocus.requestFocus() }
-            AlertDialog(
-                onDismissRequest = { showStopDialog = false },
-                title = { Text("Stop scanning?") },
-                text = {
-                    Text(
-                        "The radar, overlay, and Home Assistant updates stop until " +
-                            "you start them again from the home screen — including " +
-                            "after a reboot. Use Pause if you only need a quiet hour."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            prefs.serviceEnabled = false
-                            // Clear any pending pause window so re-arm doesn't
-                            // land back in a stale Paused state.
-                            prefs.pausedUntilEpochMs = 0L
-                            ctx.stopService(Intent(ctx, BikeRadarService::class.java))
-                            showStopDialog = false
-                        },
-                    ) { Text("Stop scanning", color = br.danger) }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showStopDialog = false },
-                        modifier = Modifier
-                            .focusRequester(cancelFocus)
-                            .focusable(),
-                    ) { Text("Cancel") }
-                },
-            )
         }
     }
 }

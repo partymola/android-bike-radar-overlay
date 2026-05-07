@@ -193,7 +193,6 @@ private fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
 
 @Composable
 private fun PermissionsStep(onContinue: () -> Unit) {
-    val br = LocalBrColors.current
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var refresh by remember { mutableIntStateOf(0) }
@@ -210,6 +209,29 @@ private fun PermissionsStep(onContinue: () -> Unit) {
     }
     val requiredGranted = states.all { (spec, granted) -> !spec.required || granted }
 
+    PermissionsStepContent(
+        states = states,
+        requiredGranted = requiredGranted,
+        onContinue = onContinue,
+        onPermissionChanged = { refresh++ },
+    )
+}
+
+/**
+ * Stateless leaf for the onboarding permissions step. Body of
+ * [PermissionsStep] forwards a pre-resolved list of (spec, granted)
+ * pairs and a refresh callback, keeping the lifecycle/permission-launcher
+ * plumbing out of this composable so snapshot tests can render the
+ * step without an Activity or [LocalContext].
+ */
+@Composable
+internal fun PermissionsStepContent(
+    states: List<Pair<PermissionSpec, Boolean>>,
+    requiredGranted: Boolean,
+    onContinue: () -> Unit,
+    onPermissionChanged: () -> Unit,
+) {
+    val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -228,7 +250,7 @@ private fun PermissionsStep(onContinue: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for ((spec, granted) in states) {
-                    PermissionCard(spec = spec, granted = granted, onChanged = { refresh++ })
+                    PermissionCard(spec = spec, granted = granted, onChanged = onPermissionChanged)
                 }
             }
         }
@@ -639,7 +661,6 @@ private fun PairingStep(
     onFinish: () -> Unit,
 ) {
     val ctx = LocalContext.current
-    val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
 
     var radarBonded by remember { mutableStateOf(hasRadarBond(ctx)) }
@@ -657,6 +678,44 @@ private fun PairingStep(
         }
     }
 
+    PairingStepContent(
+        radarBonded = radarBonded,
+        radarLocalName = radarLocalName,
+        radarMac = radarMac,
+        dashcamOwnership = prefsSnap.dashcamOwnership,
+        dashcamMac = prefsSnap.dashcamMac,
+        dashcamDisplayName = prefsSnap.dashcamDisplayName,
+        onOpenBluetoothSettings = {
+            ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
+        },
+        onPickDashcam = { navController.navigate("dashcam-picker?fromOnboarding=true") },
+        onDashcamSkip = { prefs.dashcamOwnership = DashcamOwnership.NO },
+        onDashcamReclaim = { prefs.dashcamOwnership = DashcamOwnership.UNANSWERED },
+        onFinish = onFinish,
+    )
+}
+
+/**
+ * Stateless leaf for the pairing step. The body owns the bond-state
+ * poller and nav/prefs callbacks; this leaf only renders the
+ * already-derived state so snapshot tests can exercise the radar and
+ * dashcam sub-states without a [BluetoothManager] or a [NavController].
+ */
+@Composable
+internal fun PairingStepContent(
+    radarBonded: Boolean,
+    radarLocalName: String?,
+    radarMac: String?,
+    dashcamOwnership: DashcamOwnership,
+    dashcamMac: String?,
+    dashcamDisplayName: String?,
+    onOpenBluetoothSettings: () -> Unit,
+    onPickDashcam: () -> Unit,
+    onDashcamSkip: () -> Unit,
+    onDashcamReclaim: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -692,13 +751,11 @@ private fun PairingStep(
                     else null,
                     primaryCta = if (!radarBonded) "Open Bluetooth settings" else null,
                     primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
-                    onPrimary = {
-                        ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
-                    },
+                    onPrimary = onOpenBluetoothSettings,
                 )
 
                 // Dashcam row, three sub-states matching the JSX.
-                when (prefsSnap.dashcamOwnership) {
+                when (dashcamOwnership) {
                     DashcamOwnership.UNANSWERED -> DashcamUnansweredCard(
                         // Pick device opens the picker without flipping
                         // ownership first — that way a brief recompose into
@@ -706,8 +763,8 @@ private fun PairingStep(
                         // out of the picker leaves the user on the original
                         // unanswered card (pink button still pink). The
                         // picker writes ownership=YES on a successful save.
-                        onSetUp = { navController.navigate("dashcam-picker?fromOnboarding=true") },
-                        onSkip = { prefs.dashcamOwnership = DashcamOwnership.NO },
+                        onSetUp = onPickDashcam,
+                        onSkip = onDashcamSkip,
                     )
                     DashcamOwnership.NO -> DeviceRow(
                         icon = Icons.Default.Videocam,
@@ -719,10 +776,10 @@ private fun PairingStep(
                         detail = "Change your mind any time from Settings → Dashcam.",
                         primaryCta = "I do have one",
                         primaryCtaIcon = null,
-                        onPrimary = { prefs.dashcamOwnership = DashcamOwnership.UNANSWERED },
+                        onPrimary = onDashcamReclaim,
                     )
                     DashcamOwnership.YES -> {
-                        val picked = prefsSnap.dashcamMac != null
+                        val picked = dashcamMac != null
                         DeviceRow(
                             icon = Icons.Default.Videocam,
                             tint = br.dashcam,
@@ -731,15 +788,13 @@ private fun PairingStep(
                             subtitle = if (picked) "Warns you if it's off" else null,
                             bonded = picked,
                             detail = if (picked)
-                                "${prefsSnap.dashcamDisplayName ?: "Picked"} · ${prefsSnap.dashcamMac}"
+                                "${dashcamDisplayName ?: "Picked"} · $dashcamMac"
                             else "Pick the dashcam you ride with to enable off-warnings.",
                             primaryCta = if (picked) "Change device" else "Pick device",
                             primaryCtaIcon = null,
-                            onPrimary = {
-                                navController.navigate("dashcam-picker?fromOnboarding=true")
-                            },
+                            onPrimary = onPickDashcam,
                             extraAction = "I don't have one",
-                            onExtra = { prefs.dashcamOwnership = DashcamOwnership.NO },
+                            onExtra = onDashcamSkip,
                         )
                     }
                 }
@@ -747,7 +802,7 @@ private fun PairingStep(
                 // Hint shown in UNANSWERED / YES states. NO already says
                 // the same thing in its detail box, so we'd be repeating
                 // ourselves.
-                if (prefsSnap.dashcamOwnership != DashcamOwnership.NO) {
+                if (dashcamOwnership != DashcamOwnership.NO) {
                     val hintText = androidx.compose.ui.text.buildAnnotatedString {
                         append("You can come back to this later in ")
                         pushStyle(

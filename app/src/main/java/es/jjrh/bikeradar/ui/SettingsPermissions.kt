@@ -81,6 +81,10 @@ private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNU
         PERMISSIONS.map { spec -> spec to isSpecGranted(ctx, spec) }
     }
 
+    // The body runs `PermissionCard` per spec so each card gets its own
+    // permission-launcher (one launcher per call-site). The stateless
+    // [SettingsPermissionsContent] mirrors this chrome for snapshot
+    // tests but uses [PermissionCardContent] directly with stub actions.
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -101,9 +105,48 @@ private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNU
     }
 }
 
+/**
+ * Stateless leaf — wraps the screen chrome and renders one
+ * [PermissionCardContent] per spec from a pre-derived list. Tests can
+ * call this without a `LocalContext`, a `Lifecycle`, or an Activity:
+ * grant/permanently-denied state is pre-resolved and the action
+ * callback is a no-op stub.
+ */
+@Composable
+internal fun SettingsPermissionsContent(
+    navController: NavController,
+    specsAndGranted: List<Pair<PermissionSpec, Boolean>>,
+    permanentlyDeniedFor: (PermissionSpec) -> Boolean = { false },
+    onAction: (PermissionSpec) -> Unit = {},
+) {
+    val br = LocalBrColors.current
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        ) {
+            SettingsHeader("Permissions", onBack = { navController.popBackStack() })
+
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                for ((spec, granted) in specsAndGranted) {
+                    PermissionCardContent(
+                        spec = spec,
+                        granted = granted,
+                        permanentlyDenied = permanentlyDeniedFor(spec),
+                        onAction = { onAction(spec) },
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+        }
+    }
+}
+
 @Composable
 internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: () -> Unit) {
-    val br = LocalBrColors.current
     val ctx = LocalContext.current
     val activity = ctx as? Activity
     // Track whether we've ever asked for this spec in this card's
@@ -118,6 +161,51 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
         spec.permissions.all { perm ->
             !ActivityCompat.shouldShowRequestPermissionRationale(activity, perm)
         }
+    PermissionCardContent(
+        spec = spec,
+        granted = granted,
+        permanentlyDenied = permanentlyDenied,
+        onAction = {
+            when {
+                spec.permissions.isEmpty() -> {
+                    ctx.startActivity(
+                        Intent(
+                            AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${ctx.packageName}"),
+                        )
+                    )
+                }
+                permanentlyDenied -> {
+                    ctx.startActivity(
+                        Intent(
+                            AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${ctx.packageName}"),
+                        )
+                    )
+                }
+                else -> {
+                    requestAttempted = true
+                    launcher.launch(spec.permissions.toTypedArray())
+                }
+            }
+        },
+    )
+}
+
+/**
+ * Stateless leaf — visible to snapshot tests so the visual contract can
+ * be locked without an Activity, a permission launcher, or a real
+ * `LocalContext`. Callers derive [permanentlyDenied] and provide an
+ * [onAction] that routes to the launcher or the Settings intent.
+ */
+@Composable
+internal fun PermissionCardContent(
+    spec: PermissionSpec,
+    granted: Boolean,
+    permanentlyDenied: Boolean,
+    onAction: () -> Unit,
+) {
+    val br = LocalBrColors.current
     val accentColor = when {
         granted -> br.safe
         !spec.required -> br.fgDim
@@ -194,30 +282,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                         if (spec.required) androidx.compose.ui.graphics.Color.Transparent else br.hairline2,
                         RoundedCornerShape(8.dp),
                     )
-                    .clickable {
-                        when {
-                            spec.permissions.isEmpty() -> {
-                                ctx.startActivity(
-                                    Intent(
-                                        AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${ctx.packageName}"),
-                                    )
-                                )
-                            }
-                            permanentlyDenied -> {
-                                ctx.startActivity(
-                                    Intent(
-                                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                        Uri.parse("package:${ctx.packageName}"),
-                                    )
-                                )
-                            }
-                            else -> {
-                                requestAttempted = true
-                                launcher.launch(spec.permissions.toTypedArray())
-                            }
-                        }
-                    },
+                    .clickable(onClick = onAction),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

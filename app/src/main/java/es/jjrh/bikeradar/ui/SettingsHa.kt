@@ -69,7 +69,6 @@ fun SettingsHa(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
-    val br = LocalBrColors.current
     val scope = rememberCoroutineScope()
     val creds = remember { HaCredentials(ctx) }
     val haHealth by HaHealthBus.state.collectAsState()
@@ -107,11 +106,121 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         }
     }
 
+    SettingsHaContent(
+        urlField = urlField,
+        onUrlChange = { urlField = it },
+        tokenField = tokenField,
+        onTokenChange = { tokenField = it },
+        tokenVisible = tokenVisible,
+        onToggleTokenVisible = { tokenVisible = !tokenVisible },
+        pingResult = pingResult,
+        mqttResult = mqttResult,
+        pinging = pinging,
+        haHealth = haHealth,
+        haConfigured = haConfigured,
+        onBack = { navController.popBackStack() },
+        onTestAndSave = {
+            val url = urlField.trim()
+            val tok = tokenField.trim()
+            val refusal = urlRefusalMessage(url)
+            if (refusal != null) {
+                // Preserve any previously saved working creds.
+                // Pill keeps reflecting actual storage state.
+                pingResult = Result.failure(Exception(refusal))
+                mqttResult = null
+                resultForCreds = url to tok
+                return@SettingsHaContent
+            }
+            pinging = true
+            scope.launch(Dispatchers.IO) {
+                val client = HaClient(url, tok)
+                val pr = client.ping()
+                pingResult = pr
+                if (pr.isSuccess) {
+                    creds.save(url, tok)
+                    prefs.haLastValidatedEpochMs = System.currentTimeMillis()
+                    prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
+                    haConfigured = true
+                    mqttResult = client.probeMqttService()
+                } else {
+                    mqttResult = null
+                }
+                resultForCreds = url to tok
+                pinging = false
+            }
+        },
+        onSaveWithoutTesting = {
+            val url = urlField.trim()
+            val tok = tokenField.trim()
+            val refusal = urlRefusalMessage(url)
+            if (refusal != null) {
+                pingResult = Result.failure(Exception(refusal))
+                mqttResult = null
+                resultForCreds = url to tok
+                return@SettingsHaContent
+            }
+            creds.save(url, tok)
+            // The "validated" timestamp keys off ping(); a save
+            // bypassing test must invalidate it, otherwise any
+            // "creds last verified N days ago" cue misleads.
+            prefs.haLastValidatedEpochMs = 0L
+            prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
+            haConfigured = url.isNotBlank() && tok.isNotBlank()
+            android.widget.Toast.makeText(ctx, "Saved without testing", android.widget.Toast.LENGTH_SHORT).show()
+        },
+        onClear = {
+            creds.clear()
+            prefs.haLastValidatedEpochMs = 0L
+            // Reset the onboarding intent flag so a fresh
+            // re-trigger (or onbtest variant) shows the chooser
+            // again rather than landing on an empty fields form.
+            prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.UNSET
+            urlField = ""
+            tokenField = ""
+            haConfigured = false
+            pingResult = null
+            mqttResult = null
+            resultForCreds = null
+            android.widget.Toast.makeText(
+                ctx,
+                "HA configuration cleared",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        },
+    )
+}
+
+/**
+ * Stateless leaf for the HA settings screen. The body owns the saved
+ * creds slot, the field-invalidation [LaunchedEffect], and the
+ * test/save coroutines; this composable only renders the current
+ * state. Snapshot tests can render it without a [LocalContext], a
+ * [HaCredentials], or a coroutine scope.
+ */
+@Composable
+internal fun SettingsHaContent(
+    urlField: String,
+    onUrlChange: (String) -> Unit,
+    tokenField: String,
+    onTokenChange: (String) -> Unit,
+    tokenVisible: Boolean,
+    onToggleTokenVisible: () -> Unit,
+    pingResult: Result<String>?,
+    mqttResult: Result<String>?,
+    pinging: Boolean,
+    haHealth: HaHealth,
+    haConfigured: Boolean,
+    onBack: () -> Unit,
+    onTestAndSave: () -> Unit,
+    onSaveWithoutTesting: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Home Assistant", onBack = { navController.popBackStack() })
+            SettingsHeader("Home Assistant", onBack = onBack)
 
             // Connection state pill
             val connected = haConfigured && haHealth !is HaHealth.Error
@@ -121,7 +230,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
             HaField(
                 label = "Base URL",
                 value = urlField,
-                onChange = { urlField = it },
+                onChange = onUrlChange,
                 placeholder = "https://homeassistant.local:8123",
                 mono = true,
                 keyboardOptions = KeyboardOptions(
@@ -133,7 +242,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
             HaField(
                 label = "Long-lived token",
                 value = tokenField,
-                onChange = { tokenField = it },
+                onChange = onTokenChange,
                 placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
                 mono = true,
                 visualTransformation = if (tokenVisible) VisualTransformation.None
@@ -144,7 +253,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                     autoCorrectEnabled = false,
                 ),
                 trailingIcon = {
-                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                    IconButton(onClick = onToggleTokenVisible) {
                         Icon(
                             imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                             contentDescription = if (tokenVisible) "Hide token" else "Show token",
@@ -165,60 +274,13 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                     text = if (pinging) "Testing…" else "Test and save",
                     enabled = !pinging && urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
-                    onClick = {
-                        val url = urlField.trim()
-                        val tok = tokenField.trim()
-                        val refusal = urlRefusalMessage(url)
-                        if (refusal != null) {
-                            // Preserve any previously saved working creds.
-                            // Pill keeps reflecting actual storage state.
-                            pingResult = Result.failure(Exception(refusal))
-                            mqttResult = null
-                            resultForCreds = url to tok
-                            return@BrandButton
-                        }
-                        pinging = true
-                        scope.launch(Dispatchers.IO) {
-                            val client = HaClient(url, tok)
-                            val pr = client.ping()
-                            pingResult = pr
-                            if (pr.isSuccess) {
-                                creds.save(url, tok)
-                                prefs.haLastValidatedEpochMs = System.currentTimeMillis()
-                                prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
-                                haConfigured = true
-                                mqttResult = client.probeMqttService()
-                            } else {
-                                mqttResult = null
-                            }
-                            resultForCreds = url to tok
-                            pinging = false
-                        }
-                    },
+                    onClick = onTestAndSave,
                 )
                 GhostButton(
                     text = "Save without testing",
                     enabled = urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
-                    onClick = {
-                        val url = urlField.trim()
-                        val tok = tokenField.trim()
-                        val refusal = urlRefusalMessage(url)
-                        if (refusal != null) {
-                            pingResult = Result.failure(Exception(refusal))
-                            mqttResult = null
-                            resultForCreds = url to tok
-                            return@GhostButton
-                        }
-                        creds.save(url, tok)
-                        // The "validated" timestamp keys off ping(); a save
-                        // bypassing test must invalidate it, otherwise any
-                        // "creds last verified N days ago" cue misleads.
-                        prefs.haLastValidatedEpochMs = 0L
-                        prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
-                        haConfigured = url.isNotBlank() && tok.isNotBlank()
-                        android.widget.Toast.makeText(ctx, "Saved without testing", android.widget.Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = onSaveWithoutTesting,
                 )
             }
 
@@ -236,25 +298,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                     text = "Clear HA configuration",
                     enabled = haConfigured,
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        creds.clear()
-                        prefs.haLastValidatedEpochMs = 0L
-                        // Reset the onboarding intent flag so a fresh
-                        // re-trigger (or onbtest variant) shows the chooser
-                        // again rather than landing on an empty fields form.
-                        prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.UNSET
-                        urlField = ""
-                        tokenField = ""
-                        haConfigured = false
-                        pingResult = null
-                        mqttResult = null
-                        resultForCreds = null
-                        android.widget.Toast.makeText(
-                            ctx,
-                            "HA configuration cleared",
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
-                    },
+                    onClick = onClear,
                 )
             }
 

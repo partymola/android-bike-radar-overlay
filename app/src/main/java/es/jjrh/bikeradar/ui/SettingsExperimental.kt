@@ -32,9 +32,25 @@ fun SettingsExperimental(navController: NavController, prefs: Prefs) {
 
 @Composable
 private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs) {
-    val br = LocalBrColors.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
+    SettingsExperimentalContent(
+        navController = navController,
+        precogEnabled = prefsSnap.precogEnabled,
+        onPrecogChange = { prefs.precogEnabled = it },
+    )
+}
 
+/**
+ * Stateless leaf — visible to snapshot tests so the visual contract can
+ * be locked without Prefs scaffolding.
+ */
+@Composable
+internal fun SettingsExperimentalContent(
+    navController: NavController,
+    precogEnabled: Boolean,
+    onPrecogChange: (Boolean) -> Unit,
+) {
+    val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -55,8 +71,8 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
                     leadingTint = br.brand,
                     title = "Predict overtake paths (1 s lookahead)",
                     subtitle = "Render each vehicle 1 s into the future — see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.",
-                    checked = prefsSnap.precogEnabled,
-                    onCheckedChange = { prefs.precogEnabled = it },
+                    checked = precogEnabled,
+                    onCheckedChange = onPrecogChange,
                 )
             }
 

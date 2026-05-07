@@ -119,123 +119,157 @@ private fun DashcamPickerSheetBody(
     val saveEnabled = selectedMac != initialMac
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Top bar (matches SettingsHeader)
-            SettingsHeader("Select dashcam", onBack = { navController.popBackStack() })
+        DashcamPickerContent(
+            devices = devices,
+            selectedMac = selectedMac,
+            saveEnabled = saveEnabled,
+            onSelect = { selectedMac = it },
+            onOpenBluetoothSettings = {
+                ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
+            },
+            onCancel = { navController.popBackStack() },
+            onSave = {
+                val name = devices.firstOrNull { it.mac.equals(selectedMac, ignoreCase = true) }?.name
+                prefs.dashcamMac = selectedMac
+                prefs.dashcamDisplayName = name
+                if (selectedMac == null) {
+                    prefs.dashcamWarnWhenOff = false
+                } else {
+                    // Picking a real device implies ownership; this lets
+                    // onboarding flip from the UNANSWERED card to the
+                    // picked DeviceRow without a flicker on entry.
+                    prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
+                    if (fromOnboarding) prefs.dashcamWarnWhenOff = true
+                }
+                navController.popBackStack()
+            },
+            onBack = { navController.popBackStack() },
+        )
+    }
+}
 
-            // Explainer banner
-            ExplainerBanner()
+/**
+ * Stateless leaf rendering the picker chrome (header, banner, list,
+ * footer) for a pre-resolved device list. The body owns the
+ * BluetoothAdapter poll and the [rememberSaveable] selection slot;
+ * this composable just paints. Snapshot tests can render it without
+ * a [BluetoothManager] or a [NavController].
+ *
+ * Note: the modal Dialog/scrim chrome stays in the body — only the
+ * list-and-buttons surface is golden-tested.
+ */
+@Composable
+internal fun DashcamPickerContent(
+    devices: List<DashcamCandidate>,
+    selectedMac: String?,
+    saveEnabled: Boolean,
+    onSelect: (String?) -> Unit,
+    onOpenBluetoothSettings: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val br = LocalBrColors.current
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top bar (matches SettingsHeader)
+        SettingsHeader("Select dashcam", onBack = onBack)
 
-            Spacer(modifier = Modifier.height(8.dp))
+        // Explainer banner
+        ExplainerBanner()
 
-            val (likely, other) = devices.partition { it.likely }
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            ) {
-                item("none") {
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val (likely, other) = devices.partition { it.likely }
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            item("none") {
+                PickerRow(
+                    title = "None — I don't have one",
+                    subtitle = null,
+                    tag = null,
+                    selected = selectedMac == null,
+                    onSelect = { onSelect(null) },
+                )
+            }
+
+            if (likely.isNotEmpty()) {
+                item("likely-header") {
+                    PickerSectionLabel("Likely matches")
+                }
+                items(likely, key = { "l-" + it.mac }) { d ->
                     PickerRow(
-                        title = "None — I don't have one",
-                        subtitle = null,
+                        title = d.name,
+                        subtitle = d.mac,
                         tag = null,
-                        selected = selectedMac == null,
-                        onSelect = { selectedMac = null },
+                        selected = selectedMac.equals(d.mac, ignoreCase = true),
+                        onSelect = { onSelect(d.mac) },
                     )
-                }
-
-                if (likely.isNotEmpty()) {
-                    item("likely-header") {
-                        PickerSectionLabel("Likely matches")
-                    }
-                    items(likely, key = { "l-" + it.mac }) { d ->
-                        PickerRow(
-                            title = d.name,
-                            subtitle = d.mac,
-                            tag = null,
-                            selected = selectedMac.equals(d.mac, ignoreCase = true),
-                            onSelect = { selectedMac = d.mac },
-                        )
-                    }
-                }
-
-                if (other.isNotEmpty()) {
-                    item("other-header") {
-                        PickerSectionLabel("Other paired devices")
-                    }
-                    items(other, key = { "o-" + it.mac }) { d ->
-                        PickerRow(
-                            title = d.name,
-                            subtitle = d.mac,
-                            tag = null,
-                            selected = selectedMac.equals(d.mac, ignoreCase = true),
-                            onSelect = { selectedMac = d.mac },
-                        )
-                    }
-                }
-
-                item("refresh") {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    RefreshIndicator()
-                }
-
-                item("pair-cta") {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-                            .clickable {
-                                ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bluetooth,
-                                contentDescription = null,
-                                tint = br.fgMuted,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Text(
-                                text = "Pair a new device in Android Settings",
-                                color = br.fgMuted,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(20.dp))
                 }
             }
 
-            // Sticky footer
-            FooterButtons(
-                saveEnabled = saveEnabled,
-                onCancel = { navController.popBackStack() },
-                onSave = {
-                    val name = devices.firstOrNull { it.mac.equals(selectedMac, ignoreCase = true) }?.name
-                    prefs.dashcamMac = selectedMac
-                    prefs.dashcamDisplayName = name
-                    if (selectedMac == null) {
-                        prefs.dashcamWarnWhenOff = false
-                    } else {
-                        // Picking a real device implies ownership; this lets
-                        // onboarding flip from the UNANSWERED card to the
-                        // picked DeviceRow without a flicker on entry.
-                        prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
-                        if (fromOnboarding) prefs.dashcamWarnWhenOff = true
+            if (other.isNotEmpty()) {
+                item("other-header") {
+                    PickerSectionLabel("Other paired devices")
+                }
+                items(other, key = { "o-" + it.mac }) { d ->
+                    PickerRow(
+                        title = d.name,
+                        subtitle = d.mac,
+                        tag = null,
+                        selected = selectedMac.equals(d.mac, ignoreCase = true),
+                        onSelect = { onSelect(d.mac) },
+                    )
+                }
+            }
+
+            item("refresh") {
+                Spacer(modifier = Modifier.height(16.dp))
+                RefreshIndicator()
+            }
+
+            item("pair-cta") {
+                Spacer(modifier = Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
+                        .clickable(onClick = onOpenBluetoothSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bluetooth,
+                            contentDescription = null,
+                            tint = br.fgMuted,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "Pair a new device in Android Settings",
+                            color = br.fgMuted,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
-                    navController.popBackStack()
-                },
-            )
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+            }
         }
+
+        // Sticky footer
+        FooterButtons(
+            saveEnabled = saveEnabled,
+            onCancel = onCancel,
+            onSave = onSave,
+        )
     }
 }
 

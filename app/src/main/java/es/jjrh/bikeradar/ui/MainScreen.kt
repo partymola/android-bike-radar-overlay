@@ -233,53 +233,111 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown)
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
-        if (isLandscape) {
-            MainScreenLandscape(
-                status = status,
-                cta = cta,
-                btEnabled = btEnabled,
-                showBtOffBanner = showBtOffBanner,
-                showDashcamPrompt = showDashcamPrompt,
-                radarFresh = radarFresh,
-                hasBond = hasBond,
-                dashcamOwned = dashcamOwned,
-                dashcamFresh = dashcamFresh,
-                dashcamPaired = dashcamPaired,
-                dashcamDisplayName = prefsSnap.dashcamDisplayName,
-                radarBattery = radarBattery,
-                dashcamBattery = dashcamBattery,
-                haHealthy = haHealthy,
-                closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
-                onWordmarkLongPress = onWordmarkLongPress,
-                onBtBannerTap = onBtBannerTap,
-                onSettingsClick = onSettingsClick,
-                onDashcamYes = onDashcamYes,
-                onDashcamNo = onDashcamNo,
-            )
-        } else {
-            MainScreenPortrait(
-                status = status,
-                cta = cta,
-                btEnabled = btEnabled,
-                showBtOffBanner = showBtOffBanner,
-                showDashcamPrompt = showDashcamPrompt,
-                radarFresh = radarFresh,
-                hasBond = hasBond,
-                dashcamOwned = dashcamOwned,
-                dashcamFresh = dashcamFresh,
-                dashcamPaired = dashcamPaired,
-                dashcamDisplayName = prefsSnap.dashcamDisplayName,
-                radarBattery = radarBattery,
-                dashcamBattery = dashcamBattery,
-                haHealthy = haHealthy,
-                closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
-                onWordmarkLongPress = onWordmarkLongPress,
-                onBtBannerTap = onBtBannerTap,
-                onSettingsClick = onSettingsClick,
-                onDashcamYes = onDashcamYes,
-                onDashcamNo = onDashcamNo,
-            )
-        }
+        MainScreenContent(
+            status = status,
+            cta = cta,
+            btEnabled = btEnabled,
+            showBtOffBanner = showBtOffBanner,
+            showDashcamPrompt = showDashcamPrompt,
+            radarFresh = radarFresh,
+            hasBond = hasBond,
+            dashcamOwned = dashcamOwned,
+            dashcamFresh = dashcamFresh,
+            dashcamPaired = dashcamPaired,
+            dashcamDisplayName = prefsSnap.dashcamDisplayName,
+            radarBattery = radarBattery,
+            dashcamBattery = dashcamBattery,
+            haHealthy = haHealthy,
+            closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+            isLandscape = isLandscape,
+            onWordmarkLongPress = onWordmarkLongPress,
+            onBtBannerTap = onBtBannerTap,
+            onSettingsClick = onSettingsClick,
+            onDashcamYes = onDashcamYes,
+            onDashcamNo = onDashcamNo,
+        )
+    }
+}
+
+/**
+ * Stateless leaf for the home screen — everything below the systemBars
+ * padding box. Body owns the BLE bond / Bluetooth-enabled poller, the
+ * close-pass / radar / battery flow collection, the [MainStatusDeriver]
+ * call, and the dev-tap counter; this composable just renders the
+ * resolved state in either portrait or landscape layout. Snapshot
+ * tests render this directly without a [Prefs], a [BluetoothManager],
+ * or any state buses.
+ */
+@Composable
+internal fun MainScreenContent(
+    status: MainStatus,
+    cta: StatusCta?,
+    btEnabled: Boolean,
+    showBtOffBanner: Boolean,
+    showDashcamPrompt: Boolean,
+    radarFresh: Boolean,
+    hasBond: Boolean,
+    dashcamOwned: Boolean,
+    dashcamFresh: Boolean,
+    dashcamPaired: Boolean,
+    dashcamDisplayName: String?,
+    radarBattery: BatteryEntry?,
+    dashcamBattery: BatteryEntry?,
+    haHealthy: Boolean,
+    closePassLoggingEnabled: Boolean,
+    isLandscape: Boolean,
+    onWordmarkLongPress: () -> Unit,
+    onBtBannerTap: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onDashcamYes: () -> Unit,
+    onDashcamNo: () -> Unit,
+) {
+    if (isLandscape) {
+        MainScreenLandscape(
+            status = status,
+            cta = cta,
+            btEnabled = btEnabled,
+            showBtOffBanner = showBtOffBanner,
+            showDashcamPrompt = showDashcamPrompt,
+            radarFresh = radarFresh,
+            hasBond = hasBond,
+            dashcamOwned = dashcamOwned,
+            dashcamFresh = dashcamFresh,
+            dashcamPaired = dashcamPaired,
+            dashcamDisplayName = dashcamDisplayName,
+            radarBattery = radarBattery,
+            dashcamBattery = dashcamBattery,
+            haHealthy = haHealthy,
+            closePassLoggingEnabled = closePassLoggingEnabled,
+            onWordmarkLongPress = onWordmarkLongPress,
+            onBtBannerTap = onBtBannerTap,
+            onSettingsClick = onSettingsClick,
+            onDashcamYes = onDashcamYes,
+            onDashcamNo = onDashcamNo,
+        )
+    } else {
+        MainScreenPortrait(
+            status = status,
+            cta = cta,
+            btEnabled = btEnabled,
+            showBtOffBanner = showBtOffBanner,
+            showDashcamPrompt = showDashcamPrompt,
+            radarFresh = radarFresh,
+            hasBond = hasBond,
+            dashcamOwned = dashcamOwned,
+            dashcamFresh = dashcamFresh,
+            dashcamPaired = dashcamPaired,
+            dashcamDisplayName = dashcamDisplayName,
+            radarBattery = radarBattery,
+            dashcamBattery = dashcamBattery,
+            haHealthy = haHealthy,
+            closePassLoggingEnabled = closePassLoggingEnabled,
+            onWordmarkLongPress = onWordmarkLongPress,
+            onBtBannerTap = onBtBannerTap,
+            onSettingsClick = onSettingsClick,
+            onDashcamYes = onDashcamYes,
+            onDashcamNo = onDashcamNo,
+        )
     }
 }
 
@@ -468,7 +526,7 @@ private fun MainScreenLandscape(
 
 // ── Hero status card ─────────────────────────────────────────────────
 
-private data class StatusCta(val label: String, val onClick: () -> Unit)
+internal data class StatusCta(val label: String, val onClick: () -> Unit)
 
 @Composable
 private fun ctaFor(
@@ -517,7 +575,7 @@ private fun ctaFor(
 }
 
 @Composable
-private fun HeroStatusCard(status: MainStatus, cta: StatusCta?) {
+internal fun HeroStatusCard(status: MainStatus, cta: StatusCta?) {
     val br = LocalBrColors.current
     val (dotColor, pulse) = dotForStatus(status.tone, status.icon, br)
     BrCard(modifier = Modifier.fillMaxWidth()) {
@@ -647,7 +705,7 @@ private fun BluetoothOffBanner(onTap: () -> Unit) {
 }
 
 @Composable
-private fun SystemCard(
+internal fun SystemCard(
     radarFresh: Boolean,
     hasBond: Boolean,
     btEnabled: Boolean,

@@ -11,23 +11,32 @@ package es.jjrh.bikeradar
  *   - urgency 2  : middle third
  *   - urgency 3  : near third (d <= 1/3 alertMaxM)
  *
- * Triggers:
- *  - **Per-track rising edge.** A previously-unseen track id entering the
- *    close zone fires a beep at the current closest-car urgency, even if
- *    other tracks were already close.
- *  - **Escalation.** When the closest car crosses into a higher urgency
- *    bucket (further -> closer), re-beep at the new level.
- *  - **Overtake re-acknowledgement.** When a track that was close
- *    transitions to `isBehind` (the radar's post-detection state), and
- *    other tracks are still close, re-beep at the new closest urgency so
- *    the rider knows what's still tailing after a pass.
+ * Triggers (closest-only audio model: a beep tells the rider about
+ * the *closest* threat only; piling on a beep for a track that
+ * doesn't change "the closest is at tier N" information is the
+ * cacophony pattern):
+ *  - **Closest-tier rising edge.** A new track entering the close
+ *    set is silent unless its arrival raises the *closest-urgency
+ *    tier* above the highest tier we have audibly fired for on the
+ *    new closest track.
+ *  - **Escalation with per-track tier latch.** When the closest car
+ *    crosses into a higher urgency bucket (further -> closer),
+ *    re-beep at the new level — but only if we haven't already
+ *    audibly fired for *that tid at that tier*. Intra-tier distance
+ *    jitter (e.g. 11→9→11 m flapping the near-third boundary) does
+ *    NOT re-fire.
+ *  - **Filtered overtake re-acknowledgement.** When a track that
+ *    was close transitions to `isBehind` and others remain close,
+ *    re-beep only if the remaining closest-urgency is *strictly
+ *    greater* than the peak urgency the just-overtaking track ever
+ *    reached. Same-or-lower tier re-statement is silent — the rider
+ *    was already alerted at that tier by the now-overtaking track.
  *  - **Sustain debounce.** A track must be present in close for
- *    `sustainFrames` consecutive frames before it counts. Single-frame
- *    radar blips never fire.
- *  - **Beep cooldown.** No two beeps within `minBeepGapMs`. Triggers in the
- *    cooldown window collapse into a single beep at the closest urgency
- *    *at the moment the cooldown expires* — so a junction with three cars
- *    arriving in two seconds produces one clean beep, not a cacophony.
+ *    `sustainFrames` consecutive frames before it counts. Single-
+ *    frame radar blips never fire.
+ *  - **Beep cooldown.** No two beeps within `minBeepGapMs`. Triggers
+ *    in the cooldown window collapse into a single beep at the
+ *    closest urgency *at the moment the cooldown expires*.
  *  - **Clear chime.** Plays once when the close zone goes from non-empty
  *    to empty, bypassing the cooldown (different timbre, never
  *    overlaps a beep on the speaker).
@@ -49,6 +58,11 @@ package es.jjrh.bikeradar
  */
 class AlertDecider(
     private val sustainFrames: Int = 2,
+    /** Minimum wall-clock milliseconds between two audible beeps.
+     *  The closest-only trigger rule already filters multi-track
+     *  noise; this cooldown is for back-to-back triggers on the
+     *  closest track itself (e.g. tier raise immediately after a
+     *  new-entry fire). */
     private val minBeepGapMs: Long = 700,
     /** Rider's bike speed (m/s) at or below this counts as "stationary".
      *  0.5 m/s catches raw bytes 0..2 inclusive (0, 0.25, 0.5 m/s),
@@ -78,6 +92,45 @@ class AlertDecider(
     private var prevClosestUrgency: Int = 0
     private var lastBeepAtMs: Long = Long.MIN_VALUE / 2  // guarantees first beep fires
     private var beepPending: Boolean = false
+
+    /**
+     * Per-track tier latch — tid -> highest urgency tier we have
+     * *audibly* fired for during this approach episode.
+     *
+     * Used by both the new-entry gate and the escalation gate to
+     * suppress same-tier re-fires. Once we've played a Beep(N)
+     * attributable to tid T, subsequent frames where T is still the
+     * closest at tier N (or lower) are silent. A re-fire on T
+     * requires either:
+     *   - a true tier raise (N -> N+1) for that tid;
+     *   - the close set fully empties (Clear), which clears this
+     *     map; or
+     *   - the tid de-escalates a full tier away from N then comes
+     *     back to N (rearm event), via [peakUrgencyPerTid] rearm
+     *     logic.
+     *
+     * Cleared on Clear (when the close set transitions from non-
+     * empty to empty).
+     */
+    private val firedTierPerTid = HashMap<Int, Int>()
+
+    /**
+     * Per-track peak-urgency tracker — tid -> highest urgency tier
+     * observed for that tid since it entered the close set.
+     *
+     * Two roles:
+     *   1. Drives the filtered-overtake-reack gate: when a tid flips
+     *      isBehind, the remaining closest's urgency must be strictly
+     *      greater than `peakUrgencyPerTid[overtakenTid]` to fire.
+     *   2. Drives the rearm leg of per-track hysteresis: if a tid
+     *      drops a full tier below its `firedTierPerTid` entry, the
+     *      latch is cleared so a subsequent re-escalation can fire
+     *      again.
+     *
+     * Cleared on Clear, same as [firedTierPerTid].
+     */
+    private val peakUrgencyPerTid = HashMap<Int, Int>()
+
     /** Wall-clock ms of the most recent `decide()` call in which the rider
      *  was NOT at or below [stationaryMsThreshold]. Compared against
      *  `nowMs` each call to decide whether the stationary dwell has been
@@ -125,17 +178,75 @@ class AlertDecider(
 
         val stableClose = close.filter { (consecutiveClose[it.id] ?: 0) >= sustainFrames }
         val stableTids = stableClose.mapTo(HashSet()) { it.id }
-        val closestUrgency = stableClose
-            .minOfOrNull { it.distanceM }
-            ?.let { urgencyFor(it, alertMaxM) }
+        val closestVehicle = stableClose.minByOrNull { it.distanceM }
+        val closestUrgency = closestVehicle
+            ?.let { urgencyFor(it.distanceM, alertMaxM) }
             ?: 0
+
+        // Update peak urgency per tid for every stable-close track. Used by
+        // both the D2b filtered overtake re-ack gate and the per-track
+        // hysteresis re-arm path. Must be updated BEFORE the trigger gate
+        // since D2b reads `peakUrgencyPerTid[overtakenTid]`.
+        for (v in stableClose) {
+            val u = urgencyFor(v.distanceM, alertMaxM)
+            val prevPeak = peakUrgencyPerTid[v.id] ?: 0
+            if (u > prevPeak) peakUrgencyPerTid[v.id] = u
+        }
 
         val newEntries = stableTids - prevStableClose
         val overtakes  = prevStableClose intersect behindTids
 
-        val triggered = newEntries.isNotEmpty()
-            || (overtakes.isNotEmpty() && stableTids.isNotEmpty())
-            || (closestUrgency > prevClosestUrgency)
+        // Trigger gate. Audio describes the closest threat only;
+        // additional tracks at the same or lower tier are silent.
+        //
+        //   Closest-tier rising edge: a new track entering the close
+        //     set fires only if its arrival raises the closest-urgency
+        //     tier above what we have already audibly fired for on
+        //     the current closest tid.
+        //
+        //   Filtered overtake re-ack: when a track flips isBehind and
+        //     others remain close, fire only if the remaining
+        //     closest-urgency is strictly greater than the peak
+        //     urgency the just-overtaking track ever reached.
+        //
+        //   Per-track tier latch: once we have audibly fired at
+        //     urgency N for tid T, no re-fire for the same tid at the
+        //     same tier. Re-fire requires a true tier raise N->N+1, a
+        //     Clear (which resets all latches), or a full-tier
+        //     de-escalation followed by re-escalation (handled via
+        //     the peakUrgencyPerTid rearm path).
+        val newEntryRaisesTier =
+            newEntries.isNotEmpty() && closestUrgency > prevClosestUrgency
+        val overtakeToHigher = if (overtakes.isNotEmpty() && stableTids.isNotEmpty()) {
+            val peakOvertaken = overtakes.maxOf { peakUrgencyPerTid[it] ?: 0 }
+            closestUrgency > peakOvertaken
+        } else {
+            false
+        }
+        // Escalation only counts if it's a true tier raise on the closest
+        // tid that we haven't already fired for at that tier.
+        val escalation = closestVehicle != null &&
+            closestUrgency > prevClosestUrgency &&
+            closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
+        // Stationary-impact safety override. While the rider is stopped
+        // and ANY vehicle in the close set is at near-third proximity
+        // closing fast, fire UrgentApproach every cooldown.
+        //
+        // No per-tid latch. The imminent-impact gate is intentionally
+        // very tight (closing ≥ 6 m/s AND distance ≤ alertMaxM/3 AND
+        // rider stationary) and fires precisely when time-to-collision
+        // is sub-2 seconds — the rider is in pre-attentive flinch
+        // territory, not deliberation territory. A second urgent tone
+        // 700 ms after the first is the only audible cue available
+        // DURING the impact window itself. Industry standards (TCAS,
+        // automotive FCW, IEC 60601-1-8 medical, NFPA 72 smoke T3,
+        // ISO 7731 industrial) all repeat-while-held for imminent-
+        // danger cues. DO NOT add a per-tid latch.
+        val anyImminentImpact = riderStationary && stableClose.any { v ->
+            v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
+                v.distanceM <= alertMaxM / 3
+        }
+        val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
         if (triggered) beepPending = true
 
         val cooldownDone = nowMs - lastBeepAtMs >= minBeepGapMs
@@ -144,33 +255,32 @@ class AlertDecider(
             stableTids.isEmpty() && prevStableClose.isNotEmpty() -> {
                 lastBeepAtMs = nowMs
                 beepPending = false
+                firedTierPerTid.clear()
+                peakUrgencyPerTid.clear()
                 Event.Clear
             }
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
-                val anyImminentImpact = stableClose.any { v ->
-                    v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
-                        v.distanceM <= alertMaxM / 3
-                }
                 when {
-                    riderStationary && !anyImminentImpact -> {
-                        // Inaudible - don't consume the audio-spacing
-                        // cooldown or clear beepPending. When the rider
-                        // rolls off, the next decide() call can fire
-                        // same-frame.
-                        Event.None
-                    }
-                    riderStationary && anyImminentImpact -> {
-                        // Override the suppress: the rider is stopped AND
-                        // a vehicle is closing fast at near-third
-                        // proximity. UrgentApproach (distinct audio) fires
-                        // regardless of the suppress gate.
+                    anyImminentImpact -> {
+                        // Held imminent threat: fire urgent every cooldown
+                        // until threat clears.
                         lastBeepAtMs = nowMs
                         beepPending = false
                         Event.UrgentApproach
                     }
+                    riderStationary -> {
+                        // Stationary, no imminent threat — suppress
+                        // ordinary beeps. Don't consume cooldown or
+                        // beepPending: when the rider rolls off, the
+                        // next decide() call can fire same-frame.
+                        Event.None
+                    }
                     else -> {
                         lastBeepAtMs = nowMs
                         beepPending = false
+                        if (closestVehicle != null) {
+                            firedTierPerTid[closestVehicle.id] = closestUrgency
+                        }
                         Event.Beep(closestUrgency)
                     }
                 }
@@ -185,6 +295,8 @@ class AlertDecider(
 
     fun reset() {
         consecutiveClose.clear()
+        firedTierPerTid.clear()
+        peakUrgencyPerTid.clear()
         prevStableClose = emptySet()
         prevClosestUrgency = 0
         lastBeepAtMs = Long.MIN_VALUE / 2

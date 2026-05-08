@@ -47,11 +47,22 @@ package es.jjrh.bikeradar
  *    loops from the queue of stopped cars behind them.
  *  - **Stationary safety override.** While stationary-suppressed, an
  *    [Event.UrgentApproach] (distinct audio) fires anyway when any
- *    close vehicle is at near-third proximity AND closing faster than
- *    [SAFETY_OVERRIDE_CLOSING_MS]. Catches a vehicle that isn't
- *    braking for the queue ahead - the only case where alerting a
- *    stopped rider is still useful (rider has a chance to dismount or
- *    move out of the line of impact).
+ *    close vehicle satisfies either:
+ *      a) **proximity gate** - at near-third proximity (`distanceM <=
+ *         alertMaxM/3`) AND closing faster than
+ *         [SAFETY_OVERRIDE_CLOSING_MS] (radar quantum-strict);
+ *      b) **TTC gate** - TTC = `distanceM / closing` <= [TTC_GATE_SECONDS]
+ *         AND closing >= [TTC_GATE_CLOSING_FLOOR_MS] AND `distanceM <=
+ *         alertMaxM`. Catches the same impact cases earlier on faster
+ *         approaches: the proximity gate fires only at TTC <= ~1.2 s
+ *         (alertMaxM/3 / 6 m/s), which is below the 2.8-4 s TTC range
+ *         used by automotive forward-collision-warning systems.
+ *    Catches a vehicle that isn't braking for the queue ahead - the
+ *    only case where alerting a stopped rider is still useful (rider
+ *    has a chance to dismount or move out of the line of impact).
+ *    The closing-speed floor on the TTC gate filters slow-queue
+ *    traffic merging into a stopped rider, where the driver is
+ *    clearly tracking and braking.
  *
  * Threading: instances are not thread-safe; serialise calls (the radar
  * stream is naturally single-producer).
@@ -79,10 +90,13 @@ class AlertDecider(
         data class Beep(val count: Int) : Event()
         object Clear : Event()
         /** Stationary-suppress override: rider is stopped AND a close
-         *  vehicle is closing faster than [SAFETY_OVERRIDE_CLOSING_MS]
-         *  at near-third proximity. Audible regardless of the suppress
-         *  gate; the audio is intentionally distinct from a normal Beep
-         *  so the rider knows this is the impact-warning case. */
+         *  vehicle satisfies either the proximity gate (near-third
+         *  distance + closing past [SAFETY_OVERRIDE_CLOSING_MS]) or
+         *  the TTC gate (TTC <= [TTC_GATE_SECONDS] + closing >=
+         *  [TTC_GATE_CLOSING_FLOOR_MS]). Audible regardless of the
+         *  suppress dwell; the audio is intentionally distinct from a
+         *  normal Beep so the rider knows this is the impact-warning
+         *  case. See the class KDoc for the full gate semantics. */
         object UrgentApproach : Event()
         object None : Event()
     }
@@ -241,8 +255,19 @@ class AlertDecider(
             closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
         // Stationary-impact safety override. While the rider is at or
         // below the stationary speed threshold and ANY vehicle in the
-        // close set is at near-third proximity closing fast, fire
-        // UrgentApproach every cooldown.
+        // close set looks imminent, fire UrgentApproach every cooldown.
+        //
+        // Two disjunct gates (a vehicle satisfying either fires):
+        //   1. Proximity gate (radar-quantum strict): near-third
+        //      distance AND closing faster than SAFETY_OVERRIDE_CLOSING_MS.
+        //   2. TTC gate: time-to-collision below TTC_GATE_SECONDS,
+        //      with a closing-speed floor (TTC_GATE_CLOSING_FLOOR_MS)
+        //      that filters slow-queue traffic merging into the rider,
+        //      and a distance ceiling at alertMaxM so we never reach
+        //      out beyond what the alert envelope is configured for.
+        //      The TTC gate fires earlier on fast approaches than the
+        //      proximity gate alone (a 12 m / 5 m/s approach is TTC
+        //      2.4 s, well outside near-third).
         //
         // Bypasses the stationary-suppress dwell. The dwell exists to
         // skip rolling stops mid-turn; it is a 2 s timer used as a
@@ -253,15 +278,20 @@ class AlertDecider(
         // into a junction with a closing vehicle is not "rolling stop
         // mid-turn" — they ARE the case the override exists for).
         //
-        // No per-tid latch. The imminent-impact gate is intentionally
-        // tight (closing ≥ 6 m/s AND distance ≤ alertMaxM/3 AND rider
-        // at or below stationary speed). Industry standards (TCAS,
-        // automotive FCW, IEC 60601-1-8 medical, NFPA 72 smoke T3,
-        // ISO 7731 industrial) all repeat-while-held for imminent-
-        // danger cues. DO NOT add a per-tid latch.
+        // No per-tid latch. Industry standards (TCAS, automotive FCW,
+        // IEC 60601-1-8 medical, NFPA 72 smoke T3, ISO 7731 industrial)
+        // all repeat-while-held for imminent-danger cues. DO NOT add a
+        // per-tid latch.
         val anyImminentImpact = riderBelowStationaryForUrgent && stableClose.any { v ->
-            v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
+            val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
                 v.distanceM <= alertMaxM / 3
+            // Closing speed in m/s, positive = approaching. speedMs is
+            // the radar's int-rounded m/s; flipping the sign is exact.
+            val closingMs = -v.speedMs
+            val byTtc = closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
+                v.distanceM in 0..alertMaxM &&
+                v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
+            byProximity || byTtc
         }
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
         if (triggered) beepPending = true
@@ -367,5 +397,24 @@ class AlertDecider(
          *  well within the time-to-collision window for the gate
          *  (closing ≥ 6 m/s AND distance ≤ alertMaxM/3). */
         const val URGENT_OVERRIDE_DWELL_MS = 500L
+
+        /** Time-to-collision threshold (seconds) for the TTC disjunct
+         *  of the stationary-impact safety override. 3 s is the lower
+         *  end of the automotive forward-collision-warning literature
+         *  (NHTSA Burgett & Carter, Mercedes Pre-Safe, Volvo RCW use
+         *  2.8-4 s). 3 s gives enough warning for a stopped cyclist
+         *  to dismount or step away while keeping fire rate close to
+         *  the proximity gate's flinch-territory cases. */
+        const val TTC_GATE_SECONDS = 3.0f
+
+        /** Minimum closing speed (m/s, positive = approaching) for the
+         *  TTC disjunct to engage. Below this, the gate is suppressed
+         *  so the rider isn't urgent-toned for slow-queue traffic
+         *  merging into a stopped position. 5 m/s ≈ 18 km/h, i.e. a
+         *  vehicle that is not actively braking for the queue ahead.
+         *  4 m/s is too permissive (queueing traffic at urban roll
+         *  speeds satisfies it); 6 m/s misses the window the
+         *  proximity gate already covers. */
+        const val TTC_GATE_CLOSING_FLOOR_MS = 5
     }
 }

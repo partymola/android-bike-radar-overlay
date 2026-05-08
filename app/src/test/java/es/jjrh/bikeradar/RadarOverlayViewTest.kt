@@ -90,7 +90,7 @@ class RadarOverlayViewTest {
             setState(
                 RadarState(
                     vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 40, speedMs =  6, size = VehicleSize.BIKE),
+                        Vehicle(id = 1, distanceM = 40, speedMs =  6, size = VehicleSize.CAR),
                         Vehicle(id = 2, distanceM = 22, speedMs = 10, size = VehicleSize.CAR),
                         Vehicle(id = 3, distanceM = 12, speedMs = 14, size = VehicleSize.TRUCK),
                     ),

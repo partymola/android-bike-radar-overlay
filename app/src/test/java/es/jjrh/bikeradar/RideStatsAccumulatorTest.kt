@@ -230,7 +230,7 @@ class RideStatsAccumulatorTest {
         a.observeClosePass(closeEvent(size = VehicleSize.CAR))
         a.observeClosePass(closeEvent(size = VehicleSize.TRUCK))
         a.observeClosePass(closeEvent(size = VehicleSize.TRUCK))
-        a.observeClosePass(closeEvent(size = VehicleSize.BIKE))
+        a.observeClosePass(closeEvent(size = VehicleSize.CAR))
         val s = a.snapshot()
         assertEquals(4, s.closePassCount)
         assertEquals(2, s.hgvClosePassCount)

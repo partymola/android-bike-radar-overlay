@@ -67,14 +67,20 @@ class ClosePassDetectorTest {
 
     // ── gate: rider speed floor ──────────────────────────────────────────────
 
-    @Test fun `does not fire when rider is stationary`() {
+    @Test fun `fires for stationary-rider close pass at junction`() {
+        // A junction close-pass happens while the rider is
+        // decelerating into a waiting line — a real safety
+        // event that should be logged. The previous rider-speed
+        // floor excluded these from the HA log.
+        // Floor is now 0; the other gates (closing speed,
+        // lateral arm threshold, frames-to-arm) filter the noise.
         val d = ClosePassDetector()
+        // Approach + pass + termination (track drops out → emit).
         val frames = (0..5).map { i ->
-            listOf(veh(distanceM = 20 - i * 2, lateralPos = 0.2f)) to i * 100L
-        }
-        // bikeSpeedMs = 0f — below default floor of 4.25
+            listOf(veh(distanceM = 20 - i * 3, lateralPos = 0.2f, speedMs = -8)) to i * 100L
+        } + listOf<Pair<List<Vehicle>, Long>>(emptyList<Vehicle>() to 700L)
         val events = drive(d, frames, bikeSpeedMs = 0f)
-        assertTrue(events.isEmpty())
+        assertTrue("stationary-rider close pass must emit", events.isNotEmpty())
     }
 
     @Test fun `does not fire when bike speed is unknown`() {
@@ -98,21 +104,6 @@ class ClosePassDetectorTest {
             veh(distanceM = 10, lateralPos = 0.2f, speedMs = -2) to 300L,
             veh(distanceM = 5, lateralPos = 0.15f, speedMs = -2) to 400L,
             veh(distanceM = 0, lateralPos = 0.2f, speedMs = -2, isBehind = true) to 500L,
-        )
-        val events = drive(d, frames)
-        assertTrue(events.isEmpty())
-    }
-
-    // ── gate: vehicle class ──────────────────────────────────────────────────
-
-    @Test fun `does not fire for a BIKE class target`() {
-        val d = ClosePassDetector()
-        val frames = listOf(
-            veh(distanceM = 20, lateralPos = 0.25f, size = VehicleSize.BIKE) to 0L,
-            veh(distanceM = 15, lateralPos = 0.18f, size = VehicleSize.BIKE) to 100L,
-            veh(distanceM = 10, lateralPos = 0.15f, size = VehicleSize.BIKE) to 200L,
-            veh(distanceM = 5, lateralPos = 0.15f, size = VehicleSize.BIKE) to 300L,
-            veh(distanceM = 0, lateralPos = 0.2f, size = VehicleSize.BIKE, isBehind = true) to 400L,
         )
         val events = drive(d, frames)
         assertTrue(events.isEmpty())

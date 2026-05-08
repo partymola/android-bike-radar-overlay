@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
-enum class VehicleSize { BIKE, CAR, TRUCK }
+enum class VehicleSize { CAR, TRUCK }
 
 enum class DataSource { NONE, V2 }
 

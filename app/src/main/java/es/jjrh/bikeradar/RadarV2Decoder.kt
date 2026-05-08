@@ -238,9 +238,8 @@ class RadarV2Decoder(
     }
 
     private fun sizeRank(s: VehicleSize): Int = when (s) {
-        VehicleSize.BIKE -> 0
-        VehicleSize.CAR -> 1
-        VehicleSize.TRUCK -> 2
+        VehicleSize.CAR -> 0
+        VehicleSize.TRUCK -> 1
     }
 
     private fun pruneStale(now: Long): Boolean {
@@ -283,8 +282,18 @@ class RadarV2Decoder(
         lastBikeSpeedMs = null
     }
 
+    /**
+     * Map raw radar class → display/logic enum.
+     *
+     * The radar's class names (CLASS_LOW / CLASS_NORMAL / CLASS_HIGH
+     * and their _STABLE variants) are signal-strength descriptors,
+     * not a vehicle taxonomy. CLASS_LOW means "low-RCS / low-
+     * confidence return"; a real truck reads as CLASS_LOW for the
+     * first seconds of approach until enough returns accumulate to
+     * upgrade. Default to CAR when uncertain — [debounceSize] will
+     * upgrade to TRUCK as the radar promotes the class.
+     */
     private fun classifySize(cls: Int): VehicleSize = when (cls) {
-        CLASS_LOW, CLASS_LOW_STABLE -> VehicleSize.BIKE
         CLASS_HIGH -> VehicleSize.TRUCK
         else -> VehicleSize.CAR
     }

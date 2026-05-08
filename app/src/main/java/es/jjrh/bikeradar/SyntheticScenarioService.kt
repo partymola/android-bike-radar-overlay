@@ -159,7 +159,7 @@ class SyntheticScenarioService : Service() {
         }
         if (t in 42.0..54.0) {
             val d = 70.0 - 6.0 * (t - 42.0)
-            if (d >= 0) out.add(Vehicle(id = 6, distanceM = d.toInt().coerceAtLeast(0), speedMs = 6, size = VehicleSize.BIKE, lateralPos = -0.7f))
+            if (d >= 0) out.add(Vehicle(id = 6, distanceM = d.toInt().coerceAtLeast(0), speedMs = 6, size = VehicleSize.CAR, lateralPos = -0.7f))
         }
         if (t in 42.0..53.1) {
             val d = 55.0 - 5.0 * (t - 42.0)
@@ -199,7 +199,7 @@ class SyntheticScenarioService : Service() {
             if (d >= 0) out.add(
                 Vehicle(
                     id = 12, distanceM = d.toInt().coerceAtLeast(0), speedMs = 8,
-                    size = VehicleSize.BIKE, lateralPos = -0.4f, speedXMs = 0,
+                    size = VehicleSize.CAR, lateralPos = -0.4f, speedXMs = 0,
                 )
             )
         }

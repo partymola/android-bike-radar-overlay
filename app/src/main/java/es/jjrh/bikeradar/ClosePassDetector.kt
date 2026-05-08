@@ -32,11 +32,13 @@ class ClosePassDetector {
         /** Master on/off. When false, decide() is a no-op. */
         val enabled: Boolean,
         /** Minimum rider bike speed (m/s) for the detector to arm.
-         *  Filters out stationary-rider scenarios: red lights with
-         *  cross-traffic in a right-turn lane, pushing the bike, etc.
-         *  4.25 m/s arms at raw 17+, matching the prior 15 km/h gate
-         *  exactly. */
-        val riderSpeedFloorMs: Float = 4.25f,
+         *  Default 0 so junction close-passes (rider decelerating
+         *  into a waiting line, vehicle closing fast on the rider's
+         *  flank) get logged. The closing-speed floor, lateral arm
+         *  threshold, and frames-to-arm gates already exclude
+         *  filtering-past-traffic noise. Set above 0 to restore an
+         *  active-ride-only filter. */
+        val riderSpeedFloorMs: Float = 0f,
         /** Minimum closing speed (m/s) for the detector to arm.
          *  Filters out lane-matched cruising and filtering — if the
          *  vehicle isn't genuinely overtaking, it's not a close pass
@@ -170,7 +172,6 @@ class ClosePassDetector {
             if (!state.armed) {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM
                 val closingOk = v.speedMs <= -config.closingSpeedFloorMs
-                val sizeOk = v.size == VehicleSize.CAR || v.size == VehicleSize.TRUCK
                 val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
                 // Urban-cruise branch when rider speed <= 8.25 m/s
@@ -178,7 +179,7 @@ class ClosePassDetector {
                 // 30 km/h cut exactly).
                 val armThreshold = if (riderMs <= 8.25f) config.armRangeXUrbanM else config.armRangeXRuralM
                 val lateralOk = abs(v.lateralPos * LATERAL_FULL_M) <= armThreshold
-                if (rangeYOk && closingOk && sizeOk && riderOk && framesOk && lateralOk) {
+                if (rangeYOk && closingOk && riderOk && framesOk && lateralOk) {
                     state.armed = true
                     state.armedThresholdM = armThreshold
                 }

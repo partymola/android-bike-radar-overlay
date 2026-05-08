@@ -404,13 +404,11 @@ class RadarOverlayView(context: Context) : View(context) {
      *  also leaves more map showing through, which helps orientation when
      *  the rider glances at the overlay during a turn. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
-        VehicleSize.BIKE  -> dp(3f)
         VehicleSize.CAR   -> dp(7f)
         VehicleSize.TRUCK -> dp(11f)
     }
 
     private fun vehicleHalfHeight(size: VehicleSize): Float = when (size) {
-        VehicleSize.BIKE  -> dp(9f)
         VehicleSize.CAR   -> dp(12f)
         VehicleSize.TRUCK -> dp(18f)
     }

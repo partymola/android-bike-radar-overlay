@@ -11,7 +11,7 @@ import org.junit.Test
 /**
  * Unit tests for [RadarV2Decoder]. Packet byte layout (9 bytes per target):
  *   [0]    tid uint8
- *   [1]    class uint8  (16=CLASS_LOW=BIKE, 36=CLASS_HIGH=TRUCK, else CAR)
+ *   [1]    class uint8  (36=CLASS_HIGH=TRUCK, else CAR — incl. CLASS_LOW)
  *   [2..4] 24-bit little-endian packed range field:
  *            bits 0..10  = rangeX (11-bit signed, x0.1 m)
  *            bits 11..23 = rangeY (13-bit signed, x0.1 m)
@@ -132,14 +132,19 @@ class RadarV2DecoderTest {
         assertEquals(-1f, state!!.vehicles.single().lateralPos, 0.0001f)
     }
 
-    @Test fun classLowClassifiesAsBike() {
+    @Test fun classLowClassifiesAsCar() {
+        // CLASS_LOW = "low-RCS / low-confidence return", not "is a
+        // bike". Trucks present as CLASS_LOW for several seconds of
+        // approach. Default to CAR when uncertain; the class
+        // promotion + debounce will upgrade to TRUCK as confidence
+        // grows.
         val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
-        assertEquals(VehicleSize.BIKE, state!!.vehicles.single().size)
+        assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
-    @Test fun classLowStableClassifiesAsBike() {
+    @Test fun classLowStableClassifiesAsCar() {
         val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW_STABLE)))
-        assertEquals(VehicleSize.BIKE, state!!.vehicles.single().size)
+        assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
     @Test fun classHighClassifiesAsTruck() {
@@ -398,16 +403,17 @@ class RadarV2DecoderTest {
     }
 
     @Test fun sizeDowngradeHoldsForSeveralFrames() {
-        // CAR -> BIKE: do not downgrade on first frame. Should stay CAR until
-        // DOWNGRADE_FRAMES consecutive frames at the smaller size.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
+        // TRUCK -> CAR: do not downgrade on first frame. Should stay
+        // TRUCK until DOWNGRADE_FRAMES consecutive frames at the smaller
+        // size. (CLASS_LOW now maps to CAR, not BIKE — see
+        // classLowClassifiesAsCar.)
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_HIGH)))
         for (i in 1 until RadarV2Decoder.DOWNGRADE_FRAMES) {
             val s = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
-            assertEquals("frame $i must still show CAR", VehicleSize.CAR, s!!.vehicles.single().size)
+            assertEquals("frame $i must still show TRUCK", VehicleSize.TRUCK, s!!.vehicles.single().size)
         }
-        // Kth consecutive LOW frame commits the downgrade.
         val finalState = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
-        assertEquals(VehicleSize.BIKE, finalState!!.vehicles.single().size)
+        assertEquals(VehicleSize.CAR, finalState!!.vehicles.single().size)
     }
 
     // ── alongside-stationary gate ────────────────────────────────────────────

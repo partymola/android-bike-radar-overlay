@@ -12,6 +12,34 @@ package es.jjrh.bikeradar
  * rider has the phone, so a local notification with sound + vibration
  * is the correct channel.
  *
+ * **State-machine framing**:
+ *
+ *   IDLE        -- radar connected, riding. No leave-behind possible.
+ *   ARMED       -- radar just disconnected, dashcam still seen as alive.
+ *                  This is the only state in which FIRE can be returned.
+ *   BLANK       -- radar still off but dashcam has been silent long
+ *                  enough that the rider is judged to have intentionally
+ *                  packed up (or the kit died). No alarm possible until
+ *                  the radar reconnects to start a new ride; subsequent
+ *                  off-events from this state will only re-arm via the
+ *                  next IDLE -> ARMED transition.
+ *
+ * Transitions:
+ *   IDLE  -> ARMED : on radar GATT disconnect (caller stamps).
+ *   ARMED -> BLANK : caller observed dashcam stale for [Input.armed]'s
+ *                    full disarm window with radar still off.
+ *   ARMED -> IDLE  : radar reconnects (next ride begins).
+ *   BLANK -> IDLE  : radar reconnects (caller resets `armed` to true on
+ *                    the next disconnect, NOT on advert returns within
+ *                    the same off-episode).
+ *
+ * The state machine is OWNED BY THE CALLER (`BikeRadarService`); this
+ * decider just receives `armed` as a single boolean each tick and uses
+ * it as the master gate. That keeps the state-management logic
+ * (timestamp tracking, advert observation) co-located with the live
+ * BLE state in the service, while the FIRE/AUTO_DISMISS decision rules
+ * stay JVM-pure for testability.
+ *
  * The decider is stateless; the caller owns all mutable fields and
  * passes them in via [Input]. That matches the project's existing
  * testable-decider pattern (see `DashcamStatusDeriver`).
@@ -64,15 +92,43 @@ object WalkAwayDecider {
          *  the radar is currently connected or has never been off
          *  this session. */
         val radarOffSinceMs: Long?,
-        /** Monotonic timestamp of the last dashcam BLE advert. */
+        /** Monotonic timestamp of the last dashcam BLE advert. Used by
+         *  the post-fire AUTO_DISMISS path (fire was issued, then the
+         *  dashcam went silent → reason for the alert is gone, dismiss
+         *  immediately rather than waiting for autoDismissAfterFireMs). */
         val dashcamLastAdvertMs: Long,
-        /** True iff at least one dashcam advert has been observed
-         *  after the most recent radar-off event. Distinguishes "dash-
-         *  cam still on bike while rider walks away" (this stays
-         *  true as long as the rider is within advert range of the
-         *  bike) from "rider took everything inside together" (false,
-         *  dashcam went silent as it went out of phone range). */
-        val dashcamHasAdvertedSinceRadarOff: Boolean,
+        /** Master leave-behind state-machine bit, owned by the caller.
+         *
+         *  Semantics:
+         *
+         *    IDLE   (armed=false): radar connected, riding. No leave-
+         *           behind possible.
+         *    ARMED  (armed=true): radar just disconnected with the
+         *           dashcam still alive on the bike. FIRE is gated on
+         *           this state.
+         *    BLANK  (armed=false): radar still off but the rider has
+         *           clearly packed up — dashcam has been silent for
+         *           ≥dashcamFreshMs since radar disconnect. The rider
+         *           has done something deliberate (turned the camera
+         *           off, the kit died, etc.) so this off-episode is
+         *           NOT a leave-behind risk. Stays BLANK until the
+         *           radar reconnects (next ride) and then disconnects
+         *           again.
+         *
+         *  Caller transitions:
+         *    IDLE  -> ARMED : on radar disconnect (`markRadarDisconnected`).
+         *    ARMED -> BLANK : when dashcam stale-since-or-before-radar-off
+         *                     exceeds freshness window during the tick
+         *                     (see `BikeRadarService.tickWalkAwayState`).
+         *    ARMED -> IDLE  : on radar reconnect (`markRadarConnected`).
+         *    BLANK -> IDLE  : on radar reconnect.
+         *
+         *  Critically: `armed` does NOT re-flip to true mid-off-
+         *  episode even if the dashcam comes back. A rider turning
+         *  the camera back on between rides should not re-arm the
+         *  alarm. Re-arming requires the next radar power-on/off
+         *  cycle. */
+        val armed: Boolean,
         /** Running total of how long the radar has been CONNECTED this
          *  session. */
         val sessionTotalRadarConnectedMs: Long,
@@ -115,6 +171,16 @@ object WalkAwayDecider {
         // reconnect.
         if (i.dismissedForEpisode) return Action.NONE
 
+        // ── State-machine master gate ─────────────────────────────────
+        // FIRE is only legal in the ARMED state. The state-machine
+        // logic (IDLE -> ARMED -> BLANK -> IDLE) lives in
+        // BikeRadarService; this decider treats `armed` as the master
+        // gate. The BLANK state (armed=false mid-off-episode) blocks
+        // a spurious alarm when the rider turns the camera back on
+        // between rides without first powering the radar on. Re-arm
+        // is via radar reconnect only.
+        if (!i.armed) return Action.NONE
+
         // Radar must be currently off, and off for long enough.
         if (i.radarConnected) return Action.NONE
         val off = i.radarOffSinceMs ?: return Action.NONE
@@ -126,11 +192,13 @@ object WalkAwayDecider {
         // already locked up next to a dashcam that's still on.
         if (i.sessionTotalRadarConnectedMs < c.coldStartRadarMs) return Action.NONE
 
-        // Dashcam must currently be alive AND must have adverted at
-        // least once since radar went off. The latter rules out "both
-        // devices went out of phone range together" (phone-left-
-        // behind scenario), which is not our target case.
-        if (!i.dashcamHasAdvertedSinceRadarOff) return Action.NONE
+        // Dashcam must currently be alive. (The "has adverted since
+        // radar off" guard from the previous design is now subsumed
+        // by the `armed` state gate above: if `armed` is true, by
+        // construction the dashcam was alive at radar-off time and
+        // has been continuously sighted since — caller-side disarm
+        // logic flips `armed` to false the moment the dashcam goes
+        // stale during an off-episode.)
         if (i.nowMs - i.dashcamLastAdvertMs > c.dashcamFreshMs) return Action.NONE
 
         return Action.FIRE

@@ -17,7 +17,7 @@ class WalkAwayDeciderTest {
         radarConnected: Boolean = false,
         radarOffSinceMs: Long? = 0L,
         dashcamLastAdvertMs: Long = nowMs - 5_000L,
-        dashcamHasAdvertedSinceRadarOff: Boolean = true,
+        armed: Boolean = true,
         sessionTotalRadarConnectedMs: Long = 5 * 60_000L,
         lastFireMs: Long? = null,
         dismissedForEpisode: Boolean = false,
@@ -27,7 +27,7 @@ class WalkAwayDeciderTest {
         radarConnected = radarConnected,
         radarOffSinceMs = radarOffSinceMs,
         dashcamLastAdvertMs = dashcamLastAdvertMs,
-        dashcamHasAdvertedSinceRadarOff = dashcamHasAdvertedSinceRadarOff,
+        armed = armed,
         sessionTotalRadarConnectedMs = sessionTotalRadarConnectedMs,
         lastFireMs = lastFireMs,
         dismissedForEpisode = dismissedForEpisode,
@@ -79,9 +79,15 @@ class WalkAwayDeciderTest {
 
     // ── dashcam gates ────────────────────────────────────────────────────────
 
-    @Test fun `does not fire if dashcam has never adverted since radar went off`() {
-        val noDashcamSinceOff = input(dashcamHasAdvertedSinceRadarOff = false)
-        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(noDashcamSinceOff))
+    @Test fun `does not fire when armed=false (BLANK state — rider has packed up)`() {
+        // The state-machine BLANK transition (armed=false during an
+        // off-episode) means the rider has clearly powered things
+        // down — alarm permanently disarmed for this off-episode
+        // regardless of whether the dashcam comes back. See the
+        // WalkAwayDecider class KDoc for the full state-machine
+        // semantics.
+        val packedUp = input(armed = false)
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(packedUp))
     }
 
     @Test fun `does not fire if last dashcam advert is stale`() {
@@ -155,5 +161,64 @@ class WalkAwayDeciderTest {
             dashcamLastAdvertMs = now - (config.dashcamFreshMs + 1_000L),
         )
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(silentNoFire))
+    }
+
+    // ── State-machine regression-proof tests ──────────────────────────
+    //
+    // Spurious-fire scenario: rider finished a ride (radar off),
+    // turned camera off shortly after (BLANK), app stayed running.
+    // Several minutes later the rider turned the camera back on to
+    // start setting up the next ride — without any state-machine
+    // gate, the alarm fires the moment the camera advertises again,
+    // which is wrong. These tests pin that BLANK only re-arms via
+    // radar reconnect, never via a returning dashcam advert.
+
+    @Test fun `camera-on after BLANK does not re-fire (state-machine pinning)`() {
+        // Replays the spurious-fire scenario in decider terms:
+        //   - radar disconnected 7 min ago (well past threshold)
+        //   - dashcam adverted briefly post-disconnect, then went stale
+        //   - service-side disarm logic flipped armed=false (BLANK)
+        //   - dashcam now adverts again (rider just turned it on)
+        // Service holds armed=false because BLANK only re-arms via
+        // radar reconnect. Decider must stay silent.
+        val now = 30 * 60_000L
+        val radarOffSeven = now - 7 * 60_000L
+        val justGotFreshAdvert = input(
+            nowMs = now,
+            radarOffSinceMs = radarOffSeven,
+            dashcamLastAdvertMs = now - 1_000L,  // fresh
+            armed = false,                        // BLANK — service disarmed
+        )
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(justGotFreshAdvert))
+    }
+
+    @Test fun `armed=false blocks fire even when every other gate would pass`() {
+        // Negative control: every gate green, only the master state-
+        // machine bit is BLANK. Pin this so the armed check stays a
+        // hard gate even if the gate order is refactored.
+        val allGreenButBlank = input(
+            armed = false,
+            // every other gate explicitly green:
+            radarConnected = false,
+            radarOffSinceMs = 0L,
+            sessionTotalRadarConnectedMs = 5 * 60_000L,
+            dashcamLastAdvertMs = 10 * 60_000L - 5_000L,
+            lastFireMs = null,
+            dismissedForEpisode = false,
+        )
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(allGreenButBlank))
+    }
+
+    @Test fun `armed=true still respects all the other gates`() {
+        // Negative control of the inverse: armed alone is not enough
+        // — the rest of the gates (radar off, threshold, cold-start,
+        // dashcam fresh, no recent fire, not dismissed) still apply.
+        // Pin this in case someone simplifies the decider to
+        // `if (armed) FIRE`.
+        val armedButRecentFire = input(
+            armed = true,
+            lastFireMs = 10 * 60_000L - 60_000L,  // 1 min ago, inside rate-limit window
+        )
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(armedButRecentFire))
     }
 }

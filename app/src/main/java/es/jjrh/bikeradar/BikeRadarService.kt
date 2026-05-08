@@ -140,11 +140,32 @@ class BikeRadarService : Service() {
      *  radar is not currently connected. Set in [markRadarConnected],
      *  consumed in [markRadarDisconnected]. */
     @Volatile private var radarConnectStartMs: Long? = null
-    /** True once a dashcam advert has been observed after the most recent
-     *  radar-off event; distinguishes "dashcam still on bike" from "rider
-     *  took everything inside" (dashcam went silent as it went out of
-     *  phone range). Cleared on radar reconnect. */
-    @Volatile private var dashcamSeenSinceRadarOff = false
+    /** Master state-machine bit for the leave-behind alarm.
+     *
+     *  `true` (ARMED): radar disconnected with the dashcam still
+     *  alive on the bike — leave-behind risk is in play, [WalkAwayDecider]
+     *  may FIRE.
+     *
+     *  `false` has two meanings depending on radar state:
+     *   * IDLE — radar connected, riding. No leave-behind possible.
+     *   * BLANK — radar still off but the dashcam went stale during
+     *     this off-episode. The rider is judged to have packed up; no
+     *     alarm possible until the next radar power-on.
+     *
+     *  Transitions:
+     *   * Set TRUE in [markRadarDisconnected] (IDLE → ARMED).
+     *   * Set FALSE in [markRadarConnected] (any → IDLE) AND in
+     *     [tickWalkAwayState] when the dashcam goes stale during an
+     *     off-episode (ARMED → BLANK).
+     *   * Crucially: BLANK does NOT re-flip to ARMED mid-off-episode
+     *     even if the dashcam comes back. Re-arming requires the next
+     *     IDLE → ARMED transition (i.e. radar power-on then off).
+     *
+     *  Pinning tests in `WalkAwayDeciderTest`. The blank-slate
+     *  state-machine semantic — re-arm only via radar power-on, not
+     *  via an inter-ride dashcam advert — is the canonical model.
+     *  See [WalkAwayDecider] class KDoc for the full rationale. */
+    @Volatile private var walkAwayArmed = false
     /** Monotonic ms of the last walk-away notification fire. Null until
      *  first fire this session. Cleared on radar reconnect and on
      *  auto-dismiss. */
@@ -176,11 +197,9 @@ class BikeRadarService : Service() {
      *  effect. */
     @Volatile private var walkAwaySavedAlarmVolume: Int? = null
     /** Single-slot job that stops the alarm tone after
-     *  [WALKAWAY_RINGTONE_CAP_MS] even if the user hasn't dismissed.
-     *  The decider's rate limit re-fires the notification later, which
-     *  re-starts the tone for another capped window. Bystander courtesy
-     *  vs missed-alarm trade-off: a series of capped bursts is harder to
-     *  ignore than continuous audio, and less of a nuisance to others. */
+     *  [WALKAWAY_RINGTONE_CAP_MS]. Without this cap a forgotten alert
+     *  would loop forever; the decider's rate limit then re-fires the
+     *  notification, re-starting the tone for another bounded window. */
     private var walkAwayRingtoneCapJob: Job? = null
 
     private var bondReceiverRegistered = false
@@ -1585,13 +1604,6 @@ class BikeRadarService : Service() {
     // ── walk-away alarm tone ─────────────────────────────────────────────────
 
     /**
-     * Start the looping alarm-stream tone that accompanies a walk-away
-     * notification. Idempotent: an already-playing call is a no-op so a
-     * refire mid-tone doesn't restart the cap. @Synchronized with
-     * [stopWalkAwayAlarmTone] prevents a concurrent FIRE/DISMISS from
-     * leaving a tone playing past dismissal.
-     */
-    /**
      * Vibrate the walk-away pattern explicitly via the Vibrator
      * service. Channel-level vibration is suppressed by DND when the
      * channel doesn't bypass DND; explicit Vibrator calls are not.
@@ -1838,7 +1850,9 @@ class BikeRadarService : Service() {
     private fun markRadarConnected() {
         if (radarOffSinceMs != null) {
             radarOffSinceMs = null
-            dashcamSeenSinceRadarOff = false
+            // Any → IDLE: radar is back, leave-behind tracking off.
+            // Re-arming requires the next radar disconnect.
+            walkAwayArmed = false
             walkAwayDismissed = false
             walkAwaySnoozeJob.getAndSet(null)?.cancel()
             lastWalkAwayFireMs = null
@@ -1857,6 +1871,10 @@ class BikeRadarService : Service() {
         }
         if (radarOffSinceMs == null) {
             radarOffSinceMs = System.currentTimeMillis()
+            // IDLE → ARMED: radar just disconnected mid-session. The
+            // tick will downgrade to BLANK if the dashcam has been
+            // silent past the freshness window.
+            walkAwayArmed = true
         }
     }
 
@@ -1866,14 +1884,32 @@ class BikeRadarService : Service() {
         // tick is 30 s; a connection that ends within that window would
         // never have its duration counted under the old per-tick scheme.
 
-        // Once the radar is off, watch the dashcam battery bus for a
-        // fresh advert to mark the "still on the bike" gate.
+        // ARMED → BLANK transition: while the radar is still off, watch
+        // for the dashcam going stale. The "stale window" is anchored at
+        // the LATER of (radarOffSinceMs, dashcamLastAdvertMs):
+        //   - if the dashcam has adverted since radar-off, the window
+        //     starts at the most recent advert (rider walked away from
+        //     a continuously-fresh dashcam, then dashcam dropped out);
+        //   - if the dashcam was already silent at radar-off, the window
+        //     starts at the disconnect itself (rider stopped with the
+        //     camera already off — never was a leave-behind risk).
+        // Once the window exceeds dashcamFreshMs we declare BLANK; the
+        // alarm is permanently disarmed for this off-episode regardless
+        // of whether the dashcam comes back later.
+        //
+        // Once disarmed, the rider has packed up the bike for now;
+        // re-arming requires the next ride (radar power-on then off).
         val offAt = radarOffSinceMs
-        if (offAt != null && !dashcamSeenSinceRadarOff) {
+        if (offAt != null && walkAwayArmed) {
             val slug = resolveDashcamSlug()
-            val entry = slug?.let { BatteryStateBus.entries.value[it] }
-            if (entry != null && entry.readAtMs > offAt) {
-                dashcamSeenSinceRadarOff = true
+            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
+            val anchorMs = maxOf(offAt, lastAdvert)
+            val freshMs = WalkAwayDecider.Config(
+                enabled = false,
+                thresholdMs = 0,
+            ).dashcamFreshMs
+            if (nowMs - anchorMs > freshMs) {
+                walkAwayArmed = false
             }
         }
     }
@@ -1894,7 +1930,7 @@ class BikeRadarService : Service() {
             radarConnected = radarGattActive,
             radarOffSinceMs = radarOffSinceMs,
             dashcamLastAdvertMs = dashcamLastAdvertMs,
-            dashcamHasAdvertedSinceRadarOff = dashcamSeenSinceRadarOff,
+            armed = walkAwayArmed,
             sessionTotalRadarConnectedMs = sessionRadarConnectedMs,
             lastFireMs = lastWalkAwayFireMs,
             dismissedForEpisode = walkAwayDismissed,
@@ -2192,10 +2228,10 @@ class BikeRadarService : Service() {
         // an alarm rather than a routine notification.
         private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
         private val LIGHT_FAIL_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
-        // Cap on a single alarm-tone burst. After this the tone stops on
-        // its own; the decider's rate limit will fire again later and the
-        // tone restarts. Capped-burst pattern is harder to ignore than
-        // continuous audio and less noisy for bystanders.
+        // Hard cap on how long the looping alarm tone keeps playing
+        // before it is force-stopped. Without this the tone loops until
+        // the user dismisses; this caps a forgotten alert at one
+        // bounded burst.
         private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L

@@ -153,8 +153,19 @@ class AlertDecider(
         if (lastNotStationaryAtMs == NOT_INITIALIZED || !isBelowThreshold) {
             lastNotStationaryAtMs = nowMs
         }
-        val riderStationary =
-            (nowMs - lastNotStationaryAtMs) >= stationaryDwellMs
+        val timeBelowStationaryMs = nowMs - lastNotStationaryAtMs
+        val riderStationary = timeBelowStationaryMs >= stationaryDwellMs
+        // Short mini-dwell for the imminent-impact override (below).
+        // The 2 s `stationaryDwellMs` exists to skip rolling stops
+        // mid-turn for the ordinary-Beep suppress path; the override
+        // is much narrower (closing ≥ 6 m/s AND distance ≤ alertMaxM/3)
+        // and doesn't need the same protection. 500 ms is long enough
+        // to absorb single-frame radar speed noise and 200-400 ms
+        // mid-turn speed dips, short enough that a rider decelerating
+        // into a junction with a closing vehicle gets the urgent tone
+        // well within the time-to-collision window.
+        val riderBelowStationaryForUrgent =
+            timeBelowStationaryMs >= URGENT_OVERRIDE_DWELL_MS
 
         // Skip alongside-stationary tracks (parked car / queued traffic next
         // to a crawling rider). The decoder gates these on rider speed +
@@ -228,21 +239,27 @@ class AlertDecider(
         val escalation = closestVehicle != null &&
             closestUrgency > prevClosestUrgency &&
             closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
-        // Stationary-impact safety override. While the rider is stopped
-        // and ANY vehicle in the close set is at near-third proximity
-        // closing fast, fire UrgentApproach every cooldown.
+        // Stationary-impact safety override. While the rider is at or
+        // below the stationary speed threshold and ANY vehicle in the
+        // close set is at near-third proximity closing fast, fire
+        // UrgentApproach every cooldown.
+        //
+        // Bypasses the stationary-suppress dwell. The dwell exists to
+        // skip rolling stops mid-turn; it is a 2 s timer used as a
+        // proxy for "rider has committed to a stop". When an imminent
+        // threat is present the dwell is the wrong gate: TTC is sub-
+        // 2 s, and waiting it out leaves the urgent tone silent
+        // during the entire reaction window (a rider decelerating
+        // into a junction with a closing vehicle is not "rolling stop
+        // mid-turn" — they ARE the case the override exists for).
         //
         // No per-tid latch. The imminent-impact gate is intentionally
-        // very tight (closing ≥ 6 m/s AND distance ≤ alertMaxM/3 AND
-        // rider stationary) and fires precisely when time-to-collision
-        // is sub-2 seconds — the rider is in pre-attentive flinch
-        // territory, not deliberation territory. A second urgent tone
-        // 700 ms after the first is the only audible cue available
-        // DURING the impact window itself. Industry standards (TCAS,
+        // tight (closing ≥ 6 m/s AND distance ≤ alertMaxM/3 AND rider
+        // at or below stationary speed). Industry standards (TCAS,
         // automotive FCW, IEC 60601-1-8 medical, NFPA 72 smoke T3,
         // ISO 7731 industrial) all repeat-while-held for imminent-
         // danger cues. DO NOT add a per-tid latch.
-        val anyImminentImpact = riderStationary && stableClose.any { v ->
+        val anyImminentImpact = riderBelowStationaryForUrgent && stableClose.any { v ->
             v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
                 v.distanceM <= alertMaxM / 3
         }
@@ -339,5 +356,16 @@ class AlertDecider(
          *  cruising speed without braking for the queue" better than
          *  -5 (~18 km/h) does. */
         const val SAFETY_OVERRIDE_CLOSING_MS = -6
+
+        /** Mini-dwell for the imminent-impact override path. Much
+         *  shorter than [stationaryDwellMs] (which exists to skip
+         *  rolling stops mid-turn for the ordinary-Beep suppress
+         *  path). 500 ms is long enough to absorb single-frame
+         *  radar bike-speed noise and 200-400 ms mid-turn speed
+         *  dips, short enough that a rider decelerating into a
+         *  junction with a closing vehicle gets the urgent tone
+         *  well within the time-to-collision window for the gate
+         *  (closing ≥ 6 m/s AND distance ≤ alertMaxM/3). */
+        const val URGENT_OVERRIDE_DWELL_MS = 500L
     }
 }

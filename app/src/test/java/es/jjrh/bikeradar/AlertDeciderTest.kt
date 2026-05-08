@@ -425,6 +425,45 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, ev)
     }
 
+    @Test fun `decelerating-into-junction with imminent threat fires urgent before full dwell`() {
+        // Rider decelerating into a stop with a fast-closing vehicle at
+        // near-third proximity. The 2 s ordinary stationary-suppress
+        // dwell is too long here — TTC at the imminent gate is sub-2 s,
+        // so waiting it out leaves the urgent tone silent during the
+        // entire reaction window. The mini-dwell (URGENT_OVERRIDE_DWELL_MS,
+        // 500 ms) absorbs single-frame speed noise without delaying
+        // urgent past the TTC window.
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L)
+        val c = Clock()
+        // Rider at zero speed; mini-dwell starts ticking.
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        // 600 ms below threshold — past mini-dwell, well short of
+        // 2 s ordinary suppress.
+        c.jump(600)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+    }
+
+    @Test fun `single-frame speed noise does NOT fire urgent (mini-dwell guard)`() {
+        // Defensive: a one-frame radar bike-speed dropout below the
+        // stationary threshold while the rider is genuinely moving
+        // must NOT fire urgent even if a vehicle happens to satisfy
+        // the imminent gate. The mini-dwell prevents this.
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L)
+        val c = Clock()
+        // Rider moving normally; single-frame dropout to 0.
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f) // single noise frame
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 6f)
+        // Rider is back above threshold; no urgent. Ordinary Beep(3)
+        // fires per the moving-rider path.
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
     @Test fun `escalation from slow to fast triggers UrgentApproach`() {
         // Realistic scenario: a vehicle approaching slowly enough to be
         // suppressed, then suddenly closing fast (driver realises late and

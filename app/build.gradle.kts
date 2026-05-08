@@ -163,8 +163,13 @@ kotlin {
 // so the configuration doesn't fail with "task not found".
 tasks.withType<Test>().matching { it.name == "testDebugUnitTest" }.configureEach {
     filter {
+        // Every snapshot test class hits the layoutlib loader; exclude
+        // the lot by pattern so newly-added snapshot tests are covered
+        // without ad-hoc maintenance of this list.
+        excludeTestsMatching("*SnapshotTest")
+        // Custom-View tests rely on android.graphics.Canvas which the
+        // Robolectric+layoutlib stack also can't load in cold-cache JVMs.
         excludeTestsMatching("es.jjrh.bikeradar.RadarOverlayViewTest")
-        excludeTestsMatching("es.jjrh.bikeradar.ui.HaStepSnapshotTest")
     }
 }
 

@@ -53,10 +53,11 @@ package es.jjrh.bikeradar
  *         [SAFETY_OVERRIDE_CLOSING_MS] (radar quantum-strict);
  *      b) **TTC gate** - TTC = `distanceM / closing` <= [TTC_GATE_SECONDS]
  *         AND closing >= [TTC_GATE_CLOSING_FLOOR_MS] AND `distanceM <=
- *         alertMaxM`. Catches the same impact cases earlier on faster
- *         approaches: the proximity gate fires only at TTC <= ~1.2 s
- *         (alertMaxM/3 / 6 m/s), which is below the 2.8-4 s TTC range
- *         used by automotive forward-collision-warning systems.
+ *         alertMaxM`. Strictly extends the proximity gate's coverage at
+ *         the same closing-speed bar: at 6 m/s closing, TTC <= 2 s maps
+ *         to distance <= 12 m, while the proximity gate caught only the
+ *         distance <= alertMaxM/3 = 6 m subset. Earlier warning on the
+ *         same threats; closing-floor filters slow-queue traffic.
  *    Catches a vehicle that isn't braking for the queue ahead - the
  *    only case where alerting a stopped rider is still useful (rider
  *    has a chance to dismount or move out of the line of impact).
@@ -265,9 +266,10 @@ class AlertDecider(
         //      that filters slow-queue traffic merging into the rider,
         //      and a distance ceiling at alertMaxM so we never reach
         //      out beyond what the alert envelope is configured for.
-        //      The TTC gate fires earlier on fast approaches than the
-        //      proximity gate alone (a 12 m / 5 m/s approach is TTC
-        //      2.4 s, well outside near-third).
+        //      Strictly extends the proximity gate's coverage at the
+        //      same closing-speed bar: at 6 m/s closing, TTC <= 2 s
+        //      maps to distance <= 12 m, while the proximity gate
+        //      caught only the distance <= alertMaxM/3 = 6 m subset.
         //
         // Bypasses the stationary-suppress dwell. The dwell exists to
         // skip rolling stops mid-turn; it is a 2 s timer used as a
@@ -399,22 +401,29 @@ class AlertDecider(
         const val URGENT_OVERRIDE_DWELL_MS = 500L
 
         /** Time-to-collision threshold (seconds) for the TTC disjunct
-         *  of the stationary-impact safety override. 3 s is the lower
-         *  end of the automotive forward-collision-warning literature
+         *  of the stationary-impact safety override. Below the 2.8 s
+         *  lower bound of automotive forward-collision-warning systems
          *  (NHTSA Burgett & Carter, Mercedes Pre-Safe, Volvo RCW use
-         *  2.8-4 s). 3 s gives enough warning for a stopped cyclist
-         *  to dismount or step away while keeping fire rate close to
-         *  the proximity gate's flinch-territory cases. */
-        const val TTC_GATE_SECONDS = 3.0f
+         *  2.8-4 s) - they assume a driver in a vehicle with AEB. A
+         *  stopped cyclist's reaction options are narrower (dismount,
+         *  step aside, brace), and a wider TTC window for normal-
+         *  closing-speed traffic merging into the rider's queue
+         *  position quickly degenerates into beep noise. 2 s buys
+         *  enough warning to react when paired with the 6 m/s closing
+         *  floor below: at the boundary, a 12 m / 6 m/s approach
+         *  still gives the same warning the proximity gate would
+         *  give at 6 m / 6 m/s = 1 s, but earlier in the encounter. */
+        const val TTC_GATE_SECONDS = 2.0f
 
         /** Minimum closing speed (m/s, positive = approaching) for the
-         *  TTC disjunct to engage. Below this, the gate is suppressed
-         *  so the rider isn't urgent-toned for slow-queue traffic
-         *  merging into a stopped position. 5 m/s ≈ 18 km/h, i.e. a
-         *  vehicle that is not actively braking for the queue ahead.
-         *  4 m/s is too permissive (queueing traffic at urban roll
-         *  speeds satisfies it); 6 m/s misses the window the
-         *  proximity gate already covers. */
-        const val TTC_GATE_CLOSING_FLOOR_MS = 5
+         *  TTC disjunct to engage. Mirrors [SAFETY_OVERRIDE_CLOSING_MS]
+         *  on the proximity disjunct so both gates of the stationary
+         *  override share the same quantum-strict closing bound - the
+         *  -5/-6 quantum boundary on the proximity gate exists to
+         *  avoid radar-noise flap, and the same reasoning applies
+         *  here. Anything below 6 m/s catches too much queueing
+         *  traffic merging into a stopped rider, where the driver is
+         *  clearly tracking and braking. */
+        const val TTC_GATE_CLOSING_FLOOR_MS = 6
     }
 }

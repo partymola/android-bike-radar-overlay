@@ -48,6 +48,11 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - HA integration is optional; the overlay works standalone.
+- Front-light mode is auto-set on every BLE connect: Day Flash before
+  sunset, Night Flash after, using `SunsetCalculator` (Europe/London).
+  A one-shot dawn/dusk flip is scheduled for the rest of the session.
+  Skipped when `cameraLightUserOverride` is set (manual side-button
+  press during the session). See `BikeRadarService.kt` connect path.
 - Capture log is always written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
 
@@ -119,6 +124,11 @@ decoders in both Python and Kotlin live there.
   If Bluedroid stays stuck, `svc bluetooth disable && svc bluetooth enable`
   resets it. Wait for `BikeRadar.Radar: handshake complete` + `first V2
   frame` in logcat before declaring the app ready to test.
+- AlertDecider's stationary safety override has TWO disjunct gates: the
+  proximity gate (`distance <= alertMaxM/3 AND closing >= 6 m/s`) and a
+  TTC gate (`TTC <= 3s AND closing >= 5 m/s AND distance <= alertMaxM`).
+  Boundary tests in `AlertDeciderTest.kt` pin the semantics. Don't reduce
+  the override to a single gate without re-running the capture replay.
 
 ## Contributing
 
@@ -126,8 +136,10 @@ decoders in both Python and Kotlin live there.
 - Protocol corrections go to the `bike-radar-docs` repo, not this one.
 - Decoder behaviour changes must add or update unit tests.
 - Commit subjects use the conventional-commits prefixes already
-  visible in `git log`: `ui:`, `test:`, `build:`, `ci:`, `docs(...):`,
-  `fix:`, with optional scope like `ui(onboarding):`.
+  visible in `git log`: `feat:`, `fix:`, `ui:`, `test:`, `build:`,
+  `ci:`, `docs(...):`, plus area-scoped ones like `ble:`, `ha:`,
+  `protocol:`, `service:`, `release:`. Optional scope like
+  `ui(onboarding):` or `feat(alerts):`.
 
 ## Local-only notes (not in this repo)
 

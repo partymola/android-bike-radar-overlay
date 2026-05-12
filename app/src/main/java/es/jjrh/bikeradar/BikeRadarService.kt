@@ -1180,7 +1180,11 @@ class BikeRadarService : Service() {
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            when (val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedMs)) {
+                            val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedMs)
+                            if (ev !is AlertDecider.Event.None) {
+                                logAlertEvent(ev, state, now)
+                            }
+                            when (ev) {
                                 is AlertDecider.Event.Beep           -> beeper.play(ev.count)
                                 AlertDecider.Event.Clear             -> beeper.playClear()
                                 AlertDecider.Event.UrgentApproach    -> beeper.playUrgent()
@@ -1423,6 +1427,40 @@ class BikeRadarService : Service() {
     fun clog(msg: String) {
         synchronized(captureLogLock) { captureLogWriter?.println(msg) }
         Log.d(TAG_RADAR, msg)
+    }
+
+    /** Capture-log line for a non-None AlertDecider event. Pairs the
+     *  emitted event with the in-front, in-alert-range closest vehicle
+     *  observed in the same frame so a replay can attribute the beep
+     *  to a specific track without re-deriving the AlertDecider's
+     *  internal stable-close set. */
+    private fun logAlertEvent(ev: AlertDecider.Event, state: RadarState, nowMs: Long) {
+        val evStr = when (ev) {
+            is AlertDecider.Event.Beep        -> "Beep(${ev.count})"
+            AlertDecider.Event.Clear          -> "Clear"
+            AlertDecider.Event.UrgentApproach -> "UrgentApproach"
+            AlertDecider.Event.None           -> "None"
+        }
+        val alertMax = prefs.alertMaxDistanceM
+        val closest = state.vehicles
+            .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMax }
+            .minByOrNull { it.distanceM }
+        // `frame_closest_*` is the in-front, in-range vehicle with the
+        // smallest distance THIS FRAME, not the track the decider
+        // actually attributed the event to. The decider applies
+        // `sustainFrames`, per-tid latches, and stationary suppress on
+        // top of frame closeness; same-frame closest is a diagnostic
+        // anchor, not the attribution. `_mps` suffix on speed fields
+        // distinguishes m/s from the `_ms` (milliseconds) suffix used
+        // elsewhere in the capture log. `-1` is the sentinel for "no
+        // close vehicle this frame" across all numeric fields.
+        clog(
+            "# alert ts=$nowMs event=$evStr " +
+                "frame_closest_tid=${closest?.id ?: -1} " +
+                "frame_closest_d=${closest?.distanceM ?: -1} " +
+                "closing_mps=${closest?.let { -it.speedMs } ?: -1} " +
+                "bike_speed_mps=${state.bikeSpeedMs ?: -1f}"
+        )
     }
 
     private fun clogPacket(uuid: UUID, bytes: ByteArray) {
@@ -1849,6 +1887,7 @@ class BikeRadarService : Service() {
      *  lazily on the next tick. */
     private fun markRadarConnected() {
         if (radarOffSinceMs != null) {
+            val prevState = if (walkAwayArmed) "ARMED" else "BLANK"
             radarOffSinceMs = null
             // Any → IDLE: radar is back, leave-behind tracking off.
             // Re-arming requires the next radar disconnect.
@@ -1858,6 +1897,7 @@ class BikeRadarService : Service() {
             lastWalkAwayFireMs = null
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(NOTIF_WALKAWAY_ID)
+            clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
         }
         radarConnectStartMs = System.currentTimeMillis()
         radarGattActive = true
@@ -1875,6 +1915,7 @@ class BikeRadarService : Service() {
             // tick will downgrade to BLANK if the dashcam has been
             // silent past the freshness window.
             walkAwayArmed = true
+            clog("# walkaway state=ARMED transition_reason=radar-disconnected")
         }
     }
 
@@ -1910,6 +1951,8 @@ class BikeRadarService : Service() {
             ).dashcamFreshMs
             if (nowMs - anchorMs > freshMs) {
                 walkAwayArmed = false
+                clog("# walkaway state=BLANK transition_reason=dashcam-stale " +
+                    "window_ms=${nowMs - anchorMs} fresh_ms=$freshMs")
             }
         }
     }

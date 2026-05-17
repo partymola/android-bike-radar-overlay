@@ -1204,7 +1204,7 @@ class BikeRadarService : Service() {
                         val cpConfig = ClosePassDetector.Config(
                             enabled = prefs.closePassLoggingEnabled && ha.isConfigured(),
                             riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
-                            closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs,
+                            closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat(),
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
                         // Publish discovery eagerly so HA has time to register the
@@ -1458,7 +1458,7 @@ class BikeRadarService : Service() {
             "# alert ts=$nowMs event=$evStr " +
                 "frame_closest_tid=${closest?.id ?: -1} " +
                 "frame_closest_d=${closest?.distanceM ?: -1} " +
-                "closing_mps=${closest?.let { -it.speedMs } ?: -1} " +
+                "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +
                 "bike_speed_mps=${state.bikeSpeedMs ?: -1f}"
         )
     }

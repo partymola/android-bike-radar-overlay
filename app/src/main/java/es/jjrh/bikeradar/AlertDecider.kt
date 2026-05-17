@@ -287,8 +287,7 @@ class AlertDecider(
         val anyImminentImpact = riderBelowStationaryForUrgent && stableClose.any { v ->
             val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
                 v.distanceM <= alertMaxM / 3
-            // Closing speed in m/s, positive = approaching. speedMs is
-            // the radar's int-rounded m/s; flipping the sign is exact.
+            // Closing speed in m/s, positive = approaching.
             val closingMs = -v.speedMs
             val byTtc = closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
                 v.distanceM in 0..alertMaxM &&
@@ -376,18 +375,17 @@ class AlertDecider(
          *  below which a stationary rider's suppress gate is overridden,
          *  when paired with near-third proximity.
          *
-         *  Decoded `speedMs` is integer m/s (RadarV2Decoder rounds the
-         *  raw 0.5 m/s LSBs to Int), so legal closing values are
-         *  -7, -6, -5, ... A naive choice of -5 lands the threshold
-         *  on the radar's quantisation noise: a target whose real
-         *  closing speed sits near 5 m/s would oscillate between
-         *  rounded -5 (fires) and rounded -4 (does not), causing the
-         *  override to flap frame-to-frame. -6 is one quantum stricter
-         *  and corresponds to a real closing speed of >=5.5 m/s
-         *  (~20 km/h), which matches "vehicle still going at urban
-         *  cruising speed without braking for the queue" better than
-         *  -5 (~18 km/h) does. */
-        const val SAFETY_OVERRIDE_CLOSING_MS = -6
+         *  Decoded `speedMs` is Float at the radar's native 0.5 m/s
+         *  quantum, so legal closing values are ..., -6.5, -6.0, -5.5,
+         *  -5.0, ... A naive choice of -5f sits on the quantisation
+         *  step: a target whose real closing speed sits near 5 m/s
+         *  would flap across the threshold from frame to frame as the
+         *  raw byte oscillates between -10 and -11. -6f is one quantum
+         *  stricter and corresponds to a real closing speed of
+         *  >= 6.0 m/s (~22 km/h), which matches "vehicle still going
+         *  at urban cruising speed without braking for the queue"
+         *  better than -5f (~18 km/h) does. */
+        const val SAFETY_OVERRIDE_CLOSING_MS = -6f
 
         /** Mini-dwell for the imminent-impact override path. Much
          *  shorter than [stationaryDwellMs] (which exists to skip
@@ -424,6 +422,6 @@ class AlertDecider(
          *  here. Anything below 6 m/s catches too much queueing
          *  traffic merging into a stopped rider, where the driver is
          *  clearly tracking and braking. */
-        const val TTC_GATE_CLOSING_FLOOR_MS = 6
+        const val TTC_GATE_CLOSING_FLOOR_MS = 6f
     }
 }

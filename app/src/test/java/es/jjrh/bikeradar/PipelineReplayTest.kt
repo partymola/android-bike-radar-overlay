@@ -50,7 +50,7 @@ class PipelineReplayTest {
         val cfg = ClosePassDetector.Config(
             enabled = true,
             riderSpeedFloorMs = 0f,
-            closingSpeedFloorMs = 1,
+            closingSpeedFloorMs = 1f,
             armRangeXUrbanM = 3.0f,
             armRangeXRuralM = 3.0f,
             emitMinRangeXM = 3.0f,

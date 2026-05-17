@@ -20,7 +20,7 @@ class RideStatsAccumulatorTest {
     private fun veh(
         id: Int,
         distanceM: Int = 20,
-        speedMs: Int = -8,
+        speedMs: Float = -8f,
         lateralPos: Float = 0.5f,
         size: VehicleSize = VehicleSize.CAR,
         isBehind: Boolean = false,
@@ -95,9 +95,9 @@ class RideStatsAccumulatorTest {
     @Test
     fun peakClosingTakesMaxAcrossFrames() {
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, speedMs = -5))))   // 18 km/h
-        a.observeFrame(radarState(listOf(veh(2, speedMs = -12))))  // 43 km/h
-        a.observeFrame(radarState(listOf(veh(3, speedMs = -7))))   // 25 km/h
+        a.observeFrame(radarState(listOf(veh(1, speedMs = -5f))))   // 18 km/h
+        a.observeFrame(radarState(listOf(veh(2, speedMs = -12f))))  // 43 km/h
+        a.observeFrame(radarState(listOf(veh(3, speedMs = -7f))))   // 25 km/h
         assertEquals(43, a.snapshot().peakClosingKmh)
     }
 
@@ -105,9 +105,9 @@ class RideStatsAccumulatorTest {
     fun peakClosingIgnoresStationaryAndReceding() {
         val a = acc()
         a.observeFrame(radarState(listOf(
-            veh(1, speedMs = 0),    // stationary
-            veh(2, speedMs = 5),    // receding
-            veh(3, speedMs = -3),   // 11 km/h closing
+            veh(1, speedMs = 0f),    // stationary
+            veh(2, speedMs = 5f),    // receding
+            veh(3, speedMs = -3f),   // 11 km/h closing
         )))
         assertEquals(10, a.snapshot().peakClosingKmh) // -3 * 3.6 = 10.8 → 10 (toInt truncates)
     }
@@ -136,8 +136,8 @@ class RideStatsAccumulatorTest {
     fun peakClosingIsNullWhenNoApproachingVehicleObserved() {
         val a = acc()
         a.observeFrame(radarState(emptyList()))
-        a.observeFrame(radarState(listOf(veh(1, speedMs = 0))))   // stationary
-        a.observeFrame(radarState(listOf(veh(1, speedMs = 5))))   // receding
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 0f))))   // stationary
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 5f))))   // receding
         assertNull(a.snapshot().peakClosingKmh)
     }
 

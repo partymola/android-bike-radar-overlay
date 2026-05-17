@@ -284,6 +284,35 @@ class RadarV2DecoderTest {
         )
     }
 
+    // ── longitudinal speed (byte[7]) ─────────────────────────────────────────
+
+    @Test fun speedMsPreservesHalfQuantum() {
+        // Raw -11 -> -5.5 m/s. Pre-migration code rounded this to -5 (Int);
+        // Float preserves the radar's native 0.5 m/s LSB end-to-end.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedYhalf = -11)))
+        assertEquals(-5.5f, state!!.vehicles.single().speedMs, 0f)
+    }
+
+    @Test fun speedMsZeroForRawZero() {
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, speedYhalf = 0)))
+        assertEquals(0f, state!!.vehicles.single().speedMs, 0f)
+    }
+
+    @Test fun alongsideStationaryExcludesHalfQuantumApproach() {
+        // Raw -3 -> -1.5 m/s. Under the Float gate (|speedMs| <= 1f) this
+        // must NOT be flagged as stationary. Pins the half-LSB tightening
+        // the migration brought to STATIONARY_SPEED_MS: pre-migration code
+        // rounded raw -3 to -1 (Int), which passed |..| <= 1.
+        decoder.feed(byteArrayOf(0x04, 0x00, 8))    // 2 m/s rider
+        // First frame to establish firstSeen at stationary speed.
+        decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10, speedYhalf = 0)))
+        now += RadarV2Decoder.ALONGSIDE_MIN_DURATION_MS + 1
+        // Second frame: now at -1.5 m/s. Must not dock.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, rangeX = 10, speedYhalf = -3)))
+        assertFalse("real |closing| = 1.5 m/s must not count as stationary",
+            state!!.vehicles.single().isAlongsideStationary)
+    }
+
     // ── lateral speed (byte[8]) ──────────────────────────────────────────────
 
     @Test fun positiveSpeedXIsRightward() {

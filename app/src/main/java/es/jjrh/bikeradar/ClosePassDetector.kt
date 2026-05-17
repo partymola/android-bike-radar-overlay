@@ -42,8 +42,9 @@ class ClosePassDetector {
         /** Minimum closing speed (m/s) for the detector to arm.
          *  Filters out lane-matched cruising and filtering — if the
          *  vehicle isn't genuinely overtaking, it's not a close pass
-         *  event we care to log. */
-        val closingSpeedFloorMs: Int = 6,
+         *  event we care to log. Float at the radar's 0.5 m/s native
+         *  quantum (raw byte * 0.5). */
+        val closingSpeedFloorMs: Float = 6f,
         /** Arm when |rangeX| drops under this. Tiered by rider speed
          *  at ARM time in [decide]: riderSpeed <= 30 km/h uses
          *  [armRangeXUrbanM]; above uses [armRangeXRuralM]. */

@@ -8,7 +8,15 @@ enum class DataSource { NONE, V2 }
 data class Vehicle(
     val id: Int,
     val distanceM: Int,
-    val speedMs: Int,
+    /**
+     * Longitudinal closing speed in metres per second, as reported by the
+     * radar in target byte[7] (signed int8 x 0.5 m/s - native protocol
+     * quantum). Sign convention: negative = approaching, positive = receding,
+     * zero = stationary relative to the rider. Float is carried end-to-end
+     * so downstream threshold checks land on the exact raw-byte boundaries
+     * (e.g. raw -12 -> -6.0f hits a -6f gate; raw -11 -> -5.5f does not).
+     */
+    val speedMs: Float,
     val size: VehicleSize = VehicleSize.CAR,
     /** -1.0 = full left, 0.0 = same lane / centre, +1.0 = full right */
     val lateralPos: Float = 0f,
@@ -52,7 +60,7 @@ data class Vehicle(
      */
     val lateralUnknown: Boolean = false,
 ) {
-    val speedKmh: Int get() = (speedMs * 3.6).toInt()
+    val speedKmh: Int get() = (speedMs * 3.6f).toInt()
 }
 
 data class RadarState(

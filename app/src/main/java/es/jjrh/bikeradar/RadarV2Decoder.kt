@@ -176,7 +176,7 @@ class RadarV2Decoder(
             rangeXSigned
         }
 
-        val speedMs = (payload[off + 7].toInt() * 0.5f).roundToInt()
+        val speedMs = payload[off + 7].toInt() * 0.5f
 
         val speedXRaw = payload[off + 8].toInt() and 0xFF
         val speedXMs: Int? = if (speedXRaw == LATERAL_VELOCITY_SENTINEL) {
@@ -311,7 +311,7 @@ class RadarV2Decoder(
         const val CLASS_NORMAL_STABLE = 26
         const val CLASS_HIGH = 36
 
-        const val MOVING_SPEED_MS = 1
+        const val MOVING_SPEED_MS = 1f
         const val STALE_MOVING_MS = 800L
         const val STALE_PARKED_MS = 5000L
         const val LATERAL_FULL_M = 3.0f
@@ -331,10 +331,12 @@ class RadarV2Decoder(
         // these constants to hold; the moment any breaks, the next
         // snapshot reverts to a normal filled box (the visual jump is
         // the attention cue that the target has just woken up).
-        /** |speedY| <= this rounds to "near-stationary" given the radar's
-         *  0.5 m/s quantisation. Same value as [MOVING_SPEED_MS] on
-         *  purpose - they share the "is this thing moving" boundary. */
-        const val STATIONARY_SPEED_MS = 1
+        /** |speedY| <= this counts as "near-stationary". With Float
+         *  speedMs at the radar's native 0.5 m/s quantum, a target at
+         *  real |closing| <= 1.0 m/s satisfies the gate (raw bytes -2,
+         *  -1, 0, 1, 2). Same value as [MOVING_SPEED_MS] on purpose -
+         *  they share the "is this thing moving" boundary. */
+        const val STATIONARY_SPEED_MS = 1f
         /** Maximum rangeY (m) for the alongside dock to consider a target.
          *  Beyond this the target box is too far down the panel to ever
          *  collide with the rider chevron, so normal rendering is fine. */

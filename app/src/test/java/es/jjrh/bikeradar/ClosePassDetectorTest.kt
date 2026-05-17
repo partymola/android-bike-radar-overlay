@@ -14,7 +14,7 @@ class ClosePassDetectorTest {
     private fun veh(
         id: Int = 1,
         distanceM: Int = 20,
-        speedMs: Int = -8,          // 8 m/s approaching
+        speedMs: Float = -8f,       // 8 m/s approaching
         size: VehicleSize = VehicleSize.CAR,
         lateralPos: Float = 0.2f,    // 0.6 m right
         isBehind: Boolean = false,
@@ -77,7 +77,7 @@ class ClosePassDetectorTest {
         val d = ClosePassDetector()
         // Approach + pass + termination (track drops out → emit).
         val frames = (0..5).map { i ->
-            listOf(veh(distanceM = 20 - i * 3, lateralPos = 0.2f, speedMs = -8)) to i * 100L
+            listOf(veh(distanceM = 20 - i * 3, lateralPos = 0.2f, speedMs = -8f)) to i * 100L
         } + listOf<Pair<List<Vehicle>, Long>>(emptyList<Vehicle>() to 700L)
         val events = drive(d, frames, bikeSpeedMs = 0f)
         assertTrue("stationary-rider close pass must emit", events.isNotEmpty())
@@ -98,12 +98,12 @@ class ClosePassDetectorTest {
         val d = ClosePassDetector()
         // Only closing at 2 m/s — below the 6 m/s default floor.
         val frames = listOf(
-            veh(distanceM = 20, lateralPos = 0.3f, speedMs = -2) to 0L,
-            veh(distanceM = 18, lateralPos = 0.3f, speedMs = -2) to 100L,
-            veh(distanceM = 16, lateralPos = 0.28f, speedMs = -2) to 200L,
-            veh(distanceM = 10, lateralPos = 0.2f, speedMs = -2) to 300L,
-            veh(distanceM = 5, lateralPos = 0.15f, speedMs = -2) to 400L,
-            veh(distanceM = 0, lateralPos = 0.2f, speedMs = -2, isBehind = true) to 500L,
+            veh(distanceM = 20, lateralPos = 0.3f, speedMs = -2f) to 0L,
+            veh(distanceM = 18, lateralPos = 0.3f, speedMs = -2f) to 100L,
+            veh(distanceM = 16, lateralPos = 0.28f, speedMs = -2f) to 200L,
+            veh(distanceM = 10, lateralPos = 0.2f, speedMs = -2f) to 300L,
+            veh(distanceM = 5, lateralPos = 0.15f, speedMs = -2f) to 400L,
+            veh(distanceM = 0, lateralPos = 0.2f, speedMs = -2f, isBehind = true) to 500L,
         )
         val events = drive(d, frames)
         assertTrue(events.isEmpty())
@@ -209,7 +209,7 @@ class ClosePassDetectorTest {
             listOf(
                 veh(
                     distanceM = 5,
-                    speedMs = 0,
+                    speedMs = 0f,
                     size = VehicleSize.TRUCK,
                     lateralPos = 0.033f,  // 0.1 m right
                     isAlongsideStationary = true,

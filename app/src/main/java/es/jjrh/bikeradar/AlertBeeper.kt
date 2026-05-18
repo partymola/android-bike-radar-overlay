@@ -7,6 +7,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.view.Surface
 import kotlin.math.PI
 import kotlin.math.min
 import kotlin.math.sin
@@ -24,17 +25,29 @@ import kotlin.math.sin
  * loudness noticeably.
  *
  * Stereo panning (experimental, default off via prefs): when [setPanning]
- * is on AND the active output route is a headphone-class device, [play]
- * and [playUrgent] use `setStereoVolume` to bias the cue toward the
- * threat's side. On phone speakers panning is suppressed because Pixel-
- * class speaker separation (mm-scale) gives the rider no usable
- * lateralisation, and AOSP framework does not auto-rotate channels with
- * display rotation (verified via Spatializer / AudioFlinger reading).
- * The pan formula tops out at (1.0, 0.7) so the cue is always audible
- * in both ears. Clear chime is always centred (it's not directional).
+ * is on, [play] and [playUrgent] use `setStereoVolume` to bias the cue
+ * toward the threat's side. Two output paths support pan:
+ *
+ *   - **Headphone-class routes** (BT A2DP / BLE / wired / USB / hearing
+ *     aid): channel labels travel intact end-to-end. App's L always
+ *     reaches the rider's left ear regardless of phone rotation.
+ *   - **Built-in phone speaker, landscape mount**: in landscape the
+ *     earpiece (top of phone) and bottom-main are ~6-7 inches apart,
+ *     plenty of stereo width. AOSP HAL maps app's L to a fixed physical
+ *     speaker (earpiece on Pixel) - which is on the rider's left in
+ *     ROTATION_90 (USB-right) but on the rider's right in ROTATION_270
+ *     (USB-left). The app reads [rotationProvider] and swaps the pair
+ *     when rotation is 270 so the cue still lands on the correct ear.
+ *
+ * Portrait orientation (ROTATION_0 / ROTATION_180) plays mono - the two
+ * speakers are physically close together in portrait, no usable
+ * lateralisation. Unknown routes also fall back to mono. The pan formula
+ * tops out at (1.0, 0.7) so the cue is always audible in both channels.
+ * Clear chime is always centred (it's not directional).
  */
 class AlertBeeper(
     private val audioManager: AudioManager,
+    private val rotationProvider: () -> Int = { Surface.ROTATION_90 },
 ) {
 
     private val sampleRate = 44100
@@ -130,17 +143,88 @@ class AlertBeeper(
     }
 
     private fun applyPan(track: AudioTrack, lateralPos: Float) {
-        val g = currentMonoGain()
-        if (!panningEnabled || !hasHeadphoneRoute) {
-            // Speaker route, panning off, or no headphones connected.
-            // Phone speakers are too close together (mm-scale) to
-            // give the rider usable lateralisation; cue stays centred.
-            track.setVolume(g)
-            return
+        when (val result = resolvePan(
+            lateralPos = lateralPos,
+            monoGain = currentMonoGain(),
+            panningEnabled = panningEnabled,
+            invertLR = invertLR,
+            hasHeadphoneRoute = hasHeadphoneRoute,
+            // No headphone present implies the built-in speaker is the
+            // active route (always present in `getDevices(GET_OUTPUTS)`
+            // on any phone). The pan logic only fires for it in
+            // landscape; portrait falls through to mono inside
+            // resolvePan.
+            builtinSpeakerActive = !hasHeadphoneRoute,
+            rotation = rotationProvider(),
+        )) {
+            is PanResult.Stereo -> track.setStereoVolume(result.left, result.right)
+            is PanResult.Mono -> track.setVolume(result.gain)
         }
+    }
+
+    /**
+     * Pure-functional decision: given the current pan state, return
+     * either a stereo gain pair (for `setStereoVolume`) or a mono gain
+     * (for `setVolume`). Exhaustively unit-tested in
+     * `AlertBeeperPanTest` across {pan on/off} x {headphone, speaker,
+     * unknown} x {rotation 0/90/180/270} x {invert on/off}.
+     */
+    internal fun resolvePan(
+        lateralPos: Float,
+        monoGain: Float,
+        panningEnabled: Boolean,
+        invertLR: Boolean,
+        hasHeadphoneRoute: Boolean,
+        builtinSpeakerActive: Boolean,
+        rotation: Int,
+    ): PanResult {
+        if (!panningEnabled) return PanResult.Mono(monoGain)
+
+        if (hasHeadphoneRoute) {
+            // Headphone-class route: physical channel mapping. App L
+            // always reaches rider's left ear; no rotation handling.
+            val (l, r) = computeStereoPair(lateralPos, invertLR, monoGain)
+            return PanResult.Stereo(l, r)
+        }
+
+        if (builtinSpeakerActive) {
+            // Built-in speaker: pan only useful in landscape. The HAL
+            // maps app L to a fixed physical speaker (earpiece on
+            // Pixel), which is on the rider's left in ROTATION_90 and
+            // on the rider's right in ROTATION_270; swap channels for
+            // 270 so the cue still reaches the correct ear.
+            val rotationSwap = when (rotation) {
+                Surface.ROTATION_90 -> false
+                Surface.ROTATION_270 -> true
+                else -> return PanResult.Mono(monoGain) // portrait
+            }
+            // XOR composition: user-invert + rotation-swap cancel when
+            // both fire. Lets the invert toggle do its job on the
+            // speaker path too (e.g. mounted phone is itself screen-
+            // down so the OEM speaker mapping is mirrored).
+            val effectiveInvert = rotationSwap xor invertLR
+            val (l, r) = computeStereoPair(lateralPos, effectiveInvert, monoGain)
+            return PanResult.Stereo(l, r)
+        }
+
+        // Unknown route (e.g. BT car bus, BLE speaker, casting target).
+        // Pan would be misleading; default to mono.
+        return PanResult.Mono(monoGain)
+    }
+
+    private fun computeStereoPair(
+        lateralPos: Float,
+        invertLR: Boolean,
+        monoGain: Float,
+    ): Pair<Float, Float> {
         val (panL, panR) = computePan(lateralPos)
         val (l, r) = if (invertLR) (panR to panL) else (panL to panR)
-        track.setStereoVolume(l * g, r * g)
+        return (l * monoGain) to (r * monoGain)
+    }
+
+    internal sealed class PanResult {
+        data class Stereo(val left: Float, val right: Float) : PanResult()
+        data class Mono(val gain: Float) : PanResult()
     }
 
     private fun refreshRoute() {

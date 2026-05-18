@@ -1062,7 +1062,10 @@ class BikeRadarService : Service() {
                 val wm = getSystemService(WINDOW_SERVICE) as WindowManager
                 val view = RadarOverlayView(this@BikeRadarService)
                 val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-                val beeper = AlertBeeper(audioManager).also {
+                val beeper = AlertBeeper(
+                    audioManager = audioManager,
+                    rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
+                ).also {
                     it.setVolumePct(prefs.alertVolume)
                     it.setPanning(
                         enabled = prefs.experimentalLateralPanning,

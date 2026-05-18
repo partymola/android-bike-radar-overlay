@@ -71,7 +71,10 @@ class DebugOverlayService : Service() {
 
         beeper = try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            AlertBeeper(audioManager).also {
+            AlertBeeper(
+                audioManager = audioManager,
+                rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
+            ).also {
                 it.setVolumePct(volumePct)
                 it.setPanning(
                     enabled = prefs.experimentalLateralPanning,

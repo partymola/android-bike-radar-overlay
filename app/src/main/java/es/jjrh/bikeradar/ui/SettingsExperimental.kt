@@ -92,7 +92,7 @@ internal fun SettingsExperimentalContent(
                     leadingIcon = Icons.Default.Headphones,
                     leadingTint = br.brand,
                     title = "Directional alert audio",
-                    subtitle = "Pan beeps and urgent cues to the threat's side. Requires headphones (bone-conduction, wired, BT, USB). Phone speakers stay centred.",
+                    subtitle = "Pan beeps and urgent cues to the threat's side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.",
                     checked = lateralPanningEnabled,
                     onCheckedChange = onLateralPanningChange,
                 )

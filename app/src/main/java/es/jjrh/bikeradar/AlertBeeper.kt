@@ -2,7 +2,10 @@
 package es.jjrh.bikeradar
 
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import kotlin.math.PI
 import kotlin.math.min
@@ -19,8 +22,20 @@ import kotlin.math.sin
  * Volume is user-controlled via [setVolumePct] (0..100, default 50). Values
  * map through a perceptual curve so sliding below ~50 actually reduces
  * loudness noticeably.
+ *
+ * Stereo panning (experimental, default off via prefs): when [setPanning]
+ * is on AND the active output route is a headphone-class device, [play]
+ * and [playUrgent] use `setStereoVolume` to bias the cue toward the
+ * threat's side. On phone speakers panning is suppressed because Pixel-
+ * class speaker separation (mm-scale) gives the rider no usable
+ * lateralisation, and AOSP framework does not auto-rotate channels with
+ * display rotation (verified via Spatializer / AudioFlinger reading).
+ * The pan formula tops out at (1.0, 0.7) so the cue is always audible
+ * in both ears. Clear chime is always centred (it's not directional).
  */
-class AlertBeeper {
+class AlertBeeper(
+    private val audioManager: AudioManager,
+) {
 
     private val sampleRate = 44100
     private val beepFreqHz = 3200f
@@ -32,18 +47,35 @@ class AlertBeeper {
     private val urgentTrack = buildUrgentTrack()
 
     private var volumePct = DEFAULT_VOLUME_PCT
-    init { applyVolume() }
+    @Volatile private var panningEnabled: Boolean = false
+    @Volatile private var invertLR: Boolean = false
+    @Volatile private var hasHeadphoneRoute: Boolean = false
 
-    fun play(beeps: Int) {
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) { refreshRoute() }
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) { refreshRoute() }
+    }
+
+    init {
+        applyVolume()
+        audioManager.registerAudioDeviceCallback(deviceCallback, null)
+        refreshRoute()
+    }
+
+    fun play(beeps: Int, lateralPos: Float = 0f) {
         val track = tracks.getOrNull(beeps - 1) ?: return
+        applyPan(track, lateralPos)
         playOnce(track)
     }
 
     fun playClear() {
+        // Clear is non-directional. Always mono.
+        clearTrack.setVolume(currentMonoGain())
         playOnce(clearTrack)
     }
 
-    fun playUrgent() {
+    fun playUrgent(lateralPos: Float = 0f) {
+        applyPan(urgentTrack, lateralPos)
         playOnce(urgentTrack)
     }
 
@@ -52,7 +84,13 @@ class AlertBeeper {
         applyVolume()
     }
 
+    fun setPanning(enabled: Boolean, invertLR: Boolean) {
+        this.panningEnabled = enabled
+        this.invertLR = invertLR
+    }
+
     fun release() {
+        audioManager.unregisterAudioDeviceCallback(deviceCallback)
         tracks.forEach { it.release() }
         clearTrack.release()
         urgentTrack.release()
@@ -64,11 +102,50 @@ class AlertBeeper {
     }
 
     private fun applyVolume() {
-        val linear = volumePct / 100f
-        val g = linear * linear
+        val g = currentMonoGain()
         tracks.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
         urgentTrack.setVolume(g)
+    }
+
+    private fun currentMonoGain(): Float {
+        val linear = volumePct / 100f
+        return linear * linear
+    }
+
+    /**
+     * Pan formula: linear interpolation on [lateralPos] in [-1, +1].
+     *  -1 -> (1.0, 0.7) full left
+     *   0 -> (0.85, 0.85) centred
+     *  +1 -> (0.7, 1.0) full right
+     * Caps at 0.7 on the quiet side so the cue is never inaudible on
+     * the opposite ear (preserves audibility if the rider's earbud-side
+     * battery dies mid-ride).
+     */
+    internal fun computePan(lateralPos: Float): Pair<Float, Float> {
+        val clamped = lateralPos.coerceIn(-1f, 1f)
+        val left = 0.85f - 0.15f * clamped
+        val right = 0.85f + 0.15f * clamped
+        return left to right
+    }
+
+    private fun applyPan(track: AudioTrack, lateralPos: Float) {
+        val g = currentMonoGain()
+        if (!panningEnabled || !hasHeadphoneRoute) {
+            // Speaker route, panning off, or no headphones connected.
+            // Phone speakers are too close together (mm-scale) to
+            // give the rider usable lateralisation; cue stays centred.
+            track.setVolume(g)
+            return
+        }
+        val (panL, panR) = computePan(lateralPos)
+        val (l, r) = if (invertLR) (panR to panL) else (panL to panR)
+        track.setStereoVolume(l * g, r * g)
+    }
+
+    private fun refreshRoute() {
+        val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        hasHeadphoneRoute = outputs.any { it.type in HEADPHONE_TYPES }
     }
 
     private fun buildBeepTrack(count: Int): AudioTrack {
@@ -159,5 +236,23 @@ class AlertBeeper {
 
     companion object {
         const val DEFAULT_VOLUME_PCT = 50
+
+        /** Output device types that physically map app's L channel to the
+         *  rider's left ear regardless of phone rotation. Pan is only
+         *  applied when one of these is currently present in the audio
+         *  output device list. */
+        private val HEADPHONE_TYPES = intArrayOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            // Hearing aids are stereo-labelled by HAL and the rider IS
+            // the user, so directional pan is appropriate. BLE-speaker
+            // type (portable BT speakers) is deliberately excluded -
+            // they're at unknown distance from the rider and panning
+            // would mislead.
+            AudioDeviceInfo.TYPE_HEARING_AID,
+        )
     }
 }

@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.media.AudioManager
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
@@ -69,7 +70,14 @@ class DebugOverlayService : Service() {
             .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
 
         beeper = try {
-            AlertBeeper().also { it.setVolumePct(volumePct) }
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            AlertBeeper(audioManager).also {
+                it.setVolumePct(volumePct)
+                it.setPanning(
+                    enabled = prefs.experimentalLateralPanning,
+                    invertLR = prefs.experimentalLateralPanningInvertLR,
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "AlertBeeper init failed: ${e.message}"); null
         }
@@ -122,9 +130,9 @@ class DebugOverlayService : Service() {
     private fun handleAlerts(state: RadarState) {
         val b = beeper ?: return
         when (val ev = alerts.decide(state.vehicles, maxDistanceM, System.currentTimeMillis())) {
-            is AlertDecider.Event.Beep        -> b.play(ev.count)
-            AlertDecider.Event.Clear          -> b.playClear()
-            AlertDecider.Event.UrgentApproach -> b.playUrgent()
+            is AlertDecider.Event.Beep           -> b.play(ev.count, ev.lateralPos)
+            AlertDecider.Event.Clear             -> b.playClear()
+            is AlertDecider.Event.UrgentApproach -> b.playUrgent(ev.lateralPos)
             AlertDecider.Event.None           -> {}
         }
     }

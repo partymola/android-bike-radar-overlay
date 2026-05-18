@@ -36,6 +36,8 @@ internal object SnapshotFixtures {
         walkAwayAlarmThresholdSec = 30,
         adaptiveAlertsEnabled = true,
         precogEnabled = false,
+        experimentalLateralPanning = false,
+        experimentalLateralPanningInvertLR = false,
         closePassLoggingEnabled = false,
         closePassEmitMinRangeXM = 1.0f,
         closePassRiderSpeedFloorKmh = 15,

@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -37,6 +39,10 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
         navController = navController,
         precogEnabled = prefsSnap.precogEnabled,
         onPrecogChange = { prefs.precogEnabled = it },
+        lateralPanningEnabled = prefsSnap.experimentalLateralPanning,
+        onLateralPanningChange = { prefs.experimentalLateralPanning = it },
+        lateralPanningInvertLR = prefsSnap.experimentalLateralPanningInvertLR,
+        onLateralPanningInvertLRChange = { prefs.experimentalLateralPanningInvertLR = it },
     )
 }
 
@@ -49,6 +55,10 @@ internal fun SettingsExperimentalContent(
     navController: NavController,
     precogEnabled: Boolean,
     onPrecogChange: (Boolean) -> Unit,
+    lateralPanningEnabled: Boolean,
+    onLateralPanningChange: (Boolean) -> Unit,
+    lateralPanningInvertLR: Boolean,
+    onLateralPanningInvertLRChange: (Boolean) -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -70,10 +80,32 @@ internal fun SettingsExperimentalContent(
                     leadingIcon = Icons.Default.FlashOn,
                     leadingTint = br.brand,
                     title = "Predict overtake paths (1 s lookahead)",
-                    subtitle = "Render each vehicle 1 s into the future — see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.",
+                    subtitle = "Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.",
                     checked = precogEnabled,
                     onCheckedChange = onPrecogChange,
                 )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.Headphones,
+                    leadingTint = br.brand,
+                    title = "Directional alert audio",
+                    subtitle = "Pan beeps and urgent cues to the threat's side. Requires headphones (bone-conduction, wired, BT, USB). Phone speakers stay centred.",
+                    checked = lateralPanningEnabled,
+                    onCheckedChange = onLateralPanningChange,
+                )
+                if (lateralPanningEnabled) {
+                    SettingsToggleRow(
+                        leadingIcon = Icons.Default.SwapHoriz,
+                        leadingTint = br.fgDim,
+                        title = "Invert left/right",
+                        subtitle = "Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).",
+                        checked = lateralPanningInvertLR,
+                        onCheckedChange = onLateralPanningInvertLRChange,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))

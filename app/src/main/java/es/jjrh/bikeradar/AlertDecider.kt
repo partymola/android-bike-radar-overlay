@@ -88,7 +88,11 @@ class AlertDecider(
 ) {
 
     sealed class Event {
-        data class Beep(val count: Int) : Event()
+        /** Closest stable target's `lateralPos` is carried on each
+         *  Beep so audio consumers can pan to the threat's side
+         *  (experimental flag). `0f` when no directional information
+         *  is available; consumers treat that as centred. */
+        data class Beep(val count: Int, val lateralPos: Float = 0f) : Event()
         object Clear : Event()
         /** Stationary-suppress override: rider is stopped AND a close
          *  vehicle satisfies either the proximity gate (near-third
@@ -97,8 +101,11 @@ class AlertDecider(
          *  [TTC_GATE_CLOSING_FLOOR_MS]). Audible regardless of the
          *  suppress dwell; the audio is intentionally distinct from a
          *  normal Beep so the rider knows this is the impact-warning
-         *  case. See the class KDoc for the full gate semantics. */
-        object UrgentApproach : Event()
+         *  case. See the class KDoc for the full gate semantics.
+         *  `lateralPos` is the triggering vehicle's lateral position
+         *  for directional audio (experimental flag); `0f` when not
+         *  available. */
+        data class UrgentApproach(val lateralPos: Float = 0f) : Event()
         object None : Event()
     }
 
@@ -284,7 +291,12 @@ class AlertDecider(
         // IEC 60601-1-8 medical, NFPA 72 smoke T3, ISO 7731 industrial)
         // all repeat-while-held for imminent-danger cues. DO NOT add a
         // per-tid latch.
-        val anyImminentImpact = riderBelowStationaryForUrgent && stableClose.any { v ->
+        // `stableClose` preserves the upstream order from
+        // `RadarV2Decoder.snapshot()`, which sorts by `distanceM`
+        // ascending. So `firstOrNull` here returns the CLOSEST
+        // imminent-impact threat - the right one to pan the urgent
+        // cue toward.
+        val imminentImpactTrigger = if (!riderBelowStationaryForUrgent) null else stableClose.firstOrNull { v ->
             val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
                 v.distanceM <= alertMaxM / 3
             // Closing speed in m/s, positive = approaching.
@@ -294,6 +306,7 @@ class AlertDecider(
                 v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
             byProximity || byTtc
         }
+        val anyImminentImpact = imminentImpactTrigger != null
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
         if (triggered) beepPending = true
 
@@ -311,10 +324,15 @@ class AlertDecider(
                 when {
                     anyImminentImpact -> {
                         // Held imminent threat: fire urgent every cooldown
-                        // until threat clears.
+                        // until threat clears. Carry the triggering
+                        // vehicle's lateralPos so audio consumers can pan
+                        // to the threat's side when the experimental
+                        // directional-audio flag is on.
                         lastBeepAtMs = nowMs
                         beepPending = false
-                        Event.UrgentApproach
+                        Event.UrgentApproach(
+                            lateralPos = imminentImpactTrigger?.lateralPos ?: 0f,
+                        )
                     }
                     riderStationary -> {
                         // Stationary, no imminent threat — suppress
@@ -326,10 +344,18 @@ class AlertDecider(
                     else -> {
                         lastBeepAtMs = nowMs
                         beepPending = false
-                        if (closestVehicle != null) {
-                            firedTierPerTid[closestVehicle.id] = closestUrgency
+                        // closestVehicle's lateralPos feeds directional
+                        // audio when the experimental flag is on; defaults
+                        // to 0f when no closest is tracked (defensive -
+                        // beepPending shouldn't normally reach here in
+                        // that state).
+                        val v = closestVehicle
+                        if (v != null) {
+                            firedTierPerTid[v.id] = closestUrgency
+                            Event.Beep(count = closestUrgency, lateralPos = v.lateralPos)
+                        } else {
+                            Event.Beep(count = closestUrgency, lateralPos = 0f)
                         }
-                        Event.Beep(closestUrgency)
                     }
                 }
             }

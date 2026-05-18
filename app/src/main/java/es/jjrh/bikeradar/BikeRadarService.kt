@@ -1061,7 +1061,14 @@ class BikeRadarService : Service() {
                 var overlayAdded = false
                 val wm = getSystemService(WINDOW_SERVICE) as WindowManager
                 val view = RadarOverlayView(this@BikeRadarService)
-                val beeper = AlertBeeper().also { it.setVolumePct(prefs.alertVolume) }
+                val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+                val beeper = AlertBeeper(audioManager).also {
+                    it.setVolumePct(prefs.alertVolume)
+                    it.setPanning(
+                        enabled = prefs.experimentalLateralPanning,
+                        invertLR = prefs.experimentalLateralPanningInvertLR,
+                    )
+                }
                 val alerts = AlertDecider()
                 val closePassDetector = ClosePassDetector()
                 var closePassDiscoveryPublished = false
@@ -1184,10 +1191,17 @@ class BikeRadarService : Service() {
                             if (ev !is AlertDecider.Event.None) {
                                 logAlertEvent(ev, state, now)
                             }
+                            // Re-read the experimental panning prefs each frame so
+                            // toggling the Settings flag mid-session takes effect on
+                            // the next alert without a radar reconnect.
+                            beeper.setPanning(
+                                enabled = prefs.experimentalLateralPanning,
+                                invertLR = prefs.experimentalLateralPanningInvertLR,
+                            )
                             when (ev) {
-                                is AlertDecider.Event.Beep           -> beeper.play(ev.count)
+                                is AlertDecider.Event.Beep           -> beeper.play(ev.count, ev.lateralPos)
                                 AlertDecider.Event.Clear             -> beeper.playClear()
-                                AlertDecider.Event.UrgentApproach    -> beeper.playUrgent()
+                                is AlertDecider.Event.UrgentApproach -> beeper.playUrgent(ev.lateralPos)
                                 AlertDecider.Event.None              -> {}
                             }
                         } else {
@@ -1436,9 +1450,9 @@ class BikeRadarService : Service() {
      *  internal stable-close set. */
     private fun logAlertEvent(ev: AlertDecider.Event, state: RadarState, nowMs: Long) {
         val evStr = when (ev) {
-            is AlertDecider.Event.Beep        -> "Beep(${ev.count})"
-            AlertDecider.Event.Clear          -> "Clear"
-            AlertDecider.Event.UrgentApproach -> "UrgentApproach"
+            is AlertDecider.Event.Beep           -> "Beep(${ev.count})"
+            AlertDecider.Event.Clear             -> "Clear"
+            is AlertDecider.Event.UrgentApproach -> "UrgentApproach"
             AlertDecider.Event.None           -> "None"
         }
         val alertMax = prefs.alertMaxDistanceM

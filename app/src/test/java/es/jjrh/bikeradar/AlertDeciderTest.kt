@@ -371,7 +371,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `stationary plus close plus slow-closing stays suppressed`() {
@@ -447,7 +447,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `single-frame speed noise does NOT fire urgent (mini-dwell guard)`() {
@@ -484,7 +484,7 @@ class AlertDeciderTest {
         // Same tid now closing fast.
         val fast = closingCar(id = 1, distanceM = 5, speedMs = -8f)
         val ev = d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `urgent override threshold inclusive at -6 m_per_s`() {
@@ -497,7 +497,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 5, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `urgent override does not fire at half-quantum below threshold`() {
@@ -528,7 +528,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `ttc gate boundary at exactly 2 seconds fires`() {
@@ -541,7 +541,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `ttc gate excludes ttc above 2 seconds`() {
@@ -568,7 +568,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `ttc gate closing floor excludes 5 m_per_s`() {
@@ -598,7 +598,7 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = alertMax, speedMs = -12f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, ev)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `ttc gate does not fire when rider is moving`() {
@@ -824,13 +824,13 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val first = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, first)
+        assertEquals(AlertDecider.Event.UrgentApproach(), first)
         c.jump(700)
         val again = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, again)
+        assertEquals(AlertDecider.Event.UrgentApproach(), again)
         c.jump(700)
         val third = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, third)
+        assertEquals(AlertDecider.Event.UrgentApproach(), third)
     }
 
     @Test fun `held imminent threat via TTC gate fires UrgentApproach every cooldown`() {
@@ -845,12 +845,40 @@ class AlertDeciderTest {
         val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val first = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, first)
+        assertEquals(AlertDecider.Event.UrgentApproach(), first)
         c.jump(700)
         val again = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, again)
+        assertEquals(AlertDecider.Event.UrgentApproach(), again)
         c.jump(700)
         val third = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.UrgentApproach, third)
+        assertEquals(AlertDecider.Event.UrgentApproach(), third)
+    }
+
+    // ── lateralPos plumbing for directional-audio (experimental) ───────
+
+    @Test fun `Beep carries closest target lateralPos`() {
+        // Vehicle at far third with lateralPos = +0.7 (right-of-rider).
+        // The Beep event must surface that lateralPos so the AlertBeeper
+        // pan stage can steer the cue to the rider's right ear.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = Vehicle(id = 1, distanceM = 18, speedMs = 5f, lateralPos = 0.7f)
+        d.decide(listOf(v), alertMax, c.tick())
+        val ev = d.decide(listOf(v), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(count = 1, lateralPos = 0.7f), ev)
+    }
+
+    @Test fun `UrgentApproach carries triggering vehicle lateralPos`() {
+        // Stationary rider; vehicle closes fast at lateralPos = -0.6
+        // (left-of-rider). The UrgentApproach must surface -0.6 so the
+        // urgent cue pans to the rider's left ear.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = Vehicle(id = 1, distanceM = 5, speedMs = -8f, lateralPos = -0.6f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(lateralPos = -0.6f), ev)
     }
 }

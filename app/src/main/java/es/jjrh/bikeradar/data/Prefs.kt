@@ -43,6 +43,8 @@ data class PrefsSnapshot(
     val walkAwayAlarmThresholdSec: Int,
     val adaptiveAlertsEnabled: Boolean,
     val precogEnabled: Boolean,
+    val experimentalLateralPanning: Boolean,
+    val experimentalLateralPanningInvertLR: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
     val closePassRiderSpeedFloorKmh: Int,
@@ -191,6 +193,25 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_PRECOG, false)
         set(v) { sp.edit().putBoolean(KEY_PRECOG, v).apply() }
 
+    /** Experimental: pan Beep + UrgentApproach to the threat's side via
+     *  stereo gain. Only effective when audio is routed to headphones
+     *  (BT/wired/USB headset); on phone speakers the cue stays centred
+     *  because phone speaker separation is too narrow to give the rider
+     *  usable lateralisation. Default off. */
+    var experimentalLateralPanning: Boolean
+        get() = sp.getBoolean(KEY_LATERAL_PANNING, false)
+        set(v) { sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply() }
+
+    /** Safety valve for [experimentalLateralPanning]: swap left/right at
+     *  the final gain step. Covers the rare cases where the rider's
+     *  headphones report channels inverted (factory-mislabelled buds,
+     *  or a remembered earbud-on-wrong-ear), or a device-class quirk in
+     *  AudioTrack stereo routing. Off by default; only meaningful when
+     *  [experimentalLateralPanning] is on. */
+    var experimentalLateralPanningInvertLR: Boolean
+        get() = sp.getBoolean(KEY_LATERAL_PANNING_INVERT, false)
+        set(v) { sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply() }
+
     /** Master toggle for close-pass event logging to Home Assistant.
      *  Off by default; opt-in because the feature is only useful if
      *  the user actually wants the dataset and has HA wired up. */
@@ -275,6 +296,8 @@ class Prefs(context: Context) {
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
         precogEnabled = precogEnabled,
+        experimentalLateralPanning = experimentalLateralPanning,
+        experimentalLateralPanningInvertLR = experimentalLateralPanningInvertLR,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
         closePassRiderSpeedFloorKmh = closePassRiderSpeedFloorKmh,
@@ -319,6 +342,8 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("precog_enabled=$precogEnabled")
+        appendLine("experimental_lateral_panning=$experimentalLateralPanning")
+        appendLine("experimental_lateral_panning_invert_lr=$experimentalLateralPanningInvertLR")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
         appendLine("close_pass_rider_floor_kmh=$closePassRiderSpeedFloorKmh")
@@ -352,6 +377,8 @@ class Prefs(context: Context) {
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_PRECOG = "precog_enabled"
+        const val KEY_LATERAL_PANNING = "experimental_lateral_panning"
+        const val KEY_LATERAL_PANNING_INVERT = "experimental_lateral_panning_invert_lr"
         const val KEY_CLOSE_PASS_ENABLED = "close_pass_logging_enabled"
         const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"

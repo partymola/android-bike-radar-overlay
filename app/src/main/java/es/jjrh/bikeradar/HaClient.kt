@@ -262,16 +262,33 @@ class HaClient(private val baseUrl: String, private val token: String) {
      */
     suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
         val topic = "$DISCOVERY_PREFIX/event/varia_${slug}_close_pass/config"
+        val payload = buildClosePassDiscoveryPayload(slug, deviceName).toString()
+        return publishMqtt(topic, payload, retain = true)
+    }
+
+    /**
+     * Discovery payload for the close-pass event entity. Extracted from
+     * [publishClosePassDiscovery] so unit tests can assert on the JSON
+     * shape without needing a live MQTT broker.
+     *
+     * No `value_template`: the published event payload is already a JSON
+     * object whose top-level `event_type` field matches the
+     * `event_types` list, which is exactly what HA's MQTT-event
+     * integration expects. Adding any template that renders to a bare
+     * string causes every event to be dropped with "No valid JSON
+     * event payload detected" - the integration calls
+     * `json_loads_object()` on the rendered result and rejects scalars.
+     */
+    internal fun buildClosePassDiscoveryPayload(slug: String, deviceName: String): JSONObject {
         val clean = cleanDeviceName(deviceName)
         val eventTopic = "varia/$slug/close_pass"
-        val payload = JSONObject()
+        return JSONObject()
             .put("object_id", "varia_${slug}_close_pass")
             .put("unique_id", "varia_${slug}_close_pass")
             .put("name", "Close pass")
             .put("has_entity_name", true)
             .put("state_topic", eventTopic)
             .put("event_types", JSONArray().put("close_pass"))
-            .put("value_template", "{{ value_json.event_type }}")
             .put("json_attributes_topic", eventTopic)
             .put(
                 "device",
@@ -282,8 +299,6 @@ class HaClient(private val baseUrl: String, private val token: String) {
                     .put("model", "Varia")
                     .put("via_device", "varia_reader"),
             )
-            .toString()
-        return publishMqtt(topic, payload, retain = true)
     }
 
     /**

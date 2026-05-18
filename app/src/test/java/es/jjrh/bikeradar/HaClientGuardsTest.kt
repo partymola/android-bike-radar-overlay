@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar
 
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -86,5 +87,44 @@ class HaClientGuardsTest {
     fun publishClosePassDiscoveryReturnsFalseWhenUnconfigured() = runTest {
         val client = HaClient(baseUrl = "", token = "")
         assertFalse(client.publishClosePassDiscovery("rearvue8", "RearVue8"))
+    }
+
+    @Test
+    fun closePassDiscoveryPayloadOmitsValueTemplate() {
+        // Regression test for the v0.6.0 close-pass bug: a `value_template`
+        // rendering to a bare string caused HA's MQTT-event integration
+        // to drop every event with "No valid JSON event payload detected".
+        // The published event JSON already has a top-level `event_type`
+        // field, so the integration parses it natively when no template
+        // is set.
+        val payload = HaClient(baseUrl = "https://h.example", token = "tok")
+            .buildClosePassDiscoveryPayload("rearvue8", "RearVue8")
+        assertFalse(
+            "value_template breaks HA's mqtt event entity",
+            payload.has("value_template"),
+        )
+        // Sanity: the discovery still lists close_pass as an accepted
+        // event type, otherwise the integration rejects events whose
+        // event_type isn't in the configured set.
+        val eventTypes = payload.getJSONArray("event_types")
+        assertTrue(
+            "event_types must include close_pass",
+            (0 until eventTypes.length()).any { eventTypes.getString(it) == "close_pass" },
+        )
+        // HA binds entity_id to (unique_id, object_id) on first publish;
+        // diverging the two creates a duplicate entity that ignores the
+        // dashboard's bindings (issue home-assistant/core#124259).
+        assertEquals(
+            "unique_id must equal object_id to preserve entity binding",
+            payload.getString("unique_id"),
+            payload.getString("object_id"),
+        )
+        // event-state and attributes share the topic; if they ever
+        // diverge HA can't correlate the event with its payload.
+        assertEquals(
+            "state_topic must equal json_attributes_topic",
+            payload.getString("state_topic"),
+            payload.getString("json_attributes_topic"),
+        )
     }
 }

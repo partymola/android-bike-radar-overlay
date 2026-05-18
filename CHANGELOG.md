@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.7.0 - 2026-05-18
+
+### Features
+
+- **Experimental directional alert audio.** Saves the rider a head-check on every alert: a beep arriving in the left ear means the threat is on the left. Pans Beep and UrgentApproach cues to the threat's lateral side via stereo gain, gated on a headphone-class output route (BT, BLE, wired, USB, hearing aid); phone speakers stay centred because mm-scale separation gives no usable lateralisation. A sub-row inverts L/R as a safety valve for mislabelled buds. Default off, behind a Settings -> Experimental toggle.
+- **Earlier urgent warning via TTC.** The proximity-only gate fired at sub-1.2 s time-to-collision - well below the 2.8-4 s reaction window automotive forward-collision-warning systems use - leaving a stopped rider no time to react when a vehicle is closing fast at a junction. Added a second fire condition: TTC <= 2 s AND closing >= 6 m/s AND distance <= alert max. At 6 m/s closing this catches the same threats the proximity gate caught at 6 m, but earlier in the encounter (12 m / TTC 2 s). The 6 m/s closing floor mirrors the proximity gate's quantum-strict bound and filters slow-queue traffic merging into a stopped rider.
+
+### UX
+
+- **Closest-only beep model.** Beep cues describe the closest threat only. Same-tier new entries and lower-tier overtake re-acks are silent; per-track hysteresis stops intra-tier distance flap from re-firing. Cuts urban-traffic cacophony substantially.
+- **Urgent fires within the reaction window.** The 2 s stationary-suppress dwell previously silenced the urgent tone during a rider's reaction window when decelerating into a junction with a closing vehicle (TTC at the imminent gate is sub-2 s). The override now uses a 500 ms mini-dwell - long enough to absorb radar speed noise, short enough that urgent fires within TTC. The 2 s dwell still gates ordinary-Beep suppression so rolling stops at junctions don't silence routine alerts.
+- **Urgent repeats while threat held.** Removed the per-track latch that was silencing sustained held-imminent conditions. The override now fires every cooldown while the gate holds.
+
+### Reliability
+
+- **Walk-away alarm state machine.** Replaced the one-way `dashcamSeenSinceRadarOff` latch with a discrete IDLE / ARMED / BLANK intent-state machine. ARMED on radar disconnect, BLANK once the dashcam has been silent past the freshness window. BLANK only re-arms via radar power-on, not via dashcam advert - fixes a camera-on-before-radar moment firing the bike-ring alarm minutes after the previous ride.
+- **Close-pass HA event entity.** Removed a `value_template` from the retained MQTT discovery payload that rendered every event to a bare string, causing HA's MQTT-event integration to drop the event with "No valid JSON event payload detected". The published event JSON already carries a top-level `event_type` matching the discovery's `event_types`, so no template is needed. The new APK overwrites the broken retained discovery on first publish.
+- **Close-pass logging for slow and large vehicles.** Junction close-passes (rider braking with a vehicle still closing in the flank) and trucks during the first ~10 s of approach now log. Three connected changes: low-confidence radar returns (what trucks read as on initial acquisition) now map to CAR not BIKE; dropped the 4.25 m/s rider-speed floor in ClosePassDetector; dropped the unused BIKE vehicle size.
+
+### Diagnostics
+
+- **Decoder emits speedMs at native 0.5 m/s quantum.** The V2 decoder previously rounded byte[7] to Int, throwing away the radar's half-LSB. `Vehicle.speedMs` is now Float end-to-end so future trajectory-derived features (deceleration, dwell-time gates) get the full quantum. Safety-critical gates fire byte-for-byte the same at the integer thresholds; the only behavioural tightening is at the 1.0 m/s parked-vehicle cutoff, where a target at real 1.5 m/s closing is no longer flagged as parked.
+- **Capture-log instrumentation.** WalkAway logs IDLE / ARMED / BLANK transitions; the alert path logs every non-None event alongside the same-frame closest in-front in-range vehicle. Lets one capture log follow the decision path of any WalkAway or AlertDecider issue without a separate replay. `closing_mps` field now emits Float.
+
+### Internal
+
+- CI bumps: `android-actions/setup-android` v4.0.1 (Node 24), `reactivecircus/android-emulator-runner` v2.37.0. Snapshot-test exclusion pattern broadened so newly-added `*SnapshotTest` classes are auto-excluded from CI without ad-hoc maintenance.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No prefs migration; existing HA credentials and prefs carry over from v0.6.0 unchanged. The two new experimental toggles (directional alert audio + invert L/R) default off, so a rider upgrading sees the same audio behaviour until they opt in.
+
 ## v0.6.0 — 2026-05-07
 
 ### Features

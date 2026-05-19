@@ -362,6 +362,92 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, ev)
     }
 
+    // ── speed-aware inter-beep cooldown ─────────────────────────────
+
+    @Test fun `effective cooldown defaults when no speed signal`() {
+        // null speed (no LDI, no radar-bike-speed yet): use the base
+        // minBeepGapMs unchanged. Graceful degradation contract.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        assertEquals(700L, d.effectiveMinBeepGapMs(null))
+    }
+
+    @Test fun `cooldown is base in the 15-25 kmh band`() {
+        val d = AlertDecider(minBeepGapMs = 700L)
+        assertEquals(700L, d.effectiveMinBeepGapMs(5f))         // 18 km/h
+        assertEquals(700L, d.effectiveMinBeepGapMs(20f / 3.6f)) // 20 km/h
+    }
+
+    @Test fun `cooldown doubles below 15 kmh (slow urban crawl)`() {
+        // 2 m/s = 7.2 km/h, well into the slow band. Cooldown widens to
+        // damp the flapping-beep cacophony from cars hovering at the
+        // urgency-tier boundary while everyone queues.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        assertEquals(1400L, d.effectiveMinBeepGapMs(2f))
+    }
+
+    @Test fun `cooldown halves above 25 kmh (fast descent)`() {
+        // 8 m/s = 28.8 km/h. Reaction time is shorter; re-arm faster on
+        // tier raises for the same closing-speed threat.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        assertEquals(350L, d.effectiveMinBeepGapMs(8f))
+    }
+
+    @Test fun `slow cooldown actually gates a Beep in the integration path`() {
+        // Slow rider (5 km/h) gets first beep, then a fresh trigger
+        // 800 ms later. Under the flat 700 ms cooldown this would fire
+        // again; under the slow 1400 ms cooldown it must stay silent.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 5f / 3.6f)
+        val first = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 5f / 3.6f)
+        assertEquals(AlertDecider.Event.Beep(1), first)
+        c.jump(800)
+        // New tier raise (mid-zone). Cooldown not yet done at slow speed
+        // (1400 ms required, only 800 ms elapsed). Must stay silent.
+        val tooSoon = d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 5f / 3.6f)
+        assertEquals(AlertDecider.Event.None, tooSoon)
+    }
+
+    @Test fun `must not widen UrgentApproach repeat-while-held cadence`() {
+        // Safety invariant: a stationary rider in front of an imminent
+        // threat must still get the repeated UrgentApproach at the base
+        // cooldown rate (700 ms), NOT at the slow-band widened rate
+        // (1400 ms). The point of UrgentApproach is to warn fast about
+        // impending impact; widening the cadence at low speed would
+        // make a stopped rider WAIT LONGER for the next warning, which
+        // is the opposite of what they need.
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L)
+        val c = Clock()
+        // Establish stationary state.
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // Imminent threat: 5 m at -8 m/s closing => proximity gate fires.
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)  // fires first urgent
+        c.jump(700)
+        // 700 ms later, at the base cooldown boundary. The speed-aware path in the
+        // slow-band would require 1400 ms; UrgentApproach must bypass
+        // and fire at 700 ms.
+        val again = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), again)
+    }
+
+    @Test fun `fast cooldown allows a faster re-arm in the integration path`() {
+        // Fast rider (30 km/h). At 400 ms after a beep, a tier raise
+        // would be suppressed by the flat 700 ms cooldown, but the
+        // fast-band 350 ms cooldown lets it through.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 30f / 3.6f)
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 30f / 3.6f)
+        c.jump(400)
+        // Same track raises to mid-zone tier. Fast cooldown is done at
+        // 350 ms; the tier raise must fire.
+        val ev = d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 30f / 3.6f)
+        assertEquals(AlertDecider.Event.Beep(2), ev)
+    }
+
     @Test fun `gate releases on stationary-to-moving transition`() {
         // After dwell+suppress, rolling off restores beeps without a
         // delayed cooldown gap (the suppressed beep must not have

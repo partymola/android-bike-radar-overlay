@@ -321,7 +321,16 @@ class AlertDecider(
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
         if (triggered) beepPending = true
 
-        val cooldownDone = nowMs - lastBeepAtMs >= minBeepGapMs
+        // Scale the regular-Beep cooldown by rider speed. Do NOT
+        // scale the UrgentApproach repeat-while-held cadence; a slow /
+        // stationary rider in front of an imminent threat must still
+        // get the repeated warning at the base rate.
+        val sinceLastBeep = nowMs - lastBeepAtMs
+        val cooldownDone = if (anyImminentImpact) {
+            sinceLastBeep >= minBeepGapMs
+        } else {
+            sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
+        }
 
         val event: Event = when {
             stableTids.isEmpty() && prevStableClose.isNotEmpty() -> {
@@ -387,6 +396,31 @@ class AlertDecider(
         lastBeepAtMs = Long.MIN_VALUE / 2
         beepPending = false
         lastNotStationaryAtMs = NOT_INITIALIZED
+    }
+
+    /**
+     * Scale the inter-beep cooldown by current rider speed. Slow
+     * traffic / lights gets a wider cooldown (fewer flapping beeps as
+     * cars hover at tier boundaries while everyone queues); fast
+     * descents get a tighter cooldown (less reaction time, faster
+     * re-arm on tier raises). Returns the base [minBeepGapMs] when no
+     * speed signal is available (the no-LDI, no-GPS-derived-speed
+     * fallback path).
+     *
+     * When LDI is bonded the caller supplies [bikeSpeedMs] from the
+     * bike's wheel-speed sensor (sub-second ground truth). When LDI is
+     * absent the caller supplies the radar's bike-speed field (the
+     * existing GPS-derived path); the decider doesn't care about the
+     * source, only the magnitude.
+     */
+    internal fun effectiveMinBeepGapMs(bikeSpeedMs: Float?): Long {
+        if (bikeSpeedMs == null) return minBeepGapMs
+        val kmh = bikeSpeedMs * 3.6f
+        return when {
+            kmh < SPEED_AWARE_COOLDOWN_SLOW_KMH -> minBeepGapMs * 2
+            kmh > SPEED_AWARE_COOLDOWN_FAST_KMH -> minBeepGapMs / 2
+            else -> minBeepGapMs
+        }
     }
 
     private fun urgencyFor(distM: Int, alertMaxM: Int): Int {
@@ -460,5 +494,18 @@ class AlertDecider(
          *  traffic merging into a stopped rider, where the driver is
          *  clearly tracking and braking. */
         const val TTC_GATE_CLOSING_FLOOR_MS = 6f
+
+        /** Bike speeds below this (km/h) double the [minBeepGapMs]
+         *  cooldown. Slow urban crawl is where flapping beeps come from -
+         *  cars hover near the urgency-tier boundaries as the whole
+         *  queue creeps forward, and the rider doesn't need to hear the
+         *  re-statement at the same rate as at speed. */
+        const val SPEED_AWARE_COOLDOWN_SLOW_KMH = 15f
+
+        /** Bike speeds above this (km/h) halve the [minBeepGapMs]
+         *  cooldown. Reaction time at 30 km/h is roughly half what it is
+         *  at 15 km/h, so re-arm proportionally faster on a tier raise
+         *  for the same closing-speed threat. */
+        const val SPEED_AWARE_COOLDOWN_FAST_KMH = 25f
     }
 }

@@ -1356,12 +1356,20 @@ class BikeRadarService : Service() {
                             // (lastLdiSnapshot is null when the experimental flag is
                             // off or no eBike is bonded). Null falls back to the
                             // existing bikeSpeedMs GPS-derived gate inside decide().
+                            //
+                            // When LDI is bonded, prefer wheel-speed truth
+                            // (speedRaw is 1/100 km/h; / 360 = m/s) so the
+                            // speed-aware cooldown reacts to actual rider speed at
+                            // sub-second latency instead of GPS's 1-2 s lag.
+                            val ldiSnap = lastLdiSnapshot
+                            val preferredBikeSpeedMs = ldiSnap?.speedRaw?.let { it / 360f }
+                                ?: state.bikeSpeedMs
                             val ev = alerts.decide(
                                 vehicles = state.vehicles,
                                 alertMaxM = prefs.alertMaxDistanceM,
                                 nowMs = now,
-                                bikeSpeedMs = state.bikeSpeedMs,
-                                bikeNotDriving = lastLdiSnapshot?.bikeNotDriving,
+                                bikeSpeedMs = preferredBikeSpeedMs,
+                                bikeNotDriving = ldiSnap?.bikeNotDriving,
                             )
                             if (ev !is AlertDecider.Event.None) {
                                 logAlertEvent(ev, state, now)

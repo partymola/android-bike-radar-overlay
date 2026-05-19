@@ -10,11 +10,13 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
+import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
@@ -71,9 +73,15 @@ class DebugOverlayService : Service() {
 
         beeper = try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            // Service contexts cannot call Context.getDisplay() on Android 16
+            // (UnsupportedOperationException). DisplayManager returns a live
+            // Display whose getRotation() tracks orientation. See
+            // BikeRadarService.onCreate for the production-path equivalent.
+            val defaultDisplay: Display? = getSystemService(DisplayManager::class.java)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)
             AlertBeeper(
                 audioManager = audioManager,
-                rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
+                rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
             ).also {
                 it.setVolumePct(volumePct)
                 it.setPanning(

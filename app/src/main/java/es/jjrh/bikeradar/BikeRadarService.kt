@@ -26,6 +26,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -39,6 +40,7 @@ import android.os.IBinder
 import android.os.ParcelUuid
 import android.provider.Settings
 import android.util.Log
+import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
@@ -262,9 +264,16 @@ class BikeRadarService : Service() {
         // Service-scope AlertBeeper. AudioTracks are warmed once here
         // so the first beep after any radar reconnect lands without
         // mixer / MinBuf cold-start latency.
+        //
+        // Rotation is fetched via DisplayManager rather than Context.getDisplay():
+        // on Android 16 the latter throws UnsupportedOperationException for
+        // Service contexts (no associated Display). The DisplayManager handle
+        // returns a live Display whose getRotation() tracks orientation changes.
+        val defaultDisplay: Display? = getSystemService(DisplayManager::class.java)
+            ?.getDisplay(Display.DEFAULT_DISPLAY)
         alertBeeper = AlertBeeper(
             audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
-            rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
+            rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
         ).also {
             it.setVolumePct(prefs.alertVolume)
             it.setPanning(

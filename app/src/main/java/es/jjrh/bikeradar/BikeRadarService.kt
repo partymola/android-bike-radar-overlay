@@ -129,6 +129,17 @@ class BikeRadarService : Service() {
      *  currently connected or has never been off this session. */
     @Volatile private var radarOffSinceMs: Long? = null
 
+    // ── Bosch eBike Live Data Interface (LDI) snapshot ─────────────────────
+    // Last-known LDI snapshot from [EBikeLink], or null when LDI is not
+    // bonded (no Bosch eBike, experimental flag off, pre-pair, or any
+    // failure path). Consumed by [WalkAwayArmingGate] and by the
+    // AlertDecider stationary override. The null case is the
+    // graceful-degradation path that radar-only riders take.
+    @Volatile private var lastLdiSnapshot: LiveDataSnapshot? = null
+
+    // Live EBikeLink instance, null when experimental.ldi.enable is off.
+    @Volatile private var ebikeLink: EBikeLink? = null
+
     // Throttle for the phone-battery capture-log line. Logged on level
     // changes and otherwise no more than once per PHONE_BATTERY_LOG_PERIOD_MS.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
@@ -290,6 +301,56 @@ class BikeRadarService : Service() {
         launchWalkAwayTick()
         launchDashcamRefresh()
         launchRideSummaryPublishLoop()
+        maybeStartEBikeLink()
+    }
+
+    /**
+     * Lifecycle: instantiate [EBikeLink] when the experimental flag
+     * is on AND the required runtime BLE permissions are granted. The
+     * link advertises with service solicitation; the bike connects to
+     * the phone when the rider initiates pairing via Flow. Snapshots are
+     * pushed into [lastLdiSnapshot] for the AlertDecider stationary
+     * override and the walk-away arming gate to consume.
+     *
+     * Flag off / permission missing → no advertising, no GATT server,
+     * `lastLdiSnapshot` stays null, all downstream consumers fall back
+     * to their existing GPS-derived paths. This is the
+     * graceful-degradation path for radar-only and non-Bosch-eBike
+     * riders.
+     */
+    @SuppressLint("MissingPermission")
+    private fun maybeStartEBikeLink() {
+        if (!prefs.ldiEnabled) return
+        if (!hasBlePermissions()) {
+            Log.i(TAG_RADAR, "ldi: experimental flag on but BLE permissions not granted; skipping")
+            return
+        }
+        val link = EBikeLink(
+            context = this,
+            onSnapshot = { snap ->
+                lastLdiSnapshot = snap
+            },
+            onBondedAddress = { addr -> prefs.ldiBondedAddress = addr },
+        )
+        ebikeLink = link
+        val started = link.start()
+        if (!started) {
+            Log.w(TAG_RADAR, "ldi: EBikeLink.start() failed; flag-on but adapter unavailable?")
+            ebikeLink = null
+        } else {
+            clog("# ldi state=ADVERTISING")
+        }
+    }
+
+    private fun hasBlePermissions(): Boolean {
+        val ctx = applicationContext
+        val connectOk = ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.BLUETOOTH_CONNECT,
+        ) == PackageManager.PERMISSION_GRANTED
+        val advertiseOk = ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.BLUETOOTH_ADVERTISE,
+        ) == PackageManager.PERMISSION_GRANTED
+        return connectOk && advertiseOk
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -348,6 +409,11 @@ class BikeRadarService : Service() {
         stopWalkAwayAlarmTone()
         alertBeeper?.release()
         alertBeeper = null
+        // Lifecycle teardown: stop advertising and close the GATT
+        // server. No-op when ldi flag was off or start() failed.
+        @SuppressLint("MissingPermission")
+        if (hasBlePermissions()) ebikeLink?.stop()
+        ebikeLink = null
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
@@ -1239,7 +1305,17 @@ class BikeRadarService : Service() {
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            val ev = alerts.decide(state.vehicles, prefs.alertMaxDistanceM, now, state.bikeSpeedMs)
+                            // Pass LDI ground-truth standstill when present
+                            // (lastLdiSnapshot is null when the experimental flag is
+                            // off or no eBike is bonded). Null falls back to the
+                            // existing bikeSpeedMs GPS-derived gate inside decide().
+                            val ev = alerts.decide(
+                                vehicles = state.vehicles,
+                                alertMaxM = prefs.alertMaxDistanceM,
+                                nowMs = now,
+                                bikeSpeedMs = state.bikeSpeedMs,
+                                bikeNotDriving = lastLdiSnapshot?.bikeNotDriving,
+                            )
                             if (ev !is AlertDecider.Event.None) {
                                 logAlertEvent(ev, state, now)
                             }
@@ -1977,11 +2053,17 @@ class BikeRadarService : Service() {
         }
         if (radarOffSinceMs == null) {
             radarOffSinceMs = System.currentTimeMillis()
-            // IDLE → ARMED: radar just disconnected mid-session. The
-            // tick will downgrade to BLANK if the dashcam has been
-            // silent past the freshness window.
-            walkAwayArmed = true
-            clog("# walkaway state=ARMED transition_reason=radar-disconnected")
+            // Consult the LDI snapshot before arming. When the bike
+            // reports system_locked=false the rider is on the bike
+            // (mid-ride radar BLE blip); arming would misfire. Any other
+            // case (locked, null systemLocked, null snapshot, LDI flag
+            // off) falls through to the existing IDLE → ARMED path.
+            if (WalkAwayArmingGate.shouldArm(lastLdiSnapshot)) {
+                walkAwayArmed = true
+                clog("# walkaway state=ARMED transition_reason=radar-disconnected")
+            } else {
+                clog("# walkaway state=BLANK transition_reason=radar-disconnected-but-ldi-unlocked")
+            }
         }
     }
 

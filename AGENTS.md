@@ -27,10 +27,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (Security / UX / Compatibility
-headings — see existing entries for tone), then push a `v*` tag (e.g.
-`v0.4.0-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
-which builds a release-signed APK and publishes a GitHub Release. Tags
-containing `-` (alpha/rc/...) are marked pre-release automatically.
+headings - see existing entries for tone), then push a `v*` tag (e.g.
+`v0.7.1-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
+which builds a release-signed APK and publishes a GitHub pre-release.
+The workflow defaults `prerelease: true` until the app exits alpha.
 
 **Build-dir permission gotcha:** if `:app:testDebugUnitTest` fails with
 `Unable to delete directory .../test-results/...`, a previous container left
@@ -49,10 +49,13 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
-  sunset, Night Flash after, using `SunsetCalculator` (Europe/London).
-  A one-shot dawn/dusk flip is scheduled for the rest of the session.
-  Skipped when `cameraLightUserOverride` is set (manual side-button
-  press during the session). See `BikeRadarService.kt` connect path.
+  sunset, Night Flash after, using `SunsetCalculator` driven by
+  `LocationCache` (one `getLastKnownLocation` read per ride via
+  `ACCESS_COARSE_LOCATION`; falls back to London-hardcoded if the
+  permission is denied). A one-shot dawn/dusk flip is scheduled for
+  the rest of the session. Skipped when `cameraLightUserOverride` is
+  set (manual side-button press during the session). See
+  `BikeRadarService.kt` connect path.
 - Capture log is always written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
 
@@ -65,6 +68,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
+| `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
 | `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |
 
 ## Protocol reference
@@ -126,9 +130,33 @@ decoders in both Python and Kotlin live there.
   frame` in logcat before declaring the app ready to test.
 - AlertDecider's stationary safety override has TWO disjunct gates: the
   proximity gate (`distance <= alertMaxM/3 AND closing >= 6 m/s`) and a
-  TTC gate (`TTC <= 3s AND closing >= 5 m/s AND distance <= alertMaxM`).
+  TTC gate (`TTC <= 2s AND closing >= 6 m/s AND distance <= alertMaxM`).
   Boundary tests in `AlertDeciderTest.kt` pin the semantics. Don't reduce
   the override to a single gate without re-running the capture replay.
+- `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
+  released in `onDestroy`). The first beep after every BLE reconnect lands
+  on the same warm AudioTrack pool; do not allocate per-overlayJob.
+- `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
+  a re-arming abandon timer. The walk-away alarm path uses the stronger
+  `_EXCLUSIVE` flavour and is separate from the close-pass path.
+- When `audioManager.mode == MODE_IN_CALL` the close-pass beeper skips the
+  audio path entirely (visual overlay still fires). Non-negotiable, no
+  Settings toggle.
+- `ACCESS_COARSE_LOCATION` is requested but not prompted in-app yet;
+  existing installs upgrading from pre-v0.7.1-alpha must grant via Android
+  Settings or the auto-mode silently falls back to London.
+
+## Quality gates (pre-push, mandatory)
+
+- `/qc` skill spawns a panel of read-only reviewers (legal,
+  commit-message, diff hygiene; UX if UI changed; release-scope if
+  version bumped) and writes `.git/qc-marker` for HEAD on clean PASS.
+  The pre-push hook refuses to push without a valid marker.
+- `/release-review` skill reviews the `v*` tag's CHANGELOG section for
+  reader-perspective, leakage, truthfulness, migration-impact; writes
+  `.git/release-review-marker` on PASS.
+- Any amend, reset, or new commit invalidates both markers - re-run
+  before re-pushing.
 
 ## Contributing
 

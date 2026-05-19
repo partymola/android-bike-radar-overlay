@@ -838,6 +838,15 @@ internal fun PairingStepContent(
         // without the overlay so blocking onboarding on pairing would
         // close off legitimate use cases.
         Column(modifier = Modifier.fillMaxWidth()) {
+            // Discovery hint: experimental features (Bosch eBike LDI,
+            // directional audio, overtake prediction) live behind a
+            // single Settings entry so onboarding stays minimal.
+            Text(
+                text = "More features in Settings -> Experimental once you're set up.",
+                color = br.fgDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
+            )
             if (!radarBonded) {
                 Text(
                     text = "You can pair the radar later from Bluetooth settings.",

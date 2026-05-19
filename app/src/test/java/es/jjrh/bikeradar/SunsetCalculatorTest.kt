@@ -82,4 +82,73 @@ class SunsetCalculatorTest {
         val diff = Math.abs(ms!! - zdt!!.toInstant().toEpochMilli())
         assertTrue("epochMs and ZDT should agree within 1s, diff=${diff}ms", diff < 1000)
     }
+
+    // ── parameterised lat/lon (the v0.7.2 hotfix) ────────────────────────────
+
+    @Test
+    fun londonSunsetIsLaterThanMadridOnSummerSolsticeInUtc() {
+        // On the summer solstice the high-latitude sites have much longer
+        // days, so the absolute UTC sunset time at London (51.5°N) lands
+        // later than at Madrid (40.4°N) despite Madrid being further west
+        // (later solar noon). NOAA Solar Calculator values (year 2026
+        // summer solstice): London sunset around 20h21 UTC; Madrid sunset
+        // around 19h48 UTC. London leads by ~33 min in UTC. Verify the
+        // formula reproduces this directional relationship.
+        val date = LocalDate.of(2026, 6, 21)
+        val londonMs = SunsetCalculator.sunsetEpochMs(date)
+        val madridMs = SunsetCalculator.sunsetEpochMs(date, latDeg = 40.4168, lonDeg = -3.7038)
+        assertNotNull(londonMs); assertNotNull(madridMs)
+        assertTrue(
+            "London sunset should follow Madrid sunset in UTC on summer solstice; " +
+                "london=$londonMs madrid=$madridMs diff=${(londonMs!! - madridMs!!) / 60000}min",
+            londonMs > madridMs
+        )
+    }
+
+    @Test
+    fun madridSunsetMatchesNoaa() {
+        // Year-2026 summer-solstice NOAA reference for Madrid: sunset around
+        // 21h48 CEST (19h48 UTC). Tolerance ±5 min.
+        val ms = SunsetCalculator.sunsetEpochMs(LocalDate.of(2026, 6, 21), 40.4168, -3.7038)
+        assertNotNull(ms)
+        val zdt = java.time.ZonedDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(ms!!), ZoneId.of("Europe/Madrid")
+        )
+        val h = zdt.hour; val m = zdt.minute
+        assertTrue("expected hour=21 min in 43..59 OR hour=22 min in 0..3, got h=$h m=$m",
+            (h == 21 && m in 43..59) || (h == 22 && m in 0..3))
+    }
+
+    @Test
+    fun sydneySunsetIsBeforeUtcMiddayOnAustralianWinter() {
+        // Sydney (33.8688°S, 151.2093°E): southern-hemisphere far-east case.
+        // Australian winter solstice is the same calendar day as the northern
+        // summer solstice. Sydney AEST is UTC+10, so the local evening sunset
+        // (around 16h53 AEST) lands in UTC morning (around 06h53 UTC). Sanity-
+        // checks the formula handles a southern-hemisphere far-eastern point.
+        val ms = SunsetCalculator.sunsetEpochMs(LocalDate.of(2026, 6, 21), -33.8688, 151.2093)
+        assertNotNull(ms)
+        val zdt = java.time.ZonedDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(ms!!), ZoneId.of("Australia/Sydney")
+        )
+        val h = zdt.hour; val m = zdt.minute
+        assertTrue("expected hour=16 min in 43..59 OR hour=17 min in 0..3, got h=$h m=$m",
+            (h == 16 && m in 43..59) || (h == 17 && m in 0..3))
+    }
+
+    @Test
+    fun defaultParamsStillProduceLondonValues() {
+        // The lat/lon parameters have London defaults; explicit-default and
+        // no-arg calls must produce identical results. Pins the
+        // backwards-compatibility contract for the v0.7.2 hotfix.
+        val date = LocalDate.of(2026, 6, 21)
+        val noArg = SunsetCalculator.sunsetEpochMs(date)
+        val withDefaults = SunsetCalculator.sunsetEpochMs(
+            date,
+            latDeg = SunsetCalculator.LONDON_LAT_DEG,
+            lonDeg = SunsetCalculator.LONDON_LON_DEG,
+        )
+        assertNotNull(noArg); assertNotNull(withDefaults)
+        assertTrue("default-arg must equal explicit-default-arg", noArg == withDefaults)
+    }
 }

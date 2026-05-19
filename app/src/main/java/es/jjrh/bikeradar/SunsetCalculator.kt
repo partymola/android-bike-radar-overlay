@@ -7,40 +7,51 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * Computes solar sunset for a fixed London location.
+ * Computes sunrise and sunset times for arbitrary lat/lon.
  *
  * Algorithm: NOAA Solar Calculator, https://www.esrl.noaa.gov/gmd/grad/solcalc/
  * (public domain). The formula series used here matches the NOAA spreadsheet
- * computations for solar zenith = 90.833° (geometric centre on the horizon with
- * standard atmospheric refraction).
+ * computations for solar zenith = 90.833° (geometric centre on the horizon
+ * with standard atmospheric refraction).
  *
- * London coordinates are hardcoded; the feature is deliberately single-input.
- * Accuracy: within 1-2 minutes of tabulated NOAA values.
+ * Defaults to London (51.5074°N, 0.1278°W - Trafalgar Square reference)
+ * when callers do not supply a location. Accuracy: within 1-2 minutes of
+ * tabulated NOAA values across the cited test cases.
+ *
+ * A 10 km position error shifts computed sunrise by approximately 1 minute,
+ * so callers supplying COARSE-grade locations get the same accuracy as
+ * callers supplying FINE-grade ones.
  */
 object SunsetCalculator {
 
-    private const val LONDON_LAT_DEG = 51.5074
-    private const val LONDON_LON_DEG = -0.1278
+    const val LONDON_LAT_DEG = 51.5074
+    const val LONDON_LON_DEG = -0.1278
     private const val ZENITH_DEG = 90.833
 
     /**
-     * Returns the sunset instant for [date] in the given [zone] (default Europe/London).
-     * The return value is an epoch millisecond timestamp.
+     * Returns the sunset instant for [date] at ([latDeg], [lonDeg]) as an
+     * epoch millisecond timestamp.
      *
-     * Returns null if the sun does not set on that date (polar night / midnight sun),
-     * which cannot occur at London's latitude but is handled defensively.
+     * Returns null if the sun does not set on that date (polar night /
+     * midnight sun at high latitudes).
      */
-    fun sunsetEpochMs(date: LocalDate): Long? =
-        eventEpochMs(date, sunset = true)
+    fun sunsetEpochMs(
+        date: LocalDate,
+        latDeg: Double = LONDON_LAT_DEG,
+        lonDeg: Double = LONDON_LON_DEG,
+    ): Long? = eventEpochMs(date, latDeg, lonDeg, sunset = true)
 
-    /** Sunrise on [date] for the hardcoded London location, as epoch milliseconds. */
-    fun sunriseEpochMs(date: LocalDate): Long? =
-        eventEpochMs(date, sunset = false)
+    /** Sunrise on [date] at ([latDeg], [lonDeg]) as epoch milliseconds. */
+    fun sunriseEpochMs(
+        date: LocalDate,
+        latDeg: Double = LONDON_LAT_DEG,
+        lonDeg: Double = LONDON_LON_DEG,
+    ): Long? = eventEpochMs(date, latDeg, lonDeg, sunset = false)
 
-    private fun eventEpochMs(date: LocalDate, sunset: Boolean): Long? {
+    private fun eventEpochMs(date: LocalDate, latDeg: Double, lonDeg: Double, sunset: Boolean): Long? {
         val utcMinutes =
-            (if (sunset) sunsetUtcMinutes(date.year, date.monthValue, date.dayOfMonth)
-            else sunriseUtcMinutes(date.year, date.monthValue, date.dayOfMonth))
+            (if (sunset) sunsetUtcMinutes(date.year, date.monthValue, date.dayOfMonth, latDeg, lonDeg)
+            else sunriseUtcMinutes(date.year, date.monthValue, date.dayOfMonth, latDeg, lonDeg))
             ?: return null
         val h = (utcMinutes / 60).toLong()
         val m = (utcMinutes % 60).toLong()
@@ -50,35 +61,46 @@ object SunsetCalculator {
         return utcDt.toInstant().toEpochMilli()
     }
 
-    /** Convenience: [ZonedDateTime] in [zone] for the sunset on [date]. */
-    fun sunsetZdt(date: LocalDate, zone: ZoneId = ZoneId.of("Europe/London")): ZonedDateTime? {
-        val ms = sunsetEpochMs(date) ?: return null
+    /**
+     * Convenience: [ZonedDateTime] in [zone] for the sunset on [date].
+     * Caller supplies the desired display zone (typically
+     * `ZoneId.systemDefault()`); the lat/lon defaults to London.
+     */
+    fun sunsetZdt(
+        date: LocalDate,
+        zone: ZoneId = ZoneId.of("Europe/London"),
+        latDeg: Double = LONDON_LAT_DEG,
+        lonDeg: Double = LONDON_LON_DEG,
+    ): ZonedDateTime? {
+        val ms = sunsetEpochMs(date, latDeg, lonDeg) ?: return null
         return ZonedDateTime.ofInstant(Instant.ofEpochMilli(ms), zone)
     }
 
     // ── NOAA formula chain ───────────────────────────────────────────────────
 
-    private fun sunsetUtcMinutes(year: Int, month: Int, day: Int): Double? =
-        sunEventUtcMinutes(year, month, day, sign = +1.0)
+    private fun sunsetUtcMinutes(year: Int, month: Int, day: Int, latDeg: Double, lonDeg: Double): Double? =
+        sunEventUtcMinutes(year, month, day, latDeg, lonDeg, sign = +1.0)
 
-    private fun sunriseUtcMinutes(year: Int, month: Int, day: Int): Double? =
-        sunEventUtcMinutes(year, month, day, sign = -1.0)
+    private fun sunriseUtcMinutes(year: Int, month: Int, day: Int, latDeg: Double, lonDeg: Double): Double? =
+        sunEventUtcMinutes(year, month, day, latDeg, lonDeg, sign = -1.0)
 
-    private fun sunEventUtcMinutes(year: Int, month: Int, day: Int, sign: Double): Double? {
+    private fun sunEventUtcMinutes(
+        year: Int, month: Int, day: Int, latDeg: Double, lonDeg: Double, sign: Double,
+    ): Double? {
         val t = julianCentury(julianDay(year, month, day))
         val sunDecRad = Math.toRadians(sunDeclination(t))
-        val latRad = Math.toRadians(LONDON_LAT_DEG)
+        val latRad = Math.toRadians(latDeg)
         val zenRad = Math.toRadians(ZENITH_DEG)
         val cosHa = (Math.cos(zenRad) - Math.sin(latRad) * Math.sin(sunDecRad)) /
             (Math.cos(latRad) * Math.cos(sunDecRad))
         if (cosHa > 1.0 || cosHa < -1.0) return null
         val hourAngleDeg = Math.toDegrees(Math.acos(cosHa))
-        val noonUtc = solarNoonUtcMinutes(t)
+        val noonUtc = solarNoonUtcMinutes(t, lonDeg)
         return noonUtc + sign * hourAngleDeg * 4.0
     }
 
-    private fun solarNoonUtcMinutes(t: Double): Double =
-        720.0 - 4.0 * LONDON_LON_DEG - equationOfTime(t)
+    private fun solarNoonUtcMinutes(t: Double, lonDeg: Double): Double =
+        720.0 - 4.0 * lonDeg - equationOfTime(t)
 
     private fun julianDay(year: Int, month: Int, day: Int): Double {
         var y = year; var m = month

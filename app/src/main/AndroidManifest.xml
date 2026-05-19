@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Approximate location is used solely to compute sunrise/sunset for the
+         front-light day/night auto-mode. Read once per ride session via
+         getLastKnownLocation (no continuous tracking, no background
+         polling). City-block accuracy is sufficient: a 10 km position
+         error shifts computed sunrise by ~1 minute. If the permission is
+         denied, auto-mode falls back to London-hardcoded times. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"

@@ -761,6 +761,10 @@ class BikeRadarService : Service() {
             }
 
             Log.i(TAG_LIGHT, "handshake complete; subscribing mode-state notify")
+            // Refresh the location cache for sunrise/sunset before scheduling
+            // the dusk/dawn flips below. Idempotent with the radar-side
+            // refresh: if either device handshook first, the cache is warm.
+            LocationCache.refreshIfStale(this@BikeRadarService)
             val ch14 = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_14)
             if (ch14 != null) queue.writeCccd(gatt, ch14)
 
@@ -775,15 +779,23 @@ class BikeRadarService : Service() {
 
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
-            val today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/London"))
-            val sunriseMs = SunsetCalculator.sunriseEpochMs(today)
-            val sunsetMs = SunsetCalculator.sunsetEpochMs(today)
+            val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+            val loc = LocationCache.current()
+            val (sunriseMs, sunsetMs) = if (loc != null) {
+                SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
+                    SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
+            } else {
+                // No location available (permission denied, or no last-known
+                // fix yet). Fall back to SunsetCalculator's London defaults.
+                SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
+            }
             // It's night if we're before today's sunrise (still in last night) or
             // after today's sunset (already in this night).
             val isNight = (sunriseMs != null && nowMs < sunriseMs) ||
                 (sunsetMs != null && nowMs >= sunsetMs)
             val initialMode = if (isNight) prefs.cameraLightNightMode else prefs.cameraLightDayMode
-            val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away" else "unknown"
+            val locLog = if (loc != null) "lat=${"%.2f".format(loc.first)} lon=${"%.2f".format(loc.second)}" else "London-fallback"
+            val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
             if (!cameraLightUserOverride) {
                 val applied = applyModeWithRetry(controller, initialMode)
                 Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
@@ -1054,6 +1066,10 @@ class BikeRadarService : Service() {
             }
 
             Log.i(TAG_RADAR, "handshake complete, decoding frames")
+            // First chance per ride to refresh the location cache used by
+            // SunsetCalculator (front-light auto-mode). 60-min staleness
+            // gate means quick stop-and-go reconnects don't re-poll.
+            LocationCache.refreshIfStale(this@BikeRadarService)
             openCaptureLog()
 
             // Overlay + alert coroutine. Runs on Main (WindowManager requires it).

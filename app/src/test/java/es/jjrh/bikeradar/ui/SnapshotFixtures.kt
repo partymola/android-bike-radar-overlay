@@ -45,5 +45,6 @@ internal object SnapshotFixtures {
         autoLightModeEnabled = false,
         cameraLightDayMode = CameraLightMode.DAY_FLASH,
         cameraLightNightMode = CameraLightMode.LOW,
+        ldiEnabled = false,
     )
 }

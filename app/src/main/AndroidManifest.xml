@@ -22,6 +22,13 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_CONNECT"
         tools:targetApi="31" />
+    <!-- BLE peripheral role for the Bosch LDI subsystem. The phone
+         advertises with service solicitation so the bike (acting as
+         central) initiates the connection. Only requested at runtime
+         when the experimental flag is on. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADVERTISE"
+        tools:targetApi="31" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission

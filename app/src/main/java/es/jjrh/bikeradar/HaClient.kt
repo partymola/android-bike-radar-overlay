@@ -319,6 +319,33 @@ class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     /**
+     * Publish a ride-edge event (started or ended) inferred from
+     * the Bosch LDI snapshot stream. Two writes (close-pass-event
+     * pattern): one non-retained to the main topic for HA event
+     * entities, one retained `/last` so a fresh dashboard card has
+     * something to render on reload.
+     *
+     * Topic: `varia/ride/edge` (and `varia/ride/edge/last`). The legacy
+     * `varia/` prefix is kept on purpose so existing HA configurations
+     * keep working without subscriber edits.
+     *
+     * @param edge "started" or "ended".
+     * @param timestampIso ISO-8601 UTC timestamp of the edge.
+     */
+    suspend fun publishRideEdge(edge: String, timestampIso: String): Boolean {
+        val topic = "varia/ride/edge"
+        val payload = JSONObject()
+            .put("event_type", "ride_$edge")
+            .put("timestamp", timestampIso)
+            .toString()
+        return coroutineScope {
+            val j1 = async { publishMqtt(topic, payload, retain = false) }
+            val j2 = async { publishMqtt("$topic/last", payload, retain = true) }
+            j1.await() && j2.await()
+        }
+    }
+
+    /**
      * Publishes the HA MQTT-Discovery config for the per-ride summary
      * sensors. Ten sensors share the single retained state topic
      * `varia/<slug>/ride_summary` and decompose its JSON via value_template,

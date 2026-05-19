@@ -140,6 +140,17 @@ class BikeRadarService : Service() {
     // Live EBikeLink instance, null when experimental.ldi.enable is off.
     @Volatile private var ebikeLink: EBikeLink? = null
 
+    // Absolute odometer at the first snapshot of this session; the
+    // capture log writes `odo_delta_m = current - baseline` rather than
+    // the absolute (privacy hardening, see LdiCaptureFormatter).
+    @Volatile private var sessionStartOdometerM: Long? = null
+
+    // Ride-edge detector state, mutated only on the BLE callback
+    // thread inside onSnapshot. Tracks whether the rider is currently
+    // riding (per LDI lock + wheel-motion signals) so STARTED / ENDED
+    // edges can publish to HA. See RideEdgeDetector.
+    @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
+
     // Throttle for the phone-battery capture-log line. Logged on level
     // changes and otherwise no more than once per PHONE_BATTERY_LOG_PERIOD_MS.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
@@ -329,6 +340,25 @@ class BikeRadarService : Service() {
             context = this,
             onSnapshot = { snap ->
                 lastLdiSnapshot = snap
+                // Capture odometer baseline on first sighting, then
+                // log the snapshot delta-only. format() returns null when
+                // every field is still unobserved so we skip logging
+                // empty stubs.
+                if (sessionStartOdometerM == null) {
+                    sessionStartOdometerM = snap.odometerM
+                }
+                LdiCaptureFormatter.format(snap, sessionStartOdometerM)?.let(::clog)
+                // Feed the edge detector; on STARTED / ENDED publish
+                // to HA so dashboards and automations have bike-truth ride
+                // boundaries (independent of GPS drift on the office side).
+                val (nextState, edge) = RideEdgeDetector.next(rideEdgeState, snap)
+                rideEdgeState = nextState
+                if (edge != RideEdgeDetector.Edge.NONE) {
+                    val edgeName = if (edge == RideEdgeDetector.Edge.STARTED) "started" else "ended"
+                    val nowIso = java.time.Instant.now().toString()
+                    clog("# ldi ride_edge=$edgeName t=$nowIso")
+                    publishRideEdgeIfHa(edgeName, nowIso)
+                }
             },
             onBondedAddress = { addr -> prefs.ldiBondedAddress = addr },
         )
@@ -555,6 +585,23 @@ class BikeRadarService : Service() {
         if (publishBatteryToHa(name, pct)) {
             lastHaPublishMs[s] = now
             lastPublishedPct[s] = pct
+        }
+    }
+
+    /**
+     * Fire-and-forget HA publish for ride-edge events. Called from
+     * the BLE callback thread; launches into [scope] so the BLE thread is
+     * never blocked. Silently no-ops when HA isn't configured; the
+     * decider still keeps state, just nothing reaches the dashboard for
+     * radar-only riders who never set up HA.
+     */
+    private fun publishRideEdgeIfHa(edgeName: String, timestampIso: String) {
+        scope.launch {
+            ha = HaClient(creds.baseUrl, creds.token)
+            if (!ha.isConfigured()) return@launch
+            val ok = ha.publishRideEdge(edgeName, timestampIso)
+            if (ok) HaHealthBus.reportOk()
+            else { HaHealthBus.reportError("ride-edge publish failed"); Log.w(TAG, "HA ride-edge publish failed: $edgeName") }
         }
     }
 

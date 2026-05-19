@@ -362,6 +362,45 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, ev)
     }
 
+    // ── climbing override on the stationary-suppress gate ────────────
+
+    @Test fun `climbing forces the stationary gate off even when LDI says stopped`() {
+        // Rider grinding up Fitzjohns at a wheel-near-rest cadence:
+        // bikeNotDriving could read true on a brief pedal-stroke pause,
+        // but the climb override must keep alerts firing because the
+        // rider is exposed to overtaking traffic.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeNotDriving = true, climbing = true)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeNotDriving = true, climbing = true)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `climbing forces gate off with no-LDI low GPS speed`() {
+        // No-LDI rider on a hill: GPS clamps to ~0 m/s through canyon
+        // noise; without the climb override the stationary gate would fire after dwell.
+        // Climbing override keeps the alert path open.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, climbing = true)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, climbing = true)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `climbing default false leaves existing behaviour intact`() {
+        // Graceful degradation: when ClimbDetector hasn't accumulated
+        // dwell, climbing defaults to false and the stationary path
+        // works exactly as before the climb override landed.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
     // ── speed-aware inter-beep cooldown ─────────────────────────────
 
     @Test fun `effective cooldown defaults when no speed signal`() {

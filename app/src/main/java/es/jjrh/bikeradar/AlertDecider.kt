@@ -165,6 +165,7 @@ class AlertDecider(
         nowMs: Long,
         bikeSpeedMs: Float? = null,
         bikeNotDriving: Boolean? = null,
+        climbing: Boolean = false,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -179,7 +180,16 @@ class AlertDecider(
         // fallback only when LDI is absent (no eBike, flag off, or
         // pre-bond). Both null = no signal, treated as "not below" so
         // the dwell never triggers.
+        //
+        // Climb override: when the rider is grinding up a hill
+        // (rider_power sustained above threshold via ClimbDetector), the
+        // stationary gate is forced off regardless of speed. A 5 km/h
+        // climb up Fitzjohns Avenue is not a traffic-light stop; the
+        // rider is exposed to overtaking traffic and must still get
+        // alerts. The override is non-stateful here; the climb-state
+        // accumulator lives in the caller (BikeRadarService).
         val isBelowThreshold = when {
+            climbing -> false
             bikeNotDriving != null -> bikeNotDriving
             else -> bikeSpeedMs != null && bikeSpeedMs <= stationaryMsThreshold
         }

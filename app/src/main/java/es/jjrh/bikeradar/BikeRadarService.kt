@@ -151,6 +151,14 @@ class BikeRadarService : Service() {
     // edges can publish to HA. See RideEdgeDetector.
     @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
 
+    // Climb-detector state. Accumulates the duration of sustained
+    // high rider_power; when the dwell elapses, the AlertDecider's
+    // stationary-suppress gate is forced off so a slow climb on Fitzjohns
+    // or similar still gets alerts. Mutated only on the BLE callback
+    // thread inside onSnapshot. See ClimbDetector.
+    @Volatile private var climbState: ClimbDetector.State = ClimbDetector.State()
+    @Volatile private var climbing: Boolean = false
+
     // Throttle for the phone-battery capture-log line. Logged on level
     // changes and otherwise no more than once per PHONE_BATTERY_LOG_PERIOD_MS.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
@@ -358,6 +366,20 @@ class BikeRadarService : Service() {
                     val nowIso = java.time.Instant.now().toString()
                     clog("# ldi ride_edge=$edgeName t=$nowIso")
                     publishRideEdgeIfHa(edgeName, nowIso)
+                }
+                // Thread the climb state. Sustained high rider_power
+                // (default >= 250 W for >= 30 s) flips the climbing bit,
+                // which the AlertDecider stationary override consults to
+                // keep alerts firing on a slow climb.
+                val (nextClimb, isClimbing) = ClimbDetector.classify(
+                    prev = climbState,
+                    nowMs = System.currentTimeMillis(),
+                    riderPowerW = snap.riderPower,
+                )
+                climbState = nextClimb
+                if (isClimbing != climbing) {
+                    climbing = isClimbing
+                    clog("# ldi climbing=$isClimbing rider_power=${snap.riderPower}")
                 }
             },
             onBondedAddress = { addr -> prefs.ldiBondedAddress = addr },
@@ -1370,6 +1392,7 @@ class BikeRadarService : Service() {
                                 nowMs = now,
                                 bikeSpeedMs = preferredBikeSpeedMs,
                                 bikeNotDriving = ldiSnap?.bikeNotDriving,
+                                climbing = climbing,
                             )
                             if (ev !is AlertDecider.Event.None) {
                                 logAlertEvent(ev, state, now)

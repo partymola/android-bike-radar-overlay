@@ -1,5 +1,9 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -15,30 +19,48 @@ val localProps = Properties().apply {
 
 val debugKeystoreFile = rootProject.file("debug.keystore")
 
-tasks.register("ensureDebugKeystore") {
-    outputs.file(debugKeystoreFile)
-    doLast {
-        if (!debugKeystoreFile.exists()) {
-            // Use ProcessBuilder rather than Gradle's exec{}/commandLine{}
-            // because those Project-level APIs were removed in Gradle 9.
-            // ProcessBuilder is JDK-native and stable across versions.
-            val process = ProcessBuilder(
-                "keytool", "-genkeypair", "-v",
-                "-keystore", debugKeystoreFile.absolutePath,
-                "-storepass", "android",
-                "-keypass", "android",
-                "-alias", "androiddebugkey",
-                "-dname", "CN=Android Debug,O=Android,C=US",
-                "-keyalg", "RSA",
-                "-keysize", "2048",
-                "-validity", "10000",
-            ).inheritIO().start()
-            val code = process.waitFor()
-            if (code != 0) {
-                throw GradleException("keytool exited with status $code while generating debug.keystore")
-            }
+/**
+ * Generate a debug.keystore via `keytool` when one is not already
+ * present at the root. Implemented as a typed task class so the
+ * @TaskAction body does not close over the build script's Project
+ * reference, which is required for Gradle's configuration cache
+ * (otherwise the doLast closure on a generic DefaultTask would
+ * capture script-object references that the cache cannot serialise).
+ *
+ * Uses ProcessBuilder rather than Gradle's exec{} / commandLine{}
+ * because those Project-level APIs were removed in Gradle 9.
+ * ProcessBuilder is JDK-native and stable across versions.
+ */
+abstract class EnsureDebugKeystore : DefaultTask() {
+    @get:OutputFile
+    abstract val keystoreFile: RegularFileProperty
+
+    @TaskAction
+    fun run() {
+        val file = keystoreFile.get().asFile
+        if (file.exists()) return
+        val process = ProcessBuilder(
+            "keytool", "-genkeypair", "-v",
+            "-keystore", file.absolutePath,
+            "-storepass", "android",
+            "-keypass", "android",
+            "-alias", "androiddebugkey",
+            "-dname", "CN=Android Debug,O=Android,C=US",
+            "-keyalg", "RSA",
+            "-keysize", "2048",
+            "-validity", "10000",
+        ).inheritIO().start()
+        val code = process.waitFor()
+        if (code != 0) {
+            throw RuntimeException(
+                "keytool exited with status $code while generating debug.keystore"
+            )
         }
     }
+}
+
+tasks.register<EnsureDebugKeystore>("ensureDebugKeystore") {
+    keystoreFile.set(rootProject.layout.projectDirectory.file("debug.keystore"))
 }
 
 tasks.matching { it.name == "preBuild" }.configureEach {

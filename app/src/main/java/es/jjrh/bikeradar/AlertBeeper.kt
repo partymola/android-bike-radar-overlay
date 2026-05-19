@@ -4,10 +4,15 @@ package es.jjrh.bikeradar
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import kotlin.math.PI
 import kotlin.math.min
 import kotlin.math.sin
@@ -48,6 +53,7 @@ import kotlin.math.sin
 class AlertBeeper(
     private val audioManager: AudioManager,
     private val rotationProvider: () -> Int = { Surface.ROTATION_90 },
+    private val executor: Executor = Executors.newSingleThreadExecutor(),
 ) {
 
     private val sampleRate = 44100
@@ -59,6 +65,15 @@ class AlertBeeper(
     private val clearTrack = buildClearTrack()
     private val urgentTrack = buildUrgentTrack()
 
+    // Track-duration table for the abandon-timer. Computed at build time
+    // from the same sample counts the AudioTrack contents use, so the
+    // timer never under-shoots the actual playback.
+    private val beepDurationMs: IntArray = IntArray(3) { count ->
+        (count + 1) * toneDurMs + count * gapMs
+    }
+    private val clearDurationMs: Int = 110 + 60 + 110
+    private val urgentDurationMs: Int = 4 * 70 + 3 * 50
+
     private var volumePct = DEFAULT_VOLUME_PCT
     @Volatile private var panningEnabled: Boolean = false
     @Volatile private var invertLR: Boolean = false
@@ -69,6 +84,34 @@ class AlertBeeper(
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) { refreshRoute() }
     }
 
+    // Audio-focus state. One request object reused across plays; gain
+    // is GAIN_TRANSIENT_MAY_DUCK so media (podcasts / music) ducks for
+    // the cue and restores after. Walk-away alarm uses the stronger
+    // _EXCLUSIVE path elsewhere; close-pass beeps don't need to pre-
+    // empt other audio, just be reliably heard above it.
+    private val focusRequest: AudioFocusRequest =
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            // Empty listener: close-pass beeps are fire-and-forget. Loss
+            // events are not actionable - the cue is already buffered to
+            // the audio HAL by the time any LOSS callback would land.
+            .setOnAudioFocusChangeListener { }
+            .build()
+
+    @Volatile private var hasFocus: Boolean = false
+    private val abandonHandler = Handler(Looper.getMainLooper())
+    private val abandonRunnable = Runnable {
+        if (hasFocus) {
+            try { audioManager.abandonAudioFocusRequest(focusRequest) } catch (_: Throwable) {}
+            hasFocus = false
+        }
+    }
+
     init {
         applyVolume()
         audioManager.registerAudioDeviceCallback(deviceCallback, null)
@@ -77,19 +120,29 @@ class AlertBeeper(
 
     fun play(beeps: Int, lateralPos: Float = 0f) {
         val track = tracks.getOrNull(beeps - 1) ?: return
-        applyPan(track, lateralPos)
-        playOnce(track)
+        val durationMs = beepDurationMs.getOrNull(beeps - 1) ?: return
+        executor.execute {
+            if (suppressForCall()) return@execute
+            applyPan(track, lateralPos)
+            playWithFocus(track, durationMs)
+        }
     }
 
     fun playClear() {
-        // Clear is non-directional. Always mono.
-        clearTrack.setVolume(currentMonoGain())
-        playOnce(clearTrack)
+        executor.execute {
+            if (suppressForCall()) return@execute
+            // Clear is non-directional. Always mono.
+            clearTrack.setVolume(currentMonoGain())
+            playWithFocus(clearTrack, clearDurationMs)
+        }
     }
 
     fun playUrgent(lateralPos: Float = 0f) {
-        applyPan(urgentTrack, lateralPos)
-        playOnce(urgentTrack)
+        executor.execute {
+            if (suppressForCall()) return@execute
+            applyPan(urgentTrack, lateralPos)
+            playWithFocus(urgentTrack, urgentDurationMs)
+        }
     }
 
     fun setVolumePct(pct: Int) {
@@ -103,10 +156,42 @@ class AlertBeeper(
     }
 
     fun release() {
+        abandonHandler.removeCallbacks(abandonRunnable)
+        if (hasFocus) {
+            try { audioManager.abandonAudioFocusRequest(focusRequest) } catch (_: Throwable) {}
+            hasFocus = false
+        }
         audioManager.unregisterAudioDeviceCallback(deviceCallback)
         tracks.forEach { it.release() }
         clearTrack.release()
         urgentTrack.release()
+        if (executor is java.util.concurrent.ExecutorService) executor.shutdown()
+    }
+
+    /**
+     * MODE_IN_CALL guard. When a phone call holds audio focus
+     * EXCLUSIVE, USAGE_ALARM plays can be silenced at the speaker
+     * mid-call without indication. Skipping the audio path entirely
+     * preserves call audio integrity; the visual overlay and (future)
+     * wrist haptic still fire.
+     */
+    private fun suppressForCall(): Boolean =
+        audioManager.mode == AudioManager.MODE_IN_CALL
+
+    private fun playWithFocus(track: AudioTrack, durationMs: Int) {
+        if (!hasFocus) {
+            val granted = try {
+                audioManager.requestAudioFocus(focusRequest) ==
+                    AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } catch (_: Throwable) { false }
+            hasFocus = granted
+        }
+        playOnce(track)
+        // Re-arm the abandon timer. Back-to-back plays extend the
+        // window so media stays ducked across the burst rather than
+        // restoring + re-ducking between cues.
+        abandonHandler.removeCallbacks(abandonRunnable)
+        abandonHandler.postDelayed(abandonRunnable, (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong())
     }
 
     private fun playOnce(track: AudioTrack) {
@@ -320,6 +405,11 @@ class AlertBeeper(
 
     companion object {
         const val DEFAULT_VOLUME_PCT = 50
+
+        /** Tail after the last cue's playback before audio focus is
+         *  abandoned. Covers AudioTrack finish latency and gives media
+         *  apps a clean restore window. */
+        private const val ABANDON_SAFETY_MARGIN_MS = 50
 
         /** Output device types that physically map app's L channel to the
          *  rider's left ear regardless of phone rotation. Pan is only

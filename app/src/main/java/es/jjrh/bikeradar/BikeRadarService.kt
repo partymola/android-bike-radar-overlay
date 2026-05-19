@@ -230,6 +230,12 @@ class BikeRadarService : Service() {
     @Volatile private var overlayWm: WindowManager? = null
     @Volatile private var overlayViewRef: RadarOverlayView? = null
 
+    // Service-scoped AlertBeeper. Allocated in onCreate, released in
+    // onDestroy. Hoisted out of overlayJob so reconnects do not pay
+    // AudioTrack cold-start every time, and so audio focus + the
+    // MODE_IN_CALL guard survive across radar drops.
+    @Volatile private var alertBeeper: AlertBeeper? = null
+
     // Capture log (written from GATT callback threads + coroutine threads)
     private val captureLogLock = Any()
     @Volatile private var captureLogWriter: PrintWriter? = null
@@ -252,6 +258,20 @@ class BikeRadarService : Service() {
             buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
+
+        // Service-scope AlertBeeper. AudioTracks are warmed once here
+        // so the first beep after any radar reconnect lands without
+        // mixer / MinBuf cold-start latency.
+        alertBeeper = AlertBeeper(
+            audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
+            rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
+        ).also {
+            it.setVolumePct(prefs.alertVolume)
+            it.setPanning(
+                enabled = prefs.experimentalLateralPanning,
+                invertLR = prefs.experimentalLateralPanningInvertLR,
+            )
+        }
 
         pruneCaptureLogs()
         schedulePauseExpiry()
@@ -317,6 +337,8 @@ class BikeRadarService : Service() {
         closeCaptureLog()
         RadarStateBus.clear()
         stopWalkAwayAlarmTone()
+        alertBeeper?.release()
+        alertBeeper = null
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
@@ -1077,17 +1099,19 @@ class BikeRadarService : Service() {
                 var overlayAdded = false
                 val wm = getSystemService(WINDOW_SERVICE) as WindowManager
                 val view = RadarOverlayView(this@BikeRadarService)
-                val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-                val beeper = AlertBeeper(
-                    audioManager = audioManager,
-                    rotationProvider = { display?.rotation ?: android.view.Surface.ROTATION_90 },
-                ).also {
-                    it.setVolumePct(prefs.alertVolume)
-                    it.setPanning(
-                        enabled = prefs.experimentalLateralPanning,
-                        invertLR = prefs.experimentalLateralPanningInvertLR,
-                    )
+                val beeper = alertBeeper ?: run {
+                    // Should never happen: onCreate allocates the beeper
+                    // before any overlayJob can launch. Defensive guard
+                    // for an edge case where the service is stopped
+                    // mid-allocation.
+                    Log.w(TAG_RADAR, "alertBeeper null at overlayJob start; skipping")
+                    return@launch
                 }
+                beeper.setVolumePct(prefs.alertVolume)
+                beeper.setPanning(
+                    enabled = prefs.experimentalLateralPanning,
+                    invertLR = prefs.experimentalLateralPanningInvertLR,
+                )
                 val alerts = AlertDecider()
                 val closePassDetector = ClosePassDetector()
                 var closePassDiscoveryPublished = false

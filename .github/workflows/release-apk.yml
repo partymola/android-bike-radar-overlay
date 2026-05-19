@@ -101,9 +101,10 @@ jobs:
           body_path: release-notes.md
           # Appends "Full Changelog" compare link below body_path.
           generate_release_notes: true
-          # Any tag with a dash in it (e.g. v0.1.0-alpha, v1.0-rc1) is
-          # marked as prerelease; bare semver tags are full releases.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          # All releases default to pre-release until the app exits
+          # alpha. Flip to false (or back to dash-based detection) when
+          # there's a deliberate stable cut.
+          prerelease: true
 
       - name: Wipe keystore from runner
         if: always()

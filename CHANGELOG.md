@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.7.1-alpha - 2026-05-19
+
+### Fix
+
+- **Front-light auto-mode now uses the rider's actual location for sunrise / sunset.** The v0.6.0 release notes said the day-to-night transition was computed from the rider's location; the code actually had London's coordinates hardcoded (51.5074, -0.1278), so a rider in Madrid, Berlin, or anywhere east or west of London got the front light switching at the wrong time. This release reads `ACCESS_COARSE_LOCATION` once per ride session (triggered by the first BLE handshake of either the radar or the front camera, gated by a 60-minute staleness cache so quick stop-and-go reconnects do not pile up reads), feeds the lat / lon to the sunrise / sunset calculation, and uses the device's current time zone rather than Europe/London for the date arithmetic. City-block accuracy is sufficient for this calculation: a 10 km position error shifts the computed sunrise by about one minute, so `COARSE` rather than `FINE` is the appropriate permission grade. If the permission is denied the auto-mode falls back to London-hardcoded behaviour and a log line records the fallback - same outcome as the prior release, but now visible rather than silent.
+- **Close-pass beeps now request audio focus and survive phone calls.** The close-pass beeper previously made no audio-focus request, relying on Android's default media-ducking for `USAGE_ALARM`. On some Bluetooth routes the duck was missed, and during a phone call (which holds focus EXCLUSIVE) the beep could be silenced at the speaker with no in-app indication. This release explicitly requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` for each cue, holds focus across back-to-back beeps in the same burst (re-arming the abandon timer per cue), and abandons focus after the cue plus a 50 ms safety margin so media restores cleanly. The walk-away alarm path is unchanged - it already used the stronger EXCLUSIVE flavour and is appropriate for that case.
+- **First beep after a BLE reconnect lands instantly.** `AlertBeeper` was previously allocated inside the per-radar-connection overlay coroutine and was discarded on every disconnect, so the first beep after a reconnect paid AudioTrack mixer cold-start latency (a perceptible delay on the first cue, gone after warm-up). The beeper is now allocated once in the service `onCreate` and lives until `onDestroy`. Volume and panning prefs are re-read on each radar reconnect (unchanged cadence from prior releases), so the experimental Settings toggle takes effect on the next reconnect.
+- **Beep cues no longer fire during phone calls.** When `AudioManager.getMode()` is `MODE_IN_CALL`, all cue variants (Beep / Clear / UrgentApproach) skip the audio path entirely. The visual overlay still fires; the call audio stays clean. Non-negotiable behaviour, no Settings toggle.
+
+### Features
+
+- **Directional alert audio works on phone speakers in landscape.** v0.7.0 gated panning on headphone-class routes only and kept phone speakers centred, on the assumption that mm-scale speaker separation gave no usable lateralisation. That holds in portrait, but in landscape the earpiece (top of phone) and bottom-main are ~6-7 inches apart - plenty of stereo width for a directional cue. The app now reads display rotation and pans on the built-in speaker too: ROTATION_90 (USB-right) uses the same gain pair as headphones; ROTATION_270 (USB-left, flipped landscape) swaps the pair to compensate for the HAL's fixed audio-L-to-earpiece mapping. Portrait (ROTATION_0 / ROTATION_180) falls through to mono. Unknown routes also fall through to mono. Pinned by an exhaustive route-x-rotation-x-invert test matrix in `AlertBeeperPanTest`.
+
+### Internal
+
+- AudioTrack state changes and the `requestAudioFocus` call now run on a dedicated single-thread executor inside `AlertBeeper` rather than on the main coroutine dispatcher. Eliminates a small (5-30 ms) jitter window where overlay re-layout or Compose recomposition could delay an alert onset. Test executor injection added to the constructor so the eight new Robolectric tests run inline.
+- Release workflow now defaults every tag to pre-release until the app exits alpha; the prior dash-based detection (e.g. `v0.5.0-alpha` auto-flagged, `v0.7.0` not) is removed.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No prefs migration; the new `ACCESS_COARSE_LOCATION` permission stays denied on existing installs until the rider grants it via Android Settings → Apps → BikeRadar → Permissions. The hoisted `AlertBeeper` changes the lifecycle of an internal object, no externally visible API surface.
+
 ## v0.7.0 - 2026-05-18
 
 ### Features

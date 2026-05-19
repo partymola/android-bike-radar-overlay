@@ -164,14 +164,25 @@ class AlertDecider(
         alertMaxM: Int,
         nowMs: Long,
         bikeSpeedMs: Float? = null,
+        bikeNotDriving: Boolean? = null,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
         // events get mapped to None (Clear still fires). On the very first
         // call we initialise lastNotStationaryAtMs to nowMs so the dwell is
         // measured from now, not from 1970.
-        val isBelowThreshold =
-            bikeSpeedMs != null && bikeSpeedMs <= stationaryMsThreshold
+        //
+        // Stationary signal precedence: when the LDI snapshot reports
+        // `bike_not_driving` (Bosch eBike wheel-speed ground truth), it
+        // wins outright; the wheel sensor is far more reliable than GPS
+        // in urban canyons (Holborn / Bank). GPS-derived `bikeSpeedMs`
+        // fallback only when LDI is absent (no eBike, flag off, or
+        // pre-bond). Both null = no signal, treated as "not below" so
+        // the dwell never triggers.
+        val isBelowThreshold = when {
+            bikeNotDriving != null -> bikeNotDriving
+            else -> bikeSpeedMs != null && bikeSpeedMs <= stationaryMsThreshold
+        }
         if (lastNotStationaryAtMs == NOT_INITIALIZED || !isBelowThreshold) {
             lastNotStationaryAtMs = nowMs
         }

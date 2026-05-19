@@ -311,6 +311,57 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
+    // ── LDI bike_not_driving ground truth wins over GPS speed ────────
+
+    @Test fun `LDI bikeNotDriving true wins over GPS that thinks moving`() {
+        // Urban-canyon scenario (Holborn / Bank): wheel sensor says
+        // stopped, GPS bounces around showing 6 m/s. The decider must
+        // trust the wheel sensor and suppress after dwell, even though
+        // bikeSpeedMs is well above the threshold.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f, bikeNotDriving = true)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f, bikeNotDriving = true)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `LDI bikeNotDriving false wins over GPS that thinks stopped`() {
+        // Inverse canyon scenario: GPS clamps to 0 m/s while the rider
+        // is actually rolling at 4 m/s (sensor says wheel is turning).
+        // The decider must beep normally; LDI ground truth means the
+        // rider is not actually stationary, regardless of GPS.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, bikeNotDriving = false)
+        c.jump(3000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, bikeNotDriving = false)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `LDI absent (null) falls back to bikeSpeedMs gate - moving`() {
+        // No-LDI rider (no Bosch eBike, or experimental flag off). The
+        // decider must work exactly as before: GPS-derived speed gates
+        // the stationary suppress. This is the graceful-degradation path
+        // that mandatory per the feedback memory.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f, bikeNotDriving = null)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 6f, bikeNotDriving = null)
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `LDI absent (null) falls back to bikeSpeedMs gate - stationary`() {
+        // No-LDI rider stopping at a light. GPS reads 0, LDI is null,
+        // stationary suppress engages after dwell exactly as before.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, bikeNotDriving = null)
+        c.jump(2000)
+        val ev = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 0f, bikeNotDriving = null)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
     @Test fun `gate releases on stationary-to-moving transition`() {
         // After dwell+suppress, rolling off restores beeps without a
         // delayed cooldown gap (the suppressed beep must not have

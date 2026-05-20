@@ -358,6 +358,31 @@ class HaClient(private val baseUrl: String, private val token: String) {
      * dashboard once the rider has put the bike away.
      */
     suspend fun publishRideSummaryDiscovery(slug: String, deviceName: String): Boolean {
+        var allOk = true
+        for ((topic, payload) in buildRideSummaryDiscoveryPayloads(slug, deviceName)) {
+            if (!publishMqtt(topic, payload.toString(), retain = true)) allOk = false
+        }
+        return allOk
+    }
+
+    /**
+     * Discovery payloads for the ten per-ride summary sensors, paired with
+     * their config topics. Extracted from [publishRideSummaryDiscovery] so
+     * unit tests can assert on the JSON shape - notably the value_template's
+     * no-value sentinel - without needing a live MQTT broker.
+     *
+     * Nullable numeric fields (peak/p90 closing speed, tightest clearance)
+     * are omitted from the state JSON when they have no data yet, so the
+     * value_template's `default('None')` renders the literal string "None".
+     * That is the one sentinel HA's MQTT sensor maps to the Unknown state
+     * (PAYLOAD_NONE); `default('unknown')` would instead make HA try to
+     * parse "unknown" as a float for these numeric sensors and reject the
+     * payload with a "could not parse as a number" error.
+     */
+    internal fun buildRideSummaryDiscoveryPayloads(
+        slug: String,
+        deviceName: String,
+    ): List<Pair<String, JSONObject>> {
         val clean = cleanDeviceName(deviceName)
         val stateTopic = "varia/$slug/ride_summary"
         val device = JSONObject()
@@ -378,8 +403,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
             RideSummarySensor("exposure_seconds",         "Time with traffic",             "total_increasing", "duration", "s",     null),
             RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate",  "measurement",      null,       "%",     1),
         )
-        var allOk = true
-        for (s in sensors) {
+        return sensors.map { s ->
             val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_${s.field}/config"
             val payload = JSONObject()
                 .put("object_id", "varia_${slug}_${s.field}")
@@ -387,7 +411,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
                 .put("name", s.displayName)
                 .put("has_entity_name", true)
                 .put("state_topic", stateTopic)
-                .put("value_template", "{{ value_json.${s.field} | default('unknown') }}")
+                .put("value_template", "{{ value_json.${s.field} | default('None') }}")
                 .put("json_attributes_topic", stateTopic)
                 .put("state_class", s.stateClass)
                 .put("expire_after", RIDE_SUMMARY_EXPIRE_AFTER_S)
@@ -395,9 +419,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
             if (s.deviceClass != null) payload.put("device_class", s.deviceClass)
             if (s.unit != null) payload.put("unit_of_measurement", s.unit)
             if (s.precision != null) payload.put("suggested_display_precision", s.precision)
-            if (!publishMqtt(topic, payload.toString(), retain = true)) allOk = false
+            topic to payload
         }
-        return allOk
     }
 
     /**
@@ -408,8 +431,9 @@ class HaClient(private val baseUrl: String, private val token: String) {
      */
     suspend fun publishRideSummaryState(slug: String, snapshot: RideStatsSnapshot): Boolean {
         // Nullable fields are omitted from the JSON when they have no data
-        // yet. The discovery template's `default('unknown')` then renders
-        // the entity as Unknown in HA rather than a misleading 0.
+        // yet. The discovery template's `default('None')` then renders the
+        // entity as Unknown in HA rather than a misleading 0. ("None" is
+        // HA's PAYLOAD_NONE sentinel; "unknown" would fail numeric parsing.)
         val payload = JSONObject()
             .put("overtakes_total", snapshot.overtakesTotal)
             .put("close_pass_count", snapshot.closePassCount)

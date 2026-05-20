@@ -21,9 +21,16 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -111,6 +118,28 @@ class EBikeLink(
     /** Live LDI snapshot; null fields = "not yet observed". */
     val snapshot: StateFlow<LiveDataSnapshot> = _snapshot
 
+    private val _outcome = MutableStateFlow<LdiOutcome>(LdiOutcome.Idle)
+
+    /**
+     * Live state-machine outcome. Onboarding UIs and Settings -> eBike
+     * collect this to render the right card / copy / CTA for the user.
+     *
+     * Transitions (happy path):
+     *   Idle -> Advertising -> Connecting -> Paired
+     *
+     * Failure transitions:
+     *   start() denied (SecurityException)        -> PermissionsDenied
+     *   adapter off / advertiser unavailable      -> AdapterUnavailable
+     *   GATT services discovered, no LDI service  -> NoServiceFound
+     *   GATT disconnect with auth status 137 / 5  -> SlotConflict
+     *   90s in Advertising, no inbound LL         -> TimeoutNoInbound
+     *   90s in Connecting, no Paired              -> TimeoutPairingNotConfirmed
+     *
+     * Recovery: callers should invoke [stop] then [start] to reset to
+     * Advertising. Same-state-cycle calls are no-ops.
+     */
+    val outcome: StateFlow<LdiOutcome> = _outcome
+
     /** True between [start] and [stop] when the advertiser is up. */
     @Volatile
     private var started: Boolean = false
@@ -119,6 +148,32 @@ class EBikeLink(
      *  session. Reset on [stop]. */
     @Volatile
     private var bondedAddressReported: Boolean = false
+
+    /** Most recently observed inbound BLE address, captured at the
+     *  STATE_CONNECTED edge on [serverCallback]. Passed into
+     *  [LdiOutcome.Paired] when the first valid snapshot arrives so the
+     *  UI can render "Paired with bike at <address>" without re-reading
+     *  Prefs. Cleared on [stop]. */
+    @Volatile
+    private var lastInboundAddress: String? = null
+
+    /** Internal scope for the 90s connect-timeout coroutine. */
+    private val timerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Live handle to the 90s timeout job. Cancelled on stop / Paired. */
+    @Volatile
+    private var connectTimeoutJob: Job? = null
+
+    /**
+     * Update the outcome flow and log the transition. Single-source-of-
+     * truth helper so every emission also produces a logcat line.
+     */
+    private fun setOutcome(next: LdiOutcome) {
+        val prev = _outcome.value
+        if (prev == next) return
+        _outcome.value = next
+        Log.i(TAG, "outcome: $prev -> $next")
+    }
 
     /**
      * Begin advertising for the eBike to connect. Idempotent: a second
@@ -135,16 +190,19 @@ class EBikeLink(
         val adapter = btAdapter
         if (adapter == null || !adapter.isEnabled) {
             Log.w(TAG, "BLE adapter unavailable or disabled; cannot start")
+            setOutcome(LdiOutcome.AdapterUnavailable)
             return false
         }
         val server = try {
             btManager?.openGattServer(context, serverCallback)
         } catch (e: SecurityException) {
             Log.w(TAG, "openGattServer denied: ${e.message}")
+            setOutcome(LdiOutcome.PermissionsDenied)
             return false
         }
         if (server == null) {
             Log.w(TAG, "openGattServer returned null")
+            setOutcome(LdiOutcome.AdapterUnavailable)
             return false
         }
         gattServer = server
@@ -154,6 +212,7 @@ class EBikeLink(
             Log.w(TAG, "bluetoothLeAdvertiser unavailable")
             server.close()
             gattServer = null
+            setOutcome(LdiOutcome.AdapterUnavailable)
             return false
         }
         advertiser = adv
@@ -185,6 +244,8 @@ class EBikeLink(
         return try {
             adv.startAdvertising(settings, data, cb)
             started = true
+            setOutcome(LdiOutcome.Advertising)
+            armConnectTimeout()
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "startAdvertising denied: ${e.message}")
@@ -192,7 +253,32 @@ class EBikeLink(
             gattServer = null
             advertiser = null
             advertiseCallback = null
+            setOutcome(LdiOutcome.PermissionsDenied)
             false
+        }
+    }
+
+    /**
+     * Arm the 90s connect-timeout. The timer fires once after the start;
+     * if the outcome at that point is still Advertising or Connecting the
+     * timer publishes the appropriate Timeout. Paired / NoServiceFound /
+     * SlotConflict cancel the timer implicitly (they replace the
+     * outcome and the timer checks the outcome at fire time).
+     *
+     * Sized for the observed pair flow: roughly 10 s to reach Connect
+     * device in Flow, 20 s for the bike to surface its confirm prompt,
+     * 30 s for the rider to press Confirm, 10 s for SMP / MTU /
+     * discovery / initial READ. 90 s leaves a margin.
+     */
+    private fun armConnectTimeout() {
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = timerScope.launch {
+            delay(CONNECT_TIMEOUT_MS)
+            when (_outcome.value) {
+                LdiOutcome.Advertising -> setOutcome(LdiOutcome.NoInbound)
+                LdiOutcome.Connecting -> setOutcome(LdiOutcome.PairPromptDeclined)
+                else -> Unit
+            }
         }
     }
 
@@ -204,9 +290,18 @@ class EBikeLink(
         Manifest.permission.BLUETOOTH_ADVERTISE,
     ])
     fun stop() {
-        if (!started && gattServer == null && clientGatt == null) return
+        if (!started && gattServer == null && clientGatt == null) {
+            // Already torn down, but a prior start() may have left a
+            // terminal failure outcome (AdapterUnavailable etc). Reset
+            // to Idle so the UI's collector clears the failure card.
+            setOutcome(LdiOutcome.Idle)
+            return
+        }
         started = false
         bondedAddressReported = false
+        lastInboundAddress = null
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = null
         try { advertiseCallback?.let { advertiser?.stopAdvertising(it) } } catch (_: Exception) {}
         advertiseCallback = null
         advertiser = null
@@ -216,6 +311,17 @@ class EBikeLink(
         try { gattServer?.close() } catch (_: Exception) {}
         gattServer = null
         _snapshot.value = LiveDataSnapshot()
+        setOutcome(LdiOutcome.Idle)
+    }
+
+    /**
+     * Tear down all internal scope. Called when the owning service is
+     * destroyed permanently. After this the link cannot be restarted;
+     * the owner must construct a new EBikeLink.
+     */
+    fun shutdown() {
+        stop()
+        timerScope.cancel()
     }
 
     /**
@@ -285,6 +391,8 @@ class EBikeLink(
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "inbound LL connection from ${device.address}, opening GATT client")
+                    lastInboundAddress = device.address
+                    setOutcome(LdiOutcome.Connecting)
                     if (!bondedAddressReported) {
                         bondedAddressReported = true
                         try {
@@ -300,16 +408,34 @@ class EBikeLink(
                         )
                     } catch (e: SecurityException) {
                         Log.w(TAG, "connectGatt denied: ${e.message}")
+                        setOutcome(LdiOutcome.PermissionsDenied)
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.i(TAG, "inbound LL disconnected from ${device.address}")
+                    Log.i(TAG, "inbound LL disconnected from ${device.address}, status=$status")
                     try { clientGatt?.close() } catch (_: Exception) {}
                     clientGatt = null
                     // Don't clear _snapshot - downstream disarm gate
                     // reads system_locked across radar reconnects; the
                     // last-known value remains usable until [stop] zeros
                     // it on shutdown.
+                    //
+                    // Disconnect status surfaces slot-conflict explicitly.
+                    // GATT_INSUFFICIENT_AUTHENTICATION = 137 is the
+                    // canonical reading; some vendors return 5. If we
+                    // already reached Paired, ignore the disconnect (the
+                    // bike may simply be powering down or out of range).
+                    if (_outcome.value !is LdiOutcome.Paired) {
+                        if (status == STATUS_INSUFFICIENT_AUTH ||
+                            status == STATUS_GATT_ERROR_VENDOR_AUTH) {
+                            setOutcome(LdiOutcome.SlotConflict)
+                        } else if (_outcome.value == LdiOutcome.Connecting) {
+                            // Plain disconnect mid-pair without auth status:
+                            // bike vanished. Drop back to Advertising so the
+                            // 90s timer can attribute correctly.
+                            setOutcome(LdiOutcome.Advertising)
+                        }
+                    }
                 }
             }
         }
@@ -333,10 +459,12 @@ class EBikeLink(
             val svc = gatt.getService(SVC_LDI)
             if (svc == null) {
                 Log.w(TAG, "LDI service not advertised - firmware probably <v19")
+                setOutcome(LdiOutcome.NoServiceFound)
                 return
             }
             val ch = svc.getCharacteristic(CHAR_LIVE_DATA) ?: run {
                 Log.w(TAG, "LDI characteristic not found")
+                setOutcome(LdiOutcome.NoServiceFound)
                 return
             }
             gatt.setCharacteristicNotification(ch, true)
@@ -368,14 +496,88 @@ class EBikeLink(
 
         private fun mergeAndPublish(value: ByteArray) {
             _snapshot.update { LiveDataDecoder.mergeInto(it, value) }
+            val merged = _snapshot.value
+            // First snapshot with a non-zero, non-null `time` field
+            // confirms a working bond and a bike with a sensible RTC.
+            // Transition to Paired once on the rising edge, then leave
+            // it - subsequent snapshots are just data refreshes.
+            if (_outcome.value !is LdiOutcome.Paired) {
+                val timeSec = merged.timeSec
+                if (timeSec != null && timeSec > 0L) {
+                    setOutcome(LdiOutcome.Paired(lastInboundAddress ?: ""))
+                    connectTimeoutJob?.cancel()
+                    connectTimeoutJob = null
+                }
+            }
             try {
-                onSnapshot(_snapshot.value)
+                onSnapshot(merged)
             } catch (e: Exception) {
                 Log.w(TAG, "onSnapshot callback threw: ${e.message}")
             }
         }
     }
 }
+
+/**
+ * State-machine outcome surfaced by [EBikeLink.outcome]. UIs collect
+ * this flow to render the right card / copy / CTA. See
+ * [EBikeLink.outcome] for the transition table.
+ */
+sealed class LdiOutcome {
+    /** Subsystem not started. Either the experimental flag is off or
+     *  [EBikeLink.stop] has been called. */
+    object Idle : LdiOutcome()
+    /** Advertising with service-solicitation; no eBike has connected
+     *  yet this session. */
+    object Advertising : LdiOutcome()
+    /** Inbound LL connection from the bike, opening the GATT client.
+     *  Service discovery and SMP have not yet completed. */
+    object Connecting : LdiOutcome()
+    /** First non-zero `time` snapshot received. The bond is fully up
+     *  and data is flowing.
+     *
+     *  @param shortAddress the bike's BLE address as observed at the
+     *    inbound LL connection. UIs may truncate for display; empty
+     *    string when the address was unobservable (defensive default;
+     *    in practice the inbound callback populates it before Paired
+     *    is emitted). */
+    data class Paired(val shortAddress: String) : LdiOutcome()
+    /** Service discovery completed without LDI service present. Most
+     *  likely the bike's firmware is older than v19.54. */
+    object NoServiceFound : LdiOutcome()
+    /** GATT disconnected with [STATUS_INSUFFICIENT_AUTH] (137) or
+     *  [STATUS_GATT_ERROR_VENDOR_AUTH] (5), i.e. another accessory is
+     *  holding the bike's single LDI slot. */
+    object SlotConflict : LdiOutcome()
+    /** Runtime permission (BLUETOOTH_CONNECT or BLUETOOTH_ADVERTISE)
+     *  was denied at the SecurityException level. */
+    object PermissionsDenied : LdiOutcome()
+    /** BLE adapter is off or the advertiser is null. */
+    object AdapterUnavailable : LdiOutcome()
+    /** 90s elapsed in Advertising without any inbound connection. The
+     *  bike never reached the phone; most likely powered off or out of
+     *  range. Distinct from [NoServiceFound] (firmware too old) and
+     *  [PairPromptDeclined] (rider rejected on the controller). */
+    object NoInbound : LdiOutcome()
+    /** 90s elapsed in Connecting without reaching Paired. The bike
+     *  connected and discovered the service but the SMP pairing never
+     *  completed; most likely the rider declined the confirm prompt
+     *  on the bike's controller, or the controller never surfaced it. */
+    object PairPromptDeclined : LdiOutcome()
+}
+
+/** GATT_INSUFFICIENT_AUTHENTICATION; bike rejected the bond. */
+internal const val STATUS_INSUFFICIENT_AUTH: Int = 137
+
+/** Vendor-quirk synonym for auth failure observed on some Bosch
+ *  firmware revisions. Kept distinct in case future telemetry shows
+ *  it's wrong and we need to drop it without touching the canonical
+ *  [STATUS_INSUFFICIENT_AUTH] handling. */
+internal const val STATUS_GATT_ERROR_VENDOR_AUTH: Int = 5
+
+/** 90 seconds: pair-flow budget covering Flow navigation, controller
+ *  confirm prompt, rider tap, and SMP / MTU / discovery / initial READ. */
+internal const val CONNECT_TIMEOUT_MS: Long = 90_000L
 
 /**
  * Running snapshot of LDI fields. Nullable means "not yet observed"; the

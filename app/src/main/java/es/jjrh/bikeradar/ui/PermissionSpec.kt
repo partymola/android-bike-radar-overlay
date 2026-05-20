@@ -10,8 +10,10 @@ import androidx.core.content.ContextCompat
 
 // `permissions` is the list of runtime perms to request. Empty means the
 // special overlay permission, routed via Settings intent. BLUETOOTH_SCAN +
-// BLUETOOTH_CONNECT are grouped into one "Nearby devices" card because
-// Android 12+ treats them as one permission group with a single system prompt.
+// BLUETOOTH_CONNECT + BLUETOOTH_ADVERTISE are grouped into one "Nearby devices"
+// card because Android 12+ treats them as one NEARBY_DEVICES permission group
+// with a single system prompt. ADVERTISE is needed for the LDI peripheral
+// role; without it the BluetoothLeAdvertiser silently fails on Android 12+.
 internal data class PermissionSpec(
     val permissions: List<String>,
     val title: String,
@@ -23,9 +25,14 @@ internal data class PermissionSpec(
 
 internal val PERMISSIONS = buildList {
     add(PermissionSpec(
-        listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),
+        listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        ),
         "Nearby devices",
-        "Scan for and connect to your radar and dashcam over Bluetooth.",
+        "Scan for and connect to your radar and dashcam over Bluetooth. " +
+            "Advertise to your eBike if you have one.",
         required = true,
     ))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

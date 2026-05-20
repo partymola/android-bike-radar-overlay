@@ -461,10 +461,11 @@ class BikeRadarService : Service() {
         stopWalkAwayAlarmTone()
         alertBeeper?.release()
         alertBeeper = null
-        // Lifecycle teardown: stop advertising and close the GATT
-        // server. No-op when ldi flag was off or start() failed.
-        @SuppressLint("MissingPermission")
-        if (hasBlePermissions()) ebikeLink?.stop()
+        // Lifecycle teardown: stop advertising, close the GATT
+        // server, and tear down the internal timer scope. EBikeLink's
+        // BLE calls are individually wrapped in try/catch so permission
+        // revocation between start and shutdown does not crash here.
+        ebikeLink?.shutdown()
         ebikeLink = null
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear

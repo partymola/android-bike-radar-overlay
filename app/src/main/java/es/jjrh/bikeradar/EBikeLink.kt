@@ -49,7 +49,9 @@ import java.util.UUID
  *
  *   1. [start] registers a minimal [BluetoothGattServer] (no hosted
  *      services - we need the callback only, not a service) and starts
- *      [BluetoothLeAdvertiser] with service-solicitation carrying [SVC_LDI].
+ *      [BluetoothLeAdvertiser] with service-solicitation carrying [SVC_LDI],
+ *      plus a scan response carrying the phone's Bluetooth name so the
+ *      bike's "Add accessory" list shows an identifiable entry.
  *   2. The eBike sees the solicitation, connects as central. Android
  *      fires [BluetoothGattServerCallback.onConnectionStateChange] on
  *      the empty server.
@@ -81,9 +83,11 @@ import java.util.UUID
  * @param onSnapshot Invoked on the BLE callback thread for every NOTIFY
  *   merge AND for the initial READ snapshot. Callers must marshal to the
  *   main thread if they touch UI.
- * @param onBondedAddress Invoked once per [start] session on the first
- *   inbound LL connection, with the bike's BLE address. Caller persists
- *   it (e.g. into Prefs) for the later [releaseBond] reverse-lookup.
+ * @param onBondedAddress Invoked once per [start] session when the bond is
+ *   confirmed by real LDI data (the [LdiOutcome.Paired] transition), with
+ *   the bike's BLE address. NOT fired on a bare inbound connection, so a
+ *   passing BLE central is never recorded as the bike. Caller persists the
+ *   address (e.g. into Prefs) for the later [releaseBond] reverse-lookup.
  *   Invoked on the BLE callback thread.
  */
 class EBikeLink(
@@ -231,6 +235,17 @@ class EBikeLink(
             .setIncludeTxPowerLevel(true)
             .build()
 
+        // Scan response carries the device name so the bike's accessory
+        // scan lists an identifiable entry instead of an unnamed address.
+        // Android has no API to advertise a custom local name - AdvertiseData
+        // only exposes setIncludeDeviceName, which uses the adapter's own
+        // name - so the bike shows the phone's Bluetooth name. Kept in the
+        // scan response, not the main advert, so the 128-bit solicitation
+        // UUID + tx power don't overflow the 31-byte legacy advertisement.
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .build()
+
         val cb = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 Log.i(TAG, "advertising started")
@@ -242,7 +257,7 @@ class EBikeLink(
         advertiseCallback = cb
 
         return try {
-            adv.startAdvertising(settings, data, cb)
+            adv.startAdvertising(settings, data, scanResponse, cb)
             started = true
             setOutcome(LdiOutcome.Advertising)
             armConnectTimeout()
@@ -327,8 +342,9 @@ class EBikeLink(
     /**
      * Forget the eBike on this device. Stops the subsystem,
      * deletes the local bond via reflection-based removeBond(), and zeroes
-     * the snapshot. The bike's own LDI slot is cleared by the rider
-     * through Flow -> System -> Accessories -> Remove.
+     * the snapshot. The bike's own LDI slot is cleared by the rider in
+     * Flow: open the bike -> gear icon -> Components, then remove the
+     * accessory.
      *
      * WARNING: removeBond() is a hidden-API call on Android's deny-list;
      * subject to break in a future Android release. On any reflection
@@ -391,14 +407,12 @@ class EBikeLink(
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "inbound LL connection from ${device.address}, opening GATT client")
+                    // Capture the address but do NOT persist it as the bonded
+                    // bike yet - any passing BLE central can connect to our
+                    // solicitation advert. We only record the bond once real
+                    // LDI data confirms it's the eBike (see [mergeAndPublish]).
                     lastInboundAddress = device.address
                     setOutcome(LdiOutcome.Connecting)
-                    if (!bondedAddressReported) {
-                        bondedAddressReported = true
-                        try {
-                            onBondedAddress(device.address)
-                        } catch (_: Exception) {}
-                    }
                     try {
                         clientGatt = device.connectGatt(
                             context,
@@ -456,15 +470,30 @@ class EBikeLink(
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            val svc = gatt.getService(SVC_LDI)
-            if (svc == null) {
-                Log.w(TAG, "LDI service not advertised - firmware probably <v19")
-                setOutcome(LdiOutcome.NoServiceFound)
-                return
+            val ch = if (status == BluetoothGatt.GATT_SUCCESS) {
+                gatt.getService(SVC_LDI)?.getCharacteristic(CHAR_LIVE_DATA)
+            } else {
+                null
             }
-            val ch = svc.getCharacteristic(CHAR_LIVE_DATA) ?: run {
-                Log.w(TAG, "LDI characteristic not found")
-                setOutcome(LdiOutcome.NoServiceFound)
+            if (ch == null) {
+                // No usable LDI characteristic on this connection. Only the
+                // paired eBike is bonded; stray BLE centrals routinely connect
+                // to our solicitation advert and complete discovery with a real
+                // (non-LDI) GATT server. So conclude "firmware too old" ONLY for
+                // a bonded device that genuinely lacks LDI - otherwise it's not
+                // the bike (or a failed discovery): close it and keep advertising.
+                val bonded = try {
+                    gatt.device.bondState == BluetoothDevice.BOND_BONDED
+                } catch (_: Exception) { false }
+                if (status == BluetoothGatt.GATT_SUCCESS && bonded) {
+                    Log.w(TAG, "bonded bike lacks LDI service - firmware probably <v19")
+                    setOutcome(LdiOutcome.NoServiceFound)
+                } else {
+                    Log.w(TAG, "no LDI on ${gatt.device.address} (status=$status, bonded=$bonded); not the bike, still advertising")
+                    try { gatt.close() } catch (_: Exception) {}
+                    if (clientGatt === gatt) clientGatt = null
+                    if (_outcome.value !is LdiOutcome.Paired) setOutcome(LdiOutcome.Advertising)
+                }
                 return
             }
             gatt.setCharacteristicNotification(ch, true)
@@ -504,7 +533,14 @@ class EBikeLink(
             if (_outcome.value !is LdiOutcome.Paired) {
                 val timeSec = merged.timeSec
                 if (timeSec != null && timeSec > 0L) {
-                    setOutcome(LdiOutcome.Paired(lastInboundAddress ?: ""))
+                    val addr = lastInboundAddress ?: ""
+                    setOutcome(LdiOutcome.Paired(addr))
+                    // Persist the bonded bike address only now - real LDI data
+                    // proves this connection is the eBike, not a stray central.
+                    if (!bondedAddressReported && addr.isNotEmpty()) {
+                        bondedAddressReported = true
+                        try { onBondedAddress(addr) } catch (_: Exception) {}
+                    }
                     connectTimeoutJob?.cancel()
                     connectTimeoutJob = null
                 }

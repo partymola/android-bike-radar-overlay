@@ -1308,11 +1308,15 @@ private fun EBikePairingWalkthrough(
         )
         WalkthroughLine(
             number = "2.",
-            body = "My eBike -> System -> Connect device -> Live Data Interface.",
+            body = "Open your bike, then the gear icon -> Components -> Add new device -> Accessories.",
         )
         WalkthroughLine(
             number = "3.",
-            body = "Confirm on the bike's display when prompted.",
+            body = "When the bike scans, pick this phone from the list (it shows as the phone's Bluetooth name, not \"Bike Radar\").",
+        )
+        WalkthroughLine(
+            number = "4.",
+            body = "Confirm pairing on the bike's display when prompted.",
         )
     }
 
@@ -1431,7 +1435,7 @@ private fun EBikeOutcomeEdgeCard(
                 EBikeCta("Open Flow", onOpenFlow, primary = true),
                 EBikeCta("Try again", onTryAgain, primary = false),
             )
-        LdiOutcome.SlotConflict -> "Another accessory - possibly your previous phone running this app, a sports computer, or a sports watch - is paired with your bike's Live Data slot. The bike supports only one at a time. Release the other in Flow -> My eBike -> System -> Connected devices, then try again." to
+        LdiOutcome.SlotConflict -> "Another accessory - possibly your previous phone running this app, a sports computer, or a sports watch - is paired with your bike's Live Data slot. The bike supports only one at a time. Release the other in Flow: open your bike -> gear icon -> Components, then remove the other accessory and try again." to
             listOf(
                 EBikeCta("Open Flow", onOpenFlow, primary = true),
                 EBikeCta("Try again", onTryAgain, primary = false),

@@ -48,6 +48,14 @@
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
 
+    <!-- Android 11+ package visibility: without this, getLaunchIntentForPackage
+         for Bosch Flow returns null even when it is installed, so the
+         "Open Flow to pair" action falls back to the Play Store instead of
+         opening the app. -->
+    <queries>
+        <package android:name="com.bosch.ebike.onebikeapp" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

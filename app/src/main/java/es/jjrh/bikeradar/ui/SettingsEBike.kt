@@ -184,7 +184,7 @@ internal fun SettingsEBikeContent(
                                 leadingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                                 leadingTint = br.brand,
                                 title = "Open Flow to pair",
-                                subtitle = "My eBike -> System -> Connect device -> Live Data Interface.",
+                                subtitle = "Flow: your bike -> gear icon -> Components -> Add new device -> Accessories.",
                                 actionLabel = "Open",
                                 onAction = onOpenFlow,
                             )

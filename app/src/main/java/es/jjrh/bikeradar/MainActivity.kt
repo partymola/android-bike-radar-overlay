@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -22,6 +23,7 @@ import es.jjrh.bikeradar.ui.OnboardingScreen
 import es.jjrh.bikeradar.ui.SettingsAbout
 import es.jjrh.bikeradar.ui.SettingsCameraLight
 import es.jjrh.bikeradar.ui.SettingsDashcam
+import es.jjrh.bikeradar.ui.SettingsEBike
 import es.jjrh.bikeradar.ui.SettingsExperimental
 import es.jjrh.bikeradar.ui.SettingsHa
 import es.jjrh.bikeradar.ui.SettingsLicenses
@@ -54,6 +56,21 @@ class MainActivity : ComponentActivity() {
             UiTheme {
                 val navController = rememberNavController()
                 val startDest = if (prefs.firstRunComplete) "main" else "onboarding"
+
+                // Resume an interrupted LDI pair flow. If the rider was
+                // mid-pair when they left to update firmware (or any
+                // other reason), deep-link straight to Settings -> eBike
+                // on next launch so they're back where they were. The
+                // pre-onboarding case (resumePoint set but onboarding
+                // not yet complete) is handled by OnboardingScreen
+                // landing on the eBike step naturally when prior steps
+                // are skipped.
+                LaunchedEffect(Unit) {
+                    if (prefs.firstRunComplete && prefs.ldiOnboardingResumePoint) {
+                        navController.navigate("settings/ebike")
+                    }
+                }
+
                 NavHost(navController = navController, startDestination = startDest) {
                     composable("onboarding") {
                         val onFinished: () -> Unit = {
@@ -91,6 +108,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/dashcam") {
                         SettingsDashcam(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/ebike") {
+                        SettingsEBike(navController = navController, prefs = prefs)
                     }
                     composable("settings/ha") {
                         SettingsHa(navController = navController, prefs = prefs)

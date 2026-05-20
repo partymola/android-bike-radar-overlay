@@ -383,6 +383,95 @@ fun BrOutlinedButton(
     }
 }
 
+/**
+ * Outlined-button row for low-frequency settings actions that aren't
+ * toggles (open another app, release a bond). Matches the visual register
+ * of [SettingsToggleRow] - leading icon in a tinted square, title +
+ * optional subtitle on the left - but the trailing affordance is an
+ * outlined button instead of a toggle. Useful for one-shot actions that
+ * the rider invokes rarely and never need to "undo" by tapping again.
+ */
+@Composable
+fun SettingsActionRow(
+    leadingIcon: ImageVector,
+    leadingTint: Color,
+    title: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    subtitle: String? = null,
+    isLast: Boolean = true,
+) {
+    val br = LocalBrColors.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(leadingTint.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = leadingTint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, color = br.fg, fontSize = 14.sp)
+                if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        color = br.fgDim,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            // Inline outlined button sized to its label rather than the
+            // BrOutlinedButton's fill-width layout - the row already has a
+            // leading icon and a title block; the action lives on the right
+            // edge like a chevron would.
+            Box(
+                modifier = Modifier
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
+                    .clickable(
+                        onClickLabel = actionLabel,
+                        role = Role.Button,
+                        onClick = onAction,
+                    )
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = actionLabel,
+                    color = br.fg,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+        if (!isLast) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .padding(start = 20.dp, end = 20.dp)
+                    .background(br.hairline),
+            )
+        }
+    }
+}
+
 /** A simple framed nested card (for slider groupings). */
 @Composable
 fun NestedCard(

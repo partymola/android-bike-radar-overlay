@@ -13,6 +13,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  *  been asked yet" from "explicitly said no". */
 enum class DashcamOwnership { UNANSWERED, YES, NO }
 
+/** Tri-state ownership for the Bosch eBike LDI feature. Mirrors
+ *  [DashcamOwnership] so the same UNANSWERED / YES / NO semantics apply:
+ *  the onboarding step shows the chooser when UNANSWERED, walks through
+ *  pairing on YES, skips on NO. NO is not permanent; the Settings ->
+ *  eBike screen offers a promotion path back to YES. */
+enum class EBikeOwnership { UNANSWERED, YES, NO }
+
 /** Tri-state mirror of [DashcamOwnership] for the Home Assistant step.
  *  UNSET = onboarding hasn't asked the user; YES = user opted in (fields
  *  visible); NO = user opted out (skip card visible). The HA step is
@@ -53,6 +60,8 @@ data class PrefsSnapshot(
     val cameraLightDayMode: CameraLightMode,
     val cameraLightNightMode: CameraLightMode,
     val ldiEnabled: Boolean,
+    val eBikeOwnership: EBikeOwnership,
+    val ldiOnboardingResumePoint: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -292,6 +301,29 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_LDI_BONDED_ADDRESS, null)
         set(v) { sp.edit().putString(KEY_LDI_BONDED_ADDRESS, v).apply() }
 
+    /** Rider's answer to the "do you have a Bosch Smart System eBike?"
+     *  question. UNANSWERED = onboarding's eBike step hasn't run yet,
+     *  show the chooser. YES = rider has one and pairing is the next
+     *  step. NO = rider doesn't (or doesn't want this feature). NO is
+     *  not permanent; Settings -> eBike offers a promotion back to YES. */
+    var eBikeOwnership: EBikeOwnership
+        get() = runCatching {
+            EBikeOwnership.valueOf(
+                sp.getString(KEY_EBIKE_OWNERSHIP, EBikeOwnership.UNANSWERED.name)!!
+            )
+        }.getOrDefault(EBikeOwnership.UNANSWERED)
+        set(v) { sp.edit().putString(KEY_EBIKE_OWNERSHIP, v.name).apply() }
+
+    /** Transient flag set on entering the LDI onboarding pair-walkthrough
+     *  state. On cold start with this set, the launcher deep-links back
+     *  into Settings -> eBike (if onboarding completed) or the eBike
+     *  onboarding step (if onboarding is still in progress) so a rider
+     *  who left mid-pair to run a firmware update lands back where they
+     *  were. Cleared on Paired or on Skip-for-now. */
+    var ldiOnboardingResumePoint: Boolean
+        get() = sp.getBoolean(KEY_LDI_ONBOARDING_RESUME, false)
+        set(v) { sp.edit().putBoolean(KEY_LDI_ONBOARDING_RESUME, v).apply() }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -327,6 +359,8 @@ class Prefs(context: Context) {
         cameraLightDayMode = cameraLightDayMode,
         cameraLightNightMode = cameraLightNightMode,
         ldiEnabled = ldiEnabled,
+        eBikeOwnership = eBikeOwnership,
+        ldiOnboardingResumePoint = ldiOnboardingResumePoint,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -374,6 +408,8 @@ class Prefs(context: Context) {
         appendLine("camera_light_day_mode=$cameraLightDayMode")
         appendLine("camera_light_night_mode=$cameraLightNightMode")
         appendLine("ldi_enabled=$ldiEnabled")
+        appendLine("ebike_ownership=$eBikeOwnership")
+        appendLine("ldi_onboarding_resume_point=$ldiOnboardingResumePoint")
     }
 
     companion object {
@@ -412,6 +448,8 @@ class Prefs(context: Context) {
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"
         const val KEY_LDI_ENABLED = "ldi_enabled"
         const val KEY_LDI_BONDED_ADDRESS = "ldi_bonded_address"
+        const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
+        const val KEY_LDI_ONBOARDING_RESUME = "ldi_onboarding_resume_point"
 
         /**
          * Replace a sensitive identifier with a presence-only marker for use

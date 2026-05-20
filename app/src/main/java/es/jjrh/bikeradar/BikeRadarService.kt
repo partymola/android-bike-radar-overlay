@@ -385,6 +385,11 @@ class BikeRadarService : Service() {
             onBondedAddress = { addr -> prefs.ldiBondedAddress = addr },
         )
         ebikeLink = link
+        // Mirror the link's outcome + snapshot into the process-wide bus
+        // so onboarding / Settings UI surfaces (which live outside this
+        // service) can subscribe without holding a service reference.
+        scope.launch { link.outcome.collect { EBikeStateBus.setOutcome(it) } }
+        scope.launch { link.snapshot.collect { EBikeStateBus.setSnapshot(it) } }
         val started = link.start()
         if (!started) {
             Log.w(TAG_RADAR, "ldi: EBikeLink.start() failed; flag-on but adapter unavailable?")
@@ -429,6 +434,27 @@ class BikeRadarService : Service() {
                 nm.cancel(NOTIF_WALKAWAY_ID)
                 stopWalkAwayAlarmTone()
             }
+            ACTION_START_LDI -> {
+                // Onboarding eBike step just flipped ldiEnabled and wants
+                // the advertiser up now. Idempotent: EBikeLink.start() is
+                // itself a no-op when already started, and maybeStartEBikeLink
+                // bails when ebikeLink is already non-null.
+                if (ebikeLink == null) maybeStartEBikeLink()
+            }
+            ACTION_RESTART_LDI -> {
+                // Tear the link down (releases the advertiser, closes the
+                // GATT server, cancels the 90s timeout) and rebuild it.
+                // The mirror coroutines spawned by maybeStartEBikeLink for
+                // outcome / snapshot are tied to the old link instance -
+                // they'll observe the bus reset that ebikeLink?.shutdown
+                // implicitly triggers via EBikeLink.stop() setting Idle,
+                // then attach to the new instance on next call.
+                Log.i(TAG_RADAR, "ldi: ACTION_RESTART_LDI - tearing down and restarting")
+                ebikeLink?.shutdown()
+                ebikeLink = null
+                EBikeStateBus.reset()
+                maybeStartEBikeLink()
+            }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
                 walkAwayDismissed = true
@@ -467,6 +493,7 @@ class BikeRadarService : Service() {
         // revocation between start and shutdown does not crash here.
         ebikeLink?.shutdown()
         ebikeLink = null
+        EBikeStateBus.reset()
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
@@ -2386,6 +2413,25 @@ class BikeRadarService : Service() {
         const val ACTION_FORCE_RECONNECT = "es.jjrh.bikeradar.FORCE_RECONNECT"
         const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
+        /**
+         * Brings the eBike Live Data Interface subsystem up mid-session.
+         * Fire-and-forget: the caller (typically the onboarding eBike
+         * step after the rider flips ldiEnabled = true) sends this so the
+         * advertiser starts immediately, without waiting for a full
+         * service restart. No-op if the flag is off or BLE permissions
+         * are missing.
+         */
+        const val ACTION_START_LDI = "es.jjrh.bikeradar.START_LDI"
+        /**
+         * Force a fresh advertise cycle: tear the existing [EBikeLink]
+         * down and start a new one. Sent by the onboarding eBike step's
+         * "Try again" CTA on terminal failure outcomes (SlotConflict
+         * after the rider unpairs another accessory, NoInbound after
+         * powering the bike on). [ACTION_START_LDI] alone is idempotent
+         * - it sees `started = true` and no-ops - so it can't recover
+         * from a failure state without a stop first.
+         */
+        const val ACTION_RESTART_LDI = "es.jjrh.bikeradar.RESTART_LDI"
         const val EXTRA_MAC = "mac"
         const val EXTRA_NAME = "name"
         private const val NOTIF_ACTION_REQ = 0xB1CD

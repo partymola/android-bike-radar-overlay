@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -160,6 +161,13 @@ internal fun SettingsMenuBody(
                     onClick = { navController.navigate("settings/dashcam") },
                 )
                 SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.DirectionsBike,
+                    iconTint = br.brand,
+                    title = "eBike",
+                    subtitle = eBikeSubtitle(prefsSnap),
+                    onClick = { navController.navigate("settings/ebike") },
+                )
+                SettingsRow(
                     icon = Icons.Default.Home,
                     iconTint = br.safe,
                     title = "Home Assistant",
@@ -273,6 +281,15 @@ private fun SystemHealthChip(
 private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String =
     if (!snap.autoLightModeEnabled) "Off"
     else "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
+
+private fun eBikeSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.eBikeOwnership) {
+    es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED -> "Set up your eBike"
+    es.jjrh.bikeradar.data.EBikeOwnership.NO -> "Don't have one"
+    es.jjrh.bikeradar.data.EBikeOwnership.YES -> when {
+        !snap.ldiEnabled -> "Off"
+        else -> "On"
+    }
+}
 
 private fun dashcamSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.dashcamOwnership) {
     DashcamOwnership.UNANSWERED -> "Set up your dashcam"

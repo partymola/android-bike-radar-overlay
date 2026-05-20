@@ -6,24 +6,32 @@ Pointer doc for agent-style tools working in this repo. Public-safe.
 
 ```bash
 docker build -t bike-radar-builder .
+
+# Faster workflow: spin up a persistent build container once per session
+# so the Gradle daemon (and Kotlin daemon) stays warm across invocations.
+# Warm gradle runs drop from ~2 s to ~0.4 s.
+scripts/dev up
+scripts/dev gradle :app:testDebugUnitTest --console=plain   # unit tests
+scripts/dev gradle :app:assembleDebug --console=plain       # full APK
+scripts/dev gradle :app:verifyPaparazziDebug --console=plain
+scripts/dev down                                            # when finished
+
+# Or the one-shot pattern (no daemon, slower; safe to use without `dev up`):
 docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
   -e GRADLE_USER_HOME=/gradle-cache \
   -w /workspace bike-radar-builder \
-  gradle :app:testDebugUnitTest --console=plain --no-daemon   # unit tests (what CI runs)
+  gradle :app:testDebugUnitTest --console=plain --no-daemon
 
-# Screenshot regression check (local only — Paparazzi SNAPSHOT loader is
-# unreliable on cold-cache JVMs, so CI can't run it):
-docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
-  -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
-  -e GRADLE_USER_HOME=/gradle-cache \
-  -w /workspace bike-radar-builder \
-  gradle :app:verifyPaparazziDebug --console=plain --no-daemon
+# `scripts/dev gradle ...` auto-falls back to the one-shot pattern when
+# the persistent container is not up, so it is safe to use either way.
 
-# ...or assembleDebug for a full APK:
-gradle assembleDebug --console=plain --no-daemon
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Paparazzi note: `:app:verifyPaparazziDebug` is local-only because
+Paparazzi 2.0.0-SNAPSHOT's layoutlib loader is unreliable on cold-cache
+JVMs, so CI can't run it.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (Security / UX / Compatibility

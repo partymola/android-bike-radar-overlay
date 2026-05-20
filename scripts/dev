@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Wrapper around the Docker build environment that keeps the Gradle
+# daemon alive between invocations. A long-running container hosts the
+# JVM + Gradle daemon + Kotlin daemon; each `gradle` invocation is a
+# fast `docker exec` rather than a fresh `docker run --rm`. When the
+# persistent container is not up, falls back to the one-shot pattern
+# from AGENTS.md so this script is safe to run without prior setup.
+#
+# Usage:
+#   scripts/dev up                       Start the persistent container.
+#   scripts/dev down                     Stop and remove it.
+#   scripts/dev status                   Print "up" or "down".
+#   scripts/dev gradle :app:assembleDebug
+#                                        Run Gradle. Uses the persistent
+#                                        container if available, else
+#                                        spawns a one-shot container
+#                                        with --no-daemon.
+
+set -euo pipefail
+
+CONTAINER_NAME="bike-radar-builder-dev"
+IMAGE_NAME="bike-radar-builder"
+WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GRADLE_CACHE="${HOME}/.cache/bike-radar-gradle"
+
+is_running() {
+    docker ps --filter "name=^/${CONTAINER_NAME}$" \
+        --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"
+}
+
+ensure_image() {
+    if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+        echo "Image '${IMAGE_NAME}' not found. Build it first:" >&2
+        echo "  docker build -t ${IMAGE_NAME} ." >&2
+        exit 1
+    fi
+}
+
+up() {
+    ensure_image
+    if is_running; then
+        echo "${CONTAINER_NAME} already running"
+        return 0
+    fi
+    # Clean up any stopped container with the same name.
+    docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    docker run -d \
+        --name "${CONTAINER_NAME}" \
+        -v "${WORKSPACE}:/workspace" \
+        -u "$(id -u):$(id -g)" \
+        -v "${GRADLE_CACHE}:/gradle-cache" \
+        -e GRADLE_USER_HOME=/gradle-cache \
+        -w /workspace \
+        "${IMAGE_NAME}" \
+        sleep infinity >/dev/null
+    echo "Started ${CONTAINER_NAME}. Daemon will warm on first gradle run."
+    echo "Tear down with: scripts/dev down"
+}
+
+down() {
+    if docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1; then
+        echo "Removed ${CONTAINER_NAME}"
+    else
+        echo "${CONTAINER_NAME} was not running"
+    fi
+}
+
+status() {
+    if is_running; then
+        echo "up"
+    else
+        echo "down"
+    fi
+}
+
+gradle_cmd() {
+    ensure_image
+    if is_running; then
+        # Persistent container: omit --no-daemon so the Gradle daemon
+        # stays alive between invocations. The daemon (and Kotlin
+        # daemon) save ~3-5 s on every subsequent Gradle run.
+        exec docker exec \
+            -u "$(id -u):$(id -g)" \
+            -w /workspace \
+            "${CONTAINER_NAME}" \
+            gradle "$@"
+    else
+        # One-shot container: --no-daemon, because the container dies
+        # after this invocation and there is nowhere for a daemon to
+        # live. Matches the pattern documented in AGENTS.md.
+        exec docker run --rm \
+            -v "${WORKSPACE}:/workspace" \
+            -u "$(id -u):$(id -g)" \
+            -v "${GRADLE_CACHE}:/gradle-cache" \
+            -e GRADLE_USER_HOME=/gradle-cache \
+            -w /workspace \
+            "${IMAGE_NAME}" \
+            gradle --no-daemon "$@"
+    fi
+}
+
+case "${1:-}" in
+    up)     up ;;
+    down)   down ;;
+    status) status ;;
+    gradle) shift; gradle_cmd "$@" ;;
+    ""|-h|--help|help)
+        sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "Unknown command: ${1}" >&2
+        echo "Try: scripts/dev help" >&2
+        exit 1 ;;
+esac

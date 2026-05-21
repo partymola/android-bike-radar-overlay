@@ -36,8 +36,9 @@ JVMs, so CI can't run it. The `*SnapshotTest` exclusion in
 invoked, so plain `testDebugUnitTest` / CI still skips them but the gate
 genuinely runs them. The loader can throw
 `sessionParamsBuilder has not been initialized` on the first attempt in a
-JVM; if `verify`/`record` fails with that, just re-run (use
-`--rerun-tasks` so it re-executes) - the warm retry passes.
+JVM; `scripts/dev gradle` auto-retries Paparazzi tasks once for this
+(usually transparent). For one-shot/manual `gradle` runs, re-run with
+`--rerun-tasks` - the warm retry passes.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (Security / UX / Compatibility

@@ -131,6 +131,15 @@ decoders in both Python and Kotlin live there.
   the right pair (`RADAR` or `FRONT_CAMERA`).
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
   LESC; the app never calls it. User must pair once via system Settings.
+- LDI trust: `EBikeLink` advertises a connectable solicitation, so ANY
+  passing BLE central can connect. Never treat an inbound connection as the
+  bike on the raw connect - persist the bonded address and read state only
+  after real LDI data arrives (the `Paired` transition), and conclude
+  "firmware too old" only for a `BOND_BONDED` device that completes discovery
+  without the LDI service. The decision is the pure `classifyMissingLdi`.
+- The `<queries>` entry for `com.bosch.ebike.onebikeapp` is load-bearing:
+  without it `getLaunchIntentForPackage` returns null on Android 11+ and
+  "Open Flow" silently falls back to the Play Store.
 - To test Onboarding without destroying your production install's pairing
   state, build the `onbtest` buildType (`gradle :app:assembleOnbtest`). It
   installs side-by-side under `es.jjrh.bikeradar.onbtest` with its own

@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar
 
 import android.app.Application
+import android.bluetooth.BluetoothGatt
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -88,6 +89,34 @@ class EBikeLinkOutcomeTest {
         // which shouldn't happen on real hardware.
         val paired = LdiOutcome.Paired("AA:BB:CC:DD:EE:FF")
         assertEquals("AA:BB:CC:DD:EE:FF", paired.shortAddress)
+    }
+
+    @Test fun `classifyMissingLdi reports old firmware only for a bonded clean discovery`() {
+        // The connection-trust gate: a bonded (paired) bike that completes
+        // discovery without the LDI service is genuinely old firmware.
+        assertEquals(
+            MissingLdi.OLD_FIRMWARE,
+            classifyMissingLdi(BluetoothGatt.GATT_SUCCESS, bonded = true),
+        )
+    }
+
+    @Test fun `classifyMissingLdi treats stray or failed connections as not-the-bike`() {
+        // An unbonded stray central probing the solicitation advert, or any
+        // failed/aborted discovery (even on a bonded device), must NOT be
+        // reported as old firmware. Regression guard for the bug where a
+        // passing device showed "Firmware too old" with the bike powered off.
+        assertEquals(
+            MissingLdi.NOT_THE_BIKE,
+            classifyMissingLdi(BluetoothGatt.GATT_SUCCESS, bonded = false),
+        )
+        assertEquals(
+            MissingLdi.NOT_THE_BIKE,
+            classifyMissingLdi(BluetoothGatt.GATT_FAILURE, bonded = true),
+        )
+        assertEquals(
+            MissingLdi.NOT_THE_BIKE,
+            classifyMissingLdi(BluetoothGatt.GATT_FAILURE, bonded = false),
+        )
     }
 
     @Test fun `CONNECT_TIMEOUT_MS is the documented 90 seconds`() {

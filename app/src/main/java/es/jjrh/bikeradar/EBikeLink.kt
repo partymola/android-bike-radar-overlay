@@ -476,23 +476,24 @@ class EBikeLink(
                 null
             }
             if (ch == null) {
-                // No usable LDI characteristic on this connection. Only the
-                // paired eBike is bonded; stray BLE centrals routinely connect
-                // to our solicitation advert and complete discovery with a real
-                // (non-LDI) GATT server. So conclude "firmware too old" ONLY for
-                // a bonded device that genuinely lacks LDI - otherwise it's not
-                // the bike (or a failed discovery): close it and keep advertising.
+                // No usable LDI characteristic on this connection. Stray BLE
+                // centrals routinely connect to our solicitation advert and
+                // complete discovery with a real (non-LDI) GATT server, so the
+                // decision is delegated to the pure [classifyMissingLdi].
                 val bonded = try {
                     gatt.device.bondState == BluetoothDevice.BOND_BONDED
                 } catch (_: Exception) { false }
-                if (status == BluetoothGatt.GATT_SUCCESS && bonded) {
-                    Log.w(TAG, "bonded bike lacks LDI service - firmware probably <v19")
-                    setOutcome(LdiOutcome.NoServiceFound)
-                } else {
-                    Log.w(TAG, "no LDI on ${gatt.device.address} (status=$status, bonded=$bonded); not the bike, still advertising")
-                    try { gatt.close() } catch (_: Exception) {}
-                    if (clientGatt === gatt) clientGatt = null
-                    if (_outcome.value !is LdiOutcome.Paired) setOutcome(LdiOutcome.Advertising)
+                when (classifyMissingLdi(status, bonded)) {
+                    MissingLdi.OLD_FIRMWARE -> {
+                        Log.w(TAG, "bonded bike lacks LDI service - firmware probably <v19")
+                        setOutcome(LdiOutcome.NoServiceFound)
+                    }
+                    MissingLdi.NOT_THE_BIKE -> {
+                        Log.w(TAG, "no LDI on ${gatt.device.address} (status=$status, bonded=$bonded); not the bike, still advertising")
+                        try { gatt.close() } catch (_: Exception) {}
+                        if (clientGatt === gatt) clientGatt = null
+                        if (_outcome.value !is LdiOutcome.Paired) setOutcome(LdiOutcome.Advertising)
+                    }
                 }
                 return
             }
@@ -601,6 +602,26 @@ sealed class LdiOutcome {
      *  on the bike's controller, or the controller never surfaced it. */
     object PairPromptDeclined : LdiOutcome()
 }
+
+/**
+ * Disposition when a connected device finishes discovery WITHOUT exposing the
+ * LDI characteristic. Extracted as a pure function ([classifyMissingLdi]) so
+ * the connection-trust decision is unit-testable without a live BluetoothGatt.
+ */
+internal enum class MissingLdi { OLD_FIRMWARE, NOT_THE_BIKE }
+
+/**
+ * Decide what a missing LDI characteristic means. Only a successful discovery
+ * on a BONDED device (the paired eBike) genuinely implies old firmware. A
+ * stray unbonded central probing our solicitation advert, or a failed/aborted
+ * discovery, is "not the bike" and must never be reported as old firmware.
+ */
+internal fun classifyMissingLdi(status: Int, bonded: Boolean): MissingLdi =
+    if (status == BluetoothGatt.GATT_SUCCESS && bonded) {
+        MissingLdi.OLD_FIRMWARE
+    } else {
+        MissingLdi.NOT_THE_BIKE
+    }
 
 /** GATT_INSUFFICIENT_AUTHENTICATION; bike rejected the bond. */
 internal const val STATUS_INSUFFICIENT_AUTH: Int = 137

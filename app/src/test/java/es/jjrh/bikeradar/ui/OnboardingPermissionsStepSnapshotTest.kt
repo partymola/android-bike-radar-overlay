@@ -48,9 +48,14 @@ class OnboardingPermissionsStepSnapshotTest {
     }
 
     private val nearby = PermissionSpec(
-        permissions = listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),
+        permissions = listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        ),
         title = "Nearby devices",
-        rationale = "Scan for and connect to your radar and dashcam over Bluetooth.",
+        rationale = "Scan for and connect to your radar and dashcam over Bluetooth. " +
+            "Advertise to your eBike if you have one.",
         required = true,
     )
 

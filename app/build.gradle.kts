@@ -175,22 +175,44 @@ kotlin {
 }
 
 // Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`
-// task. They run via `:app:verifyPaparazziDebug` (or `:recordPaparazziDebug`)
-// instead. Reason: Paparazzi 2.0.0-SNAPSHOT ships a layoutlib whose JNI
-// loader fails in cold-cache JVMs (e.g. CI), even though direct dlopen of
-// the same .so works. Removing this exclusion would break `gradle test` on
-// every fresh checkout. Drop the exclusion once Paparazzi alpha05 ships.
+// task UNLESS the run was invoked through a Paparazzi gate task
+// (`recordPaparazziDebug` / `verifyPaparazziDebug`), which drive this very
+// same `testDebugUnitTest` task. Reason: Paparazzi 2.0.0-SNAPSHOT ships a
+// layoutlib whose JNI loader fails in cold-cache JVMs (e.g. CI), even
+// though direct dlopen of the same .so works, so plain `gradle test` and
+// CI must skip the snapshot tests. But the Paparazzi record/verify tasks
+// run warm and locally and ARE the gate - they must actually execute the
+// snapshot tests, not silently skip them. An unconditional exclusion left
+// the gate dormant: it verified zero snapshots. Drop this block once
+// Paparazzi alpha05 ships.
+//
+// Discriminator: the requested task names. The Paparazzi gate tasks carry
+// "Paparazzi" in their name and appear in startParameter on a gate run
+// (see AGENTS.md); CI and `gradle test` do not. Caveat: an invocation
+// that requests BOTH a Paparazzi task and plain tests in one go would run
+// the snapshot tests in testDebugUnitTest too - no such combined/aggregate
+// task exists in this repo (CI calls testDebugUnitTest and assembleDebug
+// directly). Reading startParameter at configuration time is
+// configuration-cache safe; the requested-task set is part of the cache
+// key, so a plain-test invocation and a gate invocation resolve to
+// separate entries.
 //
 // `withType<Test>().matching` defers until AGP registers the unit-test task,
 // so the configuration doesn't fail with "task not found".
+val runningPaparazziGate = gradle.startParameter.taskNames.any {
+    it.contains("Paparazzi", ignoreCase = true)
+}
 tasks.withType<Test>().matching { it.name == "testDebugUnitTest" }.configureEach {
     filter {
-        // Every snapshot test class hits the layoutlib loader; exclude
-        // the lot by pattern so newly-added snapshot tests are covered
-        // without ad-hoc maintenance of this list.
-        excludeTestsMatching("*SnapshotTest")
+        // Snapshot tests hit the layoutlib loader; skip them on plain
+        // test / CI runs, but let the Paparazzi gate run them. Pattern
+        // match so newly-added snapshot tests need no list maintenance.
+        if (!runningPaparazziGate) {
+            excludeTestsMatching("*SnapshotTest")
+        }
         // Custom-View tests rely on android.graphics.Canvas which the
-        // Robolectric+layoutlib stack also can't load in cold-cache JVMs.
+        // Robolectric+layoutlib stack can't load in cold-cache JVMs. Not
+        // a snapshot test, so keep it out of this task in every mode.
         excludeTestsMatching("es.jjrh.bikeradar.RadarOverlayViewTest")
     }
 }

@@ -6,8 +6,11 @@ import android.app.NotificationManager
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
+import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
+import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
@@ -72,6 +75,24 @@ class BikeRadarServiceSmokeTest {
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
         controller.startCommand(0, 1)
+        controller.destroy()
+    }
+
+    @Test
+    fun ldiDisabledIsCleanNoOp() {
+        // Graceful degradation: with the LDI experimental flag off, the
+        // service must not start the BLE advertiser / GATT server, even
+        // for a rider who owns a Bosch eBike. Pinned via EBikeStateBus
+        // staying Idle through onCreate - a regression ships as "the app
+        // advertises to eBikes for riders who never opted in".
+        EBikeStateBus.reset()
+        Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            ldiEnabled = false
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        assertEquals(LdiOutcome.Idle, EBikeStateBus.outcome.value)
         controller.destroy()
     }
 

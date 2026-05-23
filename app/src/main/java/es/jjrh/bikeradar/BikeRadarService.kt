@@ -1507,7 +1507,12 @@ class BikeRadarService : Service() {
                         }
                     }
                 } finally {
-                    beeper.release()
+                    // Do NOT release the beeper here. It is service-scoped
+                    // (allocated in onCreate, released in onDestroy) so its warm
+                    // AudioTrack pool survives radar reconnects. Releasing it
+                    // per-overlayJob left every beep after the first mid-ride
+                    // reconnect playing on a released pool + shut-down executor,
+                    // i.e. silent close-pass alerts for the rest of the ride.
                     if (overlayAdded) {
                         try { wm.removeView(view); clog("# overlay removed") }
                         catch (t: Throwable) { Log.w(TAG_RADAR, "removeView failed: $t") }

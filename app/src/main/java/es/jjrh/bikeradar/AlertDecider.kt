@@ -38,8 +38,20 @@ package es.jjrh.bikeradar
  *    in the cooldown window collapse into a single beep at the
  *    closest urgency *at the moment the cooldown expires*.
  *  - **Clear chime.** Plays once when the close zone goes from non-empty
- *    to empty, bypassing the cooldown (different timbre, never
- *    overlaps a beep on the speaker).
+ *    to empty AND stays empty for [clearGraceMs] (different timbre, never
+ *    overlaps a beep on the speaker; not gated by the beep cooldown). The
+ *    grace defers the Clear so a single-frame radar dropout, or a target
+ *    lingering at the `alertMaxM` edge whose decoded distance jitters
+ *    across the boundary, can't fire a premature Clear immediately
+ *    followed by a fresh re-beep on the same continuous approach. A car
+ *    returning to range before the grace elapses cancels the pending Clear
+ *    silently.
+ *  - **Close-set exit hysteresis (distance band).** A track enters the
+ *    close set at `distanceM <= alertMaxM` but, once in, stays until
+ *    `distanceM` exceeds `alertMaxM + alertMaxM/`[CLOSE_EXIT_HYSTERESIS_DIVISOR].
+ *    Stops an edge-lingering car (decoded distance jittering e.g. 30<->31 m
+ *    at alertMaxM=30) from flapping out of the set. Entry threshold is
+ *    unchanged - no alerting for cars first seen beyond `alertMaxM`.
  *  - **Stationary suppress.** Once the rider has been at or below
  *    `stationaryMsThreshold` for at least `stationaryDwellMs` of
  *    wall-clock time, Beep events are mapped to None. Clear still
@@ -85,6 +97,15 @@ class AlertDecider(
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
      *  short enough to kick in at a normal traffic-light stop. */
     private val stationaryDwellMs: Long = 2_000L,
+    /** Wall-clock milliseconds the stable-close set must stay empty before a
+     *  Clear chime fires. Defers the Clear (and the per-track latch wipe)
+     *  so a single-frame radar dropout, or a boundary flap the distance
+     *  band didn't absorb, can't fire a premature Clear immediately
+     *  followed by a fresh re-beep when the same car re-stabilises. A car
+     *  returning to range before the grace elapses cancels the pending
+     *  Clear silently. The genuine all-clear is delayed by at most this
+     *  long; no safety cost (real-threat beeps are unaffected). */
+    private val clearGraceMs: Long = 1_000L,
 ) {
 
     sealed class Event {
@@ -114,6 +135,13 @@ class AlertDecider(
     private var prevClosestUrgency: Int = 0
     private var lastBeepAtMs: Long = Long.MIN_VALUE / 2  // guarantees first beep fires
     private var beepPending: Boolean = false
+    /** Clear-grace state: whether a Clear is deferred pending the
+     *  [clearGraceMs] empty-dwell, and when the stable-close set emptied. */
+    private var clearPending: Boolean = false
+    private var clearPendingSinceMs: Long = 0L
+    /** Raw in-front, in-range track ids from the previous frame (post
+     *  distance-exit-band), used to apply the band's exit hysteresis. */
+    private var prevCloseRaw: Set<Int> = emptySet()
 
     /**
      * Per-track tier latch — tid -> highest urgency tier we have
@@ -215,8 +243,17 @@ class AlertDecider(
         // dwell time + zero closing speed, so they are by construction
         // not threats - beeping for them would be the audio equivalent of
         // the chevron-overlap problem the visual dock was added to fix.
+        //
+        // Exit hysteresis on the distance gate: a track enters the close set
+        // at distanceM <= alertMaxM, but once in stays until distanceM
+        // exceeds alertMaxM + band. Stops a car lingering at the alertMaxM
+        // edge (decoded distance jittering across the boundary) from
+        // flapping out and firing a premature Clear. Entry is unchanged.
+        val rangeBand = alertMaxM / CLOSE_EXIT_HYSTERESIS_DIVISOR
         val close = vehicles.filter {
-            !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMaxM
+            if (it.isBehind || it.isAlongsideStationary) return@filter false
+            it.distanceM in 0..alertMaxM ||
+                (it.id in prevCloseRaw && it.distanceM in 0..(alertMaxM + rangeBand))
         }
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
@@ -269,8 +306,15 @@ class AlertDecider(
         //     Clear (which resets all latches), or a full-tier
         //     de-escalation followed by re-escalation (handled via
         //     the peakUrgencyPerTid rearm path).
+        // Latch-aware: a new entry whose closest tid has already been
+        // audibly fired at this tier (its latch survived a deferred or
+        // cancelled clear-grace) must not re-fire. Genuinely new tids have
+        // latch 0, so urgency >= 1 always passes - this only suppresses a
+        // car that flapped out and back within the clear-grace.
         val newEntryRaisesTier =
-            newEntries.isNotEmpty() && closestUrgency > prevClosestUrgency
+            newEntries.isNotEmpty() && closestUrgency > prevClosestUrgency &&
+            (closestVehicle == null ||
+                closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0))
         val overtakeToHigher = if (overtakes.isNotEmpty() && stableTids.isNotEmpty()) {
             val peakOvertaken = overtakes.maxOf { peakUrgencyPerTid[it] ?: 0 }
             closestUrgency > peakOvertaken
@@ -342,12 +386,29 @@ class AlertDecider(
             sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
         }
 
+        // Clear-grace state machine. Defer the Clear (and the per-track
+        // latch wipe) until the stable-close set has stayed empty for
+        // clearGraceMs. Any in-front in-range track returning (pre-sustain,
+        // via currentCloseTids) cancels the pending Clear silently. The
+        // surviving firedTierPerTid latch then suppresses the same-car
+        // re-beep through the latch-aware new-entry / escalation gates.
+        val anyInRange = currentCloseTids.isNotEmpty()
+        if (anyInRange) {
+            clearPending = false
+        } else if (stableTids.isEmpty() && prevStableClose.isNotEmpty() && !clearPending) {
+            clearPending = true
+            clearPendingSinceMs = nowMs
+        }
+        val clearGraceElapsed = clearPending && stableTids.isEmpty() &&
+            (nowMs - clearPendingSinceMs) >= clearGraceMs
+
         val event: Event = when {
-            stableTids.isEmpty() && prevStableClose.isNotEmpty() -> {
+            clearGraceElapsed -> {
                 lastBeepAtMs = nowMs
                 beepPending = false
                 firedTierPerTid.clear()
                 peakUrgencyPerTid.clear()
+                clearPending = false
                 Event.Clear
             }
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
@@ -394,6 +455,7 @@ class AlertDecider(
 
         prevStableClose = stableTids
         prevClosestUrgency = if (stableTids.isEmpty()) 0 else closestUrgency
+        prevCloseRaw = currentCloseTids
         return event
     }
 
@@ -405,6 +467,9 @@ class AlertDecider(
         prevClosestUrgency = 0
         lastBeepAtMs = Long.MIN_VALUE / 2
         beepPending = false
+        clearPending = false
+        clearPendingSinceMs = 0L
+        prevCloseRaw = emptySet()
         lastNotStationaryAtMs = NOT_INITIALIZED
     }
 
@@ -451,6 +516,16 @@ class AlertDecider(
          *  first call and would satisfy `>= stationaryDwellMs`
          *  immediately, silencing the first beep. */
         private const val NOT_INITIALIZED: Long = Long.MIN_VALUE
+
+        /** Divisor for the close-set exit-hysteresis distance band: a track
+         *  already in the close set stays until `distanceM` exceeds
+         *  `alertMaxM + alertMaxM/`this. 10 gives a 10% band (3 m at the
+         *  common alertMaxM=30), comfortably wider than the radar's ~1 m
+         *  edge jitter without reaching for cars meaningfully past the
+         *  rider's configured alert envelope. For alertMaxM < 10 the integer
+         *  band is 0 (exit reverts to the hard alertMaxM); the clear-grace
+         *  still absorbs single-frame flaps in that degenerate range. */
+        private const val CLOSE_EXIT_HYSTERESIS_DIVISOR: Int = 10
 
         /** Closing speed (m/s, signed; negative = approaching) at or
          *  below which a stationary rider's suppress gate is overridden,

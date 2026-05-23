@@ -162,19 +162,128 @@ class AlertDeciderTest {
         val c = Clock()
         d.decide(listOf(car(1, 8)), alertMax, c.tick())
         d.decide(listOf(car(1, 6)), alertMax, c.tick())  // Beep(3)
-        // No cooldown gap — Clear must still fire:
+        // Overtake empties the in-front set; the clear-grace defers the
+        // Clear (the overtaking track stays isBehind, so it never re-enters
+        // range to cancel the pending clear).
+        assertEquals(AlertDecider.Event.None,
+            d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick()))
+        // After the grace, Clear fires - not gated by the beep cooldown.
+        c.jump(1000)
         val ev = d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Clear, ev)
     }
 
-    @Test fun `close zone emptying triggers Clear once`() {
+    @Test fun `close zone emptying triggers Clear once after grace`() {
         val d = AlertDecider()
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        // First empty frame starts the clear-grace; no Clear yet.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Road stays empty past the grace window -> Clear fires once.
         c.jump(1000)
         assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+    }
+
+    // ── clear-grace + distance-band exit hysteresis ──────────────────────
+    //
+    // Fix for the beep -> clear -> re-beep churn on one continuous
+    // approach. The close set had a 2-frame entry debounce but a zero-frame
+    // exit, so a single dropped or boundary-flapping frame fired a premature
+    // Clear that wiped the per-track latch, and the re-stabilising car
+    // re-beeped.
+
+    @Test fun `car lingering at the alertMax edge does not flap-clear (distance band)`() {
+        // alertMax=21 -> exit band = 21/10 = 2, so a track stays in close
+        // out to 23 m. A car hovering 21<->22 (decoded distance jitter at
+        // the window edge) must NOT drop out and fire a Clear.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 21)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 21)), alertMax, c.tick()))
+        // Jitter just past the hard edge then back - band keeps it in
+        // close, so no Clear and no re-beep.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 22)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 21)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 22)), alertMax, c.tick()))
+    }
+
+    @Test fun `car leaving past the exit band fires Clear after grace`() {
+        // Negative control for the band: a track that genuinely drives off
+        // beyond alertMax + band still leaves the close set and clears.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 21)), alertMax, c.tick())
+        d.decide(listOf(car(1, 21)), alertMax, c.tick())  // Beep(1)
+        // 30 m > alertMax(21) + band(2): drops out, grace starts.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 30)), alertMax, c.tick()))
+        c.jump(1000)
+        assertEquals(AlertDecider.Event.Clear, d.decide(listOf(car(1, 30)), alertMax, c.tick()))
+    }
+
+    @Test fun `band-retained track that flips isBehind leaves close and clears`() {
+        // The isBehind filter runs before the distance/band test, so a
+        // band-retained edge car that overtakes is ejected regardless of
+        // the band and (after the grace) clears.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 21)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 21)), alertMax, c.tick()))
+        // Edge jitter to 22 m - band keeps it in close, no clear.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 22)), alertMax, c.tick()))
+        // Same track overtakes: isBehind ejects it, starting the grace.
+        assertEquals(AlertDecider.Event.None,
+            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()))
+        c.jump(1000)
+        assertEquals(AlertDecider.Event.Clear,
+            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()))
+    }
+
+    @Test fun `single-frame dropout within grace does not clear or re-beep`() {
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Radar drops the target for one frame (absent from vehicles).
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Wait past the beep cooldown so a re-beep is not merely cooldown-
+        // gated; still inside the clear-grace (800 ms < 1000 ms).
+        c.jump(700)
+        // Same car returns: no Clear, and no fresh re-beep (latch survived
+        // the cancelled grace).
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+    }
+
+    @Test fun `different car during grace beeps and cancels the pending clear`() {
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())  // Beep(2) for car 1
+        // Car 1 drops out; grace pending.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        c.jump(700)
+        // A DIFFERENT car enters within the grace: it must beep (new tid,
+        // no latch) and its presence cancels the pending Clear.
+        d.decide(listOf(car(2, 18)), alertMax, c.tick())
+        val ev = d.decide(listOf(car(2, 18)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), ev)
+    }
+
+    @Test fun `car returning closer within grace re-beeps at the higher tier`() {
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())  // Beep(1) far
+        // Drops out for one frame...
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        c.jump(700)
+        // ...and returns materially closer (near third). Latch was 1, so
+        // the higher tier must still fire - the threat state changed.
+        d.decide(listOf(car(1, 4)), alertMax, c.tick())
+        val ev = d.decide(listOf(car(1, 4)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(3), ev)
     }
 
     @Test fun `stationary close car at zero relative speed still alerts`() {
@@ -192,12 +301,16 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 50)), alertMax, c.tick()))
     }
 
-    @Test fun `re-entering same track after leaving close re-fires after cooldown`() {
+    @Test fun `re-entering same track after a real departure re-fires after cooldown`() {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         d.decide(listOf(car(1, 10)), alertMax, c.tick())  // Beep(2)
-        d.decide(listOf(car(1, 50)), alertMax, c.tick())  // out of close → Clear
+        // Car leaves the close zone for longer than the clear-grace: a real
+        // departure, so the Clear fires and the per-track latch is wiped.
+        d.decide(listOf(car(1, 50)), alertMax, c.tick())  // grace starts
+        c.jump(1000)
+        d.decide(listOf(car(1, 50)), alertMax, c.tick())  // grace elapsed → Clear
         c.jump(700)
         d.decide(listOf(car(1, 10)), alertMax, c.tick())  // re-entering, frame 1
         val ev = d.decide(listOf(car(1, 10)), alertMax, c.tick())
@@ -274,7 +387,11 @@ class AlertDeciderTest {
         // Rider stops; dwell completes.
         c.jump(3000)
         d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0f)
-        // Close zone empties - Clear must still fire even though rider is stationary.
+        // Close zone empties; the clear-grace defers the Clear one frame.
+        assertEquals(AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f))
+        c.jump(1000)
+        // Clear must still fire after the grace even though rider is stationary.
         val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.Clear, ev)
     }

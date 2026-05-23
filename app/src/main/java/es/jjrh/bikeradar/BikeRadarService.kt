@@ -267,6 +267,11 @@ class BikeRadarService : Service() {
     // AudioTrack cold-start every time, and so audio focus + the
     // MODE_IN_CALL guard survive across radar drops.
     @Volatile private var alertBeeper: AlertBeeper? = null
+    // Wall-clock ms of the last radar critical-battery cue, threaded through
+    // CriticalBatteryDecider so the repeat honours its cadence. Service-
+    // scoped so the cadence survives a radar reconnect; the decider resets
+    // it to null whenever the battery is not critical / stale / absent.
+    @Volatile private var lastCriticalBatteryCueMs: Long? = null
 
     // Capture log (written from GATT callback threads + coroutine threads)
     private val captureLogLock = Any()
@@ -1401,6 +1406,35 @@ class BikeRadarService : Service() {
                             .map { it.slug }.toSet()
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
+                        // Rear-radar CRITICAL battery audible cue. The radar
+                        // is the rider's rear-awareness channel, so a critical
+                        // radar battery is the one battery state that earns an
+                        // in-ride sound. Radar-only (never the dashcam). Audio
+                        // is gated on pause like the close-pass beeps; the
+                        // visual glyph above is shown regardless.
+                        if (!prefs.isPaused) {
+                            val critRadarMac = currentRadarMac
+                            val critRadarSlug = critRadarMac?.let {
+                                macToSlug[it] ?: macToSlug[it.uppercase(Locale.ROOT)]
+                            }
+                            val critRadarBatt = critRadarSlug?.let { batteries[it] }
+                            val critFresh = critRadarBatt != null &&
+                                now - critRadarBatt.readAtMs < BATTERY_STALE_MS
+                            val critDecision = CriticalBatteryDecider.decide(
+                                pct = critRadarBatt?.pct,
+                                fresh = critFresh,
+                                nowMs = now,
+                                criticalPct = CRITICAL_BATTERY_PCT,
+                                cadenceMs = CRITICAL_BATTERY_CUE_INTERVAL_MS,
+                                lastCueMs = lastCriticalBatteryCueMs,
+                            )
+                            lastCriticalBatteryCueMs = critDecision.lastCueMs
+                            if (critDecision.fire) {
+                                beeper.playCriticalBattery()
+                                clog("# critical_battery radar=$critRadarSlug pct=${critRadarBatt?.pct}")
+                            }
+                        }
+
                         if (!prefs.isPaused) {
                             // Pass LDI ground-truth standstill when present
                             // (lastLdiSnapshot is null when the experimental flag is
@@ -2511,6 +2545,18 @@ class BikeRadarService : Service() {
         // within a minute, while still cheap when the rider is parked.
         const val RIDE_SUMMARY_PUBLISH_PERIOD_MS = 60_000L
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
+
+        /** Rear-radar battery percentage below which the in-ride audible
+         *  critical-battery cue fires. The general `batteryLowThresholdPct`
+         *  still drives only the silent visual glyph; this stricter level is
+         *  what adds the sound. */
+        const val CRITICAL_BATTERY_PCT = 10
+
+        /** Minimum gap between repeats of the critical-battery cue while the
+         *  radar battery stays below [CRITICAL_BATTERY_PCT]. Sparing by
+         *  design: a critical battery the rider cannot fix mid-ride must not
+         *  nag. */
+        const val CRITICAL_BATTERY_CUE_INTERVAL_MS = 120_000L
         const val MAX_CAPTURE_LOGS = 500
         const val MIN_USEFUL_LOG_BYTES = 500L
 

@@ -10,6 +10,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("app.cash.paparazzi")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 val localProps = Properties().apply {
@@ -115,6 +116,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // JaCoCo coverage from the JVM unit tests. AGP generates the
+            // createDebugUnitTestCoverageReport task; report-only for now
+            // (no coverage threshold until a baseline number is known).
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             val release = signingConfigs.findByName("release")
@@ -146,6 +153,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
+    // JaCoCo 0.8.13 reads Java 21 class files (the toolchain target).
+    testCoverage {
+        jacocoVersion = "0.8.13"
+    }
+
     buildFeatures {
         buildConfig = true
         compose = true
@@ -172,6 +184,13 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_21)
     }
+}
+
+ktlint {
+    // Grandfather the existing findings so only NEW violations fail the
+    // build. Regenerate with `:app:ktlintGenerateBaseline` after a
+    // deliberate, reviewed sweep, not as a way to silence fresh issues.
+    baseline.set(file("config/ktlint/baseline.xml"))
 }
 
 // Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`

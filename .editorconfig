@@ -1,0 +1,11 @@
+root = true
+
+[*.{kt,kts}]
+# ktlint enforces the IntelliJ-default formatting, which matches the
+# repo's existing hand-written style far more closely than the stricter
+# ktlint_official preset (the latter would flag thousands of pre-existing
+# wrapping/indent choices and every new line written in the same style).
+ktlint_code_style = intellij_idea
+# @Composable functions are PascalCase by convention; don't flag them as
+# bad function names.
+ktlint_function_naming_ignore_when_annotated_with = Composable

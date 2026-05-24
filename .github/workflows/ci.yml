@@ -31,10 +31,14 @@ jobs:
         with:
           gradle-version: '9.4.1'
 
-      - name: Run JVM unit tests
-        # Paparazzi screenshot tests are excluded from this task and run
-        # locally via `:app:verifyPaparazziDebug`. See app/build.gradle.kts.
-        run: gradle :app:testDebugUnitTest --console=plain --no-daemon
+      - name: Run lint, ktlint, and JVM unit tests
+        # Lint and ktlint run nowhere else on the remote; bundling them with
+        # the test task keeps it one Gradle invocation (shared config, one
+        # JVM). lintDebug fails on any lint error; ktlintCheck fails on any
+        # violation outside app/config/ktlint/baseline.xml. Paparazzi
+        # screenshot tests are excluded from testDebugUnitTest and run
+        # locally via `:app:verifyPaparazziDebug` (see app/build.gradle.kts).
+        run: gradle :app:lintDebug :app:ktlintCheck :app:testDebugUnitTest --console=plain --no-daemon
 
   # Real-APK boot smoke — runs only on pushes to main (not PRs) to avoid
   # spending 5+ minutes on an emulator for every PR iteration. Gated on

@@ -105,10 +105,11 @@ decoders in both Python and Kotlin live there.
 
 ## Testing
 
-- All decoder logic is pure JVM; test with `:app:testDebugUnitTest`. This is
-  what CI runs (Robolectric only). Paparazzi screenshot tests are excluded
-  from this task because Paparazzi 2.0.0-SNAPSHOT's layoutlib loader fails
-  on cold-cache JVMs.
+- All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
+  (Robolectric). CI runs this alongside `:app:lintDebug` and
+  `:app:ktlintCheck` (see Static analysis & coverage below). Paparazzi
+  screenshot tests are excluded from `testDebugUnitTest` because Paparazzi
+  2.0.0-SNAPSHOT's layoutlib loader fails on cold-cache JVMs.
 - Locally, run `:app:verifyPaparazziDebug` to compare against golden PNGs.
   This is the QC gate before any push that touches `app/src/main/**`.
 - To regenerate goldens: `:app:recordPaparazziDebug --rerun-tasks`. Commit
@@ -116,6 +117,21 @@ decoders in both Python and Kotlin live there.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.
+
+## Static analysis & coverage
+
+- **ktlint** (`:app:ktlintCheck`, runs in CI) enforces the `intellij_idea`
+  code style set in `.editorconfig`. Pre-existing findings are grandfathered
+  in `app/config/ktlint/baseline.xml`; only violations outside the baseline
+  fail. Write new code clean; `:app:ktlintFormat` autofixes most issues.
+  Do NOT regenerate the baseline to silence a fresh finding; regenerate
+  (`:app:ktlintGenerateBaseline`) only after a deliberate style sweep.
+- **JaCoCo** coverage is report-only (`enableUnitTestCoverage`). Run
+  `:app:createDebugUnitTestCoverageReport` for
+  `app/build/reports/coverage/test/debug/`. No threshold gate yet.
+- **detekt** is intentionally not wired: only its 2.0.0-alpha targets the
+  pinned Kotlin 2.3, and an alpha doesn't belong in a public build. Revisit
+  when a stable detekt supports the toolchain.
 
 ## Gotchas
 

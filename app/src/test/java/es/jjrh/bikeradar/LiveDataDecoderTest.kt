@@ -217,4 +217,98 @@ class LiveDataDecoderTest {
         val delta = (later.odometerM ?: 0L) - (open.odometerM ?: 0L)
         assertEquals(500L, delta)
     }
+
+    // ── Remaining varint fields: each decodes into its own slot ─────────
+
+    @Test fun `rider_power decodes as plain int32 watts`() {
+        // Field 5 = rider_power. Pinned as a plain int32 pass-through; the
+        // value is the rider's pedal contribution in watts at the wire.
+        val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), payload(5 to 220L))
+        assertEquals(220, s.riderPower)
+    }
+
+    @Test fun `ambient_brightness decodes as raw int`() {
+        // Field 9 = ambient_brightness_raw; drives the SunsetCalculator
+        // cross-check. Raw value passes through unscaled.
+        val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), payload(9 to 4_096L))
+        assertEquals(4_096, s.ambientBrightnessRaw)
+    }
+
+    @Test fun `charger_connected true edge decodes`() {
+        // Field 22 with a non-zero varint must read true. The existing
+        // multi-field test only exercised the value-0 (false) edge.
+        val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), payload(22 to 1L))
+        assertEquals(true, s.chargerConnected)
+    }
+
+    @Test fun `light_reserve bool decodes both edges`() {
+        // Field 23 = light_reserve.
+        val on = LiveDataDecoder.mergeInto(LiveDataSnapshot(), payload(23 to 1L))
+        assertEquals(true, on.lightReserve)
+        val off = LiveDataDecoder.mergeInto(on, payload(23 to 0L))
+        assertEquals(false, off.lightReserve)
+    }
+
+    @Test fun `diagnosis_active bool decodes both edges`() {
+        // Field 24 = diagnosis_active.
+        val on = LiveDataDecoder.mergeInto(LiveDataSnapshot(), payload(24 to 1L))
+        assertEquals(true, on.diagnosisActive)
+        val off = LiveDataDecoder.mergeInto(on, payload(24 to 0L))
+        assertEquals(false, off.diagnosisActive)
+    }
+
+    // ── Skipped wire types 1 (fixed64) and 5 (fixed32) ──────────────────
+
+    @Test fun `unknown fixed64 wire-type field is skipped without corrupting state`() {
+        // Tag for field 99 wire-type 1 (64-bit fixed) followed by 8 payload
+        // bytes, then a known varint field. The decoder must skip exactly
+        // 8 bytes and stay on rail for the trailing field.
+        val tag99fixed64 = tag(99, 1)
+        val eightBytes = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val knownField = payload(25 to 1L)
+        val data = tag99fixed64 + eightBytes + knownField
+        val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), data)
+        assertEquals(true, s.bikeNotDriving)
+    }
+
+    @Test fun `unknown fixed32 wire-type field is skipped without corrupting state`() {
+        // Tag for field 99 wire-type 5 (32-bit fixed) followed by 4 payload
+        // bytes, then a known varint field. The decoder must skip exactly
+        // 4 bytes.
+        val tag99fixed32 = tag(99, 5)
+        val fourBytes = byteArrayOf(0x11, 0x22, 0x33, 0x44)
+        val knownField = payload(1 to 750L)
+        val data = tag99fixed32 + fourBytes + knownField
+        val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), data)
+        assertEquals(750, s.speedRaw)
+    }
+
+    // ── Length-delimited payload that runs past the buffer end ──────────
+
+    @Test fun `length-delimited field claiming more bytes than remain returns prior snapshot`() {
+        // Field 99 wire-type 2 with a declared length longer than the bytes
+        // that actually follow. The skip index runs past bytes.size; the
+        // decoder must abort and return the prior snapshot unchanged rather
+        // than reading out of bounds.
+        val prev = LiveDataSnapshot(speedRaw = 321)
+        val tag99lenDelim = tag(99, 2)
+        // Declare length 50 but supply only 2 trailing bytes.
+        val data = tag99lenDelim + byteArrayOf(50) + byteArrayOf(0x01, 0x02)
+        val next = LiveDataDecoder.mergeInto(prev, data)
+        assertSame(prev, next)
+    }
+
+    // ── Over-long varint (> 64 bits) ────────────────────────────────────
+
+    @Test fun `varint exceeding 64 bits returns prior snapshot unchanged`() {
+        // A varint whose continuation bytes never terminate within 10 bytes
+        // overflows the 64-bit shift guard. readVarint throws once shift
+        // reaches 64; mergeInto catches it and returns prev.
+        val prev = LiveDataSnapshot(cadence = 42)
+        // field 1 tag, then 11 continuation bytes (all 0x80 = continuation,
+        // payload 0) which forces shift past 64 before any terminator.
+        val overlong = byteArrayOf(tag(1, 0)[0]) + ByteArray(11) { 0x80.toByte() }
+        val next = LiveDataDecoder.mergeInto(prev, overlong)
+        assertSame(prev, next)
+    }
 }

@@ -236,4 +236,18 @@ class HaUrlPolicyTest {
         assertTrue(msg.contains("http://"))
         assertTrue(msg.startsWith("Refused"))
     }
+
+    @Test fun schemeRelativeUrlIsMalformed() {
+        // A protocol-relative URL ("//host/path") parses as a valid URI with
+        // a null scheme. Without a scheme we cannot judge HTTP-vs-HTTPS, so
+        // it must surface as Malformed rather than slipping through.
+        assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("//homeassistant.local/api"))
+    }
+
+    @Test fun httpWithEmptyAuthorityIsMalformed() {
+        // "http:///path" parses with scheme=http but a null host (empty
+        // authority). With no host to classify, the policy refuses as
+        // Malformed rather than treating it as LAN or WAN.
+        assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http:///lovelace"))
+    }
 }

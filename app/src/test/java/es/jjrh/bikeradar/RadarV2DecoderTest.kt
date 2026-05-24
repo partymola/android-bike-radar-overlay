@@ -48,6 +48,25 @@ class RadarV2DecoderTest {
         assertNotNull("empty target frame must emit a snapshot for liveness", state)
     }
 
+    @Test fun shortPayloadReturnsNullWhenNoTracks() {
+        // A runt packet below HEADER_SIZE with nothing to prune yields null:
+        // no header to decode and no stale track to flush.
+        val state = decoder.feed(byteArrayOf(0x00)) // 1 byte < HEADER_SIZE
+        assertNull("sub-header runt with no tracks should return null", state)
+    }
+
+    @Test fun shortPayloadEmitsSnapshotWhenItPrunesAStaleTrack() {
+        // A runt packet (below HEADER_SIZE) can't decode a header, but it
+        // still ages the clock: if a stale track is pruned by the arrival,
+        // a snapshot must be emitted so the overlay clears. This is the
+        // pruneStale-true branch of the sub-header early return.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
+        now += RadarV2Decoder.STALE_MOVING_MS + 200
+        val state = decoder.feed(byteArrayOf(0x00)) // 1 byte < HEADER_SIZE
+        assertNotNull("runt packet must emit a snapshot when it prunes a stale track", state)
+        assertTrue("the pruned-empty snapshot must be a clear", state?.isClear == true)
+    }
+
     // ── status frames ────────────────────────────────────────────────────────
 
     @Test fun statusFrameReturnsNullWhenNoStaleTracks() {

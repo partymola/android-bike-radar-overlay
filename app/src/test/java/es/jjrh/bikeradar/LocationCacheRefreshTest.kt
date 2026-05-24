@@ -25,6 +25,10 @@ import org.robolectric.Shadows.shadowOf
  * the fix the SunsetCalculator runs on. A wrong gate here silently sends
  * front-light auto-mode back to the London fallback every ride.
  */
+// ShadowLocationManager.setLastKnownLocation mirrors the framework setter
+// that Android deprecated; Robolectric 4.14 ships no typed replacement, so
+// the seeding calls below suppress the deprecation at the class level.
+@Suppress("DEPRECATION")
 @RunWith(RobolectricTestRunner::class)
 class LocationCacheRefreshTest {
 

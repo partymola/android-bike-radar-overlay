@@ -36,6 +36,10 @@ class BatteryScanReceiverTest {
     private val adapter =
         (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
+    // The 4-arg ScanResult constructor is deprecated on the framework side,
+    // but it's the only one a JVM test can build without the full extended-
+    // advertising parameter set; the receiver only reads device + name.
+    @Suppress("DEPRECATION")
     private fun scanResultFor(mac: String, name: String, bondState: Int): ScanResult {
         val device = adapter.getRemoteDevice(mac)
         shadowOf(device).setName(name)

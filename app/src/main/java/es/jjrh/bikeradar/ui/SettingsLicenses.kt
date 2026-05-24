@@ -74,7 +74,6 @@ private fun SettingsLicensesBody(navController: NavController) {
                     LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
                     LicenseEntry("Activity Compose", "The Android Open Source Project", "Apache 2.0"),
                     LicenseEntry("Navigation Compose", "The Android Open Source Project", "Apache 2.0"),
-                    LicenseEntry("Security Crypto", "The Android Open Source Project", "Apache 2.0"),
                     LicenseEntry("Material Components for Android", "Google", "Apache 2.0"),
                 ),
             )

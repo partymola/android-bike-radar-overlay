@@ -355,6 +355,9 @@ class BikeRadarService : Service() {
         alertBeeper = AlertBeeper(
             audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
             rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
+            // Record every cue that actually sounds (post-suppression) in the
+            // capture log, so a wrong-time beep can be traced after a ride.
+            onCue = { clog("# cue $it") },
         ).also {
             it.setVolumePct(prefs.alertVolume)
             it.setPanning(

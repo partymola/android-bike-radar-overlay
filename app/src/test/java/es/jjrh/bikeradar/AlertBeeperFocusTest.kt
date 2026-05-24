@@ -55,6 +55,12 @@ class AlertBeeperFocusTest {
         executor = directExecutor,
     )
 
+    private fun beeperRecordingCues(into: MutableList<String>): AlertBeeper = AlertBeeper(
+        audioManager = audioManager,
+        executor = directExecutor,
+        onCue = { into.add(it) },
+    )
+
     private fun lastFocusRequest(): AudioFocusRequest? = shadowAm.lastAudioFocusRequest?.audioFocusRequest
 
     @Test
@@ -197,5 +203,43 @@ class AlertBeeperFocusTest {
             "no focus request should have been made without a play call",
             shadowAm.lastAudioFocusRequest != null,
         )
+    }
+
+    @Test
+    fun onCue_firesWithExpectedTagForEachPlayPath() {
+        // Pins the single-chokepoint contract: every play* path routes
+        // through onCue with its distinct capture-log tag, so a future cue
+        // can't ship unlogged and the post-ride log names what sounded.
+        val cues = mutableListOf<String>()
+        val beeper = beeperRecordingCues(cues)
+        beeper.play(2)
+        beeper.playClear()
+        beeper.playUrgent()
+        beeper.playCriticalBattery()
+        beeper.playRadarDropped()
+        assertEquals(
+            listOf("beep count=2", "clear", "urgent", "critical_battery", "radar_drop"),
+            cues,
+        )
+        beeper.release()
+    }
+
+    @Test
+    fun onCue_notFiredForAnyPathWhileInCall() {
+        // The point of onCue is that it fires AFTER suppressForCall(), so the
+        // capture log reflects what the rider actually HEARD, not just the
+        // intent. In MODE_IN_CALL nothing sounds, so nothing must be recorded.
+        // This pins the ordering: moving onCue above the suppression check
+        // would make the log lie about in-call rides.
+        audioManager.setMode(AudioManager.MODE_IN_CALL)
+        val cues = mutableListOf<String>()
+        val beeper = beeperRecordingCues(cues)
+        beeper.play(2)
+        beeper.playClear()
+        beeper.playUrgent()
+        beeper.playCriticalBattery()
+        beeper.playRadarDropped()
+        assertTrue("no cue should be recorded while MODE_IN_CALL suppresses audio", cues.isEmpty())
+        beeper.release()
     }
 }

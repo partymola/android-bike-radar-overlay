@@ -69,6 +69,13 @@ class AlertBeeper(
     private val audioManager: AudioManager,
     private val rotationProvider: () -> Int = { Surface.ROTATION_90 },
     private val executor: Executor = Executors.newSingleThreadExecutor(),
+    // Invoked the instant a cue is about to actually sound - i.e. AFTER the
+    // MODE_IN_CALL suppression check, on the playback thread. The service
+    // wires this to the capture log so a post-ride review shows what the
+    // rider actually HEARD (distinct from the decision logs, which record
+    // the intent even when the cue is then suppressed). Single chokepoint:
+    // every play* path goes through it, so a future cue can't ship unlogged.
+    private val onCue: (String) -> Unit = {},
 ) {
 
     private val sampleRate = 44100
@@ -180,6 +187,7 @@ class AlertBeeper(
         val durationMs = beepDurationMs.getOrNull(idx) ?: return
         executor.execute {
             if (suppressForCall()) return@execute
+            onCue("beep count=$beeps")
             playPanned(beepMono[idx], beepBuckets[idx], durationMs, lateralPos)
         }
     }
@@ -187,6 +195,7 @@ class AlertBeeper(
     fun playClear() {
         executor.execute {
             if (suppressForCall()) return@execute
+            onCue("clear")
             // Clear is non-directional. Always mono.
             clearTrack.setVolume(currentMonoGain())
             playWithFocus(clearTrack, clearDurationMs)
@@ -196,6 +205,7 @@ class AlertBeeper(
     fun playUrgent(lateralPos: Float = 0f) {
         executor.execute {
             if (suppressForCall()) return@execute
+            onCue("urgent")
             playPanned(urgentMono, urgentBuckets, urgentDurationMs, lateralPos)
         }
     }
@@ -205,6 +215,7 @@ class AlertBeeper(
     fun playCriticalBattery() {
         executor.execute {
             if (suppressForCall()) return@execute
+            onCue("critical_battery")
             criticalBatteryTrack.setVolume(currentMonoGain())
             playWithFocus(criticalBatteryTrack, criticalBatteryDurationMs)
         }
@@ -217,6 +228,7 @@ class AlertBeeper(
     fun playRadarDropped() {
         executor.execute {
             if (suppressForCall()) return@execute
+            onCue("radar_drop")
             radarDroppedTrack.setVolume(currentMonoGain())
             playWithFocus(radarDroppedTrack, radarDroppedDurationMs)
         }

@@ -136,7 +136,7 @@ decoders in both Python and Kotlin live there.
   - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
     and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
   - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
-    project LINE >= 0.45, BRANCH >= 0.90 on the safety-critical deciders.
+    project LINE >= 0.55, BRANCH >= 0.93 on the safety-critical deciders.
     Raise the floors in `app/build.gradle.kts` as coverage grows.
 - **detekt** is intentionally not wired: only its 2.0.0-alpha targets the
   pinned Kotlin 2.3, and an alpha doesn't belong in a public build. Revisit

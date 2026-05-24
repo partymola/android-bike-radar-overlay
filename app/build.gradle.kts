@@ -263,7 +263,7 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.45".toBigDecimal()
+                minimum = "0.55".toBigDecimal()
             }
         }
         // Branch coverage on the safety-critical deciders. LiveDataDecoder is
@@ -280,7 +280,7 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
             limit {
                 counter = "BRANCH"
                 value = "COVEREDRATIO"
-                minimum = "0.90".toBigDecimal()
+                minimum = "0.93".toBigDecimal()
             }
         }
     }

@@ -498,10 +498,11 @@ class AlertBeeper(
      * Stereo STATIC track from a mono cue buffer, with a fixed per-channel
      * gain baked into the interleaved samples. This is how panning is
      * applied without the deprecated per-channel setStereoVolume: each pan
-     * bucket is a separate pre-built track. L = stereo[2i], R = stereo[2i+1]
-     * - the interleave direction has no unit coverage (Robolectric doesn't
-     * expose track PCM), so verify channel direction on-device after editing
-     * here. [leftScale]/[rightScale] are <= 1.0, so no clipping.
+     * bucket is a separate pre-built track. L = stereo[2i], R = stereo[2i+1].
+     * The bucket scale ratios are unit-tested (AlertBeeperPanTest), but this
+     * raw interleave is not (Robolectric doesn't expose track PCM), so verify
+     * channel direction on-device after editing here. [leftScale]/[rightScale]
+     * are <= 1.0, so no clipping.
      */
     private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
         val stereo = ShortArray(mono.size * 2)

@@ -203,11 +203,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_PRECOG, false)
         set(v) { sp.edit().putBoolean(KEY_PRECOG, v).apply() }
 
-    /** Experimental: pan Beep + UrgentApproach to the threat's side via
-     *  stereo gain. Only effective when audio is routed to headphones
-     *  (BT/wired/USB headset); on phone speakers the cue stays centred
-     *  because phone speaker separation is too narrow to give the rider
-     *  usable lateralisation. Default off. */
+    /** Experimental: hard-pan Beep + UrgentApproach to the threat's side.
+     *  Works on stereo headphones (BT/BLE/wired/USB/hearing aid) and on the
+     *  phone's two built-in speakers in landscape (rotation-aware); portrait
+     *  and unknown routes stay centred. Default off. */
     var experimentalLateralPanning: Boolean
         get() = sp.getBoolean(KEY_LATERAL_PANNING, false)
         set(v) { sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply() }

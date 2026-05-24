@@ -81,8 +81,11 @@ android {
         versionCode = 12
         versionName = "0.7.1-alpha"
 
-        buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
-        buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
+        // Empty by default so no HA bearer token is ever baked into a
+        // release (or any non-debug) APK's DEX. The debug buildType below
+        // re-seeds from local.properties for local dev convenience only.
+        buildConfigField("String", "HA_BASE_URL", "\"\"")
+        buildConfigField("String", "HA_TOKEN", "\"\"")
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -126,6 +129,14 @@ android {
             // developer can still produce a release-variant APK for
             // inspection without needing the production keystore.
             signingConfig = release ?: signingConfigs.getByName("debug")
+        }
+        getByName("debug") {
+            // Local dev convenience only: seed HA creds from local.properties
+            // so a fresh debug install needn't re-enter them. Debug APKs are
+            // never distributed. Configured before onbtest so its
+            // initWith(debug) inherits these, then re-zeroes them below.
+            buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
+            buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
         }
         // Throwaway variant for walking through Onboarding without
         // touching the production install's prefs / paired devices.

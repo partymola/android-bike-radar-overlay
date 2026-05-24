@@ -84,7 +84,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
         dashcamConnected = dashcamConnected,
-        dashcamBatteryPct = if (dashcamConnected) dashcamBattery?.pct else null,
+        dashcamBatteryPct = if (dashcamConnected) dashcamBattery.pct else null,
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
         walkAwayThreshold = walkAwayThreshold,
         canBypassDnd = canBypassDnd,

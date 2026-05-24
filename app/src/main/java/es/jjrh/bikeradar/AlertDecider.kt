@@ -433,7 +433,7 @@ class AlertDecider(
                         lastBeepAtMs = nowMs
                         beepPending = false
                         Event.UrgentApproach(
-                            lateralPos = imminentImpactTrigger?.lateralPos ?: 0f,
+                            lateralPos = imminentImpactTrigger.lateralPos,
                         )
                     }
                     riderStationary -> {

@@ -41,4 +41,15 @@ object CriticalBatteryDecider {
         return if (due) Decision(fire = true, lastCueMs = nowMs)
         else Decision(fire = false, lastCueMs = lastCueMs)
     }
+
+    /**
+     * L8 pre-flight-cue gate. A device is eligible for the low-battery
+     * heads-up unless it is the rear radar AND already in the critical band
+     * (`pct < criticalPct`) - that case is covered by the repeating
+     * radar-critical cue, so skipping it here avoids a double cue. The radar
+     * in the low-but-not-critical band, and any non-radar device (e.g. the
+     * dashcam) at any low level, stay eligible.
+     */
+    fun preflightEligible(slug: String, pct: Int, radarSlug: String?, criticalPct: Int): Boolean =
+        !(slug == radarSlug && pct < criticalPct)
 }

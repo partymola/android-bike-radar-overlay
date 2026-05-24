@@ -55,6 +55,25 @@ class CriticalBatteryDeciderTest {
         assertEquals(CriticalBatteryDecider.Decision(false, null), d)
     }
 
+    // ── L8 pre-flight-cue eligibility gate ───────────────────────────────
+
+    @Test fun `preflight skips the radar in the critical band`() {
+        // radar < criticalPct is covered by the repeating radar-critical cue.
+        assertEquals(false, CriticalBatteryDecider.preflightEligible("radar", 5, "radar", criticalPct))
+    }
+
+    @Test fun `preflight cues the radar in the low-but-not-critical band`() {
+        assertEquals(true, CriticalBatteryDecider.preflightEligible("radar", 15, "radar", criticalPct))
+    }
+
+    @Test fun `preflight cues a non-radar device even in the critical band`() {
+        assertEquals(true, CriticalBatteryDecider.preflightEligible("dashcam", 5, "radar", criticalPct))
+    }
+
+    @Test fun `preflight cues when the radar slug is unknown`() {
+        assertEquals(true, CriticalBatteryDecider.preflightEligible("radar", 5, null, criticalPct))
+    }
+
     @Test fun `recovery then re-drop fires immediately`() {
         // Was critical (latch set), battery recovers above threshold (latch
         // cleared), then drops critical again -> must fire at once, not wait

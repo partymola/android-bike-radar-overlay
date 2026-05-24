@@ -272,6 +272,12 @@ class BikeRadarService : Service() {
     // scoped so the cadence survives a radar reconnect; the decider resets
     // it to null whenever the battery is not critical / stale / absent.
     @Volatile private var lastCriticalBatteryCueMs: Long? = null
+    // Per-device (slug) wall-clock ms of the last pre-flight low-battery cue
+    // (L8), threaded through CriticalBatteryDecider with the low threshold +
+    // a 30-min cadence so it's a once-per-device-per-ride connect heads-up.
+    // Accessed only from the overlay collect loop (Main); concurrent map is
+    // belt-and-braces. Survives reconnects so the cadence holds across them.
+    private val preflightBatteryCueMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     // Capture log (written from GATT callback threads + coroutine threads)
     private val captureLogLock = Any()
@@ -1406,17 +1412,19 @@ class BikeRadarService : Service() {
                             .map { it.slug }.toSet()
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
-                        // Rear-radar CRITICAL battery audible cue. The radar
-                        // is the rider's rear-awareness channel, so a critical
-                        // radar battery is the one battery state that earns an
-                        // in-ride sound. Radar-only (never the dashcam). Audio
-                        // is gated on pause like the close-pass beeps; the
-                        // visual glyph above is shown regardless.
+                        // Battery audible cues (audio gated on pause like the
+                        // close-pass beeps; the visual glyph above is shown
+                        // regardless). Two distinct moments share the one
+                        // battery cue:
                         if (!prefs.isPaused) {
                             val critRadarMac = currentRadarMac
                             val critRadarSlug = critRadarMac?.let {
                                 macToSlug[it] ?: macToSlug[it.uppercase(Locale.ROOT)]
                             }
+                            // 1) Rear-radar CRITICAL (radar-only, < CRITICAL_BATTERY_PCT,
+                            //    repeats every ~2 min): the radar is the rider's
+                            //    rear-awareness channel, so a critical radar
+                            //    battery earns a repeating in-ride warning.
                             val critRadarBatt = critRadarSlug?.let { batteries[it] }
                             val critFresh = critRadarBatt != null &&
                                 now - critRadarBatt.readAtMs < BATTERY_STALE_MS
@@ -1432,6 +1440,38 @@ class BikeRadarService : Service() {
                             if (critDecision.fire) {
                                 beeper.playCriticalBattery()
                                 clog("# critical_battery radar=$critRadarSlug pct=${critRadarBatt?.pct}")
+                            }
+
+                            // 2) Pre-flight LOW (L8): a one-shot heads-up at
+                            //    connect when ANY device (radar or dashcam) is
+                            //    below the low-battery threshold, so a swap is
+                            //    realistic while still in the flat rather than
+                            //    mid-commute. 30-min cadence => once per device
+                            //    per ride; the audible counterpart of the silent
+                            //    low-battery glyph. The radar in the critical
+                            //    band is skipped (case 1 already covers it, so
+                            //    no double cue).
+                            for (batt in batteries.values) {
+                                if (!CriticalBatteryDecider.preflightEligible(
+                                        batt.slug, batt.pct, critRadarSlug, CRITICAL_BATTERY_PCT,
+                                    )
+                                ) continue
+                                val pfFresh = now - batt.readAtMs < BATTERY_STALE_MS
+                                val pfDecision = CriticalBatteryDecider.decide(
+                                    pct = batt.pct,
+                                    fresh = pfFresh,
+                                    nowMs = now,
+                                    criticalPct = threshold,
+                                    cadenceMs = PREFLIGHT_BATTERY_CUE_INTERVAL_MS,
+                                    lastCueMs = preflightBatteryCueMs[batt.slug],
+                                )
+                                val pfLast = pfDecision.lastCueMs
+                                if (pfLast == null) preflightBatteryCueMs.remove(batt.slug)
+                                else preflightBatteryCueMs[batt.slug] = pfLast
+                                if (pfDecision.fire) {
+                                    beeper.playCriticalBattery()
+                                    clog("# preflight_battery ${batt.slug} pct=${batt.pct}")
+                                }
                             }
                         }
 
@@ -2557,6 +2597,11 @@ class BikeRadarService : Service() {
          *  design: a critical battery the rider cannot fix mid-ride must not
          *  nag. */
         const val CRITICAL_BATTERY_CUE_INTERVAL_MS = 120_000L
+
+        /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
+         *  long enough that a sub-30-min commute gets exactly one heads-up
+         *  per device at connect, and it re-arms for the next ride. */
+        const val PREFLIGHT_BATTERY_CUE_INTERVAL_MS = 30 * 60 * 1000L
         const val MAX_CAPTURE_LOGS = 500
         const val MIN_USEFUL_LOG_BYTES = 500L
 

@@ -995,10 +995,7 @@ class BikeRadarService : Service() {
                 // fix yet). Fall back to SunsetCalculator's London defaults.
                 SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
             }
-            // It's night if we're before today's sunrise (still in last night) or
-            // after today's sunset (already in this night).
-            val isNight = (sunriseMs != null && nowMs < sunriseMs) ||
-                (sunsetMs != null && nowMs >= sunsetMs)
+            val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
             val initialMode = if (isNight) prefs.cameraLightNightMode else prefs.cameraLightDayMode
             val locLog = if (loc != null) "lat=${"%.2f".format(loc.first)} lon=${"%.2f".format(loc.second)}" else "London-fallback"
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"

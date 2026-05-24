@@ -48,6 +48,17 @@ object SunsetCalculator {
         lonDeg: Double = LONDON_LON_DEG,
     ): Long? = eventEpochMs(date, latDeg, lonDeg, sunset = false)
 
+    /**
+     * Whether [nowMs] is night: before today's [sunriseMs] (still in last
+     * night) or at/after today's [sunsetMs] (already in this night). A null
+     * bound contributes no night signal from that side, so with both null it
+     * returns false (treat as day). Boundary semantics: exactly sunrise is
+     * day, exactly sunset is night.
+     */
+    fun isNight(nowMs: Long, sunriseMs: Long?, sunsetMs: Long?): Boolean =
+        (sunriseMs != null && nowMs < sunriseMs) ||
+            (sunsetMs != null && nowMs >= sunsetMs)
+
     private fun eventEpochMs(date: LocalDate, latDeg: Double, lonDeg: Double, sunset: Boolean): Long? {
         val utcMinutes =
             (if (sunset) sunsetUtcMinutes(date.year, date.monthValue, date.dayOfMonth, latDeg, lonDeg)

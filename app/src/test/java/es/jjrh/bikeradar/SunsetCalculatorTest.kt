@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,5 +151,42 @@ class SunsetCalculatorTest {
         )
         assertNotNull(noArg); assertNotNull(withDefaults)
         assertTrue("default-arg must equal explicit-default-arg", noArg == withDefaults)
+    }
+
+    // ── isNight day/night boundary (drives the connect-time light mode) ──────
+
+    @Test fun isNight_beforeSunriseIsNight() {
+        assertTrue(SunsetCalculator.isNight(nowMs = 500, sunriseMs = 1000, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_betweenSunriseAndSunsetIsDay() {
+        assertFalse(SunsetCalculator.isNight(nowMs = 1500, sunriseMs = 1000, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_afterSunsetIsNight() {
+        assertTrue(SunsetCalculator.isNight(nowMs = 2500, sunriseMs = 1000, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_exactlySunriseIsDay() {
+        // Dawn: night has just ended.
+        assertFalse(SunsetCalculator.isNight(nowMs = 1000, sunriseMs = 1000, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_exactlySunsetIsNight() {
+        // Dusk: night has just begun.
+        assertTrue(SunsetCalculator.isNight(nowMs = 2000, sunriseMs = 1000, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_bothNullIsDay() {
+        // No solar data (polar edge case or no fix): default to day.
+        assertFalse(SunsetCalculator.isNight(nowMs = 1500, sunriseMs = null, sunsetMs = null))
+    }
+
+    @Test fun isNight_onlySunsetKnownAfterIsNight() {
+        assertTrue(SunsetCalculator.isNight(nowMs = 2500, sunriseMs = null, sunsetMs = 2000))
+    }
+
+    @Test fun isNight_onlySunriseKnownBeforeIsNight() {
+        assertTrue(SunsetCalculator.isNight(nowMs = 500, sunriseMs = 1000, sunsetMs = null))
     }
 }

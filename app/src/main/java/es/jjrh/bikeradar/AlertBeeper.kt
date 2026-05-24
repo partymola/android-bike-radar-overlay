@@ -57,9 +57,9 @@ import kotlin.math.sin
  *
  * Portrait orientation (ROTATION_0 / ROTATION_180) plays mono - the two
  * speakers are physically close together in portrait, no usable
- * lateralisation. Unknown routes also fall back to mono. The pan formula
- * tops out at (1.0, 0.7) so the cue is always audible in both channels.
- * Clear chime is always centred (it's not directional).
+ * lateralisation. Unknown routes also fall back to mono. The pan is hard
+ * (full deflection mutes the opposite channel); safe because both phone
+ * speakers are on the bike. Clear chime is always centred (not directional).
  */
 class AlertBeeper(
     private val audioManager: AudioManager,
@@ -267,18 +267,20 @@ class AlertBeeper(
     }
 
     /**
-     * Pan formula: linear interpolation on [lateralPos] in [-1, +1].
-     *  -1 -> (1.0, 0.7) full left
-     *   0 -> (0.85, 0.85) centred
-     *  +1 -> (0.7, 1.0) full right
-     * Caps at 0.7 on the quiet side so the cue is never inaudible on
-     * the opposite ear (preserves audibility if the rider's earbud-side
-     * battery dies mid-ride).
+     * Hard pan formula on [lateralPos] in [-1, +1]: full deflection mutes
+     * the opposite channel.
+     *  -1 -> (1.0, 0.0) full left
+     *   0 -> (1.0, 1.0) centred (both channels full)
+     *  +1 -> (0.0, 1.0) full right
+     * Hard rather than capped because the audio always comes from the
+     * phone's two built-in speakers (never headphones), so there is no
+     * silent-ear risk - both speakers are on the bike. The previous ~3 dB
+     * bias was too subtle to localise.
      */
     internal fun computePan(lateralPos: Float): Pair<Float, Float> {
         val clamped = lateralPos.coerceIn(-1f, 1f)
-        val left = 0.85f - 0.15f * clamped
-        val right = 0.85f + 0.15f * clamped
+        val left = (1f - clamped).coerceAtMost(1f)
+        val right = (1f + clamped).coerceAtMost(1f)
         return left to right
     }
 

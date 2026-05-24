@@ -57,42 +57,42 @@ class AlertBeeperPanTest {
 
     // ── Pan formula (pure shape, route-independent) ──────────────────────
 
-    @Test fun centreIsBalanced() {
+    @Test fun centreIsBothChannelsFull() {
         val (l, r) = beeper().computePan(0f)
-        assertEquals(0.85f, l, 0.0001f)
-        assertEquals(0.85f, r, 0.0001f)
+        assertEquals(1.0f, l, 0.0001f)
+        assertEquals(1.0f, r, 0.0001f)
     }
 
-    @Test fun fullLeftMaxesLeftMutesNothing() {
+    @Test fun fullLeftMutesRight() {
         val (l, r) = beeper().computePan(-1f)
         assertEquals(1.0f, l, 0.0001f)
-        assertEquals(0.7f, r, 0.0001f)
+        assertEquals(0.0f, r, 0.0001f)
     }
 
-    @Test fun fullRightMaxesRightMutesNothing() {
+    @Test fun fullRightMutesLeft() {
         val (l, r) = beeper().computePan(+1f)
-        assertEquals(0.7f, l, 0.0001f)
+        assertEquals(0.0f, l, 0.0001f)
         assertEquals(1.0f, r, 0.0001f)
     }
 
     @Test fun halfLeftIsHalfwayBetweenCentreAndFull() {
         val (l, r) = beeper().computePan(-0.5f)
-        assertEquals(0.925f, l, 0.0001f)
-        assertEquals(0.775f, r, 0.0001f)
+        assertEquals(1.0f, l, 0.0001f)
+        assertEquals(0.5f, r, 0.0001f)
     }
 
     @Test fun halfRightIsHalfwayBetweenCentreAndFull() {
         val (l, r) = beeper().computePan(+0.5f)
-        assertEquals(0.775f, l, 0.0001f)
-        assertEquals(0.925f, r, 0.0001f)
+        assertEquals(0.5f, l, 0.0001f)
+        assertEquals(1.0f, r, 0.0001f)
     }
 
     @Test fun outOfRangeClampsToFull() {
         val left = beeper().computePan(-5f)
         assertEquals(1.0f, left.first, 0.0001f)
-        assertEquals(0.7f, left.second, 0.0001f)
+        assertEquals(0.0f, left.second, 0.0001f)
         val right = beeper().computePan(+5f)
-        assertEquals(0.7f, right.first, 0.0001f)
+        assertEquals(0.0f, right.first, 0.0001f)
         assertEquals(1.0f, right.second, 0.0001f)
     }
 
@@ -121,24 +121,24 @@ class AlertBeeperPanTest {
     @Test fun headphoneRouteFullLeftLandsLouderOnLeftChannel() {
         val b = beeper()
         for (rot in listOf(Surface.ROTATION_0, Surface.ROTATION_90, Surface.ROTATION_180, Surface.ROTATION_270)) {
-            assertStereo(1.0f, 0.7f, b.resolvePan(-1f, 1f, true, false, true, false, rot), "headphone+lat=-1+rot=$rot")
+            assertStereo(1.0f, 0.0f, b.resolvePan(-1f, 1f, true, false, true, false, rot), "headphone+lat=-1+rot=$rot")
         }
     }
 
     @Test fun headphoneRouteFullRightLandsLouderOnRightChannel() {
         val b = beeper()
         for (rot in listOf(Surface.ROTATION_0, Surface.ROTATION_90, Surface.ROTATION_180, Surface.ROTATION_270)) {
-            assertStereo(0.7f, 1.0f, b.resolvePan(+1f, 1f, true, false, true, false, rot), "headphone+lat=+1+rot=$rot")
+            assertStereo(0.0f, 1.0f, b.resolvePan(+1f, 1f, true, false, true, false, rot), "headphone+lat=+1+rot=$rot")
         }
     }
 
     @Test fun headphoneRouteCentreIsBalanced() {
-        assertStereo(0.85f, 0.85f, beeper().resolvePan(0f, 1f, true, false, true, false, Surface.ROTATION_90))
+        assertStereo(1.0f, 1.0f, beeper().resolvePan(0f, 1f, true, false, true, false, Surface.ROTATION_90))
     }
 
     @Test fun headphoneRouteInvertSwapsLR() {
         assertStereo(
-            0.7f, 1.0f,
+            0.0f, 1.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = true, builtinSpeakerActive = false, rotation = Surface.ROTATION_90),
             "headphone+invert: bike-LEFT lands louder on RIGHT channel",
         )
@@ -151,8 +151,8 @@ class AlertBeeperPanTest {
         // rider's left. HAL maps audio L to earpiece (always). So audio L
         // already reaches the rider's left ear; no swap needed.
         val b = beeper()
-        assertStereo(1.0f, 0.7f, b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_90))
-        assertStereo(0.7f, 1.0f, b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_90))
+        assertStereo(1.0f, 0.0f, b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_90))
+        assertStereo(0.0f, 1.0f, b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_90))
     }
 
     @Test fun speakerRotation270SwapsToCompensateForHALMapping() {
@@ -162,9 +162,9 @@ class AlertBeeperPanTest {
         // which Android routes to the bottom-main speaker, now on the
         // rider's left.
         val b = beeper()
-        assertStereo(0.7f, 1.0f, b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_270),
+        assertStereo(0.0f, 1.0f, b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_270),
             "speaker+rot=270: bike-LEFT must put LOUDER gain on R channel")
-        assertStereo(1.0f, 0.7f, b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_270),
+        assertStereo(1.0f, 0.0f, b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_270),
             "speaker+rot=270: bike-RIGHT must put LOUDER gain on L channel")
     }
 
@@ -184,7 +184,7 @@ class AlertBeeperPanTest {
         // XOR: rotation-270 swaps AND invertLR swaps; both fire = no net
         // swap. Matches no-swap-no-invert (rotation 90 headphone-equivalent).
         assertStereo(
-            1.0f, 0.7f,
+            1.0f, 0.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = false, builtinSpeakerActive = true, rotation = Surface.ROTATION_270),
         )
     }
@@ -192,7 +192,7 @@ class AlertBeeperPanTest {
     @Test fun speakerInvertCompoundsRotation90Swap() {
         // ROTATION_90 doesn't swap; invertLR alone produces the swapped result.
         assertStereo(
-            0.7f, 1.0f,
+            0.0f, 1.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = false, builtinSpeakerActive = true, rotation = Surface.ROTATION_90),
         )
     }
@@ -213,11 +213,11 @@ class AlertBeeperPanTest {
     // ── Volume scaling ───────────────────────────────────────────────────
 
     @Test fun monoGainScalesStereoGains() {
-        // resolvePan multiplies the pan-formula output by monoGain so
-        // user volume cuts both channels proportionally. Half volume
-        // (0.5) on full-left pan -> (0.5, 0.35).
+        // resolvePan multiplies the pan-formula output by monoGain so user
+        // volume cuts both channels proportionally. Half volume (0.5) on
+        // full-left hard pan -> (0.5, 0.0).
         assertStereo(
-            0.5f, 0.35f,
+            0.5f, 0.0f,
             beeper().resolvePan(-1f, 0.5f, true, false, true, false, Surface.ROTATION_90),
         )
     }

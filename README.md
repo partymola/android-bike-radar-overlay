@@ -67,7 +67,7 @@ Garmin. Bug reports welcome; please include device + Android version
 ## Requirements
 
 - Android phone (tested on Pixel 10 Pro XL / Android 16). `minSdk = 31`,
-  `targetSdk = 34`.
+  `targetSdk = 36`.
 - A rear-radar BLE head unit that speaks V1 (cleartext) or V2 (bonded).
   V2 requires a one-time LE Secure Connections pair via Android's own
   Bluetooth settings; the app does not attempt `createBond()` itself.

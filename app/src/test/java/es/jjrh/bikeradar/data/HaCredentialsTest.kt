@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
  * Verifies [HaCredentials] honours the [Cryptor] contract: stored values
  * are not the plaintext, round-trip restores plaintext, and `isConfigured`
  * tracks save/clear correctly. The seam is what makes the rest of the
- * Activity / Service smoke tests possible — a regression here breaks
+ * Activity / Service smoke tests possible - a regression here breaks
  * everything downstream.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -79,6 +79,19 @@ class HaCredentialsTest {
         assertFalse(creds.isConfigured())
         assertEquals("", creds.baseUrl)
         assertEquals("", creds.token)
+    }
+
+    @Test
+    fun individualPropertySettersRoundTripThroughCryptor() {
+        // save() is the common path; the baseUrl/token property setters are a
+        // separate entry point (Settings edits one field at a time).
+        val creds = HaCredentials(app)
+        creds.baseUrl = "https://lan.local:8123"
+        creds.token = "tok-xyz"
+        val reread = HaCredentials(app)
+        assertEquals("https://lan.local:8123", reread.baseUrl)
+        assertEquals("tok-xyz", reread.token)
+        assertTrue(reread.isConfigured())
     }
 
     @Test

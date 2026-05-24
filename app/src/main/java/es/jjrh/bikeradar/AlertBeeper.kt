@@ -14,6 +14,7 @@ import android.view.Surface
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -36,8 +37,12 @@ import kotlin.math.sin
  * loudness noticeably.
  *
  * Stereo panning (experimental, default off via prefs): when [setPanning]
- * is on, [play] and [playUrgent] use `setStereoVolume` to bias the cue
- * toward the threat's side. Two output paths support pan:
+ * is on, [play] and [playUrgent] bias the cue toward the threat's side by
+ * playing one of [PAN_BUCKETS] pre-built stereo tracks whose L/R balance is
+ * baked into the samples (see [playPanned] / [nearestPanBucket]). When pan
+ * is off / portrait / an unknown route, the cue plays a plain MONO track at
+ * the same level as before - no stereo-downmix level shift on the built-in
+ * speaker. Two output paths support pan:
  *
  *   - **Headphone-class routes** (BT A2DP / BLE / wired / USB / hearing
  *     aid): channel labels travel intact end-to-end. App's L always
@@ -67,9 +72,36 @@ class AlertBeeper(
     private val toneDurMs  = 80
     private val gapMs      = 110
 
-    private val tracks = Array(3) { i -> buildBeepTrack(i + 1) }
+    // Mono cue PCM, built once. Reused to make both the mono default-path
+    // track and the stereo pan-bucket tracks.
+    private val beepPcm: Array<ShortArray> = Array(3) { i -> buildBeepPcm(i + 1) }
+    private val urgentPcm: ShortArray = buildUrgentPcm()
+
+    // Pan buckets: PAN_BUCKETS L/R ratios baked from the same [computePan]
+    // formula resolvePan uses (peak channel normalised to 1.0). Selecting
+    // the nearest bucket at play time replaces per-channel setStereoVolume
+    // (deprecated since API 21, no per-channel replacement). [bucketImbalance]
+    // is the peak-normalised (right-left) per bucket - the same metric
+    // [nearestPanBucket] computes at runtime.
+    internal val bucketScales: Array<Pair<Float, Float>> = Array(PAN_BUCKETS) { k ->
+        val (l, r) = computePan(BUCKET_LATERAL_POS[k])
+        val peak = maxOf(l, r)
+        (l / peak) to (r / peak)
+    }
+    private val bucketImbalance: FloatArray =
+        FloatArray(PAN_BUCKETS) { k -> bucketScales[k].second - bucketScales[k].first }
+
+    // Default (non-panned) path stays MONO - byte-identical level to the
+    // pre-bucket code, no stereo-downmix shift on the phone speaker.
+    private val beepMono: Array<AudioTrack> = Array(3) { i -> makeTrack(beepPcm[i]) }
+    private val urgentMono: AudioTrack = makeTrack(urgentPcm)
+    // Pan path: one stereo track per cue per bucket.
+    private val beepBuckets: Array<Array<AudioTrack>> = Array(3) { i ->
+        Array(PAN_BUCKETS) { b -> makeStereoTrack(beepPcm[i], bucketScales[b].first, bucketScales[b].second) }
+    }
+    private val urgentBuckets: Array<AudioTrack> =
+        Array(PAN_BUCKETS) { b -> makeStereoTrack(urgentPcm, bucketScales[b].first, bucketScales[b].second) }
     private val clearTrack = buildClearTrack()
-    private val urgentTrack = buildUrgentTrack()
     private val criticalBatteryTrack = buildCriticalBatteryTrack()
 
     // Track-duration table for the abandon-timer. Computed at build time
@@ -127,12 +159,12 @@ class AlertBeeper(
     }
 
     fun play(beeps: Int, lateralPos: Float = 0f) {
-        val track = tracks.getOrNull(beeps - 1) ?: return
-        val durationMs = beepDurationMs.getOrNull(beeps - 1) ?: return
+        val idx = beeps - 1
+        if (idx !in beepMono.indices) return
+        val durationMs = beepDurationMs.getOrNull(idx) ?: return
         executor.execute {
             if (suppressForCall()) return@execute
-            applyPan(track, lateralPos)
-            playWithFocus(track, durationMs)
+            playPanned(beepMono[idx], beepBuckets[idx], durationMs, lateralPos)
         }
     }
 
@@ -148,8 +180,7 @@ class AlertBeeper(
     fun playUrgent(lateralPos: Float = 0f) {
         executor.execute {
             if (suppressForCall()) return@execute
-            applyPan(urgentTrack, lateralPos)
-            playWithFocus(urgentTrack, urgentDurationMs)
+            playPanned(urgentMono, urgentBuckets, urgentDurationMs, lateralPos)
         }
     }
 
@@ -180,9 +211,11 @@ class AlertBeeper(
             hasFocus = false
         }
         audioManager.unregisterAudioDeviceCallback(deviceCallback)
-        tracks.forEach { it.release() }
+        beepMono.forEach { it.release() }
+        beepBuckets.forEach { row -> row.forEach { it.release() } }
+        urgentMono.release()
+        urgentBuckets.forEach { it.release() }
         clearTrack.release()
-        urgentTrack.release()
         criticalBatteryTrack.release()
         if (executor is java.util.concurrent.ExecutorService) executor.shutdown()
     }
@@ -220,9 +253,11 @@ class AlertBeeper(
 
     private fun applyVolume() {
         val g = currentMonoGain()
-        tracks.forEach { it.setVolume(g) }
+        beepMono.forEach { it.setVolume(g) }
+        beepBuckets.forEach { row -> row.forEach { it.setVolume(g) } }
+        urgentMono.setVolume(g)
+        urgentBuckets.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
-        urgentTrack.setVolume(g)
         criticalBatteryTrack.setVolume(g)
     }
 
@@ -247,7 +282,23 @@ class AlertBeeper(
         return left to right
     }
 
-    private fun applyPan(track: AudioTrack, lateralPos: Float) {
+    /**
+     * Play the cue with stereo panning. [resolvePan] stays the decision
+     * authority (route / rotation / invert / volume); a [PanResult.Mono]
+     * plays the plain mono track, a [PanResult.Stereo] maps to the nearest
+     * pre-built pan bucket. The absolute level is applied with the non-
+     * deprecated [AudioTrack.setVolume] (uniform). Because each bucket's
+     * peak channel is normalised to 1.0, playing the chosen bucket at
+     * `setVolume(max(left, right))` reproduces resolvePan's gains.
+     */
+    private fun playPanned(
+        monoTrack: AudioTrack,
+        buckets: Array<AudioTrack>,
+        durationMs: Int,
+        lateralPos: Float,
+    ) {
+        val track: AudioTrack
+        val level: Float
         when (val result = resolvePan(
             lateralPos = lateralPos,
             monoGain = currentMonoGain(),
@@ -257,22 +308,46 @@ class AlertBeeper(
             // No headphone present implies the built-in speaker is the
             // active route (always present in `getDevices(GET_OUTPUTS)`
             // on any phone). The pan logic only fires for it in
-            // landscape; portrait falls through to mono inside
-            // resolvePan.
+            // landscape; portrait falls through to mono inside resolvePan.
             builtinSpeakerActive = !hasHeadphoneRoute,
             rotation = rotationProvider(),
         )) {
-            is PanResult.Stereo -> track.setStereoVolume(result.left, result.right)
-            is PanResult.Mono -> track.setVolume(result.gain)
+            is PanResult.Mono -> { track = monoTrack; level = result.gain }
+            is PanResult.Stereo -> {
+                track = buckets[nearestPanBucket(result.left, result.right)]
+                level = maxOf(result.left, result.right)
+            }
         }
+        track.setVolume(level)
+        playWithFocus(track, durationMs)
     }
 
     /**
-     * Pure-functional decision: given the current pan state, return
-     * either a stereo gain pair (for `setStereoVolume`) or a mono gain
-     * (for `setVolume`). Exhaustively unit-tested in
-     * `AlertBeeperPanTest` across {pan on/off} x {headphone, speaker,
-     * unknown} x {rotation 0/90/180/270} x {invert on/off}.
+     * Map a resolved stereo gain pair to the nearest pan bucket by L/R
+     * imbalance, normalised by the louder channel so it is volume-
+     * independent. Invert and rotation are already folded into the gains
+     * resolvePan returns. Ties favour the lower index (strict `<`). Pure;
+     * [bucketImbalance] is derived from [computePan].
+     */
+    internal fun nearestPanBucket(left: Float, right: Float): Int {
+        val peak = maxOf(left, right)
+        if (peak <= 0f) return CENTER_BUCKET
+        val imbalance = (right - left) / peak
+        var best = CENTER_BUCKET
+        var bestDist = Float.MAX_VALUE
+        for (k in bucketImbalance.indices) {
+            val d = abs(imbalance - bucketImbalance[k])
+            if (d < bestDist) { bestDist = d; best = k }
+        }
+        return best
+    }
+
+    /**
+     * Pure-functional decision: given the current pan state, return either
+     * a stereo gain pair or a mono gain. The caller ([playPanned]) maps the
+     * result to a mono track or a pre-built pan bucket. Exhaustively unit-
+     * tested in `AlertBeeperPanTest` across {pan on/off} x {headphone,
+     * speaker, unknown} x {rotation 0/90/180/270} x {invert on/off}.
      */
     internal fun resolvePan(
         lateralPos: Float,
@@ -337,7 +412,7 @@ class AlertBeeper(
         hasHeadphoneRoute = outputs.any { it.type in HEADPHONE_TYPES }
     }
 
-    private fun buildBeepTrack(count: Int): AudioTrack {
+    private fun buildBeepPcm(count: Int): ShortArray {
         val toneSamples = sampleRate * toneDurMs / 1000
         val gapSamples  = sampleRate * gapMs  / 1000
         val tone        = generateTone(toneSamples, beepFreqHz)
@@ -349,7 +424,7 @@ class AlertBeeper(
             tone.copyInto(buf, pos); pos += toneSamples
             if (i < count - 1) { gap.copyInto(buf, pos); pos += gapSamples }
         }
-        return makeTrack(buf)
+        return buf
     }
 
     private fun buildClearTrack(): AudioTrack {
@@ -366,7 +441,7 @@ class AlertBeeper(
         return makeTrack(buf)
     }
 
-    private fun buildUrgentTrack(): AudioTrack {
+    private fun buildUrgentPcm(): ShortArray {
         // 4 beeps at 3800 Hz, 70 ms tone, 50 ms gap. Faster cadence and
         // higher pitch than play(3) so the rider recognises this as the
         // stationary-safety-override pattern, not a normal close-approach
@@ -382,7 +457,7 @@ class AlertBeeper(
             tone.copyInto(buf, pos); pos += toneSamples
             if (i < count - 1) { gap.copyInto(buf, pos); pos += gapSamples }
         }
-        return makeTrack(buf)
+        return buf
     }
 
     private fun buildCriticalBatteryTrack(): AudioTrack {
@@ -417,6 +492,45 @@ class AlertBeeper(
         return buf
     }
 
+    /**
+     * Stereo STATIC track from a mono cue buffer, with a fixed per-channel
+     * gain baked into the interleaved samples. This is how panning is
+     * applied without the deprecated per-channel setStereoVolume: each pan
+     * bucket is a separate pre-built track. L = stereo[2i], R = stereo[2i+1]
+     * - the interleave direction has no unit coverage (Robolectric doesn't
+     * expose track PCM), so verify channel direction on-device after editing
+     * here. [leftScale]/[rightScale] are <= 1.0, so no clipping.
+     */
+    private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
+        val stereo = ShortArray(mono.size * 2)
+        for (i in mono.indices) {
+            val s = mono[i].toInt()
+            stereo[2 * i]     = (s * leftScale).toInt().toShort()
+            stereo[2 * i + 1] = (s * rightScale).toInt().toShort()
+        }
+        val minBuf = AudioTrack.getMinBufferSize(
+            sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT
+        )
+        return AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                    .build()
+            )
+            .setBufferSizeInBytes(maxOf(stereo.size * 2, minBuf))
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .build()
+            .also { it.write(stereo, 0, stereo.size) }
+    }
+
     private fun makeTrack(buf: ShortArray): AudioTrack {
         val minBuf = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -448,6 +562,21 @@ class AlertBeeper(
          *  abandoned. Covers AudioTrack finish latency and gives media
          *  apps a clean restore window. */
         private const val ABANDON_SAFETY_MARGIN_MS = 50
+
+        /** Number of discrete pan positions pre-built per pannable cue. Five
+         *  is fine enough to track the (capped) pan range, and the rider
+         *  can't resolve finer lateralisation from two phone speakers under
+         *  helmet + wind anyway. */
+        private const val PAN_BUCKETS = 5
+
+        /** Index of the centre bucket; also the [PanResult.Mono] fallback if
+         *  a gain pair has no peak. Relies on [BUCKET_LATERAL_POS] being
+         *  symmetric about 0. */
+        private const val CENTER_BUCKET = PAN_BUCKETS / 2
+
+        /** Representative lateral position of each bucket, evenly spaced over
+         *  the full pan range. Must have [PAN_BUCKETS] entries, symmetric. */
+        private val BUCKET_LATERAL_POS = floatArrayOf(-1f, -0.5f, 0f, 0.5f, 1f)
 
         /** Output device types that physically map app's L channel to the
          *  rider's left ear regardless of phone rotation. Pan is only

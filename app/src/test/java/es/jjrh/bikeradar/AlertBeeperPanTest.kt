@@ -225,4 +225,71 @@ class AlertBeeperPanTest {
     @Test fun monoGainScalesMonoResult() {
         assertMono(0.25f, beeper().resolvePan(-1f, 0.25f, false, false, true, false, Surface.ROTATION_90))
     }
+
+    // ── nearestPanBucket: resolved gains -> pre-built stereo bucket ───────
+    // These are written formula-relative (driven by resolvePan / bucketScales
+    // rather than magic gain numbers) so they survive pan-width tuning.
+
+    @Test fun nearestPanBucket_roundTripsResolvePanGains() {
+        // The load-bearing property: each of the 5 bucket lateral positions,
+        // run through resolvePan, maps back to its own bucket index - so the
+        // played track reproduces the resolved L/R balance.
+        val b = beeper()
+        listOf(-1f, -0.5f, 0f, 0.5f, 1f).forEachIndexed { idx, lat ->
+            val r = b.resolvePan(lat, 1f, true, false, true, false, Surface.ROTATION_90)
+                as AlertBeeper.PanResult.Stereo
+            assertEquals("lat=$lat should map to bucket $idx", idx, b.nearestPanBucket(r.left, r.right))
+        }
+    }
+
+    @Test fun nearestPanBucket_centreGuardsZeroPeak() {
+        // Silent (both channels 0) can't divide by peak; fall back to centre.
+        assertEquals(2, beeper().nearestPanBucket(0f, 0f))
+    }
+
+    @Test fun nearestPanBucket_isVolumeIndependent() {
+        // Full-left at full vs half volume must select the same (left-extreme)
+        // bucket - the imbalance is normalised by the louder channel.
+        val b = beeper()
+        val full = b.resolvePan(-1f, 1f, true, false, true, false, Surface.ROTATION_90)
+            as AlertBeeper.PanResult.Stereo
+        val half = b.resolvePan(-1f, 0.5f, true, false, true, false, Surface.ROTATION_90)
+            as AlertBeeper.PanResult.Stereo
+        assertEquals(0, b.nearestPanBucket(full.left, full.right))
+        assertEquals(
+            "half volume must pick the same bucket as full",
+            b.nearestPanBucket(full.left, full.right),
+            b.nearestPanBucket(half.left, half.right),
+        )
+    }
+
+    @Test fun bucketScales_directionLowerIndexLouderLeft() {
+        // Pins the *direction* of the baked ratio (not just the magnitude
+        // nearestPanBucket sees) - the one test that catches a makeStereoTrack
+        // L/R swap or a transposed scale argument.
+        val s = beeper().bucketScales
+        assertTrue("bucket 0 must be louder-left", s[0].first > s[0].second)
+        assertEquals("centre balanced", s[2].first, s[2].second, 0.0001f)
+        assertTrue("bucket 4 must be louder-right", s[4].second > s[4].first)
+        assertEquals("mirror: bucket 0 left == bucket 4 right", s[0].first, s[4].second, 0.0001f)
+        assertEquals("mirror: bucket 0 right == bucket 4 left", s[0].second, s[4].first, 0.0001f)
+    }
+
+    @Test fun nearestPanBucket_invertMirrorsBucket() {
+        // Invert is folded into resolvePan's gains; a bike-left cue with
+        // invert must select the right-extreme bucket (wrong-ear guard).
+        val b = beeper()
+        val r = b.resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = true,
+            builtinSpeakerActive = false, rotation = Surface.ROTATION_90) as AlertBeeper.PanResult.Stereo
+        assertEquals("bike-left + invert -> right-extreme bucket", 4, b.nearestPanBucket(r.left, r.right))
+    }
+
+    @Test fun nearestPanBucket_speakerRotation270SelectsSwappedBucket() {
+        // Rotation-270 swap is folded into the gains; a bike-left cue on the
+        // speaker at 270 must select the right-channel bucket (wrong-ear guard).
+        val b = beeper()
+        val r = b.resolvePan(-1f, 1f, true, false, hasHeadphoneRoute = false,
+            builtinSpeakerActive = true, rotation = Surface.ROTATION_270) as AlertBeeper.PanResult.Stereo
+        assertEquals("bike-left on speaker@270 -> right-channel bucket", 4, b.nearestPanBucket(r.left, r.right))
+    }
 }

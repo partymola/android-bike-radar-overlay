@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,10 +27,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -46,6 +49,7 @@ fun SettingsCameraLight(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) {
     val br = LocalBrColors.current
+    val ctx = LocalContext.current
     var autoEnabled by rememberSaveable { mutableStateOf(prefs.autoLightModeEnabled) }
     var dayMode by rememberSaveable { mutableStateOf(prefs.cameraLightDayMode) }
     var nightMode by rememberSaveable { mutableStateOf(prefs.cameraLightNightMode) }
@@ -88,6 +92,24 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
                     enabled = autoEnabled,
                     isLast = true,
                 )
+            }
+
+            // When auto-mode is on but approximate location is denied, the
+            // sunrise/sunset calc silently falls back to London. Surface the
+            // grant prompt right here (it's also in onboarding + Settings ->
+            // Permissions, but an existing rider who never re-runs onboarding
+            // would otherwise never be told). Reuses PermissionCard for the
+            // request + rationale + permanent-denial deeplink; shown only
+            // while it's actionable (auto-mode on AND not yet granted).
+            val locSpec = remember {
+                PERMISSIONS.first { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
+            }
+            var locPermTick by rememberSaveable { mutableStateOf(0) }
+            val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
+            if (autoEnabled && !locGranted) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    PermissionCard(locSpec, locGranted, onChanged = { locPermTick++ })
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))

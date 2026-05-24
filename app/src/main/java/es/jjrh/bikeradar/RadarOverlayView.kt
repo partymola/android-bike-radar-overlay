@@ -6,11 +6,16 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
-import android.util.TypedValue
 import android.view.View
 import kotlin.math.roundToInt
 
 class RadarOverlayView(context: Context) : View(context) {
+
+    // Cached once: dp() is called ~20x per onDraw (and per vehicle), and the
+    // only thing it needed from resources was the display density, which does
+    // not change for a fixed-screen overlay during a session. Declared first
+    // so the paint initializers below, which call dp() at construction, see it.
+    private val density = resources.displayMetrics.density
 
     private var state: RadarState = RadarState()
 
@@ -462,7 +467,10 @@ class RadarOverlayView(context: Context) : View(context) {
         return amber to red
     }
 
-    private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
+    // COMPLEX_UNIT_DIP is defined as value * density, so the cached-density
+    // multiply is identical to TypedValue.applyDimension - just without the
+    // per-call resources.displayMetrics lookup.
+    private fun dp(v: Float) = v * density
 
     companion object {
         const val MIN_VISUAL_MAX_M = 10

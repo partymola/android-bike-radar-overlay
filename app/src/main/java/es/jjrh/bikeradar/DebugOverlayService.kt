@@ -12,6 +12,7 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
+import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
@@ -54,10 +55,14 @@ class DebugOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        startForeground(
-            NOTIF_ID, buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
-        )
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(
+                NOTIF_ID, buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+            )
+        } else {
+            startForeground(NOTIF_ID, buildNotification())
+        }
 
         if (!Settings.canDrawOverlays(this)) {
             Log.w(TAG, "no SYSTEM_ALERT_WINDOW; stopping")

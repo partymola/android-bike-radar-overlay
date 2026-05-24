@@ -1852,7 +1852,11 @@ class BikeRadarService : Service() {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
         val file = java.io.File(dir, "bike-radar-capture-$stamp.log")
         try {
-            val pw = PrintWriter(BufferedWriter(FileWriter(file)), true)
+            // No autoFlush: it write()s on every println, defeating the
+            // BufferedWriter and adding a syscall per BLE notify (~11 Hz).
+            // closeCaptureLog() flushes on the normal onDestroy path; the
+            // 8 KB buffer bounds any loss on an abnormal kill.
+            val pw = PrintWriter(BufferedWriter(FileWriter(file)))
             synchronized(captureLogLock) { captureLogWriter = pw }
             activeCaptureLogName = file.name
             clog("# bike-radar capture started ${java.time.Instant.now()}")

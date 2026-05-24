@@ -48,6 +48,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.data.PrefsSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -155,6 +156,14 @@ class BikeRadarService : Service() {
     // full rationale.
     @Volatile private var radarDropLastCueMs: Long? = null
 
+    // Cached overlay settings so the per-frame overlay loop does not re-read
+    // SharedPreferences ~6-10x a frame for values the user changes a handful
+    // of times a session. Kept fresh by a prefs.flow collector in onCreate
+    // (same pattern as DebugOverlayService); the getter falls back to a live
+    // snapshot until the collector's first emit, so it is never stale-null.
+    @Volatile private var cachedOverlayPrefs: PrefsSnapshot? = null
+    private val overlayPrefs: PrefsSnapshot get() = cachedOverlayPrefs ?: prefs.snapshot()
+
     // Live EBikeLink instance, null when experimental.ldi.enable is off.
     @Volatile private var ebikeLink: EBikeLink? = null
 
@@ -178,11 +187,9 @@ class BikeRadarService : Service() {
 
     @Volatile private var climbing: Boolean = false
 
-    // Throttle for the phone-battery capture-log line. Logged on level
-    // changes and otherwise no more than once per PHONE_BATTERY_LOG_PERIOD_MS.
+    // Throttle for the phone-battery capture-log line: read + logged no more
+    // than once per PHONE_BATTERY_LOG_PERIOD_MS.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
-
-    @Volatile private var lastPhoneBatteryLevel: Int = -1
 
     /** Running total of ms the radar has been CONNECTED this session, used
      *  as the cold-start grace gate. Integrated on each connect→disconnect
@@ -331,6 +338,8 @@ class BikeRadarService : Service() {
         rideStats = RideStatsAccumulator()
         rideSummaryDiscoveredSlugs.clear()
         prefs = Prefs(this)
+        cachedOverlayPrefs = prefs.snapshot()
+        scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
         ha = HaClient(creds.baseUrl, creds.token)
@@ -1429,32 +1438,20 @@ class BikeRadarService : Service() {
                             // Phone battery snapshot via the cached sticky broadcast - a
                             // continuous BATTERY_CHANGED receiver would itself add
                             // wake-ups against the same wake-up budget the rest of
-                            // this loop is sized against. Log on level change or
-                            // every PHONE_BATTERY_LOG_PERIOD_MS, whichever comes
-                            // first; cross-references with the radar/dashcam events
-                            // in the same capture log.
-                            registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.let { battery ->
-                                val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                                val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-                                val pct = if (level < 0 || scale <= 0) -1 else (level * 100) / scale
-                                if (shouldLogPhoneBattery(
-                                        now = now,
-                                        lastLogMs = lastPhoneBatteryLogMs,
-                                        lastLevelPct = lastPhoneBatteryLevel,
-                                        currentLevelPct = pct,
-                                        periodMs = PHONE_BATTERY_LOG_PERIOD_MS,
-                                    )
-                                ) {
+                            // this loop is sized against. The sticky read isn't free
+                            // either, so take it (and log) only once per
+                            // PHONE_BATTERY_LOG_PERIOD_MS rather than on every ~2s tick.
+                            if (now - lastPhoneBatteryLogMs >= PHONE_BATTERY_LOG_PERIOD_MS) {
+                                registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.let { battery ->
                                     clog(
                                         formatPhoneBatteryLog(
                                             unixMs = now,
-                                            level = level,
-                                            scale = scale,
+                                            level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                                            scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100),
                                             tempDc = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE),
                                             plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0),
                                         ),
                                     )
-                                    lastPhoneBatteryLevel = pct
                                     lastPhoneBatteryLogMs = now
                                 }
                             }
@@ -1523,11 +1520,11 @@ class BikeRadarService : Service() {
                                 }
                             }
 
-                            view.setVisualMaxM(prefs.visualMaxDistanceM)
-                            view.alpha = prefs.overlayOpacity
-                            view.setAlertMaxM(prefs.alertMaxDistanceM)
-                            view.setAdaptiveAlerts(prefs.adaptiveAlertsEnabled)
-                            view.setPrecog(prefs.precogEnabled)
+                            view.setVisualMaxM(overlayPrefs.visualMaxDistanceM)
+                            view.alpha = overlayPrefs.overlayOpacity
+                            view.setAlertMaxM(overlayPrefs.alertMaxDistanceM)
+                            view.setAdaptiveAlerts(overlayPrefs.adaptiveAlertsEnabled)
+                            view.setPrecog(overlayPrefs.precogEnabled)
                             view.setState(state)
 
                             val threshold = prefs.batteryLowThresholdPct
@@ -1622,7 +1619,7 @@ class BikeRadarService : Service() {
                                     ?: state.bikeSpeedMs
                                 val ev = alerts.decide(
                                     vehicles = state.vehicles,
-                                    alertMaxM = prefs.alertMaxDistanceM,
+                                    alertMaxM = overlayPrefs.alertMaxDistanceM,
                                     nowMs = now,
                                     bikeSpeedMs = preferredBikeSpeedMs,
                                     bikeNotDriving = ldiSnap?.bikeNotDriving,
@@ -1631,12 +1628,13 @@ class BikeRadarService : Service() {
                                 if (ev !is AlertDecider.Event.None) {
                                     logAlertEvent(ev, state, now)
                                 }
-                                // Re-read the experimental panning prefs each frame so
-                                // toggling the Settings flag mid-session takes effect on
-                                // the next alert without a radar reconnect.
+                                // The cached overlay-prefs snapshot is kept fresh by the
+                                // prefs.flow collector, so toggling the Settings panning
+                                // flag mid-session still takes effect on the next alert
+                                // without a radar reconnect.
                                 beeper.setPanning(
-                                    enabled = prefs.experimentalLateralPanning,
-                                    invertLR = prefs.experimentalLateralPanningInvertLR,
+                                    enabled = overlayPrefs.experimentalLateralPanning,
+                                    invertLR = overlayPrefs.experimentalLateralPanningInvertLR,
                                 )
                                 when (val cue = AlertCue.forEvent(ev)) {
                                     is AlertCue.Beep -> beeper.play(cue.count, cue.lateralPos)
@@ -2813,19 +2811,10 @@ class BikeRadarService : Service() {
             }
         }
 
-        // Phone-battery sample written into the capture log on level changes
-        // and at most once per heartbeat period. The capture-log line is
-        // comment-prefixed so existing decoders skip it cleanly.
+        // Phone-battery sample written into the capture log at most once per
+        // this period. The capture-log line is comment-prefixed so existing
+        // decoders skip it cleanly.
         const val PHONE_BATTERY_LOG_PERIOD_MS = 60_000L
-
-        @androidx.annotation.VisibleForTesting
-        internal fun shouldLogPhoneBattery(
-            now: Long,
-            lastLogMs: Long,
-            lastLevelPct: Int,
-            currentLevelPct: Int,
-            periodMs: Long,
-        ): Boolean = currentLevelPct != lastLevelPct || (now - lastLogMs >= periodMs)
 
         @androidx.annotation.VisibleForTesting
         internal fun formatPhoneBatteryLog(

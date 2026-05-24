@@ -495,22 +495,29 @@ class AlertBeeper(
     }
 
     /**
-     * Stereo STATIC track from a mono cue buffer, with a fixed per-channel
-     * gain baked into the interleaved samples. This is how panning is
-     * applied without the deprecated per-channel setStereoVolume: each pan
-     * bucket is a separate pre-built track. L = stereo[2i], R = stereo[2i+1].
-     * The bucket scale ratios are unit-tested (AlertBeeperPanTest), but this
-     * raw interleave is not (Robolectric doesn't expose track PCM), so verify
-     * channel direction on-device after editing here. [leftScale]/[rightScale]
-     * are <= 1.0, so no clipping.
+     * Interleave a mono cue into stereo PCM with a per-channel gain baked in:
+     * out[2i] = left, out[2i+1] = right. Pure and side-effect-free, so the
+     * channel order and gain are unit-tested directly (Robolectric doesn't
+     * expose AudioTrack PCM, so the test exercises this function rather than
+     * the built track). [leftScale]/[rightScale] are <= 1.0, so no clipping.
      */
-    private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
+    internal fun interleaveStereo(mono: ShortArray, leftScale: Float, rightScale: Float): ShortArray {
         val stereo = ShortArray(mono.size * 2)
         for (i in mono.indices) {
             val s = mono[i].toInt()
             stereo[2 * i]     = (s * leftScale).toInt().toShort()
             stereo[2 * i + 1] = (s * rightScale).toInt().toShort()
         }
+        return stereo
+    }
+
+    /**
+     * Stereo STATIC track from a mono cue buffer, panned by [interleaveStereo].
+     * Each pan bucket is a separate pre-built track - this is how panning is
+     * applied without the deprecated per-channel setStereoVolume.
+     */
+    private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
+        val stereo = interleaveStereo(mono, leftScale, rightScale)
         val minBuf = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT
         )

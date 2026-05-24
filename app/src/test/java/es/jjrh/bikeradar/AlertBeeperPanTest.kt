@@ -284,6 +284,24 @@ class AlertBeeperPanTest {
         assertEquals("bike-left + invert -> right-extreme bucket", 4, b.nearestPanBucket(r.left, r.right))
     }
 
+    @Test fun interleaveStereo_putsLeftFirstAndScalesEachChannel() {
+        // Pins the interleave: out[2i] = left, out[2i+1] = right, each scaled.
+        // Catches an L/R swap or a transposed scale argument in the bake.
+        val out = beeper().interleaveStereo(shortArrayOf(1000, -2000, 3000), 1.0f, 0.5f)
+        assertEquals(6, out.size)
+        assertEquals(1000, out[0].toInt());  assertEquals(500, out[1].toInt())
+        assertEquals(-2000, out[2].toInt()); assertEquals(-1000, out[3].toInt())
+        assertEquals(3000, out[4].toInt());  assertEquals(1500, out[5].toInt())
+    }
+
+    @Test fun interleaveStereo_fullLeftMutesRightChannel() {
+        // Hard-left bake: left channel present, right muted. Directly the
+        // wrong-ear guard the old "verify on-device" KDoc punted on.
+        val out = beeper().interleaveStereo(shortArrayOf(1000), 1.0f, 0.0f)
+        assertEquals(1000, out[0].toInt())
+        assertEquals(0, out[1].toInt())
+    }
+
     @Test fun nearestPanBucket_speakerRotation270SelectsSwappedBucket() {
         // Rotation-270 swap is folded into the gains; a bike-left cue on the
         // speaker at 270 must select the right-channel bucket (wrong-ear guard).

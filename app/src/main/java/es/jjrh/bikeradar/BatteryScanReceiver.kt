@@ -26,6 +26,10 @@ import androidx.core.content.ContextCompat
  */
 class BatteryScanReceiver : BroadcastReceiver() {
 
+    // Reads BluetoothDevice.name (BLUETOOTH_CONNECT). This receiver only fires
+    // from the scan PendingIntent the service registers after holding
+    // BLUETOOTH_SCAN + _CONNECT, so the permission is guaranteed here.
+    @SuppressLint("MissingPermission")
     override fun onReceive(ctx: Context, intent: Intent) {
         val errorCode = intent.getIntExtra(BluetoothLeScanner.EXTRA_ERROR_CODE, NO_ERROR_SENTINEL)
         if (errorCode != NO_ERROR_SENTINEL && errorCode != 0) {

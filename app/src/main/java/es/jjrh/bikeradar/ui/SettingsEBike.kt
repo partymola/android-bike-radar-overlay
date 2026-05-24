@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -304,7 +305,11 @@ private fun openFlow(ctx: Context) {
  * be running, so we can't route through it. On any failure (hidden-API
  * missing, deny-list block, device unbonded) we surface a manual
  * fallback via Toast and still clear the local pointer.
+ *
+ * getBondState() needs BLUETOOTH_CONNECT; reached only from the eBike
+ * unpair action, which the user can reach after granting BLE permissions.
  */
+@SuppressLint("MissingPermission")
 private fun releaseBondLocally(ctx: Context, prefs: Prefs) {
     val address = prefs.ldiBondedAddress
     if (address == null) {

@@ -1554,7 +1554,11 @@ private fun openAppPermissionsSettings(ctx: Context) {
  * Mirror of [SettingsEBike]'s helper, duplicated to keep the onboarding
  * step free of a Settings dependency. The reflection-based unpair path
  * is small enough that one duplication beats the import cycle.
+ *
+ * getBondState() needs BLUETOOTH_CONNECT; reached only from the eBike
+ * onboarding step, which the user enters after granting BLE permissions.
  */
+@SuppressLint("MissingPermission")
 private fun releaseEBikeBondFromOnboarding(ctx: Context, prefs: Prefs) {
     val address = prefs.ldiBondedAddress ?: run {
         android.widget.Toast.makeText(ctx, "No bond to release.", android.widget.Toast.LENGTH_SHORT).show()

@@ -336,6 +336,9 @@ class EBikeLink(
      * destroyed permanently. After this the link cannot be restarted;
      * the owner must construct a new EBikeLink.
      */
+    // stop() needs BLUETOOTH_CONNECT + _ADVERTISE; shutdown() is only called
+    // from the owning service, which runs solely while those are held.
+    @SuppressLint("MissingPermission")
     fun shutdown() {
         stop()
         timerScope.cancel()
@@ -362,7 +365,10 @@ class EBikeLink(
      *   when the device isn't a bonded peer (the rider should be told to
      *   use Android Settings instead).
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(allOf = [
+        Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.BLUETOOTH_ADVERTISE,
+    ])
     fun releaseBond(bondedAddress: String?, onFallback: () -> Unit = {}) {
         stop()
         if (bondedAddress == null) return

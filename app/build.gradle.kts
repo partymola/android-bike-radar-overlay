@@ -4,6 +4,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -117,13 +118,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            // Produces the JaCoCo .exec from the JVM unit tests. The filtered
-            // `jacocoTestReport` task (below) is the canonical coverage view;
-            // AGP's own createDebugUnitTestCoverageReport has no class-exclude
-            // DSL so its headline number is drowned by Compose UI + services.
-            enableUnitTestCoverage = true
-        }
         release {
             isMinifyEnabled = false
             val release = signingConfigs.findByName("release")
@@ -153,11 +147,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-    }
-
-    // JaCoCo 0.8.13 reads Java 21 class files (the toolchain target).
-    testCoverage {
-        jacocoVersion = "0.8.13"
     }
 
     buildFeatures {
@@ -199,6 +188,21 @@ jacoco {
     toolVersion = "0.8.13"
 }
 
+// On-the-fly JaCoCo agent on the unit-test task. Robolectric loads classes
+// through its own sandbox classloader, which AGP's offline instrumentation
+// (enableUnitTestCoverage) never records - so Robolectric-tested classes
+// reported 0% (AlertBeeper, the receivers, the smoke tests). The on-the-fly
+// agent instruments at load time across every classloader, and
+// includeNoLocationClasses lets it count Robolectric's no-location classes.
+// excludes drops the JDK internals the agent can't instrument on Java 9+.
+// See robolectric#3023 / robolectric#5575.
+tasks.withType<Test>().configureEach {
+    extensions.configure<JacocoTaskExtension> {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
 // Classes kept out of the coverage figure: Compose UI (covered by Paparazzi
 // snapshots, not JaCoCo) and framework-bound services. Without this the raw
 // number reflects mostly untestable UI/service code rather than the logic the
@@ -216,7 +220,8 @@ val coverageExcludes = listOf(
 // AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
 // this path the report/verification go empty (not silently wrong) - re-point.
 val coverageClassDir = "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
-val coverageExecDir = "outputs/unit_test_code_coverage"
+// The on-the-fly agent writes build/jacoco/testDebugUnitTest.exec.
+val coverageExecDir = "jacoco"
 
 tasks.register<JacocoReport>("jacocoTestReport") {
     dependsOn("testDebugUnitTest")
@@ -258,7 +263,7 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.20".toBigDecimal()
+                minimum = "0.45".toBigDecimal()
             }
         }
         // Branch coverage on the safety-critical deciders. LiveDataDecoder is

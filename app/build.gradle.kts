@@ -277,6 +277,21 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     executionData.setFrom(
         fileTree(layout.buildDirectory.dir(coverageExecDir)) { include("**/*.exec") },
     )
+    // Guard against the silent-zero mode: with an empty class tree or no exec
+    // data (a broken class-output path, or the agent falling back to offline
+    // mode where Robolectric's sandbox classloader hides everything) the ratio
+    // rules pass vacuously and the gate would wave untested code through. Fail
+    // loudly instead of reporting a hollow pass.
+    doFirst {
+        val classCount = classDirectories.asFileTree.matching { include("**/*.class") }.files.size
+        val execCount = executionData.files.count { it.exists() }
+        if (classCount == 0 || execCount == 0) {
+            throw GradleException(
+                "JaCoCo measured nothing (classes=$classCount, exec=$execCount) - coverage " +
+                    "cannot be verified. Check the on-the-fly agent and the class-output path.",
+            )
+        }
+    }
     violationRules {
         // Overall line coverage holds at the baseline, with slack below the
         // current figure so legitimately hard-to-test new code doesn't trip

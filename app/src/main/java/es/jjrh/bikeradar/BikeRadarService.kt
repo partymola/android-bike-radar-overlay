@@ -1507,11 +1507,11 @@ class BikeRadarService : Service() {
                                 enabled = prefs.experimentalLateralPanning,
                                 invertLR = prefs.experimentalLateralPanningInvertLR,
                             )
-                            when (ev) {
-                                is AlertDecider.Event.Beep           -> beeper.play(ev.count, ev.lateralPos)
-                                AlertDecider.Event.Clear             -> beeper.playClear()
-                                is AlertDecider.Event.UrgentApproach -> beeper.playUrgent(ev.lateralPos)
-                                AlertDecider.Event.None              -> {}
+                            when (val cue = AlertCue.forEvent(ev)) {
+                                is AlertCue.Beep -> beeper.play(cue.count, cue.lateralPos)
+                                AlertCue.Clear -> beeper.playClear()
+                                is AlertCue.Urgent -> beeper.playUrgent(cue.lateralPos)
+                                AlertCue.Silence -> {}
                             }
                         } else {
                             alerts.reset()

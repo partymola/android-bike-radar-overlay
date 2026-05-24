@@ -113,6 +113,18 @@ class AlertBeeperFocusTest {
     }
 
     @Test
+    fun playCriticalBattery_skipsAudioPathInCall() {
+        audioManager.setMode(AudioManager.MODE_IN_CALL)
+        val beeper = newBeeper()
+        beeper.playCriticalBattery()
+        assertTrue(
+            "no focus request expected on playCriticalBattery while MODE_IN_CALL",
+            shadowAm.lastAudioFocusRequest == null,
+        )
+        beeper.release()
+    }
+
+    @Test
     fun backToBackPlays_extendFocusInsteadOfAbandoning() {
         val beeper = newBeeper()
         beeper.play(2)
@@ -154,7 +166,7 @@ class AlertBeeperFocusTest {
         val beeper = newBeeper()
         beeper.play(2)
         beeper.release()
-        beeper.release()  // must not throw
+        beeper.release() // must not throw
     }
 
     @Test

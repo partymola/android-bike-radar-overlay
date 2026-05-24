@@ -414,7 +414,7 @@ class AlertBeeper(
         hasHeadphoneRoute = outputs.any { it.type in HEADPHONE_TYPES }
     }
 
-    private fun buildBeepPcm(count: Int): ShortArray {
+    internal fun buildBeepPcm(count: Int): ShortArray {
         val toneSamples = sampleRate * toneDurMs / 1000
         val gapSamples  = sampleRate * gapMs  / 1000
         val tone        = generateTone(toneSamples, beepFreqHz)
@@ -443,7 +443,7 @@ class AlertBeeper(
         return makeTrack(buf)
     }
 
-    private fun buildUrgentPcm(): ShortArray {
+    internal fun buildUrgentPcm(): ShortArray {
         // 4 beeps at 3800 Hz, 70 ms tone, 50 ms gap. Faster cadence and
         // higher pitch than play(3) so the rider recognises this as the
         // stationary-safety-override pattern, not a normal close-approach

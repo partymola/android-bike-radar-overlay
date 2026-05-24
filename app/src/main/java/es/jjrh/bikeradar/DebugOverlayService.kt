@@ -145,11 +145,12 @@ class DebugOverlayService : Service() {
 
     private fun handleAlerts(state: RadarState) {
         val b = beeper ?: return
-        when (val ev = alerts.decide(state.vehicles, maxDistanceM, System.currentTimeMillis())) {
-            is AlertDecider.Event.Beep           -> b.play(ev.count, ev.lateralPos)
-            AlertDecider.Event.Clear             -> b.playClear()
-            is AlertDecider.Event.UrgentApproach -> b.playUrgent(ev.lateralPos)
-            AlertDecider.Event.None           -> {}
+        val ev = alerts.decide(state.vehicles, maxDistanceM, System.currentTimeMillis())
+        when (val cue = AlertCue.forEvent(ev)) {
+            is AlertCue.Beep -> b.play(cue.count, cue.lateralPos)
+            AlertCue.Clear -> b.playClear()
+            is AlertCue.Urgent -> b.playUrgent(cue.lateralPos)
+            AlertCue.Silence -> {}
         }
     }
 

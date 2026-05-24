@@ -199,10 +199,25 @@ jacoco {
     toolVersion = "0.8.13"
 }
 
-// Coverage report scoped to testable logic. The raw number is dominated by
-// Compose UI (covered by Paparazzi snapshots, not JaCoCo) and framework-bound
-// services, so filter those out for a figure that reflects the logic the unit
-// suite is meant to cover. Consumes the .exec from enableUnitTestCoverage.
+// Classes kept out of the coverage figure: Compose UI (covered by Paparazzi
+// snapshots, not JaCoCo) and framework-bound services. Without this the raw
+// number reflects mostly untestable UI/service code rather than the logic the
+// unit suite targets. Shared by the report and the verification gate below.
+val coverageExcludes = listOf(
+    "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+    "**/*ComposableSingletons*.*",
+    "es/jjrh/bikeradar/ui/**", // Compose UI - Paparazzi covers this
+    "**/RadarOverlayView*.*", // Canvas view, excluded from unit tests
+    "**/DebugOverlayService*.*", // dev/test-only foreground services
+    "**/ReplayService*.*",
+    "**/SyntheticScenarioService*.*",
+    "**/ScreenshotCaptureService*.*",
+)
+// AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
+// this path the report/verification go empty (not silently wrong) - re-point.
+val coverageClassDir = "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
+val coverageExecDir = "outputs/unit_test_code_coverage"
+
 tasks.register<JacocoReport>("jacocoTestReport") {
     dependsOn("testDebugUnitTest")
     group = "verification"
@@ -211,29 +226,59 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         xml.required.set(true)
         html.required.set(true)
     }
-    val coverageExcludes = listOf(
-        "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
-        "**/*ComposableSingletons*.*",
-        "es/jjrh/bikeradar/ui/**", // Compose UI - Paparazzi covers this
-        "**/RadarOverlayView*.*", // Canvas view, excluded from unit tests
-        "**/DebugOverlayService*.*", // dev/test-only foreground services
-        "**/ReplayService*.*",
-        "**/SyntheticScenarioService*.*",
-        "**/ScreenshotCaptureService*.*",
-    )
-    // AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP
-    // moves this path the report goes empty (not silently wrong) - re-point it.
     classDirectories.setFrom(
-        fileTree(layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes")) {
-            exclude(coverageExcludes)
-        },
+        fileTree(layout.buildDirectory.dir(coverageClassDir)) { exclude(coverageExcludes) },
     )
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(
-        fileTree(layout.buildDirectory.dir("outputs/unit_test_code_coverage")) {
-            include("**/*.exec")
-        },
+        fileTree(layout.buildDirectory.dir(coverageExecDir)) { include("**/*.exec") },
     )
+}
+
+// Coverage ratchet. A coarse line floor on the whole testable layer catches
+// gross regressions (a disabled test class), and a branch floor on the
+// safety-critical deciders holds the line where a regression is most
+// dangerous. Report-only stays the default; this gate is opt-in via CI/QC.
+tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Fails if testable-logic coverage drops below the ratchet floor."
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir(coverageClassDir)) { exclude(coverageExcludes) },
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory.dir(coverageExecDir)) { include("**/*.exec") },
+    )
+    violationRules {
+        // Overall line coverage holds at the baseline, with slack below the
+        // current figure so legitimately hard-to-test new code doesn't trip
+        // it. Raise as coverage grows.
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.20".toBigDecimal()
+            }
+        }
+        // Branch coverage on the safety-critical deciders. LiveDataDecoder is
+        // intentionally not listed (lower branch coverage; held by the line
+        // floor above).
+        rule {
+            element = "CLASS"
+            includes = listOf(
+                "es.jjrh.bikeradar.AlertDecider",
+                "es.jjrh.bikeradar.WalkAwayDecider",
+                "es.jjrh.bikeradar.CriticalBatteryDecider",
+                "es.jjrh.bikeradar.RadarV2Decoder",
+            )
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.90".toBigDecimal()
+            }
+        }
+    }
 }
 
 // Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`

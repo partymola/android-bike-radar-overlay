@@ -4,18 +4,19 @@ package es.jjrh.bikeradar
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Test
 
 class BatteryStateBusTest {
 
+    @Before fun reset() {
+        BatteryStateBus.clearForTest()
+    }
+
     @After fun tearDown() {
-        // Keep the singleton empty between tests.
-        BatteryStateBus.entries.value.keys.toList().forEach {
-            // No public clear; overwrite with a sentinel then rely on markSeen
-            // not creating entries. Safest: reassign via update() of the same
-            // entry then ignore. For this test suite we only rely on the slugs
-            // we explicitly touch, so full reset isn't required.
-        }
+        // BatteryStateBus is a process-wide singleton; empty it so entries
+        // don't leak into the next test.
+        BatteryStateBus.clearForTest()
     }
 
     @Test fun markSeenBumpsReadAtMsOnExistingEntry() {

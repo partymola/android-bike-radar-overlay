@@ -203,6 +203,16 @@ class HaClientHttpTest {
     }
 
     @Test
+    fun probeMqttServiceMaps403ToTokenRejected() = runTest {
+        // 401 and 403 share the "Token rejected" branch; pin 403 too so a
+        // regression dropping it from that condition is caught.
+        respondAll(403)
+        val r = client().probeMqttService()
+        assertTrue(r.isFailure)
+        assertTrue(r.exceptionOrNull()!!.message!!.contains("Token rejected"))
+    }
+
+    @Test
     fun probeMqttServiceMapsOtherCodeToGenericFailure() = runTest {
         respondAll(503)
         val r = client().probeMqttService()

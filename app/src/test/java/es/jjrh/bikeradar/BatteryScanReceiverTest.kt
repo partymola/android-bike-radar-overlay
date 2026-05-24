@@ -27,6 +27,11 @@ import org.robolectric.Shadows.shadowOf
  * security-relevant branch - without it any peer spoofing the Garmin
  * company UUID plus a name matching the heuristic could trigger GATT
  * churn or slug injection - so both bonded and unbonded paths are pinned.
+ *
+ * Scope: this exercises the host-side gate only. The off-host hardware
+ * filter on the company UUID (registered by BikeRadarService's scan) is not
+ * reachable from a unit test - Robolectric delivers adverts straight to
+ * onReceive - so a regression that widened that filter would not surface here.
  */
 @RunWith(RobolectricTestRunner::class)
 class BatteryScanReceiverTest {

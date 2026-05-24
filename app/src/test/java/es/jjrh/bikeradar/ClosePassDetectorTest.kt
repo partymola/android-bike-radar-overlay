@@ -2,8 +2,6 @@
 package es.jjrh.bikeradar
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,9 +12,9 @@ class ClosePassDetectorTest {
     private fun veh(
         id: Int = 1,
         distanceM: Int = 20,
-        speedMs: Float = -8f,       // 8 m/s approaching
+        speedMs: Float = -8f, // 8 m/s approaching
         size: VehicleSize = VehicleSize.CAR,
-        lateralPos: Float = 0.2f,    // 0.6 m right
+        lateralPos: Float = 0.2f, // 0.6 m right
         isBehind: Boolean = false,
         isAlongsideStationary: Boolean = false,
         lateralUnknown: Boolean = false,
@@ -49,12 +47,12 @@ class ClosePassDetectorTest {
     @Test fun `fires once for a classic close overtake`() {
         val d = ClosePassDetector()
         val approach = listOf(
-            veh(distanceM = 30, lateralPos = 0.5f) to 0L,    // 1.5 m right
+            veh(distanceM = 30, lateralPos = 0.5f) to 0L, // 1.5 m right
             veh(distanceM = 20, lateralPos = 0.35f) to 100L, // 1.05 m
             veh(distanceM = 15, lateralPos = 0.25f) to 200L, // 0.75 m
             veh(distanceM = 10, lateralPos = 0.18f) to 300L, // 0.54 m right
-            veh(distanceM = 5, lateralPos = 0.15f) to 400L,  // 0.45 m (min)
-            veh(distanceM = 2, lateralPos = 0.2f) to 500L,   // pulling away
+            veh(distanceM = 5, lateralPos = 0.15f) to 400L, // 0.45 m (min)
+            veh(distanceM = 2, lateralPos = 0.2f) to 500L, // pulling away
             veh(distanceM = 0, lateralPos = 0.25f, isBehind = true) to 600L,
         )
         val events = drive(d, approach)
@@ -128,11 +126,11 @@ class ClosePassDetectorTest {
         // Armed because 1.4 < 1.5 urban threshold, but min never
         // drops below 1.0 m emit cutoff.
         val frames = listOf(
-            veh(distanceM = 25, lateralPos = 0.47f) to 0L,   // 1.41 m
+            veh(distanceM = 25, lateralPos = 0.47f) to 0L, // 1.41 m
             veh(distanceM = 20, lateralPos = 0.45f) to 100L, // 1.35 m
             veh(distanceM = 15, lateralPos = 0.42f) to 200L, // 1.26 m
-            veh(distanceM = 10, lateralPos = 0.4f) to 300L,  // 1.2 m (min)
-            veh(distanceM = 5, lateralPos = 0.45f) to 400L,  // receding laterally
+            veh(distanceM = 10, lateralPos = 0.4f) to 300L, // 1.2 m (min)
+            veh(distanceM = 5, lateralPos = 0.45f) to 400L, // receding laterally
             veh(distanceM = 0, lateralPos = 0.5f, isBehind = true) to 500L,
         )
         val events = drive(d, frames)
@@ -144,11 +142,11 @@ class ClosePassDetectorTest {
     @Test fun `emitted min is the tightest frame not the first under threshold`() {
         val d = ClosePassDetector()
         val frames = listOf(
-            veh(distanceM = 25, lateralPos = 0.48f) to 0L,   // 1.44 m  (arms under urban 1.5)
-            veh(distanceM = 20, lateralPos = 0.4f) to 100L,  // 1.2 m
+            veh(distanceM = 25, lateralPos = 0.48f) to 0L, // 1.44 m  (arms under urban 1.5)
+            veh(distanceM = 20, lateralPos = 0.4f) to 100L, // 1.2 m
             veh(distanceM = 15, lateralPos = 0.28f) to 200L, // 0.84 m  <-- not yet min
-            veh(distanceM = 10, lateralPos = 0.2f) to 300L,  // 0.6 m  <-- tightest
-            veh(distanceM = 5, lateralPos = 0.22f) to 400L,  // 0.66 m
+            veh(distanceM = 10, lateralPos = 0.2f) to 300L, // 0.6 m  <-- tightest
+            veh(distanceM = 5, lateralPos = 0.22f) to 400L, // 0.66 m
             veh(distanceM = 0, lateralPos = 0.3f, isBehind = true) to 500L,
         )
         val events = drive(d, frames)
@@ -211,7 +209,7 @@ class ClosePassDetectorTest {
                     distanceM = 5,
                     speedMs = 0f,
                     size = VehicleSize.TRUCK,
-                    lateralPos = 0.033f,  // 0.1 m right
+                    lateralPos = 0.033f, // 0.1 m right
                     isAlongsideStationary = true,
                 ),
             ) to 500L,

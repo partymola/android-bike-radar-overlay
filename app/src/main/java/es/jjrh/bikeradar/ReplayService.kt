@@ -37,8 +37,11 @@ class ReplayService : Service() {
         isRunning = true
         ensureChannel()
         if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, buildNotification("Replay starting…"),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
+            startForeground(
+                NOTIF_ID,
+                buildNotification("Replay starting…"),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+            )
         } else {
             startForeground(NOTIF_ID, buildNotification("Replay starting…"))
         }
@@ -58,10 +61,13 @@ class ReplayService : Service() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "failed to read $ASSET_NAME", e)
-            stopSelf(); return
+            stopSelf()
+            return
         }
         if (frames.isEmpty()) {
-            Log.w(TAG, "no frames in $ASSET_NAME"); stopSelf(); return
+            Log.w(TAG, "no frames in $ASSET_NAME")
+            stopSelf()
+            return
         }
 
         val decoder = RadarV2Decoder()
@@ -118,20 +124,19 @@ class ReplayService : Service() {
             .notify(NOTIF_ID, buildNotification(text))
     }
 
-    private fun buildNotification(text: String): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-            .setContentTitle("Bike Radar replay")
-            .setContentText(text)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
+    private fun buildNotification(text: String): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_menu_recent_history)
+        .setContentTitle("Bike Radar replay")
+        .setContentText(text)
+        .setOngoing(true)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .build()
 
     private fun ensureChannel() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Replay", NotificationManager.IMPORTANCE_MIN)
+            NotificationChannel(CHANNEL_ID, "Replay", NotificationManager.IMPORTANCE_MIN),
         )
     }
 
@@ -140,6 +145,7 @@ class ReplayService : Service() {
         const val CHANNEL_ID = "bike_radar_replay_min"
         const val NOTIF_ID = 4242
         private const val ASSET_NAME = "replay-highlight.log"
+
         @Volatile var isRunning = false
     }
 }

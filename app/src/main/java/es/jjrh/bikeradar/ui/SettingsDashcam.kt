@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,9 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import android.app.NotificationManager
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Videocam
@@ -42,8 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -149,9 +149,11 @@ internal fun SettingsDashcamContent(
             SettingsRowGroup {
                 SettingsToggleRow(
                     title = "I have a front dashcam",
-                    subtitle = if (ownership == DashcamOwnership.YES)
+                    subtitle = if (ownership == DashcamOwnership.YES) {
                         "Set up your dashcam below."
-                    else "Turn this on if you want to track a Bluetooth dashcam alongside the radar.",
+                    } else {
+                        "Turn this on if you want to track a Bluetooth dashcam alongside the radar."
+                    },
                     checked = ownership == DashcamOwnership.YES,
                     onCheckedChange = onOwnershipChange,
                 )
@@ -274,7 +276,7 @@ internal fun SettingsDashcamContent(
                         NestedCard {
                             SettingsSliderRow(
                                 title = "Out-of-range threshold",
-                                valueDisplay = "${walkAwayThreshold} s",
+                                valueDisplay = "$walkAwayThreshold s",
                                 helper = "How long the dashcam must be unreachable before the alarm fires.",
                                 value = walkAwayThreshold.toFloat(),
                                 valueRange = 15f..120f,

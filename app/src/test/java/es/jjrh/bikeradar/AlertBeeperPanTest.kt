@@ -138,7 +138,8 @@ class AlertBeeperPanTest {
 
     @Test fun headphoneRouteInvertSwapsLR() {
         assertStereo(
-            0.0f, 1.0f,
+            0.0f,
+            1.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = true, builtinSpeakerActive = false, rotation = Surface.ROTATION_90),
             "headphone+invert: bike-LEFT lands louder on RIGHT channel",
         )
@@ -162,10 +163,18 @@ class AlertBeeperPanTest {
         // which Android routes to the bottom-main speaker, now on the
         // rider's left.
         val b = beeper()
-        assertStereo(0.0f, 1.0f, b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_270),
-            "speaker+rot=270: bike-LEFT must put LOUDER gain on R channel")
-        assertStereo(1.0f, 0.0f, b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_270),
-            "speaker+rot=270: bike-RIGHT must put LOUDER gain on L channel")
+        assertStereo(
+            0.0f,
+            1.0f,
+            b.resolvePan(-1f, 1f, true, false, false, true, Surface.ROTATION_270),
+            "speaker+rot=270: bike-LEFT must put LOUDER gain on R channel",
+        )
+        assertStereo(
+            1.0f,
+            0.0f,
+            b.resolvePan(+1f, 1f, true, false, false, true, Surface.ROTATION_270),
+            "speaker+rot=270: bike-RIGHT must put LOUDER gain on L channel",
+        )
     }
 
     @Test fun speakerPortraitFallsBackToMono() {
@@ -174,8 +183,11 @@ class AlertBeeperPanTest {
         val b = beeper()
         for (rot in listOf(Surface.ROTATION_0, Surface.ROTATION_180)) {
             for (lat in listOf(-1f, 0f, 1f)) {
-                assertMono(1f, b.resolvePan(lat, 1f, true, false, false, true, rot),
-                    "speaker+portrait rot=$rot lat=$lat must be mono")
+                assertMono(
+                    1f,
+                    b.resolvePan(lat, 1f, true, false, false, true, rot),
+                    "speaker+portrait rot=$rot lat=$lat must be mono",
+                )
             }
         }
     }
@@ -184,7 +196,8 @@ class AlertBeeperPanTest {
         // XOR: rotation-270 swaps AND invertLR swaps; both fire = no net
         // swap. Matches no-swap-no-invert (rotation 90 headphone-equivalent).
         assertStereo(
-            1.0f, 0.0f,
+            1.0f,
+            0.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = false, builtinSpeakerActive = true, rotation = Surface.ROTATION_270),
         )
     }
@@ -192,7 +205,8 @@ class AlertBeeperPanTest {
     @Test fun speakerInvertCompoundsRotation90Swap() {
         // ROTATION_90 doesn't swap; invertLR alone produces the swapped result.
         assertStereo(
-            0.0f, 1.0f,
+            0.0f,
+            1.0f,
             beeper().resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = false, builtinSpeakerActive = true, rotation = Surface.ROTATION_90),
         )
     }
@@ -205,8 +219,11 @@ class AlertBeeperPanTest {
         // safe fallback (spatial layout unknown).
         val b = beeper()
         for (rot in listOf(Surface.ROTATION_0, Surface.ROTATION_90, Surface.ROTATION_180, Surface.ROTATION_270)) {
-            assertMono(1f, b.resolvePan(-1f, 1f, true, false, false, false, rot),
-                "unknown route rot=$rot must be mono")
+            assertMono(
+                1f,
+                b.resolvePan(-1f, 1f, true, false, false, false, rot),
+                "unknown route rot=$rot must be mono",
+            )
         }
     }
 
@@ -217,7 +234,8 @@ class AlertBeeperPanTest {
         // volume cuts both channels proportionally. Half volume (0.5) on
         // full-left hard pan -> (0.5, 0.0).
         assertStereo(
-            0.5f, 0.0f,
+            0.5f,
+            0.0f,
             beeper().resolvePan(-1f, 0.5f, true, false, true, false, Surface.ROTATION_90),
         )
     }
@@ -279,8 +297,15 @@ class AlertBeeperPanTest {
         // Invert is folded into resolvePan's gains; a bike-left cue with
         // invert must select the right-extreme bucket (wrong-ear guard).
         val b = beeper()
-        val r = b.resolvePan(-1f, 1f, true, invertLR = true, hasHeadphoneRoute = true,
-            builtinSpeakerActive = false, rotation = Surface.ROTATION_90) as AlertBeeper.PanResult.Stereo
+        val r = b.resolvePan(
+            -1f,
+            1f,
+            true,
+            invertLR = true,
+            hasHeadphoneRoute = true,
+            builtinSpeakerActive = false,
+            rotation = Surface.ROTATION_90,
+        ) as AlertBeeper.PanResult.Stereo
         assertEquals("bike-left + invert -> right-extreme bucket", 4, b.nearestPanBucket(r.left, r.right))
     }
 
@@ -289,9 +314,12 @@ class AlertBeeperPanTest {
         // Catches an L/R swap or a transposed scale argument in the bake.
         val out = beeper().interleaveStereo(shortArrayOf(1000, -2000, 3000), 1.0f, 0.5f)
         assertEquals(6, out.size)
-        assertEquals(1000, out[0].toInt());  assertEquals(500, out[1].toInt())
-        assertEquals(-2000, out[2].toInt()); assertEquals(-1000, out[3].toInt())
-        assertEquals(3000, out[4].toInt());  assertEquals(1500, out[5].toInt())
+        assertEquals(1000, out[0].toInt())
+        assertEquals(500, out[1].toInt())
+        assertEquals(-2000, out[2].toInt())
+        assertEquals(-1000, out[3].toInt())
+        assertEquals(3000, out[4].toInt())
+        assertEquals(1500, out[5].toInt())
     }
 
     @Test fun interleaveStereo_fullLeftMutesRightChannel() {
@@ -306,8 +334,15 @@ class AlertBeeperPanTest {
         // Rotation-270 swap is folded into the gains; a bike-left cue on the
         // speaker at 270 must select the right-channel bucket (wrong-ear guard).
         val b = beeper()
-        val r = b.resolvePan(-1f, 1f, true, false, hasHeadphoneRoute = false,
-            builtinSpeakerActive = true, rotation = Surface.ROTATION_270) as AlertBeeper.PanResult.Stereo
+        val r = b.resolvePan(
+            -1f,
+            1f,
+            true,
+            false,
+            hasHeadphoneRoute = false,
+            builtinSpeakerActive = true,
+            rotation = Surface.ROTATION_270,
+        ) as AlertBeeper.PanResult.Stereo
         assertEquals("bike-left on speaker@270 -> right-channel bucket", 4, b.nearestPanBucket(r.left, r.right))
     }
 }

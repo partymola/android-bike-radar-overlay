@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -41,20 +39,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryScanReceiver
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
+import android.provider.Settings as AndroidSettings
 
 /**
  * Mockup-fidelity dashcam picker.
@@ -488,12 +487,18 @@ private fun listBonded(ctx: Context, seenSlugs: Set<String>): List<DashcamCandid
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     val bonded: Set<BluetoothDevice> = try {
         mgr?.adapter?.bondedDevices ?: emptySet()
-    } catch (_: SecurityException) { emptySet() }
+    } catch (_: SecurityException) {
+        emptySet()
+    }
 
     val slugOf = { name: String -> name.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_') }
 
     return bonded.mapNotNull { d ->
-        val name = try { d.name } catch (_: SecurityException) { null } ?: return@mapNotNull null
+        val name = try {
+            d.name
+        } catch (_: SecurityException) {
+            null
+        } ?: return@mapNotNull null
         // The dashcam picker should never offer the rear radar as a
         // candidate. The radar-matching heuristic catches RTL- /
         // RearVue-named devices (radar-only) and "varia" devices that
@@ -509,6 +514,6 @@ private fun listBonded(ctx: Context, seenSlugs: Set<String>): List<DashcamCandid
             BatteryScanReceiver.matchesVariaName(name)
         DashcamCandidate(mac = d.address, name = name, likely = likely)
     }.sortedWith(
-        compareByDescending<DashcamCandidate> { it.likely }.thenBy { it.name.lowercase() }
+        compareByDescending<DashcamCandidate> { it.likely }.thenBy { it.name.lowercase() },
     )
 }

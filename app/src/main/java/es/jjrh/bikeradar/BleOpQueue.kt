@@ -211,18 +211,20 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
             is Op.Write -> {
                 val ok = retrySubmit {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val type = if (op.noResponse)
+                        val type = if (op.noResponse) {
                             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                        else
+                        } else {
                             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        }
                         op.gatt.writeCharacteristic(op.char, op.bytes, type) ==
                             BluetoothStatusCodes.SUCCESS
                     } else {
                         @Suppress("DEPRECATION")
-                        op.char.writeType = if (op.noResponse)
+                        op.char.writeType = if (op.noResponse) {
                             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                        else
+                        } else {
                             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        }
                         @Suppress("DEPRECATION")
                         op.char.value = op.bytes
                         @Suppress("DEPRECATION")
@@ -249,9 +251,9 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
     private fun completeAny(op: Op, timedOut: Boolean) {
         when (op) {
             is Op.CccdWrite -> if (!op.result.isCompleted) op.result.complete(!timedOut)
-            is Op.Read      -> if (!op.result.isCompleted) op.result.complete(null)
-            is Op.Write     -> if (!op.result.isCompleted) op.result.complete(!timedOut)
-            is Op.Mtu       -> if (!op.result.isCompleted) op.result.complete(-1)
+            is Op.Read -> if (!op.result.isCompleted) op.result.complete(null)
+            is Op.Write -> if (!op.result.isCompleted) op.result.complete(!timedOut)
+            is Op.Mtu -> if (!op.result.isCompleted) op.result.complete(-1)
         }
     }
 

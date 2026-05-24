@@ -39,7 +39,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
 
         val callbackType = intent.getIntExtra(
             BluetoothLeScanner.EXTRA_CALLBACK_TYPE,
-            ScanSettings.CALLBACK_TYPE_ALL_MATCHES
+            ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
         )
 
         if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST) {
@@ -82,8 +82,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun isBonded(r: ScanResult): Boolean =
-        r.device?.bondState == BluetoothDevice.BOND_BONDED
+    private fun isBonded(r: ScanResult): Boolean = r.device?.bondState == BluetoothDevice.BOND_BONDED
 
     @Suppress("DEPRECATION", "UNCHECKED_CAST")
     private fun extractResults(intent: Intent): List<ScanResult> {
@@ -102,8 +101,11 @@ class BatteryScanReceiver : BroadcastReceiver() {
 
         fun matchesVariaName(n: String): Boolean {
             val l = n.lowercase()
-            return l.contains("varia") || l.contains("vue") ||
-                l.contains("rearvue") || l.contains("rtl") || l.contains("garmin")
+            return l.contains("varia") ||
+                l.contains("vue") ||
+                l.contains("rearvue") ||
+                l.contains("rtl") ||
+                l.contains("garmin")
         }
     }
 }

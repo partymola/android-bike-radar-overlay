@@ -15,12 +15,17 @@ class CameraLightModeWireFormatTest {
 
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
-    @Test fun encodeHigh()       = assertEquals("070001", CameraLightController.encodeWrite(CameraLightMode.HIGH).toHex())
-    @Test fun encodeMedium()     = assertEquals("070002", CameraLightController.encodeWrite(CameraLightMode.MEDIUM).toHex())
-    @Test fun encodeLow()        = assertEquals("070003", CameraLightController.encodeWrite(CameraLightMode.LOW).toHex())
+    @Test fun encodeHigh() = assertEquals("070001", CameraLightController.encodeWrite(CameraLightMode.HIGH).toHex())
+
+    @Test fun encodeMedium() = assertEquals("070002", CameraLightController.encodeWrite(CameraLightMode.MEDIUM).toHex())
+
+    @Test fun encodeLow() = assertEquals("070003", CameraLightController.encodeWrite(CameraLightMode.LOW).toHex())
+
     @Test fun encodeNightFlash() = assertEquals("070004", CameraLightController.encodeWrite(CameraLightMode.NIGHT_FLASH).toHex())
-    @Test fun encodeDayFlash()   = assertEquals("070005", CameraLightController.encodeWrite(CameraLightMode.DAY_FLASH).toHex())
-    @Test fun encodeOff()        = assertEquals("070006", CameraLightController.encodeWrite(CameraLightMode.OFF).toHex())
+
+    @Test fun encodeDayFlash() = assertEquals("070005", CameraLightController.encodeWrite(CameraLightMode.DAY_FLASH).toHex())
+
+    @Test fun encodeOff() = assertEquals("070006", CameraLightController.encodeWrite(CameraLightMode.OFF).toHex())
 
     @Test fun allModesHaveUniquePayloads() {
         val payloads = CameraLightMode.entries.map { CameraLightController.encodeWrite(it).toHex() }
@@ -31,17 +36,26 @@ class CameraLightModeWireFormatTest {
 // ── Mode-state notify parser ───────────────────────────────────────────────────
 class CameraLightModeNotifyParserTest {
 
-    @Test fun parseHigh()       = assertEquals(CameraLightMode.HIGH,       CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00, 0x10.toByte())))
-    @Test fun parseMedium()     = assertEquals(CameraLightMode.MEDIUM,     CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x01, 0x11.toByte())))
-    @Test fun parseLow()        = assertEquals(CameraLightMode.LOW,        CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x02, 0x12.toByte())))
-    @Test fun parseNightFlash() = assertEquals(CameraLightMode.NIGHT_FLASH,CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x03, 0x13.toByte())))
-    @Test fun parseDayFlash()   = assertEquals(CameraLightMode.DAY_FLASH,  CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x04, 0x14.toByte())))
-    @Test fun parseOff()        = assertEquals(CameraLightMode.OFF,        CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x05, 0x1f.toByte())))
+    @Test fun parseHigh() = assertEquals(CameraLightMode.HIGH, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00, 0x10.toByte())))
 
-    @Test fun emptyReturnsNull()        = assertNull(CameraLightController.parseModeStateNotify(ByteArray(0)))
-    @Test fun wrongLeadingByteNull()    = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x00, 0x00, 0x10.toByte())))
-    @Test fun wrongLengthTwoNull()      = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00)))
-    @Test fun wrongLengthFourNull()     = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00, 0x10.toByte(), 0x00)))
+    @Test fun parseMedium() = assertEquals(CameraLightMode.MEDIUM, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x01, 0x11.toByte())))
+
+    @Test fun parseLow() = assertEquals(CameraLightMode.LOW, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x02, 0x12.toByte())))
+
+    @Test fun parseNightFlash() = assertEquals(CameraLightMode.NIGHT_FLASH, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x03, 0x13.toByte())))
+
+    @Test fun parseDayFlash() = assertEquals(CameraLightMode.DAY_FLASH, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x04, 0x14.toByte())))
+
+    @Test fun parseOff() = assertEquals(CameraLightMode.OFF, CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x05, 0x1f.toByte())))
+
+    @Test fun emptyReturnsNull() = assertNull(CameraLightController.parseModeStateNotify(ByteArray(0)))
+
+    @Test fun wrongLeadingByteNull() = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x00, 0x00, 0x10.toByte())))
+
+    @Test fun wrongLengthTwoNull() = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00)))
+
+    @Test fun wrongLengthFourNull() = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x00, 0x10.toByte(), 0x00)))
+
     @Test fun unknownOrdinalReturnsNull() = assertNull(CameraLightController.parseModeStateNotify(byteArrayOf(0x01, 0x06, 0x00)))
 }
 
@@ -74,11 +88,12 @@ class SubmodeToggleEncoderTest {
     }
 
     @Test fun frame1MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_1, ss = 0x00, pp = 0x02)
+
     @Test fun frame2MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_2, ss = 0x02, pp = 0x82.toByte())
+
     @Test fun frame3MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_3, ss = 0x00, pp = 0x02)
 
     // Frame 3 sends the same bytes as frame 1 by design: the device advances
     // internal toggle state based on sequence position, not payload content.
-    @Test fun frame1And3AreIdentical() =
-        assertArrayEquals(RadarUnlock.SUBMODE_FRAME_1.hexToBytes(), RadarUnlock.SUBMODE_FRAME_3.hexToBytes())
+    @Test fun frame1And3AreIdentical() = assertArrayEquals(RadarUnlock.SUBMODE_FRAME_1.hexToBytes(), RadarUnlock.SUBMODE_FRAME_3.hexToBytes())
 }

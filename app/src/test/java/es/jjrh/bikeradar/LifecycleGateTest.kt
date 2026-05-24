@@ -23,8 +23,13 @@ class LifecycleGateTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
-    @Before fun setUp() { kotlinx.coroutines.Dispatchers.setMain(testDispatcher) }
-    @After  fun tearDown() { kotlinx.coroutines.Dispatchers.resetMain() }
+    @Before fun setUp() {
+        kotlinx.coroutines.Dispatchers.setMain(testDispatcher)
+    }
+
+    @After fun tearDown() {
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
 
     private class TestOwner : LifecycleOwner {
         // enforceMainThread = false avoids Looper.getMainLooper() stub crash in JVM unit tests.

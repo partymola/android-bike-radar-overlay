@@ -14,13 +14,15 @@ class RadarOverlayView(context: Context) : View(context) {
 
     private var state: RadarState = RadarState()
 
-    private val bgPaint    = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dangerBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(3f)
+        style = Paint.Style.STROKE
+        strokeWidth = dp(3f)
         color = Color.rgb(220, 40, 40)
     }
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeWidth = dp(1.5f); style = Paint.Style.STROKE
+        strokeWidth = dp(1.5f)
+        style = Paint.Style.STROKE
     }
     private val riderFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -34,13 +36,17 @@ class RadarOverlayView(context: Context) : View(context) {
     }
     private val riderPath = android.graphics.Path()
     private val tmpRect = RectF()
-    private val boxFillPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val boxFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val boxStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(2.5f)
+        style = Paint.Style.STROKE
+        strokeWidth = dp(2.5f)
     }
     private val tailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeWidth = dp(3f); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
+        strokeWidth = dp(3f)
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
     }
+
     /** Hollow outline used for [Vehicle.isAlongsideStationary] targets
      *  (parked car next to a crawling rider). Thinner stroke + neutral
      *  grey is the pre-attentive cue for "noted, not a threat" - the
@@ -53,10 +59,11 @@ class RadarOverlayView(context: Context) : View(context) {
     }
     private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
-        textSize  = dp(12f)
-        color     = Color.argb(220, 220, 220, 220)
-        typeface  = android.graphics.Typeface.MONOSPACE
+        textSize = dp(12f)
+        color = Color.argb(220, 220, 220, 220)
+        typeface = android.graphics.Typeface.MONOSPACE
     }
+
     /** Dashed line showing where the user-configured alert max distance
      *  sits against the full visualisation window. Anything above the line
      *  (closer than alertMaxM) beeps; anything below is drawn but silent.
@@ -72,9 +79,9 @@ class RadarOverlayView(context: Context) : View(context) {
     }
     private val alertLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.RIGHT
-        textSize  = dp(10f)
-        color     = Color.argb(230, 230, 170, 40)
-        typeface  = android.graphics.Typeface.MONOSPACE
+        textSize = dp(10f)
+        color = Color.argb(230, 230, 170, 40)
+        typeface = android.graphics.Typeface.MONOSPACE
     }
 
     private var visualMaxM: Int = DEFAULT_VISUAL_MAX_M
@@ -94,13 +101,15 @@ class RadarOverlayView(context: Context) : View(context) {
     }
     private val batteryLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        textSize = 0f  // set in onDraw via dp()
+        textSize = 0f // set in onDraw via dp()
         color = COLOR_AMBER
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
     }
     private val cameraOffDrawable: android.graphics.drawable.Drawable? =
         androidx.core.content.res.ResourcesCompat.getDrawable(
-            resources, R.drawable.ic_videocam_off, null
+            resources,
+            R.drawable.ic_videocam_off,
+            null,
         )
 
     fun setState(s: RadarState) {
@@ -152,8 +161,8 @@ class RadarOverlayView(context: Context) : View(context) {
         val h = height.toFloat()
         val clear = state.isClear
 
-        val bgAlpha    = if (clear) 12  else 100
-        val trackAlpha = if (clear) 0   else 35
+        val bgAlpha = if (clear) 12 else 100
+        val trackAlpha = if (clear) 0 else 35
         val riderAlpha = if (clear) 200 else 255
 
         bgPaint.color = Color.argb(bgAlpha, 10, 10, 10)
@@ -179,8 +188,8 @@ class RadarOverlayView(context: Context) : View(context) {
             canvas.drawRoundRect(tmpRect, dp(8f), dp(8f), dangerBorderPaint)
         }
 
-        val trackX  = w / 2f
-        val topY    = dp(20f)
+        val trackX = w / 2f
+        val topY = dp(20f)
         val bottomY = h - dp(20f)
 
         if (clear) {
@@ -228,8 +237,8 @@ class RadarOverlayView(context: Context) : View(context) {
             }
             if (rangeYm > visualMaxM) continue
 
-            val halfW   = vehicleHalfWidth(v.size)
-            val halfH   = vehicleHalfHeight(v.size)
+            val halfW = vehicleHalfWidth(v.size)
+            val halfH = vehicleHalfHeight(v.size)
             val centreY = distToY(rangeYm, riderBottom, bottomY)
 
             // Renderer-side fallback for the parked-car-in-the-next-lane
@@ -252,8 +261,10 @@ class RadarOverlayView(context: Context) : View(context) {
                 kotlin.math.abs(v.speedMs) <= RadarV2Decoder.STATIONARY_SPEED_MS &&
                 v.distanceM in 0..RadarV2Decoder.ALONGSIDE_RANGE_Y_M &&
                 kotlin.math.abs(v.lateralPos) > RENDERER_STATIONARY_MIN_LATERAL &&
-                bikeMsSnap != null && bikeMsSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_MS &&
-                lateralMsSnap != null && kotlin.math.abs(lateralMsSnap) <= RENDERER_STATIONARY_MAX_LATERAL_MS
+                bikeMsSnap != null &&
+                bikeMsSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_MS &&
+                lateralMsSnap != null &&
+                kotlin.math.abs(lateralMsSnap) <= RENDERER_STATIONARY_MAX_LATERAL_MS
 
             if (v.isAlongsideStationary || rendererStationary) {
                 // Edge-dock hollow render. X snaps to the nearest panel
@@ -271,11 +282,13 @@ class RadarOverlayView(context: Context) : View(context) {
 
             val clampedLateral = (lateralMeters / RadarV2Decoder.LATERAL_FULL_M).coerceIn(-1f, 1f)
             val centreX = trackX + clampedLateral * maxLateralPx
-            val color   = speedColor(v.speedKmh, amberKmh, redKmh)
+            val color = speedColor(v.speedKmh, amberKmh, redKmh)
 
             val tailLen = (v.speedMs * dp(3f)).coerceIn(dp(6f), dp(40f))
             val distFactor = distanceAlphaFactor(rangeYm)
-            val r = Color.red(color); val g = Color.green(color); val b = Color.blue(color)
+            val r = Color.red(color)
+            val g = Color.green(color)
+            val b = Color.blue(color)
 
             tailPaint.color = Color.argb((210 * distFactor).toInt(), r, g, b)
             canvas.drawLine(centreX, centreY + halfH, centreX, centreY + halfH + tailLen, tailPaint)
@@ -344,7 +357,7 @@ class RadarOverlayView(context: Context) : View(context) {
                     canvas.drawText("R", cx + dp(7f), cy, batteryLabelPaint)
                 }
                 dashcamLow -> canvas.drawText("V", cx, cy, batteryLabelPaint)
-                otherLow   -> canvas.drawText("R", cx, cy, batteryLabelPaint)
+                otherLow -> canvas.drawText("R", cx, cy, batteryLabelPaint)
             }
         }
     }
@@ -355,10 +368,10 @@ class RadarOverlayView(context: Context) : View(context) {
      *  exclamation mark. */
     private fun drawDashcamIndicator(canvas: Canvas, cx: Float, cy: Float, status: DashcamStatus) {
         val (tint, alpha) = when (status) {
-            DashcamStatus.Dropped   -> COLOR_RED to 255
-            DashcamStatus.Missing   -> COLOR_AMBER to 255
+            DashcamStatus.Dropped -> COLOR_RED to 255
+            DashcamStatus.Missing -> COLOR_AMBER to 255
             DashcamStatus.Searching -> COLOR_AMBER to 130
-            DashcamStatus.Ok        -> return
+            DashcamStatus.Ok -> return
         }
         val d = cameraOffDrawable ?: return
         val size = dp(22f).toInt()
@@ -378,8 +391,8 @@ class RadarOverlayView(context: Context) : View(context) {
      *  Maps-blue with a dark hairline stroke so it survives both bright
      *  map tiles and dark camera feeds. */
     private fun drawRider(canvas: Canvas, alpha: Int, cx: Float, tipTopY: Float) {
-        val halfW  = dp(RIDER_WIDTH_DP) / 2f
-        val baseY  = tipTopY + dp(RIDER_HEIGHT_DP)
+        val halfW = dp(RIDER_WIDTH_DP) / 2f
+        val baseY = tipTopY + dp(RIDER_HEIGHT_DP)
         val notchY = tipTopY + dp(RIDER_HEIGHT_DP) * RIDER_NOTCH_FRAC
         riderPath.reset()
         riderPath.moveTo(cx, tipTopY)
@@ -404,12 +417,12 @@ class RadarOverlayView(context: Context) : View(context) {
      *  also leaves more map showing through, which helps orientation when
      *  the rider glances at the overlay during a turn. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
-        VehicleSize.CAR   -> dp(7f)
+        VehicleSize.CAR -> dp(7f)
         VehicleSize.TRUCK -> dp(11f)
     }
 
     private fun vehicleHalfHeight(size: VehicleSize): Float = when (size) {
-        VehicleSize.CAR   -> dp(12f)
+        VehicleSize.CAR -> dp(12f)
         VehicleSize.TRUCK -> dp(18f)
     }
 
@@ -429,8 +442,8 @@ class RadarOverlayView(context: Context) : View(context) {
 
     private fun speedColor(closingKmh: Int, amberKmh: Int, redKmh: Int): Int = when {
         closingKmh < amberKmh -> Color.rgb(50, 200, 70)
-        closingKmh < redKmh   -> Color.rgb(230, 170, 20)
-        else                  -> Color.rgb(220, 40, 40)
+        closingKmh < redKmh -> Color.rgb(230, 170, 20)
+        else -> Color.rgb(220, 40, 40)
     }
 
     /** Scales the amber / red closing-speed bands by rider speed so that a
@@ -445,12 +458,11 @@ class RadarOverlayView(context: Context) : View(context) {
     private fun adaptiveSpeedBands(bikeSpeedKmh: Int?): Pair<Int, Int> {
         val s = bikeSpeedKmh ?: return FIXED_SPEED_BANDS
         val amber = (15 + s / 2).coerceAtLeast(10)
-        val red   = (30 + s).coerceAtLeast(20)
+        val red = (30 + s).coerceAtLeast(20)
         return amber to red
     }
 
-    private fun dp(v: Float) =
-        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
+    private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
 
     companion object {
         const val MIN_VISUAL_MAX_M = 10
@@ -466,6 +478,7 @@ class RadarOverlayView(context: Context) : View(context) {
          *  uses 0.5 m). Anything within 0.9 m of centre stays a filled
          *  box so a stationary tailgater never gets edge-docked. */
         private const val RENDERER_STATIONARY_MIN_LATERAL = 0.3f
+
         /** ≤ 1 m/s lateral drift; the decoder doesn't gate on lateral
          *  velocity (it relies on dwell), so this is an extra
          *  renderer-only guard against targets weaving toward the
@@ -479,16 +492,17 @@ class RadarOverlayView(context: Context) : View(context) {
          *  quantised 0.5 m/s velocity data doesn't make predictions
          *  jitter wildly. */
         private const val PRECOG_LOOKAHEAD_S = 1.0f
+
         /** Fixed closing-speed bands used when adaptive alerts are off
          *  or bikeSpeedKmh is null. Tuned for a typical urban cruising
          *  rider (~20-25 km/h). */
         private val FIXED_SPEED_BANDS = 25 to 50
 
-        private const val RIDER_WIDTH_DP  = 20f
+        private const val RIDER_WIDTH_DP = 20f
         private const val RIDER_HEIGHT_DP = 24f
         private const val RIDER_NOTCH_FRAC = 0.67f
 
-        private val COLOR_AMBER     = Color.rgb(230, 150, 20)
-        private val COLOR_RED       = Color.rgb(220, 40, 40)
+        private val COLOR_AMBER = Color.rgb(230, 150, 20)
+        private val COLOR_RED = Color.rgb(220, 40, 40)
     }
 }

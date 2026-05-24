@@ -93,8 +93,11 @@ class HaClient(private val baseUrl: String, private val token: String) {
                 }
                 val code = conn.responseCode
                 drainAndReturn(conn, code)
-                if (code in 200..299) Result.success("OK ($code)")
-                else Result.failure(Exception("HTTP $code"))
+                if (code in 200..299) {
+                    Result.success("OK ($code)")
+                } else {
+                    Result.failure(Exception("HTTP $code"))
+                }
             } catch (t: Throwable) {
                 Result.failure(t)
             }
@@ -195,7 +198,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
         if (!isConfigured()) return false
         val topics = buildList {
             for (s in slugs) {
-                add("$DISCOVERY_PREFIX/sensor/${s}/${s}_battery/config")
+                add("$DISCOVERY_PREFIX/sensor/$s/${s}_battery/config")
                 add("$DISCOVERY_PREFIX/sensor/${s}_battery/config")
                 add("$DISCOVERY_PREFIX/sensor/varia_${s}_battery/config")
             }
@@ -210,11 +213,9 @@ class HaClient(private val baseUrl: String, private val token: String) {
         return allOk
     }
 
-    private fun cleanDeviceName(raw: String): String =
-        raw.replace(Regex("[^\\x20-\\x7E]"), "").trim().ifEmpty { "device" }
+    private fun cleanDeviceName(raw: String): String = raw.replace(Regex("[^\\x20-\\x7E]"), "").trim().ifEmpty { "device" }
 
-    suspend fun publishBatteryState(slug: String, pct: Int): Boolean =
-        publishMqtt("varia/$slug/battery", pct.toString(), retain = true)
+    suspend fun publishBatteryState(slug: String, pct: Int): Boolean = publishMqtt("varia/$slug/battery", pct.toString(), retain = true)
 
     /**
      * Publishes the MQTT-Discovery config for the front-camera/light mode entity.
@@ -246,8 +247,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     /** Publishes the current front-camera/light mode as a retained state value. */
-    suspend fun publishFrontModeState(slug: String, modeName: String): Boolean =
-        publishMqtt("varia/$slug/front_mode", modeName, retain = true)
+    suspend fun publishFrontModeState(slug: String, modeName: String): Boolean = publishMqtt("varia/$slug/front_mode", modeName, retain = true)
 
     /**
      * Publishes the HA MQTT-Discovery config for the close-pass event
@@ -392,16 +392,16 @@ class HaClient(private val baseUrl: String, private val token: String) {
             .put("model", "Varia")
             .put("via_device", "varia_reader")
         val sensors = listOf(
-            RideSummarySensor("overtakes_total",          "Overtakes",                     "total_increasing", null,       null,    null),
-            RideSummarySensor("close_pass_count",         "Close passes",                  "total_increasing", null,       null,    null),
-            RideSummarySensor("grazing_count",            "Grazing passes",                "total_increasing", null,       null,    null),
-            RideSummarySensor("hgv_close_pass_count",     "HGV close passes",              "total_increasing", null,       null,    null),
-            RideSummarySensor("peak_closing_kmh",         "Peak closing speed",            "measurement",      "speed",    "km/h",  null),
-            RideSummarySensor("closing_speed_p90_kmh",    "Closing speed (p90)",           "measurement",      "speed",    "km/h",  null),
-            RideSummarySensor("min_lateral_clearance_m",  "Tightest clearance",            "measurement",      "distance", "m",     2),
-            RideSummarySensor("distance_ridden_km",       "Distance ridden",               "total_increasing", "distance", "km",    2),
-            RideSummarySensor("exposure_seconds",         "Time with traffic",             "total_increasing", "duration", "s",     null),
-            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate",  "measurement",      null,       "%",     1),
+            RideSummarySensor("overtakes_total", "Overtakes", "total_increasing", null, null, null),
+            RideSummarySensor("close_pass_count", "Close passes", "total_increasing", null, null, null),
+            RideSummarySensor("grazing_count", "Grazing passes", "total_increasing", null, null, null),
+            RideSummarySensor("hgv_close_pass_count", "HGV close passes", "total_increasing", null, null, null),
+            RideSummarySensor("peak_closing_kmh", "Peak closing speed", "measurement", "speed", "km/h", null),
+            RideSummarySensor("closing_speed_p90_kmh", "Closing speed (p90)", "measurement", "speed", "km/h", null),
+            RideSummarySensor("min_lateral_clearance_m", "Tightest clearance", "measurement", "distance", "m", 2),
+            RideSummarySensor("distance_ridden_km", "Distance ridden", "total_increasing", "distance", "km", 2),
+            RideSummarySensor("exposure_seconds", "Time with traffic", "total_increasing", "duration", "s", null),
+            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate", "measurement", null, "%", 1),
         )
         return sensors.map { s ->
             val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_${s.field}/config"
@@ -473,6 +473,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
     companion object {
         private const val TAG = "BikeRadar"
         private const val DISCOVERY_PREFIX = "homeassistant"
+
         // 3 s connect+read keeps the radio awake at most ~6 s on a failed
         // publish during a flaky cell handover; the next heartbeat will
         // retry. HA endpoints used here are mqtt.publish (broker queue

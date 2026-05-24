@@ -4,10 +4,8 @@ package es.jjrh.bikeradar.ui
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,7 +30,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,15 +41,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.data.Prefs
+import android.provider.Settings as AndroidSettings
 
 @Composable
 fun SettingsPermissions(navController: NavController, prefs: Prefs) {
@@ -154,9 +153,11 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
     // from "tapped 'Don't ask again'" (rationale=false, but attempted).
     var requestAttempted by rememberSaveable(spec.title) { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) { onChanged() }
-    val permanentlyDenied = !granted && requestAttempted && spec.permissions.isNotEmpty() &&
+    val permanentlyDenied = !granted &&
+        requestAttempted &&
+        spec.permissions.isNotEmpty() &&
         activity != null &&
         spec.permissions.all { perm ->
             !ActivityCompat.shouldShowRequestPermissionRationale(activity, perm)
@@ -172,7 +173,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                         Intent(
                             AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:${ctx.packageName}"),
-                        )
+                        ),
                     )
                 }
                 permanentlyDenied -> {
@@ -180,7 +181,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                         Intent(
                             AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:${ctx.packageName}"),
-                        )
+                        ),
                     )
                 }
                 else -> {
@@ -239,9 +240,13 @@ internal fun PermissionCardContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (granted) Icons.Default.Check
-                    else if (spec.required) Icons.Default.Shield
-                    else Icons.Default.Visibility,
+                    imageVector = if (granted) {
+                        Icons.Default.Check
+                    } else if (spec.required) {
+                        Icons.Default.Shield
+                    } else {
+                        Icons.Default.Visibility
+                    },
                     contentDescription = null,
                     tint = accentColor,
                     modifier = Modifier.size(18.dp),

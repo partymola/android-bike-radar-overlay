@@ -26,13 +26,19 @@ class RemoteControlReceiver : BroadcastReceiver() {
 
         when (action) {
             ACTION_DEV_REPLAY -> {
-                if (!prefs.devModeUnlocked) { Log.w(TAG, "dev mode locked, ignoring $action"); return }
+                if (!prefs.devModeUnlocked) {
+                    Log.w(TAG, "dev mode locked, ignoring $action")
+                    return
+                }
                 stopService(ctx, SyntheticScenarioService::class.java)
                 startFg(ctx, DebugOverlayService::class.java)
                 startFg(ctx, ReplayService::class.java)
             }
             ACTION_DEV_SYNTH -> {
-                if (!prefs.devModeUnlocked) { Log.w(TAG, "dev mode locked, ignoring $action"); return }
+                if (!prefs.devModeUnlocked) {
+                    Log.w(TAG, "dev mode locked, ignoring $action")
+                    return
+                }
                 stopService(ctx, ReplayService::class.java)
                 startFg(ctx, DebugOverlayService::class.java)
                 startFg(ctx, SyntheticScenarioService::class.java)

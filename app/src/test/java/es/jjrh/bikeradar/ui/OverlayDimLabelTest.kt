@@ -13,8 +13,11 @@ import org.junit.Test
 class OverlayDimLabelTest {
 
     @Test fun fullOpacityShowsOff() = assertEquals("Off", overlayDimLabel(1.0f))
+
     @Test fun lightStop() = assertEquals("Light", overlayDimLabel(0.833f))
+
     @Test fun mediumStop() = assertEquals("Medium", overlayDimLabel(0.667f))
+
     @Test fun strongFloor() = assertEquals("Strong", overlayDimLabel(0.5f))
 
     /**

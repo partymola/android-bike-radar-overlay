@@ -18,7 +18,6 @@ import es.jjrh.bikeradar.ui.DashcamPickerSheet
 import es.jjrh.bikeradar.ui.DebugScreen
 import es.jjrh.bikeradar.ui.DevModeState
 import es.jjrh.bikeradar.ui.MainScreen
-import es.jjrh.bikeradar.ui.UiTheme
 import es.jjrh.bikeradar.ui.OnboardingScreen
 import es.jjrh.bikeradar.ui.SettingsAbout
 import es.jjrh.bikeradar.ui.SettingsCameraLight
@@ -31,6 +30,7 @@ import es.jjrh.bikeradar.ui.SettingsPermissions
 import es.jjrh.bikeradar.ui.SettingsPrivacy
 import es.jjrh.bikeradar.ui.SettingsRadar
 import es.jjrh.bikeradar.ui.SettingsScreen
+import es.jjrh.bikeradar.ui.UiTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -29,8 +29,7 @@ class LiveDataDecoderTest {
     }
 
     /** Encode a proto3 wire tag (field number + wire type). */
-    private fun tag(field: Int, wireType: Int): ByteArray =
-        varint(((field shl 3) or wireType).toLong())
+    private fun tag(field: Int, wireType: Int): ByteArray = varint(((field shl 3) or wireType).toLong())
 
     /** Build a payload of (field, varint-value) pairs. */
     private fun payload(vararg fields: Pair<Int, Long>): ByteArray {
@@ -46,10 +45,18 @@ class LiveDataDecoderTest {
 
     @Test fun `default snapshot has all fields null`() {
         val s = LiveDataSnapshot()
-        assertNull(s.speedRaw); assertNull(s.cadence); assertNull(s.riderPower)
-        assertNull(s.ambientBrightnessRaw); assertNull(s.batterySoc); assertNull(s.timeSec)
-        assertNull(s.odometerM); assertNull(s.bikeLight); assertNull(s.systemLocked)
-        assertNull(s.chargerConnected); assertNull(s.lightReserve); assertNull(s.diagnosisActive)
+        assertNull(s.speedRaw)
+        assertNull(s.cadence)
+        assertNull(s.riderPower)
+        assertNull(s.ambientBrightnessRaw)
+        assertNull(s.batterySoc)
+        assertNull(s.timeSec)
+        assertNull(s.odometerM)
+        assertNull(s.bikeLight)
+        assertNull(s.systemLocked)
+        assertNull(s.chargerConnected)
+        assertNull(s.lightReserve)
+        assertNull(s.diagnosisActive)
         assertNull(s.bikeNotDriving)
     }
 
@@ -77,7 +84,7 @@ class LiveDataDecoderTest {
         // Sint32 zig-zag of -5 = (-5 << 1) ^ (-5 >> 31) = 9 (one byte).
         // We send the 10-byte negative pattern and confirm plain int32 wins.
         val negFive: ByteArray = byteArrayOf(
-            tag(2, 0)[0],  // field 2 tag
+            tag(2, 0)[0], // field 2 tag
             0xfb.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
             0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
             0xff.toByte(), 0x01.toByte(),
@@ -134,7 +141,7 @@ class LiveDataDecoderTest {
     @Test fun `field-presence merge preserves prior values absent from payload`() {
         val prev = LiveDataDecoder.mergeInto(
             LiveDataSnapshot(),
-            payload(10 to 80L, 21 to 1L)
+            payload(10 to 80L, 21 to 1L),
         )
         assertEquals(80, prev.batterySoc)
         assertEquals(true, prev.systemLocked)
@@ -173,13 +180,15 @@ class LiveDataDecoderTest {
         val skipBytes = byteArrayOf(0xaa.toByte(), 0xbb.toByte(), 0xcc.toByte())
         val knownField = ByteArray(tag(25, 0).size + 1).apply {
             System.arraycopy(tag(25, 0), 0, this, 0, tag(25, 0).size)
-            this[tag(25, 0).size] = 1  // bool true
+            this[tag(25, 0).size] = 1 // bool true
         }
         val data = ByteArray(tag99lenDelim.size + 1 + skipBytes.size + knownField.size)
         var p = 0
-        System.arraycopy(tag99lenDelim, 0, data, p, tag99lenDelim.size); p += tag99lenDelim.size
+        System.arraycopy(tag99lenDelim, 0, data, p, tag99lenDelim.size)
+        p += tag99lenDelim.size
         data[p++] = 3
-        System.arraycopy(skipBytes, 0, data, p, skipBytes.size); p += skipBytes.size
+        System.arraycopy(skipBytes, 0, data, p, skipBytes.size)
+        p += skipBytes.size
         System.arraycopy(knownField, 0, data, p, knownField.size)
 
         val s = LiveDataDecoder.mergeInto(LiveDataSnapshot(), data)

@@ -30,11 +30,15 @@ class HaCredentials(context: Context) {
 
     var baseUrl: String
         get() = cryptor.decrypt(sp.getString(KEY_BASE_URL, null))
-        set(v) { sp.edit().putString(KEY_BASE_URL, cryptor.encrypt(v)).apply() }
+        set(v) {
+            sp.edit().putString(KEY_BASE_URL, cryptor.encrypt(v)).apply()
+        }
 
     var token: String
         get() = cryptor.decrypt(sp.getString(KEY_TOKEN, null))
-        set(v) { sp.edit().putString(KEY_TOKEN, cryptor.encrypt(v)).apply() }
+        set(v) {
+            sp.edit().putString(KEY_TOKEN, cryptor.encrypt(v)).apply()
+        }
 
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 

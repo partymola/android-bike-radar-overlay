@@ -54,7 +54,7 @@ object RadarUnlock {
     // of hardcoding.
     private const val DEVICE_ID_SUFFIX =
         "1162696b657261646172206f7665726c617906476f6f676c650f506978656c2031302050726f20584c" +
-        "01148400"
+            "01148400"
 
     @SuppressLint("MissingPermission")
     suspend fun runHandshake(
@@ -98,7 +98,10 @@ object RadarUnlock {
         val rOpen = awaitNotify(notifies, rxUuid, 800) {
             it.size >= 2 && it[1].toInt() == 0x06
         }
-        if (rOpen == null) { clog("ABORT: AMV open reply never arrived"); return false }
+        if (rOpen == null) {
+            clog("ABORT: AMV open reply never arrived")
+            return false
+        }
         delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
         // AMV cmd 04 — reply carries enumerate prefix at byte 13.
@@ -106,17 +109,25 @@ object RadarUnlock {
         val r04 = awaitNotify(notifies, rxUuid, 1000) {
             it.size >= 14 && it[1].toInt() == 0x01 && it[10].toInt() == 0x04
         }
-        if (r04 == null) { clog("ABORT: AMV 04 reply never arrived"); return false }
+        if (r04 == null) {
+            clog("ABORT: AMV 04 reply never arrived")
+            return false
+        }
         val pfxEnum = "%02x".format(r04[13].toInt() and 0xff)
         clog("pfxEnum=$pfxEnum reply=${r04.toHex()}")
         delay(50)
 
         // Enumerate commands 00..04.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}00"); delay(80)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}01"); delay(180)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}02"); delay(90)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}03"); delay(100)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}04"); delay(170)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}00")
+        delay(80)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}01")
+        delay(180)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}02")
+        delay(90)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}03")
+        delay(100)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxEnum}04")
+        delay(170)
 
         // Front camera path ends here: the 0x18 sub-mode toggle is the last handshake
         // step, and mode-set writes can proceed directly on SETTINGS_ACK. The AMV
@@ -129,13 +140,17 @@ object RadarUnlock {
         }
 
         // AMV cmd 01 + 16 back-to-back. Await both replies then the device-ID push.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56010002"); delay(5)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56010002")
+        delay(5)
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "00000000000000414d56160000")
 
         val r16 = awaitNotify(notifies, rxUuid, 1200) {
             it.size >= 11 && it[1].toInt() == 0x01 && it[10].toInt() == 0x16
         }
-        if (r16 == null) { clog("ABORT: AMV 16 reply never arrived"); return false }
+        if (r16 == null) {
+            clog("ABORT: AMV 16 reply never arrived")
+            return false
+        }
         // Front camera firmware 5.80 returns a 13-byte cmd-16 reply with no pfxCmd byte.
         // Fall back to a safe default (00) when the reply is too short to carry one.
         val pfxCmd = if (r16.size >= 14) "%02x".format(r16[13].toInt() and 0xff) else "00"
@@ -145,28 +160,62 @@ object RadarUnlock {
         val devId = awaitNotify(notifies, rxUuid, 1500) {
             it.size > 20 && (it[0].toInt() and 0xff) >= 0x80
         }
-        if (devId == null) { clog("ABORT: device-ID frame never arrived"); return false }
+        if (devId == null) {
+            clog("ABORT: device-ID frame never arrived")
+            return false
+        }
         val base = devId[0].toInt() and 0xff
         val e0 = "%02x".format(base)
         val e1 = "%02x".format((base + 1) and 0xff)
         clog("base=$e0 baseE1=$e1 devId=${devId.toHex()}")
         delay(20)
 
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxCmd}0119000000"); delay(15)
+        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxCmd}0119000000")
+        delay(15)
 
         // Capability exchange — minimal common-denominator across 4 captured sessions
         // (2026-04-17 multi-session HCI diff). Single-byte probes inconsistent across
         // sessions, removed to match the common denominator.
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
-            "${e0}4000023f058813a013029608ffffffffffff9b2fffff$DEVICE_ID_SUFFIX"); delay(180)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
-            "${e0}81000209010481ba13039de900"); delay(130)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
-            "${e0}820002130432800c010101010101010380100404f66a00"); delay(110)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
-            "${e0}c3000218032b8101010101010204010102040101046a024203d21000"); delay(85)
-        writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid,
-            "${e1}44000211010482b41301010101010101010398dd00"); delay(60)
+        writeNoResp(
+            gatt,
+            queue,
+            Uuids.SVC_CONFIG,
+            txUuid,
+            "${e0}4000023f058813a013029608ffffffffffff9b2fffff$DEVICE_ID_SUFFIX",
+        )
+        delay(180)
+        writeNoResp(
+            gatt,
+            queue,
+            Uuids.SVC_CONFIG,
+            txUuid,
+            "${e0}81000209010481ba13039de900",
+        )
+        delay(130)
+        writeNoResp(
+            gatt,
+            queue,
+            Uuids.SVC_CONFIG,
+            txUuid,
+            "${e0}820002130432800c010101010101010380100404f66a00",
+        )
+        delay(110)
+        writeNoResp(
+            gatt,
+            queue,
+            Uuids.SVC_CONFIG,
+            txUuid,
+            "${e0}c3000218032b8101010101010204010102040101046a024203d21000",
+        )
+        delay(85)
+        writeNoResp(
+            gatt,
+            queue,
+            Uuids.SVC_CONFIG,
+            txUuid,
+            "${e1}44000211010482b41301010101010101010398dd00",
+        )
+        delay(60)
 
         clog("handshake complete")
 
@@ -213,17 +262,26 @@ object RadarUnlock {
 
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_1)
         val r1 = awaitNotify(notifies, rxUuid, 1000, matcher)
-        if (r1 == null) { clog("ABORT: 0x18 toggle frame 1 reply never arrived"); return false }
+        if (r1 == null) {
+            clog("ABORT: 0x18 toggle frame 1 reply never arrived")
+            return false
+        }
         clog("0x18 toggle frame 1 ok: ${r1.toHex()}")
 
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_2)
         val r2 = awaitNotify(notifies, rxUuid, 1000, matcher)
-        if (r2 == null) { clog("ABORT: 0x18 toggle frame 2 reply never arrived"); return false }
+        if (r2 == null) {
+            clog("ABORT: 0x18 toggle frame 2 reply never arrived")
+            return false
+        }
         clog("0x18 toggle frame 2 ok: ${r2.toHex()}")
 
         writeNoResp(gatt, queue, svc, txUuid, SUBMODE_FRAME_3)
         val r3 = awaitNotify(notifies, rxUuid, 1000, matcher)
-        if (r3 == null) { clog("ABORT: 0x18 toggle frame 3 reply never arrived"); return false }
+        if (r3 == null) {
+            clog("ABORT: 0x18 toggle frame 3 reply never arrived")
+            return false
+        }
         clog("0x18 toggle frame 3 ok: ${r3.toHex()}")
 
         return true
@@ -240,12 +298,11 @@ object RadarUnlock {
      * can pin the byte positions without driving a fake notify channel.
      */
     @androidx.annotation.VisibleForTesting
-    internal fun matchSubmodeReply(bytes: ByteArray): Boolean =
-        bytes.size >= 12 &&
-            bytes[8].toInt() == 0x41 &&
-            bytes[9].toInt() == 0x4d &&
-            bytes[10].toInt() == 0x56 &&
-            bytes[11].toInt() == 0x18
+    internal fun matchSubmodeReply(bytes: ByteArray): Boolean = bytes.size >= 12 &&
+        bytes[8].toInt() == 0x41 &&
+        bytes[9].toInt() == 0x4d &&
+        bytes[10].toInt() == 0x56 &&
+        bytes[11].toInt() == 0x18
 
     private suspend fun subscribeCccd(
         gatt: BluetoothGatt,
@@ -313,8 +370,10 @@ object RadarUnlock {
 internal fun String.hexToBytes(): ByteArray {
     require(length % 2 == 0) { "hex string must have even length: $this" }
     return ByteArray(length / 2) {
-        ((Character.digit(this[it * 2], 16) shl 4) or
-            Character.digit(this[it * 2 + 1], 16)).toByte()
+        (
+            (Character.digit(this[it * 2], 16) shl 4) or
+                Character.digit(this[it * 2 + 1], 16)
+            ).toByte()
     }
 }
 

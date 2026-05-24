@@ -12,7 +12,9 @@ class RideStatsAccumulatorTest {
     private class FakeClock(start: Long = 1_000L) {
         var now: Long = start
         val provider: () -> Long = { now }
-        fun advance(ms: Long) { now += ms }
+        fun advance(ms: Long) {
+            now += ms
+        }
     }
 
     private fun acc(clock: FakeClock = FakeClock()) = RideStatsAccumulator(clock.provider)
@@ -75,11 +77,15 @@ class RideStatsAccumulatorTest {
     @Test
     fun overtakesTotalSkipsBehindAndLateralUnknownTracks() {
         val a = acc()
-        a.observeFrame(radarState(listOf(
-            veh(1, isBehind = true),
-            veh(2, lateralUnknown = true),
-            veh(3),
-        )))
+        a.observeFrame(
+            radarState(
+                listOf(
+                    veh(1, isBehind = true),
+                    veh(2, lateralUnknown = true),
+                    veh(3),
+                ),
+            ),
+        )
         assertEquals(1, a.snapshot().overtakesTotal)
     }
 
@@ -95,20 +101,24 @@ class RideStatsAccumulatorTest {
     @Test
     fun peakClosingTakesMaxAcrossFrames() {
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, speedMs = -5f))))   // 18 km/h
-        a.observeFrame(radarState(listOf(veh(2, speedMs = -12f))))  // 43 km/h
-        a.observeFrame(radarState(listOf(veh(3, speedMs = -7f))))   // 25 km/h
+        a.observeFrame(radarState(listOf(veh(1, speedMs = -5f)))) // 18 km/h
+        a.observeFrame(radarState(listOf(veh(2, speedMs = -12f)))) // 43 km/h
+        a.observeFrame(radarState(listOf(veh(3, speedMs = -7f)))) // 25 km/h
         assertEquals(43, a.snapshot().peakClosingKmh)
     }
 
     @Test
     fun peakClosingIgnoresStationaryAndReceding() {
         val a = acc()
-        a.observeFrame(radarState(listOf(
-            veh(1, speedMs = 0f),    // stationary
-            veh(2, speedMs = 5f),    // receding
-            veh(3, speedMs = -3f),   // 11 km/h closing
-        )))
+        a.observeFrame(
+            radarState(
+                listOf(
+                    veh(1, speedMs = 0f), // stationary
+                    veh(2, speedMs = 5f), // receding
+                    veh(3, speedMs = -3f), // 11 km/h closing
+                ),
+            ),
+        )
         assertEquals(10, a.snapshot().peakClosingKmh) // -3 * 3.6 = 10.8 → 10 (toInt truncates)
     }
 
@@ -117,9 +127,9 @@ class RideStatsAccumulatorTest {
     @Test
     fun minLateralTrackedAcrossFrames() {
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f))))   // 1.5 m
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.3f))))   // 0.9 m
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.4f))))   // 1.2 m
+        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f)))) // 1.5 m
+        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.3f)))) // 0.9 m
+        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.4f)))) // 1.2 m
         val m = a.snapshot().minLateralClearanceM
         assertNotNull(m)
         assertTrue("expected ~0.9 m, got $m", m!! in 0.85f..0.95f)
@@ -136,18 +146,22 @@ class RideStatsAccumulatorTest {
     fun peakClosingIsNullWhenNoApproachingVehicleObserved() {
         val a = acc()
         a.observeFrame(radarState(emptyList()))
-        a.observeFrame(radarState(listOf(veh(1, speedMs = 0f))))   // stationary
-        a.observeFrame(radarState(listOf(veh(1, speedMs = 5f))))   // receding
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 0f)))) // stationary
+        a.observeFrame(radarState(listOf(veh(1, speedMs = 5f)))) // receding
         assertNull(a.snapshot().peakClosingKmh)
     }
 
     @Test
     fun minLateralSkipsAlongsideStationary() {
         val a = acc()
-        a.observeFrame(radarState(listOf(
-            veh(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
-            veh(2, lateralPos = 0.4f),                                // 1.2 m
-        )))
+        a.observeFrame(
+            radarState(
+                listOf(
+                    veh(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
+                    veh(2, lateralPos = 0.4f), // 1.2 m
+                ),
+            ),
+        )
         val m = a.snapshot().minLateralClearanceM
         assertNotNull(m)
         assertTrue("alongside-stationary must not pull min; got $m", m!! in 1.15f..1.25f)
@@ -159,16 +173,18 @@ class RideStatsAccumulatorTest {
     fun distanceIntegratesBikeSpeedOverTime() {
         val clock = FakeClock(start = 0L)
         val a = acc(clock)
-        a.observeFrame(radarState(bikeSpeedMs = 5f))      // first frame, no prev → no integration
-        clock.advance(1_000L)                              // 1 s elapsed
-        a.observeFrame(radarState(bikeSpeedMs = 5f))      // 5 m/s * 1 s = 5 m
-        clock.advance(2_000L)                              // 2 s elapsed
-        a.observeFrame(radarState(bikeSpeedMs = 10f))     // ... carries 10 m/s for next interval
+        a.observeFrame(radarState(bikeSpeedMs = 5f)) // first frame, no prev → no integration
+        clock.advance(1_000L) // 1 s elapsed
+        a.observeFrame(radarState(bikeSpeedMs = 5f)) // 5 m/s * 1 s = 5 m
+        clock.advance(2_000L) // 2 s elapsed
+        a.observeFrame(radarState(bikeSpeedMs = 10f)) // ... carries 10 m/s for next interval
         val s = a.snapshot()
         // First interval: 5 m. Second integrated using last known speed at frame 2 (5 m/s) for 2s = 10 m.
         // Total: 15 m = 0.015 km.
-        assertTrue("expected ~0.015 km, got ${s.distanceRiddenKm}",
-            s.distanceRiddenKm in 0.013f..0.017f)
+        assertTrue(
+            "expected ~0.015 km, got ${s.distanceRiddenKm}",
+            s.distanceRiddenKm in 0.013f..0.017f,
+        )
     }
 
     @Test
@@ -177,7 +193,7 @@ class RideStatsAccumulatorTest {
         val a = acc(clock)
         a.observeFrame(radarState(bikeSpeedMs = 8f))
         clock.advance(1_000L)
-        a.observeFrame(radarState(bikeSpeedMs = null))   // no speed update; previous still applies
+        a.observeFrame(radarState(bikeSpeedMs = null)) // no speed update; previous still applies
         // 8 m/s * 1 s = 8 m
         assertTrue(a.snapshot().distanceRiddenKm in 0.007f..0.009f)
     }
@@ -188,13 +204,13 @@ class RideStatsAccumulatorTest {
     fun exposureCountsOnlyIntervalsWithTraffic() {
         val clock = FakeClock(start = 0L)
         val a = acc(clock)
-        a.observeFrame(radarState(emptyList()))             // no prev → no interval
+        a.observeFrame(radarState(emptyList())) // no prev → no interval
         clock.advance(2_000L)
-        a.observeFrame(radarState(listOf(veh(1))))          // traffic now; 2 s exposure
+        a.observeFrame(radarState(listOf(veh(1)))) // traffic now; 2 s exposure
         clock.advance(3_000L)
-        a.observeFrame(radarState(emptyList()))              // no traffic; this 3s interval has traffic per the START frame
+        a.observeFrame(radarState(emptyList())) // no traffic; this 3s interval has traffic per the START frame
         clock.advance(1_000L)
-        a.observeFrame(radarState(emptyList()))              // no traffic this interval either
+        a.observeFrame(radarState(emptyList())) // no traffic this interval either
         // Exposure semantics: interval counts iff the FRAME being processed has any traffic.
         // Interval 2 (2s): empty→veh1, frame has traffic → 2s.
         // Interval 3 (3s): veh1→empty, frame has no traffic → 0s.

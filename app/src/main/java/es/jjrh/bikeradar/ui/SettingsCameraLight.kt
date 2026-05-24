@@ -65,7 +65,10 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
                     title = "Auto dashcam light mode",
                     subtitle = "Set light mode at power-on and at sunset",
                     checked = autoEnabled,
-                    onCheckedChange = { v -> autoEnabled = v; prefs.autoLightModeEnabled = v },
+                    onCheckedChange = { v ->
+                        autoEnabled = v
+                        prefs.autoLightModeEnabled = v
+                    },
                     leadingIcon = Icons.Default.WbSunny,
                     leadingTint = br.brand,
                     isLast = false,
@@ -120,7 +123,11 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
         ModePickerDialog(
             title = "Daytime mode",
             current = dayMode,
-            onSelect = { dayMode = it; prefs.cameraLightDayMode = it; dayPickerOpen = false },
+            onSelect = {
+                dayMode = it
+                prefs.cameraLightDayMode = it
+                dayPickerOpen = false
+            },
             onDismiss = { dayPickerOpen = false },
         )
     }
@@ -128,7 +135,11 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
         ModePickerDialog(
             title = "Night mode",
             current = nightMode,
-            onSelect = { nightMode = it; prefs.cameraLightNightMode = it; nightPickerOpen = false },
+            onSelect = {
+                nightMode = it
+                prefs.cameraLightNightMode = it
+                nightPickerOpen = false
+            },
             onDismiss = { nightPickerOpen = false },
         )
     }
@@ -165,4 +176,3 @@ private fun ModePickerDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
-

@@ -68,8 +68,7 @@ object HaUrlPolicy {
     }
 
     /** Short user-facing message for the [Result.Malformed] case. */
-    fun malformedMessage(): String =
-        "Refused: URL must start with https:// or http://"
+    fun malformedMessage(): String = "Refused: URL must start with https:// or http://"
 
     private fun isLanHost(host: String): Boolean {
         if (host == "localhost") return true
@@ -80,7 +79,8 @@ object HaUrlPolicy {
                 .takeIf { it.size == 4 }
         }
         if (ipv4 != null) {
-            val a = ipv4[0]; val b = ipv4[1]
+            val a = ipv4[0]
+            val b = ipv4[1]
             return when {
                 a == 10 -> true
                 a == 127 -> true

@@ -53,8 +53,11 @@ class SyntheticScenarioService : Service() {
         isRunning = true
         ensureChannel()
         if (android.os.Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
+            startForeground(
+                NOTIF_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+            )
         } else {
             startForeground(NOTIF_ID, buildNotification())
         }
@@ -100,7 +103,7 @@ class SyntheticScenarioService : Service() {
                         source = DataSource.V2,
                         scenarioTimeMs = elapsed,
                         bikeSpeedMs = bikeMs,
-                    )
+                    ),
                 )
                 if (!dashcamPushed && elapsed >= DASHCAM_PUSH_MS) {
                     BatteryStateBus.update(
@@ -108,7 +111,7 @@ class SyntheticScenarioService : Service() {
                             slug = dashcamSlug,
                             name = prefs.dashcamDisplayName ?: "Vue Synthetic",
                             pct = 80,
-                        )
+                        ),
                     )
                     dashcamPushed = true
                 }
@@ -180,47 +183,74 @@ class SyntheticScenarioService : Service() {
         if (t in 12.0..28.0) {
             out.add(
                 Vehicle(
-                    id = 10, distanceM = 4, speedMs = 0f, size = VehicleSize.CAR,
-                    lateralPos = -0.65f, speedXMs = 0,
-                )
+                    id = 10,
+                    distanceM = 4,
+                    speedMs = 0f,
+                    size = VehicleSize.CAR,
+                    lateralPos = -0.65f,
+                    speedXMs = 0,
+                ),
             )
         }
         if (t in 8.0..22.0) {
             val d = 60.0 - 4.0 * (t - 8.0)
-            if (d >= 0) out.add(
-                Vehicle(
-                    id = 11, distanceM = d.toInt().coerceAtLeast(0), speedMs = 4f,
-                    lateralPos = 0.55f, speedXMs = 0,
+            if (d >= 0) {
+                out.add(
+                    Vehicle(
+                        id = 11,
+                        distanceM = d.toInt().coerceAtLeast(0),
+                        speedMs = 4f,
+                        lateralPos = 0.55f,
+                        speedXMs = 0,
+                    ),
                 )
-            )
+            }
         }
         if (t in 14.0..22.0) {
             val d = 50.0 - 6.0 * (t - 14.0)
-            if (d >= 0) out.add(
-                Vehicle(
-                    id = 12, distanceM = d.toInt().coerceAtLeast(0), speedMs = 8f,
-                    size = VehicleSize.CAR, lateralPos = -0.4f, speedXMs = 0,
+            if (d >= 0) {
+                out.add(
+                    Vehicle(
+                        id = 12,
+                        distanceM = d.toInt().coerceAtLeast(0),
+                        speedMs = 8f,
+                        size = VehicleSize.CAR,
+                        lateralPos = -0.4f,
+                        speedXMs = 0,
+                    ),
                 )
-            )
+            }
         }
         if (t in 18.0..28.0) {
             val d = 70.0 - 9.0 * (t - 18.0)
-            if (d >= 0) out.add(
-                Vehicle(
-                    id = 13, distanceM = d.toInt().coerceAtLeast(0), speedMs = 12f,
-                    size = VehicleSize.TRUCK, lateralPos = 0.65f, speedXMs = 0,
+            if (d >= 0) {
+                out.add(
+                    Vehicle(
+                        id = 13,
+                        distanceM = d.toInt().coerceAtLeast(0),
+                        speedMs = 12f,
+                        size = VehicleSize.TRUCK,
+                        lateralPos = 0.65f,
+                        speedXMs = 0,
+                    ),
                 )
-            )
+            }
         }
         // Second peak around t=46..54 — close-pass-grade encounter.
         if (t in 46.0..50.0) {
             val d = 30.0 - 7.0 * (t - 46.0)
-            if (d >= 0) out.add(
-                Vehicle(
-                    id = 14, distanceM = d.toInt().coerceAtLeast(0), speedMs = 13f,
-                    size = VehicleSize.CAR, lateralPos = 0.15f, speedXMs = 0,
+            if (d >= 0) {
+                out.add(
+                    Vehicle(
+                        id = 14,
+                        distanceM = d.toInt().coerceAtLeast(0),
+                        speedMs = 13f,
+                        size = VehicleSize.CAR,
+                        lateralPos = 0.15f,
+                        speedXMs = 0,
+                    ),
                 )
-            )
+            }
         }
         return out
     }
@@ -236,26 +266,25 @@ class SyntheticScenarioService : Service() {
         val t = tMs / 1000.0
         return when {
             t < 5.0 -> null
-            t < 10.0 -> 5f      // 18 km/h
-            t < 30.0 -> 2f      // 7 km/h - within alongside-slow gate
-            t < 40.0 -> 3f      // 11 km/h
-            else -> 6f          // 22 km/h
+            t < 10.0 -> 5f // 18 km/h
+            t < 30.0 -> 2f // 7 km/h - within alongside-slow gate
+            t < 40.0 -> 3f // 11 km/h
+            else -> 6f // 22 km/h
         }
     }
 
-    private fun buildNotification(): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-            .setContentTitle("Bike Radar synthetic scenario")
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
+    private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_menu_recent_history)
+        .setContentTitle("Bike Radar synthetic scenario")
+        .setOngoing(true)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .build()
 
     private fun ensureChannel() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Synthetic scenario", NotificationManager.IMPORTANCE_MIN)
+            NotificationChannel(CHANNEL_ID, "Synthetic scenario", NotificationManager.IMPORTANCE_MIN),
         )
     }
 
@@ -265,6 +294,7 @@ class SyntheticScenarioService : Service() {
         private const val TOTAL_MS = 60_000L
         private const val DASHCAM_PUSH_MS = 20_000L
         private const val SYNTHETIC_MAC = "AA:BB:CC:DD:EE:FF"
+
         @Volatile var isRunning = false
     }
 }

@@ -3,7 +3,6 @@ package es.jjrh.bikeradar
 
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import java.util.concurrent.Executor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,8 +13,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowAudioManager
+import org.robolectric.shadows.ShadowLooper
+import java.util.concurrent.Executor
 
 /**
  * Pins the audio-focus and MODE_IN_CALL behaviour of [AlertBeeper].
@@ -55,8 +55,7 @@ class AlertBeeperFocusTest {
         executor = directExecutor,
     )
 
-    private fun lastFocusRequest(): AudioFocusRequest? =
-        shadowAm.lastAudioFocusRequest?.audioFocusRequest
+    private fun lastFocusRequest(): AudioFocusRequest? = shadowAm.lastAudioFocusRequest?.audioFocusRequest
 
     @Test
     fun play_requestsTransientMayDuckFocusWithAlarmUsage() {

@@ -56,8 +56,11 @@ class ScreenshotCaptureService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val handler = Handler(Looper.getMainLooper())
+
     @Volatile private var projection: MediaProjection? = null
+
     @Volatile private var virtualDisplay: VirtualDisplay? = null
+
     @Volatile private var imageReader: ImageReader? = null
     private var captureJob: Job? = null
     private var widthPx: Int = 0
@@ -86,7 +89,9 @@ class ScreenshotCaptureService : Service() {
             ACTION_START -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
                 val resultData = IntentCompat.getParcelableExtra(
-                    intent, EXTRA_RESULT_DATA, Intent::class.java,
+                    intent,
+                    EXTRA_RESULT_DATA,
+                    Intent::class.java,
                 )
                 if (resultCode == 0 || resultData == null) {
                     Log.w(TAG, "missing projection result; stopping")
@@ -114,7 +119,8 @@ class ScreenshotCaptureService : Service() {
         // isn't already foregrounded as type=mediaProjection.
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
-                NOTIF_ID, buildNotification(),
+                NOTIF_ID,
+                buildNotification(),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,
             )
         } else {
@@ -140,12 +146,15 @@ class ScreenshotCaptureService : Service() {
         // Required on API 34+: a callback must be registered before the
         // virtual display is created, otherwise the projection is killed
         // immediately with a SecurityException.
-        mp.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                Log.i(TAG, "projection stopped by system / user")
-                stopSelf()
-            }
-        }, handler)
+        mp.registerCallback(
+            object : MediaProjection.Callback() {
+                override fun onStop() {
+                    Log.i(TAG, "projection stopped by system / user")
+                    stopSelf()
+                }
+            },
+            handler,
+        )
 
         if (!setupCaptureRig(mp)) {
             stopSelf()
@@ -167,12 +176,17 @@ class ScreenshotCaptureService : Service() {
         }
 
         val reader = ImageReader.newInstance(
-            widthPx, heightPx, PixelFormat.RGBA_8888, MAX_IMAGES,
+            widthPx,
+            heightPx,
+            PixelFormat.RGBA_8888,
+            MAX_IMAGES,
         )
         val vd = try {
             mp.createVirtualDisplay(
                 VIRTUAL_DISPLAY_NAME,
-                widthPx, heightPx, densityDpi,
+                widthPx,
+                heightPx,
+                densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface,
                 null,
@@ -180,12 +194,16 @@ class ScreenshotCaptureService : Service() {
             )
         } catch (t: Throwable) {
             Log.w(TAG, "createVirtualDisplay failed: $t")
-            try { reader.close() } catch (_: Throwable) {}
+            try {
+                reader.close()
+            } catch (_: Throwable) {}
             return false
         }
         if (vd == null) {
             Log.w(TAG, "createVirtualDisplay returned null")
-            try { reader.close() } catch (_: Throwable) {}
+            try {
+                reader.close()
+            } catch (_: Throwable) {}
             return false
         }
         imageReader = reader
@@ -215,7 +233,10 @@ class ScreenshotCaptureService : Service() {
         if (newW == widthPx && newH == heightPx) return
 
         val newReader = ImageReader.newInstance(
-            newW, newH, PixelFormat.RGBA_8888, MAX_IMAGES,
+            newW,
+            newH,
+            PixelFormat.RGBA_8888,
+            MAX_IMAGES,
         )
         val oldReader = imageReader
         try {
@@ -223,13 +244,17 @@ class ScreenshotCaptureService : Service() {
             vd.surface = newReader.surface
         } catch (t: Throwable) {
             Log.w(TAG, "resize after rotation failed: $t")
-            try { newReader.close() } catch (_: Throwable) {}
+            try {
+                newReader.close()
+            } catch (_: Throwable) {}
             return
         }
         widthPx = newW
         heightPx = newH
         imageReader = newReader
-        try { oldReader?.close() } catch (_: Throwable) {}
+        try {
+            oldReader?.close()
+        } catch (_: Throwable) {}
     }
 
     private suspend fun captureLoop() {
@@ -257,7 +282,7 @@ class ScreenshotCaptureService : Service() {
                     Log.w(TAG, "capture failed: $t")
                 }
             } else {
-                Log.i(TAG, "tick ${ticks}: overlay not live (source=${state.source} ageMs=$ageMs); skipping frame")
+                Log.i(TAG, "tick $ticks: overlay not live (source=${state.source} ageMs=$ageMs); skipping frame")
             }
             ticks++
             delay(CAPTURE_INTERVAL_MS)
@@ -293,10 +318,13 @@ class ScreenshotCaptureService : Service() {
                     Bitmap.Config.ARGB_8888,
                 )
                 padded.copyPixelsFromBuffer(buffer)
-                if (rowPadding == 0) padded
-                else Bitmap.createBitmap(padded, 0, 0, widthPx, heightPx).also {
-                    padded.recycle()
-                    padded = null
+                if (rowPadding == 0) {
+                    padded
+                } else {
+                    Bitmap.createBitmap(padded, 0, 0, widthPx, heightPx).also {
+                        padded.recycle()
+                        padded = null
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -326,13 +354,19 @@ class ScreenshotCaptureService : Service() {
         // in-flight acquireLatestImage() returns promptly. Then cancel the
         // capture job, then release the reader. This ordering avoids the
         // race where ImageReader is closed mid-acquire.
-        try { projection?.stop() } catch (_: Throwable) {}
+        try {
+            projection?.stop()
+        } catch (_: Throwable) {}
         projection = null
-        try { virtualDisplay?.release() } catch (_: Throwable) {}
+        try {
+            virtualDisplay?.release()
+        } catch (_: Throwable) {}
         virtualDisplay = null
         captureJob?.cancel()
         scope.cancel()
-        try { imageReader?.close() } catch (_: Throwable) {}
+        try {
+            imageReader?.close()
+        } catch (_: Throwable) {}
         imageReader = null
     }
 
@@ -340,7 +374,7 @@ class ScreenshotCaptureService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Screenshot capture", NotificationManager.IMPORTANCE_MIN)
+            NotificationChannel(CHANNEL_ID, "Screenshot capture", NotificationManager.IMPORTANCE_MIN),
         )
     }
 
@@ -349,7 +383,9 @@ class ScreenshotCaptureService : Service() {
             action = ACTION_STOP
         }
         val stopPi = PendingIntent.getService(
-            this, 0, stopIntent,
+            this,
+            0,
+            stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -373,12 +409,14 @@ class ScreenshotCaptureService : Service() {
         const val EXTRA_RESULT_DATA = "result_data"
         const val SCREENSHOT_DIR = "screenshots"
         private const val VIRTUAL_DISPLAY_NAME = "BikeRadarCapture"
+
         // 2 buffers is intentional: with a 60 s capture interval the
         // ImageReader will silently drop intermediate frames produced by
         // the compositor. acquireLatestImage() always returns the newest.
         private const val MAX_IMAGES = 2
         private const val CAPTURE_INTERVAL_MS = 60_000L
         private const val STARTUP_SETTLE_MS = 2_000L
+
         // The radar publishes a state on every device-status frame
         // (~every 250 ms) so 5 s is comfortably wider than any expected
         // gap. Beyond that we treat the link as down and drop the frame.
@@ -386,6 +424,7 @@ class ScreenshotCaptureService : Service() {
         private val TIMESTAMP_FMT = ThreadLocal.withInitial {
             SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT)
         }
+
         @Volatile var isRunning: Boolean = false
     }
 }

@@ -14,7 +14,7 @@ class IdleGateTest {
                 radarGattActive = true,
                 radarOffSinceMs = null,
                 nowMs = 1_000L,
-            )
+            ),
         )
     }
 
@@ -26,7 +26,7 @@ class IdleGateTest {
                 radarGattActive = true,
                 radarOffSinceMs = 0L,
                 nowMs = Long.MAX_VALUE,
-            )
+            ),
         )
     }
 
@@ -37,7 +37,7 @@ class IdleGateTest {
                 radarGattActive = false,
                 radarOffSinceMs = null,
                 nowMs = 1_000L,
-            )
+            ),
         )
     }
 
@@ -48,7 +48,7 @@ class IdleGateTest {
                 radarGattActive = false,
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_000L,
-            )
+            ),
         )
     }
 
@@ -60,7 +60,7 @@ class IdleGateTest {
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_000L + 599_999L,
                 windowMs = 600_000L,
-            )
+            ),
         )
     }
 
@@ -73,7 +73,7 @@ class IdleGateTest {
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_000L + 600_000L,
                 windowMs = 600_000L,
-            )
+            ),
         )
     }
 
@@ -85,7 +85,7 @@ class IdleGateTest {
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_000L + 600_001L,
                 windowMs = 600_000L,
-            )
+            ),
         )
     }
 
@@ -99,7 +99,7 @@ class IdleGateTest {
                 radarGattActive = false,
                 radarOffSinceMs = 2_000L,
                 nowMs = 1_000L,
-            )
+            ),
         )
     }
 
@@ -111,7 +111,7 @@ class IdleGateTest {
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_500L,
                 windowMs = 400L,
-            )
+            ),
         )
     }
 
@@ -123,7 +123,7 @@ class IdleGateTest {
                 radarOffSinceMs = 1_000L,
                 nowMs = 1_000L,
                 windowMs = 0L,
-            )
+            ),
         )
     }
 

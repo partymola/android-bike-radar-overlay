@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -68,7 +66,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
@@ -94,6 +92,7 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.provider.Settings as AndroidSettings
 
 /**
  * Mockup-fidelity onboarding pager. Four-step structure: Permissions ->
@@ -559,8 +558,11 @@ internal fun HaFieldsBlock(
         onChange = onTokenChange,
         placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
         mono = true,
-        visualTransformation = if (tokenVisible) VisualTransformation.None
-        else PasswordVisualTransformation(),
+        visualTransformation = if (tokenVisible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
         trailingIcon = {
             IconButton(onClick = onToggleTokenVisible) {
                 Icon(
@@ -759,12 +761,16 @@ internal fun PairingStepContent(
                     title = "Rear radar",
                     optionalLabel = false,
                     bonded = radarBonded,
-                    detail = if (radarBonded)
+                    detail = if (radarBonded) {
                         (radarLocalName ?: radarMac ?: "Rear radar")
-                    else "Not paired yet. The pairing screen is in Android's Bluetooth settings.",
-                    detailHint = if (!radarBonded)
+                    } else {
+                        "Not paired yet. The pairing screen is in Android's Bluetooth settings."
+                    },
+                    detailHint = if (!radarBonded) {
                         "After pairing, press back to return here."
-                    else null,
+                    } else {
+                        null
+                    },
                     primaryCta = if (!radarBonded) "Open Bluetooth settings" else null,
                     primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
                     onPrimary = onOpenBluetoothSettings,
@@ -803,9 +809,11 @@ internal fun PairingStepContent(
                             optionalLabel = true,
                             subtitle = if (picked) "Warns you if it's off" else null,
                             bonded = picked,
-                            detail = if (picked)
+                            detail = if (picked) {
                                 "${dashcamDisplayName ?: "Picked"} · $dashcamMac"
-                            else "Pick the dashcam you ride with to enable off-warnings.",
+                            } else {
+                                "Pick the dashcam you ride with to enable off-warnings."
+                            },
                             primaryCta = if (picked) "Change device" else "Pick device",
                             primaryCtaIcon = null,
                             onPrimary = onPickDashcam,
@@ -825,7 +833,7 @@ internal fun PairingStepContent(
                             androidx.compose.ui.text.SpanStyle(
                                 color = br.fg,
                                 fontWeight = FontWeight.Medium,
-                            )
+                            ),
                         )
                         append("Settings → Dashcam")
                         pop()
@@ -1031,7 +1039,9 @@ internal fun DeviceRow(
                     // device name in monospace. The visual PairedChip
                     // alongside isn't part of this Text's a11y subtree.
                     Modifier.semantics { contentDescription = "Paired with $detail" }
-                } else Modifier,
+                } else {
+                    Modifier
+                },
             )
         }
         if (detailHint != null) {
@@ -1424,24 +1434,29 @@ private fun EBikeOutcomeEdgeCard(
 ) {
     val br = LocalBrColors.current
     val (body, ctas) = when (outcome) {
-        LdiOutcome.NoInbound -> "We didn't hear from the bike. Make sure it's powered on and within 2 m, then try again." to
-            listOf<EBikeCta>(EBikeCta("Try again", onTryAgain, primary = true))
-        LdiOutcome.NoServiceFound -> "Couldn't find Live Data on the bike. Most likely the firmware is older than v19.54. Update via Flow." to
-            listOf(
-                EBikeCta("Open Flow", onOpenFlow, primary = true),
-            )
-        LdiOutcome.PairPromptDeclined -> "The pairing prompt may have been declined on the bike's display. Tap Open Flow and confirm on the bike when prompted." to
-            listOf(
-                EBikeCta("Open Flow", onOpenFlow, primary = true),
-                EBikeCta("Try again", onTryAgain, primary = false),
-            )
-        LdiOutcome.SlotConflict -> "Another accessory - possibly your previous phone running this app, a sports computer, or a sports watch - is paired with your bike's Live Data slot. The bike supports only one at a time. Release the other in Flow: open your bike -> gear icon -> Components, then remove the other accessory and try again." to
-            listOf(
-                EBikeCta("Open Flow", onOpenFlow, primary = true),
-                EBikeCta("Try again", onTryAgain, primary = false),
-            )
-        LdiOutcome.PermissionsDenied -> "Bluetooth permissions are needed to talk to the bike." to
-            listOf(EBikeCta("Open app permissions", onOpenPermissionSettings, primary = true))
+        LdiOutcome.NoInbound ->
+            "We didn't hear from the bike. Make sure it's powered on and within 2 m, then try again." to
+                listOf<EBikeCta>(EBikeCta("Try again", onTryAgain, primary = true))
+        LdiOutcome.NoServiceFound ->
+            "Couldn't find Live Data on the bike. Most likely the firmware is older than v19.54. Update via Flow." to
+                listOf(
+                    EBikeCta("Open Flow", onOpenFlow, primary = true),
+                )
+        LdiOutcome.PairPromptDeclined ->
+            "The pairing prompt may have been declined on the bike's display. Tap Open Flow and confirm on the bike when prompted." to
+                listOf(
+                    EBikeCta("Open Flow", onOpenFlow, primary = true),
+                    EBikeCta("Try again", onTryAgain, primary = false),
+                )
+        LdiOutcome.SlotConflict ->
+            "Another accessory - possibly your previous phone running this app, a sports computer, or a sports watch - is paired with your bike's Live Data slot. The bike supports only one at a time. Release the other in Flow: open your bike -> gear icon -> Components, then remove the other accessory and try again." to
+                listOf(
+                    EBikeCta("Open Flow", onOpenFlow, primary = true),
+                    EBikeCta("Try again", onTryAgain, primary = false),
+                )
+        LdiOutcome.PermissionsDenied ->
+            "Bluetooth permissions are needed to talk to the bike." to
+                listOf(EBikeCta("Open app permissions", onOpenPermissionSettings, primary = true))
         else -> return
     }
     Column(
@@ -1566,7 +1581,11 @@ private fun releaseEBikeBondFromOnboarding(ctx: Context, prefs: Prefs) {
     }
     val btManager = ctx.getSystemService(BluetoothManager::class.java)
     val adapter = btManager?.adapter
-    val device = try { adapter?.getRemoteDevice(address) } catch (_: Exception) { null }
+    val device = try {
+        adapter?.getRemoteDevice(address)
+    } catch (_: Exception) {
+        null
+    }
     val msg = when {
         device == null -> "Could not look up the bike's BLE device."
         device.bondState != android.bluetooth.BluetoothDevice.BOND_BONDED -> {
@@ -1761,7 +1780,9 @@ private fun hasRadarBond(ctx: Context): Boolean = try {
         val n = dev.name?.lowercase() ?: ""
         n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
     } == true
-} catch (_: Throwable) { false }
+} catch (_: Throwable) {
+    false
+}
 
 @SuppressLint("MissingPermission")
 private fun currentRadarMac(ctx: Context): String? = try {
@@ -1770,7 +1791,9 @@ private fun currentRadarMac(ctx: Context): String? = try {
         val n = dev.name?.lowercase() ?: ""
         n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
     }?.address
-} catch (_: Throwable) { null }
+} catch (_: Throwable) {
+    null
+}
 
 @SuppressLint("MissingPermission")
 private fun currentRadarLocalName(ctx: Context): String? = try {
@@ -1779,4 +1802,6 @@ private fun currentRadarLocalName(ctx: Context): String? = try {
         val n = dev.name?.lowercase() ?: ""
         n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
     }?.name
-} catch (_: Throwable) { null }
+} catch (_: Throwable) {
+    null
+}

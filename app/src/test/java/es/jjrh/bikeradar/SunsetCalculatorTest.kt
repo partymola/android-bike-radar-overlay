@@ -18,7 +18,8 @@ class SunsetCalculatorTest {
         // NOAA Solar Calculator: London, 2026-06-21 → sunset ~21:21 BST (UTC+1)
         val zdt = SunsetCalculator.sunsetZdt(LocalDate.of(2026, 6, 21), london)
         assertNotNull("summer solstice should not return null", zdt)
-        val h = zdt!!.hour; val m = zdt.minute
+        val h = zdt!!.hour
+        val m = zdt.minute
         assertTrue("expected ~21:21 BST, got $h:$m", h == 21 && m in 19..23)
     }
 
@@ -27,9 +28,12 @@ class SunsetCalculatorTest {
         // London, 2026-12-21: sunset ~15:53–15:58 GMT. Algorithm accuracy ±5 min.
         val zdt = SunsetCalculator.sunsetZdt(LocalDate.of(2026, 12, 21), london)
         assertNotNull("winter solstice should not return null", zdt)
-        val h = zdt!!.hour; val m = zdt.minute
-        assertTrue("expected ~15:55 GMT ±5 min, got $h:$m",
-            (h == 15 && m in 50..59) || (h == 16 && m == 0))
+        val h = zdt!!.hour
+        val m = zdt.minute
+        assertTrue(
+            "expected winter-solstice GMT sunset ±5 min, got $h:$m",
+            (h == 15 && m in 50..59) || (h == 16 && m == 0),
+        )
     }
 
     @Test
@@ -37,9 +41,12 @@ class SunsetCalculatorTest {
         // London, 2026-09-23: sunset ~18:55–19:00 BST. Algorithm accuracy ±5 min.
         val zdt = SunsetCalculator.sunsetZdt(LocalDate.of(2026, 9, 23), london)
         assertNotNull("autumn equinox should not return null", zdt)
-        val h = zdt!!.hour; val m = zdt.minute
-        assertTrue("expected ~18:58 BST ±5 min, got $h:$m",
-            (h == 18 && m in 53..59) || (h == 19 && m in 0..3))
+        val h = zdt!!.hour
+        val m = zdt.minute
+        assertTrue(
+            "expected autumn-equinox BST sunset ±5 min, got $h:$m",
+            (h == 18 && m in 53..59) || (h == 19 && m in 0..3),
+        )
     }
 
     @Test
@@ -48,7 +55,8 @@ class SunsetCalculatorTest {
         val ms = SunsetCalculator.sunriseEpochMs(LocalDate.of(2026, 6, 21))
         assertNotNull("summer solstice sunrise should not return null", ms)
         val zdt = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms!!), london)
-        val h = zdt.hour; val m = zdt.minute
+        val h = zdt.hour
+        val m = zdt.minute
         assertTrue("expected ~04:43 BST ±5 min, got $h:$m", h == 4 && m in 38..48)
     }
 
@@ -58,7 +66,8 @@ class SunsetCalculatorTest {
         val ms = SunsetCalculator.sunriseEpochMs(LocalDate.of(2026, 12, 21))
         assertNotNull("winter solstice sunrise should not return null", ms)
         val zdt = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms!!), london)
-        val h = zdt.hour; val m = zdt.minute
+        val h = zdt.hour
+        val m = zdt.minute
         assertTrue("expected ~08:04 GMT ±5 min, got $h:$m", h == 8 && m in 0..9)
     }
 
@@ -68,7 +77,8 @@ class SunsetCalculatorTest {
         for (date in listOf(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 21), LocalDate.of(2026, 12, 21))) {
             val rise = SunsetCalculator.sunriseEpochMs(date)
             val set = SunsetCalculator.sunsetEpochMs(date)
-            assertNotNull(rise); assertNotNull(set)
+            assertNotNull(rise)
+            assertNotNull(set)
             assertTrue("sunrise should precede sunset on $date", rise!! < set!!)
         }
     }
@@ -98,11 +108,12 @@ class SunsetCalculatorTest {
         val date = LocalDate.of(2026, 6, 21)
         val londonMs = SunsetCalculator.sunsetEpochMs(date)
         val madridMs = SunsetCalculator.sunsetEpochMs(date, latDeg = 40.4168, lonDeg = -3.7038)
-        assertNotNull(londonMs); assertNotNull(madridMs)
+        assertNotNull(londonMs)
+        assertNotNull(madridMs)
         assertTrue(
             "London sunset should follow Madrid sunset in UTC on summer solstice; " +
                 "london=$londonMs madrid=$madridMs diff=${(londonMs!! - madridMs!!) / 60000}min",
-            londonMs > madridMs
+            londonMs > madridMs,
         )
     }
 
@@ -113,11 +124,15 @@ class SunsetCalculatorTest {
         val ms = SunsetCalculator.sunsetEpochMs(LocalDate.of(2026, 6, 21), 40.4168, -3.7038)
         assertNotNull(ms)
         val zdt = java.time.ZonedDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(ms!!), ZoneId.of("Europe/Madrid")
+            java.time.Instant.ofEpochMilli(ms!!),
+            ZoneId.of("Europe/Madrid"),
         )
-        val h = zdt.hour; val m = zdt.minute
-        assertTrue("expected hour=21 min in 43..59 OR hour=22 min in 0..3, got h=$h m=$m",
-            (h == 21 && m in 43..59) || (h == 22 && m in 0..3))
+        val h = zdt.hour
+        val m = zdt.minute
+        assertTrue(
+            "expected hour=21 min in 43..59 OR hour=22 min in 0..3, got h=$h m=$m",
+            (h == 21 && m in 43..59) || (h == 22 && m in 0..3),
+        )
     }
 
     @Test
@@ -130,11 +145,15 @@ class SunsetCalculatorTest {
         val ms = SunsetCalculator.sunsetEpochMs(LocalDate.of(2026, 6, 21), -33.8688, 151.2093)
         assertNotNull(ms)
         val zdt = java.time.ZonedDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(ms!!), ZoneId.of("Australia/Sydney")
+            java.time.Instant.ofEpochMilli(ms!!),
+            ZoneId.of("Australia/Sydney"),
         )
-        val h = zdt.hour; val m = zdt.minute
-        assertTrue("expected hour=16 min in 43..59 OR hour=17 min in 0..3, got h=$h m=$m",
-            (h == 16 && m in 43..59) || (h == 17 && m in 0..3))
+        val h = zdt.hour
+        val m = zdt.minute
+        assertTrue(
+            "expected hour=16 min in 43..59 OR hour=17 min in 0..3, got h=$h m=$m",
+            (h == 16 && m in 43..59) || (h == 17 && m in 0..3),
+        )
     }
 
     @Test
@@ -149,7 +168,8 @@ class SunsetCalculatorTest {
             latDeg = SunsetCalculator.LONDON_LAT_DEG,
             lonDeg = SunsetCalculator.LONDON_LON_DEG,
         )
-        assertNotNull(noArg); assertNotNull(withDefaults)
+        assertNotNull(noArg)
+        assertNotNull(withDefaults)
         assertTrue("default-arg must equal explicit-default-arg", noArg == withDefaults)
     }
 

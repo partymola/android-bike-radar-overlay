@@ -115,6 +115,7 @@ class AlertDecider(
          *  is available; consumers treat that as centred. */
         data class Beep(val count: Int, val lateralPos: Float = 0f) : Event()
         object Clear : Event()
+
         /** Stationary-suppress override: rider is stopped AND a close
          *  vehicle satisfies either the proximity gate (near-third
          *  distance + closing past [SAFETY_OVERRIDE_CLOSING_MS]) or
@@ -133,12 +134,14 @@ class AlertDecider(
     private val consecutiveClose = HashMap<Int, Int>()
     private var prevStableClose: Set<Int> = emptySet()
     private var prevClosestUrgency: Int = 0
-    private var lastBeepAtMs: Long = Long.MIN_VALUE / 2  // guarantees first beep fires
+    private var lastBeepAtMs: Long = Long.MIN_VALUE / 2 // guarantees first beep fires
     private var beepPending: Boolean = false
+
     /** Clear-grace state: whether a Clear is deferred pending the
      *  [clearGraceMs] empty-dwell, and when the stable-close set emptied. */
     private var clearPending: Boolean = false
     private var clearPendingSinceMs: Long = 0L
+
     /** Raw in-front, in-range track ids from the previous frame (post
      *  distance-exit-band), used to apply the band's exit hysteresis. */
     private var prevCloseRaw: Set<Int> = emptySet()
@@ -285,7 +288,7 @@ class AlertDecider(
         }
 
         val newEntries = stableTids - prevStableClose
-        val overtakes  = prevStableClose intersect behindTids
+        val overtakes = prevStableClose intersect behindTids
 
         // Trigger gate. Audio describes the closest threat only;
         // additional tracks at the same or lower tier are silent.
@@ -312,9 +315,12 @@ class AlertDecider(
         // latch 0, so urgency >= 1 always passes - this only suppresses a
         // car that flapped out and back within the clear-grace.
         val newEntryRaisesTier =
-            newEntries.isNotEmpty() && closestUrgency > prevClosestUrgency &&
-            (closestVehicle == null ||
-                closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0))
+            newEntries.isNotEmpty() &&
+                closestUrgency > prevClosestUrgency &&
+                (
+                    closestVehicle == null ||
+                        closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
+                    )
         val overtakeToHigher = if (overtakes.isNotEmpty() && stableTids.isNotEmpty()) {
             val peakOvertaken = overtakes.maxOf { peakUrgencyPerTid[it] ?: 0 }
             closestUrgency > peakOvertaken
@@ -361,15 +367,19 @@ class AlertDecider(
         // ascending. So `firstOrNull` here returns the CLOSEST
         // imminent-impact threat - the right one to pan the urgent
         // cue toward.
-        val imminentImpactTrigger = if (!riderBelowStationaryForUrgent) null else stableClose.firstOrNull { v ->
-            val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
-                v.distanceM <= alertMaxM / 3
-            // Closing speed in m/s, positive = approaching.
-            val closingMs = -v.speedMs
-            val byTtc = closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
-                v.distanceM in 0..alertMaxM &&
-                v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
-            byProximity || byTtc
+        val imminentImpactTrigger = if (!riderBelowStationaryForUrgent) {
+            null
+        } else {
+            stableClose.firstOrNull { v ->
+                val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
+                    v.distanceM <= alertMaxM / 3
+                // Closing speed in m/s, positive = approaching.
+                val closingMs = -v.speedMs
+                val byTtc = closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
+                    v.distanceM in 0..alertMaxM &&
+                    v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
+                byProximity || byTtc
+            }
         }
         val anyImminentImpact = imminentImpactTrigger != null
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
@@ -399,7 +409,8 @@ class AlertDecider(
             clearPending = true
             clearPendingSinceMs = nowMs
         }
-        val clearGraceElapsed = clearPending && stableTids.isEmpty() &&
+        val clearGraceElapsed = clearPending &&
+            stableTids.isEmpty() &&
             (nowMs - clearPendingSinceMs) >= clearGraceMs
 
         val event: Event = when {
@@ -501,9 +512,9 @@ class AlertDecider(
     private fun urgencyFor(distM: Int, alertMaxM: Int): Int {
         val third = alertMaxM / 3f
         return when {
-            distM <= third       -> 3
-            distM <= 2f * third  -> 2
-            else                 -> 1
+            distM <= third -> 3
+            distM <= 2f * third -> 2
+            else -> 1
         }
     }
 

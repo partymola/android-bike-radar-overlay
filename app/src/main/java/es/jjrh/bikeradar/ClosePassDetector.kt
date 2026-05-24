@@ -212,7 +212,8 @@ class ClosePassDetector {
         for ((tid, state) in tracks) {
             val presentVehicle = vehicles.firstOrNull { it.id == tid }
             val dropped = tid !in currentTids
-            val justCrossedAhead = presentVehicle?.isBehind == true && state.armed &&
+            val justCrossedAhead = presentVehicle?.isBehind == true &&
+                state.armed &&
                 state.minAbsRangeXM < Float.MAX_VALUE
             if (dropped || justCrossedAhead) {
                 val event = maybeEmit(state, nowMs, config)

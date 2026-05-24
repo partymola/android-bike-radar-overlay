@@ -15,22 +15,23 @@ object Uuids {
 
     // Config / handshake service (rear radar only)
     val SVC_CONFIG: UUID = UUID.fromString("6a4e2800-667b-11e3-949a-0800200c9a66")
-    val HANDSHAKE_TX: UUID = UUID.fromString("6a4e2821-667b-11e3-949a-0800200c9a66")  // WRITE-NO-RESP
-    val HANDSHAKE_RX: UUID = UUID.fromString("6a4e2811-667b-11e3-949a-0800200c9a66")  // NOTIFY
+    val HANDSHAKE_TX: UUID = UUID.fromString("6a4e2821-667b-11e3-949a-0800200c9a66") // WRITE-NO-RESP
+    val HANDSHAKE_RX: UUID = UUID.fromString("6a4e2811-667b-11e3-949a-0800200c9a66") // NOTIFY
 
     // Radar service (rear radar only)
     val SVC_RADAR: UUID = UUID.fromString("6a4e3200-667b-11e3-949a-0800200c9a66")
+
     // V1 cleartext stream. We receive V1 frames WITHOUT writing its CCCD -
     // the radar broadcasts 3203 regardless. Subscribing the CCCD signals us
     // as a legacy V1 client and locks the radar to 3203-only, suppressing 3204.
-    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66")  // NOTIFY (no CCCD write)
-    val RADAR_V2: UUID = UUID.fromString("6a4e3204-667b-11e3-949a-0800200c9a66")  // NOTIFY (subscribe post-handshake)
+    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66") // NOTIFY (no CCCD write)
+    val RADAR_V2: UUID = UUID.fromString("6a4e3204-667b-11e3-949a-0800200c9a66") // NOTIFY (subscribe post-handshake)
 
     // Control / settings service (rear radar only)
     val SVC_CONTROL: UUID = UUID.fromString("6a4e2f00-667b-11e3-949a-0800200c9a66")
-    val SETTINGS_ACK: UUID = UUID.fromString("6a4e2f11-667b-11e3-949a-0800200c9a66")  // INDICATE
-    val SETTINGS_12: UUID = UUID.fromString("6a4e2f12-667b-11e3-949a-0800200c9a66")   // NOTIFY
-    val SETTINGS_14: UUID = UUID.fromString("6a4e2f14-667b-11e3-949a-0800200c9a66")   // NOTIFY
+    val SETTINGS_ACK: UUID = UUID.fromString("6a4e2f11-667b-11e3-949a-0800200c9a66") // INDICATE
+    val SETTINGS_12: UUID = UUID.fromString("6a4e2f12-667b-11e3-949a-0800200c9a66") // NOTIFY
+    val SETTINGS_14: UUID = UUID.fromString("6a4e2f14-667b-11e3-949a-0800200c9a66") // NOTIFY
 
     // Other config-service chars referenced in the handshake sequence
     val CHAR_2803: UUID = UUID.fromString("6a4e2803-667b-11e3-949a-0800200c9a66")

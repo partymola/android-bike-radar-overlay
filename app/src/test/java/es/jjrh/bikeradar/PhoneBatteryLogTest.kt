@@ -87,42 +87,67 @@ class PhoneBatteryLogTest {
     @Test fun throttle_logsOnFirstSampleSinceSentinel() {
         // Initial state: lastLevelPct=-1 sentinel; first reading differs,
         // so we log even though 0 ms has elapsed since lastLogMs=0.
-        assertTrue(BikeRadarService.shouldLogPhoneBattery(
-            now = 0L, lastLogMs = 0L, lastLevelPct = -1, currentLevelPct = 87,
-            periodMs = 60_000L,
-        ))
+        assertTrue(
+            BikeRadarService.shouldLogPhoneBattery(
+                now = 0L,
+                lastLogMs = 0L,
+                lastLevelPct = -1,
+                currentLevelPct = 87,
+                periodMs = 60_000L,
+            ),
+        )
     }
 
     @Test fun throttle_skipsWhenLevelSameAndPeriodNotElapsed() {
         // Same level at 30 s after last log: heartbeat hasn't fired.
-        assertFalse(BikeRadarService.shouldLogPhoneBattery(
-            now = 30_000L, lastLogMs = 0L, lastLevelPct = 87, currentLevelPct = 87,
-            periodMs = 60_000L,
-        ))
+        assertFalse(
+            BikeRadarService.shouldLogPhoneBattery(
+                now = 30_000L,
+                lastLogMs = 0L,
+                lastLevelPct = 87,
+                currentLevelPct = 87,
+                periodMs = 60_000L,
+            ),
+        )
     }
 
     @Test fun throttle_logsAtHeartbeatBoundary() {
         // Same level, exactly periodMs elapsed: heartbeat fires (>=).
-        assertTrue(BikeRadarService.shouldLogPhoneBattery(
-            now = 60_000L, lastLogMs = 0L, lastLevelPct = 87, currentLevelPct = 87,
-            periodMs = 60_000L,
-        ))
+        assertTrue(
+            BikeRadarService.shouldLogPhoneBattery(
+                now = 60_000L,
+                lastLogMs = 0L,
+                lastLevelPct = 87,
+                currentLevelPct = 87,
+                periodMs = 60_000L,
+            ),
+        )
     }
 
     @Test fun throttle_logsOnLevelChangeBeforeHeartbeat() {
         // Level dropped 1% before heartbeat would fire: log immediately.
-        assertTrue(BikeRadarService.shouldLogPhoneBattery(
-            now = 5_000L, lastLogMs = 0L, lastLevelPct = 87, currentLevelPct = 86,
-            periodMs = 60_000L,
-        ))
+        assertTrue(
+            BikeRadarService.shouldLogPhoneBattery(
+                now = 5_000L,
+                lastLogMs = 0L,
+                lastLevelPct = 87,
+                currentLevelPct = 86,
+                periodMs = 60_000L,
+            ),
+        )
     }
 
     @Test fun throttle_logsOnLevelChangeEvenJustAfterPriorLog() {
         // Edge: same instant a heartbeat fired, the next sample sees a
         // level change; should still log without waiting for next period.
-        assertTrue(BikeRadarService.shouldLogPhoneBattery(
-            now = 100L, lastLogMs = 100L, lastLevelPct = 87, currentLevelPct = 86,
-            periodMs = 60_000L,
-        ))
+        assertTrue(
+            BikeRadarService.shouldLogPhoneBattery(
+                now = 100L,
+                lastLogMs = 100L,
+                lastLevelPct = 87,
+                currentLevelPct = 86,
+                periodMs = 60_000L,
+            ),
+        )
     }
 }

@@ -14,6 +14,10 @@ object HaHealthBus {
     private val _state = MutableStateFlow<HaHealth>(HaHealth.Unknown)
     val state: StateFlow<HaHealth> = _state
 
-    fun reportOk() { _state.value = HaHealth.Ok }
-    fun reportError(message: String) { _state.value = HaHealth.Error(message) }
+    fun reportOk() {
+        _state.value = HaHealth.Ok
+    }
+    fun reportError(message: String) {
+        _state.value = HaHealth.Error(message)
+    }
 }

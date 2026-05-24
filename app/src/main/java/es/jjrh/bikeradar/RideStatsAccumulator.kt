@@ -2,7 +2,6 @@
 package es.jjrh.bikeradar
 
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -71,7 +70,9 @@ class RideStatsAccumulator(
             // and lateralUnknown sentinel frames) means the rider is in
             // traffic for this interval.
             val anyTraffic = state.vehicles.any { v ->
-                !v.isBehind && !v.isAlongsideStationary && !v.lateralUnknown &&
+                !v.isBehind &&
+                    !v.isAlongsideStationary &&
+                    !v.lateralUnknown &&
                     v.distanceM in 0..MAX_TRACK_DISTANCE_M
             }
             if (anyTraffic) {
@@ -141,7 +142,9 @@ class RideStatsAccumulator(
     /** True when state has changed since the last [markPublished] call. */
     fun changedSinceLast(): Boolean = generation != lastPublishedGeneration
 
-    fun markPublished() { lastPublishedGeneration = generation }
+    fun markPublished() {
+        lastPublishedGeneration = generation
+    }
 
     /** Snapshot the current values. Safe to call any time. */
     fun snapshot(): RideStatsSnapshot {

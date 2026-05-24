@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -92,7 +91,7 @@ private fun SettingsAboutBody(navController: NavController) {
                         .border(1.dp, br.hairline, RoundedCornerShape(999.dp))
                         .clickable {
                             ctx.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/partymola/android-bike-radar-overlay"))
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/partymola/android-bike-radar-overlay")),
                             )
                         }
                         .padding(horizontal = 14.dp, vertical = 10.dp),

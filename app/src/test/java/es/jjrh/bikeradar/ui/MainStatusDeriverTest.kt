@@ -33,8 +33,7 @@ class MainStatusDeriverTest {
         bluetoothEnabled = bluetoothEnabled,
     )
 
-    private fun derive(inputs: MainStatusInputs, now: Long = 100L) =
-        MainStatusDeriver.derive(inputs, now) { "HH:MM" }
+    private fun derive(inputs: MainStatusInputs, now: Long = 100L) = MainStatusDeriver.derive(inputs, now) { "HH:MM" }
 
     @Test fun firstRunTopsEverything() {
         val s = derive(baseInputs(firstRunComplete = false, hasBond = false))
@@ -58,13 +57,15 @@ class MainStatusDeriverTest {
 
     @Test fun dashcamOffBeatsHaDown() {
         // Both would fire — dashcam must win (rider safety).
-        val s = derive(baseInputs(
-            haErrorRecent = true,
-            dashcamOwned = true,
-            dashcamWarnWhenOff = true,
-            dashcamFresh = false,
-            dashcamDisplayName = "Vue-123",
-        ))
+        val s = derive(
+            baseInputs(
+                haErrorRecent = true,
+                dashcamOwned = true,
+                dashcamWarnWhenOff = true,
+                dashcamFresh = false,
+                dashcamDisplayName = "Vue-123",
+            ),
+        )
         assertEquals(MainStatusIcon.Warning, s.icon)
         assertEquals(MainStatusTone.Warn, s.tone)
         assertEquals("Radar live, dashcam off", s.headline)
@@ -72,42 +73,50 @@ class MainStatusDeriverTest {
     }
 
     @Test fun dashcamOffFallsBackWhenNoNameStored() {
-        val s = derive(baseInputs(
-            dashcamOwned = true,
-            dashcamWarnWhenOff = true,
-            dashcamFresh = false,
-        ))
+        val s = derive(
+            baseInputs(
+                dashcamOwned = true,
+                dashcamWarnWhenOff = true,
+                dashcamFresh = false,
+            ),
+        )
         assertEquals("Turn on your dashcam", s.subtitle)
     }
 
     @Test fun haDownShowsWhenDashcamIsFine() {
-        val s = derive(baseInputs(
-            haErrorRecent = true,
-            dashcamOwned = true,
-            dashcamWarnWhenOff = true,
-            dashcamFresh = true,
-        ))
+        val s = derive(
+            baseInputs(
+                haErrorRecent = true,
+                dashcamOwned = true,
+                dashcamWarnWhenOff = true,
+                dashcamFresh = true,
+            ),
+        )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
         assertEquals("Radar live", s.headline)
         assertEquals("Home Assistant unreachable", s.subtitle)
     }
 
     @Test fun warnDisabledSkipsDashcamStateEvenWhenDashcamIsOff() {
-        val s = derive(baseInputs(
-            dashcamOwned = true,
-            dashcamWarnWhenOff = false,
-            dashcamFresh = false,
-        ))
+        val s = derive(
+            baseInputs(
+                dashcamOwned = true,
+                dashcamWarnWhenOff = false,
+                dashcamFresh = false,
+            ),
+        )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
         assertEquals("Radar live", s.headline)
     }
 
     @Test fun allGoodWithDashcamShowsDashcamSubtitle() {
-        val s = derive(baseInputs(
-            dashcamOwned = true,
-            dashcamWarnWhenOff = true,
-            dashcamFresh = true,
-        ))
+        val s = derive(
+            baseInputs(
+                dashcamOwned = true,
+                dashcamWarnWhenOff = true,
+                dashcamFresh = true,
+            ),
+        )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
         assertEquals("Radar live", s.headline)
         assertEquals("Dashcam on", s.subtitle)

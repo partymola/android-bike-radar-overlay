@@ -92,7 +92,7 @@ class AndroidKeyStoreCryptor : Cryptor {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(KEY_SIZE_BITS)
-                .build()
+                .build(),
         )
         return gen.generateKey()
     }

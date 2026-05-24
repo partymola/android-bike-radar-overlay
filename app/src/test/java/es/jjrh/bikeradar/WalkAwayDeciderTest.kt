@@ -109,7 +109,7 @@ class WalkAwayDeciderTest {
         val oldFire = input(
             nowMs = now,
             radarOffSinceMs = now - 60_000L,
-            lastFireMs = now - 6 * 60_000L,  // 6 min ago, past 5-min rate limit
+            lastFireMs = now - 6 * 60_000L, // 6 min ago, past 5-min rate limit
         )
         assertEquals(WalkAwayDecider.Action.FIRE, WalkAwayDecider.decide(oldFire))
     }
@@ -186,8 +186,8 @@ class WalkAwayDeciderTest {
         val justGotFreshAdvert = input(
             nowMs = now,
             radarOffSinceMs = radarOffSeven,
-            dashcamLastAdvertMs = now - 1_000L,  // fresh
-            armed = false,                        // BLANK — service disarmed
+            dashcamLastAdvertMs = now - 1_000L, // fresh
+            armed = false, // BLANK - service disarmed
         )
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(justGotFreshAdvert))
     }
@@ -217,7 +217,7 @@ class WalkAwayDeciderTest {
         // `if (armed) FIRE`.
         val armedButRecentFire = input(
             armed = true,
-            lastFireMs = 10 * 60_000L - 60_000L,  // 1 min ago, inside rate-limit window
+            lastFireMs = 10 * 60_000L - 60_000L, // 1 min ago, inside rate-limit window
         )
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(armedButRecentFire))
     }

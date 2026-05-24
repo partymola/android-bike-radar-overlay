@@ -69,8 +69,8 @@ class AlertBeeper(
 
     private val sampleRate = 44100
     private val beepFreqHz = 3200f
-    private val toneDurMs  = 80
-    private val gapMs      = 110
+    private val toneDurMs = 80
+    private val gapMs = 110
 
     // Mono cue PCM, built once. Reused to make both the mono default-path
     // track and the stereo pan-bucket tracks.
@@ -95,6 +95,7 @@ class AlertBeeper(
     // pre-bucket code, no stereo-downmix shift on the phone speaker.
     private val beepMono: Array<AudioTrack> = Array(3) { i -> makeTrack(beepPcm[i]) }
     private val urgentMono: AudioTrack = makeTrack(urgentPcm)
+
     // Pan path: one stereo track per cue per bucket.
     private val beepBuckets: Array<Array<AudioTrack>> = Array(3) { i ->
         Array(PAN_BUCKETS) { b -> makeStereoTrack(beepPcm[i], bucketScales[b].first, bucketScales[b].second) }
@@ -115,13 +116,20 @@ class AlertBeeper(
     private val criticalBatteryDurationMs: Int = 2 * 160 + 1 * 140
 
     private var volumePct = DEFAULT_VOLUME_PCT
+
     @Volatile private var panningEnabled: Boolean = false
+
     @Volatile private var invertLR: Boolean = false
+
     @Volatile private var hasHeadphoneRoute: Boolean = false
 
     private val deviceCallback = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) { refreshRoute() }
-        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) { refreshRoute() }
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+            refreshRoute()
+        }
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+            refreshRoute()
+        }
     }
 
     // Audio-focus state. One request object reused across plays; gain
@@ -135,7 +143,7 @@ class AlertBeeper(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
+                    .build(),
             )
             // Empty listener: close-pass beeps are fire-and-forget. Loss
             // events are not actionable - the cue is already buffered to
@@ -147,7 +155,9 @@ class AlertBeeper(
     private val abandonHandler = Handler(Looper.getMainLooper())
     private val abandonRunnable = Runnable {
         if (hasFocus) {
-            try { audioManager.abandonAudioFocusRequest(focusRequest) } catch (_: Throwable) {}
+            try {
+                audioManager.abandonAudioFocusRequest(focusRequest)
+            } catch (_: Throwable) {}
             hasFocus = false
         }
     }
@@ -207,7 +217,9 @@ class AlertBeeper(
     fun release() {
         abandonHandler.removeCallbacks(abandonRunnable)
         if (hasFocus) {
-            try { audioManager.abandonAudioFocusRequest(focusRequest) } catch (_: Throwable) {}
+            try {
+                audioManager.abandonAudioFocusRequest(focusRequest)
+            } catch (_: Throwable) {}
             hasFocus = false
         }
         audioManager.unregisterAudioDeviceCallback(deviceCallback)
@@ -227,15 +239,16 @@ class AlertBeeper(
      * preserves call audio integrity; the visual overlay and (future)
      * wrist haptic still fire.
      */
-    private fun suppressForCall(): Boolean =
-        audioManager.mode == AudioManager.MODE_IN_CALL
+    private fun suppressForCall(): Boolean = audioManager.mode == AudioManager.MODE_IN_CALL
 
     private fun playWithFocus(track: AudioTrack, durationMs: Int) {
         if (!hasFocus) {
             val granted = try {
                 audioManager.requestAudioFocus(focusRequest) ==
                     AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            } catch (_: Throwable) { false }
+            } catch (_: Throwable) {
+                false
+            }
             hasFocus = granted
         }
         playOnce(track)
@@ -247,8 +260,13 @@ class AlertBeeper(
     }
 
     private fun playOnce(track: AudioTrack) {
-        try { track.stop() } catch (_: IllegalStateException) {}
-        try { track.setPlaybackHeadPosition(0); track.play() } catch (_: IllegalStateException) {}
+        try {
+            track.stop()
+        } catch (_: IllegalStateException) {}
+        try {
+            track.setPlaybackHeadPosition(0)
+            track.play()
+        } catch (_: IllegalStateException) {}
     }
 
     private fun applyVolume() {
@@ -301,20 +319,25 @@ class AlertBeeper(
     ) {
         val track: AudioTrack
         val level: Float
-        when (val result = resolvePan(
-            lateralPos = lateralPos,
-            monoGain = currentMonoGain(),
-            panningEnabled = panningEnabled,
-            invertLR = invertLR,
-            hasHeadphoneRoute = hasHeadphoneRoute,
-            // No headphone present implies the built-in speaker is the
-            // active route (always present in `getDevices(GET_OUTPUTS)`
-            // on any phone). The pan logic only fires for it in
-            // landscape; portrait falls through to mono inside resolvePan.
-            builtinSpeakerActive = !hasHeadphoneRoute,
-            rotation = rotationProvider(),
-        )) {
-            is PanResult.Mono -> { track = monoTrack; level = result.gain }
+        when (
+            val result = resolvePan(
+                lateralPos = lateralPos,
+                monoGain = currentMonoGain(),
+                panningEnabled = panningEnabled,
+                invertLR = invertLR,
+                hasHeadphoneRoute = hasHeadphoneRoute,
+                // No headphone present implies the built-in speaker is the
+                // active route (always present in `getDevices(GET_OUTPUTS)`
+                // on any phone). The pan logic only fires for it in
+                // landscape; portrait falls through to mono inside resolvePan.
+                builtinSpeakerActive = !hasHeadphoneRoute,
+                rotation = rotationProvider(),
+            )
+        ) {
+            is PanResult.Mono -> {
+                track = monoTrack
+                level = result.gain
+            }
             is PanResult.Stereo -> {
                 track = buckets[nearestPanBucket(result.left, result.right)]
                 level = maxOf(result.left, result.right)
@@ -339,7 +362,10 @@ class AlertBeeper(
         var bestDist = Float.MAX_VALUE
         for (k in bucketImbalance.indices) {
             val d = abs(imbalance - bucketImbalance[k])
-            if (d < bestDist) { bestDist = d; best = k }
+            if (d < bestDist) {
+                bestDist = d
+                best = k
+            }
         }
         return best
     }
@@ -416,15 +442,19 @@ class AlertBeeper(
 
     internal fun buildBeepPcm(count: Int): ShortArray {
         val toneSamples = sampleRate * toneDurMs / 1000
-        val gapSamples  = sampleRate * gapMs  / 1000
-        val tone        = generateTone(toneSamples, beepFreqHz)
-        val gap         = ShortArray(gapSamples)
+        val gapSamples = sampleRate * gapMs / 1000
+        val tone = generateTone(toneSamples, beepFreqHz)
+        val gap = ShortArray(gapSamples)
 
         val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
         var pos = 0
         repeat(count) { i ->
-            tone.copyInto(buf, pos); pos += toneSamples
-            if (i < count - 1) { gap.copyInto(buf, pos); pos += gapSamples }
+            tone.copyInto(buf, pos)
+            pos += toneSamples
+            if (i < count - 1) {
+                gap.copyInto(buf, pos)
+                pos += gapSamples
+            }
         }
         return buf
     }
@@ -437,8 +467,10 @@ class AlertBeeper(
         val gap = ShortArray(gapSamples)
         val buf = ShortArray(hi.size + gap.size + lo.size)
         var pos = 0
-        hi.copyInto(buf, pos); pos += hi.size
-        gap.copyInto(buf, pos); pos += gap.size
+        hi.copyInto(buf, pos)
+        pos += hi.size
+        gap.copyInto(buf, pos)
+        pos += gap.size
         lo.copyInto(buf, pos)
         return makeTrack(buf)
     }
@@ -449,15 +481,19 @@ class AlertBeeper(
         // stationary-safety-override pattern, not a normal close-approach
         // beep.
         val toneSamples = sampleRate * 70 / 1000
-        val gapSamples  = sampleRate * 50 / 1000
-        val tone        = generateTone(toneSamples, 3800f)
-        val gap         = ShortArray(gapSamples)
+        val gapSamples = sampleRate * 50 / 1000
+        val tone = generateTone(toneSamples, 3800f)
+        val gap = ShortArray(gapSamples)
         val count = 4
         val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
         var pos = 0
         repeat(count) { i ->
-            tone.copyInto(buf, pos); pos += toneSamples
-            if (i < count - 1) { gap.copyInto(buf, pos); pos += gapSamples }
+            tone.copyInto(buf, pos)
+            pos += toneSamples
+            if (i < count - 1) {
+                gap.copyInto(buf, pos)
+                pos += gapSamples
+            }
         }
         return buf
     }
@@ -469,25 +505,27 @@ class AlertBeeper(
         // reads it as a status cue, not a threat. Equal tones (no descent)
         // also separate it from the clear chime. First cut - tune on rides.
         val toneSamples = sampleRate * 160 / 1000
-        val gapSamples  = sampleRate * 140 / 1000
-        val tone        = generateTone(toneSamples, 520f)
-        val gap         = ShortArray(gapSamples)
+        val gapSamples = sampleRate * 140 / 1000
+        val tone = generateTone(toneSamples, 520f)
+        val gap = ShortArray(gapSamples)
         val buf = ShortArray(2 * toneSamples + gapSamples)
         var pos = 0
-        tone.copyInto(buf, pos); pos += toneSamples
-        gap.copyInto(buf, pos); pos += gapSamples
+        tone.copyInto(buf, pos)
+        pos += toneSamples
+        gap.copyInto(buf, pos)
+        pos += gapSamples
         tone.copyInto(buf, pos)
         return makeTrack(buf)
     }
 
     private fun generateTone(numSamples: Int, freqHz: Float): ShortArray {
-        val buf    = ShortArray(numSamples)
+        val buf = ShortArray(numSamples)
         val twoPiF = 2.0 * PI * freqHz / sampleRate
-        val fade   = (numSamples * 0.08).toInt().coerceAtLeast(1)
+        val fade = (numSamples * 0.08).toInt().coerceAtLeast(1)
         for (i in buf.indices) {
             val env = min(
                 min(i.toDouble() / fade, (numSamples - 1 - i).toDouble() / fade),
-                1.0
+                1.0,
             )
             buf[i] = (Short.MAX_VALUE * 0.75 * env * sin(twoPiF * i)).toInt().toShort()
         }
@@ -505,7 +543,7 @@ class AlertBeeper(
         val stereo = ShortArray(mono.size * 2)
         for (i in mono.indices) {
             val s = mono[i].toInt()
-            stereo[2 * i]     = (s * leftScale).toInt().toShort()
+            stereo[2 * i] = (s * leftScale).toInt().toShort()
             stereo[2 * i + 1] = (s * rightScale).toInt().toShort()
         }
         return stereo
@@ -519,21 +557,23 @@ class AlertBeeper(
     private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
         val stereo = interleaveStereo(mono, leftScale, rightScale)
         val minBuf = AudioTrack.getMinBufferSize(
-            sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_STEREO,
+            AudioFormat.ENCODING_PCM_16BIT,
         )
         return AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
+                    .build(),
             )
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setSampleRate(sampleRate)
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                    .build()
+                    .build(),
             )
             .setBufferSizeInBytes(maxOf(stereo.size * 2, minBuf))
             .setTransferMode(AudioTrack.MODE_STATIC)
@@ -543,21 +583,23 @@ class AlertBeeper(
 
     private fun makeTrack(buf: ShortArray): AudioTrack {
         val minBuf = AudioTrack.getMinBufferSize(
-            sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
         )
         return AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
+                    .build(),
             )
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setSampleRate(sampleRate)
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
+                    .build(),
             )
             .setBufferSizeInBytes(maxOf(buf.size * 2, minBuf))
             .setTransferMode(AudioTrack.MODE_STATIC)

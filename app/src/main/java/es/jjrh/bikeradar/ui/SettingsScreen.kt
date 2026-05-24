@@ -36,16 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
-import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -178,9 +176,11 @@ internal fun SettingsMenuBody(
                     icon = Icons.Default.Shield,
                     iconTint = if (permissionsRequiredMissing > 0) br.danger else br.caution,
                     title = "Permissions",
-                    subtitle = if (permissionsRequiredMissing > 0)
+                    subtitle = if (permissionsRequiredMissing > 0) {
                         "$permissionsRequiredMissing of $permissionsTotal need action"
-                    else "All granted ($permissionsGrantedCount of $permissionsTotal)",
+                    } else {
+                        "All granted ($permissionsGrantedCount of $permissionsTotal)"
+                    },
                     onClick = { navController.navigate("settings/permissions") },
                     isLast = true,
                 )
@@ -269,18 +269,23 @@ private fun SystemHealthChip(
     ) {
         StatusDot(color = color, size = 6.dp)
         Text(text = label, color = br.fgMuted, fontSize = 12.sp)
-        if (battery != null) BatteryChip(pct = battery.pct)
-        else Text(
-            text = "Not seen",
-            color = br.fgFaint,
-            fontSize = 11.sp,
-        )
+        if (battery != null) {
+            BatteryChip(pct = battery.pct)
+        } else {
+            Text(
+                text = "Not seen",
+                color = br.fgFaint,
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 
-private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String =
-    if (!snap.autoLightModeEnabled) "Off"
-    else "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
+private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = if (!snap.autoLightModeEnabled) {
+    "Off"
+} else {
+    "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
+}
 
 private fun eBikeSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.eBikeOwnership) {
     es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED -> "Set up your eBike"
@@ -308,6 +313,4 @@ private fun haSubtitle(configured: Boolean, health: HaHealth): String = when {
     else -> "Connected"
 }
 
-private fun experimentalSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String =
-    if (snap.precogEnabled) "Precog on" else "All off"
-
+private fun experimentalSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = if (snap.precogEnabled) "Precog on" else "All off"

@@ -40,7 +40,8 @@ class CameraLightController(
         val ch = gatt.getService(Uuids.SVC_CONTROL)
             ?.getCharacteristic(Uuids.SETTINGS_ACK) ?: return false
         return queue.write(
-            gatt, ch,
+            gatt,
+            ch,
             byteArrayOf(0x07, 0x00, payload),
             noResponse = false,
         )

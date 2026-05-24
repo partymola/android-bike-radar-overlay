@@ -101,14 +101,23 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         onOverlayOpacityChange = { overlayOpacity = it },
         onOverlayOpacityFinished = { prefs.overlayOpacity = overlayOpacity },
         adaptive = adaptive,
-        onAdaptiveChange = { adaptive = it; prefs.adaptiveAlertsEnabled = it },
+        onAdaptiveChange = {
+            adaptive = it
+            prefs.adaptiveAlertsEnabled = it
+        },
         batteryThreshold = batteryThreshold,
         onBatteryThresholdChange = { batteryThreshold = it },
         onBatteryThresholdFinished = { prefs.batteryLowThresholdPct = batteryThreshold },
         batteryShowLabels = batteryShowLabels,
-        onBatteryShowLabelsChange = { batteryShowLabels = it; prefs.batteryShowLabels = it },
+        onBatteryShowLabelsChange = {
+            batteryShowLabels = it
+            prefs.batteryShowLabels = it
+        },
         closePassLogging = closePassLogging,
-        onClosePassLoggingChange = { closePassLogging = it; prefs.closePassLoggingEnabled = it },
+        onClosePassLoggingChange = {
+            closePassLogging = it
+            prefs.closePassLoggingEnabled = it
+        },
         closePassEmitMinX = closePassEmitMinX,
         onClosePassEmitMinXChange = { closePassEmitMinX = it },
         onClosePassEmitMinXFinished = { prefs.closePassEmitMinRangeXM = closePassEmitMinX },
@@ -138,7 +147,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                 Text(
                     "The radar, overlay, and Home Assistant updates stop until " +
                         "you start them again from the home screen — including " +
-                        "after a reboot. Use Pause if you only need a quiet hour."
+                        "after a reboot. Use Pause if you only need a quiet hour.",
                 )
             },
             confirmButton = {
@@ -338,9 +347,11 @@ internal fun SettingsRadarContent(
                     leadingIcon = Icons.Default.Home,
                     leadingTint = br.safe,
                     title = "Log to Home Assistant",
-                    subtitle = if (haConfigured)
+                    subtitle = if (haConfigured) {
                         "Publish close passes to HA when a vehicle overtakes inside the lateral distance below."
-                    else "Requires Home Assistant — set it up below.",
+                    } else {
+                        "Requires Home Assistant - set it up below."
+                    },
                     checked = closePassLogging,
                     enabled = haConfigured,
                     onCheckedChange = onClosePassLoggingChange,

@@ -31,10 +31,12 @@ import androidx.core.content.ContextCompat
 object LocationCache {
 
     private const val TAG = "BikeRadar.LocCache"
-    private const val DEFAULT_MAX_AGE_MS = 60L * 60L * 1000L  // 60 minutes
+    private const val DEFAULT_MAX_AGE_MS = 60L * 60L * 1000L // 60 minutes
 
     @Volatile private var cachedLat: Double? = null
+
     @Volatile private var cachedLon: Double? = null
+
     @Volatile private var cachedAtMs: Long = 0L
 
     /** Most recent (lat, lon) pair, or null if never acquired or permission denied. */
@@ -86,7 +88,7 @@ object LocationCache {
             TAG,
             "refreshed lat=${"%.3f".format(loc.latitude)} " +
                 "lon=${"%.3f".format(loc.longitude)} provider=${loc.provider} " +
-                "ageMs=${now - loc.time}"
+                "ageMs=${now - loc.time}",
         )
         return true
     }
@@ -105,7 +107,7 @@ object LocationCache {
             } catch (_: SecurityException) {
                 null
             } catch (_: IllegalArgumentException) {
-                null  // provider unknown on this device
+                null // provider unknown on this device
             }
             if (l == null) continue
             if (best == null || l.time > best.time) best = l

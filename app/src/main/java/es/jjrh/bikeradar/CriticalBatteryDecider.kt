@@ -38,8 +38,11 @@ object CriticalBatteryDecider {
         val critical = pct != null && fresh && pct < criticalPct
         if (!critical) return Decision(fire = false, lastCueMs = null)
         val due = lastCueMs == null || nowMs - lastCueMs >= cadenceMs
-        return if (due) Decision(fire = true, lastCueMs = nowMs)
-        else Decision(fire = false, lastCueMs = lastCueMs)
+        return if (due) {
+            Decision(fire = true, lastCueMs = nowMs)
+        } else {
+            Decision(fire = false, lastCueMs = lastCueMs)
+        }
     }
 
     /**
@@ -50,6 +53,5 @@ object CriticalBatteryDecider {
      * in the low-but-not-critical band, and any non-radar device (e.g. the
      * dashcam) at any low level, stay eligible.
      */
-    fun preflightEligible(slug: String, pct: Int, radarSlug: String?, criticalPct: Int): Boolean =
-        !(slug == radarSlug && pct < criticalPct)
+    fun preflightEligible(slug: String, pct: Int, radarSlug: String?, criticalPct: Int): Boolean = !(slug == radarSlug && pct < criticalPct)
 }

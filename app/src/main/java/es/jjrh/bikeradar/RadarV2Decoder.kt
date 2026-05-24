@@ -262,12 +262,12 @@ class RadarV2Decoder(
                 .map { t ->
                     val v = t.vehicle
                     val lateralM = abs(v.lateralPos) * LATERAL_FULL_M
-                    val alongside = riderSlow
-                        && abs(v.speedMs) <= STATIONARY_SPEED_MS
-                        && v.distanceM <= ALONGSIDE_RANGE_Y_M
-                        && lateralM >= ALONGSIDE_MIN_LATERAL_M
-                        && (now - t.firstSeen) >= ALONGSIDE_MIN_DURATION_MS
-                        && !v.isBehind
+                    val alongside = riderSlow &&
+                        abs(v.speedMs) <= STATIONARY_SPEED_MS &&
+                        v.distanceM <= ALONGSIDE_RANGE_Y_M &&
+                        lateralM >= ALONGSIDE_MIN_LATERAL_M &&
+                        (now - t.firstSeen) >= ALONGSIDE_MIN_DURATION_MS &&
+                        !v.isBehind
                     if (alongside) v.copy(isAlongsideStationary = true) else v
                 }
                 .sortedBy { it.distanceM },
@@ -315,9 +315,11 @@ class RadarV2Decoder(
         const val STALE_MOVING_MS = 800L
         const val STALE_PARKED_MS = 5000L
         const val LATERAL_FULL_M = 3.0f
+
         /** Consecutive frames required at a smaller size before committing a
          *  downgrade. ~90 ms per frame observed, so 5 ~= 450 ms. */
         const val DOWNGRADE_FRAMES = 5
+
         /** Raw byte[8] value the radar emits when no lateral velocity is
          *  available for that target. Decoded as a null [Vehicle.speedXMs]. */
         const val LATERAL_VELOCITY_SENTINEL = 0x80
@@ -337,10 +339,12 @@ class RadarV2Decoder(
          *  -1, 0, 1, 2). Same value as [MOVING_SPEED_MS] on purpose -
          *  they share the "is this thing moving" boundary. */
         const val STATIONARY_SPEED_MS = 1f
+
         /** Maximum rangeY (m) for the alongside dock to consider a target.
          *  Beyond this the target box is too far down the panel to ever
          *  collide with the rider chevron, so normal rendering is fine. */
         const val ALONGSIDE_RANGE_Y_M = 8
+
         /** Minimum |rangeX| (m) for the alongside dock. A target dead
          *  behind the rider is not the parked-car case - it might be a
          *  follower and must keep its centre-lane render. */
@@ -355,6 +359,7 @@ class RadarV2Decoder(
          *  rounded to 10 was at the edge; raw 12 = 10.8 km/h was just
          *  above). */
         const val ALONGSIDE_RIDER_SLOW_MS = 2.75f
+
         /** Minimum dwell time (ms) on a track before the dock activates.
          *  Prevents the visual mode from flipping for a brief slow target
          *  that's about to start closing. */
@@ -367,6 +372,7 @@ class RadarV2Decoder(
          *  plausible (target directly behind), so the sentinel doesn't
          *  apply. */
         const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
+
         /** Previous frame's |lateralPos| floor for the lateral-unknown
          *  detection. The bug shows up as a discontinuity from a
          *  saturated lateral (|pos| ~= 1.0 -> 0.0 in one frame); a

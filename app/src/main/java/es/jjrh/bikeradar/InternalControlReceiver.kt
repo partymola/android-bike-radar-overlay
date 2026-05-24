@@ -49,9 +49,11 @@ class InternalControlReceiver : BroadcastReceiver() {
     }
 
     private fun updateServiceNotification(ctx: Context) {
-        ctx.startService(Intent(ctx, BikeRadarService::class.java).apply {
-            action = BikeRadarService.ACTION_UPDATE_NOTIF
-        })
+        ctx.startService(
+            Intent(ctx, BikeRadarService::class.java).apply {
+                action = BikeRadarService.ACTION_UPDATE_NOTIF
+            },
+        )
     }
 
     private fun forwardToService(ctx: Context, serviceAction: String) {
@@ -66,6 +68,7 @@ class InternalControlReceiver : BroadcastReceiver() {
 
         const val ACTION_PAUSE_1H = "es.jjrh.bikeradar.PAUSE_1H"
         const val ACTION_RESUME = "es.jjrh.bikeradar.RESUME"
+
         // Walk-away action strings deliberately match the same-named
         // constants in BikeRadarService — the receiver forwards the
         // intent through to the service unchanged. Different entry

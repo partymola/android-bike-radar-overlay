@@ -49,15 +49,15 @@ class DebugOverlayService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int =
-        START_STICKY
+    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
-                NOTIF_ID, buildNotification(),
+                NOTIF_ID,
+                buildNotification(),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
             )
         } else {
@@ -95,7 +95,8 @@ class DebugOverlayService : Service() {
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "AlertBeeper init failed: ${e.message}"); null
+            Log.w(TAG, "AlertBeeper init failed: ${e.message}")
+            null
         }
 
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -129,7 +130,9 @@ class DebugOverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         collectJob?.cancel()
-        try { overlayView?.let { wm?.removeView(it) } } catch (_: Throwable) {}
+        try {
+            overlayView?.let { wm?.removeView(it) }
+        } catch (_: Throwable) {}
         overlayView = null
         beeper?.release()
         beeper = null
@@ -140,7 +143,9 @@ class DebugOverlayService : Service() {
         super.onConfigurationChanged(newConfig)
         val v = overlayView ?: return
         val w = wm ?: return
-        try { w.updateViewLayout(v, buildParams(w)) } catch (_: Throwable) {}
+        try {
+            w.updateViewLayout(v, buildParams(w))
+        } catch (_: Throwable) {}
     }
 
     private fun handleAlerts(state: RadarState) {
@@ -157,35 +162,38 @@ class DebugOverlayService : Service() {
     private fun buildParams(wm: WindowManager): WindowManager.LayoutParams {
         val screenH = wm.currentWindowMetrics.bounds.height()
         return WindowManager.LayoutParams(
-            dp(130f).toInt(), screenH,
+            dp(130f).toInt(),
+            screenH,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.END; x = 0; y = 0 }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = 0
+            y = 0
+        }
     }
 
-    private fun dp(v: Float) =
-        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
+    private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
 
     private fun ensureChannel() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Radar debug overlay", NotificationManager.IMPORTANCE_MIN)
+                NotificationChannel(CHANNEL_ID, "Radar debug overlay", NotificationManager.IMPORTANCE_MIN),
             )
         }
     }
 
-    private fun buildNotification(): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Bike Radar")
-            .setContentText("Debug overlay")
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setOngoing(true).setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
+    private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setContentTitle("Bike Radar")
+        .setContentText("Debug overlay")
+        .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+        .setOngoing(true).setOnlyAlertOnce(true)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .build()
 
     companion object {
         private const val TAG = "BikeRadar"

@@ -14,8 +14,8 @@ import org.junit.Test
 class ReconnectBackoffTest {
 
     private val short = BikeRadarService.RADAR_RECONNECT_BACKOFF_MAX_MS
-    private val threshold = 30L * 60 * 1000   // 30 min, default
-    private val longCap = 30L * 1000          // 30 s, default
+    private val threshold = 30L * 60 * 1000 // 30 min, default
+    private val longCap = 30L * 1000 // 30 s, default
 
     @Test fun nullOffSinceUsesShortCap() {
         assertEquals(

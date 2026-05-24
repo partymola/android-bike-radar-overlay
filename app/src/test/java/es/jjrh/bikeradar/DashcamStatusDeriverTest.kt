@@ -31,7 +31,8 @@ class DashcamStatusDeriverTest {
     @Test fun coldStartGraceShowsSearching() {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
-            nowMs = 5_000L, sessionStartMs = 0L,
+            nowMs = 5_000L,
+            sessionStartMs = 0L,
         )
         assertEquals(DashcamStatus.Searching, s)
     }
@@ -39,7 +40,8 @@ class DashcamStatusDeriverTest {
     @Test fun pastGraceNeverSeenShowsMissing() {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
-            nowMs = 15_000L, sessionStartMs = 0L,
+            nowMs = 15_000L,
+            sessionStartMs = 0L,
         )
         assertEquals(DashcamStatus.Missing, s)
     }
@@ -49,7 +51,9 @@ class DashcamStatusDeriverTest {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
             entries = mapOf("vue" to BatteryEntry("vue", "Vue", 80, readAtMs = now - 5_000L)),
-            nowMs = now, sessionStartMs = 0L, seen = true,
+            nowMs = now,
+            sessionStartMs = 0L,
+            seen = true,
         )
         assertEquals(DashcamStatus.Ok, s)
     }
@@ -59,7 +63,9 @@ class DashcamStatusDeriverTest {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
             entries = mapOf("vue" to BatteryEntry("vue", "Vue", 80, readAtMs = now - 45_000L)),
-            nowMs = now, sessionStartMs = 0L, seen = true,
+            nowMs = now,
+            sessionStartMs = 0L,
+            seen = true,
         )
         assertEquals(DashcamStatus.Dropped, s)
     }
@@ -69,7 +75,8 @@ class DashcamStatusDeriverTest {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
             entries = mapOf("fly6" to BatteryEntry("fly6", "Fly6", 80, readAtMs = 1_000L)),
-            nowMs = 15_000L, sessionStartMs = 0L,
+            nowMs = 15_000L,
+            sessionStartMs = 0L,
         )
         assertEquals(DashcamStatus.Missing, s)
     }
@@ -82,7 +89,9 @@ class DashcamStatusDeriverTest {
         val s = derive(
             Config(warnWhenOff = true, selectedSlug = "vue"),
             entries = mapOf("vue" to BatteryEntry("vue", "Vue", 80, readAtMs = now - 40_000L)),
-            nowMs = now, sessionStartMs = 0L, seen = true,
+            nowMs = now,
+            sessionStartMs = 0L,
+            seen = true,
         )
         assertEquals(DashcamStatus.Dropped, s)
     }

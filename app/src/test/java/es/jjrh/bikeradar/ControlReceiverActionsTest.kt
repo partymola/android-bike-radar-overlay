@@ -38,8 +38,10 @@ class ControlReceiverActionsTest {
         // to the exported receiver. Any re-introduction would re-open the
         // peer-app reachability hole this split closed.
         val movedNames = setOf(
-            "ACTION_PAUSE_1H", "ACTION_RESUME",
-            "ACTION_WALKAWAY_DISMISS", "ACTION_WALKAWAY_SNOOZE",
+            "ACTION_PAUSE_1H",
+            "ACTION_RESUME",
+            "ACTION_WALKAWAY_DISMISS",
+            "ACTION_WALKAWAY_SNOOZE",
         )
         val remoteFields = RemoteControlReceiver.Companion::class.java.declaredFields
             .map { it.name }

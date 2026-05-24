@@ -187,10 +187,12 @@ class EBikeLink(
      * has started or was already up, false if the BLE adapter is off /
      * unavailable.
      */
-    @RequiresPermission(allOf = [
-        Manifest.permission.BLUETOOTH_CONNECT,
-        Manifest.permission.BLUETOOTH_ADVERTISE,
-    ])
+    @RequiresPermission(
+        allOf = [
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        ],
+    )
     fun start(): Boolean {
         if (started) return true
         val adapter = btAdapter
@@ -302,10 +304,12 @@ class EBikeLink(
     /**
      * Stop advertising, close GATT client and server. Idempotent.
      */
-    @RequiresPermission(allOf = [
-        Manifest.permission.BLUETOOTH_CONNECT,
-        Manifest.permission.BLUETOOTH_ADVERTISE,
-    ])
+    @RequiresPermission(
+        allOf = [
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        ],
+    )
     fun stop() {
         if (!started && gattServer == null && clientGatt == null) {
             // Already torn down, but a prior start() may have left a
@@ -319,13 +323,21 @@ class EBikeLink(
         lastInboundAddress = null
         connectTimeoutJob?.cancel()
         connectTimeoutJob = null
-        try { advertiseCallback?.let { advertiser?.stopAdvertising(it) } } catch (_: Exception) {}
+        try {
+            advertiseCallback?.let { advertiser?.stopAdvertising(it) }
+        } catch (_: Exception) {}
         advertiseCallback = null
         advertiser = null
-        try { clientGatt?.disconnect() } catch (_: Exception) {}
-        try { clientGatt?.close() } catch (_: Exception) {}
+        try {
+            clientGatt?.disconnect()
+        } catch (_: Exception) {}
+        try {
+            clientGatt?.close()
+        } catch (_: Exception) {}
         clientGatt = null
-        try { gattServer?.close() } catch (_: Exception) {}
+        try {
+            gattServer?.close()
+        } catch (_: Exception) {}
         gattServer = null
         _snapshot.value = LiveDataSnapshot()
         setOutcome(LdiOutcome.Idle)
@@ -365,10 +377,12 @@ class EBikeLink(
      *   when the device isn't a bonded peer (the rider should be told to
      *   use Android Settings instead).
      */
-    @RequiresPermission(allOf = [
-        Manifest.permission.BLUETOOTH_CONNECT,
-        Manifest.permission.BLUETOOTH_ADVERTISE,
-    ])
+    @RequiresPermission(
+        allOf = [
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        ],
+    )
     fun releaseBond(bondedAddress: String?, onFallback: () -> Unit = {}) {
         stop()
         if (bondedAddress == null) return
@@ -424,7 +438,8 @@ class EBikeLink(
                     try {
                         clientGatt = device.connectGatt(
                             context,
-                            /* autoConnect = */ false,
+                            /* autoConnect = */
+                            false,
                             clientCallback,
                             BluetoothDevice.TRANSPORT_LE,
                         )
@@ -435,7 +450,9 @@ class EBikeLink(
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "inbound LL disconnected from ${device.address}, status=$status")
-                    try { clientGatt?.close() } catch (_: Exception) {}
+                    try {
+                        clientGatt?.close()
+                    } catch (_: Exception) {}
                     clientGatt = null
                     // Don't clear _snapshot - downstream disarm gate
                     // reads system_locked across radar reconnects; the
@@ -449,7 +466,8 @@ class EBikeLink(
                     // bike may simply be powering down or out of range).
                     if (_outcome.value !is LdiOutcome.Paired) {
                         if (status == STATUS_INSUFFICIENT_AUTH ||
-                            status == STATUS_GATT_ERROR_VENDOR_AUTH) {
+                            status == STATUS_GATT_ERROR_VENDOR_AUTH
+                        ) {
                             setOutcome(LdiOutcome.SlotConflict)
                         } else if (_outcome.value == LdiOutcome.Connecting) {
                             // Plain disconnect mid-pair without auth status:
@@ -490,7 +508,9 @@ class EBikeLink(
                 // decision is delegated to the pure [classifyMissingLdi].
                 val bonded = try {
                     gatt.device.bondState == BluetoothDevice.BOND_BONDED
-                } catch (_: Exception) { false }
+                } catch (_: Exception) {
+                    false
+                }
                 when (classifyMissingLdi(status, bonded)) {
                     MissingLdi.OLD_FIRMWARE -> {
                         Log.w(TAG, "bonded bike lacks LDI service - firmware probably <v19")
@@ -498,7 +518,9 @@ class EBikeLink(
                     }
                     MissingLdi.NOT_THE_BIKE -> {
                         Log.w(TAG, "no LDI on ${gatt.device.address} (status=$status, bonded=$bonded); not the bike, still advertising")
-                        try { gatt.close() } catch (_: Exception) {}
+                        try {
+                            gatt.close()
+                        } catch (_: Exception) {}
                         if (clientGatt === gatt) clientGatt = null
                         if (_outcome.value !is LdiOutcome.Paired) setOutcome(LdiOutcome.Advertising)
                     }
@@ -567,7 +589,9 @@ class EBikeLink(
                     // proves this connection is the eBike, not a stray central.
                     if (!bondedAddressReported && addr.isNotEmpty()) {
                         bondedAddressReported = true
-                        try { onBondedAddress(addr) } catch (_: Exception) {}
+                        try {
+                            onBondedAddress(addr)
+                        } catch (_: Exception) {}
                     }
                     connectTimeoutJob?.cancel()
                     connectTimeoutJob = null
@@ -591,12 +615,15 @@ sealed class LdiOutcome {
     /** Subsystem not started. Either the experimental flag is off or
      *  [EBikeLink.stop] has been called. */
     object Idle : LdiOutcome()
+
     /** Advertising with service-solicitation; no eBike has connected
      *  yet this session. */
     object Advertising : LdiOutcome()
+
     /** Inbound LL connection from the bike, opening the GATT client.
      *  Service discovery and SMP have not yet completed. */
     object Connecting : LdiOutcome()
+
     /** First non-zero `time` snapshot received. The bond is fully up
      *  and data is flowing.
      *
@@ -606,23 +633,29 @@ sealed class LdiOutcome {
      *    in practice the inbound callback populates it before Paired
      *    is emitted). */
     data class Paired(val shortAddress: String) : LdiOutcome()
+
     /** Service discovery completed without LDI service present. Most
      *  likely the bike's firmware is older than v19.54. */
     object NoServiceFound : LdiOutcome()
+
     /** GATT disconnected with [STATUS_INSUFFICIENT_AUTH] (137) or
      *  [STATUS_GATT_ERROR_VENDOR_AUTH] (5), i.e. another accessory is
      *  holding the bike's single LDI slot. */
     object SlotConflict : LdiOutcome()
+
     /** Runtime permission (BLUETOOTH_CONNECT or BLUETOOTH_ADVERTISE)
      *  was denied at the SecurityException level. */
     object PermissionsDenied : LdiOutcome()
+
     /** BLE adapter is off or the advertiser is null. */
     object AdapterUnavailable : LdiOutcome()
+
     /** 90s elapsed in Advertising without any inbound connection. The
      *  bike never reached the phone; most likely powered off or out of
      *  range. Distinct from [NoServiceFound] (firmware too old) and
      *  [PairPromptDeclined] (rider rejected on the controller). */
     object NoInbound : LdiOutcome()
+
     /** 90s elapsed in Connecting without reaching Paired. The bike
      *  connected and discovered the service but the SMP pairing never
      *  completed; most likely the rider declined the confirm prompt
@@ -643,12 +676,11 @@ internal enum class MissingLdi { OLD_FIRMWARE, NOT_THE_BIKE }
  * stray unbonded central probing our solicitation advert, or a failed/aborted
  * discovery, is "not the bike" and must never be reported as old firmware.
  */
-internal fun classifyMissingLdi(status: Int, bonded: Boolean): MissingLdi =
-    if (status == BluetoothGatt.GATT_SUCCESS && bonded) {
-        MissingLdi.OLD_FIRMWARE
-    } else {
-        MissingLdi.NOT_THE_BIKE
-    }
+internal fun classifyMissingLdi(status: Int, bonded: Boolean): MissingLdi = if (status == BluetoothGatt.GATT_SUCCESS && bonded) {
+    MissingLdi.OLD_FIRMWARE
+} else {
+    MissingLdi.NOT_THE_BIKE
+}
 
 /** GATT_INSUFFICIENT_AUTHENTICATION; bike rejected the bond. */
 internal const val STATUS_INSUFFICIENT_AUTH: Int = 137
@@ -725,12 +757,13 @@ object LiveDataDecoder {
                 when ((tagWire and 7L).toInt()) {
                     0 -> {
                         // varint payload
-                        val (v, end) = readVarint(bytes, i); i = end
+                        val (v, end) = readVarint(bytes, i)
+                        i = end
                         next = when (field) {
-                            1  -> next.copy(speedRaw = v.toInt())
-                            2  -> next.copy(cadence = v.toInt())
-                            5  -> next.copy(riderPower = v.toInt())
-                            9  -> next.copy(ambientBrightnessRaw = v.toInt())
+                            1 -> next.copy(speedRaw = v.toInt())
+                            2 -> next.copy(cadence = v.toInt())
+                            5 -> next.copy(riderPower = v.toInt())
+                            9 -> next.copy(ambientBrightnessRaw = v.toInt())
                             10 -> next.copy(batterySoc = v.toInt())
                             11 -> next.copy(timeSec = v)
                             12 -> next.copy(odometerM = v)
@@ -740,17 +773,18 @@ object LiveDataDecoder {
                             23 -> next.copy(lightReserve = v != 0L)
                             24 -> next.copy(diagnosisActive = v != 0L)
                             25 -> next.copy(bikeNotDriving = v != 0L)
-                            else -> next   // forward-compat: skip unknown tags
+                            else -> next // forward-compat: skip unknown tags
                         }
                     }
                     2 -> {
                         // length-delimited: read length varint, skip payload
-                        val (len, end) = readVarint(bytes, i); i = end + len.toInt()
+                        val (len, end) = readVarint(bytes, i)
+                        i = end + len.toInt()
                         if (i > bytes.size) return prev
                     }
-                    1 -> i += 8   // 64-bit fixed
-                    5 -> i += 4   // 32-bit fixed
-                    else -> return prev   // malformed; keep prior snapshot
+                    1 -> i += 8 // 64-bit fixed
+                    5 -> i += 4 // 32-bit fixed
+                    else -> return prev // malformed; keep prior snapshot
                 }
             }
         } catch (_: IllegalArgumentException) {

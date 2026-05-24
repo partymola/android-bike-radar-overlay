@@ -71,23 +71,33 @@ class Prefs(context: Context) {
 
     var firstRunComplete: Boolean
         get() = sp.getBoolean(KEY_FIRST_RUN_COMPLETE, false)
-        set(v) { sp.edit().putBoolean(KEY_FIRST_RUN_COMPLETE, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_FIRST_RUN_COMPLETE, v).apply()
+        }
 
     var serviceEnabled: Boolean
         get() = sp.getBoolean(KEY_SERVICE_ENABLED, true)
-        set(v) { sp.edit().putBoolean(KEY_SERVICE_ENABLED, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_SERVICE_ENABLED, v).apply()
+        }
 
     var alertVolume: Int
         get() = sp.getInt(KEY_ALERT_VOLUME, 50)
-        set(v) { sp.edit().putInt(KEY_ALERT_VOLUME, v).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_ALERT_VOLUME, v).apply()
+        }
 
     var alertMaxDistanceM: Int
         get() = sp.getInt(KEY_ALERT_MAX_DISTANCE_M, 20)
-        set(v) { sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v).apply()
+        }
 
     var visualMaxDistanceM: Int
         get() = sp.getInt(KEY_VISUAL_MAX_DISTANCE_M, 50)
-        set(v) { sp.edit().putInt(KEY_VISUAL_MAX_DISTANCE_M, v).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_VISUAL_MAX_DISTANCE_M, v).apply()
+        }
 
     /** Fill multiplier for the on-screen overlay (0.5..1.0). Acts on top
      *  of the per-paint alphas in [RadarOverlayView], so 1.0 leaves the
@@ -96,7 +106,9 @@ class Prefs(context: Context) {
      *  underlying maps. */
     var overlayOpacity: Float
         get() = sp.getFloat(KEY_OVERLAY_OPACITY, 1.0f).coerceIn(0.5f, 1.0f)
-        set(v) { sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.5f, 1.0f)).apply() }
+        set(v) {
+            sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.5f, 1.0f)).apply()
+        }
 
     /** After the radar has been offline this many minutes, the reconnect
      *  loop relaxes its backoff cap to [radarLongOfflineCapSec]. Lets
@@ -104,73 +116,101 @@ class Prefs(context: Context) {
      *  GATT opens at the steady-state 8 s ceiling. */
     var radarLongOfflineThresholdMinutes: Int
         get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, 30).coerceIn(5, 120)
-        set(v) { sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, v.coerceIn(5, 120)).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, v.coerceIn(5, 120)).apply()
+        }
 
     /** Backoff cap once the radar has been offline past
      *  [radarLongOfflineThresholdMinutes]. Higher = longer idle and a
      *  slower reconnect when the radar comes back. */
     var radarLongOfflineCapSec: Int
         get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, 30).coerceIn(5, 120)
-        set(v) { sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, v.coerceIn(5, 120)).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, v.coerceIn(5, 120)).apply()
+        }
 
     var pausedUntilEpochMs: Long
         get() = sp.getLong(KEY_PAUSED_UNTIL_EPOCH_MS, 0L)
-        set(v) { sp.edit().putLong(KEY_PAUSED_UNTIL_EPOCH_MS, v).apply() }
+        set(v) {
+            sp.edit().putLong(KEY_PAUSED_UNTIL_EPOCH_MS, v).apply()
+        }
 
     var devModeUnlocked: Boolean
         get() = sp.getBoolean(KEY_DEV_MODE_UNLOCKED, false)
-        set(v) { sp.edit().putBoolean(KEY_DEV_MODE_UNLOCKED, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_DEV_MODE_UNLOCKED, v).apply()
+        }
 
     var haLastValidatedEpochMs: Long
         get() = sp.getLong(KEY_HA_LAST_VALIDATED_EPOCH_MS, 0L)
-        set(v) { sp.edit().putLong(KEY_HA_LAST_VALIDATED_EPOCH_MS, v).apply() }
+        set(v) {
+            sp.edit().putLong(KEY_HA_LAST_VALIDATED_EPOCH_MS, v).apply()
+        }
 
     var batteryLowThresholdPct: Int
         get() = sp.getInt(KEY_BATTERY_LOW_THRESHOLD_PCT, 20)
-        set(v) { sp.edit().putInt(KEY_BATTERY_LOW_THRESHOLD_PCT, v).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_BATTERY_LOW_THRESHOLD_PCT, v).apply()
+        }
 
     var batteryShowLabels: Boolean
         get() = sp.getBoolean(KEY_BATTERY_SHOW_LABELS, false)
-        set(v) { sp.edit().putBoolean(KEY_BATTERY_SHOW_LABELS, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_BATTERY_SHOW_LABELS, v).apply()
+        }
 
     var dashcamOwnership: DashcamOwnership
         get() = runCatching {
             DashcamOwnership.valueOf(
-                sp.getString(KEY_DASHCAM_OWNERSHIP, DashcamOwnership.UNANSWERED.name)!!
+                sp.getString(KEY_DASHCAM_OWNERSHIP, DashcamOwnership.UNANSWERED.name)!!,
             )
         }.getOrDefault(DashcamOwnership.UNANSWERED)
-        set(v) { sp.edit().putString(KEY_DASHCAM_OWNERSHIP, v.name).apply() }
+        set(v) {
+            sp.edit().putString(KEY_DASHCAM_OWNERSHIP, v.name).apply()
+        }
 
     var haIntent: HaIntent
         get() = runCatching {
             HaIntent.valueOf(sp.getString(KEY_HA_INTENT, HaIntent.UNSET.name)!!)
         }.getOrDefault(HaIntent.UNSET)
-        set(v) { sp.edit().putString(KEY_HA_INTENT, v.name).apply() }
+        set(v) {
+            sp.edit().putString(KEY_HA_INTENT, v.name).apply()
+        }
 
     var dashcamMac: String?
         get() = sp.getString(KEY_DASHCAM_MAC, null)
-        set(v) { sp.edit().putString(KEY_DASHCAM_MAC, v).apply() }
+        set(v) {
+            sp.edit().putString(KEY_DASHCAM_MAC, v).apply()
+        }
 
     var dashcamDisplayName: String?
         get() = sp.getString(KEY_DASHCAM_DISPLAY_NAME, null)
-        set(v) { sp.edit().putString(KEY_DASHCAM_DISPLAY_NAME, v).apply() }
+        set(v) {
+            sp.edit().putString(KEY_DASHCAM_DISPLAY_NAME, v).apply()
+        }
 
     var dashcamWarnWhenOff: Boolean
         get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
-        set(v) { sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply()
+        }
 
     /** Sticky bit set the first time the user dismisses the capture-log
      *  share warning dialog. Used so the warning only shows once. */
     var captureLogShareWarningSeen: Boolean
         get() = sp.getBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, false)
-        set(v) { sp.edit().putBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, v).apply()
+        }
 
     /** Master toggle for the walk-away alarm (radar-off-while-dashcam-
      *  on notification). Default on: asymmetric cost - false positive
      *  is one swipe, false negative is a drained or stolen dashcam. */
     var walkAwayAlarmEnabled: Boolean
         get() = sp.getBoolean(KEY_WALKAWAY_ENABLED, true)
-        set(v) { sp.edit().putBoolean(KEY_WALKAWAY_ENABLED, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_WALKAWAY_ENABLED, v).apply()
+        }
 
     /** Threshold in seconds for the walk-away alarm. Min 15 s (any
      *  tighter races the radar reconnect loop), max 120 s (beyond
@@ -180,7 +220,9 @@ class Prefs(context: Context) {
      *  catch the rider before they walk out of earshot). */
     var walkAwayAlarmThresholdSec: Int
         get() = sp.getInt(KEY_WALKAWAY_THRESHOLD_SEC, 30).coerceIn(15, 120)
-        set(v) { sp.edit().putInt(KEY_WALKAWAY_THRESHOLD_SEC, v.coerceIn(15, 120)).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_WALKAWAY_THRESHOLD_SEC, v.coerceIn(15, 120)).apply()
+        }
 
     /** When true, the closing-speed colour bands on the overlay scale
      *  with the rider's own bike speed: a stopped rider sees amber /
@@ -190,7 +232,9 @@ class Prefs(context: Context) {
      *  — puncture by the roadside — without a separate feature. */
     var adaptiveAlertsEnabled: Boolean
         get() = sp.getBoolean(KEY_ADAPTIVE_ALERTS, true)
-        set(v) { sp.edit().putBoolean(KEY_ADAPTIVE_ALERTS, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_ADAPTIVE_ALERTS, v).apply()
+        }
 
     /** Experimental. When true, the overlay renders each vehicle at its
      *  predicted position 1 s from now (extrapolated from the decoder's
@@ -201,7 +245,9 @@ class Prefs(context: Context) {
      *  when lateral velocity is noisy. */
     var precogEnabled: Boolean
         get() = sp.getBoolean(KEY_PRECOG, false)
-        set(v) { sp.edit().putBoolean(KEY_PRECOG, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_PRECOG, v).apply()
+        }
 
     /** Experimental: hard-pan Beep + UrgentApproach to the threat's side.
      *  Works on stereo headphones (BT/BLE/wired/USB/hearing aid) and on the
@@ -209,7 +255,9 @@ class Prefs(context: Context) {
      *  and unknown routes stay centred. Default off. */
     var experimentalLateralPanning: Boolean
         get() = sp.getBoolean(KEY_LATERAL_PANNING, false)
-        set(v) { sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply()
+        }
 
     /** Safety valve for [experimentalLateralPanning]: swap left/right at
      *  the final gain step. Covers the rare cases where the rider's
@@ -219,14 +267,18 @@ class Prefs(context: Context) {
      *  [experimentalLateralPanning] is on. */
     var experimentalLateralPanningInvertLR: Boolean
         get() = sp.getBoolean(KEY_LATERAL_PANNING_INVERT, false)
-        set(v) { sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply()
+        }
 
     /** Master toggle for close-pass event logging to Home Assistant.
      *  Off by default; opt-in because the feature is only useful if
      *  the user actually wants the dataset and has HA wired up. */
     var closePassLoggingEnabled: Boolean
         get() = sp.getBoolean(KEY_CLOSE_PASS_ENABLED, false)
-        set(v) { sp.edit().putBoolean(KEY_CLOSE_PASS_ENABLED, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_CLOSE_PASS_ENABLED, v).apply()
+        }
 
     /** Advanced: emit an event only if the minimum lateral clearance
      *  dropped below this many metres. Default 1.0 m keeps the
@@ -234,7 +286,9 @@ class Prefs(context: Context) {
      *  here rather than filtered downstream. */
     var closePassEmitMinRangeXM: Float
         get() = sp.getFloat(KEY_CLOSE_PASS_EMIT_MIN_X_M, 1.0f).coerceIn(0.3f, 2.0f)
-        set(v) { sp.edit().putFloat(KEY_CLOSE_PASS_EMIT_MIN_X_M, v.coerceIn(0.3f, 2.0f)).apply() }
+        set(v) {
+            sp.edit().putFloat(KEY_CLOSE_PASS_EMIT_MIN_X_M, v.coerceIn(0.3f, 2.0f)).apply()
+        }
 
     /** Advanced: minimum rider bike speed (km/h) for the detector to
      *  arm. Filters stationary-rider scenarios (red lights, pushing
@@ -244,7 +298,9 @@ class Prefs(context: Context) {
      *  m/s via [closePassRiderSpeedFloorMs]. */
     var closePassRiderSpeedFloorKmh: Int
         get() = sp.getInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, 15).coerceIn(5, 30)
-        set(v) { sp.edit().putInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, v.coerceIn(5, 30)).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_CLOSE_PASS_RIDER_FLOOR_KMH, v.coerceIn(5, 30)).apply()
+        }
 
     /** Same value as [closePassRiderSpeedFloorKmh], converted to m/s
      *  for the detector's m/s-canonical API. Read-only - the slider
@@ -258,27 +314,35 @@ class Prefs(context: Context) {
      *  isn't genuinely overtaking, it's not a close pass. */
     var closePassClosingSpeedFloorMs: Int
         get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
-        set(v) { sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply() }
+        set(v) {
+            sp.edit().putInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, v.coerceIn(3, 15)).apply()
+        }
 
     /** Master toggle for front camera/light auto-mode. Default off: opt-in feature.
      *  When off, no BLE writes are sent to the light regardless of other settings. */
     var autoLightModeEnabled: Boolean
         get() = sp.getBoolean(KEY_AUTO_LIGHT_MODE, false)
-        set(v) { sp.edit().putBoolean(KEY_AUTO_LIGHT_MODE, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_AUTO_LIGHT_MODE, v).apply()
+        }
 
     /** Light mode applied at front camera/light connect time (before local sunset). */
     var cameraLightDayMode: CameraLightMode
         get() = runCatching {
             CameraLightMode.valueOf(sp.getString(KEY_CAMERA_LIGHT_DAY_MODE, CameraLightMode.DAY_FLASH.name)!!)
         }.getOrDefault(CameraLightMode.DAY_FLASH)
-        set(v) { sp.edit().putString(KEY_CAMERA_LIGHT_DAY_MODE, v.name).apply() }
+        set(v) {
+            sp.edit().putString(KEY_CAMERA_LIGHT_DAY_MODE, v.name).apply()
+        }
 
     /** Light mode applied at local sunset. */
     var cameraLightNightMode: CameraLightMode
         get() = runCatching {
             CameraLightMode.valueOf(sp.getString(KEY_CAMERA_LIGHT_NIGHT_MODE, CameraLightMode.LOW.name)!!)
         }.getOrDefault(CameraLightMode.LOW)
-        set(v) { sp.edit().putString(KEY_CAMERA_LIGHT_NIGHT_MODE, v.name).apply() }
+        set(v) {
+            sp.edit().putString(KEY_CAMERA_LIGHT_NIGHT_MODE, v.name).apply()
+        }
 
     /** Experimental: enable the Bosch eBike Live Data Interface (LDI) BLE
      *  subsystem. Off by default. When off, no advertising, no GATT server,
@@ -290,7 +354,9 @@ class Prefs(context: Context) {
      *  controller, not in this app. */
     var ldiEnabled: Boolean
         get() = sp.getBoolean(KEY_LDI_ENABLED, false)
-        set(v) { sp.edit().putBoolean(KEY_LDI_ENABLED, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_LDI_ENABLED, v).apply()
+        }
 
     /** Address of the eBike that has bonded LDI with this phone. Captured
      *  on the first successful inbound LDI connection; used by the Release
@@ -298,7 +364,9 @@ class Prefs(context: Context) {
      *  removeBond(). Cleared when the bond is released. */
     var ldiBondedAddress: String?
         get() = sp.getString(KEY_LDI_BONDED_ADDRESS, null)
-        set(v) { sp.edit().putString(KEY_LDI_BONDED_ADDRESS, v).apply() }
+        set(v) {
+            sp.edit().putString(KEY_LDI_BONDED_ADDRESS, v).apply()
+        }
 
     /** Rider's answer to the "do you have a Bosch Smart System eBike?"
      *  question. UNANSWERED = onboarding's eBike step hasn't run yet,
@@ -308,10 +376,12 @@ class Prefs(context: Context) {
     var eBikeOwnership: EBikeOwnership
         get() = runCatching {
             EBikeOwnership.valueOf(
-                sp.getString(KEY_EBIKE_OWNERSHIP, EBikeOwnership.UNANSWERED.name)!!
+                sp.getString(KEY_EBIKE_OWNERSHIP, EBikeOwnership.UNANSWERED.name)!!,
             )
         }.getOrDefault(EBikeOwnership.UNANSWERED)
-        set(v) { sp.edit().putString(KEY_EBIKE_OWNERSHIP, v.name).apply() }
+        set(v) {
+            sp.edit().putString(KEY_EBIKE_OWNERSHIP, v.name).apply()
+        }
 
     /** Transient flag set on entering the LDI onboarding pair-walkthrough
      *  state. On cold start with this set, the launcher deep-links back
@@ -321,7 +391,9 @@ class Prefs(context: Context) {
      *  were. Cleared on Paired or on Skip-for-now. */
     var ldiOnboardingResumePoint: Boolean
         get() = sp.getBoolean(KEY_LDI_ONBOARDING_RESUME, false)
-        set(v) { sp.edit().putBoolean(KEY_LDI_ONBOARDING_RESUME, v).apply() }
+        set(v) {
+            sp.edit().putBoolean(KEY_LDI_ONBOARDING_RESUME, v).apply()
+        }
 
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
@@ -458,7 +530,6 @@ class Prefs(context: Context) {
          * a value here and chose not to show it" and won't be mistaken for
          * a literal stored value.
          */
-        internal fun redactPresence(value: String?): String =
-            if (value.isNullOrBlank()) "<unset>" else "<redacted>"
+        internal fun redactPresence(value: String?): String = if (value.isNullOrBlank()) "<unset>" else "<redacted>"
     }
 }

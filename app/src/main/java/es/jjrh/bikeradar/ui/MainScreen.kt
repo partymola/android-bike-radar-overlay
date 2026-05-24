@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.provider.Settings as AndroidSettings
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -54,9 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -69,6 +65,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
@@ -85,6 +84,7 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.provider.Settings as AndroidSettings
 
 /**
  * Redesigned home screen, matching the design handoff's main-screen
@@ -987,9 +987,13 @@ private fun hasRearBond(ctx: Context): Boolean = try {
         val n = dev.name?.lowercase() ?: ""
         n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
     } == true
-} catch (_: Throwable) { false }
+} catch (_: Throwable) {
+    false
+}
 
 private fun isBluetoothEnabled(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.isEnabled == true
-} catch (_: Throwable) { false }
+} catch (_: Throwable) {
+    false
+}

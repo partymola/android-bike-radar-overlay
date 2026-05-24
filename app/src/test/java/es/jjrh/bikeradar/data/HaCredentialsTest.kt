@@ -4,11 +4,11 @@ package es.jjrh.bikeradar.data
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith

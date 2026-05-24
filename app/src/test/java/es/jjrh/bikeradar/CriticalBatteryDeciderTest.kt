@@ -9,8 +9,7 @@ class CriticalBatteryDeciderTest {
     private val criticalPct = 10
     private val cadence = 120_000L
 
-    private fun decide(pct: Int?, fresh: Boolean = true, now: Long, last: Long?) =
-        CriticalBatteryDecider.decide(pct, fresh, now, criticalPct, cadence, last)
+    private fun decide(pct: Int?, fresh: Boolean = true, now: Long, last: Long?) = CriticalBatteryDecider.decide(pct, fresh, now, criticalPct, cadence, last)
 
     @Test fun `above threshold does not fire and clears latch`() {
         val d = decide(pct = 15, now = 1_000, last = 500)

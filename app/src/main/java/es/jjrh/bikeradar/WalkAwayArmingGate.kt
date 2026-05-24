@@ -33,7 +33,5 @@ object WalkAwayArmingGate {
      * proceed with the existing IDLE → ARMED transition; false to
      * suppress arming for this disconnect.
      */
-    fun shouldArm(ldiSnapshot: LiveDataSnapshot?): Boolean {
-        return ldiSnapshot?.systemLocked != false
-    }
+    fun shouldArm(ldiSnapshot: LiveDataSnapshot?): Boolean = ldiSnapshot?.systemLocked != false
 }

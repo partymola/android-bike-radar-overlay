@@ -34,7 +34,7 @@ class DebugScreenSnapshotTest {
     val tempFolder = TemporaryFolder()
 
     /** A pinned wall-clock timestamp so card mtimes don't drift run to run. */
-    private val pinnedMs = 1_700_000_000_000L  // 2023-11-14 22:13 UTC
+    private val pinnedMs = 1_700_000_000_000L // fixed epoch for deterministic snapshots
 
     /** Build a deterministic capture-log [File] with a fixed size and mtime. */
     private fun fakeLog(name: String, kb: Int, mtime: Long): File {

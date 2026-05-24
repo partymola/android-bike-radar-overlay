@@ -30,8 +30,12 @@ object EBikeStateBus {
     private val _snapshot = MutableStateFlow(LiveDataSnapshot())
     val snapshot: StateFlow<LiveDataSnapshot> = _snapshot
 
-    fun setOutcome(value: LdiOutcome) { _outcome.value = value }
-    fun setSnapshot(value: LiveDataSnapshot) { _snapshot.value = value }
+    fun setOutcome(value: LdiOutcome) {
+        _outcome.value = value
+    }
+    fun setSnapshot(value: LiveDataSnapshot) {
+        _snapshot.value = value
+    }
 
     /** Restore default state. Called on service destroy so UI surfaces
      *  see a clean Idle state after the rider stops the service. */

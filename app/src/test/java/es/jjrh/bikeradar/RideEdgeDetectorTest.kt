@@ -8,8 +8,7 @@ import org.junit.Test
 
 class RideEdgeDetectorTest {
 
-    private fun snap(locked: Boolean? = null, notDriving: Boolean? = null) =
-        LiveDataSnapshot(systemLocked = locked, bikeNotDriving = notDriving)
+    private fun snap(locked: Boolean? = null, notDriving: Boolean? = null) = LiveDataSnapshot(systemLocked = locked, bikeNotDriving = notDriving)
 
     @Test fun `first snapshot never synthesises an edge`() {
         // Cold start: rider's app launches with the bike already locked
@@ -99,30 +98,37 @@ class RideEdgeDetectorTest {
         s = RideEdgeDetector.next(s, snap(locked = true, notDriving = true)).first
         // Rider unlocks.
         var (next, edge) = RideEdgeDetector.next(s, snap(locked = false, notDriving = true))
-        assertEquals(RideEdgeDetector.Edge.NONE, edge); s = next
+        assertEquals(RideEdgeDetector.Edge.NONE, edge)
+        s = next
         // Rider pushes off.
         RideEdgeDetector.next(s, snap(locked = false, notDriving = false)).also {
-            assertEquals(RideEdgeDetector.Edge.STARTED, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.STARTED, it.second)
+            s = it.first
         }
         // First traffic light.
         RideEdgeDetector.next(s, snap(locked = false, notDriving = true)).also {
-            assertEquals(RideEdgeDetector.Edge.NONE, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.NONE, it.second)
+            s = it.first
         }
         // Resumes.
         RideEdgeDetector.next(s, snap(locked = false, notDriving = false)).also {
-            assertEquals(RideEdgeDetector.Edge.NONE, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.NONE, it.second)
+            s = it.first
         }
         // Second traffic light.
         RideEdgeDetector.next(s, snap(locked = false, notDriving = true)).also {
-            assertEquals(RideEdgeDetector.Edge.NONE, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.NONE, it.second)
+            s = it.first
         }
         // Resumes again.
         RideEdgeDetector.next(s, snap(locked = false, notDriving = false)).also {
-            assertEquals(RideEdgeDetector.Edge.NONE, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.NONE, it.second)
+            s = it.first
         }
         // Rider locks the bike at the office.
         RideEdgeDetector.next(s, snap(locked = true, notDriving = true)).also {
-            assertEquals(RideEdgeDetector.Edge.ENDED, it.second); s = it.first
+            assertEquals(RideEdgeDetector.Edge.ENDED, it.second)
+            s = it.first
         }
         assertFalse(s.isRiding)
     }

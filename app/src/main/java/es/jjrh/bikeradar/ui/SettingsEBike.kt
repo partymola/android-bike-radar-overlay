@@ -10,12 +10,10 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -85,10 +83,11 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         },
         onToggleLdi = { enabled ->
             prefs.ldiEnabled = enabled
-            val msg = if (enabled)
+            val msg = if (enabled) {
                 "Bosch eBike Live Data will start on next ride. Open Flow to pair."
-            else
+            } else {
                 "Bosch eBike Live Data will stop on next ride."
+            }
             Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
         },
         onOpenFlow = { openFlow(ctx) },
@@ -318,7 +317,11 @@ private fun releaseBondLocally(ctx: Context, prefs: Prefs) {
     }
     val btManager = ctx.getSystemService(BluetoothManager::class.java)
     val adapter: BluetoothAdapter? = btManager?.adapter
-    val device = try { adapter?.getRemoteDevice(address) } catch (_: Exception) { null }
+    val device = try {
+        adapter?.getRemoteDevice(address)
+    } catch (_: Exception) {
+        null
+    }
     val msg = when {
         device == null -> "Could not look up the bike's BLE device. Forget the bike in Android Settings -> Bluetooth -> Saved devices."
         device.bondState != BluetoothDevice.BOND_BONDED -> {

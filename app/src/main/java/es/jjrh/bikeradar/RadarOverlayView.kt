@@ -347,7 +347,7 @@ class RadarOverlayView(context: Context) : View(context) {
         // — only the most-distant vehicles render here, so the
         // occasional overlap with a far-back box is preferable to
         // stealing attention near the rider mark.
-        val iconSize = dp(22f)
+        val iconSize = dp(28f)
         val cx = w / 2f
         val cy = h - iconSize / 2f - dp(8f)
         val status = dashcamStatus
@@ -362,7 +362,7 @@ class RadarOverlayView(context: Context) : View(context) {
         if (status != DashcamStatus.Ok) {
             drawDashcamIndicator(canvas, cx, cy, status)
             if (otherLow) {
-                batteryLabelPaint.textSize = dp(11f)
+                batteryLabelPaint.textSize = dp(14f)
                 batteryLabelPaint.color = COLOR_AMBER
                 canvas.drawText("R", cx - dp(14f), cy, batteryLabelPaint)
             }
@@ -370,10 +370,10 @@ class RadarOverlayView(context: Context) : View(context) {
         }
 
         if (batteryLowSlugs.isEmpty()) return
-        batteryLabelPaint.textSize = dp(11f)
+        batteryLabelPaint.textSize = dp(14f)
         batteryLabelPaint.color = COLOR_AMBER
         if (!batteryShowLabels) {
-            canvas.drawCircle(cx, cy - dp(2f), dp(4f), batteryDotPaint)
+            canvas.drawCircle(cx, cy - dp(2f), dp(5f), batteryDotPaint)
         } else {
             when {
                 dashcamLow && otherLow -> {
@@ -398,7 +398,7 @@ class RadarOverlayView(context: Context) : View(context) {
             DashcamStatus.Ok -> return
         }
         val d = cameraOffDrawable ?: return
-        val size = dp(22f).toInt()
+        val size = dp(28f).toInt()
         val half = size / 2
         val left = (cx - half).toInt()
         val top = (cy - half).toInt()

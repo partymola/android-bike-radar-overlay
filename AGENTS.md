@@ -170,6 +170,19 @@ decoders in both Python and Kotlin live there.
   existing installs upgrading from pre-v0.7.1-alpha must grant via Android
   Settings or the auto-mode silently falls back to London.
 
+## Audio design
+
+The alert-audio model - close-pass tier beeps, the urgent impact cue, the
+all-clear chime, the radar critical-battery cue, and the inactivation states
+(audio-focus ducking + `MODE_IN_CALL` suppression) - is an informal
+implementation of the IEC 60601-1-8 alarm-system pattern: distinct alarm
+*classes* (by timbre, not fine pitch), alarm parsimony, and "paused with
+new-condition override". Design inspiration only; the app is not a medical
+device and makes no compliance claim. The authoritative description of each
+cue and its rationale lives in the `AlertBeeper.kt` / `AlertDecider.kt` KDoc,
+which is kept current with the code - this note is the conceptual frame, not
+a behaviour spec to keep in sync.
+
 ## Quality gates (pre-push, mandatory)
 
 - `/qc` skill spawns a panel of read-only reviewers (legal,

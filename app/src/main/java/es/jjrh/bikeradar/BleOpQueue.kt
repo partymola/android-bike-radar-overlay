@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothStatusCodes
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
@@ -41,6 +42,7 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         data class CccdWrite(
             val gatt: BluetoothGatt,
             val descriptor: BluetoothGattDescriptor,
+            val value: ByteArray,
             override val result: CompletableDeferred<Boolean> = CompletableDeferred(),
         ) : Op()
 
@@ -96,6 +98,9 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
 
     // ── enqueuers (called from coroutines that need the result) ───────────────
 
+    // GATT ops require BLUETOOTH_CONNECT; the queue only runs against a live
+    // connection the service opened after the permission was granted.
+    @SuppressLint("MissingPermission")
     suspend fun writeCccd(gatt: BluetoothGatt, char: BluetoothGattCharacteristic): Boolean {
         gatt.setCharacteristicNotification(char, true)
         val desc = char.getDescriptor(Uuids.CCCD) ?: return false
@@ -104,9 +109,7 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         } else {
             BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
         }
-        @Suppress("DEPRECATION")
-        desc.value = value
-        val op = Op.CccdWrite(gatt, desc)
+        val op = Op.CccdWrite(gatt, desc, value)
         channel.send(op)
         return op.result.await()
     }
@@ -169,22 +172,37 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
 
     /**
      * The synchronous Android GATT-submit calls (writeDescriptor,
-     * readCharacteristic, writeCharacteristic, requestMtu) sometimes return
-     * false transiently when the stack is briefly busy with internal
-     * housekeeping. Retrying the submit a few times with a small gap
-     * recovers the op without bubbling a spurious failure to the caller.
-     * Only after [SUBMIT_RETRY_ATTEMPTS] consecutive false returns do we
-     * complete the op as failed.
+     * readCharacteristic, writeCharacteristic, requestMtu) sometimes fail
+     * transiently when the stack is briefly busy with internal housekeeping
+     * - the legacy calls return false, and the API 33+ write overloads
+     * return a non-SUCCESS status. [retrySubmit] normalises both to a
+     * Boolean and retries a few times with a small gap, recovering the op
+     * without bubbling a spurious failure to the caller. Only after
+     * [SUBMIT_RETRY_ATTEMPTS] consecutive failures do we complete the op as
+     * failed.
      */
     @SuppressLint("MissingPermission")
     private suspend fun dispatch(op: Op) {
         when (op) {
             is Op.CccdWrite -> {
                 val ok = retrySubmit {
-                    @Suppress("DEPRECATION")
-                    op.gatt.writeDescriptor(op.descriptor)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        op.gatt.writeDescriptor(op.descriptor, op.value) ==
+                            BluetoothStatusCodes.SUCCESS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        op.descriptor.value = op.value
+                        @Suppress("DEPRECATION")
+                        op.gatt.writeDescriptor(op.descriptor)
+                    }
                 }
-                if (!ok) op.result.complete(false)
+                if (!ok) {
+                    // Distinguishes a rejected/non-SUCCESS submit from a
+                    // GATT-callback timeout (handled in completeAny) when
+                    // reading the capture log after a handshake abort.
+                    Log.w(TAG, "CCCD descriptor write not submitted")
+                    op.result.complete(false)
+                }
             }
             is Op.Read -> {
                 val ok = retrySubmit { op.gatt.readCharacteristic(op.char) }
@@ -197,9 +215,8 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
                             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                         else
                             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                        // BluetoothStatusCodes.SUCCESS = 0 on API 33+; using
-                        // the literal avoids a class reference on API 31/32.
-                        op.gatt.writeCharacteristic(op.char, op.bytes, type) == 0
+                        op.gatt.writeCharacteristic(op.char, op.bytes, type) ==
+                            BluetoothStatusCodes.SUCCESS
                     } else {
                         @Suppress("DEPRECATION")
                         op.char.writeType = if (op.noResponse)

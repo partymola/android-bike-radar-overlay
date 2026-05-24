@@ -33,6 +33,7 @@ import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -1982,11 +1983,23 @@ class BikeRadarService : Service() {
         }
         if (vibrator == null || !vibrator.hasVibrator()) return
         val effect = VibrationEffect.createWaveform(WALKAWAY_VIBRATE_PATTERN, -1)
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        try { vibrator.vibrate(effect, attrs) } catch (t: Throwable) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                vibrator.vibrate(
+                    effect,
+                    VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_ALARM)
+                        .build(),
+                )
+            } else {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(effect, attrs)
+            }
+        } catch (t: Throwable) {
             Log.w(TAG, "vibrate failed: $t")
         }
     }

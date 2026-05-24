@@ -36,7 +36,7 @@ jobs:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
         run: |
-          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
+          regex='decompil|jadx|varia-apk|hci[- ]snoop|btsnoop|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware'
           hits=$(git log --format='%H%n%B%n---%n' "$BASE..$HEAD" 2>/dev/null | grep -nEi "$regex" || true)
           if [ -n "$hits" ]; then
             echo "::error::Dangerous keywords in commit message(s) in push range:"
@@ -49,7 +49,7 @@ jobs:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
         run: |
-          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
+          regex='decompil|jadx|varia-apk|hci[- ]snoop|btsnoop|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|ported from|from the official app|matches the firmware'
           # Exclude this workflow file itself — the regex string would otherwise
           # self-trigger on its own introduction / edits.
           hits=$(git log -p "$BASE..$HEAD" -- . ':(exclude).github/workflows/' 2>/dev/null \

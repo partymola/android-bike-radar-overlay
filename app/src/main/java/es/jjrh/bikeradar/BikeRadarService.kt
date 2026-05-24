@@ -144,6 +144,17 @@ class BikeRadarService : Service() {
     // graceful-degradation path that radar-only riders take.
     @Volatile private var lastLdiSnapshot: LiveDataSnapshot? = null
 
+    // Wall-clock of the last LDI snapshot. The radar-drop cue trusts
+    // `system_locked == false` only while this is fresh: a stale snapshot
+    // means the LDI link itself has dropped (rider walked away), so
+    // "unlocked" can no longer be believed.
+    @Volatile private var lastLdiSnapshotMs: Long = 0L
+
+    // Radar-drop cue latch (RadarDropDecider). Set to the last cue time;
+    // reset to null on radar reconnect. See [RadarDropDecider] for the
+    // full rationale.
+    @Volatile private var radarDropLastCueMs: Long? = null
+
     // Live EBikeLink instance, null when experimental.ldi.enable is off.
     @Volatile private var ebikeLink: EBikeLink? = null
 
@@ -388,6 +399,7 @@ class BikeRadarService : Service() {
             context = this,
             onSnapshot = { snap ->
                 lastLdiSnapshot = snap
+                lastLdiSnapshotMs = System.currentTimeMillis()
                 // Capture odometer baseline on first sighting, then
                 // log the snapshot delta-only. format() returns null when
                 // every field is still unobserved so we skip logging
@@ -2347,6 +2359,7 @@ class BikeRadarService : Service() {
                 prevTickMs = now
                 tickWalkAwayState(now, elapsed)
                 evaluateWalkAway(now)
+                evaluateRadarDrop(now)
             }
         }
     }
@@ -2519,6 +2532,48 @@ class BikeRadarService : Service() {
                 lastWalkAwayFireMs = null
             }
             WalkAwayDecider.Action.NONE -> {}
+        }
+    }
+
+    /**
+     * Radar-drop audio cue: a dropped radar link looks identical to a clear
+     * road on the overlay, and the rider's eyes are on the road, so the
+     * warning must be audible. Fires when the radar has been down for
+     * [RADAR_DROP_THRESHOLD_MS] while LDI confirms the rider is still on the
+     * bike, then repeats every [RADAR_DROP_CUE_INTERVAL_MS] until reconnect.
+     *
+     * LDI-gated on purpose: a fresh `system_locked == false` is the only
+     * signal that separates a mid-ride radar loss (cue) from a ride-end
+     * dismount (no cue). That makes this mutually exclusive with the walk-away
+     * alarm, which arms only when NOT unlocked. Without an LDI signal there is
+     * no cue - a radar-only / no-eBike rider never gets a false ride-end fire.
+     * Full design rationale + scenario matrix in [RadarDropDecider]'s KDoc.
+     */
+    private fun evaluateRadarDrop(nowMs: Long) {
+        if (prefs.isPaused) return
+        val ldi = lastLdiSnapshot
+        val downForMs = radarOffSinceMs?.let { nowMs - it }
+        val decision = RadarDropDecider.decide(
+            radarEverLive = sessionRadarConnectedMs > 0L,
+            radarDownForMs = downForMs,
+            ridingConfirmed = RadarDropDecider.ridingConfirmed(
+                systemLocked = ldi?.systemLocked,
+                snapshotAgeMs = nowMs - lastLdiSnapshotMs,
+                freshMs = RADAR_DROP_LDI_FRESH_MS,
+            ),
+            nowMs = nowMs,
+            thresholdMs = RADAR_DROP_THRESHOLD_MS,
+            cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
+            lastCueMs = radarDropLastCueMs,
+        )
+        // The latch resets lazily here on the next tick that sees the radar
+        // back up (downForMs == null), NOT eagerly in markRadarConnected like
+        // the walk-away state. Safe because a fresh drop re-stamps
+        // radarOffSinceMs and restarts below the threshold.
+        radarDropLastCueMs = decision.lastCueMs
+        if (decision.fire) {
+            alertBeeper?.playRadarDropped()
+            clog("# radar_drop_cue down_ms=${downForMs ?: -1L} system_locked=${ldi?.systemLocked}")
         }
     }
 
@@ -2806,6 +2861,19 @@ class BikeRadarService : Service() {
          *  design: a critical battery the rider cannot fix mid-ride must not
          *  nag. */
         const val CRITICAL_BATTERY_CUE_INTERVAL_MS = 120_000L
+
+        /** Radar-drop cue: continuous radar-off time before the first cue.
+         *  Deliberately generous so the normal end-of-ride wind-down (radar
+         *  off around when the dashcam goes off) never trips it. */
+        const val RADAR_DROP_THRESHOLD_MS = 60_000L
+
+        /** Radar-drop cue re-fire gap while the radar stays down. */
+        const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L
+
+        /** Max age of the LDI snapshot for its `system_locked` to be trusted
+         *  by the radar-drop cue. Older than this means the LDI link has
+         *  itself dropped (rider left), so "unlocked" can't be believed. */
+        const val RADAR_DROP_LDI_FRESH_MS = 30_000L
 
         /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
          *  long enough that a sub-30-min commute gets exactly one heads-up

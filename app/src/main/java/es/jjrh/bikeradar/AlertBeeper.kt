@@ -31,6 +31,10 @@ import kotlin.math.sin
  *                   the mid descending "all clear" - it is a status cue,
  *                   not a threat, and must never read as one. First cut;
  *                   tune the pitch/cadence on ride evidence.
+ *   playRadarDropped() -> low (440 Hz) 3-pulse for "rear radar link lost
+ *                   mid-ride". Status-class like the battery cue, but THREE
+ *                   pulses vs the battery's two so the rider tells them
+ *                   apart by count, not pitch. First cut; tune on rides.
  *
  * Volume is user-controlled via [setVolumePct] (0..100, default 50). Values
  * map through a perceptual curve so sliding below ~50 actually reduces
@@ -104,6 +108,7 @@ class AlertBeeper(
         Array(PAN_BUCKETS) { b -> makeStereoTrack(urgentPcm, bucketScales[b].first, bucketScales[b].second) }
     private val clearTrack = buildClearTrack()
     private val criticalBatteryTrack = buildCriticalBatteryTrack()
+    private val radarDroppedTrack = buildRadarDroppedTrack()
 
     // Track-duration table for the abandon-timer. Computed at build time
     // from the same sample counts the AudioTrack contents use, so the
@@ -114,6 +119,7 @@ class AlertBeeper(
     private val clearDurationMs: Int = 110 + 60 + 110
     private val urgentDurationMs: Int = 4 * 70 + 3 * 50
     private val criticalBatteryDurationMs: Int = 2 * 160 + 1 * 140
+    private val radarDroppedDurationMs: Int = 3 * 130 + 2 * 90
 
     private var volumePct = DEFAULT_VOLUME_PCT
 
@@ -204,6 +210,18 @@ class AlertBeeper(
         }
     }
 
+    /** Rear-radar dropped status cue: the radar link went down mid-ride, so
+     *  rear awareness is lost. Non-directional (mono). A low 3-pulse, a
+     *  distinct count + timbre-class from the critical-battery two-tone and
+     *  from the sharp/high threat beeps - a status cue, never a threat. */
+    fun playRadarDropped() {
+        executor.execute {
+            if (suppressForCall()) return@execute
+            radarDroppedTrack.setVolume(currentMonoGain())
+            playWithFocus(radarDroppedTrack, radarDroppedDurationMs)
+        }
+    }
+
     fun setVolumePct(pct: Int) {
         volumePct = pct.coerceIn(0, 100)
         applyVolume()
@@ -229,6 +247,7 @@ class AlertBeeper(
         urgentBuckets.forEach { it.release() }
         clearTrack.release()
         criticalBatteryTrack.release()
+        radarDroppedTrack.release()
         if (executor is java.util.concurrent.ExecutorService) executor.shutdown()
     }
 
@@ -277,6 +296,7 @@ class AlertBeeper(
         urgentBuckets.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
         criticalBatteryTrack.setVolume(g)
+        radarDroppedTrack.setVolume(g)
     }
 
     private fun currentMonoGain(): Float {
@@ -515,6 +535,29 @@ class AlertBeeper(
         gap.copyInto(buf, pos)
         pos += gapSamples
         tone.copyInto(buf, pos)
+        return makeTrack(buf)
+    }
+
+    private fun buildRadarDroppedTrack(): AudioTrack {
+        // Low (440 Hz) 3-pulse. Low pitch keeps it in the status timbre-class
+        // (not a sharp/high threat beep); the count of THREE separates it from
+        // the critical-battery TWO-tone (the rider discriminates by count, not
+        // fine pitch, per the noisy-London rule). First cut - tune on rides.
+        val toneSamples = sampleRate * 130 / 1000
+        val gapSamples = sampleRate * 90 / 1000
+        val tone = generateTone(toneSamples, 440f)
+        val gap = ShortArray(gapSamples)
+        val count = 3
+        val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
+        var pos = 0
+        repeat(count) { i ->
+            tone.copyInto(buf, pos)
+            pos += toneSamples
+            if (i < count - 1) {
+                gap.copyInto(buf, pos)
+                pos += gapSamples
+            }
+        }
         return makeTrack(buf)
     }
 

@@ -524,7 +524,7 @@ internal fun HaFieldsBlock(
     // would. heightIn ensures a reasonable tap target.
     Box(
         modifier = Modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(br.brand.copy(alpha = 0.12f))
             .border(1.dp, br.brand.copy(alpha = 0.30f), RoundedCornerShape(999.dp))
@@ -583,7 +583,7 @@ internal fun HaFieldsBlock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(br.bgElev2)
             .clickable(enabled = testEnabled, onClick = onTest),
@@ -652,7 +652,7 @@ internal fun HaSkippedCard(onChangeMind: () -> Unit) {
         Spacer(modifier = Modifier.height(12.dp))
         Box(
             modifier = Modifier
-                .height(36.dp)
+                .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                 .semantics { role = Role.Button }
@@ -945,7 +945,7 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(br.dashcam)
                     .clickable(onClick = onSetUp),
@@ -956,7 +956,7 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
                     .clickable(onClick = onSkip),
@@ -1060,7 +1060,7 @@ internal fun DeviceRow(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(36.dp)
+                            .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                             .clickable(onClick = onPrimary),
@@ -1085,7 +1085,7 @@ internal fun DeviceRow(
                 if (extraAction != null && onExtra != null) {
                     Box(
                         modifier = Modifier
-                            .height(36.dp)
+                            .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                             .clickable(onClick = onExtra)
@@ -1372,7 +1372,7 @@ private fun EBikePairingWalkthrough(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(br.brand)
             .clickable(onClick = onOpenFlow),
@@ -1488,7 +1488,7 @@ private fun EBikeOutcomeEdgeCard(
             for (cta in ctas) {
                 Box(
                     modifier = Modifier
-                        .height(36.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (cta.primary) br.brand else br.bgElev2)
                         .border(

@@ -110,6 +110,20 @@ class ScreenSmokeTest {
     }
 
     @Test
+    fun settingsCameraLightComposes() {
+        // Auto-mode on so the conditional location-permission card branch
+        // (shown when auto-mode is enabled and COARSE location is denied -
+        // the default in this harness) is actually composed, not just the
+        // base screen.
+        prefs.autoLightModeEnabled = true
+        composeRule.setContent {
+            val nav = rememberNavController()
+            SettingsCameraLight(navController = nav, prefs = prefs)
+        }
+        composeRule.waitForIdle()
+    }
+
+    @Test
     fun settingsPermissionsComposes() {
         composeRule.setContent {
             val nav = rememberNavController()

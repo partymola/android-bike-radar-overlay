@@ -13,11 +13,13 @@ import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
+import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
@@ -498,11 +500,30 @@ class EBikeLink(
                 return
             }
             gatt.setCharacteristicNotification(ch, true)
-            ch.getDescriptor(CCCD)?.let { desc ->
-                desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            ch.getDescriptor(CCCD)?.let { desc -> enableNotifications(gatt, desc) }
+            gatt.readCharacteristic(ch)
+        }
+
+        /**
+         * Subscribe to CHAR_LIVE_DATA notifications by writing the CCCD.
+         * API 33+ passes the value as an argument and returns a status
+         * code; the descriptor object is no longer mutated, which removes
+         * the shared-value race of the legacy two-step form. Pre-33 devices
+         * fall back to the deprecated set-then-write path. Best-effort: the
+         * write completes asynchronously on the GATT thread - here we only
+         * log when the request can't even be queued.
+         */
+        @SuppressLint("MissingPermission")
+        @Suppress("DEPRECATION")
+        private fun enableNotifications(gatt: BluetoothGatt, desc: BluetoothGattDescriptor) {
+            val value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            val queued = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(desc, value) == BluetoothStatusCodes.SUCCESS
+            } else {
+                desc.value = value
                 gatt.writeDescriptor(desc)
             }
-            gatt.readCharacteristic(ch)
+            if (!queued) Log.w(TAG, "CCCD enable write not queued")
         }
 
         override fun onCharacteristicRead(

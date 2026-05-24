@@ -17,6 +17,14 @@ class RadarOverlayView(context: Context) : View(context) {
     // so the paint initializers below, which call dp() at construction, see it.
     private val density = resources.displayMetrics.density
 
+    // The Canvas overlay is otherwise invisible to accessibility services.
+    // We expose a spoken state summary via contentDescription, but only build
+    // it when an a11y service is actually listening so non-TalkBack riders
+    // (the overwhelming majority) pay nothing per frame. A full per-vehicle
+    // accessibility node tree would be richer but is a separate feature.
+    private val a11yManager =
+        context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+
     private var state: RadarState = RadarState()
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -120,6 +128,7 @@ class RadarOverlayView(context: Context) : View(context) {
     fun setState(s: RadarState) {
         if (s == state) return
         state = s
+        updateA11y()
         postInvalidate()
     }
 
@@ -151,6 +160,7 @@ class RadarOverlayView(context: Context) : View(context) {
         if (lowSlugs == batteryLowSlugs && showLabels == batteryShowLabels) return
         batteryLowSlugs = lowSlugs
         batteryShowLabels = showLabels
+        updateA11y()
         postInvalidate()
     }
 
@@ -158,7 +168,16 @@ class RadarOverlayView(context: Context) : View(context) {
         if (status == dashcamStatus && slug == dashcamSlug) return
         dashcamStatus = status
         dashcamSlug = slug
+        updateA11y()
         postInvalidate()
+    }
+
+    /** Spoken state summary for accessibility services - built only when one
+     *  is listening (see [a11yManager]). The string logic is the pure,
+     *  unit-tested [buildOverlayA11ySummary]. */
+    private fun updateA11y() {
+        if (!a11yManager.isEnabled) return
+        contentDescription = buildOverlayA11ySummary(state, dashcamStatus, batteryLowSlugs.isNotEmpty())
     }
 
     override fun onDraw(canvas: Canvas) {

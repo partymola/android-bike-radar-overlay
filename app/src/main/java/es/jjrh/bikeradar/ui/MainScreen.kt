@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -358,10 +359,16 @@ private fun TopBar(onWordmarkLongPress: () -> Unit) {
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.2).sp,
-            modifier = Modifier.combinedClickable(
-                onClick = {},
-                onLongClick = onWordmarkLongPress,
-            ),
+            modifier = Modifier
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onWordmarkLongPress,
+                )
+                // The tap does nothing (long-press is the hidden dev-unlock
+                // gesture), so clear the inherited "double-tap to activate"
+                // semantics and expose just the label. Touch handling for the
+                // long-press is unaffected.
+                .clearAndSetSemantics { contentDescription = "Bike Radar" },
         )
     }
 }

@@ -129,9 +129,9 @@ and reuses it across rebuilds so `adb install -r` keeps working.
 Signed APKs are published as GitHub Releases when a tag matching
 `v*` is pushed. The release workflow builds from a clean checkout,
 signs with a release keystore held as repo secrets, and attaches
-the APK to the Release. Tags containing a hyphen (e.g. `v0.1.0-alpha`,
-`v1.0-rc1`) are marked as prereleases; bare semver tags are full
-releases.
+the APK to the Release. While the app is in alpha every release is
+published as a prerelease; the flag is hardcoded in the workflow and
+will be removed when the app ships a stable tag.
 
 To cut a release:
 

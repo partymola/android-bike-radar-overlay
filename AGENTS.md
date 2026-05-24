@@ -41,8 +41,10 @@ JVM; `scripts/dev gradle` auto-retries Paparazzi tasks once for this
 `--rerun-tasks` - the warm retry passes.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
-add a top-level entry to `CHANGELOG.md` (Security / UX / Compatibility
-headings - see existing entries for tone), then push a `v*` tag (e.g.
+add a top-level entry to `CHANGELOG.md` (group changes under the
+headings already in use - Features, Fix, Security, UX, Compatibility,
+Reliability, Stability, Power, Diagnostics, Internal - matching the tone
+of existing entries), then push a `v*` tag (e.g.
 `v0.7.1-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
 which builds a release-signed APK and publishes a GitHub pre-release.
 The workflow defaults `prerelease: true` until the app exits alpha.
@@ -101,7 +103,7 @@ decoders in both Python and Kotlin live there.
   for it literally).
 - MQTT topic prefixes and HA entity IDs keep the legacy `varia_` prefix on
   purpose — renaming would break existing subscribers. See
-  `HaClient.kt:22-23`.
+  `HaClient.kt:25-26`.
 
 ## Testing
 

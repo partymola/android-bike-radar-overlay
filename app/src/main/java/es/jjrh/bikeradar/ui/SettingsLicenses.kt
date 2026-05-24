@@ -94,17 +94,6 @@ private fun SettingsLicensesBody(navController: NavController) {
                 ),
             )
 
-            SettingsSectionLabel("Audio assets")
-            LicenseGroup(
-                listOf(
-                    LicenseEntry(
-                        "Walk-away alarm tone (bicycle bell)",
-                        "freesound_community on Pixabay (id 32072)",
-                        "Pixabay Content License",
-                    ),
-                ),
-            )
-
             SettingsSectionLabel("Protocols")
             LicenseGroup(
                 listOf(

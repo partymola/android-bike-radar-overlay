@@ -2191,14 +2191,15 @@ class BikeRadarService : Service() {
             Log.w(TAG, "walk-away audio focus denied; playing without focus")
         }
 
-        // Bundled bike-bell sound, attributed in SettingsLicenses
-        // ("Audio assets") and in res/raw/walkaway_alarm_license.txt.
-        // Using a bundled asset rather than the system default alarm
-        // (the rider's morning-wakeup tone) so the alarm is recognisable
-        // as a walk-away alert and harder to ignore as routine.
-        val uri = android.net.Uri.parse(
-            "android.resource://$packageName/${R.raw.walkaway_alarm}",
-        )
+        // System default alarm tone. A bundled sound asset was dropped
+        // because its licence was not GPL-compatible; the device alarm
+        // keeps the app asset-free. It does share the rider's wake-up
+        // tone, but the alarm stream is forced to max below and the cue
+        // loops under USAGE_ALARM, so it still cuts through. Fall back
+        // through ringtone/notification if no default alarm is set.
+        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val rt = try {
             RingtoneManager.getRingtone(this, uri).apply {
                 audioAttributes = attrs

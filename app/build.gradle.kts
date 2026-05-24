@@ -122,7 +122,18 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 in shrink-only mode (see proguard-rules.pro): removes dead
+            // code - chiefly the unused material-icons-extended dex (~5 MB) -
+            // without renaming or optimizing, so the reflection-free string
+            // lookups (org.json, enum valueOf, prefs keys) and the BLE
+            // callbacks keep working. A minified release MUST be ride-tested
+            // before the next v* tag.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             val release = signingConfigs.findByName("release")
             // If the release signing config is wired up (env vars present),
             // use it. Otherwise fall back to debug signing so a local
@@ -148,7 +159,7 @@ android {
             versionNameSuffix = "-onbtest"
             // The point of onbtest is to walk Onboarding from genuine
             // fresh-install state. Wipe the local.properties HA seed
-            // so the variant doesn't pre-fill JJ's real creds and
+            // so the variant doesn't pre-fill real HA creds and
             // can't accidentally hit real HA via "Test connection".
             buildConfigField("String", "HA_BASE_URL", "\"\"")
             buildConfigField("String", "HA_TOKEN", "\"\"")

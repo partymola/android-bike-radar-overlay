@@ -308,6 +308,10 @@ class BikeRadarService : Service() {
 
     @Volatile private var captureLogWriter: PrintWriter? = null
 
+    // Wall-clock of the last capture-log flush; drives the periodic flush in
+    // writeCaptureLine. Guarded by captureLogLock.
+    private var lastCaptureFlushMs: Long = 0L
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -1854,10 +1858,15 @@ class BikeRadarService : Service() {
         try {
             // No autoFlush: it write()s on every println, defeating the
             // BufferedWriter and adding a syscall per BLE notify (~11 Hz).
-            // closeCaptureLog() flushes on the normal onDestroy path; the
-            // 8 KB buffer bounds any loss on an abnormal kill.
+            // closeCaptureLog() flushes on the normal onDestroy path, and
+            // writeCaptureLine flushes at most every CAPTURE_LOG_FLUSH_INTERVAL_MS
+            // so an abnormal kill loses at most one flush window.
             val pw = PrintWriter(BufferedWriter(FileWriter(file)))
-            synchronized(captureLogLock) { captureLogWriter = pw }
+            synchronized(captureLogLock) {
+                captureLogWriter = pw
+                // Force the first line (the header) of a fresh log to flush.
+                lastCaptureFlushMs = 0L
+            }
             activeCaptureLogName = file.name
             clog("# bike-radar capture started ${java.time.Instant.now()}")
             clog("# format: unix_ms char_tail_4hex hex_bytes_no_spaces")
@@ -1880,8 +1889,26 @@ class BikeRadarService : Service() {
         activeCaptureLogName = null
     }
 
+    /**
+     * Append one line to the capture log and flush at most every
+     * [CAPTURE_LOG_FLUSH_INTERVAL_MS]. The writer has no autoFlush, so this
+     * bounds data loss on an abnormal kill to one flush window while keeping
+     * the per-notify path a buffered write rather than a syscall.
+     */
+    private fun writeCaptureLine(line: String) {
+        synchronized(captureLogLock) {
+            val w = captureLogWriter ?: return
+            w.println(line)
+            val now = System.currentTimeMillis()
+            if (now - lastCaptureFlushMs >= CAPTURE_LOG_FLUSH_INTERVAL_MS) {
+                w.flush()
+                lastCaptureFlushMs = now
+            }
+        }
+    }
+
     fun clog(msg: String) {
-        synchronized(captureLogLock) { captureLogWriter?.println(msg) }
+        writeCaptureLine(msg)
         Log.d(TAG_RADAR, msg)
     }
 
@@ -1925,7 +1952,7 @@ class BikeRadarService : Service() {
         // always "9a66" — chars 4-7 of the first segment give the meaningful discriminator.
         val tag = uuid.toString().substring(4, 8)
         val line = "${System.currentTimeMillis()} $tag ${bytes.toHex()}"
-        synchronized(captureLogLock) { captureLogWriter?.println(line) }
+        writeCaptureLine(line)
     }
 
     // ── event scan registration ───────────────────────────────────────────────
@@ -2833,6 +2860,11 @@ class BikeRadarService : Service() {
 
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
+
+        // Capture-log flush cadence. The writer is unbuffered-flushed at most
+        // this often (only while lines are being written), bounding loss on an
+        // abnormal kill to ~5 s without an fsync per BLE notify.
+        private const val CAPTURE_LOG_FLUSH_INTERVAL_MS = 5_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

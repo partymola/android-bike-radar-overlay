@@ -142,7 +142,7 @@ internal fun SettingsMenuBody(
                 SettingsRow(
                     icon = Icons.Default.WbSunny,
                     iconTint = br.brand,
-                    title = "Front light auto-mode",
+                    title = "Dashcam light auto-mode",
                     subtitle = cameraLightSubtitle(prefsSnap),
                     onClick = { navController.navigate("settings/camera-light") },
                 )

@@ -1657,7 +1657,7 @@ class BikeRadarService : Service() {
         ensureNotificationChannel()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
-            .setContentTitle("Front light")
+            .setContentTitle("Dashcam light")
             .setContentText("Couldn't switch to $modeName - check connection.")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -1892,7 +1892,7 @@ class BikeRadarService : Service() {
             nm.createNotificationChannel(
                 NotificationChannel(
                     LIGHT_FAIL_CHANNEL_ID,
-                    "Front light",
+                    "Dashcam light",
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = "Alerts when the front camera/light mode could not be applied."

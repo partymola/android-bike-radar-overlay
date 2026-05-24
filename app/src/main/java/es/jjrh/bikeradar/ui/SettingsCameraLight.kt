@@ -54,11 +54,11 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SettingsHeader("Front light auto-mode", onBack = { navController.popBackStack() })
+            SettingsHeader("Dashcam light auto-mode", onBack = { navController.popBackStack() })
 
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Auto front light mode",
+                    title = "Auto dashcam light mode",
                     subtitle = "Set light mode at power-on and at sunset",
                     checked = autoEnabled,
                     onCheckedChange = { v -> autoEnabled = v; prefs.autoLightModeEnabled = v },

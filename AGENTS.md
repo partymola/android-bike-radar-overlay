@@ -106,8 +106,9 @@ decoders in both Python and Kotlin live there.
 ## Testing
 
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
-  (Robolectric). CI runs this alongside `:app:lintDebug` and
-  `:app:ktlintCheck` (see Static analysis & coverage below). Paparazzi
+  (Robolectric). CI runs this alongside `:app:lintDebug`,
+  `:app:ktlintCheck`, and `:app:jacocoCoverageVerification` (see Static
+  analysis & coverage below). Paparazzi
   screenshot tests are excluded from `testDebugUnitTest` because Paparazzi
   2.0.0-SNAPSHOT's layoutlib loader fails on cold-cache JVMs.
 - Locally, run `:app:verifyPaparazziDebug` to compare against golden PNGs.
@@ -121,14 +122,22 @@ decoders in both Python and Kotlin live there.
 ## Static analysis & coverage
 
 - **ktlint** (`:app:ktlintCheck`, runs in CI) enforces the `intellij_idea`
-  code style set in `.editorconfig`. Pre-existing findings are grandfathered
-  in `app/config/ktlint/baseline.xml`; only violations outside the baseline
-  fail. Write new code clean; `:app:ktlintFormat` autofixes most issues.
-  Do NOT regenerate the baseline to silence a fresh finding; regenerate
-  (`:app:ktlintGenerateBaseline`) only after a deliberate style sweep.
-- **JaCoCo** coverage is report-only (`enableUnitTestCoverage`). Run
-  `:app:createDebugUnitTestCoverageReport` for
-  `app/build/reports/coverage/test/debug/`. No threshold gate yet.
+  code style set in `.editorconfig`. The codebase is fully formatted and the
+  baseline (`app/config/ktlint/baseline.xml`) is empty, so all code must be
+  clean; `:app:ktlintFormat` autofixes most issues. Regenerate the baseline
+  (`:app:ktlintGenerateBaseline`) only after a deliberate style sweep, never
+  to silence a fresh finding.
+- **JaCoCo** runs via the on-the-fly agent on `:app:testDebugUnitTest`
+  (`JacocoTaskExtension { isIncludeNoLocationClasses = true }`), exec at
+  `build/jacoco/testDebugUnitTest.exec`. Do NOT switch to AGP's offline
+  `enableUnitTestCoverage`: it cannot see classes loaded through
+  Robolectric's sandbox classloader, so Robolectric-tested code silently
+  reports 0%.
+  - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
+    and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
+  - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
+    project LINE >= 0.45, BRANCH >= 0.90 on the safety-critical deciders.
+    Raise the floors in `app/build.gradle.kts` as coverage grows.
 - **detekt** is intentionally not wired: only its 2.0.0-alpha targets the
   pinned Kotlin 2.3, and an alpha doesn't belong in a public build. Revisit
   when a stable detekt supports the toolchain.

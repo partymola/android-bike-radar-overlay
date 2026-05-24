@@ -6,11 +6,9 @@ import org.junit.Test
 
 class AlertDeciderTest {
 
-    private fun car(id: Int, distanceM: Int, isBehind: Boolean = false) =
-        Vehicle(id = id, distanceM = distanceM, speedMs = 5f, isBehind = isBehind)
+    private fun car(id: Int, distanceM: Int, isBehind: Boolean = false) = Vehicle(id = id, distanceM = distanceM, speedMs = 5f, isBehind = isBehind)
 
-    private fun closingCar(id: Int, distanceM: Int, speedMs: Float) =
-        Vehicle(id = id, distanceM = distanceM, speedMs = speedMs)
+    private fun closingCar(id: Int, distanceM: Int, speedMs: Float) = Vehicle(id = id, distanceM = distanceM, speedMs = speedMs)
 
     private val alertMax = 21
 
@@ -19,8 +17,14 @@ class AlertDeciderTest {
      *  then handles it. */
     private class Clock(start: Long = 0L, val dtMs: Long = 100L) {
         var now: Long = start
-        fun tick(): Long { val t = now; now += dtMs; return t }
-        fun jump(deltaMs: Long) { now += deltaMs }
+        fun tick(): Long {
+            val t = now
+            now += dtMs
+            return t
+        }
+        fun jump(deltaMs: Long) {
+            now += deltaMs
+        }
     }
 
     @Test fun `empty road returns None`() {
@@ -64,15 +68,21 @@ class AlertDeciderTest {
         // then a single Beep when cooldown allows, at the latest urgency.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
-        d.decide(listOf(car(1, 18)), alertMax, c.tick())          // sustain frame 1
-        assertEquals(AlertDecider.Event.Beep(1),                   // sustain frame 2
-            d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // sustain frame 1
+        assertEquals(
+            AlertDecider.Event.Beep(1), // sustain frame 2
+            d.decide(listOf(car(1, 18)), alertMax, c.tick()),
+        )
         // Crosses to mid third immediately (~100ms later) — pending, suppressed:
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(1, 13)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(1, 13)), alertMax, c.tick()),
+        )
         // Crosses to near third 100ms later — still pending:
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(1, 6)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(1, 6)), alertMax, c.tick()),
+        )
         // Wait past cooldown:
         c.jump(700)
         val ev = d.decide(listOf(car(1, 4)), alertMax, c.tick())
@@ -84,7 +94,7 @@ class AlertDeciderTest {
         val d = AlertDecider()
         val c = Clock()
         d.decide(listOf(car(1, 4)), alertMax, c.tick())
-        d.decide(listOf(car(1, 4)), alertMax, c.tick())  // Beep(3)
+        d.decide(listOf(car(1, 4)), alertMax, c.tick()) // Beep(3)
         c.jump(1000)
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 18)), alertMax, c.tick()))
@@ -116,23 +126,33 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(2), first)
 
         // Car 6 enters at ~18m a moment later — within cooldown:
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(6, 18), car(7, 12)), alertMax, c.tick()))
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(6, 17), car(7, 12)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(6, 18), car(7, 12)), alertMax, c.tick()),
+        )
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(6, 17), car(7, 12)), alertMax, c.tick()),
+        )
 
         // Car 8 enters at ~18m — also within cooldown:
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(6, 16), car(7, 11), car(8, 18)), alertMax, c.tick()))
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(6, 15), car(7, 11), car(8, 17)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(6, 16), car(7, 11), car(8, 18)), alertMax, c.tick()),
+        )
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(6, 15), car(7, 11), car(8, 17)), alertMax, c.tick()),
+        )
 
         // Cooldown expires. Closest is car 7 still at 10m (urgency 2).
         // Under D2a + per-track tier hysteresis, this is the same closest
         // tid at the same tier we already audibly fired for — silent.
         c.jump(700)
         val second = d.decide(
-            listOf(car(6, 14), car(7, 10), car(8, 16)), alertMax, c.tick(),
+            listOf(car(6, 14), car(7, 10), car(8, 16)),
+            alertMax,
+            c.tick(),
         )
         assertEquals(AlertDecider.Event.None, second)
     }
@@ -147,7 +167,7 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 4), car(2, 16)), alertMax, c.tick())
-        d.decide(listOf(car(1, 3), car(2, 16)), alertMax, c.tick())  // Beep(3)
+        d.decide(listOf(car(1, 3), car(2, 16)), alertMax, c.tick()) // Beep(3)
         c.jump(700)
         val ev = d.decide(
             listOf(car(1, 2, isBehind = true), car(2, 14)),
@@ -161,12 +181,14 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 8)), alertMax, c.tick())
-        d.decide(listOf(car(1, 6)), alertMax, c.tick())  // Beep(3)
+        d.decide(listOf(car(1, 6)), alertMax, c.tick()) // Beep(3)
         // Overtake empties the in-front set; the clear-grace defers the
         // Clear (the overtaking track stays isBehind, so it never re-enters
         // range to cancel the pending clear).
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick()),
+        )
         // After the grace, Clear fires - not gated by the beep cooldown.
         c.jump(1000)
         val ev = d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick())
@@ -215,7 +237,7 @@ class AlertDeciderTest {
         val d = AlertDecider()
         val c = Clock()
         d.decide(listOf(car(1, 21)), alertMax, c.tick())
-        d.decide(listOf(car(1, 21)), alertMax, c.tick())  // Beep(1)
+        d.decide(listOf(car(1, 21)), alertMax, c.tick()) // Beep(1)
         // 30 m > alertMax(21) + band(2): drops out, grace starts.
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 30)), alertMax, c.tick()))
         c.jump(1000)
@@ -233,11 +255,15 @@ class AlertDeciderTest {
         // Edge jitter to 22 m - band keeps it in close, no clear.
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 22)), alertMax, c.tick()))
         // Same track overtakes: isBehind ejects it, starting the grace.
-        assertEquals(AlertDecider.Event.None,
-            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()),
+        )
         c.jump(1000)
-        assertEquals(AlertDecider.Event.Clear,
-            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()))
+        assertEquals(
+            AlertDecider.Event.Clear,
+            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()),
+        )
     }
 
     @Test fun `single-frame dropout within grace does not clear or re-beep`() {
@@ -260,7 +286,7 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
-        d.decide(listOf(car(1, 10)), alertMax, c.tick())  // Beep(2) for car 1
+        d.decide(listOf(car(1, 10)), alertMax, c.tick()) // Beep(2) for car 1
         // Car 1 drops out; grace pending.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         c.jump(700)
@@ -275,7 +301,7 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick())
-        d.decide(listOf(car(1, 18)), alertMax, c.tick())  // Beep(1) far
+        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // Beep(1) far
         // Drops out for one frame...
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         c.jump(700)
@@ -305,14 +331,14 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
-        d.decide(listOf(car(1, 10)), alertMax, c.tick())  // Beep(2)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick()) // Beep(2)
         // Car leaves the close zone for longer than the clear-grace: a real
         // departure, so the Clear fires and the per-track latch is wiped.
-        d.decide(listOf(car(1, 50)), alertMax, c.tick())  // grace starts
+        d.decide(listOf(car(1, 50)), alertMax, c.tick()) // grace starts
         c.jump(1000)
-        d.decide(listOf(car(1, 50)), alertMax, c.tick())  // grace elapsed → Clear
+        d.decide(listOf(car(1, 50)), alertMax, c.tick()) // grace elapsed → Clear
         c.jump(700)
-        d.decide(listOf(car(1, 10)), alertMax, c.tick())  // re-entering, frame 1
+        d.decide(listOf(car(1, 10)), alertMax, c.tick()) // re-entering, frame 1
         val ev = d.decide(listOf(car(1, 10)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), ev)
     }
@@ -388,8 +414,10 @@ class AlertDeciderTest {
         c.jump(3000)
         d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0f)
         // Close zone empties; the clear-grace defers the Clear one frame.
-        assertEquals(AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f))
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f),
+        )
         c.jump(1000)
         // Clear must still fire after the grace even though rider is stationary.
         val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -529,7 +557,7 @@ class AlertDeciderTest {
 
     @Test fun `cooldown is base in the 15-25 kmh band`() {
         val d = AlertDecider(minBeepGapMs = 700L)
-        assertEquals(700L, d.effectiveMinBeepGapMs(5f))         // 18 km/h
+        assertEquals(700L, d.effectiveMinBeepGapMs(5f)) // 18 km/h
         assertEquals(700L, d.effectiveMinBeepGapMs(20f / 3.6f)) // 20 km/h
     }
 
@@ -580,7 +608,7 @@ class AlertDeciderTest {
         // Imminent threat: 5 m at -8 m/s closing => proximity gate fires.
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)  // fires first urgent
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f) // fires first urgent
         c.jump(700)
         // 700 ms later, at the base cooldown boundary. The speed-aware path in the
         // slow-band would require 1400 ms; UrgentApproach must bypass
@@ -945,7 +973,7 @@ class AlertDeciderTest {
         val c = Clock()
         // Car 1 at near-tier (u=3), car 2 at far-tier (u=1).
         d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick())
-        d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick())  // Beep(3)
+        d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick()) // Beep(3)
         c.jump(1000)
         // Car 1 overtakes. Remaining is car 2 at u=1; peak[1] was 3.
         // 1 > 3? No — silent.
@@ -995,7 +1023,7 @@ class AlertDeciderTest {
         // suppress / urgent-override paths don't enter — this
         // isolates the closest-only audio model.
         val alertMaxTruck = 30
-        val d = AlertDecider()  // default minBeepGapMs = 700
+        val d = AlertDecider() // default minBeepGapMs = 700
         val audible = mutableListOf<AlertDecider.Event>()
         var t = 0L
 
@@ -1004,9 +1032,15 @@ class AlertDeciderTest {
             if (ev !is AlertDecider.Event.None) audible.add(ev)
             t += 200
         }
+
         // Two-frame sustain helper.
-        fun scene(vs: List<Vehicle>) { feed(vs); feed(vs) }
-        fun gap(ms: Long) { t += ms }
+        fun scene(vs: List<Vehicle>) {
+            feed(vs)
+            feed(vs)
+        }
+        fun gap(ms: Long) {
+            t += ms
+        }
 
         // t+0 — tid 51@16 (u=2 mid), tid 111@27 (u=1 far). Closest 51.
         scene(listOf(car(51, 16), car(111, 27)))
@@ -1043,8 +1077,8 @@ class AlertDeciderTest {
         scene(listOf(car(51, 0)))
         // t+19 — close set finally empties (truck has fully passed).
         gap(1000)
-        feed(emptyList())  // Clear
-        feed(emptyList())  // None
+        feed(emptyList()) // Clear
+        feed(emptyList()) // None
 
         // Expect: Beep(2) for tid 51 entering mid-tier, Beep(3) on
         // escalation, Beep(3) on tid 51's re-entry-as-closest at u=3
@@ -1173,5 +1207,298 @@ class AlertDeciderTest {
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.UrgentApproach(lateralPos = -0.6f), ev)
+    }
+
+    // ── filtered-overtake re-ack: the FIRE leg ───────────────────────────
+
+    @Test fun `overtake re-acks when remaining closest tier exceeds overtaken peak`() {
+        // D2b fire leg (the strict-greater case). A far-tier car (u=1) is
+        // tracked alongside a near-tier car (u=3); the near one is the
+        // closest, so the only audible thread so far is at u=3. When the
+        // FAR car overtakes, peakOvertaken = peak[far] = 1, and the
+        // remaining closest is still at u=3. 3 > 1, so the gate must
+        // re-announce the surviving closest threat.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 18), car(2, 4)), alertMax, c.tick())
+        // Closest is car 2 (4 m, u=3) -> Beep(3); peak[1]=1, peak[2]=3.
+        assertEquals(
+            AlertDecider.Event.Beep(3),
+            d.decide(listOf(car(1, 18), car(2, 4)), alertMax, c.tick()),
+        )
+        c.jump(1000)
+        // Far car 1 overtakes; car 2 remains closest at u=3. peakOvertaken
+        // = peak[1] = 1; 3 > 1 -> re-ack the surviving near-tier threat.
+        val ev = d.decide(
+            listOf(car(1, 16, isBehind = true), car(2, 4)),
+            alertMax,
+            c.tick(),
+        )
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `multi-car overtake takes the max peak across overtaken tracks`() {
+        // D2b's `overtakes.maxOf { peak }` must reduce over EVERY overtaking
+        // track, not just one. Two cars overtake at once: a far one
+        // (peak=1) and a mid one (peak=2). A near car (u=3) remains
+        // closest. peakOvertaken = max(1, 2) = 2; 3 > 2 -> re-ack fires.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 18), car(2, 10), car(3, 4)), alertMax, c.tick())
+        // Closest car 3 (u=3) -> Beep(3). peaks: [1]=1, [2]=2, [3]=3.
+        assertEquals(
+            AlertDecider.Event.Beep(3),
+            d.decide(listOf(car(1, 18), car(2, 10), car(3, 4)), alertMax, c.tick()),
+        )
+        c.jump(1000)
+        // Cars 1 and 2 both overtake; car 3 remains closest at u=3.
+        // peakOvertaken = max(peak[1]=1, peak[2]=2) = 2; 3 > 2 -> fire.
+        val ev = d.decide(
+            listOf(
+                car(1, 16, isBehind = true),
+                car(2, 16, isBehind = true),
+                car(3, 4),
+            ),
+            alertMax,
+            c.tick(),
+        )
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `multi-car overtake stays silent when max overtaken peak ties remaining`() {
+        // Inverse of the test above for the maxOf reduction: two cars
+        // overtake (peaks 2 and 3); the remaining car is at u=3. The
+        // overtaken max is 3, so closestUrgency 3 > 3 is false -> silent.
+        // Confirms the reduction includes the HIGHER-peak overtaken track
+        // (car at peak 3), not just the first one iterated.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick())
+        // Closest car 2 (4 m, u=3) -> Beep(3). peaks: [1]=2, [2]=3, [3]=3.
+        assertEquals(
+            AlertDecider.Event.Beep(3),
+            d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick()),
+        )
+        c.jump(1000)
+        // Cars 1 (peak 2) and 2 (peak 3) overtake; car 3 (u=3) remains.
+        // peakOvertaken = max(2, 3) = 3; 3 > 3 is false -> silent.
+        val ev = d.decide(
+            listOf(
+                car(1, 8, isBehind = true),
+                car(2, 2, isBehind = true),
+                car(3, 5),
+            ),
+            alertMax,
+            c.tick(),
+        )
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `three-car overtake keeps the running max when later peaks are lower`() {
+        // Drives the reduction's compare-and-keep leg: the first overtaken
+        // track iterated has the HIGHEST peak (3), so subsequent lower
+        // peaks (1 then 2) must NOT replace the running max. peakOvertaken
+        // stays 3; the remaining car is also u=3, so 3 > 3 is false ->
+        // silent. Pins that the max is a true reduction, not last-wins.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        // peaks: car1 near (u=3), car2 far (u=1), car3 mid (u=2); car4 near.
+        d.decide(
+            listOf(car(1, 4), car(2, 18), car(3, 10), car(4, 5)),
+            alertMax,
+            c.tick(),
+        )
+        // Closest is car 1 (4 m, u=3) -> Beep(3). peaks: [1]=3,[2]=1,[3]=2,[4]=3.
+        assertEquals(
+            AlertDecider.Event.Beep(3),
+            d.decide(
+                listOf(car(1, 4), car(2, 18), car(3, 10), car(4, 5)),
+                alertMax,
+                c.tick(),
+            ),
+        )
+        c.jump(1000)
+        // Cars 1, 2, 3 all overtake; car 4 (u=3) remains closest.
+        // peakOvertaken = max(3, 1, 2) = 3; 3 > 3 is false -> silent.
+        val ev = d.decide(
+            listOf(
+                car(1, 2, isBehind = true),
+                car(2, 16, isBehind = true),
+                car(3, 8, isBehind = true),
+                car(4, 5),
+            ),
+            alertMax,
+            c.tick(),
+        )
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    // ── imminent-override cooldown gate (line 384) ───────────────────────
+
+    @Test fun `imminent threat within cooldown stays silent until gap elapses`() {
+        // The UrgentApproach path is rate-limited by the base minBeepGapMs
+        // (NOT the speed-scaled cooldown). A held imminent threat fires
+        // once, and a re-trigger BEFORE minBeepGapMs has elapsed must stay
+        // None - the cooldown gate's false branch on the imminent path.
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(
+            AlertDecider.Event.UrgentApproach(),
+            d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f),
+        )
+        // Only 100 ms later (clock dt) - well inside the 700 ms gap. The
+        // threat is still imminent (beepPending re-armed) but the cooldown
+        // is not done, so no urgent tone yet.
+        val tooSoon = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, tooSoon)
+    }
+
+    @Test fun `band-retained vehicle past alertMax does not fire the TTC gate`() {
+        // The TTC gate's distance ceiling is `distanceM in 0..alertMaxM`.
+        // A vehicle held in the close set only by the exit-hysteresis band
+        // (alertMax < distance <= alertMax + band) is INSIDE the close set
+        // but OUTSIDE the TTC envelope. Even fast-closing it must not fire
+        // UrgentApproach - it sits past the rider's configured alert
+        // distance. Exercises the high-bound-false leg of the TTC ceiling.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        // Establish stationary state with the car already at the edge so it
+        // is in prevCloseRaw (needed for the band to retain it next frame).
+        d.decide(listOf(closingCar(1, 21, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // Now jitter to 22 m: 22 > alertMax(21) but <= alertMax + band(23),
+        // so it stays in close via prevCloseRaw. TTC = 22/8 = 2.75 s and,
+        // crucially, 22 !in 0..21, so byTtc is false. byProximity needs
+        // distance <= 7, also false. -> suppressed.
+        d.decide(listOf(closingCar(1, 22, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(closingCar(1, 22, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    // ── close-set distance-band entry/exit boundary branches ─────────────
+
+    @Test fun `negative-distance track is excluded from the close set`() {
+        // Defensive: a decoded distanceM below zero (would be a malformed
+        // range field) fails the `0..alertMaxM` lower bound and must never
+        // enter the close set, so it cannot beep. Exercises the low side
+        // of the entry range check.
+        val d = AlertDecider()
+        val c = Clock()
+        val bogus = Vehicle(id = 1, distanceM = -3, speedMs = 5f)
+        d.decide(listOf(bogus), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(bogus), alertMax, c.tick()))
+    }
+
+    @Test fun `prev-close track with a negative distance this frame drops out`() {
+        // A track that WAS in range last frame (so its id is in
+        // prevCloseRaw) but reports a negative distance this frame must
+        // fail the band's RHS range on the lower bound and leave the close
+        // set. Exercises the `distanceM in 0..(alertMax + band)` low-bound
+        // leg with the id-in-prevCloseRaw branch already taken.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 20)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 20)), alertMax, c.tick()))
+        // id 1 is in prevCloseRaw, but distance -3 fails `-3 >= 0`, so the
+        // band cannot retain it -> drops out, clear-grace starts.
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(listOf(Vehicle(id = 1, distanceM = -3, speedMs = 5f)), alertMax, c.tick()),
+        )
+        c.jump(1000)
+        assertEquals(
+            AlertDecider.Event.Clear,
+            d.decide(listOf(Vehicle(id = 1, distanceM = -3, speedMs = 5f)), alertMax, c.tick()),
+        )
+    }
+
+    @Test fun `track in prev-close-raw beyond the exit band drops out`() {
+        // A car that was in range last frame (in prevCloseRaw) but whose
+        // distance this frame exceeds alertMax + band fails the RHS of the
+        // close filter and leaves the set, starting the clear-grace. After
+        // the grace a Clear fires. Pins the RHS-false leg of the exit band.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 20)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 20)), alertMax, c.tick()))
+        // alertMax 21 + band 2 = 23; 40 m is well past it. id IS in
+        // prevCloseRaw so the RHS is evaluated and is false -> excluded.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 40)), alertMax, c.tick()))
+        c.jump(1000)
+        assertEquals(AlertDecider.Event.Clear, d.decide(listOf(car(1, 40)), alertMax, c.tick()))
+    }
+
+    // ── clear-pending re-arm after a cancelled grace ─────────────────────
+
+    @Test fun `clear-grace re-arms after a cancellation then fires`() {
+        // Exercises the clear-pending state machine across a cancel/re-arm
+        // cycle: stable car -> drops out (pending) -> returns within grace
+        // (cancels) -> drops out again (re-pends) -> stays empty past grace
+        // (Clear). Pins that the pending flag is correctly re-armed after a
+        // cancellation, not stuck.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Drop out: clear-grace pends.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Car returns within grace -> cancels the pending Clear (and the
+        // surviving latch keeps it silent).
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Drops out again: clear-grace re-pends.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Road stays empty past the grace -> Clear fires.
+        c.jump(1000)
+        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+    }
+
+    // ── beepPending surviving the stable set emptying mid-cooldown ───────
+
+    @Test fun `pending beep is dropped when the stable set empties before cooldown`() {
+        // A trigger sets beepPending, but the cooldown isn't done yet. When
+        // the close set then empties before the cooldown elapses, the frame
+        // must still yield None - a stale pending beep is never emitted onto a
+        // road that has already cleared. (At this frame the cooldown-not-done
+        // leg short-circuits first; the empty-stable-set isNotEmpty leg is
+        // isolated by the companion test below.)
+        val d = AlertDecider(minBeepGapMs = 700L)
+        val c = Clock()
+        // Car closes from far to mid quickly: first Beep(1), then a tier
+        // raise sets beepPending again while still in cooldown.
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        // Tier raise to mid third, but within the 700 ms cooldown -> pending,
+        // suppressed.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Car vanishes while still inside the cooldown. beepPending is still
+        // set but the cooldown isn't done, so the gate yields None before the
+        // empty stable set even matters.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+    }
+
+    @Test fun `pending beep with cooldown done but empty stable set yields None`() {
+        // Complements the test above for the `stableTids.isNotEmpty()` leg
+        // of the beep gate: here beepPending AND cooldownDone are both TRUE
+        // but the close set is empty on this frame, so the beep gate's
+        // isNotEmpty leg short-circuits to None (and the freshly-opened
+        // clear-grace has not yet elapsed). A stale pending beep is never
+        // emitted onto an already-empty road.
+        val d = AlertDecider(minBeepGapMs = 700L)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        // Tier raise within cooldown -> beepPending set, suppressed.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Cooldown now elapses while the car vanishes the same frame.
+        c.jump(700)
+        // beepPending still set, cooldownDone true, but stable set empty:
+        // gate yields None. The clear-grace only just started this frame,
+        // so no Clear yet either.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
     }
 }

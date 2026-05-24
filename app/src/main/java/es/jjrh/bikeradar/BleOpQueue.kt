@@ -238,7 +238,7 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         }
     }
 
-    private suspend fun retrySubmit(submit: () -> Boolean): Boolean {
+    internal suspend fun retrySubmit(submit: () -> Boolean): Boolean {
         repeat(SUBMIT_RETRY_ATTEMPTS) { attempt ->
             if (submit()) return true
             if (attempt < SUBMIT_RETRY_ATTEMPTS - 1) delay(SUBMIT_RETRY_GAP_MS)

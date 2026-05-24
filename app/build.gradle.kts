@@ -11,6 +11,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("app.cash.paparazzi")
     id("org.jlleitschuh.gradle.ktlint")
+    jacoco
 }
 
 val localProps = Properties().apply {
@@ -54,7 +55,7 @@ abstract class EnsureDebugKeystore : DefaultTask() {
         val code = process.waitFor()
         if (code != 0) {
             throw RuntimeException(
-                "keytool exited with status $code while generating debug.keystore"
+                "keytool exited with status $code while generating debug.keystore",
             )
         }
     }
@@ -117,9 +118,10 @@ android {
 
     buildTypes {
         debug {
-            // JaCoCo coverage from the JVM unit tests. AGP generates the
-            // createDebugUnitTestCoverageReport task; report-only for now
-            // (no coverage threshold until a baseline number is known).
+            // Produces the JaCoCo .exec from the JVM unit tests. The filtered
+            // `jacocoTestReport` task (below) is the canonical coverage view;
+            // AGP's own createDebugUnitTestCoverageReport has no class-exclude
+            // DSL so its headline number is drowned by Compose UI + services.
             enableUnitTestCoverage = true
         }
         release {
@@ -191,6 +193,47 @@ ktlint {
     // build. Regenerate with `:app:ktlintGenerateBaseline` after a
     // deliberate, reviewed sweep, not as a way to silence fresh issues.
     baseline.set(file("config/ktlint/baseline.xml"))
+}
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+// Coverage report scoped to testable logic. The raw number is dominated by
+// Compose UI (covered by Paparazzi snapshots, not JaCoCo) and framework-bound
+// services, so filter those out for a figure that reflects the logic the unit
+// suite is meant to cover. Consumes the .exec from enableUnitTestCoverage.
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "JaCoCo coverage scoped to testable logic (excludes Compose UI + framework services)."
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+    val coverageExcludes = listOf(
+        "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+        "**/*ComposableSingletons*.*",
+        "es/jjrh/bikeradar/ui/**", // Compose UI - Paparazzi covers this
+        "**/RadarOverlayView*.*", // Canvas view, excluded from unit tests
+        "**/DebugOverlayService*.*", // dev/test-only foreground services
+        "**/ReplayService*.*",
+        "**/SyntheticScenarioService*.*",
+        "**/ScreenshotCaptureService*.*",
+    )
+    // AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP
+    // moves this path the report goes empty (not silently wrong) - re-point it.
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes")) {
+            exclude(coverageExcludes)
+        },
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory.dir("outputs/unit_test_code_coverage")) {
+            include("**/*.exec")
+        },
+    )
 }
 
 // Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`
@@ -266,5 +309,4 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-
 }

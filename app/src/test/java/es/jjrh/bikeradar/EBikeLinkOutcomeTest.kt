@@ -6,6 +6,8 @@ import android.bluetooth.BluetoothGatt
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -16,9 +18,12 @@ import org.robolectric.RobolectricTestRunner
  * are reachable without a real BLE stack: initial state, start() with
  * adapter unavailable, stop() reset.
  *
- * Deeper transitions (Connecting / Paired / NoServiceFound / SlotConflict
- * / Timeouts) require live BLE callbacks and are verified by on-bike
- * behaviour with the capture log + outcome logging in EBikeLink itself.
+ * The pure decisions extracted from the GATT callbacks - [classifyMissingLdi],
+ * [classifyInboundDisconnect] (SlotConflict / Advertising attribution), and
+ * [shouldEnterPaired] (the pairing rising-edge) - are unit-tested here. The
+ * callback plumbing that drives them (Connecting / NoServiceFound /
+ * Timeouts) still requires live BLE and is verified by on-bike behaviour
+ * with the capture log + outcome logging in EBikeLink itself.
  */
 @RunWith(RobolectricTestRunner::class)
 class EBikeLinkOutcomeTest {
@@ -117,6 +122,53 @@ class EBikeLinkOutcomeTest {
             MissingLdi.NOT_THE_BIKE,
             classifyMissingLdi(BluetoothGatt.GATT_FAILURE, bonded = false),
         )
+    }
+
+    @Test fun `classifyInboundDisconnect maps auth-failure statuses to SlotConflict`() {
+        // Either auth status, while not yet Paired, means another accessory
+        // holds the single LDI slot.
+        assertEquals(
+            LdiOutcome.SlotConflict,
+            classifyInboundDisconnect(LdiOutcome.Connecting, STATUS_INSUFFICIENT_AUTH),
+        )
+        assertEquals(
+            LdiOutcome.SlotConflict,
+            classifyInboundDisconnect(LdiOutcome.Advertising, STATUS_GATT_ERROR_VENDOR_AUTH),
+        )
+    }
+
+    @Test fun `classifyInboundDisconnect drops a mid-pair vanish back to Advertising`() {
+        // A plain disconnect while Connecting (no auth status) is the bike
+        // vanishing mid-pair; fall back so the 90s timer can attribute it.
+        assertEquals(
+            LdiOutcome.Advertising,
+            classifyInboundDisconnect(LdiOutcome.Connecting, BluetoothGatt.GATT_SUCCESS),
+        )
+    }
+
+    @Test fun `classifyInboundDisconnect leaves a trusted or quiet connection unchanged`() {
+        // Once Paired the connection is trusted: even an auth-status disconnect
+        // is ignored (bike powering down). And a non-auth disconnect that isn't
+        // mid-pair has nothing to attribute.
+        assertNull(classifyInboundDisconnect(LdiOutcome.Paired("AA:BB"), STATUS_INSUFFICIENT_AUTH))
+        assertNull(classifyInboundDisconnect(LdiOutcome.Advertising, BluetoothGatt.GATT_SUCCESS))
+        assertNull(classifyInboundDisconnect(LdiOutcome.Idle, BluetoothGatt.GATT_SUCCESS))
+    }
+
+    @Test fun `shouldEnterPaired fires once on the first positive RTC snapshot`() {
+        assertTrue(shouldEnterPaired(LdiOutcome.Connecting, timeSec = 1_700_000_000L))
+        assertTrue(shouldEnterPaired(LdiOutcome.Advertising, timeSec = 1L))
+    }
+
+    @Test fun `shouldEnterPaired ignores absent, zero, or negative RTC`() {
+        assertFalse(shouldEnterPaired(LdiOutcome.Connecting, timeSec = null))
+        assertFalse(shouldEnterPaired(LdiOutcome.Connecting, timeSec = 0L))
+        assertFalse(shouldEnterPaired(LdiOutcome.Connecting, timeSec = -5L))
+    }
+
+    @Test fun `shouldEnterPaired does not re-fire once already Paired`() {
+        // Subsequent snapshots after pairing are just data refreshes.
+        assertFalse(shouldEnterPaired(LdiOutcome.Paired("AA:BB"), timeSec = 1_700_000_000L))
     }
 
     @Test fun `CONNECT_TIMEOUT_MS is the documented 90 seconds`() {

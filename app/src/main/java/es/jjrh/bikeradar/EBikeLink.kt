@@ -460,22 +460,11 @@ class EBikeLink(
                     // it on shutdown.
                     //
                     // Disconnect status surfaces slot-conflict explicitly.
-                    // GATT_INSUFFICIENT_AUTHENTICATION = 137 is the
-                    // canonical reading; some vendors return 5. If we
-                    // already reached Paired, ignore the disconnect (the
-                    // bike may simply be powering down or out of range).
-                    if (_outcome.value !is LdiOutcome.Paired) {
-                        if (status == STATUS_INSUFFICIENT_AUTH ||
-                            status == STATUS_GATT_ERROR_VENDOR_AUTH
-                        ) {
-                            setOutcome(LdiOutcome.SlotConflict)
-                        } else if (_outcome.value == LdiOutcome.Connecting) {
-                            // Plain disconnect mid-pair without auth status:
-                            // bike vanished. Drop back to Advertising so the
-                            // 90s timer can attribute correctly.
-                            setOutcome(LdiOutcome.Advertising)
-                        }
-                    }
+                    // GATT_INSUFFICIENT_AUTHENTICATION = 137 is the canonical
+                    // reading; some vendors return 5. The pure
+                    // [classifyInboundDisconnect] owns the attribution table
+                    // (including the already-Paired no-op).
+                    classifyInboundDisconnect(_outcome.value, status)?.let { setOutcome(it) }
                 }
             }
         }
@@ -580,22 +569,19 @@ class EBikeLink(
             // confirms a working bond and a bike with a sensible RTC.
             // Transition to Paired once on the rising edge, then leave
             // it - subsequent snapshots are just data refreshes.
-            if (_outcome.value !is LdiOutcome.Paired) {
-                val timeSec = merged.timeSec
-                if (timeSec != null && timeSec > 0L) {
-                    val addr = lastInboundAddress ?: ""
-                    setOutcome(LdiOutcome.Paired(addr))
-                    // Persist the bonded bike address only now - real LDI data
-                    // proves this connection is the eBike, not a stray central.
-                    if (!bondedAddressReported && addr.isNotEmpty()) {
-                        bondedAddressReported = true
-                        try {
-                            onBondedAddress(addr)
-                        } catch (_: Exception) {}
-                    }
-                    connectTimeoutJob?.cancel()
-                    connectTimeoutJob = null
+            if (shouldEnterPaired(_outcome.value, merged.timeSec)) {
+                val addr = lastInboundAddress ?: ""
+                setOutcome(LdiOutcome.Paired(addr))
+                // Persist the bonded bike address only now - real LDI data
+                // proves this connection is the eBike, not a stray central.
+                if (!bondedAddressReported && addr.isNotEmpty()) {
+                    bondedAddressReported = true
+                    try {
+                        onBondedAddress(addr)
+                    } catch (_: Exception) {}
                 }
+                connectTimeoutJob?.cancel()
+                connectTimeoutJob = null
             }
             try {
                 onSnapshot(merged)
@@ -694,6 +680,37 @@ internal const val STATUS_GATT_ERROR_VENDOR_AUTH: Int = 5
 /** 90 seconds: pair-flow budget covering Flow navigation, controller
  *  confirm prompt, rider tap, and SMP / MTU / discovery / initial READ. */
 internal const val CONNECT_TIMEOUT_MS: Long = 90_000L
+
+/**
+ * Attribute an inbound-LL disconnect to the next [LdiOutcome], or null to
+ * leave the current outcome unchanged. Extracted from the GATT server
+ * callback so the disconnect-reason logic is unit-testable without a live
+ * BluetoothGattServer.
+ *
+ * Once [LdiOutcome.Paired] is reached the connection is trusted, so a later
+ * disconnect (bike powering down or out of range) is ignored. Before that,
+ * an auth-failure status is a slot conflict - another accessory holds the
+ * single LDI slot. A plain disconnect while still Connecting means the bike
+ * vanished mid-pair, so drop back to Advertising and let the 90s timer
+ * attribute the final outcome. Any other pre-Paired disconnect is left as-is.
+ */
+internal fun classifyInboundDisconnect(current: LdiOutcome, status: Int): LdiOutcome? = when {
+    current is LdiOutcome.Paired -> null
+    status == STATUS_INSUFFICIENT_AUTH || status == STATUS_GATT_ERROR_VENDOR_AUTH ->
+        LdiOutcome.SlotConflict
+    current == LdiOutcome.Connecting -> LdiOutcome.Advertising
+    else -> null
+}
+
+/**
+ * Whether a freshly merged LDI snapshot should flip the outcome to
+ * [LdiOutcome.Paired]. Extracted from the notification handler so the
+ * pairing rising-edge is unit-testable. The first snapshot carrying a
+ * positive `timeSec` (the bike's RTC) confirms a working bond with the real
+ * eBike rather than a stray central; the transition fires once, then later
+ * snapshots are just data refreshes - hence the not-already-Paired guard.
+ */
+internal fun shouldEnterPaired(current: LdiOutcome, timeSec: Long?): Boolean = current !is LdiOutcome.Paired && timeSec != null && timeSec > 0L
 
 /**
  * Running snapshot of LDI fields. Nullable means "not yet observed"; the

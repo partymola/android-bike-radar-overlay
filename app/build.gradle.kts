@@ -178,9 +178,9 @@ kotlin {
 }
 
 ktlint {
-    // Grandfather the existing findings so only NEW violations fail the
-    // build. Regenerate with `:app:ktlintGenerateBaseline` after a
-    // deliberate, reviewed sweep, not as a way to silence fresh issues.
+    // The baseline is empty: the codebase is fully formatted, so every
+    // violation fails the build. Regenerate with `:app:ktlintGenerateBaseline`
+    // only after a deliberate, reviewed sweep, not to silence fresh issues.
     baseline.set(file("config/ktlint/baseline.xml"))
 }
 

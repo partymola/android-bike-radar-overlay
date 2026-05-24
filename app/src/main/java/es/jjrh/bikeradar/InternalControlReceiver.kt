@@ -12,13 +12,12 @@ import es.jjrh.bikeradar.data.Prefs
  * Non-exported receiver for safety-relevant UX actions (Pause/Resume from
  * the foreground-service notification, walk-away alarm dismiss/snooze).
  *
- * Kept off the exported [RemoteControlReceiver] because a peer app could
- * otherwise silently pause the overlay or dismiss the walk-away alarm via
- * `am broadcast`. None of these actions leak data, but degrading
- * safety-critical UX is itself a finding.
- *
- * All callers target this receiver explicitly via PendingIntent component,
- * so no intent-filter is required.
+ * These live here, separate from the dev-only [RemoteControlReceiver], and
+ * are reached only by an explicit PendingIntent component (no intent-filter).
+ * Both receivers are non-exported, so no peer app can reach either; keeping
+ * the safety actions off the dev receiver is defense-in-depth, so a future
+ * re-export of that receiver could never let `am broadcast` silently pause
+ * the overlay or dismiss a walk-away alarm.
  */
 class InternalControlReceiver : BroadcastReceiver() {
 

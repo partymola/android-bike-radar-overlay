@@ -9,13 +9,17 @@ import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
 /**
- * Exported receiver for adb-driven dev actions only (replay + synthetic
- * scenario). Both branches gate on [Prefs.devModeUnlocked] so broadcasting
- * at a non-dev install is a no-op beyond a log warning.
+ * Receiver for adb-driven dev actions only (replay + synthetic scenario).
+ * NOT exported: a peer app must never start the debug overlay/replay FGSes,
+ * even on a device where the user has flipped [Prefs.devModeUnlocked] (which
+ * each branch still checks, so a non-dev install is a no-op beyond a log
+ * warning). adb reaches it with an explicit component, which shell may
+ * deliver to a non-exported receiver:
+ *   am broadcast -n es.jjrh.bikeradar/.RemoteControlReceiver \
+ *                -a es.jjrh.bikeradar.DEV_REPLAY
  *
  * Notification-driven Pause/Resume and walk-away dismiss/snooze live on
- * the non-exported [InternalControlReceiver] so peer apps cannot reach
- * them.
+ * the (also non-exported) [InternalControlReceiver].
  */
 class RemoteControlReceiver : BroadcastReceiver() {
 

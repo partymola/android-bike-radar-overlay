@@ -147,7 +147,11 @@ internal fun SettingsEBikeContent(
                         leadingIcon = Icons.AutoMirrored.Filled.DirectionsBike,
                         leadingTint = br.brand,
                         title = "Use eBike data",
-                        subtitle = if (!ldiEnabled) "Turn on to set up" else null,
+                        subtitle = if (!ldiEnabled) {
+                            "Turn on to set up"
+                        } else {
+                            "Warns if the radar drops; quieter standstill + walk-away"
+                        },
                         checked = ldiEnabled,
                         onCheckedChange = onToggleLdi,
                     )
@@ -205,10 +209,14 @@ internal fun SettingsEBikeContent(
             Spacer(modifier = Modifier.height(20.dp))
             SettingsSectionLabel("What it does")
             Text(
-                text = "Quiets the alert beeps when you stop, using the bike's own wheel sensor rather than GPS. Keeps the walk-away alarm quiet while you're still riding. Doesn't change the visual overlay or the radar's alert sounds.",
+                text = listOf(
+                    "Beeps if the rear radar drops out mid-ride",
+                    "Quieter alerts when you stop (wheel sensor, not GPS)",
+                    "Keeps the walk-away alarm quiet while riding",
+                ).joinToString("\n") { "•  $it" },
                 color = br.fgMuted,
                 fontSize = 12.sp,
-                lineHeight = 17.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
 

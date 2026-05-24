@@ -1208,7 +1208,7 @@ internal fun EBikeStepContent(
                 tint = br.brand,
                 mark = "Last step",
                 title = "Connect your eBike",
-                sub = "Quiets the alert beeps when you stop, using the bike's own wheel sensor instead of GPS. For Bosch Smart System eBikes on firmware v19.54 or newer.",
+                sub = "For Bosch Smart System eBikes on firmware v19.54 or newer.",
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -1259,9 +1259,19 @@ internal fun EBikeStepContent(
 private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
     val br = LocalBrColors.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = listOf(
+                "Beeps if the rear radar drops out mid-ride",
+                "Quieter alerts when you stop",
+                "Quieter walk-away alarm while riding",
+            ).joinToString("\n") { "•  $it" },
+            color = br.fgMuted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
         IntentCard(
             title = "I have one",
-            subtitle = "Pair the bike's Live Data interface.",
+            subtitle = "Pair to set it up.",
             filled = true,
             onClick = onHaveOne,
         )
@@ -1516,7 +1526,7 @@ private fun EBikePairedBlock(shortAddress: String, onUnpairAndRepair: () -> Unit
         tint = br.brand,
         title = "Bosch eBike",
         optionalLabel = false,
-        subtitle = "Quiets alerts at standstill. Keeps the walk-away alarm quiet during the ride.",
+        subtitle = "Warns if the radar drops; quieter standstill + walk-away.",
         bonded = true,
         detail = shortAddress,
         primaryCta = null,

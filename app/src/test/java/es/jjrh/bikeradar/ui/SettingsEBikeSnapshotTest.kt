@@ -2,15 +2,17 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.EBikeOwnership
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the [SettingsEBikeContent] leaf. Covers the
+ * Roborazzi goldens for the [SettingsEBikeContent] leaf. Covers the
  * four headline states from the design's §1 / §5:
  *
  *  - noOwnership: ownership = NO. Toggle row replaced by the promotion
@@ -23,18 +25,17 @@ import org.junit.Test
  *    bondedAddress non-null. Status reads `Paired with bike at ...`,
  *    ACTIONS shows `Unpair this bike`.
  *
- * CI does not run these - Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsEBikeSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun noOwnership() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
@@ -53,7 +54,7 @@ class SettingsEBikeSnapshotTest {
 
     @Test
     fun yesToggleOff() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
@@ -72,7 +73,7 @@ class SettingsEBikeSnapshotTest {
 
     @Test
     fun yesToggleOnNoBond() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
@@ -91,7 +92,7 @@ class SettingsEBikeSnapshotTest {
 
     @Test
     fun yesToggleOnBonded() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),

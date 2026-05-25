@@ -2,29 +2,30 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the Experimental screen - covers each toggle's
+ * Roborazzi goldens for the Experimental screen - covers each toggle's
  * state plus the directional-audio invert sub-row (only visible when the
  * main toggle is on). Renders the stateless [SettingsExperimentalContent]
  * leaf so no Prefs scaffolding is needed.
  *
- * CI does not run these - Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsExperimentalSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun allOff() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsExperimentalContent(
                     navController = rememberNavController(),
@@ -41,7 +42,7 @@ class SettingsExperimentalSnapshotTest {
 
     @Test
     fun precogOn() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsExperimentalContent(
                     navController = rememberNavController(),
@@ -61,7 +62,7 @@ class SettingsExperimentalSnapshotTest {
         // Sub-row "Invert left/right" becomes visible when the main
         // toggle is on. Pinned so a future refactor of the conditional
         // render is caught.
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsExperimentalContent(
                     navController = rememberNavController(),
@@ -78,7 +79,7 @@ class SettingsExperimentalSnapshotTest {
 
     @Test
     fun lateralPanningOnInverted() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsExperimentalContent(
                     navController = rememberNavController(),

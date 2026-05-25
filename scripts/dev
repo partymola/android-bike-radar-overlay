@@ -73,41 +73,9 @@ status() {
     fi
 }
 
-# Run gradle in the container and RETURN its exit code (no exec), so the
-# caller can inspect it for the Paparazzi auto-retry below.
-_docker_gradle() {
-    if is_running; then
-        docker exec \
-            -u "$(id -u):$(id -g)" \
-            -w /workspace \
-            "${CONTAINER_NAME}" \
-            gradle "$@"
-    else
-        docker run --rm \
-            -v "${WORKSPACE}:/workspace" \
-            -u "$(id -u):$(id -g)" \
-            -v "${GRADLE_CACHE}:/gradle-cache" \
-            -e GRADLE_USER_HOME=/gradle-cache \
-            -w /workspace \
-            "${IMAGE_NAME}" \
-            gradle --no-daemon "$@"
-    fi
-}
-
 gradle_cmd() {
     ensure_image
-    # Paparazzi 2.0.0-SNAPSHOT's layoutlib loader throws "sessionParamsBuilder
-    # has not been initialized" on its first run in a JVM; a re-run passes.
-    # Auto-retry Paparazzi tasks once so verify/record don't need a manual
-    # retry. A genuine golden mismatch fails on the retry too, so nothing is
-    # masked. Drop this once Paparazzi is upgraded past the SNAPSHOT.
-    if [[ "$*" == *Paparazzi* ]]; then
-        _docker_gradle "$@" && return 0
-        echo "scripts/dev: Paparazzi run failed; retrying once (cold-load flake)..." >&2
-        _docker_gradle --rerun-tasks "$@"
-        return $?
-    fi
-    # Fast path for normal tasks: replace the shell with the container
+    # Fast path: replace the shell with the container
     # process. The persistent container keeps the Gradle + Kotlin daemons
     # warm (~3-5 s/run); the one-shot path uses --no-daemon (the container
     # dies after the invocation).

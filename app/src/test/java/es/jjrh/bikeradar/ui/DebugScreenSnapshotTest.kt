@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Paparazzi goldens for the two stateless leaves of the Debug screen:
+ * Roborazzi goldens for the two stateless leaves of the Debug screen:
  *  - [DebugScenarioControls] for the Replay / Synthetic state row
  *  - [DebugCaptureLogList] for the capture-log file list
  *
- * The radar-state log feed is intentionally out of scope — it's a
+ * The radar-state log feed is intentionally out of scope - it's a
  * streaming source unsuitable for static goldens. We also avoid the
  * media-projection consent flow by snapshotting these two stateless
  * leaves directly.
@@ -21,14 +24,13 @@ import java.io.File
  * Capture-log timestamps are pinned via [File.setLastModified] so the
  * formatted "yyyy-MM-dd HH:mm" string in the card is deterministic.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class DebugScreenSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @get:Rule
     val tempFolder = TemporaryFolder()
@@ -46,7 +48,7 @@ class DebugScreenSnapshotTest {
 
     @Test
     fun scenarioIdle() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 DebugScenarioControls(
                     replayRunning = false,
@@ -62,7 +64,7 @@ class DebugScreenSnapshotTest {
 
     @Test
     fun replayRunning() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 DebugScenarioControls(
                     replayRunning = true,
@@ -78,7 +80,7 @@ class DebugScreenSnapshotTest {
 
     @Test
     fun syntheticRunning() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 DebugScenarioControls(
                     replayRunning = false,
@@ -94,7 +96,7 @@ class DebugScreenSnapshotTest {
 
     @Test
     fun logsEmpty() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 DebugCaptureLogList(
                     logFiles = emptyList(),
@@ -115,7 +117,7 @@ class DebugScreenSnapshotTest {
                 mtime = pinnedMs - i * 3_600_000L,
             )
         }
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 DebugCaptureLogList(
                     logFiles = files,

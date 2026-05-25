@@ -2,31 +2,32 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.HaHealth
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi golden for the Settings home menu using the stateless
+ * Roborazzi golden for the Settings home menu using the stateless
  * [SettingsMenuBody] leaf so the test does not depend on Prefs, the
  * battery/HA buses, or `HaCredentials`. One default-state variant
  * locks the row-group composition (General + Advanced) plus the system
  * health bar at the top.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsScreenSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun defaultMenu() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsMenuBody(
                     navController = rememberNavController(),

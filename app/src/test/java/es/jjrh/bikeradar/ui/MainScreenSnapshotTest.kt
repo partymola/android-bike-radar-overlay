@@ -7,14 +7,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the home-screen leaf cards: [HeroStatusCard]
+ * Roborazzi goldens for the home-screen leaf cards: [HeroStatusCard]
  * and [SystemCard]. Renders each leaf directly with stub state so the
  * test does not depend on Prefs, the radar/battery/HA buses, or the
  * lifecycle-driven pollers in [MainScreen].
@@ -24,14 +26,13 @@ import org.junit.Test
  *  - System: empty (no devices live) and populated (radar + dashcam +
  *    HA all green with battery chips)
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class MainScreenSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     /** Mirrors the parent column inside [MainScreen]'s portrait body so
      *  the leaf cards sit at the horizontal padding they would on the
@@ -45,7 +46,7 @@ class MainScreenSnapshotTest {
 
     @Test
     fun heroLive() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     HeroStatusCard(
@@ -64,7 +65,7 @@ class MainScreenSnapshotTest {
 
     @Test
     fun heroNotPaired() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     HeroStatusCard(
@@ -83,7 +84,7 @@ class MainScreenSnapshotTest {
 
     @Test
     fun systemEmpty() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     SystemCard(
@@ -105,7 +106,7 @@ class MainScreenSnapshotTest {
 
     @Test
     fun systemPopulated() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     SystemCard(

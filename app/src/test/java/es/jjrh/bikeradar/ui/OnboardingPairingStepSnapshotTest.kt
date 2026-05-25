@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.data.DashcamOwnership
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the onboarding [PairingStepContent] leaf.
+ * Roborazzi goldens for the onboarding [PairingStepContent] leaf.
  *
  * The full state space is 2 (radar bonded?) × 4 (dashcam ownership ×
  * picked?). We snapshot a representative subset that covers each
@@ -19,18 +21,17 @@ import org.junit.Test
  *  - radarBondedDashcamUnanswered: radar paired, dashcam still asking
  *  - radarBondedDashcamPicked: full happy path with both rows resolved
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class OnboardingPairingStepSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun radarUnbondedDashcamUnanswered() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PairingStepContent(
                     radarBonded = false,
@@ -51,7 +52,7 @@ class OnboardingPairingStepSnapshotTest {
 
     @Test
     fun radarUnbondedDashcamSkipped() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PairingStepContent(
                     radarBonded = false,
@@ -72,7 +73,7 @@ class OnboardingPairingStepSnapshotTest {
 
     @Test
     fun radarBondedDashcamUnanswered() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PairingStepContent(
                     radarBonded = true,
@@ -93,7 +94,7 @@ class OnboardingPairingStepSnapshotTest {
 
     @Test
     fun radarBondedDashcamPicked() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PairingStepContent(
                     radarBonded = true,

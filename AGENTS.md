@@ -13,7 +13,7 @@ docker build -t bike-radar-builder .
 scripts/dev up
 scripts/dev gradle :app:testDebugUnitTest --console=plain   # unit tests
 scripts/dev gradle :app:assembleDebug --console=plain       # full APK
-scripts/dev gradle :app:verifyPaparazziDebug --console=plain
+scripts/dev gradle :app:verifyRoborazziDebug --console=plain
 scripts/dev down                                            # when finished
 
 # Or the one-shot pattern (no daemon, slower; safe to use without `dev up`):
@@ -29,16 +29,11 @@ docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Paparazzi note: `:app:verifyPaparazziDebug` is local-only because
-Paparazzi 2.0.0-SNAPSHOT's layoutlib loader is unreliable on cold-cache
-JVMs, so CI can't run it. The `*SnapshotTest` exclusion in
-`app/build.gradle.kts` is lifted only when a `*Paparazzi*` task is the one
-invoked, so plain `testDebugUnitTest` / CI still skips them but the gate
-genuinely runs them. The loader can throw
-`sessionParamsBuilder has not been initialized` on the first attempt in a
-JVM; `scripts/dev gradle` auto-retries Paparazzi tasks once for this
-(usually transparent). For one-shot/manual `gradle` runs, re-run with
-`--rerun-tasks` - the warm retry passes.
+Screenshot tests: `:app:verifyRoborazziDebug` renders the Compose and
+Canvas goldens via Robolectric Native Graphics, so they run inside
+`testDebugUnitTest` and in CI - no device, emulator, or layoutlib.
+Regenerate goldens with `:app:recordRoborazziDebug` and commit the PNGs
+under `app/src/test/snapshots/images/`.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the
@@ -109,14 +104,14 @@ decoders in both Python and Kotlin live there.
 
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
   (Robolectric). CI runs this alongside `:app:lintDebug`,
-  `:app:ktlintCheck`, and `:app:jacocoCoverageVerification` (see Static
-  analysis & coverage below). Paparazzi
-  screenshot tests are excluded from `testDebugUnitTest` because Paparazzi
-  2.0.0-SNAPSHOT's layoutlib loader fails on cold-cache JVMs.
-- Locally, run `:app:verifyPaparazziDebug` to compare against golden PNGs.
-  This is the QC gate before any push that touches `app/src/main/**`.
-- To regenerate goldens: `:app:recordPaparazziDebug --rerun-tasks`. Commit
-  the updated PNGs under `app/src/test/snapshots/images/`.
+  `:app:ktlintCheck`, `:app:verifyRoborazziDebug`, and
+  `:app:jacocoCoverageVerification` (see Static analysis & coverage below).
+- Roborazzi screenshot tests render via Robolectric Native Graphics and run
+  as part of `testDebugUnitTest`. `:app:verifyRoborazziDebug` compares
+  against the golden PNGs; this gate runs in CI and before any push that
+  touches `app/src/main/**`.
+- To regenerate goldens: `:app:recordRoborazziDebug`. Commit the updated
+  PNGs under `app/src/test/snapshots/images/`.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

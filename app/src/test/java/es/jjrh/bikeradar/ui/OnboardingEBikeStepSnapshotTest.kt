@@ -1,31 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.EBikeOwnership
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the [EBikeStepContent] onboarding leaf.
+ * Roborazzi goldens for the [EBikeStepContent] onboarding leaf.
  * Renders the chooser (UNANSWERED), the advertising/walkthrough state
  * (YES + Advertising), the bonded success state (YES + Paired), and a
  * representative failure outcome (NoServiceFound).
  *
- * CI does not run these - Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class OnboardingEBikeStepSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun unanswered() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.UNANSWERED,
@@ -46,7 +47,7 @@ class OnboardingEBikeStepSnapshotTest {
 
     @Test
     fun yesAdvertising() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,
@@ -67,7 +68,7 @@ class OnboardingEBikeStepSnapshotTest {
 
     @Test
     fun yesPaired() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,
@@ -88,7 +89,7 @@ class OnboardingEBikeStepSnapshotTest {
 
     @Test
     fun yesNoServiceFound() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,

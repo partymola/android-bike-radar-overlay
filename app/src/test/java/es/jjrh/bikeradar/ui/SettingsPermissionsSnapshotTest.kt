@@ -2,27 +2,28 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the Settings → Permissions screen using the
+ * Roborazzi goldens for the Settings → Permissions screen using the
  * stateless [SettingsPermissionsContent] leaf so the test does not
  * depend on real `Context`-backed permission state.
  *
  * Variants cover the three card-mix states a fresh-install user can
  * actually land in: everything granted, a mix, and everything denied.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsPermissionsSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     private val nearby = PermissionSpec(
         permissions = listOf("android.permission.BLUETOOTH_SCAN"),
@@ -49,7 +50,7 @@ class SettingsPermissionsSnapshotTest {
 
     @Test
     fun allGranted() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsPermissionsContent(
                     navController = rememberNavController(),
@@ -65,7 +66,7 @@ class SettingsPermissionsSnapshotTest {
 
     @Test
     fun mixed() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsPermissionsContent(
                     navController = rememberNavController(),
@@ -81,7 +82,7 @@ class SettingsPermissionsSnapshotTest {
 
     @Test
     fun allDenied() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsPermissionsContent(
                     navController = rememberNavController(),

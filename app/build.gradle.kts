@@ -10,7 +10,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("app.cash.paparazzi")
+    id("io.github.takahirom.roborazzi")
     id("org.jlleitschuh.gradle.ktlint")
     jacoco
 }
@@ -183,7 +183,7 @@ android {
     // JVM unit tests under app/src/test resolve against the merged Android
     // resources/manifest (so Robolectric can inflate views, and Compose
     // tests can find the activity in AndroidManifest.xml). isReturnDefaultValues
-    // makes unmocked Android stubs return defaults instead of throwing —
+    // makes unmocked Android stubs return defaults instead of throwing -
     // useful for smoke tests that touch APIs we don't shadow.
     testOptions {
         unitTests {
@@ -225,15 +225,15 @@ tasks.withType<Test>().configureEach {
     }
 }
 
-// Classes kept out of the coverage figure: Compose UI (covered by Paparazzi
+// Classes kept out of the coverage figure: Compose UI (covered by Roborazzi
 // snapshots, not JaCoCo) and framework-bound services. Without this the raw
 // number reflects mostly untestable UI/service code rather than the logic the
 // unit suite targets. Shared by the report and the verification gate below.
 val coverageExcludes = listOf(
     "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
     "**/*ComposableSingletons*.*",
-    "es/jjrh/bikeradar/ui/**", // Compose UI - Paparazzi covers this
-    "**/RadarOverlayView*.*", // Canvas view, excluded from unit tests
+    "es/jjrh/bikeradar/ui/**", // Compose UI - Roborazzi covers this
+    "**/RadarOverlayView*.*", // Canvas view - Roborazzi-rendered, not line-coverable
     "**/DebugOverlayService*.*", // dev/test-only foreground services
     "**/ReplayService*.*",
     "**/SyntheticScenarioService*.*",
@@ -323,47 +323,17 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     }
 }
 
-// Exclude Paparazzi screenshot tests from the standard `testDebugUnitTest`
-// task UNLESS the run was invoked through a Paparazzi gate task
-// (`recordPaparazziDebug` / `verifyPaparazziDebug`), which drive this very
-// same `testDebugUnitTest` task. Reason: Paparazzi 2.0.0-SNAPSHOT ships a
-// layoutlib whose JNI loader fails in cold-cache JVMs (e.g. CI), even
-// though direct dlopen of the same .so works, so plain `gradle test` and
-// CI must skip the snapshot tests. But the Paparazzi record/verify tasks
-// run warm and locally and ARE the gate - they must actually execute the
-// snapshot tests, not silently skip them. An unconditional exclusion left
-// the gate dormant: it verified zero snapshots. Drop this block once
-// Paparazzi alpha05 ships.
-//
-// Discriminator: the requested task names. The Paparazzi gate tasks carry
-// "Paparazzi" in their name and appear in startParameter on a gate run
-// (see AGENTS.md); CI and `gradle test` do not. Caveat: an invocation
-// that requests BOTH a Paparazzi task and plain tests in one go would run
-// the snapshot tests in testDebugUnitTest too - no such combined/aggregate
-// task exists in this repo (CI calls testDebugUnitTest and assembleDebug
-// directly). Reading startParameter at configuration time is
-// configuration-cache safe; the requested-task set is part of the cache
-// key, so a plain-test invocation and a gate invocation resolve to
-// separate entries.
-//
-// `withType<Test>().matching` defers until AGP registers the unit-test task,
-// so the configuration doesn't fail with "task not found".
-val runningPaparazziGate = gradle.startParameter.taskNames.any {
-    it.contains("Paparazzi", ignoreCase = true)
-}
-tasks.withType<Test>().matching { it.name == "testDebugUnitTest" }.configureEach {
-    filter {
-        // Snapshot tests hit the layoutlib loader; skip them on plain
-        // test / CI runs, but let the Paparazzi gate run them. Pattern
-        // match so newly-added snapshot tests need no list maintenance.
-        if (!runningPaparazziGate) {
-            excludeTestsMatching("*SnapshotTest")
-        }
-        // Custom-View tests rely on android.graphics.Canvas which the
-        // Robolectric+layoutlib stack can't load in cold-cache JVMs. Not
-        // a snapshot test, so keep it out of this task in every mode.
-        excludeTestsMatching("es.jjrh.bikeradar.RadarOverlayViewTest")
-    }
+// Roborazzi renders via Robolectric Native Graphics, so the screenshot tests
+// are ordinary Robolectric unit tests - they run in plain `testDebugUnitTest`
+// and in CI with no layoutlib loader and no exclusion hack. captureRoboImage()
+// is a no-op unless a roborazzi.test.* property is set, so plain test runs just
+// exercise the composition; `verifyRoborazziDebug` is the pixel gate (and
+// `recordRoborazziDebug` regenerates goldens). Keep the goldens under
+// src/test/snapshots/images (their historical home, paired with the
+// roborazzi.record.filePathStrategy in gradle.properties) rather than the
+// default build/outputs.
+roborazzi {
+    outputDir.set(file("src/test/snapshots/images"))
 }
 
 dependencies {
@@ -391,6 +361,9 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.63.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.63.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.63.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))

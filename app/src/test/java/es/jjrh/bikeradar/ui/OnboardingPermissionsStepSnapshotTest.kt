@@ -7,33 +7,34 @@ import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.runtime.CompositionLocalProvider
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the onboarding [PermissionsStepContent] leaf.
+ * Roborazzi goldens for the onboarding [PermissionsStepContent] leaf.
  * Renders pre-resolved (spec, granted) lists so the test does not need
  * a [LocalContext] or a real lifecycle observer.
  *
  * Variants exercise the three states the Continue button cares about:
  *  - all required perms granted (Continue enabled, optional still off)
- *  - mixed (one required granted, one not — Continue disabled)
- *  - all pending (every card in denied state — Continue disabled)
+ *  - mixed (one required granted, one not - Continue disabled)
+ *  - all pending (every card in denied state - Continue disabled)
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class OnboardingPermissionsStepSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     /**
      * Inert ActivityResultRegistryOwner so PermissionCard's
-     * rememberLauncherForActivityResult doesn't crash under Paparazzi.
+     * rememberLauncherForActivityResult doesn't crash under Robolectric.
      * The launcher is never invoked from a snapshot.
      */
     private val fakeRegistryOwner = object : ActivityResultRegistryOwner {
@@ -78,7 +79,7 @@ class OnboardingPermissionsStepSnapshotTest {
     @Test
     fun allGranted() {
         val states = listOf(nearby to true, notifications to true, overlay to true)
-        paparazzi.snapshot {
+        captureRoboImage {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides fakeRegistryOwner) {
                 UiTheme {
                     PermissionsStepContent(
@@ -95,7 +96,7 @@ class OnboardingPermissionsStepSnapshotTest {
     @Test
     fun mixed() {
         val states = listOf(nearby to true, notifications to false, overlay to false)
-        paparazzi.snapshot {
+        captureRoboImage {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides fakeRegistryOwner) {
                 UiTheme {
                     PermissionsStepContent(
@@ -112,7 +113,7 @@ class OnboardingPermissionsStepSnapshotTest {
     @Test
     fun allPending() {
         val states = listOf(nearby to false, notifications to false, overlay to false)
-        paparazzi.snapshot {
+        captureRoboImage {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides fakeRegistryOwner) {
                 UiTheme {
                     PermissionsStepContent(

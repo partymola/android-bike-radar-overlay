@@ -2,31 +2,32 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi golden for the open-source-licences screen. Renders the
- * top of the screen — header, intro blurb, and first section groups.
- * Mid-scroll positions are not snapshotted: Paparazzi cannot drive a
+ * Roborazzi golden for the open-source-licences screen. Renders the
+ * top of the screen - header, intro blurb, and first section groups.
+ * Mid-scroll positions are not snapshotted: the lambda capture cannot drive a
  * `verticalScroll(rememberScrollState())` mid-test, and the layout
  * structure is uniform enough that the top frame catches regressions
  * to the row template.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsLicensesSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun top() {
-        paparazzi.snapshot {
+        captureRoboImage {
             SettingsLicenses(navController = rememberNavController())
         }
     }

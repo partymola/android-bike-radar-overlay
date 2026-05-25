@@ -5,9 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Pins [buildOverlayA11ySummary] - the spoken overlay summary that the
- * Canvas view itself can't unit-test (its Paparazzi test is excluded from
- * CI). Plain JVM, no Robolectric.
+ * Pins [buildOverlayA11ySummary] - the spoken overlay summary backing the
+ * Canvas view's a11y node. The view's rendering is covered by
+ * RadarOverlayViewTest (Roborazzi); this pins the text as plain JVM logic,
+ * no Robolectric.
  */
 class RadarOverlayA11yTest {
 

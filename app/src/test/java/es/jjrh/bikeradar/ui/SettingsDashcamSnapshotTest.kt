@@ -2,14 +2,16 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.navigation.compose.rememberNavController
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.data.DashcamOwnership
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the Dashcam settings screen using the
+ * Roborazzi goldens for the Dashcam settings screen using the
  * stateless [SettingsDashcamContent] leaf so the test does not depend
  * on Prefs, the battery bus, or `NotificationManager`.
  *
@@ -18,18 +20,17 @@ import org.junit.Test
  * and YES with a device picked (full set: device card, Behaviour
  * toggle, Walk-away alarm + DnD row + threshold slider).
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsDashcamSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     @Test
     fun ownershipNo() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsDashcamContent(
                     navController = rememberNavController(),
@@ -56,7 +57,7 @@ class SettingsDashcamSnapshotTest {
 
     @Test
     fun ownershipYesNotPicked() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsDashcamContent(
                     navController = rememberNavController(),
@@ -83,7 +84,7 @@ class SettingsDashcamSnapshotTest {
 
     @Test
     fun ownershipYesPicked() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 SettingsDashcamContent(
                     navController = rememberNavController(),

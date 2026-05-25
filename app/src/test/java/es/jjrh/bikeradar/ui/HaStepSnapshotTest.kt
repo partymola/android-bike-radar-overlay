@@ -8,33 +8,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the three HA-step branches: the UNSET chooser,
+ * Roborazzi goldens for the three HA-step branches: the UNSET chooser,
  * the YES fields block (empty + populated), and the NO skipped card.
  * Locks the visual contract so a future refactor that breaks the
  * chooser, pill, or skipped-card layout fails the local QC gate.
  *
  * Tests render the leaf composables directly so no Prefs / HaCredentials
- * scaffolding is needed — those are exercised by ScreenSmokeTest. Here
+ * scaffolding is needed - those are exercised by ScreenSmokeTest. Here
  * we only assert layout.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class HaStepSnapshotTest {
 
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
-
     /**
-     * Mirrors the parent Column inside [HaStep] — same horizontal padding
-     * and 14 dp vertical gap — so the leaf composables sit at the same
+     * Mirrors the parent Column inside [HaStep] - same horizontal padding
+     * and 14 dp vertical gap - so the leaf composables sit at the same
      * positions they would on the real screen.
      */
     @Composable
@@ -49,7 +50,7 @@ class HaStepSnapshotTest {
 
     @Test
     fun unsetChooser() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 StepShell {
                     HaIntentChooser(onUseHa = {}, onNotForMe = {})
@@ -60,7 +61,7 @@ class HaStepSnapshotTest {
 
     @Test
     fun yesEmptyFields() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 StepShell {
                     HaFieldsBlock(
@@ -83,7 +84,7 @@ class HaStepSnapshotTest {
 
     @Test
     fun yesPrefilled() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 StepShell {
                     HaFieldsBlock(
@@ -106,7 +107,7 @@ class HaStepSnapshotTest {
 
     @Test
     fun noSkipped() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 StepShell {
                     HaSkippedCard(onChangeMind = {})

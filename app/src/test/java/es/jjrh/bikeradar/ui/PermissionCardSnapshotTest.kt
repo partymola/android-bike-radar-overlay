@@ -8,13 +8,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
-import org.junit.Rule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the [PermissionCardContent] leaf shared by the
+ * Roborazzi goldens for the [PermissionCardContent] leaf shared by the
  * Settings → Permissions screen and the onboarding PermissionsStep.
  *
  * Variants exercise the three distinct visual states the leaf has:
@@ -25,14 +27,13 @@ import org.junit.Test
  * `permanentlyDenied` is also covered so the "Open App info" CTA copy
  * can't silently regress.
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class PermissionCardSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     private val nearby = PermissionSpec(
         permissions = listOf("android.permission.BLUETOOTH_SCAN"),
@@ -65,7 +66,7 @@ class PermissionCardSnapshotTest {
 
     @Test
     fun requiredGranted() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PermShell {
                     PermissionCardContent(
@@ -81,7 +82,7 @@ class PermissionCardSnapshotTest {
 
     @Test
     fun requiredDenied() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PermShell {
                     PermissionCardContent(
@@ -97,7 +98,7 @@ class PermissionCardSnapshotTest {
 
     @Test
     fun optionalDenied() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PermShell {
                     PermissionCardContent(
@@ -113,7 +114,7 @@ class PermissionCardSnapshotTest {
 
     @Test
     fun permanentlyDenied() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 PermShell {
                     PermissionCardContent(

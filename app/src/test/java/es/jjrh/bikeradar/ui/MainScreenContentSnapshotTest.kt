@@ -7,16 +7,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import app.cash.paparazzi.DeviceConfig.Companion.PIXEL_9_PRO_XL
-import app.cash.paparazzi.Paparazzi
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
-import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Paparazzi goldens for the full home-screen chrome — [MainScreenContent].
+ * Roborazzi goldens for the full home-screen chrome - [MainScreenContent].
  * Complements [MainScreenSnapshotTest] (which covers individual cards
- * — HeroStatusCard, SystemCard) by exercising the surrounding layout
+ * - HeroStatusCard, SystemCard) by exercising the surrounding layout
  * (Bluetooth banner, ClosePassStatsCard, dashcam prompt) at full
  * portrait resolution.
  *
@@ -27,14 +29,13 @@ import org.junit.Test
  *  - dashcamWarning: dashcam off + walk-away alarm armed -> Warn tone
  *  - bluetoothOff: BLE disabled -> banner visible + BT-off hero
  *
- * CI does not run these — Paparazzi 2.0.0-SNAPSHOT's layoutlib loader
- * fails on cold-cache JVMs. Run locally with `:app:verifyPaparazziDebug`;
- * regenerate with `:app:recordPaparazziDebug --rerun-tasks`.
+ * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
+ * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class MainScreenContentSnapshotTest {
-
-    @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = PIXEL_9_PRO_XL)
 
     private val radarBattery = BatteryEntry(
         slug = "rearvue",
@@ -62,7 +63,7 @@ class MainScreenContentSnapshotTest {
 
     @Test
     fun idle() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     MainScreenContent(
@@ -100,7 +101,7 @@ class MainScreenContentSnapshotTest {
 
     @Test
     fun withTraffic() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     MainScreenContent(
@@ -138,7 +139,7 @@ class MainScreenContentSnapshotTest {
 
     @Test
     fun paused() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     MainScreenContent(
@@ -176,7 +177,7 @@ class MainScreenContentSnapshotTest {
 
     @Test
     fun dashcamWarning() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     MainScreenContent(
@@ -214,7 +215,7 @@ class MainScreenContentSnapshotTest {
 
     @Test
     fun bluetoothOff() {
-        paparazzi.snapshot {
+        captureRoboImage {
             UiTheme {
                 MainShell {
                     MainScreenContent(

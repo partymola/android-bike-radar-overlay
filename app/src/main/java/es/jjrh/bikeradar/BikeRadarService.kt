@@ -948,7 +948,7 @@ class BikeRadarService : Service() {
                 Log.i(TAG_LIGHT, "connect attempt to $name $mac")
                 val quickReconnect = connectAndRunCameraLight(device, name)
                 cameraLightGattActive = false
-                val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else backoffMs
+                val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else jittered(backoffMs)
                 Log.i(TAG_LIGHT, "reconnecting in ${delayMs}ms")
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
@@ -1252,7 +1252,7 @@ class BikeRadarService : Service() {
                 }
                 val delayMs = when {
                     quickReconnect -> RADAR_QUICK_RECONNECT_MS
-                    else -> backoffMs
+                    else -> jittered(backoffMs)
                 }
                 val tag = when {
                     quickReconnect -> " (post-ABORT)"

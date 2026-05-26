@@ -91,7 +91,7 @@ class EBikeStatusReader(
         while (true) {
             log("eBike status: connect attempt")
             val subscribed = connectAndRun(device)
-            val delayMs = if (subscribed) QUICK_RECONNECT_MS else backoffMs
+            val delayMs = if (subscribed) QUICK_RECONNECT_MS else jittered(backoffMs)
             backoffMs = if (subscribed) BACKOFF_INITIAL_MS else (backoffMs * 2).coerceAtMost(BACKOFF_CAP_MS)
             delay(delayMs)
         }

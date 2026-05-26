@@ -2,7 +2,10 @@
 package es.jjrh.bikeradar
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 /**
  * Verifies the reconnect-backoff cap function: returns the steady-state
@@ -116,5 +119,50 @@ class ReconnectBackoffTest {
                 longOfflineCapMs = customCap,
             ),
         )
+    }
+
+    @Test fun jitteredStaysWithinTwentyPercentBand() {
+        // Sampling: every draw must land in [base*0.8, base*1.2] inclusive.
+        val base = 8_000L
+        val low = (base * 0.8).toLong()
+        val high = (base * 1.2).toLong()
+        val rng = Random(42L)
+        repeat(10_000) {
+            val v = jittered(base, rng)
+            assertTrue("$v not in [$low, $high]", v in low..high)
+        }
+    }
+
+    @Test fun jitteredActuallySpreads() {
+        // Sanity: 1000 draws on the same base must produce at least two
+        // distinct values (otherwise jitter is silently a no-op).
+        val rng = Random(7L)
+        val draws = (1..1000).map { jittered(8_000L, rng) }.toSet()
+        assertTrue("only ${draws.size} distinct values from 1000 draws", draws.size > 1)
+    }
+
+    @Test fun jitteredIsDeterministicWithSeededRandom() {
+        // Replaying the same seed yields the same sequence; required for the
+        // bounds test above and for any future regression run.
+        val seq1 = (1..10).map { jittered(8_000L, Random(123L)) }
+        val seq2 = (1..10).map { jittered(8_000L, Random(123L)) }
+        assertEquals(seq1, seq2)
+        // Sanity: a different seed gives a different sequence.
+        val seq3 = (1..10).map { jittered(8_000L, Random(124L)) }
+        assertNotEquals(seq1, seq3)
+    }
+
+    @Test fun jitteredZeroOrNegativePassesThrough() {
+        // Jittering into the past would be meaningless; the helper must be
+        // a no-op for non-positive inputs.
+        assertEquals(0L, jittered(0L))
+        assertEquals(-5L, jittered(-5L))
+    }
+
+    @Test fun jitteredSmallBasePassesThroughWhenRangeRoundsToZero() {
+        // A 4 ms base produces a 0 ms jitter range (4 * 0.2 = 0.8 -> 0L);
+        // returning the base unchanged is safer than calling
+        // Random.nextLong(0, 1) and biasing toward zero.
+        assertEquals(4L, jittered(4L, Random(0L)))
     }
 }

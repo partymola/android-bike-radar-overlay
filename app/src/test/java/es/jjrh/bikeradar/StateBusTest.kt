@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -68,5 +71,20 @@ class StateBusTest {
         ClosePassStateBus.increment(5)
         ClosePassStateBus.reset()
         assertEquals(0, ClosePassStateBus.sessionCount.value)
+    }
+
+    @Test
+    fun closePassBusIncrementIsAtomicUnderConcurrency() {
+        // Pins the read-modify-write race: with `value += n` (the old impl)
+        // parallel callers drop each other's writes and the final value falls
+        // short. With `update { }` (CAS) the final value converges to N. Real
+        // parallelism via Dispatchers.Default; 10k iterations to make the race
+        // surface reliably on a multi-core test host.
+        ClosePassStateBus.reset()
+        val n = 10_000
+        runBlocking(Dispatchers.Default) {
+            repeat(n) { launch { ClosePassStateBus.increment() } }
+        }
+        assertEquals(n, ClosePassStateBus.sessionCount.value)
     }
 }

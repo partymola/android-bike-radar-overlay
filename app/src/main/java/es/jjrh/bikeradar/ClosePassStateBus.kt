@@ -3,13 +3,17 @@ package es.jjrh.bikeradar
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 
 object ClosePassStateBus {
     private val _sessionCount = MutableStateFlow(0)
     val sessionCount: StateFlow<Int> = _sessionCount
 
+    /** Atomic increment. `value += n` would be a read-modify-write race when
+     *  concurrent callers land on the same StateFlow; `update { }` is a CAS
+     *  loop. Mirrors the pattern in [BatteryStateBus.update]. */
     fun increment(n: Int = 1) {
-        _sessionCount.value += n
+        _sessionCount.update { it + n }
     }
 
     /** Called by [BikeRadarService.onCreate] so the home screen's

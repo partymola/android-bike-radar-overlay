@@ -112,6 +112,12 @@ decoders in both Python and Kotlin live there.
   touches `app/src/main/**`.
 - To regenerate goldens: `:app:recordRoborazziDebug`. Commit the updated
   PNGs under `app/src/test/snapshots/images/`.
+- Writing a new screenshot test: Compose screens use
+  `captureRoboImage { MyComposable() }` (lambda form, no compose rule). A
+  detached custom `View` can't use `View.captureRoboImage()` - it needs an
+  Activity and fails with "View should have Activity"; instead measure + lay
+  out the view, draw it to a `Bitmap`, and capture that (see
+  `RadarOverlayViewTest`).
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

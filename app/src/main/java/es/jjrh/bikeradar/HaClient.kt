@@ -487,3 +487,39 @@ class HaClient(private val baseUrl: String, private val token: String) {
         private const val RIDE_SUMMARY_EXPIRE_AFTER_S = 600
     }
 }
+
+/**
+ * Single source of truth for every category of data Bike Radar sends
+ * off-device (to the user's own Home Assistant), keyed by MQTT topic family.
+ *
+ * Why it exists: keeps the privacy disclosures honest as the app grows.
+ * [HaClientDataDisclosureTest] fails if [HaClient] publishes a `varia/...`
+ * data topic whose family is not registered here, and
+ * `scripts/privacy-disclosure-check.sh` fails if a registered flow's
+ * [Flow.disclosureKeyword] is missing from the Settings → Privacy screen.
+ * Adding a new outbound flow therefore forces both an entry here and a
+ * matching disclosure update.
+ */
+object DataDisclosure {
+    /**
+     * @param topicFamily the distinctive MQTT topic token after the `varia/`
+     *   prefix, slug- and `/last`-stripped (e.g. `battery`, or the fixed
+     *   `ride_edge` from `varia/ride/edge`).
+     * @param category human description of what is sent.
+     * @param disclosureKeyword a substring that MUST appear in the Privacy
+     *   screen's "What goes to your Home Assistant" copy.
+     */
+    data class Flow(val topicFamily: String, val category: String, val disclosureKeyword: String)
+
+    val outbound: List<Flow> = listOf(
+        Flow("battery", "Radar and dashcam battery level", "battery"),
+        Flow("front_mode", "Front-light mode", "front-light mode"),
+        Flow("close_pass", "Close-pass events", "close-pass"),
+        Flow("ride_edge", "Ride start/end events", "ride start/end"),
+        Flow(
+            "ride_summary",
+            "End-of-ride summary (distance, close-pass counts, closing speeds, clearances)",
+            "summary",
+        ),
+    )
+}

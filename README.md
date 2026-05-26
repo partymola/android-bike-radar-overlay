@@ -27,11 +27,12 @@ repository for the wire protocol, reference decoders, and unit tests.
   Flash after, computed from the device location (London fallback if
   the location permission is denied). A manual button press during the
   session wins for the rest of the ride.
-- Bosch eBike live data (read-only): five object IDs decode today -
-  rear-wheel speed, cadence, rider power, battery state of charge,
-  and odometer. Subscribes to the Smart System proprietary
-  status-notify characteristic while Bosch Flow is active; never
-  writes the bike's command channel.
+- Bosch eBike live data (read-only): subscribes to the Smart System
+  proprietary status-notify characteristic while Bosch Flow is
+  active and decodes the scalar datapoints it carries (speed,
+  cadence, rider and motor power, battery state of charge,
+  odometer, assist mode, etc.). Never writes the bike's command
+  channel.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
 - Per-ride capture log written to app-private storage: radar packets,

@@ -18,6 +18,17 @@ data class LiveDataSnapshot(
     val cadence: Int? = null,
     /** Rider (human) power, watts - NOT motor assist. */
     val riderPower: Int? = null,
+    /** Motor assist power, watts. The complement of [riderPower]: total
+     *  pedal-effort wattage = [riderPower] + [motorPower]. */
+    val motorPower: Int? = null,
+    /** Assist-mode enum (raw). Best-guess Bosch smart-system mapping per
+     *  public docs (varies by drive-unit generation) is 0=Off, 1=Eco, 2=Tour,
+     *  3=eMTB/Tour+, 4=Turbo - PENDING ride confirmation. Stored raw so
+     *  downstream can map without changing the decoder. */
+    val assistMode: Int? = null,
+    /** Configured wheel circumference, millimetres (matches Bosch Live Data
+     *  spec; ~2200 for a typical 700c). */
+    val wheelCircumferenceMm: Int? = null,
     /** Ambient brightness, raw 1/1000 lux. */
     val ambientBrightnessRaw: Int? = null,
     /** Drive-system battery, percent 0-100. */

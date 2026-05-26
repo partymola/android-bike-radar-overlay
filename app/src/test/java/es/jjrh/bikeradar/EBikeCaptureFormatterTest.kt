@@ -73,6 +73,16 @@ class EBikeCaptureFormatterTest {
         assertTrue("ISO 'Z' suffix must be present", line.contains("Z"))
     }
 
+    @Test fun `motor power assist mode and wheel circumference render with distinct keys`() {
+        val snap = LiveDataSnapshot(
+            motorPower = 250,
+            assistMode = 2,
+            wheelCircumferenceMm = 2200,
+        )
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        assertEquals("ebike mpower=250 assist=2 wheel_mm=2200", line)
+    }
+
     @Test fun `bike_light enum value preserved as integer`() {
         // Downstream consumers translate 0/1/2 to invalid/off/on; the
         // log preserves the raw value so the consumer can update its

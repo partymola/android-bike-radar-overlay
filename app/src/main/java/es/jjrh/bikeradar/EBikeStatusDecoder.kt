@@ -36,11 +36,13 @@ object EBikeStatusDecoder {
         const val SPEED = 0x982D // 1/100 km/h (matches LiveDataSnapshot.speedRaw)
         const val CADENCE = 0x985A // rpm (scaling vs spec field TBD on a ride; stored raw)
         const val RIDER_POWER = 0x985B // watts
+        const val MOTOR_POWER = 0x985D // watts (motor assist; complement of RIDER_POWER)
+        const val ASSIST_MODE = 0x9809 // enum: 0=Off..4=Turbo per public docs; pending ride confirmation
+        const val WHEEL_CIRCUMFERENCE = 0x80E2 // millimetres
         const val BATTERY_SOC = 0x8088 // percent 0-100
         const val ODOMETER = 0x9818 // metres (total)
-        // Identified but unmapped (no LiveDataSnapshot field): 0x985D motor
-        // power, 0x9809 assist mode, 0x80E2 wheel circumference. Lock/light
-        // object IDs not yet pinned - need a ride that toggles them.
+        // Lock/light/charger/light-reserve/diagnosis/wheel-at-rest object IDs
+        // not yet pinned - need a session that toggles each state to identify.
     }
 
     /**
@@ -88,6 +90,9 @@ object EBikeStatusDecoder {
         Obj.SPEED -> s.copy(speedRaw = value.toInt())
         Obj.CADENCE -> s.copy(cadence = value.toInt())
         Obj.RIDER_POWER -> s.copy(riderPower = value.toInt())
+        Obj.MOTOR_POWER -> s.copy(motorPower = value.toInt())
+        Obj.ASSIST_MODE -> s.copy(assistMode = value.toInt())
+        Obj.WHEEL_CIRCUMFERENCE -> s.copy(wheelCircumferenceMm = value.toInt())
         Obj.BATTERY_SOC -> s.copy(batterySoc = value.toInt())
         Obj.ODOMETER -> s.copy(odometerM = value)
         else -> s

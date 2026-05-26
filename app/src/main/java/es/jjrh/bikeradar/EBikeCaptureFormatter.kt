@@ -49,6 +49,9 @@ object EBikeCaptureFormatter {
         snapshot.speedRaw?.let { parts += "spd_raw=$it" }
         snapshot.cadence?.let { parts += "cad=$it" }
         snapshot.riderPower?.let { parts += "power=$it" }
+        snapshot.motorPower?.let { parts += "mpower=$it" }
+        snapshot.assistMode?.let { parts += "assist=$it" }
+        snapshot.wheelCircumferenceMm?.let { parts += "wheel_mm=$it" }
         snapshot.ambientBrightnessRaw?.let { parts += "lux_raw=$it" }
         snapshot.batterySoc?.let { parts += "batt=$it" }
         snapshot.timeSec?.let { parts += "t_iso=${Instant.ofEpochSecond(it)}" }

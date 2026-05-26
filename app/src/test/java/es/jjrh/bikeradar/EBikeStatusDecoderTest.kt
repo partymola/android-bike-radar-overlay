@@ -73,6 +73,23 @@ class EBikeStatusDecoderTest {
         assertEquals(240, EBikeStatusDecoder.mergeInto(empty, hex("3005985b08f001")).riderPower)
     }
 
+    @Test
+    fun decodesMotorPowerAssistModeWheelCircumference() {
+        // motor power 0x985D = 250 W (varint fa 01)
+        assertEquals(250, EBikeStatusDecoder.mergeInto(empty, hex("3005985d08fa01")).motorPower)
+        // assist mode 0x9809 = 2 (Tour)
+        assertEquals(2, EBikeStatusDecoder.mergeInto(empty, hex("300498090802")).assistMode)
+        // wheel circumference 0x80E2 = 2200 mm (varint 98 11)
+        assertEquals(2200, EBikeStatusDecoder.mergeInto(empty, hex("300580e2089811")).wheelCircumferenceMm)
+    }
+
+    @Test
+    fun assistModeOffAbsentVarintIsZero() {
+        // Assist off: presence flag, no field-1 (proto3 omits zero) -> 0.
+        val s = EBikeStatusDecoder.mergeInto(empty, hex("300498091001"))
+        assertEquals(0, s.assistMode)
+    }
+
     // ── merge preserves previously-seen fields ─────────────────────────────
 
     @Test
@@ -81,6 +98,19 @@ class EBikeStatusDecoderTest {
         val withBattery = EBikeStatusDecoder.mergeInto(withSpeed, hex("300480880848"))
         assertEquals(1091, withBattery.speedRaw) // preserved
         assertEquals(72, withBattery.batterySoc) // added
+    }
+
+    @Test
+    fun mergePreservesPriorMotorAssistAndWheel() {
+        // Same preservation contract as the speed+battery case, exercising
+        // the newer scalar branches so a future refactor that drops the
+        // copy()-merge pattern on these fields trips a test.
+        val withMotor = EBikeStatusDecoder.mergeInto(empty, hex("3005985d08fa01"))
+        val withAssist = EBikeStatusDecoder.mergeInto(withMotor, hex("300498090802"))
+        val withWheel = EBikeStatusDecoder.mergeInto(withAssist, hex("300580e2089811"))
+        assertEquals(250, withWheel.motorPower) // preserved
+        assertEquals(2, withWheel.assistMode) // preserved
+        assertEquals(2200, withWheel.wheelCircumferenceMm) // added
     }
 
     // ── robustness ─────────────────────────────────────────────────────────

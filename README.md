@@ -1,14 +1,42 @@
 # android-bike-radar-overlay
 
 Android companion for a rear-bike-radar head unit that speaks the common
-V1 (cleartext) and V2 (bonded) BLE radar protocols. Reads
-battery levels from the front camera and rear radar over BLE, publishes
-them to Home Assistant via MQTT, and draws a live radar overlay during
-rides.
+V1 (cleartext) and V2 (bonded) BLE radar protocols. Draws a live radar
+overlay during rides, plays per-tier audio cues, and feeds the same view
+with optional inputs from the dashcam, the front-camera light, and a
+Bosch Smart System eBike (via the Bosch Flow app running on the same
+phone).
 
 See [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
 and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
 repository for the wire protocol, reference decoders, and unit tests.
+
+## Features
+
+- Live radar overlay with per-vehicle distance, closing speed and
+  lateral position; per-tier audio cues plus a separate urgent-impact
+  tone.
+- Optional directional alert audio: in landscape, beeps pan to the
+  threat's lateral side on the phone's built-in speakers, and on stereo
+  headphone-class routes (BT, BLE, wired, USB, hearing aid).
+- Home Assistant integration via MQTT discovery: radar and dashcam
+  batteries, front-light mode, close-pass event entity, end-of-ride
+  summary (distance, close-pass count, closing speeds, lateral
+  clearances).
+- Front-camera light auto-mode: picks Day Flash before sunset, Night
+  Flash after, computed from the device location (London fallback if
+  the location permission is denied). A manual button press during the
+  session wins for the rest of the ride.
+- Bosch eBike live data (read-only): five object IDs decode today -
+  rear-wheel speed, cadence, rider power, battery state of charge,
+  and odometer. Subscribes to the Smart System proprietary
+  status-notify characteristic while Bosch Flow is active; never
+  writes the bike's command channel.
+- Walk-away alarm: chirps a forgotten dashcam if it stays awake past
+  the rider's leaving window after a parked-and-locked bike state.
+- Per-ride capture log written to app-private storage: radar packets,
+  BLE characteristic notifications, phone-battery trace, and decoder
+  events; useful for post-ride replay and bug reports.
 
 ## Screenshots
 
@@ -18,12 +46,13 @@ repository for the wire protocol, reference decoders, and unit tests.
   <img src="screenshots/03-radar-alerts.png" width="200" alt="Radar and alerts settings" />
   <img src="screenshots/04-dashcam.png" width="200" alt="Dashcam settings" />
   <img src="screenshots/05-home-assistant.png" width="200" alt="Home Assistant settings" />
-  <img src="screenshots/06-permissions.png" width="200" alt="Permissions settings" />
-  <img src="screenshots/07-experimental.png" width="200" alt="Experimental settings" />
-  <img src="screenshots/08-debug.png" width="200" alt="Debug screen (developer mode)" />
-  <img src="screenshots/09-about.png" width="200" alt="About screen" />
-  <img src="screenshots/10-licences.png" width="200" alt="Open source licences" />
-  <img src="screenshots/11-privacy.png" width="200" alt="Privacy notice" />
+  <img src="screenshots/06-ebike.png" width="200" alt="eBike settings" />
+  <img src="screenshots/07-permissions.png" width="200" alt="Permissions settings" />
+  <img src="screenshots/08-experimental.png" width="200" alt="Experimental settings" />
+  <img src="screenshots/09-debug.png" width="200" alt="Debug screen (developer mode)" />
+  <img src="screenshots/10-about.png" width="200" alt="About screen" />
+  <img src="screenshots/11-licences.png" width="200" alt="Open source licences" />
+  <img src="screenshots/12-privacy.png" width="200" alt="Privacy notice" />
 </p>
 
 Live overlay during a ride (left column: arrival ETA, distance left,
@@ -32,7 +61,7 @@ front-light state and clock; right edge: radar threat ladder, dimmed
 when no targets):
 
 <p align="left">
-  <img src="screenshots/12-overlay-live.png" width="600" alt="Live overlay during a ride" />
+  <img src="screenshots/13-overlay-live.png" width="600" alt="Live overlay during a ride" />
 </p>
 
 Map tiles in the live-overlay screenshot are rendered by a separate
@@ -84,7 +113,7 @@ version + firmware.
 If you want the app to push radar + dashcam battery and close-pass
 events into HA, the HA side needs:
 
-1. An MQTT broker reachable from HA — e.g. the official
+1. An MQTT broker reachable from HA - e.g. the official
    [Mosquitto add-on](https://www.home-assistant.io/integrations/mqtt/)
    on HA OS / Supervised, or any external broker.
 2. HA's MQTT integration enabled and connected to that broker
@@ -92,7 +121,7 @@ events into HA, the HA side needs:
 3. A long-lived access token for the account you want the app to
    act as (**user profile → Security → Long-lived access tokens**).
 
-No extra configuration is required beyond that — the app publishes
+No extra configuration is required beyond that - the app publishes
 via MQTT Discovery on HA's default `homeassistant/` prefix, so
 entities appear automatically. Dashboards, automations and
 Grafana/InfluxDB are up to you.
@@ -147,10 +176,10 @@ git push origin vX.Y.Z
 
 The workflow needs these GitHub repo secrets to exist:
 
-- `ANDROID_KEYSTORE_BASE64` — the release keystore, base64-encoded
-- `ANDROID_KEYSTORE_PASSWORD` — keystore password
-- `ANDROID_KEY_ALIAS` — key alias inside the keystore
-- `ANDROID_KEY_PASSWORD` — key password
+- `ANDROID_KEYSTORE_BASE64` - the release keystore, base64-encoded
+- `ANDROID_KEYSTORE_PASSWORD` - keystore password
+- `ANDROID_KEY_ALIAS` - key alias inside the keystore
+- `ANDROID_KEY_PASSWORD` - key password
 
 Local release builds pick the same env variables up from the
 shell (with `ANDROID_KEYSTORE_PATH` pointing at the keystore

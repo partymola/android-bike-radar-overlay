@@ -48,21 +48,21 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 PrivacySectionLabel("What stays on your phone")
                 PrivacyP("Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android's app-private storage and never leave the device.")
                 PrivacyP("Your Home Assistant base URL and long-lived bearer token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The encryption key never leaves the secure element. An attacker with raw filesystem access (e.g. `adb pull`) recovers only ciphertext.")
-                PrivacyP("Per-ride capture logs (radar packets, BLE characteristic notifications, phone-battery samples) are written to the app's external files dir under `bike-radar-capture-*.log`. They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.")
+                PrivacyP("A capture log is written for every ride (radar packets, BLE characteristic notifications, eBike data read from Bosch Flow, phone-battery samples - no location) to the app's external files dir under `bike-radar-capture-*.log`. They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.")
 
                 PrivacySectionLabel("What goes to your Home Assistant")
-                PrivacyP("If you configure HA in Settings, the app publishes the radar's and the dashcam's battery levels to your HA instance via MQTT discovery, plus a close-pass event log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.")
+                PrivacyP("If you configure HA in Settings, the app publishes to your HA instance via MQTT discovery: the radar's and the dashcam's battery levels, your front-light mode, ride start/end events, and an end-of-ride summary (distance, close-pass counts, closing speeds and lateral clearances). It also publishes a per-event close-pass log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.")
                 PrivacyP("You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.")
 
                 PrivacySectionLabel("Bluetooth")
-                PrivacyP("Pairing happens in Android's system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar and the dashcam. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.")
+                PrivacyP("Pairing happens in Android's system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.")
 
                 PrivacySectionLabel("Networking")
                 PrivacyP("The only network destination the app contacts is the HA URL you provide. There are no analytics endpoints, crash reporters, ad networks, or third-party libraries that phone home.")
                 PrivacyP("If your HA URL points outside your home network, the app requires HTTPS and refuses to send your bearer token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.")
 
                 PrivacySectionLabel("Permissions")
-                PrivacyP("BLUETOOTH_SCAN, BLUETOOTH_CONNECT (radar + dashcam), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts.")
+                PrivacyP("BLUETOOTH_SCAN and BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). ACCESS_COARSE_LOCATION is read once per ride only to set your front light for local sunrise/sunset; it is never used to track you and never leaves the phone. The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts; it captures the whole screen, so anything behind the overlay (such as your map) is included.")
 
                 PrivacySectionLabel("Source")
                 PrivacyP("The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.")

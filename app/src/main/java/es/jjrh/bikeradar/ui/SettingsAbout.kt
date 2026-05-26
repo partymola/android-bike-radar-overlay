@@ -125,7 +125,7 @@ private fun SettingsAboutBody(navController: NavController) {
                 SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
-                    title = "Not affiliated with Garmin",
+                    title = "Not affiliated with Garmin or Bosch",
                     subtitle = "This is an independent tool",
                     onClick = {},
                     chevron = false,

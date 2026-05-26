@@ -59,10 +59,14 @@ mirror, direct observation, or safe riding practice. Treat anything
 shown on the overlay as advisory only, and never rely on it alone for
 safety-critical decisions. Always shoulder-check before manoeuvring.
 
+The optional eBike status feature is read-only: it passively listens to
+data your Bosch eBike already broadcasts while the Bosch Flow app is
+connected, and never sends any command to the bike.
+
 The GPL-3.0 licence (see `LICENSE`) disclaims warranty to the extent
 permitted by applicable law. Not affiliated with or endorsed by
-Garmin. Bug reports welcome; please include device + Android version
-+ firmware.
+Garmin or Bosch. Bug reports welcome; please include device + Android
+version + firmware.
 
 ## Requirements
 

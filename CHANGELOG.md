@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.8.0-alpha - 2026-05-26
+
+### Features
+
+- **Live eBike data on the home screen.** If you have a Bosch Smart System eBike paired and the Bosch Flow app running on the same phone, the app now reads your bike's speed, cadence, rider power, battery charge, and odometer while you ride. A status row shows Live (green) or Waiting for Flow (amber). A new Settings -> eBike screen has the on/off toggle, the connection state, and a one-tap Open Bosch Flow shortcut. Read-only: nothing is written to the bike. Default on if you said you own a Bosch eBike during onboarding; without the eBike the rest of the app works the same as before.
+- **Dedicated eBike step in onboarding.** Pairing your Bosch eBike now has its own onboarding card and a top-level Settings -> eBike screen, instead of being buried in the Experimental panel. The card shows Live / Waiting for Flow / Bosch Flow not installed at a glance, with an Install / Open / "Receiving data" button that adapts to what's needed next.
+- **Close-pass beeps keep firing when you're grinding up a hill.** If you have a Bosch eBike paired: rider power at 250 W or more sustained for 30 seconds flips you into a "climbing" state, which keeps close-pass beeps firing even when you're moving slowly. Before, the stationary-rider gate could silence alerts at 5 km/h on a climb, exactly when you're most exposed to overtaking traffic. Without an eBike the existing behaviour is unchanged.
+- **Beep cooldown adapts to how fast you're going.** Below 15 km/h the gap between beeps doubles so traffic hovering at a tier boundary doesn't cause a flapping-beep cacophony. Above 25 km/h the gap halves so you get re-warned within the shorter reaction window. Urgent-impact beeps for an imminent threat are unaffected and still fire at the base rate. Uses eBike wheel speed if you have one paired, otherwise the radar's own bike-speed reading.
+- **In-ride beep when the radar's battery hits critical.** The rear radar is your only rear-traffic awareness, so a critical radar battery is the one battery state that earns an in-ride sound. Fires once when the radar drops below 10%, then no more than once every 2 minutes while it stays critical. Radar only (never the dashcam). A 520 Hz slow two-tone that sounds nothing like the threat beeps or the all-clear, so you won't confuse it. All other battery warnings still wait for the ride summary.
+- **Low-battery heads-up at connect.** A single low-battery beep per device (radar and dashcam) at connect time if either is below the warning threshold, capped at once per 30 minutes. Gives you a chance to top up the charge before heading out instead of finding out mid-commute.
+- **Directional alert audio is louder on the threat's side.** The experimental directional cue used to nudge the quiet side by about 3 dB - too subtle to tell apart on phone speakers six or seven inches apart. The pan is now full: the opposite channel goes silent. Still experimental, still default off, found under Settings -> Experimental.
+
+### UX
+
+- **Overlay battery and dashcam icons are bigger and easier to glance at.** The bottom-row camera icon and battery labels were 22dp and 11dp, too small to read at arm's length on a moving bike. Now 28dp and 14dp, with a slightly larger low-battery dot. Still at the bottom of the overlay so they can't compete with live threats for your attention.
+- **Onboarding buttons are now easy to hit with gloves on.** Device-row actions, Test connection, Open Flow, Pick device, and the selected-device pill were between 36 and 40dp tall. All now meet Android's recommended 48dp minimum.
+- **The overlay works with TalkBack.** Screen readers used to skip the radar overlay entirely. It now announces what's on screen: clear road, vehicle count and nearest distance, and active warnings. The wordmark in the corner no longer makes TalkBack falsely announce "double-tap to activate" for a non-existent action.
+- **"Front light" renamed to "Dashcam light" in Settings.** This setting was always controlling the dashcam's built-in light, not your bike's primary front light. The new label matches what the app already calls the device and won't be mistaken for your real bike light. Settings rows, headers, and the light-fail notification all updated; the behaviour is unchanged.
+- **Privacy screen now lists every Home Assistant entity the app can publish to.** The in-app Privacy notice and the per-step onboarding summaries name everything the app can push to your HA instance: radar and dashcam batteries, dashcam-light mode, the close-pass event entity, and the end-of-ride summary (distance, close-pass count, closing speeds, lateral clearances). The Permissions screen now also explains why the app asks for coarse location, and warns that dashcam-picker screenshots include whatever else is on screen.
+- **Experimental row subtitle now lists everything you've turned on.** It used to mention only the precog toggle, so turning on directional panning still showed "All off" - making it look like the setting hadn't taken effect. Both toggles are now summarised.
+- **Licences screen cleanup.** Removed a Security Crypto entry that named a library the app doesn't actually use.
+
+### Fix
+
+- **Close-pass beeps no longer go silent after a radar reconnect.** Until this release, the first time the radar dropped and reconnected mid-ride, every close-pass beep stopped working until you restarted the app. Fixed.
+- **No more "beep, clear, beep" flapping at the edge of the alert range.** A car sitting right at the edge of the close-pass distance could trigger a beep, fire a premature all-clear, then beep again when the radar briefly lost it. The all-clear now waits a full second of empty road before firing, and it's cancelled the moment a vehicle reappears.
+- **Directional panning no longer crashes the app on Android 16.** On Android 16, the panning code was hitting an Android API change that crashed the foreground service mid-beep. The phone would then fail to restart the service and the app would be stuck until reboot. Fixed at the source so panning is safe on every supported Android version.
+- **Bosch eBike pairing instructions and "Open Flow" both work properly now.** The in-app pairing guidance referenced an old Flow menu path; it now matches what your bike actually shows (Components -> Add new device -> Accessories). The phone now identifies itself by name during pairing so you can pick the right device, and "Open Flow" reliably opens Bosch Flow instead of falling back to the Play Store.
+- **Walk-away alarm now uses your phone's alarm tone.** The bundled alarm sound had a licence that's incompatible with this app's GPL licence and couldn't ship. The alarm path now plays whatever you've set as your alarm tone, still at maximum alarm volume so it still cuts through. Only the sound itself changes.
+- **End-of-ride summary sensors no longer break Home Assistant.** When a ride had no close-pass data, the summary entities were being rejected by HA instead of showing as Unknown. Existing entities recover on the first publish after upgrade.
+
+### Security
+
+- **Closed an adb-only debug entry point against peer apps.** A receiver used for scenario replay and synthetic-frame injection during development was exposed to other apps on the phone whenever you had developer mode unlocked. It's no longer reachable from other apps. Adb access from your computer is unaffected.
+- **Home Assistant token is no longer baked into release APKs.** If you built a release APK yourself with a token configured in `local.properties`, that token was embedded in the APK as readable text. Release and onboarding-test APKs are now built without any embedded token; only debug builds keep the convenience seeding. If you installed a release APK from a previous tag and entered your HA token through the in-app settings screen, you're unaffected; rebuild and reinstall if you want to drop any embedded copy from your own build.
+
+### Compatibility
+
+- **minSdk unchanged at 31; targetSdk unchanged at 36.** No devices left behind.
+- **The app now asks for coarse location through the standard Android prompt.** Previous releases declared the permission but never asked, so existing installs stayed denied and the dashcam light's sunrise/sunset auto-mode silently fell back to London times. Onboarding and Settings -> Permissions now prompt for it, and the Dashcam light screen shows an inline grant prompt if auto-mode is on but location is denied. Optional: the London fallback still works if you skip it.
+- **eBike toggle setting carried over transparently.** The internal name for the eBike on/off toggle changed in this release; your existing setting is preserved automatically. No action needed and no settings reset.
+- **New Home Assistant MQTT topic when the eBike feature is on.** Ride-start and ride-end events publish to `varia/ride/edge` (plus a retained `varia/ride/edge/last`). HA subscribers and dashboards will see new traffic; existing topics are unchanged. If the eBike feature is off, nothing is published to the new topic.
+- **Release APK is dramatically smaller (~7 MB, down from tens of MB).** Release builds now strip dead code and unused icons. No action needed; install over the top and everything works the same.
+- **Internal compatibility tweaks for older and newer Android versions.** A few internal calls (debug overlay foreground-service typing on Android 12-13, the radar Bluetooth setup write and the walk-away vibration call on Android 13 and up) were updated to match the right Android API for the version they run on. No rider-visible change.
+
+### Diagnostics
+
+- **Capture log records every cue that actually sounded.** A new line in the capture log marks each beep, all-clear, urgent-impact, and radar-critical cue at the point it was actually played - after the phone-call mute check - so a post-ride log shows what you actually heard, not just what the decider intended. Makes wrong-time-beep reports traceable from the log alone.
+
+### Internal
+
+- **Screenshot suite migrated from Paparazzi to Roborazzi.** Paparazzi 2.0.0-SNAPSHOT's layoutlib loader failed on cold-cache JVMs, so the snapshot tests had been excluded from `testDebugUnitTest` and never ran in CI; regressions only surfaced on a manual local record. Roborazzi 1.63.0 renders via Robolectric Native Graphics, which works cold-cache; the 71 goldens now verify inside `testDebugUnitTest` and in CI. Compose tests use the `captureRoboImage` lambda; the detached overlay view draws to a bitmap.
+- **Coverage gated with a ratchet on JaCoCo's on-the-fly agent.** AGP's offline `enableUnitTestCoverage` cannot see classes loaded through Robolectric's sandbox classloader and silently reports 0%, so the project switched to the on-the-fly agent with `isIncludeNoLocationClasses = true`. `:app:jacocoCoverageVerification` now wires into CI and `/qc` with a project LINE floor of 0.55 and a 0.93 BRANCH floor on the safety-critical deciders. A `doFirst` guard fails the gate if the class tree or exec data is empty so a hollow pass cannot wave untested code through.
+- **ktlint wired into CI with an empty baseline.** `:app:ktlintCheck` runs on every push under the `intellij_idea` style declared in `.editorconfig`; the codebase was reformatted in one sweep and the baseline kept empty so any new finding is a hard failure. `:app:ktlintFormat` autofixes most issues.
+- **Test coverage expanded across the ride-critical surface.** New JVM unit tests cover the GATT op-queue and handshake, the battery-scan match-and-forward gate, the eBike disconnect and pairing edges, the connect-time day / night light decision, `LocationCache`'s permission gate, `AndroidKeyStoreCryptor`'s decrypt-guard contract, `Prefs` clamps and Flow emissions, the protocol decoders + UUID wire contract, `AlertDecider`'s reachable branches, event-to-cue mapping, the HA HTTP publish / ping / probe paths and credentials property setters, the state buses, and the dashcam-light Compose screen with auto-mode on.
+- **Privacy disclosure fail-fast tests.** A `DataDisclosure` anchor in `HaClient` plus `scripts/privacy-disclosure-check.sh` (also wired into `/qc`) break the build if the privacy screen drifts from the actual MQTT egress or the manifest permission set.
+- **Pure-function extractions to lift logic into the JVM tier.** The stereo interleave used by the panner, the eBike disconnect and pairing edges, and the eBike connection-trust decision moved out of service / coroutine context into pure functions with their own tests. Audio panning now mixes into pre-built stereo buckets and drops `setStereoVolume`. No behavioural change; coverage that previously needed instrumentation now runs as plain unit tests.
+- **`scripts/dev` warm-daemon wrapper.** A persistent build container brought up via `scripts/dev up` keeps the Gradle and Kotlin daemons warm across invocations; a typical `gradle` call drops from ~2 s to ~0.4 s. Configuration cache, build cache, and parallel execution are enabled across the build. `scripts/dev gradle ...` transparently falls back to the one-shot Docker pattern when the container is not up.
+- **Channel-neutral naming across the eBike code path.** Classes, prefs keys, capture-log markers, broadcast intent actions, and KDoc match the read-only GATT-client design. Internal-only rename; no externally visible behaviour change.
+- **Overlay micro-perf cleanups.** The overlay collect loop no longer re-reads `SharedPreferences` ~6x a frame or samples the phone-battery sticky broadcast on every 2 s tick; a `PrefsSnapshot` kept fresh by a `prefs.flow` collector replaces both, and the battery is read at most once per 60 s. The `dp()` helper caches display density instead of resolving it per call. The capture log flushes on a 1 s timer rather than per line.
+- **AGENTS.md refreshed for new contributors.** New sections document the Roborazzi screenshot-test patterns, the JaCoCo on-the-fly rationale and coverage floors, the eBike / Flow connection-trust gotchas, the `<queries>` manifest entry that keeps Open Flow working on Android 11+, the IEC 60601-1-8 conceptual framing for the alert-audio design, and the three-tier quality-gate flow (pre-commit hook -> `/qc` -> `/release-review`).
+- **Repository hygiene additions.** GitHub issue and PR templates, a `SECURITY.md` policy, and the full GPL-3.0 license text shipped at the repo root. The provenance keyword-scan in CI was narrowed to phrases that would genuinely leak how the protocol was obtained.
+- **README and screenshot grid refreshed for v0.8.0.** New Features section, eBike Settings shot added at slot 06, and the visibly-changed shots re-captured against the current build.
+
 ## v0.7.1-alpha - 2026-05-19
 
 ### Fix
@@ -20,7 +84,7 @@
 
 ### Compatibility
 
-- minSdk unchanged at 31; targetSdk unchanged at 36. No prefs migration; the new `ACCESS_COARSE_LOCATION` permission stays denied on existing installs until the rider grants it via Android Settings → Apps → BikeRadar → Permissions. The hoisted `AlertBeeper` changes the lifecycle of an internal object, no externally visible API surface.
+- minSdk unchanged at 31; targetSdk unchanged at 36. No prefs migration; the new `ACCESS_COARSE_LOCATION` permission stays denied on existing installs until the rider grants it via Android Settings -> Apps -> BikeRadar -> Permissions. The hoisted `AlertBeeper` changes the lifecycle of an internal object, no externally visible API surface.
 
 ## v0.7.0 - 2026-05-18
 
@@ -54,7 +118,7 @@
 
 - minSdk unchanged at 31; targetSdk unchanged at 36. No prefs migration; existing HA credentials and prefs carry over from v0.6.0 unchanged. The two new experimental toggles (directional alert audio + invert L/R) default off, so a rider upgrading sees the same audio behaviour until they opt in.
 
-## v0.6.0 — 2026-05-07
+## v0.6.0 - 2026-05-07
 
 ### Features
 
@@ -62,7 +126,7 @@
 
 ### UX
 
-- **Overlay dimmer slider.** A new Settings → Radar & alerts → Overlay section gathers Visual distance and a 4-stop "Off / Light / Medium / Strong" overlay dimmer. Visual distance moved out of the Alerts section since it controls the overlay's render cutoff, not audio alerts. The dimmer multiplies the View's alpha on top of the existing per-paint alphas: "Off" (the default) preserves the prior look; lower stops dim the overlay further so an underlying map or navigation app shows through.
+- **Overlay dimmer slider.** A new Settings -> Radar & alerts -> Overlay section gathers Visual distance and a 4-stop "Off / Light / Medium / Strong" overlay dimmer. Visual distance moved out of the Alerts section since it controls the overlay's render cutoff, not audio alerts. The dimmer multiplies the View's alpha on top of the existing per-paint alphas: "Off" (the default) preserves the prior look; lower stops dim the overlay further so an underlying map or navigation app shows through.
 - **Configurable reconnect-backoff long-offline tier.** When the radar has been out of range past a user-set threshold (default 30 min), the reconnect interval relaxes to a user-set cap (default 30 s) so the BLE stack idles overnight instead of hammering GATT opens at the steady-state 8 s ceiling. New "Connection" section in Settings exposes both knobs.
 
 ### Reliability
@@ -72,7 +136,7 @@
 
 ### Diagnostics
 
-- **Phone-battery trace logged into per-ride capture log.** Battery level (percent), temperature (decicelsius), and charging state are sampled on every level change and on a 60 s heartbeat. Read from the cached sticky broadcast — no continuous receiver, no extra wake-ups. Cross-references with radar / dashcam / handshake events in the same log for post-ride battery analysis. `dumpsys batterystats` remains authoritative for per-uid mAh attribution.
+- **Phone-battery trace logged into per-ride capture log.** Battery level (percent), temperature (decicelsius), and charging state are sampled on every level change and on a 60 s heartbeat. Read from the cached sticky broadcast - no continuous receiver, no extra wake-ups. Cross-references with radar / dashcam / handshake events in the same log for post-ride battery analysis. `dumpsys batterystats` remains authoritative for per-uid mAh attribution.
 
 ### Internal
 
@@ -84,7 +148,7 @@
 
 - No migration. SharedPreferences, paired devices, HA credentials, and overlay positioning unchanged. New prefs (`overlay_opacity`, `radar_long_offline_threshold_min`, `radar_long_offline_cap_sec`, `auto_light_mode_enabled`, `camera_light_day_mode`, `camera_light_night_mode`) default to values that preserve prior behaviour.
 
-## v0.5.1-alpha — 2026-05-04
+## v0.5.1-alpha - 2026-05-04
 
 ### UX
 
@@ -104,12 +168,12 @@
 - `HaStepSnapshotTest` excluded from `:app:testDebugUnitTest` alongside `RadarOverlayViewTest`, restoring the green build on cold-cache JVMs (CI included). Both Paparazzi tests run via `:app:verifyPaparazziDebug` locally; the exclusion can drop when Paparazzi alpha05 ships.
 - Paparazzi screenshot goldens added for the four HA onboarding step branches (unset chooser, Yes empty fields, Yes prefilled, No skipped).
 
-## v0.5.0-alpha — 2026-05-03
+## v0.5.0-alpha - 2026-05-03
 
 ### Features
 
 - **Live close-pass count on the home screen.** The stats card now shows the actual count of close-pass events for the current ride instead of a permanent zero. Resets when the service starts.
-- **Per-ride summary published to Home Assistant.** Ten new MQTT-discovery sensors per radar device — HA derives the entity IDs from the display names: `overtakes`, `close_passes`, `grazing_passes`, `hgv_close_passes`, `peak_closing_speed`, `closing_speed_p90`, `tightest_clearance`, `distance_ridden`, `time_with_traffic`, `close_pass_conversion_rate` (each prefixed `sensor.varia_<slug>_`). A `tightest_pass` JSON attribute carries the worst-pass-of-the-ride record (timestamp, side, vehicle size, clearance, closing speed). Auto-discovers under the same HA device card as the existing battery and close-pass entities; vanilla HA + MQTT integration is enough, no YAML required. Published every 60 s when state changes; sensors flip to `unavailable` ten minutes past the last update. Measurement-class fields (peak closing, p90, tightest clearance) report `unknown` until the first relevant observation lands, instead of a misleading 0.
+- **Per-ride summary published to Home Assistant.** Ten new MQTT-discovery sensors per radar device - HA derives the entity IDs from the display names: `overtakes`, `close_passes`, `grazing_passes`, `hgv_close_passes`, `peak_closing_speed`, `closing_speed_p90`, `tightest_clearance`, `distance_ridden`, `time_with_traffic`, `close_pass_conversion_rate` (each prefixed `sensor.varia_<slug>_`). A `tightest_pass` JSON attribute carries the worst-pass-of-the-ride record (timestamp, side, vehicle size, clearance, closing speed). Auto-discovers under the same HA device card as the existing battery and close-pass entities; vanilla HA + MQTT integration is enough, no YAML required. Published every 60 s when state changes; sensors flip to `unavailable` ten minutes past the last update. Measurement-class fields (peak closing, p90, tightest clearance) report `unknown` until the first relevant observation lands, instead of a misleading 0.
 
 ### Reliability
 
@@ -124,7 +188,7 @@
 
 ### Internal
 
-- JVM test suite expanded to 288 Robolectric tests. New coverage: service and activity boot smoke; all 13 Compose screens composed synchronously; gate-matrix tests for `BootReceiver`, `InternalControlReceiver`, and `RemoteControlReceiver`; `HaClient` short-circuit guards; pipeline replay through decoder → detector → accumulator; `HaCredentials` round-trip.
+- JVM test suite expanded to 288 Robolectric tests. New coverage: service and activity boot smoke; all 13 Compose screens composed synchronously; gate-matrix tests for `BootReceiver`, `InternalControlReceiver`, and `RemoteControlReceiver`; `HaClient` short-circuit guards; pipeline replay through decoder -> detector -> accumulator; `HaCredentials` round-trip.
 - `HaCredentials` crypto extracted to a `Cryptor` interface (`AndroidKeyStoreCryptor` in production, `InMemoryCryptor` in tests). Removes the requirement for a real AndroidKeyStore in JVM tests.
 - 11 Paparazzi screenshot tests for `RadarOverlayView`. Goldens cover: empty, single vehicle, close-approach danger border, multiple vehicles, mixed sizes, alongside-stationary hollow outline, battery-low badge, dashcam-missing/dropped icons, scenario replay label, and alert threshold line. No device required. Run locally with `:app:verifyPaparazziDebug` before pushing UI changes; CI runs the Robolectric suite only (Paparazzi's pre-release layoutlib loader is too unreliable on cold-cache JVMs).
 - Build upgraded to Java 21 (required for Paparazzi 2.x layoutlib rendering engine).
@@ -134,7 +198,7 @@
 
 - No migration. SharedPreferences, paired devices, HA credentials, overlay positioning, and the existing battery + close-pass MQTT topics are unchanged. The new ride-summary entities appear automatically in HA on first publish.
 
-## v0.4.1-alpha — 2026-05-02
+## v0.4.1-alpha - 2026-05-02
 
 ### Stability
 
@@ -159,7 +223,7 @@
 
 - No migration. SharedPreferences, paired devices, HA credentials, and overlay positioning unchanged.
 
-## v0.4.0-alpha — 2026-05-01
+## v0.4.0-alpha - 2026-05-01
 
 ### Security
 
@@ -183,7 +247,7 @@
 
 - No migration steps. The HA close-pass MQTT payload still publishes `closing_speed_kmh` and `rider_speed_kmh`, the Settings slider stays in km/h, and stored preferences are unchanged. Internally the decoder switched from km/h to m/s; alert and close-pass thresholds were re-expressed at exact equivalents so alerting fires on the same radar readings as v0.3.0-alpha.
 
-## v0.3.0-alpha — 2026-04-29
+## v0.3.0-alpha - 2026-04-29
 
 ### UX
 

@@ -160,12 +160,11 @@ decoders in both Python and Kotlin live there.
   the right pair (`RADAR` or `FRONT_CAMERA`).
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
   LESC; the app never calls it. User must pair once via system Settings.
-- LDI trust: `EBikeLink` advertises a connectable solicitation, so ANY
-  passing BLE central can connect. Never treat an inbound connection as the
-  bike on the raw connect - persist the bonded address and read state only
-  after real LDI data arrives (the `Paired` transition), and conclude
-  "firmware too old" only for a `BOND_BONDED` device that completes discovery
-  without the LDI service. The decision is the pure `classifyMissingLdi`.
+- eBike data is READ-ONLY: `EBikeStatusReader` is a GATT client that connects
+  out to the bonded eBike and subscribes to the proprietary status-notify char
+  Bosch Flow already streams (it fans out to every subscriber). It works only
+  while Flow holds the link, and never writes the bike's command channel.
+  `findBondedEBikeMac` picks the eBike from the bonded-device list by name.
 - The `<queries>` entry for `com.bosch.ebike.onebikeapp` is load-bearing:
   without it `getLaunchIntentForPackage` returns null on Android 11+ and
   "Open Flow" silently falls back to the Play Store.

@@ -46,8 +46,7 @@ internal object SnapshotFixtures {
         autoLightModeEnabled = false,
         cameraLightDayMode = CameraLightMode.DAY_FLASH,
         cameraLightNightMode = CameraLightMode.LOW,
-        ldiEnabled = false,
+        eBikeDataEnabled = false,
         eBikeOwnership = EBikeOwnership.UNANSWERED,
-        ldiOnboardingResumePoint = false,
     )
 }

@@ -77,6 +77,9 @@ class HaStepSnapshotTest {
                         onTest = {},
                         onChangeIntent = {},
                     )
+                    // Mirrors the real YES branch, which shows the egress
+                    // disclosure below the fields (see HaStep).
+                    HaStepPrivacyNote()
                 }
             }
         }
@@ -100,6 +103,9 @@ class HaStepSnapshotTest {
                         onTest = {},
                         onChangeIntent = {},
                     )
+                    // Mirrors the real YES branch, which shows the egress
+                    // disclosure below the fields (see HaStep).
+                    HaStepPrivacyNote()
                 }
             }
         }

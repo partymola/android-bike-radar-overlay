@@ -23,8 +23,9 @@ import org.robolectric.annotation.GraphicsMode
  *
  * Variants picked to exercise the visually distinct states:
  *  - Hero: live-good (CheckCircle / Good) and not-paired-bt-on (Error)
- *  - System: empty (no devices live) and populated (radar + dashcam +
- *    HA all green with battery chips)
+ *  - System: empty (no devices live), populated (radar + dashcam + eBike +
+ *    HA all green with battery chips), and eBike-waiting (the eBike row in
+ *    its amber "Waiting for Flow" state with no stale battery chip)
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -130,6 +131,42 @@ class MainScreenSnapshotTest {
                             readAtMs = 0L,
                         ),
                         haHealthy = true,
+                        ebikeEnabled = true,
+                        ebikeReceiving = true,
+                        ebikeBatterySoc = 82,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun systemEbikeWaiting() {
+        captureRoboImage {
+            UiTheme {
+                MainShell {
+                    SystemCard(
+                        radarFresh = true,
+                        hasBond = true,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        dashcamDisplayName = null,
+                        radarBattery = BatteryEntry(
+                            slug = "rearvue",
+                            name = "RearVue",
+                            pct = 78,
+                            readAtMs = 0L,
+                        ),
+                        dashcamBattery = null,
+                        haHealthy = true,
+                        // Feature on but Flow not running: amber dot, "Waiting
+                        // for Flow", and no battery chip (a stale SoC here would
+                        // be a regression).
+                        ebikeEnabled = true,
+                        ebikeReceiving = false,
+                        ebikeBatterySoc = 82,
                     )
                 }
             }

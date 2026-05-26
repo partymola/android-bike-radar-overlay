@@ -10,7 +10,7 @@ import java.time.Instant
  *
  * Format (greppable, one key per non-null field):
  *
- *   `ldi spd_raw=1080 cad=85 power=120 batt=80 odo_delta_m=125 sysl=1 ...`
+ *   `ebike spd_raw=1080 cad=85 power=120 batt=80 odo_delta_m=125 sysl=1 ...`
  *
  * Fields that have not been observed yet (still null on the snapshot)
  * are omitted entirely; this keeps the line short and avoids logging
@@ -31,14 +31,14 @@ import java.time.Instant
  * odometer, the caller is responsible for capturing the baseline before
  * the first delta is computed.
  */
-object LdiCaptureFormatter {
+object EBikeCaptureFormatter {
 
     /**
      * Render a snapshot to a one-line capture-log payload. Returns null
      * when every field is still unobserved (no useful information to log)
      * so the caller can skip the line entirely.
      *
-     * @param snapshot Current merged snapshot from [EBikeLink].
+     * @param snapshot Current merged snapshot from the eBike status reader.
      * @param sessionStartOdometerM Absolute odometer (metres) observed
      *   on the first snapshot of this session; the rest of the session
      *   logs `odometer - sessionStartOdometerM`. Null when no odometer
@@ -65,6 +65,6 @@ object LdiCaptureFormatter {
         snapshot.diagnosisActive?.let { parts += "diag=${if (it) 1 else 0}" }
         snapshot.bikeNotDriving?.let { parts += "notdrv=${if (it) 1 else 0}" }
         if (parts.isEmpty()) return null
-        return "ldi " + parts.joinToString(" ")
+        return "ebike " + parts.joinToString(" ")
     }
 }

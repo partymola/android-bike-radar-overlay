@@ -10,7 +10,7 @@ import org.junit.Test
 /**
  * Pins [RadarDropDecider]: the radar-drop cue fires only when the radar has
  * been down past the threshold AND riding is confirmed, repeats on cadence,
- * and resets on reconnect. The LDI gate (`ridingConfirmed`) is what keeps
+ * and resets on reconnect. The eBike-data gate (`ridingConfirmed`) is what keeps
  * this cue mutually exclusive with the walk-away alarm and prevents a
  * ride-end false fire - its fail-closed cases are pinned separately below.
  */
@@ -52,9 +52,9 @@ class RadarDropDeciderTest {
 
     @Test
     fun doesNotFireWhenRidingNotConfirmed() {
-        // ridingConfirmed=false covers all no-go LDI states the caller folds
-        // in: system_locked==true (dismounting), no LDI snapshot, or a stale
-        // snapshot (LDI link dropped = rider left). Well past the threshold,
+        // ridingConfirmed=false covers all no-go eBike states the caller folds
+        // in: system_locked==true (dismounting), no eBike snapshot, or a stale
+        // snapshot (eBike link dropped = rider left). Well past the threshold,
         // still silent.
         val d = RadarDropDecider.decide(
             radarEverLive = true,
@@ -134,7 +134,7 @@ class RadarDropDeciderTest {
     @Test
     fun latchHeldWhileDownButRidingMomentarilyUnconfirmed() {
         // Down past threshold, already cued, but riding briefly unconfirmed
-        // (e.g. one stale LDI tick): no fire, and the latch is preserved so a
+        // (e.g. one stale eBike tick): no fire, and the latch is preserved so a
         // re-confirm doesn't replay the cue out of cadence.
         val firedAt = now
         val d = RadarDropDecider.decide(
@@ -163,7 +163,7 @@ class RadarDropDeciderTest {
     @Test
     fun ridingConfirmedFailsClosedWhenLockedNullOrStale() {
         // Locked (dismounting), null systemLocked, null snapshot (caller passes
-        // null), and a stale snapshot (LDI link dropped) must ALL fail closed -
+        // null), and a stale snapshot (eBike link dropped) must ALL fail closed -
         // this is what stops a ride-end false fire and the walk-away collision.
         assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = true, snapshotAgeMs = 1_000L, freshMs = fresh))
         assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = null, snapshotAgeMs = 1_000L, freshMs = fresh))

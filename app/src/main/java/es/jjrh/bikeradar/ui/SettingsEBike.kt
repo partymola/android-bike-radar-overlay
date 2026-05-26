@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -22,32 +19,38 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.EBikeStateBus
-import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.eBikeDataIsFresh
+import kotlinx.coroutines.delay
 
 /**
- * Settings -> eBike screen. Top-level Settings entry alongside Radar and
- * Dashcam, owning the post-onboarding adjustments for Bosch eBike Live
- * Data: master toggle, status, re-pair, unpair.
+ * Settings -> eBike screen. Owns the post-onboarding controls for the
+ * eBike Live Data feature: the master toggle, a receiving/waiting status,
+ * and an "Open Bosch Flow" shortcut.
  *
- * Settings reads from Prefs (`ldiEnabled`, `ldiBondedAddress`) plus the
- * latest [LdiOutcome] published to [EBikeStateBus]. The onboarding step
- * is the right place to drive the pair flow live; Settings shows the
- * resulting status without needing the same live grain - if the service
- * isn't running the bus stays at [LdiOutcome.Idle] and the screen falls
- * back to the bond-presence inference from Prefs.
+ * The feature reads the bike's live data (battery, speed, cadence, rider
+ * power, odometer) by passively subscribing to the proprietary status stream
+ * the Bosch eBike Flow app uses - it works only while Flow is open and
+ * connected to the bike. Only battery and a live/waiting status are surfaced
+ * in the UI; the rest feeds alert tuning (stop detection, walk-away gating).
+ * There is nothing to pair in this app, so this screen has no pairing
+ * walkthrough or unpair action; status is just "are frames arriving right
+ * now", derived from [EBikeStateBus] snapshot freshness.
  *
  * Flow's Android package name (public, on Google Play).
  */
@@ -64,34 +67,38 @@ fun SettingsEBike(navController: NavController, prefs: Prefs) {
 private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
-    val outcome by EBikeStateBus.outcome.collectAsState()
+    val lastUpdated by EBikeStateBus.lastUpdatedElapsedMs.collectAsState()
+    // Re-evaluate freshness on a 5s tick (like MainScreen) so the status flips
+    // to "Waiting" when Flow stops streaming - otherwise it would stay on the
+    // last frame's verdict until an unrelated recompose.
+    var tickNowMs by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5_000)
+            tickNowMs = SystemClock.elapsedRealtime()
+        }
+    }
+    val receiving = eBikeDataIsFresh(lastUpdated, tickNowMs)
 
     SettingsEBikeContent(
         navController = navController,
         ownership = prefsSnap.eBikeOwnership,
-        ldiEnabled = prefsSnap.ldiEnabled,
-        bondedAddress = prefs.ldiBondedAddress,
-        outcome = outcome,
+        eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
+        receiving = receiving,
         onOwnershipYes = {
-            // Promotion from UNANSWERED / NO -> YES. Flipping ldiEnabled
-            // arms the subsystem on the next service start; the screen's
-            // pairing walkthrough handles the in-session path through
-            // ACTION_START_LDI, but Settings is reached post-onboarding
-            // so we don't fire the intent here.
             prefs.eBikeOwnership = EBikeOwnership.YES
-            prefs.ldiEnabled = true
+            prefs.eBikeDataEnabled = true
         },
-        onToggleLdi = { enabled ->
-            prefs.ldiEnabled = enabled
+        onToggleEBikeData = { enabled ->
+            prefs.eBikeDataEnabled = enabled
             val msg = if (enabled) {
-                "Bosch eBike Live Data will start on next ride. Open Flow to pair."
+                "Live eBike data is on. Leave Bosch Flow running in the background while you ride."
             } else {
-                "Bosch eBike Live Data will stop on next ride."
+                "Live eBike data is off."
             }
             Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
         },
         onOpenFlow = { openFlow(ctx) },
-        onUnpair = { releaseBondLocally(ctx, prefs) },
     )
 }
 
@@ -103,13 +110,11 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
 internal fun SettingsEBikeContent(
     navController: NavController,
     ownership: EBikeOwnership,
-    ldiEnabled: Boolean,
-    bondedAddress: String?,
-    outcome: LdiOutcome,
+    eBikeDataEnabled: Boolean,
+    receiving: Boolean,
     onOwnershipYes: () -> Unit,
-    onToggleLdi: (Boolean) -> Unit,
+    onToggleEBikeData: (Boolean) -> Unit,
     onOpenFlow: () -> Unit,
-    onUnpair: () -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -118,57 +123,65 @@ internal fun SettingsEBikeContent(
         ) {
             SettingsHeader(title = "eBike", onBack = { navController.popBackStack() })
 
-            // Introductory line - sits above the toggle / promotion card.
+            // Introductory line - lead with the payoff, state the dependency.
             Text(
-                text = "For Bosch Smart System eBikes on firmware v19.54 or newer.",
+                text = "Shows your eBike battery and connection status on the home " +
+                    "screen, while Bosch Flow runs in the background on this phone.",
                 color = br.fgDim,
                 fontSize = 12.sp,
+                lineHeight = 17.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+            Text(
+                text = "Needs a Bosch Smart System eBike and the Bosch Flow app.",
+                color = br.fgMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             if (ownership != EBikeOwnership.YES) {
                 // Promotion path. NO / UNANSWERED riders see the chooser
-                // card instead of a toggle they can't usefully flip; one
-                // tap brings them into the eBike branch.
+                // card instead of a toggle they can't usefully flip.
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     IntentCard(
                         title = "I have a Bosch Smart System eBike now",
-                        subtitle = "Tap to set up.",
+                        subtitle = "Tap to turn on live data.",
                         filled = true,
                         onClick = onOwnershipYes,
                     )
                 }
             } else {
-                // Master toggle row
                 SettingsRowGroup {
                     SettingsToggleRow(
                         leadingIcon = Icons.AutoMirrored.Filled.DirectionsBike,
                         leadingTint = br.brand,
                         title = "Use eBike data",
-                        subtitle = if (!ldiEnabled) {
-                            "Turn on to set up"
+                        subtitle = if (!eBikeDataEnabled) {
+                            "Turn on to show eBike battery and status on the home screen."
                         } else {
-                            "Warns if the radar drops; quieter standstill + walk-away"
+                            "Battery and status - shown while Bosch Flow runs in the background."
                         },
-                        checked = ldiEnabled,
-                        onCheckedChange = onToggleLdi,
+                        checked = eBikeDataEnabled,
+                        onCheckedChange = onToggleEBikeData,
                     )
                 }
             }
 
-            if (ownership == EBikeOwnership.YES) {
+            if (ownership == EBikeOwnership.YES && eBikeDataEnabled) {
                 Spacer(modifier = Modifier.height(16.dp))
                 SettingsSectionLabel("Status")
                 SettingsRowGroup {
-                    // Status row uses a SettingsRow without a chevron; the
-                    // line is informational, not navigational.
                     SettingsRow(
                         icon = Icons.AutoMirrored.Filled.DirectionsBike,
-                        iconTint = if (statusIsHealthy(ldiEnabled, bondedAddress, outcome)) br.safe else br.fgMuted,
-                        title = settingsStatusText(ldiEnabled, bondedAddress, outcome),
-                        subtitle = settingsStatusSub(ldiEnabled, bondedAddress, outcome),
+                        iconTint = if (receiving) br.safe else br.fgMuted,
+                        title = if (receiving) "Receiving live data" else "Waiting for Bosch Flow",
+                        subtitle = if (receiving) {
+                            "Battery and ride status from your bike."
+                        } else {
+                            "Open Flow and ride - data appears here automatically."
+                        },
                         onClick = {},
                         clickable = false,
                         chevron = false,
@@ -176,33 +189,17 @@ internal fun SettingsEBikeContent(
                     )
                 }
 
-                // ACTIONS group: visible only when the toggle is on. When
-                // off, the toggle subtitle reads "Turn on to set up" and
-                // actions don't apply.
-                if (ldiEnabled) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    SettingsSectionLabel("Actions")
-                    SettingsRowGroup {
-                        if (bondedAddress == null) {
-                            SettingsActionRow(
-                                leadingIcon = Icons.AutoMirrored.Filled.OpenInNew,
-                                leadingTint = br.brand,
-                                title = "Open Flow to pair",
-                                subtitle = "Flow: your bike -> gear icon -> Components -> Add new device -> Accessories.",
-                                actionLabel = "Open",
-                                onAction = onOpenFlow,
-                            )
-                        } else {
-                            SettingsActionRow(
-                                leadingIcon = Icons.Default.LinkOff,
-                                leadingTint = br.fgMuted,
-                                title = "Unpair this bike",
-                                subtitle = "Forget this bike on the phone. Use before pairing a new accessory with your bike.",
-                                actionLabel = "Unpair",
-                                onAction = onUnpair,
-                            )
-                        }
-                    }
+                Spacer(modifier = Modifier.height(16.dp))
+                SettingsSectionLabel("Actions")
+                SettingsRowGroup {
+                    SettingsActionRow(
+                        leadingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+                        leadingTint = br.brand,
+                        title = "Open Bosch Flow",
+                        subtitle = "Live data needs Flow running in the background while you ride.",
+                        actionLabel = "Open",
+                        onAction = onOpenFlow,
+                    )
                 }
             }
 
@@ -210,9 +207,9 @@ internal fun SettingsEBikeContent(
             SettingsSectionLabel("What it does")
             Text(
                 text = listOf(
-                    "Beeps if the rear radar drops out mid-ride",
-                    "Quieter alerts when you stop (wheel sensor, not GPS)",
-                    "Keeps the walk-away alarm quiet while riding",
+                    "Shows eBike battery and connection status on the home screen",
+                    "Keeps close-pass beeps firing on a slow climb",
+                    "Scales beep timing to your wheel speed",
                 ).joinToString("\n") { "•  $it" },
                 color = br.fgMuted,
                 fontSize = 12.sp,
@@ -220,77 +217,38 @@ internal fun SettingsEBikeContent(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
 
+            Spacer(modifier = Modifier.height(20.dp))
+            SettingsSectionLabel("What's collected")
+            Text(
+                text = listOf(
+                    "Reads battery, speed and pedalling - read-only, never sends " +
+                        "anything to your bike",
+                    "Stays on your phone, saved to the ride log",
+                    "Ride and battery info goes to Home Assistant only if you set it up",
+                ).joinToString("\n") { "•  $it" },
+                color = br.fgMuted,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+            Text(
+                text = "Full detail in the Privacy screen.",
+                color = br.fgDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+            )
+
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
-}
-
-/**
- * Map ldiEnabled + bondedAddress + live outcome to the single status
- * string shown at the top of the Status group. Order of precedence:
- * disabled -> outcome-specific failure -> "Paired with ..." (if a
- * bonded address was previously persisted) -> "Not paired".
- *
- * The outcome stream is only meaningful when the service is running;
- * if it's [LdiOutcome.Idle] but a bonded address exists, we still show
- * "Paired" - the bond survives across service restarts and the rider
- * doesn't want to be told it vanished on every cold start.
- */
-internal fun settingsStatusText(
-    ldiEnabled: Boolean,
-    bondedAddress: String?,
-    outcome: LdiOutcome,
-): String {
-    if (!ldiEnabled) return "Off"
-    return when (outcome) {
-        LdiOutcome.NoServiceFound -> "Firmware too old (need v19.54+)"
-        LdiOutcome.SlotConflict -> "Pairing rejected (another device holds the slot)"
-        LdiOutcome.PermissionsDenied -> "Bluetooth permission needed"
-        LdiOutcome.AdapterUnavailable -> "Bluetooth is off"
-        LdiOutcome.Connecting -> "Connecting..."
-        is LdiOutcome.Paired -> "Paired with bike at ${shortenAddress(outcome.shortAddress.ifEmpty { bondedAddress.orEmpty() })}"
-        LdiOutcome.Idle, LdiOutcome.Advertising, LdiOutcome.NoInbound, LdiOutcome.PairPromptDeclined ->
-            if (bondedAddress != null) "Paired with bike at ${shortenAddress(bondedAddress)}" else "Not paired"
-    }
-}
-
-internal fun settingsStatusSub(
-    ldiEnabled: Boolean,
-    bondedAddress: String?,
-    outcome: LdiOutcome,
-): String? {
-    if (!ldiEnabled) return null
-    return when (outcome) {
-        is LdiOutcome.Paired -> "Reading wheel speed and lock state."
-        LdiOutcome.Idle, LdiOutcome.Advertising ->
-            if (bondedAddress != null) "Reading wheel speed and lock state." else null
-        else -> null
-    }
-}
-
-private fun statusIsHealthy(
-    ldiEnabled: Boolean,
-    bondedAddress: String?,
-    outcome: LdiOutcome,
-): Boolean {
-    if (!ldiEnabled) return false
-    return outcome is LdiOutcome.Paired || (bondedAddress != null && outcome !is LdiOutcome.SlotConflict)
-}
-
-/** Truncate to "AA:BB:CC..." so a BLE MAC fits in the row without
- *  pushing the chevron off-screen. Empty -> empty. */
-internal fun shortenAddress(addr: String): String {
-    if (addr.isBlank()) return addr
-    return if (addr.length > 8) addr.substring(0, 8) + "..." else addr
 }
 
 private fun openFlow(ctx: Context) {
     val pm = ctx.packageManager
     val launch = pm.getLaunchIntentForPackage(FLOW_PACKAGE)
     val intent = launch?.apply {
-        // From a non-Activity context (e.g. Settings reached from
-        // navigation backstack) Android requires NEW_TASK to launch
-        // another app.
+        // From a non-Activity context (Settings reached from the nav
+        // backstack) Android requires NEW_TASK to launch another app.
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     } ?: Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$FLOW_PACKAGE"))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -303,46 +261,4 @@ private fun openFlow(ctx: Context) {
             Toast.LENGTH_LONG,
         ).show()
     }
-}
-
-/**
- * Reflection-based `removeBond()` for the eBike. Same shape as the
- * helper in [es.jjrh.bikeradar.EBikeLink.releaseBond], duplicated here
- * because [EBikeLink] is service-owned: in Settings the service may not
- * be running, so we can't route through it. On any failure (hidden-API
- * missing, deny-list block, device unbonded) we surface a manual
- * fallback via Toast and still clear the local pointer.
- *
- * getBondState() needs BLUETOOTH_CONNECT; reached only from the eBike
- * unpair action, which the user can reach after granting BLE permissions.
- */
-@SuppressLint("MissingPermission")
-private fun releaseBondLocally(ctx: Context, prefs: Prefs) {
-    val address = prefs.ldiBondedAddress
-    if (address == null) {
-        Toast.makeText(ctx, "No bond to release.", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val btManager = ctx.getSystemService(BluetoothManager::class.java)
-    val adapter: BluetoothAdapter? = btManager?.adapter
-    val device = try {
-        adapter?.getRemoteDevice(address)
-    } catch (_: Exception) {
-        null
-    }
-    val msg = when {
-        device == null -> "Could not look up the bike's BLE device. Forget the bike in Android Settings -> Bluetooth -> Saved devices."
-        device.bondState != BluetoothDevice.BOND_BONDED -> {
-            prefs.ldiBondedAddress = null
-            "No active bond; cleared the local pointer."
-        }
-        else -> try {
-            device.javaClass.getMethod("removeBond").invoke(device)
-            prefs.ldiBondedAddress = null
-            "Bike unpaired. Restart the app to stop advertising."
-        } catch (_: Exception) {
-            "Could not unpair automatically. Forget the bike in Android Settings -> Bluetooth -> Saved devices."
-        }
-    }
-    Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
 }

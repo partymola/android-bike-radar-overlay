@@ -49,4 +49,13 @@ object Uuids {
 
     // Standard CCCD descriptor UUID
     val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+    // Bosch smart-system proprietary "status" service the Flow app uses for
+    // live telemetry (speed/SoC/cadence/power/odometer). This is NOT the
+    // official LDI eb20/eb21 accessory protocol - LDI requires the bike to be
+    // GAP central to the phone, which can't happen while Flow holds the single
+    // phone<->bike link. This channel streams over that existing phone-central
+    // link instead; we subscribe to its notify char and parse, read-only.
+    val SVC_EBIKE_STATUS: UUID = UUID.fromString("00000010-eaa2-11e9-81b4-2a2ae2dbcce4")
+    val CHAR_EBIKE_STATUS: UUID = UUID.fromString("00000011-eaa2-11e9-81b4-2a2ae2dbcce4")
 }

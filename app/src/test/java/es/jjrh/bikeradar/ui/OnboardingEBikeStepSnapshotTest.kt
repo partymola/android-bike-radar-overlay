@@ -3,7 +3,6 @@ package es.jjrh.bikeradar.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
-import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.EBikeOwnership
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -11,13 +10,14 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Roborazzi goldens for the [EBikeStepContent] onboarding leaf.
- * Renders the chooser (UNANSWERED), the advertising/walkthrough state
- * (YES + Advertising), the bonded success state (YES + Paired), and a
- * representative failure outcome (NoServiceFound).
+ * Roborazzi goldens for the [EBikeStepContent] onboarding leaf: the chooser
+ * (UNANSWERED), and the YES "how it works" body in its three adaptive-CTA
+ * states - Flow not installed (Install), Flow installed but no data yet
+ * (Open), and receiving (a confirmation, no button). There is no pairing
+ * walkthrough; the feature just reads live data while Bosch Flow is open.
  *
- * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
- * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
+ * Renders via Robolectric Native Graphics. Verify with
+ * `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -30,15 +30,12 @@ class OnboardingEBikeStepSnapshotTest {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.UNANSWERED,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.Idle,
+                    receiving = false,
+                    flowInstalled = true,
                     onChooseHave = {},
                     onChooseDontHave = {},
                     onOpenFlow = {},
-                    onOpenPermissionSettings = {},
-                    onTryAgain = {},
-                    onUnpairAndRepair = {},
-                    onSkipForNow = {},
+                    onBack = {},
                     onFinish = {},
                 )
             }
@@ -46,20 +43,17 @@ class OnboardingEBikeStepSnapshotTest {
     }
 
     @Test
-    fun yesAdvertising() {
+    fun yesInstallFlow() {
         captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.Advertising,
+                    receiving = false,
+                    flowInstalled = false,
                     onChooseHave = {},
                     onChooseDontHave = {},
                     onOpenFlow = {},
-                    onOpenPermissionSettings = {},
-                    onTryAgain = {},
-                    onUnpairAndRepair = {},
-                    onSkipForNow = {},
+                    onBack = {},
                     onFinish = {},
                 )
             }
@@ -67,20 +61,17 @@ class OnboardingEBikeStepSnapshotTest {
     }
 
     @Test
-    fun yesPaired() {
+    fun yesOpenFlow() {
         captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,
-                    bondedAddress = "AA:BB:CC:DD:EE:FF",
-                    outcome = LdiOutcome.Paired("AA:BB:CC:DD:EE:FF"),
+                    receiving = false,
+                    flowInstalled = true,
                     onChooseHave = {},
                     onChooseDontHave = {},
                     onOpenFlow = {},
-                    onOpenPermissionSettings = {},
-                    onTryAgain = {},
-                    onUnpairAndRepair = {},
-                    onSkipForNow = {},
+                    onBack = {},
                     onFinish = {},
                 )
             }
@@ -88,20 +79,17 @@ class OnboardingEBikeStepSnapshotTest {
     }
 
     @Test
-    fun yesNoServiceFound() {
+    fun yesReceiving() {
         captureRoboImage {
             UiTheme {
                 EBikeStepContent(
                     ownership = EBikeOwnership.YES,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.NoServiceFound,
+                    receiving = true,
+                    flowInstalled = true,
                     onChooseHave = {},
                     onChooseDontHave = {},
                     onOpenFlow = {},
-                    onOpenPermissionSettings = {},
-                    onTryAgain = {},
-                    onUnpairAndRepair = {},
-                    onSkipForNow = {},
+                    onBack = {},
                     onFinish = {},
                 )
             }

@@ -291,7 +291,7 @@ private fun eBikeSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = 
     es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED -> "Set up your eBike"
     es.jjrh.bikeradar.data.EBikeOwnership.NO -> "Don't have one"
     es.jjrh.bikeradar.data.EBikeOwnership.YES -> when {
-        !snap.ldiEnabled -> "Off"
+        !snap.eBikeDataEnabled -> "Off"
         else -> "On"
     }
 }

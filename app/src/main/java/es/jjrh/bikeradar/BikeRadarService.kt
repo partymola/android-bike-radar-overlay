@@ -137,19 +137,19 @@ class BikeRadarService : Service() {
      *  currently connected or has never been off this session. */
     @Volatile private var radarOffSinceMs: Long? = null
 
-    // ── Bosch eBike Live Data Interface (LDI) snapshot ─────────────────────
-    // Last-known LDI snapshot from [EBikeLink], or null when LDI is not
-    // bonded (no Bosch eBike, experimental flag off, pre-pair, or any
-    // failure path). Consumed by [WalkAwayArmingGate] and by the
+    // ── Bosch eBike live-data snapshot ───────────────────────────────
+    // Last-known eBike snapshot from the status reader, or null when the
+    // feature is off (no Bosch eBike, experimental flag off, or Flow not
+    // running so no frames arrive). Consumed by [WalkAwayArmingGate] and by the
     // AlertDecider stationary override. The null case is the
     // graceful-degradation path that radar-only riders take.
-    @Volatile private var lastLdiSnapshot: LiveDataSnapshot? = null
+    @Volatile private var lastEBikeSnapshot: LiveDataSnapshot? = null
 
-    // Wall-clock of the last LDI snapshot. The radar-drop cue trusts
+    // Wall-clock of the last eBike snapshot. The radar-drop cue trusts
     // `system_locked == false` only while this is fresh: a stale snapshot
-    // means the LDI link itself has dropped (rider walked away), so
+    // means the eBike link itself has dropped (rider walked away), so
     // "unlocked" can no longer be believed.
-    @Volatile private var lastLdiSnapshotMs: Long = 0L
+    @Volatile private var lastEBikeSnapshotMs: Long = 0L
 
     // Radar-drop cue latch (RadarDropDecider). Set to the last cue time;
     // reset to null on radar reconnect. See [RadarDropDecider] for the
@@ -164,17 +164,19 @@ class BikeRadarService : Service() {
     @Volatile private var cachedOverlayPrefs: PrefsSnapshot? = null
     private val overlayPrefs: PrefsSnapshot get() = cachedOverlayPrefs ?: prefs.snapshot()
 
-    // Live EBikeLink instance, null when experimental.ldi.enable is off.
-    @Volatile private var ebikeLink: EBikeLink? = null
+    // Read-only reader for the bike's proprietary live-data stream (the channel
+    // the Bosch Flow app uses). Sources the live snapshot. Null when the eBike
+    // feature is off or no bonded eBike is present.
+    @Volatile private var ebikeStatusReader: EBikeStatusReader? = null
 
     // Absolute odometer at the first snapshot of this session; the
     // capture log writes `odo_delta_m = current - baseline` rather than
-    // the absolute (privacy hardening, see LdiCaptureFormatter).
+    // the absolute (privacy hardening, see EBikeCaptureFormatter).
     @Volatile private var sessionStartOdometerM: Long? = null
 
     // Ride-edge detector state, mutated only on the BLE callback
     // thread inside onSnapshot. Tracks whether the rider is currently
-    // riding (per LDI lock + wheel-motion signals) so STARTED / ENDED
+    // riding (per eBike lock + wheel-motion signals) so STARTED / ENDED
     // edges can publish to HA. See RideEdgeDetector.
     @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
 
@@ -383,97 +385,101 @@ class BikeRadarService : Service() {
         launchWalkAwayTick()
         launchDashcamRefresh()
         launchRideSummaryPublishLoop()
-        maybeStartEBikeLink()
+        maybeStartEBikeReader()
     }
 
     /**
-     * Lifecycle: instantiate [EBikeLink] when the experimental flag
-     * is on AND the required runtime BLE permissions are granted. The
-     * link advertises with service solicitation; the bike connects to
-     * the phone when the rider initiates pairing via Flow. Snapshots are
-     * pushed into [lastLdiSnapshot] for the AlertDecider stationary
-     * override and the walk-away arming gate to consume.
+     * Lifecycle: start the read-only eBike live-data reader when the feature
+     * flag is on AND BLE permissions are granted. [EBikeStatusReader]
+     * subscribes to the bike's proprietary status stream (the channel the
+     * Bosch Flow app uses) over the existing bonded link, and pushes snapshots
+     * into [lastEBikeSnapshot] (for the AlertDecider stationary override +
+     * walk-away gate) and [EBikeStateBus] (for the SYSTEM-card eBike row). It
+     * never writes to the bike.
      *
-     * Flag off / permission missing → no advertising, no GATT server,
-     * `lastLdiSnapshot` stays null, all downstream consumers fall back
-     * to their existing GPS-derived paths. This is the
-     * graceful-degradation path for radar-only and non-Bosch-eBike
-     * riders.
+     * Flag off / permission missing / no bonded eBike → reader not started,
+     * `lastEBikeSnapshot` stays null, all downstream consumers fall back to the
+     * radar's own bike-speed reading. Graceful degradation for radar-only riders.
      */
     @SuppressLint("MissingPermission")
-    private fun maybeStartEBikeLink() {
-        if (!prefs.ldiEnabled) return
+    private fun maybeStartEBikeReader() {
+        if (!prefs.eBikeDataEnabled) return
         if (!hasBlePermissions()) {
-            Log.i(TAG_RADAR, "ldi: experimental flag on but BLE permissions not granted; skipping")
+            Log.i(TAG_RADAR, "ebike: feature on but BLE permissions not granted; skipping")
             return
         }
-        val link = EBikeLink(
+        val ebikeMac = EBikeStatusReader.findBondedEBikeMac(this)
+        if (ebikeMac == null) {
+            Log.i(TAG_RADAR, "ebike: no bonded eBike found; status reader not started")
+            return
+        }
+        val reader = EBikeStatusReader(
             context = this,
+            scope = scope,
+            mac = ebikeMac,
             onSnapshot = { snap ->
-                lastLdiSnapshot = snap
-                lastLdiSnapshotMs = System.currentTimeMillis()
-                // Capture odometer baseline on first sighting, then
-                // log the snapshot delta-only. format() returns null when
-                // every field is still unobserved so we skip logging
-                // empty stubs.
-                if (sessionStartOdometerM == null) {
-                    sessionStartOdometerM = snap.odometerM
-                }
-                LdiCaptureFormatter.format(snap, sessionStartOdometerM)?.let(::clog)
-                // Feed the edge detector; on STARTED / ENDED publish
-                // to HA so dashboards and automations have bike-truth ride
-                // boundaries (independent of GPS drift on the office side).
-                val (nextState, edge) = RideEdgeDetector.next(rideEdgeState, snap)
-                rideEdgeState = nextState
-                if (edge != RideEdgeDetector.Edge.NONE) {
-                    val edgeName = if (edge == RideEdgeDetector.Edge.STARTED) "started" else "ended"
-                    val nowIso = java.time.Instant.now().toString()
-                    clog("# ldi ride_edge=$edgeName t=$nowIso")
-                    publishRideEdgeIfHa(edgeName, nowIso)
-                }
-                // Thread the climb state. Sustained high rider_power
-                // (default >= 250 W for >= 30 s) flips the climbing bit,
-                // which the AlertDecider stationary override consults to
-                // keep alerts firing on a slow climb.
-                val (nextClimb, isClimbing) = ClimbDetector.classify(
-                    prev = climbState,
-                    nowMs = System.currentTimeMillis(),
-                    riderPowerW = snap.riderPower,
-                )
-                climbState = nextClimb
-                if (isClimbing != climbing) {
-                    climbing = isClimbing
-                    clog("# ldi climbing=$isClimbing rider_power=${snap.riderPower}")
-                }
+                onEBikeSnapshot(snap)
+                EBikeStateBus.setSnapshot(snap)
             },
-            onBondedAddress = { addr -> prefs.ldiBondedAddress = addr },
+            log = { m -> Log.i("BikeRadar.EBikeStatus", m) },
         )
-        ebikeLink = link
-        // Mirror the link's outcome + snapshot into the process-wide bus
-        // so onboarding / Settings UI surfaces (which live outside this
-        // service) can subscribe without holding a service reference.
-        scope.launch { link.outcome.collect { EBikeStateBus.setOutcome(it) } }
-        scope.launch { link.snapshot.collect { EBikeStateBus.setSnapshot(it) } }
-        val started = link.start()
-        if (!started) {
-            Log.w(TAG_RADAR, "ldi: EBikeLink.start() failed; flag-on but adapter unavailable?")
-            ebikeLink = null
-        } else {
-            clog("# ldi state=ADVERTISING")
+        ebikeStatusReader = reader
+        reader.start()
+        clog("# ebike status-reader started")
+    }
+
+    /**
+     * Handle a fresh live-data snapshot (from [EBikeStatusReader]): cache it
+     * for the AlertDecider stationary override and the walk-away arming gate,
+     * append a delta-only line to the capture log, and drive ride-edge + climb
+     * detection. Extracted so both the (defunct) eb21 path and the proprietary
+     * status reader feed identical downstream behaviour.
+     */
+    private fun onEBikeSnapshot(snap: LiveDataSnapshot) {
+        lastEBikeSnapshot = snap
+        lastEBikeSnapshotMs = System.currentTimeMillis()
+        // Capture odometer baseline on first sighting, then log the snapshot
+        // delta-only. format() returns null when every field is still
+        // unobserved so we skip logging empty stubs.
+        if (sessionStartOdometerM == null) {
+            sessionStartOdometerM = snap.odometerM
+        }
+        EBikeCaptureFormatter.format(snap, sessionStartOdometerM)?.let(::clog)
+        // Feed the edge detector; on STARTED / ENDED publish to HA so
+        // dashboards and automations have bike-truth ride boundaries
+        // (independent of GPS drift on the office side).
+        val (nextState, edge) = RideEdgeDetector.next(rideEdgeState, snap)
+        rideEdgeState = nextState
+        if (edge != RideEdgeDetector.Edge.NONE) {
+            val edgeName = if (edge == RideEdgeDetector.Edge.STARTED) "started" else "ended"
+            val nowIso = java.time.Instant.now().toString()
+            clog("# ebike ride_edge=$edgeName t=$nowIso")
+            publishRideEdgeIfHa(edgeName, nowIso)
+        }
+        // Thread the climb state. Sustained high rider_power (default >= 250 W
+        // for >= 30 s) flips the climbing bit, which the AlertDecider
+        // stationary override consults to keep alerts firing on a slow climb.
+        val (nextClimb, isClimbing) = ClimbDetector.classify(
+            prev = climbState,
+            nowMs = System.currentTimeMillis(),
+            riderPowerW = snap.riderPower,
+        )
+        climbState = nextClimb
+        if (isClimbing != climbing) {
+            climbing = isClimbing
+            clog("# ebike climbing=$isClimbing rider_power=${snap.riderPower}")
         }
     }
 
     private fun hasBlePermissions(): Boolean {
-        val ctx = applicationContext
-        val connectOk = ContextCompat.checkSelfPermission(
-            ctx,
+        // The eBike reader is a read-only GATT client connecting to a bonded
+        // device by address - it needs BLUETOOTH_CONNECT only. It does not
+        // advertise (the old peripheral link did; it's gone) and does not scan
+        // (the address comes from the bonded-device list).
+        return ContextCompat.checkSelfPermission(
+            applicationContext,
             Manifest.permission.BLUETOOTH_CONNECT,
         ) == PackageManager.PERMISSION_GRANTED
-        val advertiseOk = ContextCompat.checkSelfPermission(
-            ctx,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-        ) == PackageManager.PERMISSION_GRANTED
-        return connectOk && advertiseOk
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -500,26 +506,20 @@ class BikeRadarService : Service() {
                 nm.cancel(NOTIF_WALKAWAY_ID)
                 stopWalkAwayAlarmTone()
             }
-            ACTION_START_LDI -> {
-                // Onboarding eBike step just flipped ldiEnabled and wants
-                // the advertiser up now. Idempotent: EBikeLink.start() is
-                // itself a no-op when already started, and maybeStartEBikeLink
-                // bails when ebikeLink is already non-null.
-                if (ebikeLink == null) maybeStartEBikeLink()
+            ACTION_START_EBIKE_READER -> {
+                // Onboarding eBike step just enabled the feature; bring up the
+                // read-only status reader now. Idempotent: maybeStartEBikeReader
+                // bails when the reader is already running.
+                if (ebikeStatusReader == null) maybeStartEBikeReader()
             }
-            ACTION_RESTART_LDI -> {
-                // Tear the link down (releases the advertiser, closes the
-                // GATT server, cancels the 90s timeout) and rebuild it.
-                // The mirror coroutines spawned by maybeStartEBikeLink for
-                // outcome / snapshot are tied to the old link instance -
-                // they'll observe the bus reset that ebikeLink?.shutdown
-                // implicitly triggers via EBikeLink.stop() setting Idle,
-                // then attach to the new instance on next call.
-                Log.i(TAG_RADAR, "ldi: ACTION_RESTART_LDI - tearing down and restarting")
-                ebikeLink?.shutdown()
-                ebikeLink = null
+            ACTION_RESTART_EBIKE_READER -> {
+                // Tear the status reader down and rebuild it (e.g. the rider
+                // re-opened Flow, or the bike came back).
+                Log.i(TAG_RADAR, "ebike: ACTION_RESTART_EBIKE_READER - restarting status reader")
+                ebikeStatusReader?.shutdown()
+                ebikeStatusReader = null
                 EBikeStateBus.reset()
-                maybeStartEBikeLink()
+                maybeStartEBikeReader()
             }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
@@ -553,12 +553,12 @@ class BikeRadarService : Service() {
         stopWalkAwayAlarmTone()
         alertBeeper?.release()
         alertBeeper = null
-        // Lifecycle teardown: stop advertising, close the GATT
-        // server, and tear down the internal timer scope. EBikeLink's
-        // BLE calls are individually wrapped in try/catch so permission
-        // revocation between start and shutdown does not crash here.
-        ebikeLink?.shutdown()
-        ebikeLink = null
+        // Lifecycle teardown: stop the eBike status reader and tear down the
+        // internal timer scope. The reader's GATT calls are wrapped in
+        // try/catch so permission revocation between start and shutdown does
+        // not crash here.
+        ebikeStatusReader?.shutdown()
+        ebikeStatusReader = null
         EBikeStateBus.reset()
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
@@ -1565,9 +1565,9 @@ class BikeRadarService : Service() {
 
                                 // 2) Pre-flight LOW (L8): a one-shot heads-up at
                                 //    connect when ANY device (radar or dashcam) is
-                                //    below the low-battery threshold, so a swap is
-                                //    realistic while still in the flat rather than
-                                //    mid-commute. 30-min cadence => once per device
+                                //    below the low-battery threshold, so the rider
+                                //    can top up via USB-C before heading out rather
+                                //    than finding out mid-commute. 30-min cadence => once per device
                                 //    per ride; the audible counterpart of the silent
                                 //    low-battery glyph. The radar in the critical
                                 //    band is skipped (case 1 already covers it, so
@@ -1605,24 +1605,26 @@ class BikeRadarService : Service() {
                             }
 
                             if (!prefs.isPaused) {
-                                // Pass LDI ground-truth standstill when present
-                                // (lastLdiSnapshot is null when the experimental flag is
+                                // Pass eBike ground-truth standstill when present
+                                // (lastEBikeSnapshot is null when the experimental flag is
                                 // off or no eBike is bonded). Null falls back to the
-                                // existing bikeSpeedMs GPS-derived gate inside decide().
+                                // bikeSpeedMs gate inside decide(), which uses the radar's
+                                // own bike-speed field from its V2 device-status frame.
                                 //
-                                // When LDI is bonded, prefer wheel-speed truth
+                                // When eBike is bonded, prefer wheel-speed truth
                                 // (speedRaw is 1/100 km/h; / 360 = m/s) so the
                                 // speed-aware cooldown reacts to actual rider speed at
-                                // sub-second latency instead of GPS's 1-2 s lag.
-                                val ldiSnap = lastLdiSnapshot
-                                val preferredBikeSpeedMs = ldiSnap?.speedRaw?.let { it / 360f }
+                                // sub-second latency instead of the radar's slower
+                                // device-status cadence.
+                                val eBikeSnap = lastEBikeSnapshot
+                                val preferredBikeSpeedMs = eBikeSnap?.speedRaw?.let { it / 360f }
                                     ?: state.bikeSpeedMs
                                 val ev = alerts.decide(
                                     vehicles = state.vehicles,
                                     alertMaxM = overlayPrefs.alertMaxDistanceM,
                                     nowMs = now,
                                     bikeSpeedMs = preferredBikeSpeedMs,
-                                    bikeNotDriving = ldiSnap?.bikeNotDriving,
+                                    bikeNotDriving = eBikeSnap?.bikeNotDriving,
                                     climbing = climbing,
                                 )
                                 if (ev !is AlertDecider.Event.None) {
@@ -2444,16 +2446,16 @@ class BikeRadarService : Service() {
         }
         if (radarOffSinceMs == null) {
             radarOffSinceMs = System.currentTimeMillis()
-            // Consult the LDI snapshot before arming. When the bike
+            // Consult the eBike snapshot before arming. When the bike
             // reports system_locked=false the rider is on the bike
             // (mid-ride radar BLE blip); arming would misfire. Any other
-            // case (locked, null systemLocked, null snapshot, LDI flag
+            // case (locked, null systemLocked, null snapshot, eBike flag
             // off) falls through to the existing IDLE → ARMED path.
-            if (WalkAwayArmingGate.shouldArm(lastLdiSnapshot)) {
+            if (WalkAwayArmingGate.shouldArm(lastEBikeSnapshot)) {
                 walkAwayArmed = true
                 clog("# walkaway state=ARMED transition_reason=radar-disconnected")
             } else {
-                clog("# walkaway state=BLANK transition_reason=radar-disconnected-but-ldi-unlocked")
+                clog("# walkaway state=BLANK transition_reason=radar-disconnected-but-ebike-unlocked")
             }
         }
     }
@@ -2540,27 +2542,27 @@ class BikeRadarService : Service() {
      * Radar-drop audio cue: a dropped radar link looks identical to a clear
      * road on the overlay, and the rider's eyes are on the road, so the
      * warning must be audible. Fires when the radar has been down for
-     * [RADAR_DROP_THRESHOLD_MS] while LDI confirms the rider is still on the
+     * [RADAR_DROP_THRESHOLD_MS] while eBike confirms the rider is still on the
      * bike, then repeats every [RADAR_DROP_CUE_INTERVAL_MS] until reconnect.
      *
-     * LDI-gated on purpose: a fresh `system_locked == false` is the only
+     * eBike-gated on purpose: a fresh `system_locked == false` is the only
      * signal that separates a mid-ride radar loss (cue) from a ride-end
      * dismount (no cue). That makes this mutually exclusive with the walk-away
-     * alarm, which arms only when NOT unlocked. Without an LDI signal there is
+     * alarm, which arms only when NOT unlocked. Without an eBike signal there is
      * no cue - a radar-only / no-eBike rider never gets a false ride-end fire.
      * Full design rationale + scenario matrix in [RadarDropDecider]'s KDoc.
      */
     private fun evaluateRadarDrop(nowMs: Long) {
         if (prefs.isPaused) return
-        val ldi = lastLdiSnapshot
+        val snap = lastEBikeSnapshot
         val downForMs = radarOffSinceMs?.let { nowMs - it }
         val decision = RadarDropDecider.decide(
             radarEverLive = sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
             ridingConfirmed = RadarDropDecider.ridingConfirmed(
-                systemLocked = ldi?.systemLocked,
-                snapshotAgeMs = nowMs - lastLdiSnapshotMs,
-                freshMs = RADAR_DROP_LDI_FRESH_MS,
+                systemLocked = snap?.systemLocked,
+                snapshotAgeMs = nowMs - lastEBikeSnapshotMs,
+                freshMs = RADAR_DROP_EBIKE_FRESH_MS,
             ),
             nowMs = nowMs,
             thresholdMs = RADAR_DROP_THRESHOLD_MS,
@@ -2574,7 +2576,7 @@ class BikeRadarService : Service() {
         radarDropLastCueMs = decision.lastCueMs
         if (decision.fire) {
             alertBeeper?.playRadarDropped()
-            clog("# radar_drop_cue down_ms=${downForMs ?: -1L} system_locked=${ldi?.systemLocked}")
+            clog("# radar_drop_cue down_ms=${downForMs ?: -1L} system_locked=${snap?.systemLocked}")
         }
     }
 
@@ -2757,25 +2759,21 @@ class BikeRadarService : Service() {
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
 
         /**
-         * Brings the eBike Live Data Interface subsystem up mid-session.
-         * Fire-and-forget: the caller (typically the onboarding eBike
-         * step after the rider flips ldiEnabled = true) sends this so the
-         * advertiser starts immediately, without waiting for a full
-         * service restart. No-op if the flag is off or BLE permissions
-         * are missing.
+         * Brings the eBike Live Data subsystem up mid-session.
+         * Fire-and-forget: the onboarding eBike step sends this after the
+         * rider flips eBikeDataEnabled = true so the read-only status reader
+         * starts immediately, without waiting for a full service restart.
+         * No-op if the flag is off or BLE permissions are missing.
          */
-        const val ACTION_START_LDI = "es.jjrh.bikeradar.START_LDI"
+        const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
 
         /**
-         * Force a fresh advertise cycle: tear the existing [EBikeLink]
-         * down and start a new one. Sent by the onboarding eBike step's
-         * "Try again" CTA on terminal failure outcomes (SlotConflict
-         * after the rider unpairs another accessory, NoInbound after
-         * powering the bike on). [ACTION_START_LDI] alone is idempotent
-         * - it sees `started = true` and no-ops - so it can't recover
-         * from a failure state without a stop first.
+         * Tear the existing status reader down and start a fresh one.
+         * [ACTION_START_EBIKE_READER] alone is idempotent - it no-ops when the
+         * reader is already running - so a forced restart needs a stop
+         * first.
          */
-        const val ACTION_RESTART_LDI = "es.jjrh.bikeradar.RESTART_LDI"
+        const val ACTION_RESTART_EBIKE_READER = "es.jjrh.bikeradar.RESTART_EBIKE_READER"
         const val EXTRA_MAC = "mac"
         const val EXTRA_NAME = "name"
         private const val NOTIF_ACTION_REQ = 0xB1CD
@@ -2862,10 +2860,10 @@ class BikeRadarService : Service() {
         /** Radar-drop cue re-fire gap while the radar stays down. */
         const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L
 
-        /** Max age of the LDI snapshot for its `system_locked` to be trusted
-         *  by the radar-drop cue. Older than this means the LDI link has
+        /** Max age of the eBike snapshot for its `system_locked` to be trusted
+         *  by the radar-drop cue. Older than this means the eBike link has
          *  itself dropped (rider left), so "unlocked" can't be believed. */
-        const val RADAR_DROP_LDI_FRESH_MS = 30_000L
+        const val RADAR_DROP_EBIKE_FRESH_MS = 30_000L
 
         /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
          *  long enough that a sub-30-min commute gets exactly one heads-up

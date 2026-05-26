@@ -30,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
@@ -75,12 +76,14 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.ClosePassStateBus
 import es.jjrh.bikeradar.DataSource
+import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.eBikeDataIsFresh
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -126,6 +129,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val haHealth by HaHealthBus.state.collectAsState()
     val batteryEntries by BatteryStateBus.entries.collectAsState()
+    val ebikeSnap by EBikeStateBus.snapshot.collectAsState()
+    val ebikeLastUpdated by EBikeStateBus.lastUpdatedElapsedMs.collectAsState()
 
     // Pollers below use repeatOnLifecycle(RESUMED) so they pause when
     // the screen is off / app backgrounded — there's no value in
@@ -232,6 +237,11 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
     val haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown)
+    // eBike freshness samples elapsedRealtime() fresh on every recompose;
+    // the 5 s tickNowMs above is the recompose driver, so the dot drops to
+    // amber a few seconds after Flow stops streaming.
+    val ebikeReceiving = eBikeDataIsFresh(ebikeLastUpdated, android.os.SystemClock.elapsedRealtime())
+    val ebikeBatterySoc = ebikeSnap.batterySoc
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         MainScreenContent(
@@ -250,6 +260,9 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             dashcamBattery = dashcamBattery,
             haHealthy = haHealthy,
             closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+            eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
+            ebikeReceiving = ebikeReceiving,
+            ebikeBatterySoc = ebikeBatterySoc,
             isLandscape = isLandscape,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
@@ -286,6 +299,9 @@ internal fun MainScreenContent(
     dashcamBattery: BatteryEntry?,
     haHealthy: Boolean,
     closePassLoggingEnabled: Boolean,
+    eBikeDataEnabled: Boolean = false,
+    ebikeReceiving: Boolean = false,
+    ebikeBatterySoc: Int? = null,
     isLandscape: Boolean,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
@@ -310,6 +326,9 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haHealthy = haHealthy,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            eBikeDataEnabled = eBikeDataEnabled,
+            ebikeReceiving = ebikeReceiving,
+            ebikeBatterySoc = ebikeBatterySoc,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
@@ -333,6 +352,9 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haHealthy = haHealthy,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            eBikeDataEnabled = eBikeDataEnabled,
+            ebikeReceiving = ebikeReceiving,
+            ebikeBatterySoc = ebikeBatterySoc,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
@@ -390,6 +412,9 @@ private fun MainScreenPortrait(
     dashcamBattery: BatteryEntry?,
     haHealthy: Boolean,
     closePassLoggingEnabled: Boolean,
+    eBikeDataEnabled: Boolean,
+    ebikeReceiving: Boolean,
+    ebikeBatterySoc: Int?,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -424,6 +449,9 @@ private fun MainScreenPortrait(
                 radarBattery = radarBattery,
                 dashcamBattery = dashcamBattery,
                 haHealthy = haHealthy,
+                ebikeEnabled = eBikeDataEnabled,
+                ebikeReceiving = ebikeReceiving,
+                ebikeBatterySoc = ebikeBatterySoc,
             )
             Spacer(modifier = Modifier.height(12.dp))
             ClosePassStatsCard(loggingEnabled = closePassLoggingEnabled)
@@ -463,6 +491,9 @@ private fun MainScreenLandscape(
     dashcamBattery: BatteryEntry?,
     haHealthy: Boolean,
     closePassLoggingEnabled: Boolean,
+    eBikeDataEnabled: Boolean,
+    ebikeReceiving: Boolean,
+    ebikeBatterySoc: Int?,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -521,6 +552,9 @@ private fun MainScreenLandscape(
                     radarBattery = radarBattery,
                     dashcamBattery = dashcamBattery,
                     haHealthy = haHealthy,
+                    ebikeEnabled = eBikeDataEnabled,
+                    ebikeReceiving = ebikeReceiving,
+                    ebikeBatterySoc = ebikeBatterySoc,
                 )
                 // Push Settings to the bottom of the right column.
                 Spacer(modifier = Modifier.weight(1f))
@@ -723,6 +757,9 @@ internal fun SystemCard(
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     haHealthy: Boolean,
+    ebikeEnabled: Boolean = false,
+    ebikeReceiving: Boolean = false,
+    ebikeBatterySoc: Int? = null,
 ) {
     val br = LocalBrColors.current
 
@@ -769,6 +806,17 @@ internal fun SystemCard(
         hollow = !dashcamOwned || !dashcamPaired,
     )
 
+    // eBike live-data status (read from the proprietary channel Flow uses).
+    // Battery % + dot, no data dump - shown only when the feature is on.
+    val ebikeRow = SystemRow(
+        icon = Icons.AutoMirrored.Filled.DirectionsBike,
+        label = "eBike",
+        value = if (ebikeReceiving) "Live" else "Waiting for Flow",
+        muted = !ebikeReceiving,
+        battery = if (ebikeReceiving) ebikeBatterySoc else null,
+        dot = if (ebikeReceiving) br.safe else br.caution,
+    )
+
     val haRow = SystemRow(
         icon = Icons.Default.Home,
         label = "Home Assistant",
@@ -784,6 +832,7 @@ internal fun SystemCard(
             Spacer(modifier = Modifier.height(10.dp))
             SystemRowRender(radarRow, isFirst = true)
             SystemRowRender(dashcamRow, isFirst = false)
+            if (ebikeEnabled) SystemRowRender(ebikeRow, isFirst = false)
             SystemRowRender(haRow, isFirst = false)
         }
     }

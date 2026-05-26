@@ -79,20 +79,39 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
-    fun ldiDisabledIsCleanNoOp() {
-        // Graceful degradation: with the LDI experimental flag off, the
-        // service must not start the BLE advertiser / GATT server, even
-        // for a rider who owns a Bosch eBike. Pinned via EBikeStateBus
-        // staying Idle through onCreate - a regression ships as "the app
-        // advertises to eBikes for riders who never opted in".
+    fun eBikeDataDisabledIsCleanNoOp() {
+        // Graceful degradation: with the eBike feature flag off, the service
+        // must not start the status reader, even for a rider who owns a Bosch
+        // eBike. Pinned via EBikeStateBus publishing no frame through onCreate
+        // (lastUpdated stays 0) - a regression ships as "the app talks to
+        // eBikes for riders who never opted in".
         EBikeStateBus.reset()
         Prefs(app).apply {
             eBikeOwnership = EBikeOwnership.YES
-            ldiEnabled = false
+            eBikeDataEnabled = false
         }
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
-        assertEquals(LdiOutcome.Idle, EBikeStateBus.outcome.value)
+        assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
+        controller.destroy()
+    }
+
+    @Test
+    fun eBikeDataEnabledIsCleanWithoutABondedEBike() {
+        // Flag-on companion of the no-op test. Flag is enabled, ownership is
+        // YES, but no Bosch eBike is bonded in Robolectric's shadow adapter
+        // (the only bonded device fixture is the radar mock, if any). The
+        // reader must not start, and EBikeStateBus stays at the never-received
+        // sentinel - regression ships as a crash on radar-only riders who
+        // toggle the feature on without an eBike.
+        EBikeStateBus.reset()
+        Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = true
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
         controller.destroy()
     }
 

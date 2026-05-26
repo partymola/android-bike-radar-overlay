@@ -73,7 +73,7 @@ class RideEdgeDetectorTest {
     }
 
     @Test fun `both signals null - state and edge unchanged`() {
-        // No-LDI rider, or a snapshot before the first relevant NOTIFY.
+        // No-eBike rider, or a snapshot before the first relevant NOTIFY.
         // No basis for any edge decision.
         val warm = RideEdgeDetector.State(isRiding = true, firstSnapshotSeen = true)
         val (after, edge) = RideEdgeDetector.next(warm, LiveDataSnapshot())
@@ -82,7 +82,7 @@ class RideEdgeDetectorTest {
     }
 
     @Test fun `flag-off path - caller never invokes us - graceful degrade`() {
-        // When developer.ldi.enable is false, no snapshots arrive and
+        // When the eBike feature is false, no snapshots arrive and
         // RideEdgeDetector is never invoked. No HA events fire. This
         // test pins the no-invocation contract by confirming the empty
         // initial state is itself stable across a noop snapshot.

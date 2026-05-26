@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  *  been asked yet" from "explicitly said no". */
 enum class DashcamOwnership { UNANSWERED, YES, NO }
 
-/** Tri-state ownership for the Bosch eBike LDI feature. Mirrors
+/** Tri-state ownership for the Bosch eBike live-data feature. Mirrors
  *  [DashcamOwnership] so the same UNANSWERED / YES / NO semantics apply:
  *  the onboarding step shows the chooser when UNANSWERED, walks through
  *  pairing on YES, skips on NO. NO is not permanent; the Settings ->
@@ -59,9 +59,8 @@ data class PrefsSnapshot(
     val autoLightModeEnabled: Boolean,
     val cameraLightDayMode: CameraLightMode,
     val cameraLightNightMode: CameraLightMode,
-    val ldiEnabled: Boolean,
+    val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
-    val ldiOnboardingResumePoint: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -344,28 +343,35 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_CAMERA_LIGHT_NIGHT_MODE, v.name).apply()
         }
 
-    /** Experimental: enable the Bosch eBike Live Data Interface (LDI) BLE
-     *  subsystem. Off by default. When off, no advertising, no GATT server,
-     *  no permission requested at runtime, and every downstream consumer
-     *  (AlertDecider stationary override, walk-away disarm gate) sees a
-     *  null `LiveDataSnapshot` and falls back to its existing GPS-derived
-     *  behaviour. Requires a Bosch Smart System eBike running firmware
-     *  v19.54+; pairing happens through the Bosch Flow app on the bike's
-     *  controller, not in this app. */
-    var ldiEnabled: Boolean
-        get() = sp.getBoolean(KEY_LDI_ENABLED, false)
-        set(v) {
-            sp.edit().putBoolean(KEY_LDI_ENABLED, v).apply()
+    /** Enable the Bosch eBike live-data reader. Off by default. When off, the
+     *  read-only status reader is never started and every downstream consumer
+     *  (AlertDecider stationary override, walk-away disarm gate) sees a null
+     *  `LiveDataSnapshot` and falls back to the radar's own bike-speed reading.
+     *  Requires a Bosch Smart System eBike and the Bosch Flow app running;
+     *  there is nothing to pair in this app - the reader listens on the link
+     *  Flow already holds.
+     *
+     *  The getter performs a one-shot migration from the previous storage key
+     *  (`ldi_enabled`, from when the feature was named after the official LDI
+     *  protocol) so existing users keep their setting across the upgrade. The
+     *  migration also clears two now-deleted legacy keys
+     *  ([LEGACY_KEY_LDI_BONDED_ADDRESS], [LEGACY_KEY_LDI_ONBOARDING_RESUME]). */
+    var eBikeDataEnabled: Boolean
+        get() {
+            if (sp.contains(LEGACY_KEY_LDI_ENABLED) && !sp.contains(KEY_EBIKE_DATA_ENABLED)) {
+                val legacy = sp.getBoolean(LEGACY_KEY_LDI_ENABLED, false)
+                sp.edit()
+                    .putBoolean(KEY_EBIKE_DATA_ENABLED, legacy)
+                    .remove(LEGACY_KEY_LDI_ENABLED)
+                    .remove(LEGACY_KEY_LDI_BONDED_ADDRESS)
+                    .remove(LEGACY_KEY_LDI_ONBOARDING_RESUME)
+                    .apply()
+                return legacy
+            }
+            return sp.getBoolean(KEY_EBIKE_DATA_ENABLED, false)
         }
-
-    /** Address of the eBike that has bonded LDI with this phone. Captured
-     *  on the first successful inbound LDI connection; used by the Release
-     *  LDI bond Settings action to look up the BluetoothDevice for
-     *  removeBond(). Cleared when the bond is released. */
-    var ldiBondedAddress: String?
-        get() = sp.getString(KEY_LDI_BONDED_ADDRESS, null)
         set(v) {
-            sp.edit().putString(KEY_LDI_BONDED_ADDRESS, v).apply()
+            sp.edit().putBoolean(KEY_EBIKE_DATA_ENABLED, v).apply()
         }
 
     /** Rider's answer to the "do you have a Bosch Smart System eBike?"
@@ -381,18 +387,6 @@ class Prefs(context: Context) {
         }.getOrDefault(EBikeOwnership.UNANSWERED)
         set(v) {
             sp.edit().putString(KEY_EBIKE_OWNERSHIP, v.name).apply()
-        }
-
-    /** Transient flag set on entering the LDI onboarding pair-walkthrough
-     *  state. On cold start with this set, the launcher deep-links back
-     *  into Settings -> eBike (if onboarding completed) or the eBike
-     *  onboarding step (if onboarding is still in progress) so a rider
-     *  who left mid-pair to run a firmware update lands back where they
-     *  were. Cleared on Paired or on Skip-for-now. */
-    var ldiOnboardingResumePoint: Boolean
-        get() = sp.getBoolean(KEY_LDI_ONBOARDING_RESUME, false)
-        set(v) {
-            sp.edit().putBoolean(KEY_LDI_ONBOARDING_RESUME, v).apply()
         }
 
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
@@ -429,9 +423,8 @@ class Prefs(context: Context) {
         autoLightModeEnabled = autoLightModeEnabled,
         cameraLightDayMode = cameraLightDayMode,
         cameraLightNightMode = cameraLightNightMode,
-        ldiEnabled = ldiEnabled,
+        eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
-        ldiOnboardingResumePoint = ldiOnboardingResumePoint,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -478,9 +471,8 @@ class Prefs(context: Context) {
         appendLine("auto_light_mode_enabled=$autoLightModeEnabled")
         appendLine("camera_light_day_mode=$cameraLightDayMode")
         appendLine("camera_light_night_mode=$cameraLightNightMode")
-        appendLine("ldi_enabled=$ldiEnabled")
+        appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
-        appendLine("ldi_onboarding_resume_point=$ldiOnboardingResumePoint")
     }
 
     companion object {
@@ -517,10 +509,16 @@ class Prefs(context: Context) {
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
         const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"
-        const val KEY_LDI_ENABLED = "ldi_enabled"
-        const val KEY_LDI_BONDED_ADDRESS = "ldi_bonded_address"
+        const val KEY_EBIKE_DATA_ENABLED = "ebike_data_enabled"
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
-        const val KEY_LDI_ONBOARDING_RESUME = "ldi_onboarding_resume_point"
+
+        // Legacy storage keys from when the feature was named after the
+        // official Bosch LDI protocol. Read-only; cleared on first use of the
+        // new key by the [eBikeDataEnabled] migration getter. Do not introduce
+        // new readers / writers.
+        private const val LEGACY_KEY_LDI_ENABLED = "ldi_enabled"
+        private const val LEGACY_KEY_LDI_BONDED_ADDRESS = "ldi_bonded_address"
+        private const val LEGACY_KEY_LDI_ONBOARDING_RESUME = "ldi_onboarding_resume_point"
 
         /**
          * Replace a sensitive identifier with a presence-only marker for use

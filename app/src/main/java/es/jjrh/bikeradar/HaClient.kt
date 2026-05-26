@@ -320,7 +320,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
 
     /**
      * Publish a ride-edge event (started or ended) inferred from
-     * the Bosch LDI snapshot stream. Two writes (close-pass-event
+     * the Bosch eBike snapshot stream. Two writes (close-pass-event
      * pattern): one non-retained to the main topic for HA event
      * entities, one retained `/last` so a fresh dashboard card has
      * something to render on reload.

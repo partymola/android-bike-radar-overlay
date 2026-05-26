@@ -4,7 +4,6 @@ package es.jjrh.bikeradar.ui
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
-import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.EBikeOwnership
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,20 +12,19 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Roborazzi goldens for the [SettingsEBikeContent] leaf. Covers the
- * four headline states from the design's §1 / §5:
+ * headline states of the Settings → eBike screen:
  *
  *  - noOwnership: ownership = NO. Toggle row replaced by the promotion
- *    IntentCard. The status group and ACTIONS group are hidden.
- *  - yesToggleOff: ownership = YES, ldiEnabled = false. Status reads
- *    Off, ACTIONS hidden, toggle subtitle reads `Turn on to set up`.
- *  - yesToggleOnNoBond: ownership = YES, ldiEnabled = true,
- *    bondedAddress = null. ACTIONS shows `Open Flow to pair`.
- *  - yesToggleOnBonded: ownership = YES, ldiEnabled = true,
- *    bondedAddress non-null. Status reads `Paired with bike at ...`,
- *    ACTIONS shows `Unpair this bike`.
+ *    IntentCard; Status and Actions hidden.
+ *  - yesToggleOff: ownership = YES, eBikeDataEnabled = false. Toggle subtitle
+ *    invites turning it on; Status and Actions hidden.
+ *  - yesWaiting: ownership = YES, enabled, receiving = false. Status reads
+ *    "Waiting for Bosch Flow"; Actions shows "Open Bosch Flow".
+ *  - yesReceiving: ownership = YES, enabled, receiving = true. Status reads
+ *    "Receiving live data".
  *
- * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
- * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
+ * Renders via Robolectric Native Graphics. Verify with
+ * `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -40,13 +38,11 @@ class SettingsEBikeSnapshotTest {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
                     ownership = EBikeOwnership.NO,
-                    ldiEnabled = false,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.Idle,
+                    eBikeDataEnabled = false,
+                    receiving = false,
                     onOwnershipYes = {},
-                    onToggleLdi = {},
+                    onToggleEBikeData = {},
                     onOpenFlow = {},
-                    onUnpair = {},
                 )
             }
         }
@@ -59,51 +55,45 @@ class SettingsEBikeSnapshotTest {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
                     ownership = EBikeOwnership.YES,
-                    ldiEnabled = false,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.Idle,
+                    eBikeDataEnabled = false,
+                    receiving = false,
                     onOwnershipYes = {},
-                    onToggleLdi = {},
+                    onToggleEBikeData = {},
                     onOpenFlow = {},
-                    onUnpair = {},
                 )
             }
         }
     }
 
     @Test
-    fun yesToggleOnNoBond() {
+    fun yesWaiting() {
         captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
                     ownership = EBikeOwnership.YES,
-                    ldiEnabled = true,
-                    bondedAddress = null,
-                    outcome = LdiOutcome.Advertising,
+                    eBikeDataEnabled = true,
+                    receiving = false,
                     onOwnershipYes = {},
-                    onToggleLdi = {},
+                    onToggleEBikeData = {},
                     onOpenFlow = {},
-                    onUnpair = {},
                 )
             }
         }
     }
 
     @Test
-    fun yesToggleOnBonded() {
+    fun yesReceiving() {
         captureRoboImage {
             UiTheme {
                 SettingsEBikeContent(
                     navController = rememberNavController(),
                     ownership = EBikeOwnership.YES,
-                    ldiEnabled = true,
-                    bondedAddress = "AA:BB:CC:DD:EE:FF",
-                    outcome = LdiOutcome.Paired("AA:BB:CC:DD:EE:FF"),
+                    eBikeDataEnabled = true,
+                    receiving = true,
                     onOwnershipYes = {},
-                    onToggleLdi = {},
+                    onToggleEBikeData = {},
                     onOpenFlow = {},
-                    onUnpair = {},
                 )
             }
         }

@@ -7,10 +7,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class LdiCaptureFormatterTest {
+class EBikeCaptureFormatterTest {
 
     @Test fun `empty snapshot renders null (skip logging)`() {
-        assertNull(LdiCaptureFormatter.format(LiveDataSnapshot(), sessionStartOdometerM = null))
+        assertNull(EBikeCaptureFormatter.format(LiveDataSnapshot(), sessionStartOdometerM = null))
     }
 
     @Test fun `populated snapshot renders all observed fields`() {
@@ -23,18 +23,18 @@ class LdiCaptureFormatterTest {
             chargerConnected = false,
             bikeNotDriving = false,
         )
-        val line = LdiCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
         assertNotNull(line)
         assertEquals(
-            "ldi spd_raw=1080 cad=85 power=120 batt=80 sysl=1 chg=0 notdrv=0",
+            "ebike spd_raw=1080 cad=85 power=120 batt=80 sysl=1 chg=0 notdrv=0",
             line,
         )
     }
 
     @Test fun `null fields are omitted from the line`() {
         val snap = LiveDataSnapshot(speedRaw = 500)
-        val line = LdiCaptureFormatter.format(snap, sessionStartOdometerM = null)
-        assertEquals("ldi spd_raw=500", line)
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        assertEquals("ebike spd_raw=500", line)
     }
 
     @Test fun `odometer renders as delta-since-baseline, never absolute`() {
@@ -44,8 +44,8 @@ class LdiCaptureFormatterTest {
         // appear in the log.
         val snap = LiveDataSnapshot(odometerM = 1_000_500L)
         val baseline = 1_000_000L
-        val line = LdiCaptureFormatter.format(snap, sessionStartOdometerM = baseline)
-        assertEquals("ldi odo_delta_m=500", line)
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = baseline)
+        assertEquals("ebike odo_delta_m=500", line)
         // Hard negative: the absolute must NOT appear in the line.
         assertTrue("absolute odometer must not leak", !line!!.contains("1000500"))
         assertTrue("baseline must not leak", !line.contains("1000000"))
@@ -56,13 +56,13 @@ class LdiCaptureFormatterTest {
         // captured a baseline yet, so the delta is rendered as zero.
         // Subsequent calls will pass the captured baseline.
         val snap = LiveDataSnapshot(odometerM = 1_000_500L)
-        val line = LdiCaptureFormatter.format(snap, sessionStartOdometerM = null)
-        assertEquals("ldi odo_delta_m=0", line)
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        assertEquals("ebike odo_delta_m=0", line)
     }
 
     @Test fun `time renders as ISO-8601 from seconds-since-epoch`() {
         val snap = LiveDataSnapshot(timeSec = 1_747_600_000L)
-        val line = LdiCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
         assertNotNull(line)
         // Don't pin the exact rendered timestamp (Instant.toString format
         // is stable but the actual value depends on JDK behaviour); just
@@ -78,11 +78,11 @@ class LdiCaptureFormatterTest {
         // log preserves the raw value so the consumer can update its
         // mapping without re-running the rider's ride.
         for (v in 0..3) {
-            val line = LdiCaptureFormatter.format(
+            val line = EBikeCaptureFormatter.format(
                 LiveDataSnapshot(bikeLight = v),
                 sessionStartOdometerM = null,
             )
-            assertEquals("ldi blight=$v", line)
+            assertEquals("ebike blight=$v", line)
         }
     }
 }

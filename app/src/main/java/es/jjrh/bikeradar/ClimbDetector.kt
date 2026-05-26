@@ -11,12 +11,12 @@ package es.jjrh.bikeradar
  * pedal effort continuously for at least [DEFAULT_SUSTAIN_MS]
  * milliseconds. 250 W sustained for 30 s is well above commuting cruise
  * (50-150 W) and well above the bike's motor-assist baseline of zero
- * (rider_power on the LDI v1 spec is rider effort only, not motor
+ * (rider_power on the eBike v1 spec is rider effort only, not motor
  * assist). 30 s damps single-frame spikes (a hard push-off, a power
  * spike on a kerb).
  *
  * The detector is stateless; the caller threads [State] across calls.
- * Designed to be invoked once per LDI snapshot from the BLE callback.
+ * Designed to be invoked once per eBike snapshot from the BLE callback.
  */
 object ClimbDetector {
 
@@ -35,7 +35,7 @@ object ClimbDetector {
      * is currently in a sustained climb (true once [sustainMs] has
      * elapsed in a continuous run above [thresholdW]).
      *
-     * @param riderPowerW From LDI snapshot, in watts. Null when LDI is
+     * @param riderPowerW From eBike snapshot, in watts. Null when eBike is
      *   not bonded or rider_power has not yet appeared in any NOTIFY.
      *   Null => not climbing, state reset.
      */

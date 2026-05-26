@@ -80,9 +80,8 @@ class PrefsTest {
         assertFalse(s.autoLightModeEnabled)
         assertEquals(CameraLightMode.DAY_FLASH, s.cameraLightDayMode)
         assertEquals(CameraLightMode.LOW, s.cameraLightNightMode)
-        assertFalse(s.ldiEnabled)
+        assertFalse(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.UNANSWERED, s.eBikeOwnership)
-        assertFalse(s.ldiOnboardingResumePoint)
     }
 
     @Test
@@ -118,9 +117,8 @@ class PrefsTest {
         prefs.autoLightModeEnabled = true
         prefs.cameraLightDayMode = CameraLightMode.HIGH
         prefs.cameraLightNightMode = CameraLightMode.NIGHT_FLASH
-        prefs.ldiEnabled = true
+        prefs.eBikeDataEnabled = true
         prefs.eBikeOwnership = EBikeOwnership.NO
-        prefs.ldiOnboardingResumePoint = true
 
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
@@ -156,23 +154,61 @@ class PrefsTest {
         assertTrue(s.autoLightModeEnabled)
         assertEquals(CameraLightMode.HIGH, s.cameraLightDayMode)
         assertEquals(CameraLightMode.NIGHT_FLASH, s.cameraLightNightMode)
-        assertTrue(s.ldiEnabled)
+        assertTrue(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
-        assertTrue(s.ldiOnboardingResumePoint)
+    }
+
+    @Test
+    fun legacyLdiEnabledKeyMigratesToTheNewKeyAndIsRemoved() {
+        // The feature was previously stored under "ldi_enabled" (when it was
+        // named after Bosch's official LDI protocol). Existing users have the
+        // legacy key set; on first read of eBikeDataEnabled the getter must
+        // copy the value into "ebike_data_enabled" and delete the legacy key
+        // (plus its two now-deleted siblings). Pinned so a refactor that drops
+        // the migration silently resets every existing user.
+        val sp = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        sp.edit()
+            .clear()
+            .putBoolean("ldi_enabled", true)
+            .putString("ldi_bonded_address", "11:22:33:44:55:66")
+            .putBoolean("ldi_onboarding_resume_point", true)
+            .commit()
+        val fresh = Prefs(context)
+        assertTrue(fresh.eBikeDataEnabled) // value carried across
+        val after = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        assertTrue(after.contains("ebike_data_enabled"))
+        assertFalse(after.contains("ldi_enabled"))
+        assertFalse(after.contains("ldi_bonded_address"))
+        assertFalse(after.contains("ldi_onboarding_resume_point"))
+    }
+
+    @Test
+    fun migrationDoesNotOverwriteAnExistingNewKey() {
+        // The migration guard is `contains(LEGACY) && !contains(NEW)`. If both
+        // keys are present (e.g. after a downgrade/reinstall cycle), the new
+        // key must win and the legacy key must be ignored - dropping the
+        // `!contains(NEW)` conjunct in a refactor would silently clobber an
+        // explicit user-set value with a stale legacy bool. Pinned to catch
+        // that refactor.
+        val sp = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        sp.edit()
+            .clear()
+            .putBoolean("ldi_enabled", true) // stale legacy: would say ON
+            .putBoolean("ebike_data_enabled", false) // explicit new: rider turned it OFF
+            .commit()
+        val fresh = Prefs(context)
+        assertFalse(fresh.eBikeDataEnabled) // new key wins
     }
 
     @Test
     fun nonSnapshotPropertiesRoundTrip() {
-        // captureLogShareWarningSeen and ldiBondedAddress are real persisted
-        // properties that snapshot() does not surface; round-trip them so a
-        // regression in their key wiring is still caught.
+        // captureLogShareWarningSeen is a real persisted property that
+        // snapshot() does not surface; round-trip it so a regression in
+        // its key wiring is still caught.
         assertFalse(prefs.captureLogShareWarningSeen)
-        assertNull(prefs.ldiBondedAddress)
         prefs.captureLogShareWarningSeen = true
-        prefs.ldiBondedAddress = "11:22:33:44:55:66"
         val fresh = Prefs(context)
         assertTrue(fresh.captureLogShareWarningSeen)
-        assertEquals("11:22:33:44:55:66", fresh.ldiBondedAddress)
     }
 
     @Test

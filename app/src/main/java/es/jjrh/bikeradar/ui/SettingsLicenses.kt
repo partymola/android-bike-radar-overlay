@@ -94,17 +94,6 @@ private fun SettingsLicensesBody(navController: NavController) {
                 ),
             )
 
-            SettingsSectionLabel("Protocols")
-            LicenseGroup(
-                listOf(
-                    LicenseEntry(
-                        "Bosch eBike Live Data Interface v1.0 spec",
-                        "Robert Bosch GmbH",
-                        "Apache 2.0",
-                    ),
-                ),
-            )
-
             Spacer(modifier = Modifier.height(28.dp))
         }
     }

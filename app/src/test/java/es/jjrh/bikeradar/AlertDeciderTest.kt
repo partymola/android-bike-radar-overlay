@@ -456,9 +456,9 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
-    // ── LDI bike_not_driving ground truth wins over GPS speed ────────
+    // ── eBike bike_not_driving ground truth wins over GPS speed ────────
 
-    @Test fun `LDI bikeNotDriving true wins over GPS that thinks moving`() {
+    @Test fun `eBike bikeNotDriving true wins over GPS that thinks moving`() {
         // Urban-canyon scenario (Holborn / Bank): wheel sensor says
         // stopped, GPS bounces around showing 6 m/s. The decider must
         // trust the wheel sensor and suppress after dwell, even though
@@ -471,10 +471,10 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, ev)
     }
 
-    @Test fun `LDI bikeNotDriving false wins over GPS that thinks stopped`() {
+    @Test fun `eBike bikeNotDriving false wins over GPS that thinks stopped`() {
         // Inverse canyon scenario: GPS clamps to 0 m/s while the rider
         // is actually rolling at 4 m/s (sensor says wheel is turning).
-        // The decider must beep normally; LDI ground truth means the
+        // The decider must beep normally; eBike ground truth means the
         // rider is not actually stationary, regardless of GPS.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
@@ -484,8 +484,8 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
-    @Test fun `LDI absent (null) falls back to bikeSpeedMs gate - moving`() {
-        // No-LDI rider (no Bosch eBike, or experimental flag off). The
+    @Test fun `eBike absent (null) falls back to bikeSpeedMs gate - moving`() {
+        // No-eBike rider (no Bosch eBike, or experimental flag off). The
         // decider must work exactly as before: GPS-derived speed gates
         // the stationary suppress. This is the graceful-degradation path
         // that mandatory per the feedback memory.
@@ -496,8 +496,8 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
-    @Test fun `LDI absent (null) falls back to bikeSpeedMs gate - stationary`() {
-        // No-LDI rider stopping at a light. GPS reads 0, LDI is null,
+    @Test fun `eBike absent (null) falls back to bikeSpeedMs gate - stationary`() {
+        // No-eBike rider stopping at a light. GPS reads 0, eBike is null,
         // stationary suppress engages after dwell exactly as before.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
@@ -509,7 +509,7 @@ class AlertDeciderTest {
 
     // ── climbing override on the stationary-suppress gate ────────────
 
-    @Test fun `climbing forces the stationary gate off even when LDI says stopped`() {
+    @Test fun `climbing forces the stationary gate off even when eBike says stopped`() {
         // Rider grinding up Fitzjohns at a wheel-near-rest cadence:
         // bikeNotDriving could read true on a brief pedal-stroke pause,
         // but the climb override must keep alerts firing because the
@@ -522,8 +522,8 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
-    @Test fun `climbing forces gate off with no-LDI low GPS speed`() {
-        // No-LDI rider on a hill: GPS clamps to ~0 m/s through canyon
+    @Test fun `climbing forces gate off with no-eBike low GPS speed`() {
+        // No-eBike rider on a hill: GPS clamps to ~0 m/s through canyon
         // noise; without the climb override the stationary gate would fire after dwell.
         // Climbing override keeps the alert path open.
         val d = AlertDecider(stationaryDwellMs = 2000L)
@@ -549,7 +549,7 @@ class AlertDeciderTest {
     // ── speed-aware inter-beep cooldown ─────────────────────────────
 
     @Test fun `effective cooldown defaults when no speed signal`() {
-        // null speed (no LDI, no radar-bike-speed yet): use the base
+        // null speed (no eBike, no radar-bike-speed yet): use the base
         // minBeepGapMs unchanged. Graceful degradation contract.
         val d = AlertDecider(minBeepGapMs = 700L)
         assertEquals(700L, d.effectiveMinBeepGapMs(null))

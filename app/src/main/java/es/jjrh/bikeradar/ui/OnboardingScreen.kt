@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Sensors
@@ -83,12 +83,12 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaClient
-import es.jjrh.bikeradar.LdiOutcome
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.HaIntent
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.eBikeDataIsFresh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -124,13 +124,7 @@ private fun OnboardingScreenBody(
 ) {
     val br = LocalBrColors.current
     val scope = rememberCoroutineScope()
-    // Resume deep-link: if the rider was mid-pair on the eBike step in
-    // a previous session (set the resume flag, then killed the app),
-    // jump straight to the last step so they don't re-walk Permissions
-    // / HA / Pair only to confirm choices they already made. The flag
-    // is cleared on Paired / Skip-for-now / a deliberate NO.
-    val initialPage = if (prefs.ldiOnboardingResumePoint) 3 else 0
-    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 4 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
 
     BackHandler(enabled = pagerState.currentPage > 0) {
         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
@@ -267,6 +261,15 @@ internal fun PermissionsStepContent(
                 for ((spec, granted) in states) {
                     PermissionCard(spec = spec, granted = granted, onChanged = onPermissionChanged)
                 }
+                StepPrivacyNote(
+                    heading = "What these allow",
+                    bullets = listOf(
+                        "Bluetooth: finds and connects your radar, dashcam and eBike",
+                        "Notifications: shows ride status and alerts",
+                        "Location (approx, optional): sets your front light by local " +
+                            "sunset - never tracks you",
+                    ),
+                )
             }
         }
         FooterCta(
@@ -394,6 +397,11 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                     HaIntent.NO -> HaSkippedCard(
                         onChangeMind = { prefs.haIntent = HaIntent.UNSET },
                     )
+                }
+                // Only disclose egress once the rider has opted into HA -
+                // nothing is sent in the chooser or "not for me" states.
+                if (effectiveIntent == HaIntent.YES) {
+                    HaStepPrivacyNote()
                 }
             }
         }
@@ -855,6 +863,14 @@ internal fun PairingStepContent(
                         )
                     }
                 }
+                StepPrivacyNote(
+                    heading = "What this can access",
+                    bullets = listOf(
+                        "Reads your paired-device list to find the radar and dashcam",
+                        "Saves which dashcam you ride with, on your phone",
+                        "Nothing from pairing is sent anywhere",
+                    ),
+                )
             }
         }
         // Footer: always-enabled Continue, with warning text when radar
@@ -1103,97 +1119,87 @@ internal fun DeviceRow(
 // ── Step 4: eBike ────────────────────────────────────────────────────
 
 /**
- * Onboarding's fourth step: Connect your eBike. Tri-state by
- * [EBikeOwnership]:
- *  - UNANSWERED: chooser with two balanced [IntentCard]s.
- *  - YES + no bond: pairing walkthrough + live status panel, polling
- *    [EBikeStateBus.outcome] for the current state of the link.
- *  - YES + bonded: success [DeviceRow] with the short address and a
- *    Finish footer.
- *  - Outcome-keyed edge cards (NoServiceFound, SlotConflict,
- *    PermissionsDenied, NoInbound, PairPromptDeclined) shadow the
- *    walkthrough when the link reports a failure.
+ * Onboarding's fourth step: connect your eBike. Tri-state by [EBikeOwnership]:
+ *  - UNANSWERED / NO: chooser with two balanced [IntentCard]s.
+ *  - YES: a status hero (green = receiving, amber = action needed) over an
+ *    adaptive CTA (Install Bosch Flow / Open Bosch Flow / "✓ Receiving"
+ *    confirmation), plus skip + go-back escape and a "What's collected"
+ *    privacy note.
  *
- * Live outcome / snapshot data is consumed via [EBikeStateBus], a
- * process-wide singleton that [BikeRadarService] mirrors from its
- * service-owned [es.jjrh.bikeradar.EBikeLink]. This decoupling keeps
- * the Composable testable without a service binder; the tradeoff is
- * that the bus reads as Idle when the service isn't running, so we
- * fire [BikeRadarService.ACTION_START_LDI] from the chooser's "I have
- * one" branch to bring the subsystem up.
+ * Snapshot freshness is consumed via [EBikeStateBus], a process-wide
+ * singleton that [BikeRadarService] mirrors from its service-owned eBike
+ * status reader. This decoupling keeps the composable testable without a
+ * service binder; the tradeoff is that the bus reads as "no frame ever"
+ * when the service isn't running, so we fire
+ * [BikeRadarService.ACTION_START_EBIKE_READER] from the chooser's "I have one"
+ * branch to bring the subsystem up.
  */
 @Composable
 private fun EBikeStep(prefs: Prefs, onFinish: () -> Unit) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // Re-check Flow's presence on resume: a rider who taps "Install Bosch
+    // Flow", installs it, and returns should see the CTA flip to "Open".
+    var resume by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resume++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
-    val outcome by EBikeStateBus.outcome.collectAsState()
+    val lastUpdated by EBikeStateBus.lastUpdatedElapsedMs.collectAsState()
+    val receiving = eBikeDataIsFresh(lastUpdated)
+    val flowInstalled = remember(resume) {
+        ctx.packageManager.getLaunchIntentForPackage(EBIKE_FLOW_PACKAGE) != null
+    }
 
     EBikeStepContent(
         ownership = prefsSnap.eBikeOwnership,
-        bondedAddress = prefs.ldiBondedAddress,
-        outcome = outcome,
+        receiving = receiving,
+        flowInstalled = flowInstalled,
         onChooseHave = {
-            // Promotion -> YES. Flipping ldiEnabled arms the subsystem
-            // and ACTION_START_LDI brings the advertiser up in-session.
-            // ldiOnboardingResumePoint is set so a cold-start mid-pair
-            // deep-links back to this step.
+            // Promotion -> YES. Enabling the feature + starting the service
+            // brings up the read-only status reader; there is no pairing
+            // step (the bike's link is owned by Flow, we just listen).
             prefs.eBikeOwnership = EBikeOwnership.YES
-            prefs.ldiEnabled = true
-            prefs.ldiOnboardingResumePoint = true
+            prefs.eBikeDataEnabled = true
             ctx.startService(
-                Intent(ctx, BikeRadarService::class.java).setAction(BikeRadarService.ACTION_START_LDI),
+                Intent(ctx, BikeRadarService::class.java).setAction(BikeRadarService.ACTION_START_EBIKE_READER),
             )
         },
         onChooseDontHave = {
             prefs.eBikeOwnership = EBikeOwnership.NO
-            prefs.ldiOnboardingResumePoint = false
+            prefs.eBikeDataEnabled = false
             onFinish()
         },
         onOpenFlow = { openFlowFromOnboarding(ctx) },
-        onOpenPermissionSettings = { openAppPermissionsSettings(ctx) },
-        onTryAgain = {
-            // Force a fresh advertise cycle. After SlotConflict (rider
-            // unpaired their other accessory in Flow) or NoInbound (bike
-            // woken up) the existing EBikeLink is in a terminal state;
-            // ACTION_RESTART_LDI tears it down and rebuilds so the bike
-            // can re-discover us.
-            ctx.startService(
-                Intent(ctx, BikeRadarService::class.java).setAction(BikeRadarService.ACTION_RESTART_LDI),
-            )
+        onBack = {
+            // Escape hatch from the YES branch back to the chooser - for a
+            // rider who picked "I have one" but can't get data working, or
+            // chose it by mistake. Disable until they answer again.
+            prefs.eBikeOwnership = EBikeOwnership.UNANSWERED
+            prefs.eBikeDataEnabled = false
         },
-        onUnpairAndRepair = {
-            // Unpair + return to YES, not-yet-paired. Reuses the same
-            // helper as Settings.
-            releaseEBikeBondFromOnboarding(ctx, prefs)
-        },
-        onSkipForNow = {
-            prefs.ldiOnboardingResumePoint = false
-            onFinish()
-        },
-        onFinish = {
-            prefs.ldiOnboardingResumePoint = false
-            onFinish()
-        },
+        onFinish = onFinish,
     )
 }
 
 /**
  * Stateless leaf. Snapshot-friendly; renders the eBike step from
- * already-derived state. Side effects (Prefs writes, service intents,
- * bond release) live in the body above.
+ * already-derived state. Side effects (Prefs writes, service intents)
+ * live in the body above.
  */
 @Composable
 internal fun EBikeStepContent(
     ownership: EBikeOwnership,
-    bondedAddress: String?,
-    outcome: LdiOutcome,
+    receiving: Boolean,
+    flowInstalled: Boolean,
     onChooseHave: () -> Unit,
     onChooseDontHave: () -> Unit,
     onOpenFlow: () -> Unit,
-    onOpenPermissionSettings: () -> Unit,
-    onTryAgain: () -> Unit,
-    onUnpairAndRepair: () -> Unit,
-    onSkipForNow: () -> Unit,
+    onBack: () -> Unit,
     onFinish: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -1203,54 +1209,38 @@ internal fun EBikeStepContent(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            StepHeroBlock(
-                icon = Icons.AutoMirrored.Filled.DirectionsBike,
-                tint = br.brand,
-                mark = "Last step",
-                title = "Connect your eBike",
-                sub = "For Bosch Smart System eBikes on firmware v19.54 or newer.",
-            )
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                when (ownership) {
-                    EBikeOwnership.UNANSWERED, EBikeOwnership.NO -> EBikeChooser(
-                        onHaveOne = onChooseHave,
-                        onDontHaveOne = onChooseDontHave,
+            when (ownership) {
+                EBikeOwnership.UNANSWERED, EBikeOwnership.NO -> {
+                    StepHeroBlock(
+                        icon = Icons.AutoMirrored.Filled.DirectionsBike,
+                        tint = br.brand,
+                        mark = "Last step",
+                        title = "Your eBike status",
+                        sub = "Show your eBike battery and connection status while you ride - " +
+                            "works alongside the Bosch Flow app.",
                     )
-                    EBikeOwnership.YES -> {
-                        val paired = outcome is LdiOutcome.Paired || bondedAddress != null
-                        if (paired && outcome !is LdiOutcome.SlotConflict) {
-                            EBikePairedBlock(
-                                shortAddress = shortenAddress(
-                                    (outcome as? LdiOutcome.Paired)?.shortAddress?.ifEmpty { bondedAddress.orEmpty() }
-                                        ?: bondedAddress.orEmpty(),
-                                ),
-                                onUnpairAndRepair = onUnpairAndRepair,
-                            )
-                        } else {
-                            EBikePairingWalkthrough(
-                                outcome = outcome,
-                                onOpenFlow = onOpenFlow,
-                                onTryAgain = onTryAgain,
-                                onOpenPermissionSettings = onOpenPermissionSettings,
-                            )
-                        }
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        EBikeChooser(onHaveOne = onChooseHave, onDontHaveOne = onChooseDontHave)
                     }
                 }
+                // The YES body is status-first: it renders its own state-driven
+                // hero (see EBikeHowItWorks) instead of the generic one above.
+                EBikeOwnership.YES -> EBikeHowItWorks(
+                    receiving = receiving,
+                    flowInstalled = flowInstalled,
+                    onOpenFlow = onOpenFlow,
+                    onBack = onBack,
+                )
             }
         }
-        // Footer is state-dependent:
-        // - UNANSWERED / NO: chooser drives nav, no footer.
-        // - YES not paired: skip-for-now + finish path is in the
-        //   walkthrough's CTAs; show only a Skip footer.
-        // - YES paired: single Finish.
-        when {
-            ownership != EBikeOwnership.YES -> Unit
-            outcome is LdiOutcome.Paired || (bondedAddress != null && outcome !is LdiOutcome.SlotConflict) ->
-                FooterCta(label = "Finish", enabled = true, onClick = onFinish)
-            else -> FooterCta(label = "Skip for now", enabled = true, onClick = onSkipForNow)
+        // Footer: the chooser drives its own nav (no footer); once the rider
+        // has said YES, a single Finish completes onboarding - the eBike status
+        // shows on the home screen later whenever Flow is open.
+        if (ownership == EBikeOwnership.YES) {
+            FooterCta(label = "Finish", enabled = true, onClick = onFinish)
         }
     }
 }
@@ -1261,9 +1251,9 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = listOf(
-                "Beeps if the rear radar drops out mid-ride",
-                "Quieter alerts when you stop",
-                "Quieter walk-away alarm while riding",
+                "eBike battery and status on the home screen",
+                "Close-pass beeps stay on during a slow climb",
+                "Beep timing scales with your wheel speed",
             ).joinToString("\n") { "•  $it" },
             color = br.fgMuted,
             fontSize = 13.sp,
@@ -1271,7 +1261,7 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
         )
         IntentCard(
             title = "I have one",
-            subtitle = "Pair to set it up.",
+            subtitle = "Turn it on.",
             filled = true,
             onClick = onHaveOne,
         )
@@ -1291,258 +1281,108 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
 }
 
 /**
- * Pairing walkthrough body for the YES + not-yet-paired states, plus
- * the outcome-keyed edge cards. Single composable so the layout flow
- * (numbered walkthrough above, status / actions below) stays in one
- * place rather than diverging across outcomes.
+ * YES-branch body, status-first. The hero IS the status: a state-tinted bike
+ * icon (green [LocalBrColors.safe] = receiving, amber [LocalBrColors.caution] =
+ * action needed - the same colours the home-screen eBike card uses) over a big
+ * title and a one-line subline that states the one thing to do, if anything:
+ *  - receiving     → "You're all set" / no action, no button.
+ *  - Flow present   → "Almost there" / open Flow, + an Open button.
+ *  - Flow absent    → "Almost there" / install Flow, + an Install button.
+ * There is deliberately no "how it works" explainer - the mechanism doesn't
+ * affect the act/don't-act decision; it lives on the Settings → eBike screen.
+ * When not receiving the rider can finish now and set up later (the Finish
+ * footer) or [onBack] to the chooser. The "What's collected" disclosure matches
+ * the other onboarding steps.
  */
 @Composable
-private fun EBikePairingWalkthrough(
-    outcome: LdiOutcome,
+private fun EBikeHowItWorks(
+    receiving: Boolean,
+    flowInstalled: Boolean,
     onOpenFlow: () -> Unit,
-    onTryAgain: () -> Unit,
-    onOpenPermissionSettings: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val br = LocalBrColors.current
-
-    // The walkthrough is always visible; only the trailing edge card
-    // changes per outcome.
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(br.bgElev1)
-            .border(1.dp, br.hairline, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = "Pair from Flow",
-            color = br.fg,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        WalkthroughLine(
-            number = "1.",
-            body = "Open Flow on this phone.",
-        )
-        WalkthroughLine(
-            number = "2.",
-            body = "Open your bike, then the gear icon -> Components -> Add new device -> Accessories.",
-        )
-        WalkthroughLine(
-            number = "3.",
-            body = "When the bike scans, pick this phone from the list (it shows as the phone's Bluetooth name, not \"Bike Radar\").",
-        )
-        WalkthroughLine(
-            number = "4.",
-            body = "Confirm pairing on the bike's display when prompted.",
-        )
-    }
-
-    // Status panel. Talkback reads label + value via contentDescription.
-    val statusText = walkthroughStatusText(outcome)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(br.bgElev2)
-            .border(1.dp, br.hairline, RoundedCornerShape(10.dp))
-            .padding(12.dp)
-            .semantics { contentDescription = "Status: $statusText" },
-    ) {
-        Text(
-            text = statusText,
-            color = br.fgMuted,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-        )
-    }
-
-    // Outcome-keyed edge card. Only renders when the outcome is a
-    // failure that needs rider action.
-    EBikeOutcomeEdgeCard(
-        outcome = outcome,
-        onOpenFlow = onOpenFlow,
-        onTryAgain = onTryAgain,
-        onOpenPermissionSettings = onOpenPermissionSettings,
+    StepHeroBlock(
+        icon = Icons.AutoMirrored.Filled.DirectionsBike,
+        tint = if (receiving) br.safe else br.caution,
+        mark = "Last step",
+        title = if (receiving) "You're all set" else "Almost there",
+        sub = when {
+            receiving -> "We can read your eBike - no action needed."
+            flowInstalled -> "Open Bosch Flow and keep it running while you ride."
+            else -> "Install Bosch Flow to get your eBike's live data."
+        },
     )
-
-    // Primary "Open Flow" CTA, always reachable from the walkthrough.
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(br.brand)
-            .clickable(onClick = onOpenFlow),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = null,
-                tint = br.bg,
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = "Open Flow",
-                color = br.bg,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-private fun walkthroughStatusText(outcome: LdiOutcome): String = when (outcome) {
-    LdiOutcome.Idle -> "Not started yet."
-    LdiOutcome.Advertising -> "Waiting for the bike..."
-    LdiOutcome.Connecting -> "Connected. Reading your bike..."
-    is LdiOutcome.Paired -> "Paired with bike at ${shortenAddress(outcome.shortAddress)}"
-    LdiOutcome.NoInbound -> "Haven't heard from the bike yet."
-    LdiOutcome.NoServiceFound -> "Couldn't find Live Data on the bike."
-    LdiOutcome.PairPromptDeclined -> "Pairing wasn't confirmed on the bike."
-    LdiOutcome.SlotConflict -> "Another device holds the bike's Live Data slot."
-    LdiOutcome.PermissionsDenied -> "Bluetooth permission needed."
-    LdiOutcome.AdapterUnavailable -> "Bluetooth is off."
-}
-
-@Composable
-private fun WalkthroughLine(number: String, body: String) {
-    val br = LocalBrColors.current
-    Row(
-        modifier = Modifier.semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = number,
-            color = br.brand,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(20.dp),
-        )
-        Text(
-            text = body,
-            color = br.fgMuted,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
-        )
-    }
-}
-
-@Composable
-private fun EBikeOutcomeEdgeCard(
-    outcome: LdiOutcome,
-    onOpenFlow: () -> Unit,
-    onTryAgain: () -> Unit,
-    onOpenPermissionSettings: () -> Unit,
-) {
-    val br = LocalBrColors.current
-    val (body, ctas) = when (outcome) {
-        LdiOutcome.NoInbound ->
-            "We didn't hear from the bike. Make sure it's powered on and within 2 m, then try again." to
-                listOf<EBikeCta>(EBikeCta("Try again", onTryAgain, primary = true))
-        LdiOutcome.NoServiceFound ->
-            "Couldn't find Live Data on the bike. Most likely the firmware is older than v19.54. Update via Flow." to
-                listOf(
-                    EBikeCta("Open Flow", onOpenFlow, primary = true),
-                )
-        LdiOutcome.PairPromptDeclined ->
-            "The pairing prompt may have been declined on the bike's display. Tap Open Flow and confirm on the bike when prompted." to
-                listOf(
-                    EBikeCta("Open Flow", onOpenFlow, primary = true),
-                    EBikeCta("Try again", onTryAgain, primary = false),
-                )
-        LdiOutcome.SlotConflict ->
-            "Another accessory - possibly your previous phone running this app, a sports computer, or a sports watch - is paired with your bike's Live Data slot. The bike supports only one at a time. Release the other in Flow: open your bike -> gear icon -> Components, then remove the other accessory and try again." to
-                listOf(
-                    EBikeCta("Open Flow", onOpenFlow, primary = true),
-                    EBikeCta("Try again", onTryAgain, primary = false),
-                )
-        LdiOutcome.PermissionsDenied ->
-            "Bluetooth permissions are needed to talk to the bike." to
-                listOf(EBikeCta("Open app permissions", onOpenPermissionSettings, primary = true))
-        else -> return
-    }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(br.danger.copy(alpha = 0.08f))
-            .border(1.dp, br.danger.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            text = body,
-            color = br.fg,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (cta in ctas) {
-                Box(
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (cta.primary) br.brand else br.bgElev2)
-                        .border(
-                            1.dp,
-                            if (cta.primary) br.brand else br.hairline2,
-                            RoundedCornerShape(8.dp),
-                        )
-                        .clickable(onClick = cta.onClick)
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.Center,
+        if (!receiving) {
+            // One action: install Flow if it's missing, else open it.
+            // openFlowFromOnboarding falls back to the Play Store when Flow is
+            // absent, so the same handler serves both labels.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(br.brand)
+                    .clickable(onClick = onOpenFlow),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    Icon(
+                        imageVector = if (flowInstalled) {
+                            Icons.AutoMirrored.Filled.OpenInNew
+                        } else {
+                            Icons.Default.Download
+                        },
+                        contentDescription = null,
+                        tint = br.bg,
+                        modifier = Modifier.size(14.dp),
+                    )
                     Text(
-                        text = cta.label,
-                        color = if (cta.primary) br.bg else br.fg,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = if (flowInstalled) "Open Bosch Flow" else "Install Bosch Flow",
+                        color = br.bg,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
+            // Escape hatch: not everyone can get data flowing during setup.
+            Text(
+                text = "You can finish now and set this up later.",
+                color = br.fgMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+            Text(
+                text = "Don't have a Bosch eBike? Go back",
+                color = br.brand,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable(onClick = onBack)
+                    .padding(vertical = 4.dp),
+            )
         }
+
+        StepPrivacyNote(
+            heading = "What's collected",
+            bullets = listOf(
+                "Reads your bike's battery, speed and pedalling - read-only, " +
+                    "never sends anything to your bike",
+                "Stays on your phone, saved to the ride log",
+                "If Home Assistant is set up, ride and battery info is sent there",
+            ),
+        )
     }
 }
 
-private data class EBikeCta(
-    val label: String,
-    val onClick: () -> Unit,
-    val primary: Boolean,
-)
-
-@Composable
-private fun EBikePairedBlock(shortAddress: String, onUnpairAndRepair: () -> Unit) {
-    val br = LocalBrColors.current
-    DeviceRow(
-        icon = Icons.AutoMirrored.Filled.DirectionsBike,
-        tint = br.brand,
-        title = "Bosch eBike",
-        optionalLabel = false,
-        subtitle = "Warns if the radar drops; quieter standstill + walk-away.",
-        bonded = true,
-        detail = shortAddress,
-        primaryCta = null,
-        primaryCtaIcon = null,
-        onPrimary = {},
-        extraAction = "Pair a different bike",
-        onExtra = onUnpairAndRepair,
-    )
-    Text(
-        text = "Paired with bike at $shortAddress. Only one bike at a time - unpair to swap.",
-        color = br.fgDim,
-        fontSize = 11.sp,
-        lineHeight = 15.sp,
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-    )
-}
+private const val EBIKE_FLOW_PACKAGE = "com.bosch.ebike.onebikeapp"
 
 private fun openFlowFromOnboarding(ctx: Context) {
     val pm = ctx.packageManager
@@ -1561,62 +1401,71 @@ private fun openFlowFromOnboarding(ctx: Context) {
     }
 }
 
-private fun openAppPermissionsSettings(ctx: Context) {
-    try {
-        val intent = Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = android.net.Uri.fromParts("package", ctx.packageName, null)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        ctx.startActivity(intent)
-    } catch (_: Exception) {
-        // Fallback to top-level settings if the per-app screen is
-        // unavailable on this OEM.
-        ctx.startActivity(Intent(AndroidSettings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+/**
+ * Per-step privacy disclosure card. A calm informational block (NOT an
+ * alert - plain [LocalBrColors.bgElev1], no warning colour) placed as the
+ * last item in a step body, above the footer: a short mono [heading], up to
+ * ~3 one-line [bullets], and a fixed "Full detail: Settings → Privacy"
+ * pointer.
+ *
+ * The pointer is hardcoded, not a parameter, so a step cannot ship the
+ * disclosure without it. [heading] varies per step ("What these allow" /
+ * "What's sent" / "What this can access" / "What's collected") so four
+ * disclosures don't read as boilerplate, while the chrome + pointer stay
+ * identical so they read as one system. Callers must only render this in
+ * states where the bullets are true - e.g. the HA "What's sent" card is
+ * gated on the rider having opted into HA, since nothing is sent otherwise.
+ */
+@Composable
+internal fun StepPrivacyNote(
+    heading: String,
+    bullets: List<String>,
+    modifier: Modifier = Modifier,
+) {
+    val br = LocalBrColors.current
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(br.bgElev1)
+            .border(1.dp, br.hairline, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Mark(text = heading)
+        Text(
+            text = bullets.joinToString("\n") { "•  $it" },
+            color = br.fgMuted,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
+        Text(
+            text = "Full detail: Settings → Privacy",
+            color = br.fgDim,
+            fontSize = 11.sp,
+        )
     }
 }
 
 /**
- * Mirror of [SettingsEBike]'s helper, duplicated to keep the onboarding
- * step free of a Settings dependency. The reflection-based unpair path
- * is small enough that one duplication beats the import cycle.
- *
- * getBondState() needs BLUETOOTH_CONNECT; reached only from the eBike
- * onboarding step, which the user enters after granting BLE permissions.
+ * The HA step's "What's sent" disclosure. Extracted (unlike the other steps'
+ * inline notes) because [HaStepSnapshotTest] renders the HA leaf composables
+ * directly rather than the stateful [HaStep], so this keeps the golden's copy
+ * identical to what the real screen shows. Only rendered in the HaIntent.YES
+ * state - nothing is sent before the rider opts in.
  */
-@SuppressLint("MissingPermission")
-private fun releaseEBikeBondFromOnboarding(ctx: Context, prefs: Prefs) {
-    val address = prefs.ldiBondedAddress ?: run {
-        android.widget.Toast.makeText(ctx, "No bond to release.", android.widget.Toast.LENGTH_SHORT).show()
-        return
-    }
-    val btManager = ctx.getSystemService(BluetoothManager::class.java)
-    val adapter = btManager?.adapter
-    val device = try {
-        adapter?.getRemoteDevice(address)
-    } catch (_: Exception) {
-        null
-    }
-    val msg = when {
-        device == null -> "Could not look up the bike's BLE device."
-        device.bondState != android.bluetooth.BluetoothDevice.BOND_BONDED -> {
-            prefs.ldiBondedAddress = null
-            "No active bond; cleared the local pointer."
-        }
-        else -> try {
-            device.javaClass.getMethod("removeBond").invoke(device)
-            prefs.ldiBondedAddress = null
-            "Bike unpaired. Restart pairing to bond a different bike."
-        } catch (_: Exception) {
-            "Could not unpair automatically. Forget the bike in Android Settings -> Bluetooth."
-        }
-    }
-    android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+@Composable
+internal fun HaStepPrivacyNote() {
+    StepPrivacyNote(
+        heading = "What's sent",
+        bullets = listOf(
+            "Sends battery, light mode, ride times and ride stats " +
+                "(incl. close passes) to your HA",
+            "Goes only to your Home Assistant - never to the developer",
+            "Your HA address and token are encrypted on your phone",
+        ),
+    )
 }
-
-/** Bosch Flow Android package name (public, on Google Play). */
-private const val EBIKE_FLOW_PACKAGE = "com.bosch.ebike.onebikeapp"
-
-// ── Shared step primitives ───────────────────────────────────────────
 
 @Composable
 internal fun StepHeroBlock(

@@ -11,22 +11,22 @@ package es.jjrh.bikeradar
  * The rider's eyes are on the road, so the warning has to be audible, not a
  * screen glyph.
  *
- * LDI-ONLY GATE (load-bearing - do not relax without re-reading the collision
+ * EBIKE-DATA-ONLY GATE (load-bearing - do not relax without re-reading the collision
  * rationale below). The cue fires ONLY when [ridingConfirmed] is true, which
  * the caller
- * sets from a FRESH LDI snapshot reporting `system_locked == false` (the
+ * sets from a FRESH eBike snapshot reporting `system_locked == false` (the
  * Bosch eBike is actively telling us the rider is on the bike right now).
  *
  * The reason is a collision with the walk-away "you left the dashcam on the
  * bike" alarm: both features trigger on "radar went off". The disambiguator
  * is "is the rider still riding or has the ride ended?", and the dashcam
  * being alive does NOT answer it (the camera records both mid-ride and just
- * after stopping). Only LDI `system_locked` (or GPS motion, declined for v1)
+ * after stopping). Only eBike `system_locked` (or GPS motion, declined for v1)
  * does. Gating on a fresh `system_locked == false` makes this cue mutually
  * exclusive with the walk-away alarm (which arms only when NOT unlocked) and
  * means it can never false-fire at ride-end: a dismount either locks the bike
- * (system_locked -> true) or drops the LDI link (snapshot goes stale), and
- * either closes the gate. Without LDI there is no cue.
+ * (system_locked -> true) or drops the eBike link (snapshot goes stale), and
+ * either closes the gate. Without eBike there is no cue.
  *
  * Behaviour: once the radar has been continuously down for [thresholdMs]
  * while riding is confirmed, fire, then repeat no more often than
@@ -67,15 +67,15 @@ object RadarDropDecider {
     }
 
     /**
-     * The LDI gate the cue depends on: confirm the rider is actively on the
+     * The eBike-data gate the cue depends on: confirm the rider is actively on the
      * bike RIGHT NOW. True only for a FRESH snapshot reporting
      * `system_locked == false`. This is what keeps the cue mutually exclusive
      * with the walk-away alarm and prevents a ride-end false fire, so every
      * way of having no live "unlocked" signal must FAIL CLOSED:
-     *  - [systemLocked] null (no LDI field) -> false,
+     *  - [systemLocked] null (no eBike field) -> false,
      *  - caller passes null systemLocked for a null snapshot (no eBike) -> false,
      *  - `system_locked == true` (locked / dismounting) -> false,
-     *  - [snapshotAgeMs] >= [freshMs] (LDI link dropped, e.g. rider left) -> false.
+     *  - [snapshotAgeMs] >= [freshMs] (eBike link dropped, e.g. rider left) -> false.
      * Extracted as a pure function (like `WalkAwayArmingGate.shouldArm`) so this
      * safety gate is unit-tested rather than buried inline in the service.
      */

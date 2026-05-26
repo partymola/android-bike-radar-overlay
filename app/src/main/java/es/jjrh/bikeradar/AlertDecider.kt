@@ -204,13 +204,13 @@ class AlertDecider(
         // call we initialise lastNotStationaryAtMs to nowMs so the dwell is
         // measured from now, not from 1970.
         //
-        // Stationary signal precedence: when the LDI snapshot reports
+        // Stationary signal precedence: when the eBike snapshot reports
         // `bike_not_driving` (Bosch eBike wheel-speed ground truth), it
-        // wins outright; the wheel sensor is far more reliable than GPS
-        // in urban canyons (Holborn / Bank). GPS-derived `bikeSpeedMs`
-        // fallback only when LDI is absent (no eBike, flag off, or
-        // pre-bond). Both null = no signal, treated as "not below" so
-        // the dwell never triggers.
+        // wins outright; the wheel sensor is sub-second and faster than
+        // the radar's own bike-speed field. Radar-reported `bikeSpeedMs`
+        // (from the V2 device-status frame) is the fallback when eBike
+        // is absent (no eBike, flag off, or pre-bond). Both null = no
+        // signal, treated as "not below" so the dwell never triggers.
         //
         // Climb override: when the rider is grinding up a hill
         // (rider_power sustained above threshold via ClimbDetector), the
@@ -490,13 +490,13 @@ class AlertDecider(
      * cars hover at tier boundaries while everyone queues); fast
      * descents get a tighter cooldown (less reaction time, faster
      * re-arm on tier raises). Returns the base [minBeepGapMs] when no
-     * speed signal is available (the no-LDI, no-GPS-derived-speed
+     * speed signal is available (the no-eBike, no-radar-speed
      * fallback path).
      *
-     * When LDI is bonded the caller supplies [bikeSpeedMs] from the
-     * bike's wheel-speed sensor (sub-second ground truth). When LDI is
-     * absent the caller supplies the radar's bike-speed field (the
-     * existing GPS-derived path); the decider doesn't care about the
+     * When eBike is bonded the caller supplies [bikeSpeedMs] from the
+     * bike's wheel-speed sensor (sub-second ground truth). When eBike is
+     * absent the caller supplies the radar's bike-speed field (from the
+     * V2 device-status frame); the decider doesn't care about the
      * source, only the magnitude.
      */
     internal fun effectiveMinBeepGapMs(bikeSpeedMs: Float?): Long {

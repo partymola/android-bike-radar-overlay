@@ -11,7 +11,7 @@ import org.junit.Test
 class ClimbDetectorTest {
 
     @Test fun `null rider power keeps not-climbing and resets state`() {
-        // No-LDI rider, or rider_power not yet observed. Graceful
+        // No-eBike rider, or rider_power not yet observed. Graceful
         // degradation: the detector returns not-climbing, doesn't
         // accumulate any dwell, and resets any prior state.
         val prev = ClimbDetector.State(highPowerStartedMs = 1000L)
@@ -79,7 +79,7 @@ class ClimbDetectorTest {
     }
 
     @Test fun `flag-off graceful degradation - all-null inputs stay not-climbing forever`() {
-        // When developer.ldi.enable is off, no snapshot is ever produced
+        // When the eBike feature is off, no snapshot is ever produced
         // and the detector is never called. As a defensive contract,
         // explicit null inputs across many calls must never accumulate
         // false climbing.

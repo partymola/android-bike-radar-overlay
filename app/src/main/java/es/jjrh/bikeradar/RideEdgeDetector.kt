@@ -2,13 +2,13 @@
 package es.jjrh.bikeradar
 
 /**
- * Detect ride-start and ride-end edges from the Bosch LDI snapshot
+ * Detect ride-start and ride-end edges from the Bosch eBike snapshot
  * stream. Pure-function; the caller owns the state and feeds in one
  * snapshot per NOTIFY merge.
  *
- * Why LDI edges instead of GPS-derived ones: GPS-edge ride boundaries
+ * Why eBike edges instead of GPS-derived ones: GPS-edge ride boundaries
  * drift by hundreds of metres on the office side of a commute (radio
- * shadow indoors), so the ride often appears to "end" 5 km later. LDI
+ * shadow indoors), so the ride often appears to "end" 5 km later. eBike
  * gives bike-truth: the rider unlocked the bike means the ride started,
  * locking it means the ride ended. Independent of GPS quality.
  *

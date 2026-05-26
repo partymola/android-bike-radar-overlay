@@ -75,6 +75,57 @@ object EBikeStatusDecoder {
     }
 
     /**
+     * Parse [bytes] and return one `(objId, value)` for each marker-`0x30`
+     * record whose object ID is NOT in [Obj]. Used by the debug "unknown
+     * object ID logger" to pin the IDs that map to the still-unmapped
+     * [LiveDataSnapshot] flags (lock, light, charger, light-reserve,
+     * diagnosis, wheel-at-rest, ambient brightness, time). Toggle a state
+     * (e.g. switch the bike light), capture, then diff which `objId`s
+     * changed value either side of the transition.
+     *
+     * Mirrors [mergeInto]'s framing-failure contract: on a truncated or
+     * malformed record returns an empty list rather than partial data, so
+     * the caller doesn't log a record whose value we couldn't trust.
+     * Component-info / block-read records (marker `0x10` and `a2..` IDs)
+     * are intentionally skipped - they're not the channel we're trying to
+     * pin here.
+     */
+    fun extractUnknownObjectIds(bytes: ByteArray): List<Pair<Int, Long>> {
+        // Lazy-allocate so the steady-state (all records mapped) doesn't
+        // churn an empty list per BLE notification.
+        var out: MutableList<Pair<Int, Long>>? = null
+        var i = 0
+        try {
+            while (i + 1 < bytes.size) {
+                val marker = bytes[i].toInt() and 0xff
+                val len = bytes[i + 1].toInt() and 0xff
+                val bodyStart = i + 2
+                if (bodyStart + len > bytes.size) break
+                if (marker == 0x30 && len >= 2) {
+                    val objId = ((bytes[bodyStart].toInt() and 0xff) shl 8) or
+                        (bytes[bodyStart + 1].toInt() and 0xff)
+                    if (!isKnownObjectId(objId)) {
+                        val value = scalarValue(bytes, bodyStart + 2, bodyStart + len)
+                        (out ?: mutableListOf<Pair<Int, Long>>().also { out = it }) += objId to value
+                    }
+                }
+                i = bodyStart + len
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return out ?: emptyList()
+    }
+
+    private fun isKnownObjectId(objId: Int): Boolean = when (objId) {
+        Obj.SPEED, Obj.CADENCE, Obj.RIDER_POWER, Obj.MOTOR_POWER,
+        Obj.ASSIST_MODE, Obj.WHEEL_CIRCUMFERENCE, Obj.BATTERY_SOC,
+        Obj.ODOMETER,
+        -> true
+        else -> false
+    }
+
+    /**
      * Read the field-1 (tag 0x08) varint within a record body `[start, end)`.
      * Returns 0 when field 1 is absent (proto3 omits a zero value, leaving only
      * the presence flag).

@@ -48,5 +48,6 @@ internal object SnapshotFixtures {
         cameraLightNightMode = CameraLightMode.LOW,
         eBikeDataEnabled = false,
         eBikeOwnership = EBikeOwnership.UNANSWERED,
+        eBikeUnknownObjectLogEnabled = false,
     )
 }

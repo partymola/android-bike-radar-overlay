@@ -288,6 +288,14 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
 
             // Diagnostics
             SettingsSectionLabel("Diagnostics")
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = "Log unknown eBike object IDs",
+                    subtitle = "Writes ebike_unk lines for unmapped records. Toggle each bike state during a capture to pin lock/light/charger IDs, then turn off.",
+                    checked = prefsSnap.eBikeUnknownObjectLogEnabled,
+                    onCheckedChange = { prefs.eBikeUnknownObjectLogEnabled = it },
+                )
+            }
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
                     text = "Copy diagnostic bundle",

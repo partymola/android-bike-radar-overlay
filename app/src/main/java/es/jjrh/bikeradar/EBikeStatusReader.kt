@@ -49,6 +49,14 @@ class EBikeStatusReader(
     private val mac: String,
     private val onSnapshot: (LiveDataSnapshot) -> Unit,
     private val log: (String) -> Unit = {},
+    /** Optional sink for marker-`0x30` records whose object ID is not yet
+     *  mapped in [EBikeStatusDecoder]. Null (default) skips extraction
+     *  entirely; when non-null the reader extracts and forwards per frame,
+     *  and the caller is expected to gate the actual side effect (so the
+     *  decision to log can be live-toggleable without rebuilding the
+     *  reader). The service wires this for the Debug "log unknown eBike
+     *  object IDs" pinning workflow. */
+    private val onUnknownRecord: ((Int, Long) -> Unit)? = null,
 ) {
     private var loopJob: Job? = null
 
@@ -189,6 +197,10 @@ class EBikeStatusReader(
                 if (uuid != Uuids.CHAR_EBIKE_STATUS) continue
                 snapshot = EBikeStatusDecoder.mergeInto(snapshot, value)
                 onSnapshot(snapshot)
+                onUnknownRecord?.let { sink ->
+                    EBikeStatusDecoder.extractUnknownObjectIds(value)
+                        .forEach { (objId, v) -> sink(objId, v) }
+                }
             }
             true
         } catch (e: CancellationException) {

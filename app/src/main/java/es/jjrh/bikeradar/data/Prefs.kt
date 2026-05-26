@@ -61,6 +61,7 @@ data class PrefsSnapshot(
     val cameraLightNightMode: CameraLightMode,
     val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
+    val eBikeUnknownObjectLogEnabled: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -389,6 +390,20 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_EBIKE_OWNERSHIP, v.name).apply()
         }
 
+    /** Debug: log every marker-`0x30` record on the proprietary eBike status
+     *  stream whose object ID is not yet mapped in [EBikeStatusDecoder]. Off
+     *  by default. Lives on the Debug screen because its only purpose is the
+     *  one-off pinning exercise for the still-unmapped flags (lock, light,
+     *  charger, light-reserve, diagnosis, wheel-at-rest, ambient brightness,
+     *  time): turn on, capture a session that toggles each state, diff the
+     *  resulting `ebike_unk obj=0x.... val=...` lines either side of each
+     *  transition, then turn off again. */
+    var eBikeUnknownObjectLogEnabled: Boolean
+        get() = sp.getBoolean(KEY_EBIKE_UNKNOWN_OBJ_LOG, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_EBIKE_UNKNOWN_OBJ_LOG, v).apply()
+        }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -425,6 +440,7 @@ class Prefs(context: Context) {
         cameraLightNightMode = cameraLightNightMode,
         eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
+        eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -473,6 +489,7 @@ class Prefs(context: Context) {
         appendLine("camera_light_night_mode=$cameraLightNightMode")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
+        appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
     }
 
     companion object {
@@ -511,6 +528,7 @@ class Prefs(context: Context) {
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"
         const val KEY_EBIKE_DATA_ENABLED = "ebike_data_enabled"
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
+        const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

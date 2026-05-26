@@ -82,6 +82,7 @@ class PrefsTest {
         assertEquals(CameraLightMode.LOW, s.cameraLightNightMode)
         assertFalse(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.UNANSWERED, s.eBikeOwnership)
+        assertFalse(s.eBikeUnknownObjectLogEnabled)
     }
 
     @Test
@@ -119,6 +120,7 @@ class PrefsTest {
         prefs.cameraLightNightMode = CameraLightMode.NIGHT_FLASH
         prefs.eBikeDataEnabled = true
         prefs.eBikeOwnership = EBikeOwnership.NO
+        prefs.eBikeUnknownObjectLogEnabled = true
 
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
@@ -156,6 +158,7 @@ class PrefsTest {
         assertEquals(CameraLightMode.NIGHT_FLASH, s.cameraLightNightMode)
         assertTrue(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
+        assertTrue(s.eBikeUnknownObjectLogEnabled)
     }
 
     @Test
@@ -323,6 +326,7 @@ class PrefsTest {
         assertFalse("the raw MAC must never appear in the dump", dump.contains("AA:BB:CC:DD:EE:FF"))
         assertFalse(dump.contains("My dashcam"))
         assertTrue(dump.contains("alert_volume=42"))
+        assertTrue(dump.contains("ebike_unknown_object_log_enabled=false"))
     }
 
     @Test

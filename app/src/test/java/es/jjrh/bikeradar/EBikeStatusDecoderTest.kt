@@ -123,6 +123,52 @@ class EBikeStatusDecoderTest {
         assertSame(prior, out)
     }
 
+    // ── unknown-object extraction (debug "log unknown IDs" path) ───────────
+
+    @Test
+    fun extractUnknownObjectIdsReturnsEmptyWhenAllRecordsAreMapped() {
+        // All-mapped frame: speed + battery. Nothing to log.
+        val bytes = hex("3007982d08c3081001" + "300480880848")
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(bytes)
+        assertEquals(0, unknowns.size)
+    }
+
+    @Test
+    fun extractUnknownObjectIdsReportsUnmappedRecordsOnly() {
+        // 0x9808 (a 2nd speed source, unmapped) sandwiched between mapped
+        // speed and battery records. Only the unmapped one is reported, and
+        // it carries its scalar value.
+        val bytes = hex(
+            "3007982d08c3081001" + // mapped: speed 1091
+                "3007980808ba081001" + // unmapped: 0x9808 = 1082
+                "300480880848", // mapped: battery 72
+        )
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(bytes)
+        assertEquals(1, unknowns.size)
+        assertEquals(0x9808, unknowns[0].first)
+        assertEquals(1082L, unknowns[0].second)
+    }
+
+    @Test
+    fun extractUnknownObjectIdsSkipsHandshakeMarkerRecords() {
+        // Marker 0x10 records (Flow handshake/meta) must not appear as
+        // unknown - they're a different framing class, not an unmapped
+        // object ID.
+        val bytes = hex("100201033007982d08c3081001")
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(bytes)
+        assertEquals(0, unknowns.size)
+    }
+
+    @Test
+    fun extractUnknownObjectIdsReturnsEmptyOnMalformedFrame() {
+        // Same fail-safe contract as mergeInto: truncated record bails out
+        // and no unknowns are reported. Prevents logging a record whose
+        // value we couldn't trust.
+        val bytes = hex("3007980808")
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(bytes)
+        assertEquals(0, unknowns.size)
+    }
+
     @Test
     fun emptyPayloadIsNoOp() {
         val out = EBikeStatusDecoder.mergeInto(empty, ByteArray(0))

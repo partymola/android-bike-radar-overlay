@@ -422,6 +422,14 @@ class BikeRadarService : Service() {
                 EBikeStateBus.setSnapshot(snap)
             },
             log = { m -> Log.i("BikeRadar.EBikeStatus", m) },
+            // Sink for the Debug "log unknown eBike object IDs" pinning
+            // workflow. Always wired so flipping the toggle takes effect on
+            // the next frame; the closure no-ops when the pref is off.
+            onUnknownRecord = { objId, value ->
+                if (prefs.eBikeUnknownObjectLogEnabled) {
+                    clog("ebike_unk obj=0x${"%04x".format(objId)} val=$value")
+                }
+            },
         )
         ebikeStatusReader = reader
         reader.start()

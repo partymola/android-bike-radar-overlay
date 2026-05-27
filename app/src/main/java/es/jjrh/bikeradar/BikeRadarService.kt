@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedWriter
+import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
 import java.text.SimpleDateFormat
@@ -1555,7 +1556,19 @@ class BikeRadarService : Service() {
             captureLogWriter?.close()
             captureLogWriter = null
         }
+        val closedName = activeCaptureLogName
         activeCaptureLogName = null
+        // Gzip the just-finalised file. Runs after the PrintWriter close so
+        // the live write path is never on a gzip stream (which would lose
+        // its un-finalised tail on a crash). Failure preserves the .log so
+        // the next pruneCaptureLogs pass can retry.
+        if (closedName != null) {
+            val dir = getExternalFilesDir(null)
+            if (dir != null) {
+                val src = java.io.File(dir, closedName)
+                if (src.exists()) CaptureLogFiles.gzipAndDelete(src, TAG_RADAR)
+            }
+        }
     }
 
     /**
@@ -2388,23 +2401,57 @@ class BikeRadarService : Service() {
 
     private fun pruneCaptureLogs() {
         val dir = getExternalFilesDir(null) ?: return
-        val logs = dir.listFiles { f -> f.name.startsWith("bike-radar-capture-") && f.name.endsWith(".log") }
-            ?: return
+        val logs = dir.listFiles { f -> CaptureLogFiles.isCaptureLog(f) } ?: return
         val active = activeCaptureLogName
         // A real session logs thousands of packet lines; anything under a few
         // hundred bytes is just the header + maybe a connect-state line from a
-        // session where the radar never actually connected.
-        val tiny = logs.filter { it.name != active && it.length() < MIN_USEFUL_LOG_BYTES }
+        // session where the radar never actually connected. Only applies to
+        // plain `.log` files - the `MIN_USEFUL_LOG_BYTES` threshold was sized
+        // for plain text, and a `.log.gz` is always small (a real session
+        // compresses to hundreds of KB, but even a multi-KB plain session can
+        // gzip below the threshold).
+        val tiny = logs.filter {
+            it.name != active &&
+                !CaptureLogFiles.isGzipped(it) &&
+                it.length() < MIN_USEFUL_LOG_BYTES
+        }
         tiny.forEach { it.delete() }
-        val remaining = logs.filter { it.name != active && it.length() >= MIN_USEFUL_LOG_BYTES }
+        // Gzipped archives always pass the size gate (the threshold was sized
+        // for plain text); only the plain-text size gate has to discriminate.
+        var remaining = logs.filter {
+            it.name != active &&
+                (CaptureLogFiles.isGzipped(it) || it.length() >= MIN_USEFUL_LOG_BYTES)
+        }
+
+        // Opportunistic backfill: gzip any plain .log files that aren't the
+        // active write target. closeCaptureLog gzips on the normal path; this
+        // covers logs left plain by a previous install (pre-gzip code) or by a
+        // crash before closeCaptureLog ran. .gz outputs replace their .log
+        // sources in `remaining` so the size cap is computed on the final set.
+        var backfilled = 0
+        remaining = remaining.map { src ->
+            if (!CaptureLogFiles.isGzipped(src)) {
+                val gz = CaptureLogFiles.gzipAndDelete(src, TAG)
+                if (gz != null) backfilled++
+                gz ?: src
+            } else {
+                src
+            }
+        }
+
         val keepFromOld = if (active != null) MAX_CAPTURE_LOGS - 1 else MAX_CAPTURE_LOGS
         if (remaining.size <= keepFromOld) {
-            if (tiny.isNotEmpty()) Log.d(TAG, "deleted ${tiny.size} header-only capture logs")
+            if (tiny.isNotEmpty() || backfilled > 0) {
+                Log.d(TAG, "deleted ${tiny.size} header-only + gzipped $backfilled legacy capture logs")
+            }
             return
         }
         val pruned = remaining.sortedByDescending { it.lastModified() }.drop(keepFromOld)
         pruned.forEach { it.delete() }
-        Log.d(TAG, "deleted ${tiny.size} header-only + ${pruned.size} old capture logs")
+        Log.d(
+            TAG,
+            "deleted ${tiny.size} header-only + ${pruned.size} old + gzipped $backfilled legacy capture logs",
+        )
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

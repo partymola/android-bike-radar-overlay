@@ -31,7 +31,6 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelUuid
@@ -58,7 +57,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -212,10 +210,6 @@ class BikeRadarService : Service() {
 
     @Volatile private var climbing: Boolean = false
 
-    // Throttle for the phone-battery capture-log line: read + logged no more
-    // than once per PHONE_BATTERY_LOG_PERIOD_MS.
-    @Volatile private var lastPhoneBatteryLogMs: Long = 0L
-
     // sessionRadarConnectedMs, radarConnectStartMs, walkAwayArmed,
     // walkAwayDismissed, lastWalkAwayFireMs are part of [_radarLinkState]
     // above. The walk-away ARMED/BLANK/IDLE state machine - re-arm only via
@@ -282,29 +276,22 @@ class BikeRadarService : Service() {
         }
     }
 
-    // Overlay refs for orientation change updates (set/cleared on Main thread)
-    @Volatile private var overlayWm: WindowManager? = null
+    // Overlay window + view ownership lives in AndroidOverlayHost; the
+    // service forwards onConfigurationChanged so the host re-applies layout
+    // params on rotation.
+    private lateinit var overlayHost: AndroidOverlayHost
 
-    @Volatile private var overlayViewRef: RadarOverlayView? = null
+    // Pipeline orchestrates the per-frame combine(RadarStateBus +
+    // BatteryStateBus + ticker) loop that drives the overlay view, the
+    // beeper cues, and the close-pass detector + HA publish. Allocated in
+    // onCreate; attach() is called per radar connection.
+    private lateinit var overlayPipeline: OverlayPipeline
 
     // Service-scoped AlertBeeper. Allocated in onCreate, released in
     // onDestroy. Hoisted out of overlayJob so reconnects do not pay
     // AudioTrack cold-start every time, and so audio focus + the
     // MODE_IN_CALL guard survive across radar drops.
     @Volatile private var alertBeeper: AlertBeeper? = null
-
-    // Wall-clock ms of the last radar critical-battery cue, threaded through
-    // CriticalBatteryDecider so the repeat honours its cadence. Service-
-    // scoped so the cadence survives a radar reconnect; the decider resets
-    // it to null whenever the battery is not critical / stale / absent.
-    @Volatile private var lastCriticalBatteryCueMs: Long? = null
-
-    // Per-device (slug) wall-clock ms of the last pre-flight low-battery cue
-    // (L8), threaded through CriticalBatteryDecider with the low threshold +
-    // a 30-min cadence so it's a once-per-device-per-ride connect heads-up.
-    // Accessed only from the overlay collect loop (Main); concurrent map is
-    // belt-and-braces. Survives reconnects so the cadence holds across them.
-    private val preflightBatteryCueMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     // Capture log (written from GATT callback threads + coroutine threads)
     private val captureLogLock = Any()
@@ -359,6 +346,22 @@ class BikeRadarService : Service() {
                 invertLR = prefs.experimentalLateralPanningInvertLR,
             )
         }
+
+        overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
+        overlayPipeline = OverlayPipeline(
+            prefs = prefs,
+            ha = ha,
+            beeper = alertBeeper!!,
+            overlayHost = overlayHost,
+            phoneBattery = AndroidPhoneBatterySource(this),
+            rideStats = { rideStats },
+            overlayPrefsSnapshot = { cachedOverlayPrefs ?: prefs.snapshot() },
+            ebikeSnapshot = { lastEBikeSnapshot },
+            climbingNow = { climbing },
+            currentRadarMac = { currentRadarMac },
+            macToSlug = { macToSlug },
+            clog = { line -> clog(line) },
+        )
 
         pruneCaptureLogs()
         schedulePauseExpiry()
@@ -565,11 +568,7 @@ class BikeRadarService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val wm = overlayWm ?: return
-        val v = overlayViewRef ?: return
-        try {
-            wm.updateViewLayout(v, buildOverlayParams(wm))
-        } catch (_: Throwable) {}
+        if (::overlayHost.isInitialized) overlayHost.onConfigurationChanged()
     }
 
     // ── battery scan kickstart ────────────────────────────────────────────────
@@ -1390,345 +1389,8 @@ class BikeRadarService : Service() {
             // gate means quick stop-and-go reconnects don't re-poll.
             LocationCache.refreshIfStale(this@BikeRadarService)
             openCaptureLog()
-
-            // Overlay + alert coroutine. Runs on Main (WindowManager requires it).
-            overlayJob = scope.launch(Dispatchers.Main) {
-                var overlayAdded = false
-                val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-                val view = RadarOverlayView(this@BikeRadarService)
-                val beeper = alertBeeper ?: run {
-                    // Should never happen: onCreate allocates the beeper
-                    // before any overlayJob can launch. Defensive guard
-                    // for an edge case where the service is stopped
-                    // mid-allocation.
-                    Log.w(TAG_RADAR, "alertBeeper null at overlayJob start; skipping")
-                    return@launch
-                }
-                beeper.setVolumePct(prefs.alertVolume)
-                beeper.setPanning(
-                    enabled = prefs.experimentalLateralPanning,
-                    invertLR = prefs.experimentalLateralPanningInvertLR,
-                )
-                val alerts = AlertDecider()
-                val closePassDetector = ClosePassDetector()
-                var closePassDiscoveryPublished = false
-                var closePassDiscoveryInFlight = false
-                val sessionStartMs = System.currentTimeMillis()
-                var seenDashcamThisSession = false
-                var lastLoggedDashcamStatus: DashcamStatus? = null
-                val ticker = flow {
-                    while (true) {
-                        emit(Unit)
-                        delay(DASHCAM_TICK_MS)
-                    }
-                }
-                try {
-                    combine(RadarStateBus.state, BatteryStateBus.entries, ticker) { s, b, _ -> s to b }
-                        .collect { (state, batteries) ->
-                            val now = System.currentTimeMillis()
-
-                            // Phone battery snapshot via the cached sticky broadcast - a
-                            // continuous BATTERY_CHANGED receiver would itself add
-                            // wake-ups against the same wake-up budget the rest of
-                            // this loop is sized against. The sticky read isn't free
-                            // either, so take it (and log) only once per
-                            // PHONE_BATTERY_LOG_PERIOD_MS rather than on every ~2s tick.
-                            if (now - lastPhoneBatteryLogMs >= PHONE_BATTERY_LOG_PERIOD_MS) {
-                                registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.let { battery ->
-                                    clog(
-                                        formatPhoneBatteryLog(
-                                            unixMs = now,
-                                            level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
-                                            scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100),
-                                            tempDc = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE),
-                                            plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0),
-                                        ),
-                                    )
-                                    lastPhoneBatteryLogMs = now
-                                }
-                            }
-
-                            // Dashcam refresh + status update runs regardless
-                            // of radar state. The walk-away alarm path
-                            // specifically depends on the dashcam entry
-                            // staying current AFTER the radar goes off, and
-                            // the in-app main page glyph reads BatteryStateBus
-                            // directly - both would silently desync if the
-                            // refresh sat below the radar-NONE early return.
-                            val dashcamSlug = prefs.dashcamMac?.let { mac ->
-                                macToSlug[mac]
-                                    ?: macToSlug[mac.uppercase(Locale.ROOT)]
-                                    ?: prefs.dashcamDisplayName?.let { slug(it) }
-                            }
-                            val dashcamEntry = dashcamSlug?.let { batteries[it] }
-                            if (dashcamEntry != null) seenDashcamThisSession = true
-
-                            val cfg = DashcamStatusDeriver.Config(
-                                warnWhenOff = prefs.dashcamWarnWhenOff,
-                                selectedSlug = dashcamSlug,
-                            )
-                            val status = DashcamStatusDeriver.derive(
-                                config = cfg,
-                                entries = batteries,
-                                nowMs = now,
-                                sessionStartMs = sessionStartMs,
-                                seenThisSession = seenDashcamThisSession,
-                                freshMs = DASHCAM_FRESH_MS,
-                                coldStartMs = DASHCAM_COLD_START_MS,
-                            )
-                            if (status != lastLoggedDashcamStatus) {
-                                Log.i(
-                                    TAG_RADAR,
-                                    "dashcam status=$status " +
-                                        "warn=${prefs.dashcamWarnWhenOff} " +
-                                        "mac=${prefs.dashcamMac ?: "-"} slug=${dashcamSlug ?: "-"} " +
-                                        "entries=${batteries.size} " +
-                                        "seen=$seenDashcamThisSession " +
-                                        "ageMs=${dashcamEntry?.let { now - it.readAtMs } ?: -1L} " +
-                                        "sessionAgeMs=${now - sessionStartMs}",
-                                )
-                                lastLoggedDashcamStatus = status
-                            }
-                            view.setDashcamStatus(status, dashcamSlug)
-
-                            if (state.source == DataSource.NONE) return@collect
-
-                            rideStats.observeFrame(state)
-
-                            if (!overlayAdded) {
-                                if (Settings.canDrawOverlays(this@BikeRadarService)) {
-                                    try {
-                                        wm.addView(view, buildOverlayParams(wm))
-                                        overlayWm = wm
-                                        overlayViewRef = view
-                                        overlayAdded = true
-                                        clog("# overlay added")
-                                    } catch (t: Throwable) {
-                                        clog("# overlay addView failed: $t")
-                                        Log.w(TAG_RADAR, "overlay addView failed (permission TOCTOU?): $t")
-                                    }
-                                } else {
-                                    clog("# overlay: SYSTEM_ALERT_WINDOW not granted")
-                                }
-                            }
-
-                            view.setVisualMaxM(overlayPrefs.visualMaxDistanceM)
-                            view.alpha = overlayPrefs.overlayOpacity
-                            view.setAlertMaxM(overlayPrefs.alertMaxDistanceM)
-                            view.setAdaptiveAlerts(overlayPrefs.adaptiveAlertsEnabled)
-                            view.setPrecog(overlayPrefs.precogEnabled)
-                            view.setState(state)
-
-                            val threshold = prefs.batteryLowThresholdPct
-                            val lowSlugs = batteries.values
-                                .filter { it.pct < threshold && now - it.readAtMs < BATTERY_STALE_MS }
-                                .map { it.slug }.toSet()
-                            view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
-
-                            // Battery audible cues (audio gated on pause like the
-                            // close-pass beeps; the visual glyph above is shown
-                            // regardless). Two distinct moments share the one
-                            // battery cue:
-                            if (!prefs.isPaused) {
-                                val critRadarMac = currentRadarMac
-                                val critRadarSlug = critRadarMac?.let {
-                                    macToSlug[it] ?: macToSlug[it.uppercase(Locale.ROOT)]
-                                }
-                                // 1) Rear-radar CRITICAL (radar-only, < CRITICAL_BATTERY_PCT,
-                                //    repeats every ~2 min): the radar is the rider's
-                                //    rear-awareness channel, so a critical radar
-                                //    battery earns a repeating in-ride warning.
-                                val critRadarBatt = critRadarSlug?.let { batteries[it] }
-                                val critFresh = critRadarBatt != null &&
-                                    now - critRadarBatt.readAtMs < BATTERY_STALE_MS
-                                val critDecision = CriticalBatteryDecider.decide(
-                                    pct = critRadarBatt?.pct,
-                                    fresh = critFresh,
-                                    nowMs = now,
-                                    criticalPct = CRITICAL_BATTERY_PCT,
-                                    cadenceMs = CRITICAL_BATTERY_CUE_INTERVAL_MS,
-                                    lastCueMs = lastCriticalBatteryCueMs,
-                                )
-                                lastCriticalBatteryCueMs = critDecision.lastCueMs
-                                if (critDecision.fire) {
-                                    beeper.playCriticalBattery()
-                                    clog("# critical_battery radar=$critRadarSlug pct=${critRadarBatt?.pct}")
-                                }
-
-                                // 2) Pre-flight LOW (L8): a one-shot heads-up at
-                                //    connect when ANY device (radar or dashcam) is
-                                //    below the low-battery threshold, so the rider
-                                //    can top up via USB-C before heading out rather
-                                //    than finding out mid-commute. 30-min cadence => once per device
-                                //    per ride; the audible counterpart of the silent
-                                //    low-battery glyph. The radar in the critical
-                                //    band is skipped (case 1 already covers it, so
-                                //    no double cue).
-                                for (batt in batteries.values) {
-                                    if (!CriticalBatteryDecider.preflightEligible(
-                                            batt.slug,
-                                            batt.pct,
-                                            critRadarSlug,
-                                            CRITICAL_BATTERY_PCT,
-                                        )
-                                    ) {
-                                        continue
-                                    }
-                                    val pfFresh = now - batt.readAtMs < BATTERY_STALE_MS
-                                    val pfDecision = CriticalBatteryDecider.decide(
-                                        pct = batt.pct,
-                                        fresh = pfFresh,
-                                        nowMs = now,
-                                        criticalPct = threshold,
-                                        cadenceMs = PREFLIGHT_BATTERY_CUE_INTERVAL_MS,
-                                        lastCueMs = preflightBatteryCueMs[batt.slug],
-                                    )
-                                    val pfLast = pfDecision.lastCueMs
-                                    if (pfLast == null) {
-                                        preflightBatteryCueMs.remove(batt.slug)
-                                    } else {
-                                        preflightBatteryCueMs[batt.slug] = pfLast
-                                    }
-                                    if (pfDecision.fire) {
-                                        beeper.playCriticalBattery()
-                                        clog("# preflight_battery ${batt.slug} pct=${batt.pct}")
-                                    }
-                                }
-                            }
-
-                            if (!prefs.isPaused) {
-                                // Pass eBike ground-truth standstill when present
-                                // (lastEBikeSnapshot is null when the experimental flag is
-                                // off or no eBike is bonded). Null falls back to the
-                                // bikeSpeedMs gate inside decide(), which uses the radar's
-                                // own bike-speed field from its V2 device-status frame.
-                                //
-                                // When eBike is bonded, prefer wheel-speed truth
-                                // (speedRaw is 1/100 km/h; / 360 = m/s) so the
-                                // speed-aware cooldown reacts to actual rider speed at
-                                // sub-second latency instead of the radar's slower
-                                // device-status cadence.
-                                val eBikeSnap = lastEBikeSnapshot
-                                val preferredBikeSpeedMs = eBikeSnap?.speedRaw?.let { it / 360f }
-                                    ?: state.bikeSpeedMs
-                                val ev = alerts.decide(
-                                    vehicles = state.vehicles,
-                                    alertMaxM = overlayPrefs.alertMaxDistanceM,
-                                    nowMs = now,
-                                    bikeSpeedMs = preferredBikeSpeedMs,
-                                    bikeNotDriving = eBikeSnap?.bikeNotDriving,
-                                    climbing = climbing,
-                                )
-                                if (ev !is AlertDecider.Event.None) {
-                                    logAlertEvent(ev, state, now)
-                                }
-                                // The cached overlay-prefs snapshot is kept fresh by the
-                                // prefs.flow collector, so toggling the Settings panning
-                                // flag mid-session still takes effect on the next alert
-                                // without a radar reconnect.
-                                beeper.setPanning(
-                                    enabled = overlayPrefs.experimentalLateralPanning,
-                                    invertLR = overlayPrefs.experimentalLateralPanningInvertLR,
-                                )
-                                when (val cue = AlertCue.forEvent(ev)) {
-                                    is AlertCue.Beep -> beeper.play(cue.count, cue.lateralPos)
-                                    AlertCue.Clear -> beeper.playClear()
-                                    is AlertCue.Urgent -> beeper.playUrgent(cue.lateralPos)
-                                    AlertCue.Silence -> {}
-                                }
-                            } else {
-                                alerts.reset()
-                            }
-
-                            // Close-pass detection: strict-gated per-track state
-                            // machine that only emits an event for genuine
-                            // overtakes at <1 m (default). Runs regardless of
-                            // the pause state - pause silences the beeper but
-                            // doesn't turn off data logging. Config is re-read
-                            // every frame so Settings changes take effect
-                            // immediately without losing per-track state.
-                            val cpConfig = ClosePassDetector.Config(
-                                enabled = prefs.closePassLoggingEnabled && ha.isConfigured(),
-                                riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
-                                closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat(),
-                                emitMinRangeXM = prefs.closePassEmitMinRangeXM,
-                            )
-                            // Publish discovery eagerly so HA has time to register the
-                            // entity before any non-retained event payload arrives;
-                            // events fired into a not-yet-registered topic get dropped.
-                            // The BLE-advertised name is used (same source as battery
-                            // discovery) so HA derives a stable, device-aligned slug.
-                            // Flip the persisted flag on success only; retry on failure
-                            // if HA was momentarily unreachable. The in-flight guard
-                            // suppresses re-issue while the publish is pending.
-                            if (cpConfig.enabled && !closePassDiscoveryPublished && !closePassDiscoveryInFlight) {
-                                val radarMac = currentRadarMac
-                                val radarSlug = radarMac?.let { macToSlug[it] }
-                                    ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
-                                if (radarSlug != null) {
-                                    closePassDiscoveryInFlight = true
-                                    launch(Dispatchers.IO) {
-                                        val ok = ha.publishClosePassDiscovery(radarSlug, name)
-                                        if (ok) {
-                                            closePassDiscoveryPublished = true
-                                        } else {
-                                            Log.w(TAG, "close-pass discovery publish failed; will retry")
-                                        }
-                                        closePassDiscoveryInFlight = false
-                                    }
-                                }
-                            }
-                            val cpEvents = closePassDetector.decide(
-                                state.vehicles,
-                                state.bikeSpeedMs,
-                                now,
-                                cpConfig,
-                            )
-                            if (cpEvents.isNotEmpty()) {
-                                ClosePassStateBus.increment(cpEvents.size)
-                                for (ev in cpEvents) rideStats.observeClosePass(ev)
-                                val radarMac = currentRadarMac
-                                val radarSlug = radarMac?.let { macToSlug[it] }
-                                    ?: radarMac?.let { macToSlug[it.uppercase(Locale.ROOT)] }
-                                if (radarSlug != null) {
-                                    launch(Dispatchers.IO) {
-                                        for (ev in cpEvents) {
-                                            val json = org.json.JSONObject()
-                                                .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())
-                                                .put("min_range_x_m", String.format(Locale.US, "%.2f", ev.minRangeXM).toFloat())
-                                                .put("side", ev.side.name.lowercase(Locale.ROOT))
-                                                .put("range_y_at_min_m", String.format(Locale.US, "%.1f", ev.rangeYAtMinM).toFloat())
-                                                .put("closing_speed_kmh", ev.closingSpeedKmh)
-                                                .put("rider_speed_kmh", ev.riderSpeedKmh)
-                                                .put("vehicle_size", ev.vehicleSize.name)
-                                                .put("threshold_m", ev.thresholdArmedM)
-                                                .put("severity", ev.severity.name.lowercase(Locale.ROOT))
-                                            val ok = ha.publishClosePassEvent(radarSlug, json)
-                                            if (!ok) Log.w(TAG, "close-pass publish failed")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                } finally {
-                    // Do NOT release the beeper here. It is service-scoped
-                    // (allocated in onCreate, released in onDestroy) so its warm
-                    // AudioTrack pool survives radar reconnects. Releasing it
-                    // per-overlayJob left every beep after the first mid-ride
-                    // reconnect playing on a released pool + shut-down executor,
-                    // i.e. silent close-pass alerts for the rest of the ride.
-                    if (overlayAdded) {
-                        try {
-                            wm.removeView(view)
-                            clog("# overlay removed")
-                        } catch (t: Throwable) {
-                            Log.w(TAG_RADAR, "removeView failed: $t")
-                        }
-                    }
-                    overlayWm = null
-                    overlayViewRef = null
-                }
-            }
+            // Overlay + alert coroutine, extracted into OverlayPipeline.
+            overlayJob = overlayPipeline.attach(scope, name)
 
             val rearMac = gatt.device?.address
             val v2Dec = RadarV2Decoder()

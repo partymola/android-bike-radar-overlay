@@ -1,15 +1,32 @@
 # android-bike-radar-overlay
 
-Android companion for a rear-bike-radar head unit that speaks the common
-V1 (cleartext) and V2 (bonded) BLE radar protocols. Draws a live radar
-overlay during rides, plays per-tier audio cues, and feeds the same view
-with optional inputs from the dashcam, the front-camera light, and a
-Bosch Smart System eBike (via the Bosch Flow app running on the same
-phone).
+<p align="left">
+  <img src="screenshots/13-overlay-live.png" width="700" alt="Live overlay during a ride" />
+</p>
 
-See [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
+The app is the faint strip down the right edge of the screenshot above
+- the radar threat ladder, plus small battery indicators for the radar
+itself and the front camera. It draws on top of whatever you're already
+running (a map, Bosch Flow, etc.) and beeps when a car closes in behind
+you. The beep tier rises as the closest vehicle gets nearer; a distinct
+urgent tone fires if an impact looks imminent.
+
+Everything else in the screenshot - the navigation panel on the left,
+the assist-mode and battery row along the bottom - is other apps
+showing through. The overlay only ever draws the right-edge strip; the
+rest of your screen stays yours.
+
+Map tiles in the screenshot are rendered by a separate navigation app
+underneath the overlay. Map tiles &copy; Mapbox, map data &copy;
+OpenStreetMap contributors. The visible eBike assist-mode indicator
+("TURBO") is part of the Bosch eBike Flow UI; Bosch and eBike Flow are
+trademarks of Robert Bosch GmbH and their incidental appearance here
+does not imply any endorsement.
+
+The app speaks the V2 (bonded) BLE rear-radar protocol. See
+[`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
 and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
-repository for the wire protocol, reference decoders, and unit tests.
+repository for the wire protocol, reference decoder, and unit tests.
 
 ## Features
 
@@ -39,7 +56,7 @@ repository for the wire protocol, reference decoders, and unit tests.
   BLE characteristic notifications, phone-battery trace, and decoder
   events; useful for post-ride replay and bug reports.
 
-## Screenshots
+## App screens
 
 <p align="left">
   <img src="screenshots/01-main.png" width="200" alt="Main screen" />
@@ -55,22 +72,6 @@ repository for the wire protocol, reference decoders, and unit tests.
   <img src="screenshots/11-licences.png" width="200" alt="Open source licences" />
   <img src="screenshots/12-privacy.png" width="200" alt="Privacy notice" />
 </p>
-
-Live overlay during a ride (left column: arrival ETA, distance left,
-arrival charge, current speed; bottom strip: assist mode and battery,
-front-light state and clock; right edge: radar threat ladder, dimmed
-when no targets):
-
-<p align="left">
-  <img src="screenshots/13-overlay-live.png" width="600" alt="Live overlay during a ride" />
-</p>
-
-Map tiles in the live-overlay screenshot are rendered by a separate
-navigation app underneath the overlay. Map tiles &copy; Mapbox, map
-data &copy; OpenStreetMap contributors. The visible eBike assist-mode
-indicator ("TURBO") is part of the Bosch eBike Flow UI; Bosch and
-eBike Flow are trademarks of Robert Bosch GmbH and their incidental
-appearance here does not imply any endorsement.
 
 Debug screen is hidden behind a three-tap long-press unlock on the app title.
 
@@ -102,9 +103,11 @@ version + firmware.
 
 - Android phone (tested on Pixel 10 Pro XL / Android 16). `minSdk = 31`,
   `targetSdk = 36`.
-- A rear-radar BLE head unit that speaks V1 (cleartext) or V2 (bonded).
-  V2 requires a one-time LE Secure Connections pair via Android's own
+- A rear-radar BLE head unit that speaks the V2 (bonded) protocol. V2
+  requires a one-time LE Secure Connections pair via Android's own
   Bluetooth settings; the app does not attempt `createBond()` itself.
+  (Legacy V1 (cleartext) frames the radar emits unsolicited are
+  ignored; the app never subscribes the V1 channel.)
 - Optional: Home Assistant for battery reporting and close-pass
   logging. See below for the bare-minimum HA-side set-up; the radar
   overlay works standalone without it.

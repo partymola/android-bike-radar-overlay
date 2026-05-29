@@ -83,7 +83,7 @@ class ScreenshotCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                stopSelf()
+                startForegroundThenStop()
                 return START_NOT_STICKY
             }
             ACTION_START -> {
@@ -95,10 +95,14 @@ class ScreenshotCaptureService : Service() {
                 )
                 if (resultCode == 0 || resultData == null) {
                     Log.w(TAG, "missing projection result; stopping")
-                    stopSelf()
+                    startForegroundThenStop()
                     return START_NOT_STICKY
                 }
                 if (projection != null) {
+                    // A live projection means beginProjection already promoted
+                    // the service to the foreground, so this delivery's FGS
+                    // start timer is already satisfied. Keep the session; do
+                    // not re-enter foreground or tear it down.
                     Log.i(TAG, "already running; ignoring re-start")
                     return START_NOT_STICKY
                 }
@@ -106,11 +110,30 @@ class ScreenshotCaptureService : Service() {
             }
             else -> {
                 Log.w(TAG, "unknown action ${intent?.action}; stopping")
-                stopSelf()
+                startForegroundThenStop()
                 return START_NOT_STICKY
             }
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Promote to foreground with a minimal notification then immediately stop.
+     *
+     * Any path that exits before [beginProjection] must still satisfy the
+     * platform contract: when started via startForegroundService() on API 31+,
+     * the system requires startForeground() within ~5 s or it throws
+     * ForegroundServiceDidNotStartInTimeException. Call startForeground() once
+     * (plain notification - the MEDIA_PROJECTION type isn't needed merely to
+     * satisfy the timer) and then tear down.
+     */
+    private fun startForegroundThenStop() {
+        if (!foregroundStarted) {
+            startForeground(NOTIF_ID, buildNotification())
+            foregroundStarted = true
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun beginProjection(resultCode: Int, resultData: Intent) {

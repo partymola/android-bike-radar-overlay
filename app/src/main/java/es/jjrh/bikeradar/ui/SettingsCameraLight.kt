@@ -48,7 +48,6 @@ fun SettingsCameraLight(navController: NavController, prefs: Prefs) {
 
 @Composable
 private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) {
-    val br = LocalBrColors.current
     val ctx = LocalContext.current
     var autoEnabled by rememberSaveable { mutableStateOf(prefs.autoLightModeEnabled) }
     var dayMode by rememberSaveable { mutableStateOf(prefs.cameraLightDayMode) }
@@ -56,68 +55,40 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
     var dayPickerOpen by rememberSaveable { mutableStateOf(false) }
     var nightPickerOpen by rememberSaveable { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
-        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SettingsHeader("Dashcam light auto-mode", onBack = { navController.popBackStack() })
-
-            SettingsRowGroup {
-                SettingsToggleRow(
-                    title = "Auto dashcam light mode",
-                    subtitle = "Set light mode at power-on and at sunset",
-                    checked = autoEnabled,
-                    onCheckedChange = { v ->
-                        autoEnabled = v
-                        prefs.autoLightModeEnabled = v
-                    },
-                    leadingIcon = Icons.Default.WbSunny,
-                    leadingTint = br.brand,
-                    isLast = false,
-                )
-                SettingsRow(
-                    icon = Icons.Default.LightMode,
-                    iconTint = if (autoEnabled) br.brand else br.fgMuted,
-                    title = "Daytime mode",
-                    subtitle = dayMode.displayName(),
-                    onClick = { dayPickerOpen = true },
-                    chevron = false,
-                    clickable = autoEnabled,
-                    enabled = autoEnabled,
-                    isLast = false,
-                )
-                SettingsRow(
-                    icon = Icons.Default.DarkMode,
-                    iconTint = if (autoEnabled) br.brand else br.fgMuted,
-                    title = "Night mode",
-                    subtitle = "${nightMode.displayName()} - applied at local sunset",
-                    onClick = { nightPickerOpen = true },
-                    chevron = false,
-                    clickable = autoEnabled,
-                    enabled = autoEnabled,
-                    isLast = true,
-                )
-            }
-
-            // When auto-mode is on but approximate location is denied, the
-            // sunrise/sunset calc silently falls back to London. Surface the
-            // grant prompt right here (it's also in onboarding + Settings ->
-            // Permissions, but an existing rider who never re-runs onboarding
-            // would otherwise never be told). Reuses PermissionCard for the
-            // request + rationale + permanent-denial deeplink; shown only
-            // while it's actionable (auto-mode on AND not yet granted).
-            val locSpec = remember {
-                PERMISSIONS.first { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
-            }
-            var locPermTick by rememberSaveable { mutableStateOf(0) }
-            val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
-            if (autoEnabled && !locGranted) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    PermissionCard(locSpec, locGranted, onChanged = { locPermTick++ })
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-        }
+    // When auto-mode is on but approximate location is denied, the
+    // sunrise/sunset calc silently falls back to London. Surface the
+    // grant prompt right here (it's also in onboarding + Settings ->
+    // Permissions, but an existing rider who never re-runs onboarding
+    // would otherwise never be told). Reuses PermissionCard for the
+    // request + rationale + permanent-denial deeplink; shown only
+    // while it's actionable (auto-mode on AND not yet granted).
+    //
+    // The body owns the location `PermissionCard` (and thus its
+    // permission-launcher); the stateless [SettingsCameraLightContent]
+    // leaf takes that card as a `locationCard` slot so snapshot tests
+    // can substitute a launcher-free [PermissionCardContent].
+    val locSpec = remember {
+        PERMISSIONS.first { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
     }
+    var locPermTick by rememberSaveable { mutableStateOf(0) }
+    val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
+
+    SettingsCameraLightContent(
+        onBack = { navController.popBackStack() },
+        autoEnabled = autoEnabled,
+        dayMode = dayMode,
+        nightMode = nightMode,
+        locGranted = locGranted,
+        onAutoChanged = { v ->
+            autoEnabled = v
+            prefs.autoLightModeEnabled = v
+        },
+        onDayClick = { dayPickerOpen = true },
+        onNightClick = { nightPickerOpen = true },
+        locationCard = {
+            PermissionCard(locSpec, locGranted, onChanged = { locPermTick++ })
+        },
+    )
 
     if (dayPickerOpen) {
         ModePickerDialog(
@@ -142,6 +113,80 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
             },
             onDismiss = { nightPickerOpen = false },
         )
+    }
+}
+
+/**
+ * Stateless leaf - wraps the screen chrome (header, the auto-mode toggle
+ * row group, and the conditional location re-grant card) from
+ * pre-resolved state. Tests can call this without a `LocalContext`, a
+ * permission launcher, or an Activity: grant state is pre-resolved and
+ * the location card is provided as a [locationCard] slot (snapshot tests
+ * pass a launcher-free [PermissionCardContent]; the real body passes a
+ * stateful [PermissionCard]).
+ *
+ * The `autoEnabled && !locGranted` visibility gate for the location card
+ * lives here so a golden can exercise the M7 re-grant surface.
+ */
+@Composable
+internal fun SettingsCameraLightContent(
+    onBack: () -> Unit,
+    autoEnabled: Boolean,
+    dayMode: CameraLightMode,
+    nightMode: CameraLightMode,
+    locGranted: Boolean,
+    onAutoChanged: (Boolean) -> Unit = {},
+    onDayClick: () -> Unit = {},
+    onNightClick: () -> Unit = {},
+    locationCard: @Composable () -> Unit = {},
+) {
+    val br = LocalBrColors.current
+    Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            SettingsHeader("Dashcam light auto-mode", onBack = onBack)
+
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = "Auto dashcam light mode",
+                    subtitle = "Set light mode at power-on and at sunset",
+                    checked = autoEnabled,
+                    onCheckedChange = onAutoChanged,
+                    leadingIcon = Icons.Default.WbSunny,
+                    leadingTint = br.brand,
+                    isLast = false,
+                )
+                SettingsRow(
+                    icon = Icons.Default.LightMode,
+                    iconTint = if (autoEnabled) br.brand else br.fgMuted,
+                    title = "Daytime mode",
+                    subtitle = dayMode.displayName(),
+                    onClick = onDayClick,
+                    chevron = false,
+                    clickable = autoEnabled,
+                    enabled = autoEnabled,
+                    isLast = false,
+                )
+                SettingsRow(
+                    icon = Icons.Default.DarkMode,
+                    iconTint = if (autoEnabled) br.brand else br.fgMuted,
+                    title = "Night mode",
+                    subtitle = "${nightMode.displayName()} - applied at local sunset",
+                    onClick = onNightClick,
+                    chevron = false,
+                    clickable = autoEnabled,
+                    enabled = autoEnabled,
+                    isLast = true,
+                )
+            }
+
+            if (autoEnabled && !locGranted) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    locationCard()
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+        }
     }
 }
 

@@ -2,5 +2,5 @@
 <paths>
     <external-files-path
         name="capture-logs"
-        path="." />
+        path="captures/" />
 </paths>

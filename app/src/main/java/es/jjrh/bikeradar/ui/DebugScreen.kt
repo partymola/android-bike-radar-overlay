@@ -101,6 +101,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     val logFiles = remember {
         val active = BikeRadarService.activeCaptureLogName
         ctx.getExternalFilesDir(null)
+            ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
             ?.listFiles { f ->
                 CaptureLogFiles.isCaptureLog(f) &&
                     f.length() > 0L &&
@@ -599,6 +600,7 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
     sb.appendLine("adb shell dumpsys bluetooth_manager | grep -E 'PairingAlgorithm|le_encrypted'")
     sb.appendLine()
     val logFiles = ctx.getExternalFilesDir(null)
+        ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
         ?.listFiles { f -> CaptureLogFiles.isCaptureLog(f) }
         ?.sortedByDescending { it.lastModified() }
         ?: emptyList()

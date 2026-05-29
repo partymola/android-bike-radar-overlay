@@ -1521,8 +1521,8 @@ class BikeRadarService : Service() {
     // ── capture log ───────────────────────────────────────────────────────────
 
     private fun openCaptureLog() {
-        val dir = getExternalFilesDir(null) ?: return
-        dir.mkdirs()
+        val root = getExternalFilesDir(null) ?: return
+        val dir = File(root, CAPTURE_DIR).apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
         val file = java.io.File(dir, "bike-radar-capture-$stamp.log")
         try {
@@ -1563,7 +1563,7 @@ class BikeRadarService : Service() {
         // its un-finalised tail on a crash). Failure preserves the .log so
         // the next pruneCaptureLogs pass can retry.
         if (closedName != null) {
-            val dir = getExternalFilesDir(null)
+            val dir = getExternalFilesDir(null)?.let { File(it, CAPTURE_DIR) }
             if (dir != null) {
                 val src = java.io.File(dir, closedName)
                 if (src.exists()) CaptureLogFiles.gzipAndDelete(src, TAG_RADAR)
@@ -1591,7 +1591,10 @@ class BikeRadarService : Service() {
 
     fun clog(msg: String) {
         writeCaptureLine(msg)
-        Log.d(TAG_RADAR, msg)
+        // Mirror to logcat only in debug builds. The capture log carries BLE /
+        // movement payloads; release builds keep those out of logcat where any
+        // app with READ_LOGS (or an adb pull) could harvest them.
+        if (BuildConfig.DEBUG) Log.d(TAG_RADAR, msg)
     }
 
     /** Capture-log line for a non-None AlertDecider event. Pairs the
@@ -2400,7 +2403,7 @@ class BikeRadarService : Service() {
     }
 
     private fun pruneCaptureLogs() {
-        val dir = getExternalFilesDir(null) ?: return
+        val dir = getExternalFilesDir(null)?.let { File(it, CAPTURE_DIR) } ?: return
         val logs = dir.listFiles { f -> CaptureLogFiles.isCaptureLog(f) } ?: return
         val active = activeCaptureLogName
         // A real session logs thousands of packet lines; anything under a few
@@ -2620,8 +2623,13 @@ class BikeRadarService : Service() {
          *  long enough that a sub-30-min commute gets exactly one heads-up
          *  per device at connect, and it re-arms for the next ride. */
         const val PREFLIGHT_BATTERY_CUE_INTERVAL_MS = 30 * 60 * 1000L
-        const val MAX_CAPTURE_LOGS = 500
+        const val MAX_CAPTURE_LOGS = 50
         const val MIN_USEFUL_LOG_BYTES = 500L
+
+        /** Subdirectory under the app's external files dir where capture logs
+         *  live. Narrows the FileProvider share subtree (file_paths.xml) to
+         *  just the logs rather than the whole external-files root. */
+        const val CAPTURE_DIR = "captures"
 
         // Dashcam presence-by-advert timing. Fresh threshold accommodates
         // SCAN_MODE_LOW_POWER batching; cold-start grace covers the window

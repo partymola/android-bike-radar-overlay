@@ -19,6 +19,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import java.io.File
 
 /**
  * Smoke tests for [BikeRadarService] lifecycle entrypoints under
@@ -122,5 +123,47 @@ class BikeRadarServiceSmokeTest {
         controller.create()
         controller.startCommand(0, 1)
         controller.destroy()
+    }
+
+    @Test
+    fun retentionCapConstantIsFifty() {
+        // Pins the M9 retention reduction (was 500). A revert trips this.
+        assertEquals(50, BikeRadarService.MAX_CAPTURE_LOGS)
+    }
+
+    @Test
+    fun onCreatePrunesCaptureLogsToTheCapInTheCapturesSubdir() {
+        // M9: capture logs live under files/<CAPTURE_DIR>/ and onCreate prunes
+        // them to MAX_CAPTURE_LOGS. Seed more than the cap (each above
+        // MIN_USEFUL_LOG_BYTES so none is dropped as header-only), plus a
+        // sentinel in the external-files ROOT that prune must NOT touch -
+        // proving the prune is scoped to the subdir, not the whole files dir.
+        // Assert survivor COUNT only: prune gzips the seeds (resetting mtime),
+        // so which files get dropped is not deterministic.
+        val root = app.getExternalFilesDir(null)!!
+        val captures = File(root, BikeRadarService.CAPTURE_DIR).apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val body = "x".repeat(BikeRadarService.MIN_USEFUL_LOG_BYTES.toInt() + 100)
+        repeat(BikeRadarService.MAX_CAPTURE_LOGS + 10) { i ->
+            File(captures, "bike-radar-capture-20260101-0000%02d.log".format(i)).writeText(body)
+        }
+        val rootSentinel = File(root, "bike-radar-capture-19990101-000000.log").apply {
+            writeText(body)
+        }
+
+        Robolectric.buildService(BikeRadarService::class.java).create().destroy()
+
+        val kept = captures.listFiles { f -> CaptureLogFiles.isCaptureLog(f) }.orEmpty()
+        assertEquals(
+            "capture logs should be pruned to the cap",
+            BikeRadarService.MAX_CAPTURE_LOGS,
+            kept.size,
+        )
+        assertTrue(
+            "a capture-log file in the external-files root must be left untouched",
+            rootSentinel.exists(),
+        )
     }
 }

@@ -336,6 +336,61 @@ class PrefsTest {
         assertTrue(dump.contains("dashcam_display_name=<unset>"))
     }
 
+    /**
+     * Audit finding M10: [Prefs.dumpAll] is a hand-maintained `buildString`
+     * that enumerates every field by name, and the diagnostic bundle it
+     * produces is meant to be pasted into public issue trackers. The two
+     * existing dump tests only pin the fields we already know to redact -
+     * nothing fails if a future contributor adds a new user-identifying field
+     * (another MAC, a bonded address, a serial) and emits it raw instead of
+     * routing it through [Prefs.redactPresence]. This is the future-proof
+     * guard: it seeds identifiers shaped like a BLE MAC (including a display
+     * name that is itself MAC-shaped, to prove names are redacted too) and
+     * asserts the whole dump contains no MAC-shaped substring. A new raw
+     * identifier whose value happens to look like a MAC trips this test; the
+     * companion test below catches verbatim leaks of any shape.
+     */
+    @Test
+    fun dumpAllNeverEmitsAnythingMatchingAMacAddress() {
+        prefs.dashcamMac = "AA:BB:CC:DD:EE:FF"
+        // A display name shaped like a MAC: proves names are redacted too,
+        // not merely the field we happen to call the "MAC".
+        prefs.dashcamDisplayName = "AA:BB:CC:DD:EE:FF"
+        val dump = prefs.dumpAll()
+        val macRegex = Regex("""\b([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b""")
+        assertFalse(
+            "A sensitive field is being dumped without redactPresence(): " +
+                "the diagnostic bundle contains a BLE-MAC-shaped value and is " +
+                "pasted into public issue trackers. Route the new field through " +
+                "Prefs.redactPresence(). Dump was:\n$dump",
+            macRegex.containsMatchIn(dump),
+        )
+    }
+
+    /**
+     * Audit finding M10 companion: pins that the seeded identifier *values*
+     * never appear verbatim in the dump (catching leaks of any shape, not just
+     * MAC-shaped), while the redaction markers for the two known identifier
+     * fields are present. The key strings and the `<redacted>` marker are
+     * copied verbatim from [Prefs.dumpAll] / [Prefs.redactPresence].
+     */
+    @Test
+    fun dumpAllNeverEmitsSeededIdentifierValuesVerbatim() {
+        prefs.dashcamMac = "11:22:33:44:55:66"
+        prefs.dashcamDisplayName = "Rider's Personal Dashcam 9000"
+        val dump = prefs.dumpAll()
+        assertFalse(
+            "the raw MAC must never appear in the dump",
+            dump.contains("11:22:33:44:55:66"),
+        )
+        assertFalse(
+            "the raw display name must never appear in the dump",
+            dump.contains("Rider's Personal Dashcam 9000"),
+        )
+        assertTrue(dump.contains("dashcam_mac=<redacted>"))
+        assertTrue(dump.contains("dashcam_display_name=<redacted>"))
+    }
+
     @Test
     fun redactPresenceDistinguishesUnsetFromPresent() {
         assertEquals("<unset>", Prefs.redactPresence(null))

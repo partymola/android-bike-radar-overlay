@@ -69,7 +69,11 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   set (manual side-button press during the session). See
   `BikeRadarService.kt` connect path.
 - Capture log is always written to
-  `/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
+  `/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`
+  (in the `captures/` subdir so the FileProvider share subtree is scoped to the
+  logs, not the whole external-files root). Cap is `MAX_CAPTURE_LOGS = 50`.
+  `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
+  release builds keep BLE/movement payloads out of logcat.
 
 ## Key files
 
@@ -195,9 +199,10 @@ decoders in both Python and Kotlin live there.
 - When `audioManager.mode == MODE_IN_CALL` the close-pass beeper skips the
   audio path entirely (visual overlay still fires). Non-negotiable, no
   Settings toggle.
-- `ACCESS_COARSE_LOCATION` is requested but not prompted in-app yet;
-  existing installs upgrading from pre-v0.7.1-alpha must grant via Android
-  Settings or the auto-mode silently falls back to London.
+- `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
+  in Settings -> Permissions, and via a contextual re-grant card in Settings ->
+  Dashcam light (shown when auto-mode is on and location is not yet granted).
+  If never granted, the day/night auto-mode silently falls back to London times.
 
 ## Audio design
 

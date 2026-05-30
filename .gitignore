@@ -10,14 +10,10 @@ local.properties
 .DS_Store
 debug.keystore
 
-# Android captures + radar log files
-captures/
-
-# Local-only working directory for drafts, ride annotations, and
-# research. Not part of the public repo.
-notes/
-
-# Local-only reference material and tooling outputs that must never
-# enter git history.
+# Kotlin-only repo; never track stray Java.
 *.java
+
+# Local-only working tree: research, drafts, ride captures, analysis,
+# tooling output, and anything else that must never enter public
+# history. One rule - nothing under do-not-commit/ is ever committed.
 do-not-commit/

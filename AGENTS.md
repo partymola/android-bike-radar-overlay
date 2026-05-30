@@ -240,12 +240,7 @@ a behaviour spec to keep in sync.
   `protocol:`, `service:`, `release:`. Optional scope like
   `ui(onboarding):` or `feat(alerts):`.
 
-## Local-only notes (not in this repo)
-
-Working drafts and research live in gitignored directories
-(`notes/`, `do-not-commit/`). Keep any local index under
-`do-not-commit/INDEX.md` — the directory is gitignored so nothing
-there reaches public history.
+## Sibling repository
 
 The sibling docs repo `../bike-radar-docs/` (public) is the canonical
 protocol spec.

@@ -217,8 +217,9 @@ class AlertBeeperFocusTest {
         beeper.playUrgent()
         beeper.playCriticalBattery()
         beeper.playRadarDropped()
+        beeper.playRadarReconnected()
         assertEquals(
-            listOf("beep count=2", "clear", "urgent", "critical_battery", "radar_drop"),
+            listOf("beep count=2", "clear", "urgent", "critical_battery", "radar_drop", "radar_reconnect"),
             cues,
         )
         beeper.release()
@@ -239,6 +240,7 @@ class AlertBeeperFocusTest {
         beeper.playUrgent()
         beeper.playCriticalBattery()
         beeper.playRadarDropped()
+        beeper.playRadarReconnected()
         assertTrue("no cue should be recorded while MODE_IN_CALL suppresses audio", cues.isEmpty())
         beeper.release()
     }

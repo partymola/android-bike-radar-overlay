@@ -33,6 +33,7 @@ class RadarDropDeciderTest {
         )
         assertTrue(d.fire)
         assertEquals(now, d.lastCueMs)
+        assertFalse(d.fireReconnect) // a drop fire is never also a reconnect fire
     }
 
     @Test
@@ -115,9 +116,11 @@ class RadarDropDeciderTest {
     }
 
     @Test
-    fun reconnectResetsTheLatch() {
+    fun reconnectResetsTheLatchAndFiresReconnectCue() {
         // radarDownForMs == null means the radar is back up. The latch must
-        // reset so the NEXT drop fires fresh at the threshold.
+        // reset so the NEXT drop fires fresh at the threshold. Because a drop
+        // cue WAS raised this episode (lastCueMs non-null), the one-shot
+        // reconnect cue fires on this same edge.
         val d = RadarDropDecider.decide(
             radarEverLive = true,
             radarDownForMs = null,
@@ -129,6 +132,133 @@ class RadarDropDeciderTest {
         )
         assertFalse(d.fire)
         assertNull(d.lastCueMs)
+        assertTrue(d.fireReconnect)
+    }
+
+    @Test
+    fun coldStartReconnectIsSilent() {
+        // Radar up from the start of the ride, no drop cue ever raised
+        // (lastCueMs null). The reconnect cue must NOT fire - a fresh connect
+        // / adb-install path should stay silent.
+        val d = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null,
+            ridingConfirmed = true,
+            nowMs = now,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = null,
+        )
+        assertFalse(d.fire)
+        assertFalse(d.fireReconnect)
+        assertNull(d.lastCueMs)
+    }
+
+    @Test
+    fun transientBlipReconnectIsSilent() {
+        // A blip shorter than the threshold never raises a drop cue, so its
+        // latch stays null; when it returns, no reconnect cue fires. Modelled
+        // as the two ticks the service sees: under-threshold-down, then up.
+        val down = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold - 1,
+            ridingConfirmed = true,
+            nowMs = now,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = null,
+        )
+        assertFalse(down.fire)
+        assertNull(down.lastCueMs)
+        val up = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null,
+            ridingConfirmed = true,
+            nowMs = now + 1_000L,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = down.lastCueMs,
+        )
+        assertFalse(up.fireReconnect)
+        assertNull(up.lastCueMs)
+    }
+
+    @Test
+    fun reconnectCueDoesNotFireWhileStillDown() {
+        // While the radar is still down (cue already raised, riding briefly
+        // unconfirmed) the latch is preserved but the reconnect cue must not
+        // fire - it is reserved for the actual back-up edge.
+        val d = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold * 3,
+            ridingConfirmed = false,
+            nowMs = now,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = now - 5_000L,
+        )
+        assertFalse(d.fireReconnect)
+        assertEquals(now - 5_000L, d.lastCueMs)
+    }
+
+    @Test
+    fun reconnectCueFiresOncePerDropEpisode() {
+        // Two drop-reconnect cycles: the reconnect cue fires exactly once per
+        // cycle. Thread the latch through the ticks the service would see.
+        // Cycle 1: drop past threshold (cue fires, latch set) -> reconnect.
+        val drop1 = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold,
+            ridingConfirmed = true,
+            nowMs = now,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = null,
+        )
+        assertTrue(drop1.fire)
+        val up1 = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null,
+            ridingConfirmed = true,
+            nowMs = now + 10_000L,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = drop1.lastCueMs,
+        )
+        assertTrue(up1.fireReconnect)
+        assertNull(up1.lastCueMs)
+        // A second up tick (still no new drop) must NOT re-fire.
+        val up1Again = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null,
+            ridingConfirmed = true,
+            nowMs = now + 11_000L,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = up1.lastCueMs,
+        )
+        assertFalse(up1Again.fireReconnect)
+        // Cycle 2: a fresh drop re-arms, then reconnect fires once more.
+        val drop2 = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold,
+            ridingConfirmed = true,
+            nowMs = now + 100_000L,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = up1Again.lastCueMs,
+        )
+        assertTrue(drop2.fire)
+        val up2 = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null,
+            ridingConfirmed = true,
+            nowMs = now + 110_000L,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = drop2.lastCueMs,
+        )
+        assertTrue(up2.fireReconnect)
     }
 
     @Test

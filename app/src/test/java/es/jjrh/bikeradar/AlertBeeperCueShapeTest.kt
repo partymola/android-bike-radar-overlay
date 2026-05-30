@@ -67,4 +67,14 @@ class AlertBeeperCueShapeTest {
         assertNotEquals(countPulses(threeBeep), countPulses(urgent))
         assertTrue("urgent and 3-beep must not be the same length", urgent.size != threeBeep.size)
     }
+
+    @Test fun statusCuesAreSeparableByPulseCount() {
+        // The three rear-radar status cues are discriminated by COUNT, not fine
+        // pitch (the noisy-London rule). Reconnect=1, battery=2, drop=3 - a
+        // distinct count each, so collapsing any two together fails here.
+        val b = beeper()
+        assertEquals(1, countPulses(b.buildRadarReconnectedPcm()))
+        assertEquals(2, countPulses(b.buildCriticalBatteryPcm()))
+        assertEquals(3, countPulses(b.buildRadarDroppedPcm()))
+    }
 }

@@ -2298,6 +2298,14 @@ class BikeRadarService : Service() {
             alertBeeper?.playRadarDropped()
             clog("# radar_drop_cue down_ms=${downForMs ?: -1L} system_locked=${snap?.systemLocked}")
         }
+        // Reconnect acknowledgement: fires once on the tick the radar comes
+        // back up, but only when a drop cue had been raised this down-episode
+        // (decided in [RadarDropDecider]). Closes the ambiguity a bare silence
+        // leaves after a drop cue - "back" vs "still dead".
+        if (decision.fireReconnect) {
+            alertBeeper?.playRadarReconnected()
+            clog("# radar_reconnect_cue")
+        }
     }
 
     private fun resolveDashcamSlug(): String? {

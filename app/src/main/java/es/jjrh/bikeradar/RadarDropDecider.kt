@@ -32,10 +32,18 @@ package es.jjrh.bikeradar
  * while riding is confirmed, fire, then repeat no more often than
  * [cadenceMs]. The latch resets the moment the radar reconnects (so the next
  * drop fires fresh at the threshold again).
+ *
+ * RECONNECT CUE (the completing half of the drop design). A drop cue tells the
+ * rider the rear channel is dead; after that, silence is ambiguous - it could
+ * mean the radar came back (clear road) or that it is still down. So the same
+ * reconnect edge that resets the latch also raises [Decision.fireReconnect]
+ * IF a drop cue had actually been raised this down-episode (latch non-null).
+ * One acknowledgement cue then restores silence's meaning. It never fires on a
+ * cold start or a sub-threshold blip, because those never set the latch.
  */
 object RadarDropDecider {
 
-    data class Decision(val fire: Boolean, val lastCueMs: Long?)
+    data class Decision(val fire: Boolean, val lastCueMs: Long?, val fireReconnect: Boolean = false)
 
     fun decide(
         radarEverLive: Boolean,
@@ -56,7 +64,18 @@ object RadarDropDecider {
             // yet eligible (under threshold, or riding momentarily
             // unconfirmed), preserve the latch so a brief un-confirm doesn't
             // replay the cue.
-            return Decision(fire = false, lastCueMs = if (radarDownForMs == null) null else lastCueMs)
+            //
+            // The reconnect edge rides on this same reset: back up
+            // (radarDownForMs == null) AND a drop cue was raised this episode
+            // (lastCueMs != null) fires the one-shot reconnect cue. A still-down
+            // tick (latch preserved) or a never-cued reconnect (cold start /
+            // blip, latch null) stays silent.
+            val backUp = radarDownForMs == null
+            return Decision(
+                fire = false,
+                lastCueMs = if (backUp) null else lastCueMs,
+                fireReconnect = backUp && lastCueMs != null,
+            )
         }
         val due = lastCueMs == null || nowMs - lastCueMs >= cadenceMs
         return if (due) {

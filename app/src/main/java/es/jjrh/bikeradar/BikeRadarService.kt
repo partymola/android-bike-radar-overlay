@@ -189,6 +189,12 @@ class BikeRadarService : Service() {
     // full rationale.
     @Volatile private var radarDropLastCueMs: Long? = null
 
+    // Diagnostics latch: true once a radar-drop "near miss" (radar down past
+    // threshold but the cue held because riding wasn't confirmed) has been
+    // logged this down-episode. Reset on radar reconnect so each episode logs
+    // at most one suppression line - enough to tune the gate, no per-tick spam.
+    @Volatile private var radarDropSuppressLogged = false
+
     // Live radar GATT + queue, set in connectAndRun after the V2 handshake and
     // cleared in its finally. Used ONLY by the debug-only radar light-mode
     // write-probe ([probeWriteRadarLight]); production code paths address the
@@ -2396,10 +2402,20 @@ class BikeRadarService : Service() {
             )
         }
         if (prev.radarOffSinceMs == null) {
+            // ebike_locked + ebike_age_ms make the arming decision tunable: a
+            // BLANK is always a fresh unlocked reading; an ARMED is one of
+            // locked / stale-unlocked / no-eBike, told apart by these two.
+            val ebikeAgeMs = nowMs - lastEBikeSnapshotMs
             if (armOnDisconnect) {
-                clog("# walkaway state=ARMED transition_reason=radar-disconnected")
+                clog(
+                    "# walkaway state=ARMED transition_reason=radar-disconnected " +
+                        "ebike_locked=${lastEBikeSnapshot?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+                )
             } else {
-                clog("# walkaway state=BLANK transition_reason=radar-disconnected-but-ebike-unlocked")
+                clog(
+                    "# walkaway state=BLANK transition_reason=radar-disconnected-but-ebike-unlocked " +
+                        "ebike_age_ms=$ebikeAgeMs",
+                )
             }
         }
     }
@@ -2517,14 +2533,16 @@ class BikeRadarService : Service() {
         val snap = lastEBikeSnapshot
         val link = _radarLinkState.value
         val downForMs = link.radarOffSinceMs?.let { nowMs - it }
+        val ebikeAgeMs = nowMs - lastEBikeSnapshotMs
+        val ridingConfirmed = RadarDropDecider.ridingConfirmed(
+            systemLocked = snap?.systemLocked,
+            snapshotAgeMs = ebikeAgeMs,
+            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+        )
         val decision = RadarDropDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
-            ridingConfirmed = RadarDropDecider.ridingConfirmed(
-                systemLocked = snap?.systemLocked,
-                snapshotAgeMs = nowMs - lastEBikeSnapshotMs,
-                freshMs = RADAR_DROP_EBIKE_FRESH_MS,
-            ),
+            ridingConfirmed = ridingConfirmed,
             nowMs = nowMs,
             thresholdMs = RADAR_DROP_THRESHOLD_MS,
             cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
@@ -2537,8 +2555,30 @@ class BikeRadarService : Service() {
         radarDropLastCueMs = decision.lastCueMs
         if (decision.fire) {
             alertBeeper?.playRadarDropped()
-            clog("# radar_drop_cue down_ms=${downForMs ?: -1L} system_locked=${snap?.systemLocked}")
+            clog(
+                "# radar_drop_cue down_ms=${downForMs ?: -1L} " +
+                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+            )
         }
+        // Near-miss diagnostics: an eBike IS present but the radar-down cue is
+        // held because riding isn't confirmed (the snapshot went stale, or the
+        // bike is locked). Log once per down-episode so the freshness gate is
+        // tunable from ride logs; reset the latch when the radar returns. Gated
+        // on a non-null snapshot so a radar-only rider - whose cue is suppressed
+        // by design, with nothing to tune - never logs it.
+        val suppressed = link.sessionRadarConnectedMs > 0L &&
+            snap != null &&
+            downForMs != null &&
+            downForMs >= RADAR_DROP_THRESHOLD_MS &&
+            !ridingConfirmed
+        if (suppressed && !radarDropSuppressLogged) {
+            radarDropSuppressLogged = true
+            clog(
+                "# radar_drop_suppressed down_ms=$downForMs reason=riding-not-confirmed " +
+                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+            )
+        }
+        if (downForMs == null) radarDropSuppressLogged = false
         // Reconnect acknowledgement: fires once on the tick the radar comes
         // back up, but only when a drop cue had been raised this down-episode
         // (decided in [RadarDropDecider]). Closes the ambiguity a bare silence

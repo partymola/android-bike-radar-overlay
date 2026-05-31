@@ -677,8 +677,24 @@ class BikeRadarService : Service() {
     // ── battery read scheduling + execution ──────────────────────────────────
 
     private fun scheduleRead(name: String, mac: String) {
-        // Always try to keep the radar link alive for rear devices.
-        if (isRearDevice(name)) maybeStartRadarLink(name, mac)
+        // Keep the radar link alive for the SELECTED radar. Default is
+        // name-match (zero config); if the rider pinned a specific radar
+        // (radarMac, still bonded) only that exact device links - the guard
+        // against silently streaming the wrong rear-facing radar. See
+        // RadarSelection. The bonded-device enumeration only runs when a pin
+        // exists, so the common no-pin path stays a pure name-match.
+        val pinnedRadar = prefs.radarMac
+        val shouldLinkRadar = if (pinnedRadar == null) {
+            isRearDevice(name)
+        } else {
+            RadarSelection.shouldLinkRadar(
+                mac = mac,
+                nameMatchesRadar = isRearDevice(name),
+                chosenMac = pinnedRadar,
+                bondedRadarMacs = RadarSelection.bondedRadars(this).mapTo(HashSet()) { it.mac },
+            )
+        }
+        if (shouldLinkRadar) maybeStartRadarLink(name, mac)
 
         if (isRearDevice(name) && (radarGattActive || radarJob?.isActive == true)) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")

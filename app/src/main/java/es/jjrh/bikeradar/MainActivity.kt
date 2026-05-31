@@ -28,6 +28,7 @@ import es.jjrh.bikeradar.ui.SettingsLights
 import es.jjrh.bikeradar.ui.SettingsPermissions
 import es.jjrh.bikeradar.ui.SettingsPrivacy
 import es.jjrh.bikeradar.ui.SettingsRadar
+import es.jjrh.bikeradar.ui.SettingsRadarDevice
 import es.jjrh.bikeradar.ui.SettingsScreen
 import es.jjrh.bikeradar.ui.UiTheme
 
@@ -90,6 +91,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/radar") {
                         SettingsRadar(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/radar-device") {
+                        SettingsRadarDevice(navController = navController, prefs = prefs)
                     }
                     composable("settings/dashcam") {
                         SettingsDashcam(navController = navController, prefs = prefs)

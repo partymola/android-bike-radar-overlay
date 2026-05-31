@@ -59,6 +59,11 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   radar decode, overlay draw, HA MQTT push. No fragments, Compose-only UI.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
+- Radar selection is name-match by default; a rider with more than one radar
+  bonded can pin this bike's (`Prefs.radarMac`), and a pinned-and-still-bonded
+  MAC overrides the name-match in `scheduleRead` so the app never streams from
+  the wrong rear unit. Pure decider in `RadarSelection.shouldLinkRadar`;
+  managed in Settings -> Connections -> Radar.
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by

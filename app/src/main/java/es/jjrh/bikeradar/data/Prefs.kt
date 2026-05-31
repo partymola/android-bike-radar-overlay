@@ -63,6 +63,8 @@ data class PrefsSnapshot(
     val radarLightAutoModeEnabled: Boolean,
     val radarLightDayMode: RadarLightMode,
     val radarLightNightMode: RadarLightMode,
+    val radarMac: String?,
+    val radarDisplayName: String?,
     val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
     val eBikeUnknownObjectLogEnabled: Boolean,
@@ -376,6 +378,21 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_LIGHT_NIGHT_MODE, v.name).apply()
         }
 
+    /** MAC of the radar the rider explicitly pinned for this bike, or null to
+     *  use name-match. See [es.jjrh.bikeradar.RadarSelection]. */
+    var radarMac: String?
+        get() = sp.getString(KEY_RADAR_MAC, null)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_MAC, v).apply()
+        }
+
+    /** Display name of the pinned radar (for the Settings device card). */
+    var radarDisplayName: String?
+        get() = sp.getString(KEY_RADAR_DISPLAY_NAME, null)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_DISPLAY_NAME, v).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -489,6 +506,8 @@ class Prefs(context: Context) {
         radarLightAutoModeEnabled = radarLightAutoModeEnabled,
         radarLightDayMode = radarLightDayMode,
         radarLightNightMode = radarLightNightMode,
+        radarMac = radarMac,
+        radarDisplayName = radarDisplayName,
         eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
@@ -585,6 +604,8 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LIGHT_AUTO_MODE = "radar_light_auto_mode_enabled"
         const val KEY_RADAR_LIGHT_DAY_MODE = "radar_light_day_mode"
         const val KEY_RADAR_LIGHT_NIGHT_MODE = "radar_light_night_mode"
+        const val KEY_RADAR_MAC = "radar_mac"
+        const val KEY_RADAR_DISPLAY_NAME = "radar_display_name"
         const val KEY_EBIKE_DATA_ENABLED = "ebike_data_enabled"
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"

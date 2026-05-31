@@ -122,6 +122,8 @@ class PrefsTest {
         prefs.radarLightAutoModeEnabled = true
         prefs.radarLightDayMode = RadarLightMode.SOLID
         prefs.radarLightNightMode = RadarLightMode.PELOTON
+        prefs.radarMac = "11:22:33:44:55:66"
+        prefs.radarDisplayName = "RearVue8"
         prefs.eBikeDataEnabled = true
         prefs.eBikeOwnership = EBikeOwnership.NO
         prefs.eBikeUnknownObjectLogEnabled = true
@@ -164,6 +166,8 @@ class PrefsTest {
         assertTrue(s.radarLightAutoModeEnabled)
         assertEquals(RadarLightMode.SOLID, s.radarLightDayMode)
         assertEquals(RadarLightMode.PELOTON, s.radarLightNightMode)
+        assertEquals("11:22:33:44:55:66", s.radarMac)
+        assertEquals("RearVue8", s.radarDisplayName)
         assertTrue(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
         assertTrue(s.eBikeUnknownObjectLogEnabled)

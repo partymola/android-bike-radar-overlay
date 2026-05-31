@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Videocam
@@ -157,6 +158,13 @@ internal fun SettingsMenuBody(
             SettingsSectionLabel("Connections")
             SettingsRowGroup {
                 SettingsRow(
+                    icon = Icons.Default.Sensors,
+                    iconTint = br.brand,
+                    title = "Radar",
+                    subtitle = radarConnectionSubtitle(radarBattery),
+                    onClick = { navController.navigate("settings/radar-device") },
+                )
+                SettingsRow(
                     icon = Icons.Default.Videocam,
                     iconTint = br.dashcam,
                     title = "Dashcam",
@@ -289,6 +297,8 @@ private fun SystemHealthChip(
 // Connections rows carry live connection status in their subtitles (the
 // top card is now just a glanceable "Quick Status"). A recent battery read
 // is the app's proxy for "connected".
+private fun radarConnectionSubtitle(radarBattery: BatteryEntry?): String = if (radarBattery != null) "Connected · ${radarBattery.pct}%" else "Not connected"
+
 private fun dashcamConnectionSubtitle(
     snap: es.jjrh.bikeradar.data.PrefsSnapshot,
     dashcamBattery: BatteryEntry?,

@@ -22,7 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Videocam
@@ -54,9 +54,9 @@ import java.util.Locale
  * matching `settings-screens.jsx`'s `SettingsHome` composition.
  *
  * Top: SettingsHeader with chevron-back.
- * Then: System health card (compressed Radar + Cam status).
- * Then: GENERAL section (Radar & alerts, Dashcam, Home Assistant, Permissions).
- * Then: ADVANCED section (Experimental, Debug, About).
+ * Then: Quick Status card (compressed Radar + Cam status).
+ * Then: RIDE (Alerts, Light auto-mode), CONNECTIONS (Dashcam, eBike,
+ *   Home Assistant), SYSTEM (Permissions, Experimental, Debug, About).
  *
  * Each row navigates to its own sub-screen.
  */
@@ -135,34 +135,32 @@ internal fun SettingsMenuBody(
             // System health card (the small one at the top of Settings)
             SystemHealthBar(radarBattery = radarBattery, dashcamBattery = dashcamBattery)
 
-            SettingsSectionLabel("General")
+            SettingsSectionLabel("Ride")
             SettingsRowGroup {
                 SettingsRow(
-                    icon = Icons.Default.WbSunny,
+                    icon = Icons.Default.Notifications,
                     iconTint = br.brand,
-                    title = "Dashcam light auto-mode",
-                    subtitle = cameraLightSubtitle(prefsSnap),
-                    onClick = { navController.navigate("settings/camera-light") },
-                )
-                SettingsRow(
-                    icon = Icons.Default.WbSunny,
-                    iconTint = br.brand,
-                    title = "Radar light auto-mode",
-                    subtitle = radarLightSubtitle(prefsSnap),
-                    onClick = { navController.navigate("settings/radar-light") },
-                )
-                SettingsRow(
-                    icon = Icons.Default.Sensors,
-                    iconTint = br.brand,
-                    title = "Radar & alerts",
+                    title = "Alerts",
                     subtitle = "Volume ${prefsSnap.alertVolume}% · alert at ${prefsSnap.alertMaxDistanceM} m",
                     onClick = { navController.navigate("settings/radar") },
                 )
                 SettingsRow(
+                    icon = Icons.Default.WbSunny,
+                    iconTint = br.brand,
+                    title = "Light auto-mode",
+                    subtitle = lightsSubtitle(prefsSnap),
+                    onClick = { navController.navigate("settings/lights") },
+                    isLast = true,
+                )
+            }
+
+            SettingsSectionLabel("Connections")
+            SettingsRowGroup {
+                SettingsRow(
                     icon = Icons.Default.Videocam,
                     iconTint = br.dashcam,
                     title = "Dashcam",
-                    subtitle = dashcamSubtitle(prefsSnap),
+                    subtitle = dashcamConnectionSubtitle(prefsSnap, dashcamBattery),
                     onClick = { navController.navigate("settings/dashcam") },
                 )
                 SettingsRow(
@@ -178,7 +176,12 @@ internal fun SettingsMenuBody(
                     title = "Home Assistant",
                     subtitle = haSubtitle(haConfigured, haHealth),
                     onClick = { navController.navigate("settings/ha") },
+                    isLast = true,
                 )
+            }
+
+            SettingsSectionLabel("System")
+            SettingsRowGroup {
                 SettingsRow(
                     icon = Icons.Default.Shield,
                     iconTint = if (permissionsRequiredMissing > 0) br.danger else br.caution,
@@ -189,12 +192,7 @@ internal fun SettingsMenuBody(
                         "All granted ($permissionsGrantedCount of $permissionsTotal)"
                     },
                     onClick = { navController.navigate("settings/permissions") },
-                    isLast = true,
                 )
-            }
-
-            SettingsSectionLabel("Advanced")
-            SettingsRowGroup {
                 SettingsRow(
                     icon = Icons.Default.FlashOn,
                     iconTint = br.brand,
@@ -238,7 +236,7 @@ private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: Battery
             .border(1.dp, br.hairline, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        SectionLabel("System")
+        SectionLabel("Quick Status")
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -288,16 +286,31 @@ private fun SystemHealthChip(
     }
 }
 
-private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = if (!snap.autoLightModeEnabled) {
-    "Off"
+// Connections rows carry live connection status in their subtitles (the
+// top card is now just a glanceable "Quick Status"). A recent battery read
+// is the app's proxy for "connected".
+private fun dashcamConnectionSubtitle(
+    snap: es.jjrh.bikeradar.data.PrefsSnapshot,
+    dashcamBattery: BatteryEntry?,
+): String = if (dashcamBattery != null) {
+    "Connected · ${dashcamBattery.pct}%"
 } else {
-    "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
+    dashcamSubtitle(snap)
 }
 
-private fun radarLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = if (!snap.radarLightAutoModeEnabled) {
-    "Off"
-} else {
-    "Day: ${snap.radarLightDayMode.displayName()} · Night: ${snap.radarLightNightMode.displayName()}"
+// One row now summarises both lights. Radar-first (matches the consolidated
+// screen's section order); fold in dashcam ownership so a rider with no
+// dashcam isn't told about a front light they can't use.
+internal fun lightsSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {
+    val rear = if (snap.radarLightAutoModeEnabled) "on" else "off"
+    val hasFront = snap.dashcamOwnership == DashcamOwnership.YES
+    if (!hasFront) return "Rear $rear"
+    val front = if (snap.autoLightModeEnabled) "on" else "off"
+    return if (!snap.radarLightAutoModeEnabled && !snap.autoLightModeEnabled) {
+        "Off"
+    } else {
+        "Rear $rear · Front $front"
+    }
 }
 
 private fun eBikeSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.eBikeOwnership) {

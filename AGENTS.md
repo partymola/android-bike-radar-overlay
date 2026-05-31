@@ -201,7 +201,8 @@ decoders in both Python and Kotlin live there.
   Settings toggle.
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
   in Settings -> Permissions, and via a contextual re-grant card in Settings ->
-  Dashcam light (shown when auto-mode is on and location is not yet granted).
+  Light auto-mode (shown when either light's auto-mode is on and location is
+  not yet granted).
   If never granted, the day/night auto-mode silently falls back to London times.
 
 ## Audio design

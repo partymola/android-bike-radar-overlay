@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Roborazzi golden for the Radar & alerts screen. Renders the
+ * Roborazzi golden for the Alerts screen. Renders the
  * stateless [SettingsRadarContent] leaf with the production default
  * values so every section header - Alerts, Overlay, Adaptive, Battery
  * warnings, Close-pass logging, Danger zone - is on screen exactly

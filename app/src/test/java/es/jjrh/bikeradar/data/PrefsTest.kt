@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.data
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.RadarLightMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
@@ -118,6 +119,9 @@ class PrefsTest {
         prefs.autoLightModeEnabled = true
         prefs.cameraLightDayMode = CameraLightMode.HIGH
         prefs.cameraLightNightMode = CameraLightMode.NIGHT_FLASH
+        prefs.radarLightAutoModeEnabled = true
+        prefs.radarLightDayMode = RadarLightMode.SOLID
+        prefs.radarLightNightMode = RadarLightMode.PELOTON
         prefs.eBikeDataEnabled = true
         prefs.eBikeOwnership = EBikeOwnership.NO
         prefs.eBikeUnknownObjectLogEnabled = true
@@ -157,6 +161,9 @@ class PrefsTest {
         assertTrue(s.autoLightModeEnabled)
         assertEquals(CameraLightMode.HIGH, s.cameraLightDayMode)
         assertEquals(CameraLightMode.NIGHT_FLASH, s.cameraLightNightMode)
+        assertTrue(s.radarLightAutoModeEnabled)
+        assertEquals(RadarLightMode.SOLID, s.radarLightDayMode)
+        assertEquals(RadarLightMode.PELOTON, s.radarLightNightMode)
         assertTrue(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
         assertTrue(s.eBikeUnknownObjectLogEnabled)

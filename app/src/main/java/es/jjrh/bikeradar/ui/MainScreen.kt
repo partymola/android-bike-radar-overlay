@@ -941,7 +941,7 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
             if (!loggingEnabled && count == 0 && !compact) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Enable Settings → Radar & alerts → Log to Home Assistant to keep a history of overtakes inside your set lateral threshold.",
+                    text = "Enable Settings → Alerts → Log to Home Assistant to keep a history of overtakes inside your set lateral threshold.",
                     color = br.fgDim,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,

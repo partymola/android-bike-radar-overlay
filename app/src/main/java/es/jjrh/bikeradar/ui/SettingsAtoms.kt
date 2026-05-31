@@ -182,8 +182,8 @@ fun SettingsRow(
 }
 
 /**
- * Card that wraps a group of SettingsRow children. Shared frame with
- * the mockup's GENERAL/ADVANCED row groupings.
+ * Card that wraps a group of SettingsRow children. Shared frame for the
+ * Settings home's section row groupings.
  */
 @Composable
 fun SettingsRowGroup(

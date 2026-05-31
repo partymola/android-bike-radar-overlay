@@ -175,7 +175,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
 }
 
 /**
- * Stateless leaf — renders the scrolling Settings → Radar & alerts
+ * Stateless leaf - renders the scrolling Settings → Alerts
  * content from already-derived UI state. No `rememberSaveable`, no
  * `Prefs`. Visible to snapshot tests so the visual contract can be
  * locked without Prefs scaffolding. The body wires the saveable
@@ -241,7 +241,7 @@ internal fun SettingsRadarContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Radar & alerts", onBack = { navController.popBackStack() })
+            SettingsHeader("Alerts", onBack = { navController.popBackStack() })
 
             // Alerts group — sliders sit directly on the screen background
             // matching the JSX which puts them outside any card.

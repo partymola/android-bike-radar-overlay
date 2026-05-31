@@ -301,15 +301,32 @@ class AlertDeciderTest {
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick())
-        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // Beep(1) far
-        // Drops out for one frame...
+        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // Beep(1) far - now stable
+        // Drops out for one frame. The track is already stable, so the W8
+        // grace preserves its sustain counter across the single gap.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         c.jump(700)
-        // ...and returns materially closer (near third). Latch was 1, so
-        // the higher tier must still fire - the threat state changed.
-        d.decide(listOf(car(1, 4)), alertMax, c.tick())
+        // ...and returns materially closer (near third). The preserved counter
+        // makes it stable immediately on the RETURN frame, so the higher tier
+        // fires there (latch was 1; threat state changed) - one frame sooner
+        // than before W8, where a single gap reset the sustain to zero.
         val ev = d.decide(listOf(car(1, 4)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `stable track reset after two dropped frames re-earns sustain`() {
+        val d = AlertDecider(minBeepGapMs = 0)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // Beep(1) - stable, latch 1
+        // Two consecutive dropped frames exceed the grace (GRACE_MISS_FRAMES = 2),
+        // so even an already-stable track's sustain counter resets.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick())) // miss 1: preserved
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick())) // miss 2: reset
+        // Returning closer must now re-earn the full sustain: the first present
+        // frame is silent (rebuilding), the higher tier fires only on the second.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 4)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.Beep(3), d.decide(listOf(car(1, 4)), alertMax, c.tick()))
     }
 
     @Test fun `stationary close car at zero relative speed still alerts`() {

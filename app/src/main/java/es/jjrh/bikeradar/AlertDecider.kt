@@ -132,6 +132,19 @@ class AlertDecider(
     }
 
     private val consecutiveClose = HashMap<Int, Int>()
+
+    /** Grace-frame hysteresis state: tid -> consecutive frames the track has
+     *  been ABSENT from the close set since it was last seen. A track that has
+     *  ALREADY reached [sustainFrames] survives a single missed frame (one
+     *  dropped BLE notification) with its [consecutiveClose] counter intact, so
+     *  it fires immediately on its return frame; [GRACE_MISS_FRAMES] consecutive
+     *  misses reset it. A sub-sustain track is NOT preserved - it resets the
+     *  moment it leaves - so an alternating/flickering track never accrues to a
+     *  beep (preserving the anti-flicker guard). Without the stable-track grace,
+     *  one missed notification re-armed the sustain and delayed a deserved tier
+     *  fire by ~one frame (~200 ms) - measured on 24/115 capture replays of
+     *  edge-flickering vehicles. [W8] */
+    private val framesSinceLastSeen = HashMap<Int, Int>()
     private var prevStableClose: Set<Int> = emptySet()
     private var prevClosestUrgency: Int = 0
     private var lastBeepAtMs: Long = Long.MIN_VALUE / 2 // guarantees first beep fires
@@ -261,14 +274,35 @@ class AlertDecider(
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
 
-        // Update consecutive-frame counters. A tid drops back to zero the
-        // moment it leaves the close set, so flicker can't accumulate.
-        val updated = HashMap<Int, Int>(currentCloseTids.size)
+        // Update consecutive-frame counters with grace-frame hysteresis. A tid
+        // seen this frame increments its sustain counter and resets its miss
+        // count. A tid that is absent this frame but has ALREADY reached
+        // [sustainFrames] keeps its counter across fewer than [GRACE_MISS_FRAMES]
+        // consecutive misses, so a stable edge-track that drops a single BLE
+        // notification fires immediately on its return frame instead of
+        // re-arming the sustain. A still-building (sub-sustain) tid resets the
+        // moment it leaves, so an alternating/flickering track can never
+        // accumulate to a beep. Only the stable case is preserved on purpose:
+        // grace must help a confirmed track survive a blip, never let noise
+        // climb to the sustain threshold. [W8]
+        val updated = HashMap<Int, Int>()
+        val updatedMisses = HashMap<Int, Int>()
         for (tid in currentCloseTids) {
             updated[tid] = (consecutiveClose[tid] ?: 0) + 1
         }
+        for ((tid, count) in consecutiveClose) {
+            if (tid in currentCloseTids) continue
+            if (count < sustainFrames) continue // sub-sustain: reset on the gap (no flicker accrual)
+            val misses = (framesSinceLastSeen[tid] ?: 0) + 1
+            if (misses < GRACE_MISS_FRAMES) {
+                updated[tid] = count
+                updatedMisses[tid] = misses
+            }
+        }
         consecutiveClose.clear()
         consecutiveClose.putAll(updated)
+        framesSinceLastSeen.clear()
+        framesSinceLastSeen.putAll(updatedMisses)
 
         val stableClose = close.filter { (consecutiveClose[it.id] ?: 0) >= sustainFrames }
         val stableTids = stableClose.mapTo(HashSet()) { it.id }
@@ -472,6 +506,7 @@ class AlertDecider(
 
     fun reset() {
         consecutiveClose.clear()
+        framesSinceLastSeen.clear()
         firedTierPerTid.clear()
         peakUrgencyPerTid.clear()
         prevStableClose = emptySet()
@@ -537,6 +572,12 @@ class AlertDecider(
          *  band is 0 (exit reverts to the hard alertMaxM); the clear-grace
          *  still absorbs single-frame flaps in that degenerate range. */
         private const val CLOSE_EXIT_HYSTERESIS_DIVISOR: Int = 10
+
+        /** Consecutive frames a track must be ABSENT from the close set before
+         *  its sustain counter is reset. 2 = a single missed frame (one dropped
+         *  BLE notification) is tolerated; the second consecutive miss resets.
+         *  See [framesSinceLastSeen]. [W8] */
+        private const val GRACE_MISS_FRAMES: Int = 2
 
         /** Closing speed (m/s, signed; negative = approaching) at or
          *  below which a stationary rider's suppress gate is overridden,

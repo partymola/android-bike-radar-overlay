@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -112,6 +113,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     }
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
+    var radarRawHex by remember { mutableStateOf("06 09 01 13") }
     var synthRunning by remember { mutableStateOf(SyntheticScenarioService.isRunning) }
     var screenshotRunning by remember { mutableStateOf(ScreenshotCaptureService.isRunning) }
     var stateLogExpanded by remember { mutableStateOf(false) }
@@ -296,6 +298,85 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     checked = prefsSnap.eBikeUnknownObjectLogEnabled,
                     onCheckedChange = { prefs.eBikeUnknownObjectLogEnabled = it },
                 )
+                SettingsToggleRow(
+                    title = "Probe radar settings channel",
+                    subtitle = "Logs radar_2f14 / radar_2f12 lines from the radar control service. Cycle the tail-light modes (button or vendor app) to pin the night/day encoding, then turn off.",
+                    checked = prefsSnap.radarSettingsProbeEnabled,
+                    onCheckedChange = { prefs.radarSettingsProbeEnabled = it },
+                )
+            }
+            // Write-probe: shown only while the probe toggle is on. Sends writes
+            // to the radar's 6a4e2f11 via the live connection (same-uid
+            // startService - shell broadcasts can't reach the non-exported
+            // receiver on Android 16). Tap, watch the tail light, read the
+            // radar_probe_write + radar_2f14 echo in the capture log.
+            if (prefsSnap.radarSettingsProbeEnabled) {
+                val sendRadarHex: (String) -> Unit = { hex ->
+                    ctx.startService(
+                        Intent(ctx, BikeRadarService::class.java).apply {
+                            this.action = BikeRadarService.ACTION_RADAR_LIGHT_PROBE_WRITE
+                            putExtra(BikeRadarService.EXTRA_RADAR_LIGHT_HEX, hex)
+                        },
+                    )
+                    Toast.makeText(ctx, "radar write $hex", Toast.LENGTH_SHORT).show()
+                }
+                // Set mode by stable TYPE: 06 09 01 TT. Sweep 0x10..0x1f to find
+                // unmapped modes (Peloton etc.) - watch which TT changes the light.
+                SettingsSectionLabel("Set mode by type (06 09 01 TT)")
+                listOf(0x10..0x17, 0x18..0x1f).forEach { range ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        range.forEach { tt ->
+                            val hex = "0609 01 %02x".format(tt)
+                            DbgGhostButton(
+                                text = "%02x".format(tt),
+                                modifier = Modifier.weight(1f),
+                                onClick = { sendRadarHex(hex) },
+                            )
+                        }
+                    }
+                }
+                // Slot-select 07 00 NN (legacy; depends on the current slot list).
+                SettingsSectionLabel("Select slot (07 00 NN)")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    (0..5).forEach { nn ->
+                        DbgGhostButton(
+                            text = "$nn",
+                            modifier = Modifier.weight(1f),
+                            onClick = { sendRadarHex("0700 %02x".format(nn)) },
+                        )
+                    }
+                }
+                // Free-form: any hex written raw to 2f11 (slot-list config, etc.).
+                SettingsSectionLabel("Raw write to 2f11 (hex)")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = radarRawHex,
+                        onValueChange = { radarRawHex = it },
+                        singleLine = true,
+                        label = { Text("hex") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    DbgGhostButton(
+                        text = "Send",
+                        onClick = { sendRadarHex(radarRawHex) },
+                    )
+                }
             }
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(

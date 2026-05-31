@@ -58,8 +58,8 @@ internal val PERMISSIONS = buildList {
             markLabel = "Recommended",
         ),
     )
-    // Approximate location, read once per ride for the dashcam-light
-    // day/night auto-mode (sunrise/sunset). Genuinely optional: skipped or
+    // Approximate location, read once per ride for the front- and radar-light
+    // day/night auto-modes (sunrise/sunset). Genuinely optional: skipped or
     // denied, SunsetCalculator falls back to London, so the app is fully
     // usable without it. Surfaced here so onboarding and Settings ->
     // Permissions both prompt for it; it was previously manifest-only, so
@@ -68,7 +68,7 @@ internal val PERMISSIONS = buildList {
         PermissionSpec(
             listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
             "Approximate location",
-            "Used once per ride to compute accurate sunrise/sunset for the dashcam-light auto-mode. Skip it and sunset is estimated for London.",
+            "Used once per ride to compute accurate sunrise/sunset for your front and radar light auto-modes. Skip it and sunset is estimated for London.",
             required = false,
             markLabel = "Optional",
         ),

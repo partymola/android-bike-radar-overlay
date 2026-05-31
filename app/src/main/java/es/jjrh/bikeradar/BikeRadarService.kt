@@ -110,6 +110,17 @@ class BikeRadarService : Service() {
     @Volatile private var cameraLightOffSinceMs: Long? = null
     private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
+    // Radar tail-light auto-mode state (the radar light shares the radar's GATT
+    // link, so unlike the camera there is no separate connection - the schedule
+    // jobs are locals inside connectAndRun). Override is detected from 2f14 slot
+    // changes against a per-connect baseline (see [RadarLightOverrideDecider]);
+    // it persists across brief reconnects and is cleared only past a deadband.
+    @Volatile private var radarLightUserOverride = false
+
+    @Volatile private var radarLightBaselineKey: Int? = null
+
+    @Volatile private var radarLightOffSinceMs: Long? = null
+
     // MAC currently being driven by the radar link, exposed so the bond-state
     // receiver can match the right device. Null when no link is active.
     @Volatile private var currentRadarMac: String? = null
@@ -177,6 +188,14 @@ class BikeRadarService : Service() {
     // reset to null on radar reconnect. See [RadarDropDecider] for the
     // full rationale.
     @Volatile private var radarDropLastCueMs: Long? = null
+
+    // Live radar GATT + queue, set in connectAndRun after the V2 handshake and
+    // cleared in its finally. Used ONLY by the debug-only radar light-mode
+    // write-probe ([probeWriteRadarLight]); production code paths address the
+    // gatt/queue locally inside connectAndRun.
+    @Volatile private var liveRadarGatt: BluetoothGatt? = null
+
+    @Volatile private var liveRadarQueue: BleOpQueue? = null
 
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
@@ -534,8 +553,72 @@ class BikeRadarService : Service() {
                 }
                 walkAwaySnoozeJob.getAndSet(newJob)?.cancel()
             }
+            ACTION_RADAR_LIGHT_PROBE_WRITE -> {
+                val hex = intent.getStringExtra(EXTRA_RADAR_LIGHT_HEX)
+                if (hex != null) {
+                    probeWriteRadarRaw(hex)
+                } else {
+                    probeWriteRadarLight(intent.getIntExtra(EXTRA_RADAR_LIGHT_NN, -1))
+                }
+            }
         }
         return START_STICKY
+    }
+
+    /**
+     * Debug-only radar tail-light mode-set write-probe. Writes `07 00 NN` to
+     * the radar's SETTINGS_ACK (6a4e2f11), mirroring the front camera's mode-set,
+     * so a bench sweep can find which command sets the tail-light mode (and
+     * whether NN selects a cycle-slot or a stable mode-type). Reached only via
+     * the dev-only [RemoteControlReceiver] with the probe toggle on; the write
+     * lands on the live radar connection if one is up. Not a shipping path - the
+     * production controller will be derived once the encoding is pinned.
+     */
+    private fun probeWriteRadarLight(nn: Int) {
+        if (nn !in 0..0xFF) {
+            clog("# radar_probe_write skipped (bad nn=$nn)")
+            return
+        }
+        probeWriteRadar(byteArrayOf(0x07, 0x00, nn.toByte()))
+    }
+
+    /** Parse a hex string (spaces ignored) and write it raw to the radar's
+     *  control char. Lets the bench probe send any command - mode-set by type
+     *  (`06 09 01 TT`), slot-list config (`06 09 05 ...`), etc. - not just
+     *  the `07 00 NN` slot select. */
+    private fun probeWriteRadarRaw(hex: String) {
+        val clean = hex.filterNot { it.isWhitespace() }
+        val bytes = try {
+            require(clean.isNotEmpty() && clean.length % 2 == 0)
+            clean.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        } catch (_: Exception) {
+            clog("# radar_probe_write skipped (bad hex='$hex')")
+            return
+        }
+        probeWriteRadar(bytes)
+    }
+
+    private fun probeWriteRadar(payload: ByteArray) {
+        val label = payload.joinToString(" ") { "%02x".format(it) }
+        if (!prefs.radarSettingsProbeEnabled) {
+            clog("# radar_probe_write skipped (probe off) [$label]")
+            return
+        }
+        val gatt = liveRadarGatt
+        val queue = liveRadarQueue
+        if (gatt == null || queue == null) {
+            clog("# radar_probe_write skipped (no live radar) [$label]")
+            return
+        }
+        val ch = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_ACK)
+        if (ch == null) {
+            clog("# radar_probe_write skipped (no 2f11) [$label]")
+            return
+        }
+        scope.launch {
+            val ok = queue.write(gatt, ch, payload, noResponse = false)
+            clog("# radar_probe_write [$label] ok=$ok")
+        }
     }
 
     override fun onDestroy() {
@@ -1098,7 +1181,7 @@ class BikeRadarService : Service() {
             val locLog = if (loc != null) "lat=${"%.2f".format(loc.first)} lon=${"%.2f".format(loc.second)}" else "London-fallback"
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
             if (!cameraLightUserOverride) {
-                val applied = applyModeWithRetry(controller, initialMode)
+                val applied = applyWithRetry { controller.setMode(initialMode) }
                 Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
                 if (applied) {
                     cameraLightLastWrittenMode = initialMode
@@ -1121,7 +1204,7 @@ class BikeRadarService : Service() {
                     kotlinx.coroutines.delay(msToSunset)
                     if (cameraLightGattActive && !cameraLightUserOverride) {
                         val nightMode = prefs.cameraLightNightMode
-                        val nightOk = applyModeWithRetry(controller, nightMode)
+                        val nightOk = applyWithRetry { controller.setMode(nightMode) }
                         Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
                         if (nightOk) {
                             cameraLightLastWrittenMode = nightMode
@@ -1138,7 +1221,7 @@ class BikeRadarService : Service() {
                     kotlinx.coroutines.delay(msToSunrise)
                     if (cameraLightGattActive && !cameraLightUserOverride) {
                         val dayMode = prefs.cameraLightDayMode
-                        val dayOk = applyModeWithRetry(controller, dayMode)
+                        val dayOk = applyWithRetry { controller.setMode(dayMode) }
                         Log.i(TAG_LIGHT, "sunrise mode=$dayMode applied=$dayOk")
                         if (dayOk) {
                             cameraLightLastWrittenMode = dayMode
@@ -1364,6 +1447,11 @@ class BikeRadarService : Service() {
 
         val queueJob = scope.launch { queue.run() }
 
+        // Radar tail-light dusk/dawn flip jobs - declared here so the finally can
+        // cancel them (scheduling happens post-handshake when auto-mode is on).
+        var radarSunsetJob: Job? = null
+        var radarSunriseJob: Job? = null
+
         return try {
             val ok = servicesReady.await()
             if (!ok) {
@@ -1386,7 +1474,7 @@ class BikeRadarService : Service() {
 
             Log.i(TAG_RADAR, "handshake complete, decoding frames")
             // First chance per ride to refresh the location cache used by
-            // SunsetCalculator (front-light auto-mode). 60-min staleness
+            // SunsetCalculator (front- and radar-light auto-modes). 60-min staleness
             // gate means quick stop-and-go reconnects don't re-poll.
             LocationCache.refreshIfStale(this@BikeRadarService)
             openCaptureLog()
@@ -1434,6 +1522,80 @@ class BikeRadarService : Service() {
                 }
             }
 
+            // Subscribe the radar control-service mode-state notify (6a4e2f14)
+            // when EITHER the production light auto-mode OR the debug probe needs
+            // it. Done here, AFTER the V2 handshake, so it cannot interfere with
+            // the unlock (verified safe on-bench). 6a4e2f12 and the live
+            // write-probe handles stay strictly debug-gated - never exposed in a
+            // normal ride. Never touch 6a4e3203 (V1 char) here.
+            val controlSvc = gatt.getService(Uuids.SVC_CONTROL)
+            val ch2f14 = controlSvc?.getCharacteristic(Uuids.SETTINGS_14)
+            if ((prefs.radarSettingsProbeEnabled || prefs.radarLightAutoModeEnabled) && ch2f14 != null) {
+                queue.writeCccd(gatt, ch2f14)
+            }
+            if (prefs.radarSettingsProbeEnabled) {
+                val probe12 = controlSvc?.getCharacteristic(Uuids.SETTINGS_12)
+                clog("# radar_settings_probe svc=${controlSvc != null} 2f14=${ch2f14 != null} 2f12=${probe12 != null}")
+                if (probe12 != null) queue.writeCccd(gatt, probe12)
+                liveRadarGatt = gatt
+                liveRadarQueue = queue
+            }
+
+            // Radar tail-light auto day/night. The radar light shares THIS
+            // connection (no separate device), so set the mode now and schedule
+            // the dusk/dawn flip as locals cancelled in finally. Override (rider
+            // button press) is detected from 2f14 slot changes in the loop below,
+            // against a baseline captured fresh this connect. A manual override
+            // sticks across brief reconnects and clears only past a deadband.
+            // Supplementary rear light (built-in rear is primary), so failures
+            // are non-critical; rider chose dashcam-parity fail feedback.
+            radarLightBaselineKey = null
+            if (RadarLightOverrideDecider.shouldClearOverride(
+                    radarLightOffSinceMs,
+                    System.currentTimeMillis(),
+                    RADAR_LIGHT_OVERRIDE_DEADBAND_MS,
+                )
+            ) {
+                radarLightUserOverride = false
+            }
+            radarLightOffSinceMs = null
+            if (prefs.radarLightAutoModeEnabled && controlSvc != null) {
+                val controller = RadarLightController(gatt, queue)
+                val nowMs = System.currentTimeMillis()
+                val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+                val loc = LocationCache.current()
+                val (sunriseMs, sunsetMs) = if (loc != null) {
+                    SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
+                        SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
+                } else {
+                    SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
+                }
+                val night = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
+                val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, night, radarLightUserOverride)
+                suspend fun applyPhase(phase: LightAutoModeDecider.Phase) {
+                    val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
+                        prefs.radarLightNightMode
+                    } else {
+                        prefs.radarLightDayMode
+                    }
+                    val okSet = applyWithRetry { controller.setMode(mode) }
+                    Log.i(TAG_RADAR, "radar light $phase mode=$mode applied=$okSet")
+                    if (!okSet) postRadarLightModeFailNotification(mode)
+                }
+                plan.initial?.let { applyPhase(it) }
+                val flipAt = plan.flipAtMs
+                val flipTo = plan.flipTo
+                if (flipAt != null && flipTo != null) {
+                    val job = scope.launch {
+                        kotlinx.coroutines.delay(flipAt - nowMs)
+                        if (_radarLinkState.value.radarGattActive && !radarLightUserOverride) {
+                            applyPhase(flipTo)
+                        }
+                    }
+                    if (flipTo == LightAutoModeDecider.Phase.NIGHT) radarSunsetJob = job else radarSunriseJob = job
+                }
+            }
+
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.RADAR_V2 -> {
@@ -1441,6 +1603,25 @@ class BikeRadarService : Service() {
                         if (v2FrameCount++ == 0) Log.i(TAG_RADAR, "first V2 frame: ${bytes.toHex()}")
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
+                    Uuids.SETTINGS_14 -> {
+                        if (prefs.radarSettingsProbeEnabled) clog("# radar_2f14 ${bytes.toHex()}")
+                        if (prefs.radarLightAutoModeEnabled) {
+                            RadarLightController.parseModeState(bytes)?.let { ms ->
+                                val key = RadarLightOverrideDecider.key(ms.slot, ms.type)
+                                if (radarLightBaselineKey == null) {
+                                    radarLightBaselineKey = key
+                                } else if (!radarLightUserOverride &&
+                                    RadarLightOverrideDecider.isOverride(radarLightBaselineKey, key)
+                                ) {
+                                    radarLightUserOverride = true
+                                    radarSunsetJob?.cancel()
+                                    radarSunriseJob?.cancel()
+                                    clog("# radar_light_override (2f14 slot change)")
+                                }
+                            }
+                        }
+                    }
+                    Uuids.SETTINGS_12 -> if (prefs.radarSettingsProbeEnabled) clog("# radar_2f12 ${bytes.toHex()}")
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
                         val s = slug(name)
@@ -1452,6 +1633,11 @@ class BikeRadarService : Service() {
             }
             false
         } finally {
+            radarSunsetJob?.cancel()
+            radarSunriseJob?.cancel()
+            radarLightOffSinceMs = System.currentTimeMillis()
+            liveRadarGatt = null
+            liveRadarQueue = null
             watchdogJob?.cancel()
             overlayJob?.cancel()
             queue.cancel()
@@ -1466,21 +1652,18 @@ class BikeRadarService : Service() {
         }
     }
 
-    // ── camera light failure feedback ─────────────────────────────────────────
+    // ── light failure feedback ─────────────────────────────────────────────────
 
-    /**
-     * Attempts [controller.setMode] up to 3 times with increasing delays.
-     * Returns true on the first success; false if all 3 attempts fail.
-     */
-    private suspend fun applyModeWithRetry(
-        controller: CameraLightController,
-        mode: CameraLightMode,
-    ): Boolean {
-        if (controller.setMode(mode)) return true
+    /** Three jittered attempts at a light-mode write (shared by the camera and
+     *  radar light paths). [write] returns true once the device ACKs the GATT
+     *  write; note for the radar that confirms receipt, not that the light
+     *  element actually changed (the radar can't be read back). */
+    private suspend fun applyWithRetry(write: suspend () -> Boolean): Boolean {
+        if (write()) return true
         kotlinx.coroutines.delay(500 + (100 * (Math.random() * 2 - 1)).toLong())
-        if (controller.setMode(mode)) return true
+        if (write()) return true
         kotlinx.coroutines.delay(1500 + (300 * (Math.random() * 2 - 1)).toLong())
-        return controller.setMode(mode)
+        return write()
     }
 
     private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
@@ -1507,6 +1690,44 @@ class BikeRadarService : Service() {
         nm.notify(NOTIF_LIGHT_FAIL_ID, notif)
 
         // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
+        var tg: android.media.ToneGenerator? = null
+        try {
+            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
+            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
+            kotlinx.coroutines.delay(600)
+        } catch (_: Exception) {
+        } finally {
+            tg?.release()
+        }
+    }
+
+    /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
+     *  a HIGH-priority notification + the NACK beep. Distinct notification ID
+     *  from the dashcam so neither clobbers the other. Fires only when the GATT
+     *  write was not ACKed after the retries - it can't catch the rarer "ACKed
+     *  but the light element didn't change" case (no read-back). */
+    private suspend fun postRadarLightModeFailNotification(mode: RadarLightMode) {
+        val modeName = when (mode) {
+            RadarLightMode.NIGHT_FLASH -> "Night flash"
+            RadarLightMode.DAY_FLASH -> "Day flash"
+            RadarLightMode.SOLID -> "Solid"
+            RadarLightMode.PELOTON -> "Peloton"
+            RadarLightMode.OFF -> "Off"
+        }
+
+        ensureNotificationChannel()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
+            .setContentTitle("Radar light")
+            .setContentText("Couldn't switch to $modeName - check connection.")
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
+            .build()
+        nm.notify(NOTIF_RADAR_LIGHT_FAIL_ID, notif)
+
         var tg: android.media.ToneGenerator? = null
         try {
             tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
@@ -2506,6 +2727,7 @@ class BikeRadarService : Service() {
         const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3
         const val NOTIF_LIGHT_FAIL_ID = 4
+        const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
         private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
         private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
@@ -2536,8 +2758,14 @@ class BikeRadarService : Service() {
          * first.
          */
         const val ACTION_RESTART_EBIKE_READER = "es.jjrh.bikeradar.RESTART_EBIKE_READER"
+
+        /** Debug-only radar light-mode write-probe (see [probeWriteRadarLight]).
+         *  Forwarded from the dev-only [RemoteControlReceiver]. */
+        const val ACTION_RADAR_LIGHT_PROBE_WRITE = "es.jjrh.bikeradar.RADAR_LIGHT_PROBE_WRITE"
         const val EXTRA_MAC = "mac"
         const val EXTRA_NAME = "name"
+        const val EXTRA_RADAR_LIGHT_NN = "nn"
+        const val EXTRA_RADAR_LIGHT_HEX = "hex"
         private const val NOTIF_ACTION_REQ = 0xB1CD
 
         const val THROTTLE_MS = 5 * 60 * 1000L
@@ -2686,6 +2914,7 @@ class BikeRadarService : Service() {
 
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
+        private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
 
         // Capture-log flush cadence. The writer is unbuffered-flushed at most
         // this often (only while lines are being written), bounding loss on an

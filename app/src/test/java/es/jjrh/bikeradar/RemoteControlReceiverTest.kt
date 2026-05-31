@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,6 +67,42 @@ class RemoteControlReceiverTest {
         assertTrue(started.size >= 2)
         assertTrue(started.any { it.component?.className == DebugOverlayService::class.java.name })
         assertTrue(started.any { it.component?.className == SyntheticScenarioService::class.java.name })
+    }
+
+    @Test
+    fun radarLightWriteIsNoOpWhenDevModeLocked() {
+        Prefs(app).devModeUnlocked = false
+        Prefs(app).radarSettingsProbeEnabled = true
+        receiver.onReceive(app, Intent(RemoteControlReceiver.ACTION_DEV_RADAR_LIGHT_WRITE))
+        assertNull(shadowOf(app).peekNextStartedService())
+    }
+
+    @Test
+    fun radarLightWriteIsNoOpWhenProbeDisabled() {
+        // Dev mode alone is not enough: the radar-settings probe toggle must
+        // also be on, so a stray broadcast can't poke the radar's control char.
+        Prefs(app).devModeUnlocked = true
+        Prefs(app).radarSettingsProbeEnabled = false
+        receiver.onReceive(app, Intent(RemoteControlReceiver.ACTION_DEV_RADAR_LIGHT_WRITE))
+        assertNull(shadowOf(app).peekNextStartedService())
+    }
+
+    @Test
+    fun radarLightWriteForwardsNnToServiceWhenUnlockedAndProbeOn() {
+        Prefs(app).devModeUnlocked = true
+        Prefs(app).radarSettingsProbeEnabled = true
+        receiver.onReceive(
+            app,
+            Intent(RemoteControlReceiver.ACTION_DEV_RADAR_LIGHT_WRITE)
+                .putExtra(RemoteControlReceiver.EXTRA_NN, 3),
+        )
+        val started = drainStartedServices()
+        val fwd = started.firstOrNull {
+            it.component?.className == BikeRadarService::class.java.name &&
+                it.action == BikeRadarService.ACTION_RADAR_LIGHT_PROBE_WRITE
+        }
+        assertTrue("expected a forwarded radar-light write intent", fwd != null)
+        assertEquals(3, fwd!!.getIntExtra(BikeRadarService.EXTRA_RADAR_LIGHT_NN, -1))
     }
 
     private fun drainStartedServices(): List<Intent> {

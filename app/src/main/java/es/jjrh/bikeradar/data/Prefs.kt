@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.data
 import android.content.Context
 import android.content.SharedPreferences
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.RadarLightMode
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -59,9 +60,13 @@ data class PrefsSnapshot(
     val autoLightModeEnabled: Boolean,
     val cameraLightDayMode: CameraLightMode,
     val cameraLightNightMode: CameraLightMode,
+    val radarLightAutoModeEnabled: Boolean,
+    val radarLightDayMode: RadarLightMode,
+    val radarLightNightMode: RadarLightMode,
     val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
     val eBikeUnknownObjectLogEnabled: Boolean,
+    val radarSettingsProbeEnabled: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -344,6 +349,33 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_CAMERA_LIGHT_NIGHT_MODE, v.name).apply()
         }
 
+    /** Auto-switch the rear radar's tail light by time of day, mirroring the
+     *  dashcam light. Independent of [autoLightModeEnabled] so a rider can run
+     *  either light's auto-mode without the other. Off by default (opt-in). */
+    var radarLightAutoModeEnabled: Boolean
+        get() = sp.getBoolean(KEY_RADAR_LIGHT_AUTO_MODE, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_RADAR_LIGHT_AUTO_MODE, v).apply()
+        }
+
+    /** Radar tail-light mode applied at radar connect (before local sunset). */
+    var radarLightDayMode: RadarLightMode
+        get() = runCatching {
+            RadarLightMode.valueOf(sp.getString(KEY_RADAR_LIGHT_DAY_MODE, RadarLightMode.DAY_FLASH.name)!!)
+        }.getOrDefault(RadarLightMode.DAY_FLASH)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_LIGHT_DAY_MODE, v.name).apply()
+        }
+
+    /** Radar tail-light mode applied at local sunset. */
+    var radarLightNightMode: RadarLightMode
+        get() = runCatching {
+            RadarLightMode.valueOf(sp.getString(KEY_RADAR_LIGHT_NIGHT_MODE, RadarLightMode.NIGHT_FLASH.name)!!)
+        }.getOrDefault(RadarLightMode.NIGHT_FLASH)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_LIGHT_NIGHT_MODE, v.name).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -404,6 +436,22 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_EBIKE_UNKNOWN_OBJ_LOG, v).apply()
         }
 
+    /** Debug-only: after the V2 handshake, subscribe the rear radar's
+     *  control-service notify characteristics (6a4e2f14 / 6a4e2f12) and log
+     *  every frame as `radar_2f14` / `radar_2f12` capture lines. Off by
+     *  default. Its only purpose is the one-off bench exercise to pin the
+     *  radar tail-light mode-state encoding: the radar hosts the same control
+     *  service (6a4e2f00) as the front camera, but its light-mode command is
+     *  unverified. Turn on, cycle the radar light modes via the button or the
+     *  Varia app, diff the logged frames against each mode, then turn off.
+     *  Subscribed only post-handshake so it cannot interfere with the V2
+     *  unlock, and gated so production rides never touch these CCCDs. */
+    var radarSettingsProbeEnabled: Boolean
+        get() = sp.getBoolean(KEY_RADAR_SETTINGS_PROBE, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_RADAR_SETTINGS_PROBE, v).apply()
+        }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -438,9 +486,13 @@ class Prefs(context: Context) {
         autoLightModeEnabled = autoLightModeEnabled,
         cameraLightDayMode = cameraLightDayMode,
         cameraLightNightMode = cameraLightNightMode,
+        radarLightAutoModeEnabled = radarLightAutoModeEnabled,
+        radarLightDayMode = radarLightDayMode,
+        radarLightNightMode = radarLightNightMode,
         eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
+        radarSettingsProbeEnabled = radarSettingsProbeEnabled,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -487,9 +539,13 @@ class Prefs(context: Context) {
         appendLine("auto_light_mode_enabled=$autoLightModeEnabled")
         appendLine("camera_light_day_mode=$cameraLightDayMode")
         appendLine("camera_light_night_mode=$cameraLightNightMode")
+        appendLine("radar_light_auto_mode_enabled=$radarLightAutoModeEnabled")
+        appendLine("radar_light_day_mode=$radarLightDayMode")
+        appendLine("radar_light_night_mode=$radarLightNightMode")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
+        appendLine("radar_settings_probe_enabled=$radarSettingsProbeEnabled")
     }
 
     companion object {
@@ -526,9 +582,13 @@ class Prefs(context: Context) {
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
         const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"
+        const val KEY_RADAR_LIGHT_AUTO_MODE = "radar_light_auto_mode_enabled"
+        const val KEY_RADAR_LIGHT_DAY_MODE = "radar_light_day_mode"
+        const val KEY_RADAR_LIGHT_NIGHT_MODE = "radar_light_night_mode"
         const val KEY_EBIKE_DATA_ENABLED = "ebike_data_enabled"
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"
+        const val KEY_RADAR_SETTINGS_PROBE = "radar_settings_probe_enabled"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

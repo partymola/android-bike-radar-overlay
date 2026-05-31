@@ -121,6 +121,7 @@ class PrefsTest {
         prefs.eBikeDataEnabled = true
         prefs.eBikeOwnership = EBikeOwnership.NO
         prefs.eBikeUnknownObjectLogEnabled = true
+        prefs.radarSettingsProbeEnabled = true
 
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
@@ -159,6 +160,7 @@ class PrefsTest {
         assertTrue(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
         assertTrue(s.eBikeUnknownObjectLogEnabled)
+        assertTrue(s.radarSettingsProbeEnabled)
     }
 
     @Test

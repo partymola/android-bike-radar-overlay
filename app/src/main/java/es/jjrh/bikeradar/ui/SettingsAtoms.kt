@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.RadarLightMode
 
 /**
  * Shared atoms for the redesigned Settings flow. Mirrors the JSX
@@ -501,4 +502,12 @@ internal fun CameraLightMode.displayName(): String = when (this) {
     CameraLightMode.NIGHT_FLASH -> "Night flash"
     CameraLightMode.DAY_FLASH -> "Day flash"
     CameraLightMode.OFF -> "Off"
+}
+
+internal fun RadarLightMode.displayName(): String = when (this) {
+    RadarLightMode.NIGHT_FLASH -> "Night flash"
+    RadarLightMode.DAY_FLASH -> "Day flash"
+    RadarLightMode.SOLID -> "Solid"
+    RadarLightMode.PELOTON -> "Peloton"
+    RadarLightMode.OFF -> "Off"
 }

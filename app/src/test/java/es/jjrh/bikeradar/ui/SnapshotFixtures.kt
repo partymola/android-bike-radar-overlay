@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.ui
 
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.RadarLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaIntent
@@ -46,8 +47,12 @@ internal object SnapshotFixtures {
         autoLightModeEnabled = false,
         cameraLightDayMode = CameraLightMode.DAY_FLASH,
         cameraLightNightMode = CameraLightMode.LOW,
+        radarLightAutoModeEnabled = false,
+        radarLightDayMode = RadarLightMode.DAY_FLASH,
+        radarLightNightMode = RadarLightMode.NIGHT_FLASH,
         eBikeDataEnabled = false,
         eBikeOwnership = EBikeOwnership.UNANSWERED,
         eBikeUnknownObjectLogEnabled = false,
+        radarSettingsProbeEnabled = false,
     )
 }

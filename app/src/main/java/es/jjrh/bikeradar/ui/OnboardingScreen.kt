@@ -266,8 +266,8 @@ internal fun PermissionsStepContent(
                     bullets = listOf(
                         "Bluetooth: finds and connects your radar, dashcam and eBike",
                         "Notifications: shows ride status and alerts",
-                        "Location (approx, optional): sets your front light by local " +
-                            "sunset - never tracks you",
+                        "Location (approx, optional): sets your front and radar lights by " +
+                            "local sunset - never tracks you",
                     ),
                 )
             }

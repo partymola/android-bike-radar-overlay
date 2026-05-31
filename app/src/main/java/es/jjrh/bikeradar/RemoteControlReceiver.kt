@@ -47,6 +47,26 @@ class RemoteControlReceiver : BroadcastReceiver() {
                 startFg(ctx, DebugOverlayService::class.java)
                 startFg(ctx, SyntheticScenarioService::class.java)
             }
+            ACTION_DEV_RADAR_LIGHT_WRITE -> {
+                // Debug radar tail-light mode-set write-probe. Double-gated:
+                // dev mode AND the radar-settings probe toggle must both be on.
+                // Forwarded to the service, which owns the live radar GATT.
+                if (!prefs.devModeUnlocked || !prefs.radarSettingsProbeEnabled) {
+                    Log.w(
+                        TAG,
+                        "radar-light write ignored (dev=${prefs.devModeUnlocked} probe=${prefs.radarSettingsProbeEnabled})",
+                    )
+                    return
+                }
+                val nn = intent.getIntExtra(EXTRA_NN, -1)
+                ContextCompat.startForegroundService(
+                    ctx,
+                    Intent(ctx, BikeRadarService::class.java).apply {
+                        this.action = BikeRadarService.ACTION_RADAR_LIGHT_PROBE_WRITE
+                        putExtra(BikeRadarService.EXTRA_RADAR_LIGHT_NN, nn)
+                    },
+                )
+            }
             else -> Log.w(TAG, "unknown action $action")
         }
     }
@@ -64,5 +84,10 @@ class RemoteControlReceiver : BroadcastReceiver() {
 
         const val ACTION_DEV_REPLAY = "es.jjrh.bikeradar.DEV_REPLAY"
         const val ACTION_DEV_SYNTH = "es.jjrh.bikeradar.DEV_SYNTH"
+
+        /** Debug radar light-mode write-probe: `--ei nn <0..255>` writes
+         *  `07 00 NN` to the radar's 6a4e2f11. Dev-mode + probe-toggle gated. */
+        const val ACTION_DEV_RADAR_LIGHT_WRITE = "es.jjrh.bikeradar.DEV_RADAR_LIGHT_WRITE"
+        const val EXTRA_NN = "nn"
     }
 }

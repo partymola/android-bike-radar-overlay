@@ -145,6 +145,13 @@ internal fun SettingsMenuBody(
                     onClick = { navController.navigate("settings/camera-light") },
                 )
                 SettingsRow(
+                    icon = Icons.Default.WbSunny,
+                    iconTint = br.brand,
+                    title = "Radar light auto-mode",
+                    subtitle = radarLightSubtitle(prefsSnap),
+                    onClick = { navController.navigate("settings/radar-light") },
+                )
+                SettingsRow(
                     icon = Icons.Default.Sensors,
                     iconTint = br.brand,
                     title = "Radar & alerts",
@@ -285,6 +292,12 @@ private fun cameraLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): Str
     "Off"
 } else {
     "Day: ${snap.cameraLightDayMode.displayName()} · Night: ${snap.cameraLightNightMode.displayName()}"
+}
+
+private fun radarLightSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = if (!snap.radarLightAutoModeEnabled) {
+    "Off"
+} else {
+    "Day: ${snap.radarLightDayMode.displayName()} · Night: ${snap.radarLightNightMode.displayName()}"
 }
 
 private fun eBikeSubtitle(snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.eBikeOwnership) {

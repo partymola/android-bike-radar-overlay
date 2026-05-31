@@ -36,51 +36,43 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.RadarLightMode
 import es.jjrh.bikeradar.data.Prefs
 
 @Composable
-fun SettingsCameraLight(navController: NavController, prefs: Prefs) {
+fun SettingsRadarLight(navController: NavController, prefs: Prefs) {
     UiTheme {
-        SettingsCameraLightBody(navController, prefs)
+        SettingsRadarLightBody(navController, prefs)
     }
 }
 
 @Composable
-private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) {
+private fun SettingsRadarLightBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
-    var autoEnabled by rememberSaveable { mutableStateOf(prefs.autoLightModeEnabled) }
-    var dayMode by rememberSaveable { mutableStateOf(prefs.cameraLightDayMode) }
-    var nightMode by rememberSaveable { mutableStateOf(prefs.cameraLightNightMode) }
+    var autoEnabled by rememberSaveable { mutableStateOf(prefs.radarLightAutoModeEnabled) }
+    var dayMode by rememberSaveable { mutableStateOf(prefs.radarLightDayMode) }
+    var nightMode by rememberSaveable { mutableStateOf(prefs.radarLightNightMode) }
     var dayPickerOpen by rememberSaveable { mutableStateOf(false) }
     var nightPickerOpen by rememberSaveable { mutableStateOf(false) }
 
-    // When auto-mode is on but approximate location is denied, the
-    // sunrise/sunset calc silently falls back to London. Surface the
-    // grant prompt right here (it's also in onboarding + Settings ->
-    // Permissions, but an existing rider who never re-runs onboarding
-    // would otherwise never be told). Reuses PermissionCard for the
-    // request + rationale + permanent-denial deeplink; shown only
-    // while it's actionable (auto-mode on AND not yet granted).
-    //
-    // The body owns the location `PermissionCard` (and thus its
-    // permission-launcher); the stateless [SettingsCameraLightContent]
-    // leaf takes that card as a `locationCard` slot so snapshot tests
-    // can substitute a launcher-free [PermissionCardContent].
+    // Same location dependency as the dashcam light: sunrise/sunset needs
+    // ACCESS_COARSE_LOCATION, else it silently falls back to London. Surface the
+    // re-grant card while it's actionable. See SettingsCameraLight for the
+    // body-owns-the-launcher / stateless-leaf-takes-a-slot rationale.
     // The shared spec's rationale names both lights (it backs the global
-    // Permissions screen); on this screen, scope the re-grant card to the
-    // dashcam light so the copy is specific to where the rider is.
+    // Permissions screen); on this screen, scope the re-grant card to the radar
+    // light so the copy is specific to where the rider is.
     val locSpec = remember {
         PERMISSIONS.first { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
             .copy(
                 rationale = "Used once per ride to compute accurate sunrise/sunset for the " +
-                    "dashcam-light auto-mode. Skip it and sunset is estimated for London.",
+                    "radar-light auto-mode. Skip it and sunset is estimated for London.",
             )
     }
     var locPermTick by rememberSaveable { mutableStateOf(0) }
     val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
 
-    SettingsCameraLightContent(
+    SettingsRadarLightContent(
         onBack = { navController.popBackStack() },
         autoEnabled = autoEnabled,
         dayMode = dayMode,
@@ -88,7 +80,7 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
         locGranted = locGranted,
         onAutoChanged = { v ->
             autoEnabled = v
-            prefs.autoLightModeEnabled = v
+            prefs.radarLightAutoModeEnabled = v
         },
         onDayClick = { dayPickerOpen = true },
         onNightClick = { nightPickerOpen = true },
@@ -98,24 +90,24 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
     )
 
     if (dayPickerOpen) {
-        ModePickerDialog(
+        RadarModePickerDialog(
             title = "Daytime mode",
             current = dayMode,
             onSelect = {
                 dayMode = it
-                prefs.cameraLightDayMode = it
+                prefs.radarLightDayMode = it
                 dayPickerOpen = false
             },
             onDismiss = { dayPickerOpen = false },
         )
     }
     if (nightPickerOpen) {
-        ModePickerDialog(
+        RadarModePickerDialog(
             title = "Night mode",
             current = nightMode,
             onSelect = {
                 nightMode = it
-                prefs.cameraLightNightMode = it
+                prefs.radarLightNightMode = it
                 nightPickerOpen = false
             },
             onDismiss = { nightPickerOpen = false },
@@ -124,23 +116,16 @@ private fun SettingsCameraLightBody(navController: NavController, prefs: Prefs) 
 }
 
 /**
- * Stateless leaf - wraps the screen chrome (header, the auto-mode toggle
- * row group, and the conditional location re-grant card) from
- * pre-resolved state. Tests can call this without a `LocalContext`, a
- * permission launcher, or an Activity: grant state is pre-resolved and
- * the location card is provided as a [locationCard] slot (snapshot tests
- * pass a launcher-free [PermissionCardContent]; the real body passes a
- * stateful [PermissionCard]).
- *
- * The `autoEnabled && !locGranted` visibility gate for the location card
- * lives here so a golden can exercise the M7 re-grant surface.
+ * Stateless leaf (mirrors [SettingsCameraLightContent]) so snapshot tests can
+ * render without a `LocalContext`, a permission launcher, or an Activity. The
+ * `autoEnabled && !locGranted` location-card gate lives here.
  */
 @Composable
-internal fun SettingsCameraLightContent(
+internal fun SettingsRadarLightContent(
     onBack: () -> Unit,
     autoEnabled: Boolean,
-    dayMode: CameraLightMode,
-    nightMode: CameraLightMode,
+    dayMode: RadarLightMode,
+    nightMode: RadarLightMode,
     locGranted: Boolean,
     onAutoChanged: (Boolean) -> Unit = {},
     onDayClick: () -> Unit = {},
@@ -150,12 +135,12 @@ internal fun SettingsCameraLightContent(
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SettingsHeader("Dashcam light auto-mode", onBack = onBack)
+            SettingsHeader("Radar light auto-mode", onBack = onBack)
 
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Auto dashcam light mode",
-                    subtitle = "Set light mode at power-on and at sunset",
+                    title = "Auto radar light mode",
+                    subtitle = "Set the radar tail light at connect and at sunset",
                     checked = autoEnabled,
                     onCheckedChange = onAutoChanged,
                     leadingIcon = Icons.Default.WbSunny,
@@ -177,12 +162,25 @@ internal fun SettingsCameraLightContent(
                     icon = Icons.Default.DarkMode,
                     iconTint = if (autoEnabled) br.brand else br.fgMuted,
                     title = "Night mode",
-                    subtitle = "${nightMode.displayName()} - applied at local sunset",
+                    subtitle = "${nightMode.displayName()} - switched at local sunset",
                     onClick = onNightClick,
                     chevron = false,
                     clickable = autoEnabled,
                     enabled = autoEnabled,
                     isLast = true,
+                )
+            }
+
+            // Honest limitation: the radar reports its selected cycle slot, not
+            // our mode-override, so the app can't confirm the switch landed.
+            // Calm one-liner, not a warning. The built-in rear light is primary,
+            // so this is a supplementary light - no safety alarm needed.
+            if (autoEnabled) {
+                Text(
+                    text = "The radar can't confirm the switch - if in doubt, glance at the tail light.",
+                    color = br.fgMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
 
@@ -198,10 +196,10 @@ internal fun SettingsCameraLightContent(
 }
 
 @Composable
-private fun ModePickerDialog(
+private fun RadarModePickerDialog(
     title: String,
-    current: CameraLightMode,
-    onSelect: (CameraLightMode) -> Unit,
+    current: RadarLightMode,
+    onSelect: (RadarLightMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -209,7 +207,7 @@ private fun ModePickerDialog(
         title = { Text(title, fontSize = 16.sp) },
         text = {
             Column {
-                CameraLightMode.entries.forEach { mode ->
+                RadarLightMode.entries.forEach { mode ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

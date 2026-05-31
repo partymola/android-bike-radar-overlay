@@ -44,6 +44,11 @@ repository for the wire protocol, reference decoder, and unit tests.
   Flash after, computed from the device location (London fallback if
   the location permission is denied). A manual button press during the
   session wins for the rest of the ride.
+- Radar tail-light auto-mode: sets the rear radar's tail light to a day
+  mode (default Day Flash) before sunset and a night mode (default Night
+  Flash) after, from the same device location. Sets the mode by type, so
+  it leaves your radar's button-cycle configuration untouched; a manual
+  button press wins for the rest of the ride. Off by default.
 - Bosch eBike live data (read-only): subscribes to the Smart System
   proprietary status-notify characteristic while Bosch Flow is
   active and decodes the scalar datapoints it carries (speed,

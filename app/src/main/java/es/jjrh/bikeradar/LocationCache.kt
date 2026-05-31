@@ -11,7 +11,7 @@ import androidx.core.content.ContextCompat
 
 /**
  * In-process cache of the rider's approximate location for sunrise / sunset
- * computation in front-light auto-mode.
+ * computation in the front- and radar-light auto-modes.
  *
  * Refreshed on each successful BLE handshake (radar or front camera) per ride
  * session via [refreshIfStale], gated by a staleness threshold so quick

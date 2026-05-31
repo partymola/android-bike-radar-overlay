@@ -63,31 +63,86 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(3), ev)
     }
 
-    @Test fun `escalation honours cooldown but still escalates`() {
-        // Car closes from far->mid->near rapidly. Expect Beep(1) immediately,
-        // then a single Beep when cooldown allows, at the latest urgency.
-        val d = AlertDecider(minBeepGapMs = 700)
+    @Test fun `escalation under NONE mode honours cooldown then fires latest urgency`() {
+        // escalationBypass = NONE reproduces the pre-E1 behaviour: a tier raise
+        // inside the cooldown window is deferred and collapses into a single
+        // beep at the closest urgency at the moment the cooldown expires.
+        val d = AlertDecider(minBeepGapMs = 700, escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick()) // sustain frame 1
         assertEquals(
             AlertDecider.Event.Beep(1), // sustain frame 2
             d.decide(listOf(car(1, 18)), alertMax, c.tick()),
         )
-        // Crosses to mid third immediately (~100ms later) — pending, suppressed:
-        assertEquals(
-            AlertDecider.Event.None,
-            d.decide(listOf(car(1, 13)), alertMax, c.tick()),
-        )
-        // Crosses to near third 100ms later — still pending:
-        assertEquals(
-            AlertDecider.Event.None,
-            d.decide(listOf(car(1, 6)), alertMax, c.tick()),
-        )
-        // Wait past cooldown:
+        // Crosses to mid third (~100ms later) - deferred, suppressed:
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 13)), alertMax, c.tick()))
+        // Crosses to near third 100ms later - still deferred:
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 6)), alertMax, c.tick()))
         c.jump(700)
-        val ev = d.decide(listOf(car(1, 4)), alertMax, c.tick())
         // Beep at the CURRENT urgency (3), not whatever was queued.
-        assertEquals(AlertDecider.Event.Beep(3), ev)
+        assertEquals(AlertDecider.Event.Beep(3), d.decide(listOf(car(1, 4)), alertMax, c.tick()))
+    }
+
+    @Test fun `escalation bypasses cooldown and fires each tier raise same-frame (E1 ALL)`() {
+        // Default escalationBypass = ALL. A car closing far->mid->near on
+        // consecutive frames fires Beep(1), Beep(2), Beep(3) in real time:
+        // each strict tier raise bypasses the 700ms cooldown instead of being
+        // deferred and collapsed into one beep when it expires.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick()) // sustain frame 1
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 13)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.Beep(3), d.decide(listOf(car(1, 6)), alertMax, c.tick()))
+    }
+
+    @Test fun `fast closer overtaking within cooldown - ALL beeps the escalation, NONE drops it`() {
+        // The safety case E1 targets: a fast closer raises a tier, then
+        // overtakes before the cooldown expires. Under ALL the tier-3 raise
+        // fires the same frame; under NONE it is deferred and then lost when
+        // the car leaves the close set - the rider never hears it.
+        val f1 = listOf(car(1, 18))
+        val f2 = listOf(car(1, 18))
+        val f3 = listOf(car(1, 5)) // raise to near third, ~200ms in (< 700 cooldown)
+        val f4 = listOf(car(1, 2, isBehind = true)) // overtakes, leaves the close set
+
+        val all = AlertDecider(minBeepGapMs = 700)
+        val ca = Clock()
+        assertEquals(AlertDecider.Event.None, all.decide(f1, alertMax, ca.tick()))
+        assertEquals(AlertDecider.Event.Beep(1), all.decide(f2, alertMax, ca.tick()))
+        assertEquals(AlertDecider.Event.Beep(3), all.decide(f3, alertMax, ca.tick())) // escalation heard
+        assertEquals(AlertDecider.Event.None, all.decide(f4, alertMax, ca.tick())) // overtake; clear-grace
+
+        val none = AlertDecider(minBeepGapMs = 700, escalationBypass = EscalationCooldownBypass.NONE)
+        val cn = Clock()
+        assertEquals(AlertDecider.Event.None, none.decide(f1, alertMax, cn.tick()))
+        assertEquals(AlertDecider.Event.Beep(1), none.decide(f2, alertMax, cn.tick()))
+        assertEquals(AlertDecider.Event.None, none.decide(f3, alertMax, cn.tick())) // deferred
+        assertEquals(AlertDecider.Event.None, none.decide(f4, alertMax, cn.tick())) // escalation dropped
+    }
+
+    @Test fun `same-tier re-statement within cooldown stays silent under ALL (latch holds)`() {
+        // E1 bypasses only a strict tier RAISE. A car that beeps then stays at
+        // the same tier inside the cooldown must not re-fire - the per-tid
+        // latch suppresses same-tier re-statements regardless of bypass.
+        val d = AlertDecider(minBeepGapMs = 700)
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 11)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 9)), alertMax, c.tick()))
+    }
+
+    @Test fun `TOP_TIER bypasses only a raise into the near third`() {
+        // escalationBypass = TOP_TIER: a 1->2 raise inside the cooldown is
+        // still gated (deferred), but a raise into the near third (Beep 3 -
+        // the imminent tier) bypasses and fires the same frame.
+        val d = AlertDecider(minBeepGapMs = 700, escalationBypass = EscalationCooldownBypass.TOP_TIER)
+        val c = Clock()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 13)), alertMax, c.tick())) // 1->2 gated
+        assertEquals(AlertDecider.Event.Beep(3), d.decide(listOf(car(1, 6)), alertMax, c.tick())) // ->3 bypasses
     }
 
     @Test fun `de-escalation does not re-fire`() {
@@ -594,10 +649,12 @@ class AlertDeciderTest {
     }
 
     @Test fun `slow cooldown actually gates a Beep in the integration path`() {
-        // Slow rider (5 km/h) gets first beep, then a fresh trigger
-        // 800 ms later. Under the flat 700 ms cooldown this would fire
-        // again; under the slow 1400 ms cooldown it must stay silent.
-        val d = AlertDecider(minBeepGapMs = 700L)
+        // Pinned to NONE: under the default ALL a tier raise would bypass the
+        // cooldown, so this exercises the speed-aware slow band in the mode
+        // where it still gates a tier raise. Slow rider (5 km/h) gets the
+        // first beep, then a fresh tier raise 800 ms later: under the slow
+        // 1400 ms cooldown it must stay silent.
+        val d = AlertDecider(minBeepGapMs = 700L, escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 5f / 3.6f)
         val first = d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 5f / 3.6f)
@@ -635,10 +692,12 @@ class AlertDeciderTest {
     }
 
     @Test fun `fast cooldown allows a faster re-arm in the integration path`() {
-        // Fast rider (30 km/h). At 400 ms after a beep, a tier raise
-        // would be suppressed by the flat 700 ms cooldown, but the
-        // fast-band 350 ms cooldown lets it through.
-        val d = AlertDecider(minBeepGapMs = 700L)
+        // Pinned to NONE: under the default ALL the tier raise bypasses the
+        // cooldown outright, so this exercises the fast band in the mode where
+        // it still governs the re-arm. Fast rider (30 km/h). At 400 ms after a
+        // beep, a tier raise would be suppressed by the flat 700 ms cooldown,
+        // but the fast-band 350 ms cooldown lets it through.
+        val d = AlertDecider(minBeepGapMs = 700L, escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 30f / 3.6f)
         d.decide(listOf(car(1, 18)), alertMax, c.tick(), bikeSpeedMs = 30f / 3.6f)
@@ -1483,7 +1542,10 @@ class AlertDeciderTest {
         // road that has already cleared. (At this frame the cooldown-not-done
         // leg short-circuits first; the empty-stable-set isNotEmpty leg is
         // isolated by the companion test below.)
-        val d = AlertDecider(minBeepGapMs = 700L)
+        // Pinned to NONE: under the default ALL the tier raise fires the same
+        // frame and never pends, so this pending-then-emptied path is only
+        // reachable in NONE mode.
+        val d = AlertDecider(minBeepGapMs = 700L, escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         // Car closes from far to mid quickly: first Beep(1), then a tier
         // raise sets beepPending again while still in cooldown.
@@ -1505,7 +1567,10 @@ class AlertDeciderTest {
         // isNotEmpty leg short-circuits to None (and the freshly-opened
         // clear-grace has not yet elapsed). A stale pending beep is never
         // emitted onto an already-empty road.
-        val d = AlertDecider(minBeepGapMs = 700L)
+        // Pinned to NONE: under the default ALL the tier raise fires the same
+        // frame and never pends, so this pending-then-emptied path is only
+        // reachable in NONE mode.
+        val d = AlertDecider(minBeepGapMs = 700L, escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         d.decide(listOf(car(1, 18)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))

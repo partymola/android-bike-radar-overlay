@@ -2,6 +2,23 @@
 package es.jjrh.bikeradar
 
 /**
+ * Selects which tier-raise ("escalation") beeps bypass the inter-beep
+ * cooldown. A tier raise is genuinely new threat information (the closest
+ * car got closer), unlike same-tier chatter; bypassing the cooldown fires
+ * it the same frame instead of deferring it - which the cooldown can drop
+ * entirely if the car overtakes before the cooldown expires. The per-tid
+ * latch still suppresses same-tier re-fires under every mode, so this only
+ * ever ADDS the escalation beep the cooldown would have dropped. [E1]
+ *
+ *  - [NONE]: pre-E1 behaviour - every beep, including a tier raise, waits
+ *    out the (speed-aware) cooldown.
+ *  - [ALL]: any tier raise on the closest track fires immediately.
+ *  - [TOP_TIER]: only a raise INTO the near third (Beep 3, the imminent
+ *    case) fires immediately; lower raises still respect the cooldown.
+ */
+enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
+
+/**
  * Pure-JVM alert decision engine. Fed one frame at a time, returns either a
  * `Beep(urgency)` to acknowledge a new threat or a closer-distance escalation,
  * a `Clear` chime when the road empties, or `None`.
@@ -24,7 +41,9 @@ package es.jjrh.bikeradar
  *    re-beep at the new level — but only if we haven't already
  *    audibly fired for *that tid at that tier*. Intra-tier distance
  *    jitter (e.g. 11→9→11 m flapping the near-third boundary) does
- *    NOT re-fire.
+ *    NOT re-fire. The tier-raise re-beep fires the SAME frame - it
+ *    bypasses the beep cooldown ([escalationBypass]) so a fast
+ *    closer's escalation is never swallowed by the window. [E1]
  *  - **Filtered overtake re-acknowledgement.** When a track that
  *    was close transitions to `isBehind` and others remain close,
  *    re-beep only if the remaining closest-urgency is *strictly
@@ -36,7 +55,10 @@ package es.jjrh.bikeradar
  *    frame radar blips never fire.
  *  - **Beep cooldown.** No two beeps within `minBeepGapMs`. Triggers
  *    in the cooldown window collapse into a single beep at the
- *    closest urgency *at the moment the cooldown expires*.
+ *    closest urgency *at the moment the cooldown expires* - except a
+ *    strict tier raise, which bypasses the cooldown and fires the same
+ *    frame ([escalationBypass]). The cooldown therefore now only
+ *    gates same-tier re-statements and new lower-or-equal-tier entries.
  *  - **Clear chime.** Plays once when the close zone goes from non-empty
  *    to empty AND stays empty for [clearGraceMs] (different timbre, never
  *    overlaps a beep on the speaker; not gated by the beep cooldown). The
@@ -106,6 +128,12 @@ class AlertDecider(
      *  Clear silently. The genuine all-clear is delayed by at most this
      *  long; no safety cost (real-threat beeps are unaffected). */
     private val clearGraceMs: Long = 1_000L,
+    /** E1: which tier-raise beeps bypass the inter-beep cooldown and fire
+     *  the same frame. See [EscalationCooldownBypass]. Default [ALL] - a
+     *  corpus replay over 87 rides (345k frames) showed it recovers ~12
+     *  cooldown-dropped escalations and advances ~54 by a median 0.6 s for
+     *  only +9 net beeps; [NONE]/[TOP_TIER] are retained for re-validation. */
+    private val escalationBypass: EscalationCooldownBypass = EscalationCooldownBypass.ALL,
 ) {
 
     sealed class Event {
@@ -424,10 +452,22 @@ class AlertDecider(
         // stationary rider in front of an imminent threat must still
         // get the repeated warning at the base rate.
         val sinceLastBeep = nowMs - lastBeepAtMs
-        val cooldownDone = if (anyImminentImpact) {
-            sinceLastBeep >= minBeepGapMs
-        } else {
-            sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
+        // E1: a strict tier raise (escalation) on the closest tid is new
+        // threat information, not same-tier chatter, so per [escalationBypass]
+        // it can bypass the inter-beep cooldown and fire the same frame
+        // instead of being deferred (and dropped if the car overtakes before
+        // the cooldown expires). The per-tid latch still blocks same-tier
+        // re-fires, so this only adds the escalation beep the cooldown would
+        // have dropped - it never silences anything.
+        val escalationBypassesCooldown = when (escalationBypass) {
+            EscalationCooldownBypass.NONE -> false
+            EscalationCooldownBypass.ALL -> escalation
+            EscalationCooldownBypass.TOP_TIER -> escalation && closestUrgency >= 3
+        }
+        val cooldownDone = when {
+            anyImminentImpact -> sinceLastBeep >= minBeepGapMs
+            escalationBypassesCooldown -> true
+            else -> sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
         }
 
         // Clear-grace state machine. Defer the Clear (and the per-track
@@ -521,12 +561,17 @@ class AlertDecider(
 
     /**
      * Scale the inter-beep cooldown by current rider speed. Slow
-     * traffic / lights gets a wider cooldown (fewer flapping beeps as
-     * cars hover at tier boundaries while everyone queues); fast
-     * descents get a tighter cooldown (less reaction time, faster
-     * re-arm on tier raises). Returns the base [minBeepGapMs] when no
-     * speed signal is available (the no-eBike, no-radar-speed
-     * fallback path).
+     * traffic / lights gets a wider cooldown; fast descents get a
+     * tighter one. Returns the base [minBeepGapMs] when no speed signal
+     * is available (the no-eBike, no-radar-speed fallback path).
+     *
+     * Since E1 ([escalationBypass] = [EscalationCooldownBypass.ALL] by
+     * default), a strict tier raise bypasses the cooldown entirely, so
+     * this scaling no longer gates tier raises - it governs only the
+     * residual non-escalation pending-beep paths (e.g. a beep deferred
+     * across a stationary-suppress window, then released on roll-off).
+     * The band split is exercised directly by `effectiveMinBeepGapMs`
+     * unit tests and end-to-end under [EscalationCooldownBypass.NONE].
      *
      * When eBike is bonded the caller supplies [bikeSpeedMs] from the
      * bike's wheel-speed sensor (sub-second ground truth). When eBike is
@@ -633,16 +678,17 @@ class AlertDecider(
         const val TTC_GATE_CLOSING_FLOOR_MS = 6f
 
         /** Bike speeds below this (km/h) double the [minBeepGapMs]
-         *  cooldown. Slow urban crawl is where flapping beeps come from -
-         *  cars hover near the urgency-tier boundaries as the whole
-         *  queue creeps forward, and the rider doesn't need to hear the
-         *  re-statement at the same rate as at speed. */
+         *  cooldown. Slow urban crawl is where flapping beeps come from
+         *  as the queue creeps forward; the wider gap damps the residual
+         *  re-statements the cooldown still governs (tier raises bypass
+         *  it since E1, so this no longer delays a genuine escalation). */
         const val SPEED_AWARE_COOLDOWN_SLOW_KMH = 15f
 
         /** Bike speeds above this (km/h) halve the [minBeepGapMs]
          *  cooldown. Reaction time at 30 km/h is roughly half what it is
-         *  at 15 km/h, so re-arm proportionally faster on a tier raise
-         *  for the same closing-speed threat. */
+         *  at 15 km/h, so the residual (non-escalation) cooldown re-arms
+         *  proportionally faster; tier raises themselves bypass the
+         *  cooldown entirely since E1. */
         const val SPEED_AWARE_COOLDOWN_FAST_KMH = 25f
     }
 }

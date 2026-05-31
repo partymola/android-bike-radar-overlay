@@ -37,12 +37,17 @@ object EBikeStatusDecoder {
         const val CADENCE = 0x985A // rpm (scaling vs spec field TBD on a ride; stored raw)
         const val RIDER_POWER = 0x985B // watts
         const val MOTOR_POWER = 0x985D // watts (motor assist; complement of RIDER_POWER)
-        const val ASSIST_MODE = 0x9809 // enum: 0=Off..4=Turbo per public docs; pending ride confirmation
+        const val ASSIST_MODE = 0x9809 // selected mode-slot index 0..4 - see LiveDataSnapshot.assistMode
         const val WHEEL_CIRCUMFERENCE = 0x80E2 // millimetres
         const val BATTERY_SOC = 0x8088 // percent 0-100
         const val ODOMETER = 0x9818 // metres (total)
-        // Lock/light/charger/light-reserve/diagnosis/wheel-at-rest object IDs
-        // not yet pinned - need a session that toggles each state to identify.
+        const val BIKE_LIGHT = 0x981C // 0=off, 1=on (binary) - see LiveDataSnapshot.bikeLight
+        const val SYSTEM_LOCKED = 0x808E // 0=active, 2=locked-or-asleep - see LiveDataSnapshot.systemLocked
+        const val BIKE_NOT_DRIVING = 0x981A // 1=at rest, 0=moving (wheel standstill)
+        // Still unpinned: charger / light-reserve / diagnosis (can't trigger
+        // without a charger / low battery / dealer tool). ambientBrightnessRaw is
+        // NOT carried on this stream - the display's auto-dim is local to the
+        // head unit, not broadcast (bench-confirmed dark vs bright, no lux value).
     }
 
     /**
@@ -120,7 +125,7 @@ object EBikeStatusDecoder {
     private fun isKnownObjectId(objId: Int): Boolean = when (objId) {
         Obj.SPEED, Obj.CADENCE, Obj.RIDER_POWER, Obj.MOTOR_POWER,
         Obj.ASSIST_MODE, Obj.WHEEL_CIRCUMFERENCE, Obj.BATTERY_SOC,
-        Obj.ODOMETER,
+        Obj.ODOMETER, Obj.BIKE_LIGHT, Obj.SYSTEM_LOCKED, Obj.BIKE_NOT_DRIVING,
         -> true
         else -> false
     }
@@ -146,6 +151,10 @@ object EBikeStatusDecoder {
         Obj.WHEEL_CIRCUMFERENCE -> s.copy(wheelCircumferenceMm = value.toInt())
         Obj.BATTERY_SOC -> s.copy(batterySoc = value.toInt())
         Obj.ODOMETER -> s.copy(odometerM = value)
+        Obj.BIKE_LIGHT -> s.copy(bikeLight = value.toInt())
+        // Any non-zero => locked-or-asleep (see Obj.SYSTEM_LOCKED / field KDoc).
+        Obj.SYSTEM_LOCKED -> s.copy(systemLocked = value != 0L)
+        Obj.BIKE_NOT_DRIVING -> s.copy(bikeNotDriving = value != 0L)
         else -> s
     }
 

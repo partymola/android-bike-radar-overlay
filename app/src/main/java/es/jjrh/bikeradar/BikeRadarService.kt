@@ -2373,7 +2373,11 @@ class BikeRadarService : Service() {
         // markRadarConnected / tickWalkAwayState BLANK), so re-evaluating
         // it per retry wouldn't change the post-state semantically.
         val armOnDisconnect = prev.radarOffSinceMs == null &&
-            WalkAwayArmingGate.shouldArm(lastEBikeSnapshot)
+            WalkAwayArmingGate.shouldArm(
+                lastEBikeSnapshot,
+                snapshotAgeMs = nowMs - lastEBikeSnapshotMs,
+                freshMs = WALKAWAY_EBIKE_FRESH_MS,
+            )
         _radarLinkState.update { current ->
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
             current.copy(
@@ -2870,6 +2874,12 @@ class BikeRadarService : Service() {
          *  by the radar-drop cue. Older than this means the eBike link has
          *  itself dropped (rider left), so "unlocked" can't be believed. */
         const val RADAR_DROP_EBIKE_FRESH_MS = 30_000L
+
+        /** Same trust window for the walk-away arming gate: a `system_locked =
+         *  false` older than this is a stale reading from before the eBike link
+         *  dropped and must NOT suppress arming. Separate from the radar-drop
+         *  constant so the two gates can be tuned independently. */
+        const val WALKAWAY_EBIKE_FRESH_MS = 30_000L
 
         /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
          *  long enough that a sub-30-min commute gets exactly one heads-up

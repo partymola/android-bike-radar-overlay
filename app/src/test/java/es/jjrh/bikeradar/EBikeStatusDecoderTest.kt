@@ -77,7 +77,7 @@ class EBikeStatusDecoderTest {
     fun decodesMotorPowerAssistModeWheelCircumference() {
         // motor power 0x985D = 250 W (varint fa 01)
         assertEquals(250, EBikeStatusDecoder.mergeInto(empty, hex("3005985d08fa01")).motorPower)
-        // assist mode 0x9809 = 2 (Tour)
+        // assist mode 0x9809 = 2 (slot index, not a fixed level - see LiveDataSnapshot.assistMode)
         assertEquals(2, EBikeStatusDecoder.mergeInto(empty, hex("300498090802")).assistMode)
         // wheel circumference 0x80E2 = 2200 mm (varint 98 11)
         assertEquals(2200, EBikeStatusDecoder.mergeInto(empty, hex("300580e2089811")).wheelCircumferenceMm)
@@ -88,6 +88,37 @@ class EBikeStatusDecoderTest {
         // Assist off: presence flag, no field-1 (proto3 omits zero) -> 0.
         val s = EBikeStatusDecoder.mergeInto(empty, hex("300498091001"))
         assertEquals(0, s.assistMode)
+    }
+
+    // ── bench-pinned fields (light / lock / wheel-at-rest) ─────────────────
+
+    @Test
+    fun decodesBikeLightOnOff() {
+        // 0x981c: binary on the proprietary stream. 1=on, 0=off (absent varint).
+        assertEquals(1, EBikeStatusDecoder.mergeInto(empty, hex("3004981c0801")).bikeLight)
+        assertEquals(0, EBikeStatusDecoder.mergeInto(empty, hex("3004981c1001")).bikeLight)
+    }
+
+    @Test
+    fun decodesSystemLockedAnyNonZeroIsLocked() {
+        // 0x808e enum: 2=locked-or-asleep -> true, 0=active -> false.
+        assertEquals(true, EBikeStatusDecoder.mergeInto(empty, hex("3004808e0802")).systemLocked)
+        assertEquals(false, EBikeStatusDecoder.mergeInto(empty, hex("3004808e1001")).systemLocked)
+    }
+
+    @Test
+    fun decodesBikeNotDriving() {
+        // 0x981a: 1=at rest -> true, 0=moving (absent varint) -> false.
+        assertEquals(true, EBikeStatusDecoder.mergeInto(empty, hex("3004981a0801")).bikeNotDriving)
+        assertEquals(false, EBikeStatusDecoder.mergeInto(empty, hex("3004981a1001")).bikeNotDriving)
+    }
+
+    @Test
+    fun benchPinnedFieldsAreKnownAndNotReportedAsUnknown() {
+        // After pinning, 0x981c/0x808e/0x981a must be filtered from the
+        // unknown-object debug path (they're mapped now), unlike 0x9808.
+        val bytes = hex("3004981c0801" + "3004808e0802" + "3004981a0801")
+        assertEquals(0, EBikeStatusDecoder.extractUnknownObjectIds(bytes).size)
     }
 
     // ── merge preserves previously-seen fields ─────────────────────────────

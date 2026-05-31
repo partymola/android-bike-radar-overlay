@@ -84,9 +84,9 @@ class EBikeCaptureFormatterTest {
     }
 
     @Test fun `bike_light enum value preserved as integer`() {
-        // Downstream consumers translate 0/1/2 to invalid/off/on; the
-        // log preserves the raw value so the consumer can update its
-        // mapping without re-running the rider's ride.
+        // bikeLight is binary 0=off/1=on on the proprietary stream; the log
+        // preserves the raw value (the 0..3 loop guards the passthrough against
+        // any future encoding) so a consumer's mapping can change without a re-ride.
         for (v in 0..3) {
             val line = EBikeCaptureFormatter.format(
                 LiveDataSnapshot(bikeLight = v),

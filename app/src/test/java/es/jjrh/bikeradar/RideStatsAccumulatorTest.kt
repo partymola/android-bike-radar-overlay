@@ -347,4 +347,59 @@ class RideStatsAccumulatorTest {
         // Ride start should not move forward.
         assertEquals(12_345L, a.snapshot().rideStartedAtMs)
     }
+
+    // ── alarm-fatigue rates ───────────────────────────────────────────────────
+
+    /** Accrue 12 km of distance: 10 m/s integrated over a 1200 s interval. */
+    private fun rideTwelveKm(a: RideStatsAccumulator, clock: FakeClock) {
+        a.observeFrame(radarState(bikeSpeedMs = 10f)) // seed speed, no integration yet
+        clock.advance(1_200_000L) // 1200 s
+        a.observeFrame(radarState(bikeSpeedMs = 10f)) // 10 m/s * 1200 s = 12 000 m
+    }
+
+    @Test
+    fun freshRideHasNullAlarmRates() {
+        val s = acc().snapshot()
+        assertNull(s.alertsPerKm)
+        assertNull(s.alertsPerHourOfRide)
+    }
+
+    @Test
+    fun thirtyMinuteRideWithSixAlarmsYieldsTwelvePerHourAndHalfPerKm() {
+        val clock = FakeClock()
+        val a = acc(clock)
+        rideTwelveKm(a, clock)
+        repeat(3) { a.observeAlertCue("beep count=3") }
+        repeat(3) { a.observeAlertCue("urgent") }
+        clock.advance(600_000L) // total ride wall-clock = 30 min
+        val s = a.snapshot()
+        assertEquals(0.5f, s.alertsPerKm!!, 1e-4f)
+        assertEquals(12.0f, s.alertsPerHourOfRide!!, 1e-4f)
+    }
+
+    @Test
+    fun oneCueWithZeroDistanceSuppressesPerKmButKeepsPerHour() {
+        val clock = FakeClock()
+        val a = acc(clock)
+        a.observeAlertCue("beep count=2")
+        clock.advance(60_000L) // 1 min elapsed, no distance ridden
+        val s = a.snapshot()
+        assertNull("div-by-zero distance must not publish a per-km rate", s.alertsPerKm)
+        assertEquals(60.0f, s.alertsPerHourOfRide!!, 1e-4f)
+    }
+
+    @Test
+    fun informationalCuesAreExcludedFromTheAlarmTally() {
+        val clock = FakeClock()
+        val a = acc(clock)
+        rideTwelveKm(a, clock)
+        a.observeAlertCue("clear")
+        a.observeAlertCue("critical_battery")
+        a.observeAlertCue("radar_drop")
+        a.observeAlertCue("radar_reconnect")
+        val s = a.snapshot()
+        // Distance accrued (so not null) but no alarm cue counted -> rate 0.
+        assertEquals(0.0f, s.alertsPerKm!!, 1e-4f)
+        assertEquals(0.0f, s.alertsPerHourOfRide!!, 1e-4f)
+    }
 }

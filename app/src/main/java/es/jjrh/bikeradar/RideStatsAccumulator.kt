@@ -39,6 +39,12 @@ class RideStatsAccumulator(
     private val closingSpeedSamples = ArrayList<Int>()
     private var tightestPass: TightestPass? = null
 
+    // Alarm-cue tally. Counts only the close-pass ALARM cues that actually
+    // sounded (beep + urgent); informational cues (clear, critical_battery,
+    // radar_drop, radar_reconnect) are excluded so the derived per-km /
+    // per-hour rates measure alarm burden.
+    private var alarmCueCount: Int = 0
+
     // Generation counter for change detection. Incremented whenever any
     // observable state changes; the publish loop compares against
     // [lastPublishedGeneration] and skips if equal.
@@ -139,6 +145,19 @@ class RideStatsAccumulator(
         generation++
     }
 
+    /**
+     * Ingest one sounded alert cue, tagged by [AlertBeeper]'s `onCue`
+     * chokepoint. Only the close-pass alarm cues ([AlertBeeper] tags `beep…`
+     * and `urgent`) increment the tally; the informational cues (`clear`,
+     * `critical_battery`, `radar_drop`, `radar_reconnect`) are ignored.
+     */
+    fun observeAlertCue(tag: String) {
+        if (tag.startsWith("beep") || tag == "urgent") {
+            alarmCueCount++
+            generation++
+        }
+    }
+
     /** True when state has changed since the last [markPublished] call. */
     fun changedSinceLast(): Boolean = generation != lastPublishedGeneration
 
@@ -155,6 +174,17 @@ class RideStatsAccumulator(
             0f
         }
         val p90 = if (closingSpeedSamples.isEmpty()) null else percentile(closingSpeedSamples, 0.9)
+        // Alarm-fatigue rates. Null (rendered Unknown in HA) rather than a
+        // misleading number when the denominator is non-positive: a ride with
+        // no distance ridden yet, or a zero-length ride.
+        val distanceKm = distanceRiddenM / 1000.0
+        val rideDurationMs = (nowMsProvider() - rideStartedAtMs).coerceAtLeast(0L)
+        val alertsPerKm = if (distanceKm > 0.0) (alarmCueCount / distanceKm).toFloat() else null
+        val alertsPerHour = if (rideDurationMs > 0L) {
+            (alarmCueCount.toDouble() / (rideDurationMs / 3_600_000.0)).toFloat()
+        } else {
+            null
+        }
         return RideStatsSnapshot(
             overtakesTotal = totalOvertakes,
             closePassCount = closePassCount,
@@ -168,6 +198,8 @@ class RideStatsAccumulator(
             closePassConversionRatePct = conversionRatePct,
             tightestPass = tightestPass,
             rideStartedAtMs = rideStartedAtMs,
+            alertsPerKm = alertsPerKm,
+            alertsPerHourOfRide = alertsPerHour,
         )
     }
 
@@ -203,6 +235,11 @@ data class RideStatsSnapshot(
     val closePassConversionRatePct: Float,
     val tightestPass: TightestPass?,
     val rideStartedAtMs: Long,
+    /** Alarm cues (close-pass beep + urgent) per km ridden. Null when no
+     *  distance has accumulated (avoids a div-by-zero / absurd rate). */
+    val alertsPerKm: Float?,
+    /** Alarm cues per hour of ride wall-clock. Null for a zero-length ride. */
+    val alertsPerHourOfRide: Float?,
 )
 
 data class TightestPass(

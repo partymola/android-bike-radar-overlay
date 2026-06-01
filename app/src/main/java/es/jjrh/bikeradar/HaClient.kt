@@ -366,7 +366,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     /**
-     * Discovery payloads for the ten per-ride summary sensors, paired with
+     * Discovery payloads for the twelve per-ride summary sensors, paired with
      * their config topics. Extracted from [publishRideSummaryDiscovery] so
      * unit tests can assert on the JSON shape - notably the value_template's
      * no-value sentinel - without needing a live MQTT broker.
@@ -402,6 +402,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
             RideSummarySensor("distance_ridden_km", "Distance ridden", "total_increasing", "distance", "km", 2),
             RideSummarySensor("exposure_seconds", "Time with traffic", "total_increasing", "duration", "s", null),
             RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate", "measurement", null, "%", 1),
+            RideSummarySensor("alerts_per_km", "Alerts per km", "measurement", null, "/km", 2),
+            RideSummarySensor("alerts_per_hour_of_ride", "Alerts per hour", "measurement", null, "/h", 1),
         )
         return sensors.map { s ->
             val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_${s.field}/config"
@@ -446,6 +448,8 @@ class HaClient(private val baseUrl: String, private val token: String) {
         snapshot.peakClosingKmh?.let { payload.put("peak_closing_kmh", it) }
         snapshot.closingSpeedP90Kmh?.let { payload.put("closing_speed_p90_kmh", it) }
         snapshot.minLateralClearanceM?.let { payload.put("min_lateral_clearance_m", it.toDouble()) }
+        snapshot.alertsPerKm?.let { payload.put("alerts_per_km", it.toDouble()) }
+        snapshot.alertsPerHourOfRide?.let { payload.put("alerts_per_hour_of_ride", it.toDouble()) }
         snapshot.tightestPass?.let { tp ->
             payload.put(
                 "tightest_pass",

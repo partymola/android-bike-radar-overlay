@@ -363,8 +363,16 @@ class BikeRadarService : Service() {
             audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
             rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
             // Record every cue that actually sounds (post-suppression) in the
-            // capture log, so a wrong-time beep can be traced after a ride.
-            onCue = { clog("# cue $it") },
+            // capture log, so a wrong-time beep can be traced after a ride, and
+            // tally the alarm cues (beep/urgent) into the ride stats for the
+            // alerts-per-km / per-hour summary metrics. onCue runs on
+            // AlertBeeper's playback thread; rideStats is otherwise written only
+            // from the radar-collect (Main) context, so marshal the tally onto
+            // Main to keep the accumulator single-writer.
+            onCue = {
+                clog("# cue $it")
+                scope.launch(Dispatchers.Main) { rideStats.observeAlertCue(it) }
+            },
         ).also {
             it.setVolumePct(prefs.alertVolume)
             it.setPanning(

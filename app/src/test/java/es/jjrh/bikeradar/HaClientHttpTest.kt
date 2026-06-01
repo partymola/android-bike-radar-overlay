@@ -355,10 +355,10 @@ class HaClientHttpTest {
     }
 
     @Test
-    fun publishRideSummaryDiscoveryPostsTenRetainedSensors() = runTest {
+    fun publishRideSummaryDiscoveryPostsTwelveRetainedSensors() = runTest {
         respondAll(200)
         assertTrue(client().publishRideSummaryDiscovery("rearvue8", "RearVue8"))
-        assertEquals(10, requests.size)
+        assertEquals(12, requests.size)
         assertTrue(requests.all { JSONObject(it.body).getBoolean("retain") })
     }
 
@@ -385,11 +385,15 @@ class HaClientHttpTest {
                 rangeYAtMinM = 2.1f,
             ),
             rideStartedAtMs = 1_716_533_000_000L,
+            alertsPerKm = 0.32f,
+            alertsPerHourOfRide = 11.3f,
         )
         assertTrue(client().publishRideSummaryState("rearvue8", snapshot))
         val sent = JSONObject(JSONObject(requests.single().body).getString("payload"))
         assertEquals(12, sent.getInt("overtakes_total"))
         assertEquals(47, sent.getInt("peak_closing_kmh"))
+        assertEquals(0.32, sent.getDouble("alerts_per_km"), 1e-4)
+        assertEquals(11.3, sent.getDouble("alerts_per_hour_of_ride"), 1e-4)
         val tightest = sent.getJSONObject("tightest_pass")
         assertEquals("left", tightest.getString("side"))
         assertEquals("TRUCK", tightest.getString("vehicle_size"))
@@ -411,6 +415,8 @@ class HaClientHttpTest {
             closePassConversionRatePct = 0f,
             tightestPass = null,
             rideStartedAtMs = 1_716_533_000_000L,
+            alertsPerKm = null,
+            alertsPerHourOfRide = null,
         )
         assertTrue(client().publishRideSummaryState("rearvue8", snapshot))
         val sent = JSONObject(JSONObject(requests.single().body).getString("payload"))
@@ -418,6 +424,8 @@ class HaClientHttpTest {
         assertFalse(sent.has("closing_speed_p90_kmh"))
         assertFalse(sent.has("min_lateral_clearance_m"))
         assertFalse(sent.has("tightest_pass"))
+        assertFalse(sent.has("alerts_per_km"))
+        assertFalse(sent.has("alerts_per_hour_of_ride"))
     }
 
     private companion object {

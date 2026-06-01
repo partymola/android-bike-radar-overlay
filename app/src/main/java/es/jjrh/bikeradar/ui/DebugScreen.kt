@@ -29,10 +29,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -99,18 +101,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
 
     val stateLog = remember { mutableStateListOf<String>() }
     val logScroll = rememberLazyListState()
-    val logFiles = remember {
-        val active = BikeRadarService.activeCaptureLogName
-        ctx.getExternalFilesDir(null)
-            ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
-            ?.listFiles { f ->
-                CaptureLogFiles.isCaptureLog(f) &&
-                    f.length() > 0L &&
-                    f.name != active
-            }
-            ?.sortedByDescending { it.lastModified() }
-            ?: emptyList()
-    }
+    // Mutable so the list re-renders after a delete. Re-enumerated from disk
+    // (not mutated in place) so it always reflects the true on-disk state.
+    var logFiles by remember { mutableStateOf(enumerateCaptureLogs(ctx)) }
+    var pendingDeleteAll by remember { mutableStateOf(false) }
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
     var radarRawHex by remember { mutableStateOf("06 09 01 13") }
@@ -145,6 +139,9 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     // up the static fields every half-second from the background.
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Refresh the log list once on resume so a capture written while
+            // this screen was backgrounded shows up without forcing a delete.
+            logFiles = enumerateCaptureLogs(ctx)
             while (true) {
                 delay(500)
                 replayRunning = ReplayService.isRunning
@@ -219,6 +216,36 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
+            // Capture logging master switch (opt-in, off by default). Placed
+            // high - above the niche dev tools below - because it (and the logs
+            // it produces) is the most-used Debug surface.
+            SettingsSectionLabel("Capture logging")
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = "Write capture logs",
+                    subtitle = "Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride's log finishes either way).",
+                    checked = prefsSnap.captureLoggingEnabled,
+                    onCheckedChange = { prefs.captureLoggingEnabled = it },
+                )
+            }
+
+            // Capture logs
+            DebugCaptureLogList(
+                logFiles = logFiles,
+                onShare = { f ->
+                    if (prefs.captureLogShareWarningSeen) {
+                        shareFile(ctx, f)
+                    } else {
+                        pendingShareFile = f
+                    }
+                },
+                onDelete = { f ->
+                    f.delete()
+                    logFiles = enumerateCaptureLogs(ctx)
+                },
+                onDeleteAll = { pendingDeleteAll = true },
+            )
+
             // Screenshot capture
             SettingsSectionLabel("Screenshot capture")
             SettingsRowGroup {
@@ -276,29 +303,6 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     },
                 )
             }
-
-            // Capture logging master switch (opt-in, off by default)
-            SettingsSectionLabel("Capture logging")
-            SettingsRowGroup {
-                SettingsToggleRow(
-                    title = "Write capture logs",
-                    subtitle = "Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride's log finishes either way).",
-                    checked = prefsSnap.captureLoggingEnabled,
-                    onCheckedChange = { prefs.captureLoggingEnabled = it },
-                )
-            }
-
-            // Capture logs
-            DebugCaptureLogList(
-                logFiles = logFiles,
-                onShare = { f ->
-                    if (prefs.captureLogShareWarningSeen) {
-                        shareFile(ctx, f)
-                    } else {
-                        pendingShareFile = f
-                    }
-                },
-            )
 
             // Diagnostics
             SettingsSectionLabel("Diagnostics")
@@ -498,6 +502,48 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             },
         )
     }
+
+    if (pendingDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAll = false },
+            title = { Text("Delete all capture logs?") },
+            text = {
+                Text(
+                    "This permanently removes all ${logFiles.size} capture " +
+                        "log(s) from this phone. It can't be undone. The current " +
+                        "ride's log (if any) is not in this list and is kept.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    logFiles.forEach { it.delete() }
+                    logFiles = enumerateCaptureLogs(ctx)
+                    pendingDeleteAll = false
+                }) { Text("Delete all") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteAll = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/**
+ * Enumerate the shareable/deletable capture logs on disk (newest first),
+ * excluding the log currently being written. Re-run after a delete so the
+ * list reflects the true on-disk state rather than a stale in-memory copy.
+ */
+private fun enumerateCaptureLogs(ctx: Context): List<File> {
+    val active = BikeRadarService.activeCaptureLogName
+    return ctx.getExternalFilesDir(null)
+        ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
+        ?.listFiles { f ->
+            CaptureLogFiles.isCaptureLog(f) &&
+                f.length() > 0L &&
+                f.name != active
+        }
+        ?.sortedByDescending { it.lastModified() }
+        ?: emptyList()
 }
 
 /**
@@ -546,10 +592,12 @@ internal fun DebugScenarioControls(
 internal fun DebugCaptureLogList(
     logFiles: List<File>,
     onShare: (File) -> Unit,
+    onDelete: (File) -> Unit,
+    onDeleteAll: () -> Unit,
 ) {
     val br = LocalBrColors.current
-    SettingsSectionLabel("Capture logs")
     if (logFiles.isEmpty()) {
+        SettingsSectionLabel("Capture logs")
         Text(
             text = "No capture logs yet.",
             color = br.fgDim,
@@ -557,12 +605,31 @@ internal fun DebugCaptureLogList(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
     } else {
+        // Header carries the bulk action; matches SettingsSectionLabel's type
+        // so the "CAPTURE LOGS" caption lines up with the other sections.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "CAPTURE LOGS",
+                color = br.fgDim,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 10.sp,
+                letterSpacing = 1.4.sp,
+            )
+            DbgGhostButton(text = "Delete all", onClick = onDeleteAll)
+        }
         Column(
             modifier = Modifier.padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             for (f in logFiles) {
-                CaptureLogCard(file = f, onShare = { onShare(f) })
+                CaptureLogCard(file = f, onShare = { onShare(f) }, onDelete = { onDelete(f) })
             }
         }
     }
@@ -623,7 +690,7 @@ private fun DbgGhostButton(
 }
 
 @Composable
-private fun CaptureLogCard(file: File, onShare: () -> Unit) {
+private fun CaptureLogCard(file: File, onShare: () -> Unit, onDelete: () -> Unit) {
     val br = LocalBrColors.current
     Row(
         modifier = Modifier
@@ -631,9 +698,9 @@ private fun CaptureLogCard(file: File, onShare: () -> Unit) {
             .clip(RoundedCornerShape(10.dp))
             .background(br.bgElev1)
             .border(1.dp, br.hairline, RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -652,6 +719,16 @@ private fun CaptureLogCard(file: File, onShare: () -> Unit) {
             )
         }
         DbgGhostButton(text = "Share", onClick = onShare)
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete ${file.name}",
+                // Match the "Share" label's weight, not the dim caption grey -
+                // a no-undo destructive control shouldn't be the faintest thing
+                // in the row.
+                tint = br.fg,
+            )
+        }
     }
 }
 

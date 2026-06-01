@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -98,10 +101,14 @@ class DebugScreenSnapshotTest {
     fun logsEmpty() {
         captureRoboImage {
             UiTheme {
-                DebugCaptureLogList(
-                    logFiles = emptyList(),
-                    onShare = {},
-                )
+                Column(Modifier.background(LocalBrColors.current.bg)) {
+                    DebugCaptureLogList(
+                        logFiles = emptyList(),
+                        onShare = {},
+                        onDelete = {},
+                        onDeleteAll = {},
+                    )
+                }
             }
         }
     }
@@ -119,10 +126,14 @@ class DebugScreenSnapshotTest {
         }
         captureRoboImage {
             UiTheme {
-                DebugCaptureLogList(
-                    logFiles = files,
-                    onShare = {},
-                )
+                Column(Modifier.background(LocalBrColors.current.bg)) {
+                    DebugCaptureLogList(
+                        logFiles = files,
+                        onShare = {},
+                        onDelete = {},
+                        onDeleteAll = {},
+                    )
+                }
             }
         }
     }

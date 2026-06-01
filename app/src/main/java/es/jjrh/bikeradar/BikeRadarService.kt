@@ -1199,60 +1199,49 @@ class BikeRadarService : Service() {
                 SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
             }
             val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-            val initialMode = if (isNight) prefs.cameraLightNightMode else prefs.cameraLightDayMode
             val locLog = if (loc != null) "lat=${"%.2f".format(loc.first)} lon=${"%.2f".format(loc.second)}" else "London-fallback"
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
-            if (!cameraLightUserOverride) {
-                val applied = applyWithRetry { controller.setMode(initialMode) }
-                Log.i(TAG_LIGHT, "initial mode=$initialMode applied=$applied sunset=$sunsetLog")
-                if (applied) {
-                    cameraLightLastWrittenMode = initialMode
-                    if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, initialMode.name)
-                } else {
-                    postLightModeFailNotification(initialMode)
-                }
-            } else {
-                Log.i(TAG_LIGHT, "initial mode skipped (manual override active) sunset=$sunsetLog")
-            }
 
-            // Schedule the next solar transition. If currently in daytime and today's
-            // sunset is in the future, schedule the dusk flip to night mode. If
-            // currently in night and today's sunrise is in the future (i.e., we're
-            // before sunrise rather than after sunset), schedule the dawn flip to
-            // day mode. Either way, the flip only fires if no manual override.
-            if (!isNight && sunsetMs != null && nowMs < sunsetMs) {
-                val msToSunset = sunsetMs - nowMs
-                sunsetJob = scope.launch {
-                    kotlinx.coroutines.delay(msToSunset)
-                    if (cameraLightGattActive && !cameraLightUserOverride) {
-                        val nightMode = prefs.cameraLightNightMode
-                        val nightOk = applyWithRetry { controller.setMode(nightMode) }
-                        Log.i(TAG_LIGHT, "sunset mode=$nightMode applied=$nightOk")
-                        if (nightOk) {
-                            cameraLightLastWrittenMode = nightMode
-                            if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, nightMode.name)
-                        } else {
-                            postLightModeFailNotification(nightMode)
-                        }
-                    }
+            // Same time-of-day scheduling as the radar tail light, via the shared
+            // pure LightAutoModeDecider: DAY -> cameraLightDayMode, NIGHT ->
+            // cameraLightNightMode. A manual side-button override suppresses both
+            // the initial apply and the scheduled flip; the flip is also
+            // re-checked at fire time in case the override or link changed.
+            val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, isNight, cameraLightUserOverride)
+            Log.i(TAG_LIGHT, "auto-mode: night=$isNight override=$cameraLightUserOverride sunset=$sunsetLog")
+            suspend fun applyPhase(phase: LightAutoModeDecider.Phase, label: String) {
+                val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
+                    prefs.cameraLightNightMode
+                } else {
+                    prefs.cameraLightDayMode
+                }
+                val ok = applyWithRetry { controller.setMode(mode) }
+                Log.i(TAG_LIGHT, "$label mode=$mode applied=$ok")
+                if (ok) {
+                    cameraLightLastWrittenMode = mode
+                    if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
+                } else {
+                    postLightModeFailNotification(mode)
                 }
             }
-            if (isNight && sunriseMs != null && nowMs < sunriseMs) {
-                val msToSunrise = sunriseMs - nowMs
-                sunriseJob = scope.launch {
-                    kotlinx.coroutines.delay(msToSunrise)
+            if (plan.initial != null) {
+                applyPhase(plan.initial, "initial")
+            } else {
+                Log.i(TAG_LIGHT, "initial mode skipped (manual override active)")
+            }
+            val flipAt = plan.flipAtMs
+            val flipTo = plan.flipTo
+            if (flipAt != null && flipTo != null) {
+                val job = scope.launch {
+                    kotlinx.coroutines.delay(flipAt - nowMs)
                     if (cameraLightGattActive && !cameraLightUserOverride) {
-                        val dayMode = prefs.cameraLightDayMode
-                        val dayOk = applyWithRetry { controller.setMode(dayMode) }
-                        Log.i(TAG_LIGHT, "sunrise mode=$dayMode applied=$dayOk")
-                        if (dayOk) {
-                            cameraLightLastWrittenMode = dayMode
-                            if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, dayMode.name)
-                        } else {
-                            postLightModeFailNotification(dayMode)
-                        }
+                        applyPhase(
+                            flipTo,
+                            if (flipTo == LightAutoModeDecider.Phase.NIGHT) "sunset" else "sunrise",
+                        )
                     }
                 }
+                if (flipTo == LightAutoModeDecider.Phase.NIGHT) sunsetJob = job else sunriseJob = job
             }
 
             for ((uuid, bytes) in notifyChannel) {

@@ -277,6 +277,17 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
+            // Capture logging master switch (opt-in, off by default)
+            SettingsSectionLabel("Capture logging")
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = "Write capture logs",
+                    subtitle = "Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride's log finishes either way).",
+                    checked = prefsSnap.captureLoggingEnabled,
+                    onCheckedChange = { prefs.captureLoggingEnabled = it },
+                )
+            }
+
             // Capture logs
             DebugCaptureLogList(
                 logFiles = logFiles,

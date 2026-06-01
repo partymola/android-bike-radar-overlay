@@ -57,8 +57,9 @@ repository for the wire protocol, reference decoder, and unit tests.
   channel.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
-- Per-ride capture log written to app-private storage: radar packets,
-  BLE characteristic notifications, phone-battery trace, and decoder
+- Optional per-ride capture log (off by default; enable on the Debug
+  screen) written to app-private storage: radar packets, BLE
+  characteristic notifications, phone-battery trace, and decoder
   events; useful for post-ride replay and bug reports.
 
 ## App screens

@@ -84,6 +84,8 @@ class PrefsTest {
         assertFalse(s.eBikeDataEnabled)
         assertEquals(EBikeOwnership.UNANSWERED, s.eBikeOwnership)
         assertFalse(s.eBikeUnknownObjectLogEnabled)
+        // Capture logging is opt-in: a fresh install must not write ride logs.
+        assertFalse(s.captureLoggingEnabled)
     }
 
     @Test
@@ -128,6 +130,7 @@ class PrefsTest {
         prefs.eBikeOwnership = EBikeOwnership.NO
         prefs.eBikeUnknownObjectLogEnabled = true
         prefs.radarSettingsProbeEnabled = true
+        prefs.captureLoggingEnabled = true
 
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
@@ -172,6 +175,7 @@ class PrefsTest {
         assertEquals(EBikeOwnership.NO, s.eBikeOwnership)
         assertTrue(s.eBikeUnknownObjectLogEnabled)
         assertTrue(s.radarSettingsProbeEnabled)
+        assertTrue(s.captureLoggingEnabled)
     }
 
     @Test

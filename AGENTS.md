@@ -73,10 +73,12 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   the rest of the session. Skipped when `cameraLightUserOverride` is
   set (manual side-button press during the session). See
   `BikeRadarService.kt` connect path.
-- Capture log is always written to
+- Capture log is opt-in (off by default; `Prefs.captureLoggingEnabled`, toggled
+  on the Debug screen). When enabled it is written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`
   (in the `captures/` subdir so the FileProvider share subtree is scoped to the
   logs, not the whole external-files root). Cap is `MAX_CAPTURE_LOGS = 50`.
+  When the toggle is off, `openCaptureLog` no-ops and no file is created.
   `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
   release builds keep BLE/movement payloads out of logcat.
 

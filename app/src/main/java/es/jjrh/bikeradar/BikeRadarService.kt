@@ -1764,6 +1764,11 @@ class BikeRadarService : Service() {
     // ── capture log ───────────────────────────────────────────────────────────
 
     private fun openCaptureLog() {
+        // Opt-in: capture logging is off by default. When off, no log file is
+        // ever created and every writeCaptureLine no-ops on the null writer.
+        // Toggled on the Debug screen (Prefs.captureLoggingEnabled); takes
+        // effect on the next radar connection, which is when this is called.
+        if (!prefs.captureLoggingEnabled) return
         val root = getExternalFilesDir(null) ?: return
         val dir = File(root, CAPTURE_DIR).apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
@@ -2575,7 +2580,7 @@ class BikeRadarService : Service() {
             radarDropSuppressLogged = true
             clog(
                 "# radar_drop_suppressed down_ms=$downForMs reason=riding-not-confirmed " +
-                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+                    "system_locked=${snap.systemLocked} ebike_age_ms=$ebikeAgeMs",
             )
         }
         if (downForMs == null) radarDropSuppressLogged = false

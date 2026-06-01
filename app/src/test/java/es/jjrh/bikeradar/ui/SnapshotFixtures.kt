@@ -56,5 +56,6 @@ internal object SnapshotFixtures {
         eBikeOwnership = EBikeOwnership.UNANSWERED,
         eBikeUnknownObjectLogEnabled = false,
         radarSettingsProbeEnabled = false,
+        captureLoggingEnabled = false,
     )
 }

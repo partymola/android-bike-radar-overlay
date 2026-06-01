@@ -69,6 +69,7 @@ data class PrefsSnapshot(
     val eBikeOwnership: EBikeOwnership,
     val eBikeUnknownObjectLogEnabled: Boolean,
     val radarSettingsProbeEnabled: Boolean,
+    val captureLoggingEnabled: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -469,6 +470,18 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_RADAR_SETTINGS_PROBE, v).apply()
         }
 
+    /** Master switch for the per-ride capture log. Off by default: the log
+     *  records the exact timing of every radar packet, BLE notify and eBike
+     *  snapshot to app-private storage - ride-tracking-grade data the app
+     *  should not write unprompted. Enable it on the Debug screen to produce a
+     *  log for bug reports or analysis; when off, [BikeRadarService.openCaptureLog]
+     *  is a no-op and no file is created. */
+    var captureLoggingEnabled: Boolean
+        get() = sp.getBoolean(KEY_CAPTURE_LOGGING, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_CAPTURE_LOGGING, v).apply()
+        }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -512,6 +525,7 @@ class Prefs(context: Context) {
         eBikeOwnership = eBikeOwnership,
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
         radarSettingsProbeEnabled = radarSettingsProbeEnabled,
+        captureLoggingEnabled = captureLoggingEnabled,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -565,6 +579,7 @@ class Prefs(context: Context) {
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
         appendLine("radar_settings_probe_enabled=$radarSettingsProbeEnabled")
+        appendLine("capture_logging_enabled=$captureLoggingEnabled")
     }
 
     companion object {
@@ -610,6 +625,7 @@ class Prefs(context: Context) {
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"
         const val KEY_RADAR_SETTINGS_PROBE = "radar_settings_probe_enabled"
+        const val KEY_CAPTURE_LOGGING = "capture_logging_enabled"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

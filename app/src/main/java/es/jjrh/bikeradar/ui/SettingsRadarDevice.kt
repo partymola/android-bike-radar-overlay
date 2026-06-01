@@ -88,7 +88,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         chosenMac = chosen,
         activeName = activeName,
         connected = connected,
-        batteryPct = if (connected) radarBattery?.pct else null,
+        batteryPct = if (connected) radarBattery.pct else null,
         onPairDifferent = {
             ctx.startActivity(
                 Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

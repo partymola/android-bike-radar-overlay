@@ -1,7 +1,7 @@
 # android-bike-radar-overlay
 
 <p align="left">
-  <img src="screenshots/13-overlay-live.png" width="700" alt="Live overlay during a ride" />
+  <img src="screenshots/overlay-live.png" width="700" alt="Live overlay during a ride" />
 </p>
 
 The app is the faint strip down the right edge of the screenshot above
@@ -66,16 +66,17 @@ repository for the wire protocol, reference decoder, and unit tests.
 <p align="left">
   <img src="screenshots/01-main.png" width="200" alt="Main screen" />
   <img src="screenshots/02-settings.png" width="200" alt="Settings home" />
-  <img src="screenshots/03-radar-alerts.png" width="200" alt="Radar and alerts settings" />
-  <img src="screenshots/04-dashcam.png" width="200" alt="Dashcam settings" />
-  <img src="screenshots/05-home-assistant.png" width="200" alt="Home Assistant settings" />
-  <img src="screenshots/06-ebike.png" width="200" alt="eBike settings" />
-  <img src="screenshots/07-permissions.png" width="200" alt="Permissions settings" />
-  <img src="screenshots/08-experimental.png" width="200" alt="Experimental settings" />
-  <img src="screenshots/09-debug.png" width="200" alt="Debug screen (developer mode)" />
-  <img src="screenshots/10-about.png" width="200" alt="About screen" />
-  <img src="screenshots/11-licences.png" width="200" alt="Open source licences" />
-  <img src="screenshots/12-privacy.png" width="200" alt="Privacy notice" />
+  <img src="screenshots/03-alerts.png" width="200" alt="Alerts settings" />
+  <img src="screenshots/04-light-auto-mode.png" width="200" alt="Light auto-mode settings" />
+  <img src="screenshots/05-radar.png" width="200" alt="Radar device settings" />
+  <img src="screenshots/06-dashcam.png" width="200" alt="Dashcam settings" />
+  <img src="screenshots/07-home-assistant.png" width="200" alt="Home Assistant settings" />
+  <img src="screenshots/08-ebike.png" width="200" alt="eBike settings" />
+  <img src="screenshots/09-permissions.png" width="200" alt="Permissions settings" />
+  <img src="screenshots/10-experimental.png" width="200" alt="Experimental settings" />
+  <img src="screenshots/11-about.png" width="200" alt="About screen" />
+  <img src="screenshots/12-licences.png" width="200" alt="Open source licences" />
+  <img src="screenshots/13-privacy.png" width="200" alt="Privacy notice" />
 </p>
 
 Debug screen is hidden behind a three-tap long-press unlock on the app title.

@@ -37,6 +37,8 @@ class SettingsScreenSnapshotTest {
                         dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
                         autoLightModeEnabled = true,
                         radarLightAutoModeEnabled = true,
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
+                        eBikeDataEnabled = true,
                     ),
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
                     dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),

@@ -1207,7 +1207,10 @@ class BikeRadarService : Service() {
                 SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
             }
             val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-            val locLog = if (loc != null) "lat=${"%.2f".format(loc.first)} lon=${"%.2f".format(loc.second)}" else "London-fallback"
+            // Provenance only - never the coordinates. This line goes to release
+            // logcat via Log.i; 2-decimal lat/lon would localise the rider's
+            // ride-start to a ~1 km cell for anything with READ_LOGS.
+            val locLog = if (loc != null) "gps" else "London-fallback"
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
 
             // Same time-of-day scheduling as the radar tail light, via the shared

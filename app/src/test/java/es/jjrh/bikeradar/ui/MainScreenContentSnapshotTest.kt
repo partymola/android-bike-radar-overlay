@@ -100,6 +100,50 @@ class MainScreenContentSnapshotTest {
     }
 
     @Test
+    fun fullyConfigured() {
+        // Same as idle() but with the eBike/Flow card present and receiving -
+        // the fully-configured rider used for the README main-screen shot.
+        // idle() stays the radar-only (no-eBike) baseline.
+        captureRoboImage {
+            UiTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Radar live",
+                            subtitle = "Dashcam on",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haHealthy = true,
+                        eBikeDataEnabled = true,
+                        ebikeReceiving = true,
+                        ebikeBatterySoc = 80,
+                        closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun withTraffic() {
         captureRoboImage {
             UiTheme {

@@ -347,7 +347,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
 
     /**
      * Publishes the HA MQTT-Discovery config for the per-ride summary
-     * sensors. Ten sensors share the single retained state topic
+     * sensors. Twelve sensors share the single retained state topic
      * `varia/<slug>/ride_summary` and decompose its JSON via value_template,
      * so one MQTT message updates every sensor atomically. All sensors
      * sit under the same `device.identifiers` as the battery + close-pass

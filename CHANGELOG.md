@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.9.0-alpha - 2026-06-02
+
+### Features
+
+- **The rear radar's tail light now follows sunset like the front light does.** On every connect the radar tail light switches to your configured day mode before sunset and your configured night mode after, using your local sunrise/sunset, with a one-shot switch scheduled for dusk or dawn during the ride. Set both modes in the consolidated Settings -> Light auto-mode screen; it's independent of the front-light auto-mode and off unless you turn it on.
+- **More of your eBike's data is read from Bosch Flow.** On top of the speed, cadence, rider power, battery and odometer added last release, the app now also decodes motor power, assist mode, and wheel circumference, plus the bike's lock and wheel-at-rest state. Still strictly read-only; nothing is written to the bike. Needs a Bosch Smart System eBike with Flow running; without one, nothing changes.
+- **Your radar is now pinned to this bike by address.** If you have more than one Varia bonded - a second bike, a spare unit - the app could previously stream from whichever one answered first. It now remembers this bike's radar by its Bluetooth address and won't connect to a different one, even if both are in range. A new Settings -> Connections -> Radar screen shows the linked radar, its battery, and a "Pair a different radar" action when you do want to switch.
+- **Close-pass beeps escalate immediately when a pass gets more dangerous.** The beep cooldown that prevents cacophony used to hold even when a vehicle moved into a closer, more urgent tier. Now a tier increase beeps straight away, so a fast-closing overtake isn't muted by a cooldown started for a gentler one.
+- **A single beep when the rear radar reconnects after dropping.** After the app warns you the radar link died mid-ride, silence is ambiguous - back, or still gone? One short acknowledgement beep on reconnect restores silence's meaning. It only fires if a drop was actually announced first.
+- **Alarm-rate metrics in the ride-end Home Assistant summary.** If you publish to Home Assistant, the end-of-ride summary now includes alerts-per-km and alerts-per-hour-of-ride (close-pass alarm cues only), so you can chart how noisy your alerts are over time. Publish-only, post-ride; no in-ride change.
+
+### UX
+
+- **Settings reorganised around how often you touch things.** The front and rear light controls are merged into one Light auto-mode screen, and the Settings home is grouped into Ride / Connections / System with a Quick Status card showing radar and camera battery at a glance. Most-changed settings sit at the top; one-time setup at the bottom.
+- **Manage your capture logs from the Debug screen.** Each saved log now has a delete button, and there's a "Delete all" with a confirmation, so you can clear the ride-tracking-grade logs off your phone without reinstalling. The currently-recording log is always kept.
+
+### Security
+
+- **Capture logging is now off by default.** The per-ride log (radar packets, BLE traffic, eBike telemetry with exact timing) is no longer written unless you opt in on the Debug screen. Existing behaviour for people who want it is one toggle away; everyone else stops generating ride-tracking-grade files silently.
+- **Your location no longer reaches the system log.** The front-light auto-mode used to write your coarse GPS fix (to ~1 km) into Android's logcat, which other apps with the right permission could read. It now logs only whether a fix was used, never the coordinates.
+- **Capture-log storage hardened.** Log retention and the file-share scope were tightened so the share sheet exposes only the logs, not the rest of the app's files.
+
+### Fix
+
+- **Close-pass beeps survive a momentary radar blip.** A single dropped radar frame could reset a tracked vehicle and silence its beep. A stable track now keeps going across one missing frame.
+- **The close-pass counter can't lose a count.** Concurrent updates to the overtake tally are now atomic, so a close pass is never dropped from the count or the Home Assistant summary.
+
+### Reliability
+
+- **Reconnect attempts no longer thunder together.** The radar, camera, and eBike reconnect loops now jitter their backoff so they don't retry in lockstep and overload the phone's Bluetooth stack after a multi-device dropout.
+- **The screenshot capture no longer crashes the service on an early exit.** A foreground-service start-contract edge that could kill the app mid-capture is fixed.
+- **Saved capture logs take far less space.** A ride's capture log is now gzip-compressed when it's finalised (`.log.gz`), and older uncompressed logs are migrated opportunistically, so the on-phone footprint is much smaller. Only relevant if you've turned capture logging on.
+
+### Diagnostics
+
+- **Near-miss logging for the radar-drop and eBike-freshness gates.** When the radar drops but a cue is held back (or the eBike snapshot has gone stale), the app records why to the capture log, so the freshness thresholds can be tuned from real rides.
+- **Debug toggle to log unmapped eBike status fields.** Helps pin the remaining Bosch Flow status object IDs from a real ride; off by default, dev-only.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36.
+- The two new ride-summary metrics (alerts-per-km, alerts-per-hour-of-ride) are additive fields on the existing Home Assistant ride-summary payload and appear as two auto-discovered entities; existing subscribers keep working unchanged.
+
+### Internal
+
+- Extracted the overlay pipeline and the radar-link state cluster out of the foreground service, and routed the front-camera light auto-mode through the same shared, unit-tested decider as the radar light. Plus the usual test, screenshot, and doc refreshes.
+
 ## v0.8.0-alpha - 2026-05-26
 
 ### Features

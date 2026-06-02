@@ -148,6 +148,13 @@ android {
             // initWith(debug) inherits these, then re-zeroes them below.
             buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
             buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
+            // Pseudolocales (en-XA / en-XB) ship only in debug builds: switch
+            // the device to "English (XA)" to eyeball string overflow and spot
+            // any still-hardcoded text (it renders un-accented while everything
+            // externalised shows [Ḩéllo Wörld]). They cannot be set via
+            // Robolectric @Config qualifiers, so they are a manual on-device
+            // check, not a snapshot gate.
+            isPseudoLocalesEnabled = true
         }
         // Throwaway variant for walking through Onboarding without
         // touching the production install's prefs / paired devices.
@@ -174,6 +181,23 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+    }
+
+    lint {
+        // Translation correctness is the #1 gate for contributed locale PRs.
+        // These are error-severity by default, but pin them explicitly so a
+        // dropped string or a mangled/auto-translated format arg (a dropped
+        // %1$s crashes the app at runtime) fails lintDebug in CI rather than
+        // shipping. abortOnError keeps lintDebug a hard gate.
+        error +=
+            listOf(
+                "MissingTranslation",
+                "ExtraTranslation",
+                "StringFormatInvalid",
+                "StringFormatMatches",
+                "ImpliedQuantity",
+            )
+        abortOnError = true
     }
 
     packaging {

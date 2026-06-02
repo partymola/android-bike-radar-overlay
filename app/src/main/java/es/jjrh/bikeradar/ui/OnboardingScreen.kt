@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -83,6 +84,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaClient
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
@@ -189,7 +191,7 @@ private fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
         }
         Box(modifier = Modifier.clickable(onClick = onSkip).padding(horizontal = 4.dp, vertical = 6.dp)) {
             Text(
-                text = "Skip",
+                text = stringResource(R.string.onboarding_skip),
                 color = br.fgMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -250,9 +252,9 @@ internal fun PermissionsStepContent(
             StepHeroBlock(
                 icon = Icons.Default.Shield,
                 tint = br.brand,
-                mark = "Step 1 of 4",
-                title = "Grant permissions",
-                sub = "System permissions so the app can find your devices, post a status notification, and draw the overlay.",
+                mark = stringResource(R.string.onboarding_step_1_of_4),
+                title = stringResource(R.string.onboarding_perm_title),
+                sub = stringResource(R.string.onboarding_perm_sub),
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -262,18 +264,17 @@ internal fun PermissionsStepContent(
                     PermissionCard(spec = spec, granted = granted, onChanged = onPermissionChanged)
                 }
                 StepPrivacyNote(
-                    heading = "What these allow",
+                    heading = stringResource(R.string.onboarding_perm_privacy_heading),
                     bullets = listOf(
-                        "Bluetooth: finds and connects your radar, dashcam and eBike",
-                        "Notifications: shows ride status and alerts",
-                        "Location (approx, optional): sets your front and radar lights by " +
-                            "local sunset - never tracks you",
+                        stringResource(R.string.onboarding_perm_bullet_bluetooth),
+                        stringResource(R.string.onboarding_perm_bullet_notifications),
+                        stringResource(R.string.onboarding_perm_bullet_location),
                     ),
                 )
             }
         }
         FooterCta(
-            label = "Continue",
+            label = stringResource(R.string.common_continue),
             enabled = requiredGranted,
             onClick = onContinue,
         )
@@ -295,6 +296,7 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
     var pingResult by remember { mutableStateOf<Result<String>?>(null) }
     var pinging by remember { mutableStateOf(false) }
     val canSubmit = urlField.isNotBlank() && tokenField.isNotBlank()
+    val savedWithoutTestingMsg = stringResource(R.string.onboarding_ha_saved_without_testing)
 
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     // Treat existing saved creds as implicit YES so legacy installs (or
@@ -314,7 +316,7 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
             if (pingResult?.isSuccess != true) {
                 android.widget.Toast.makeText(
                     ctx,
-                    "Saved without testing",
+                    savedWithoutTestingMsg,
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -334,9 +336,9 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
             StepHeroBlock(
                 icon = Icons.Default.Home,
                 tint = Color(0xFFFF8A3D),
-                mark = "Step 2 of 4",
-                title = "Connect to Home Assistant",
-                sub = "Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders.",
+                mark = stringResource(R.string.onboarding_step_2_of_4),
+                title = stringResource(R.string.onboarding_ha_title),
+                sub = stringResource(R.string.onboarding_ha_sub),
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -415,21 +417,21 @@ private fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
             HaIntent.UNSET -> Unit
             HaIntent.YES -> if (canSubmit) {
                 FooterCta(
-                    label = "Continue",
+                    label = stringResource(R.string.common_continue),
                     enabled = true,
                     onClick = onContinueSaving,
                 )
             } else {
                 FooterCtaDual(
-                    primary = "Continue",
-                    secondary = "Skip for now",
+                    primary = stringResource(R.string.common_continue),
+                    secondary = stringResource(R.string.onboarding_skip_for_now),
                     primaryEnabled = false,
                     onPrimary = onContinueSaving,
                     onSecondary = onSkip,
                 )
             }
             HaIntent.NO -> FooterCta(
-                label = "Continue",
+                label = stringResource(R.string.common_continue),
                 enabled = true,
                 onClick = onContinue,
             )
@@ -442,19 +444,19 @@ internal fun HaIntentChooser(onUseHa: () -> Unit, onNotForMe: () -> Unit) {
     val br = LocalBrColors.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         IntentCard(
-            title = "I use Home Assistant",
-            subtitle = "Set up the URL and token now.",
+            title = stringResource(R.string.onboarding_ha_use_title),
+            subtitle = stringResource(R.string.onboarding_ha_use_sub),
             filled = true,
             onClick = onUseHa,
         )
         IntentCard(
-            title = "Not for me",
-            subtitle = "Skip this step. The app works without HA.",
+            title = stringResource(R.string.onboarding_ha_notforme_title),
+            subtitle = stringResource(R.string.onboarding_ha_notforme_sub),
             filled = false,
             onClick = onNotForMe,
         )
         Text(
-            text = "You can change this later from Settings → Home Assistant.",
+            text = stringResource(R.string.onboarding_ha_change_later),
             color = br.fgDim,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp, start = 2.dp),
@@ -542,16 +544,17 @@ internal fun HaFieldsBlock(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "Using Home Assistant · change",
+            text = stringResource(R.string.onboarding_ha_using_pill),
             color = br.fg,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
     }
     Field(
-        label = "Base URL",
+        label = stringResource(R.string.onboarding_ha_url_label),
         value = urlField,
         onChange = onUrlChange,
+        // Example value, not prose: left literal (translators keep the URL).
         placeholder = "https://homeassistant.local:8123",
         mono = true,
         keyboardOptions = KeyboardOptions(
@@ -561,9 +564,10 @@ internal fun HaFieldsBlock(
         ),
     )
     Field(
-        label = "Long-lived access token",
+        label = stringResource(R.string.onboarding_ha_token_label),
         value = tokenField,
         onChange = onTokenChange,
+        // Example value, not prose: a sample JWT prefix, left literal.
         placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
         mono = true,
         visualTransformation = if (tokenVisible) {
@@ -575,12 +579,17 @@ internal fun HaFieldsBlock(
             IconButton(onClick = onToggleTokenVisible) {
                 Icon(
                     imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                    contentDescription =
+                    if (tokenVisible) {
+                        stringResource(R.string.onboarding_ha_hide_token)
+                    } else {
+                        stringResource(R.string.onboarding_ha_show_token)
+                    },
                     tint = br.fgMuted,
                 )
             }
         },
-        hint = "In HA: Profile → Security → Long-lived access tokens.",
+        hint = stringResource(R.string.onboarding_ha_token_hint),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done,
@@ -608,7 +617,12 @@ internal fun HaFieldsBlock(
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = if (pinging) "Testing…" else "Test connection",
+                text =
+                if (pinging) {
+                    stringResource(R.string.onboarding_ha_testing)
+                } else {
+                    stringResource(R.string.onboarding_ha_test_connection)
+                },
                 color = if (testEnabled) br.fg else br.fgDim,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -617,7 +631,15 @@ internal fun HaFieldsBlock(
     }
     pingResult?.let { r ->
         BrChip(
-            text = if (r.isSuccess) "HA: connected" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
+            text =
+            if (r.isSuccess) {
+                stringResource(R.string.onboarding_ha_connected)
+            } else {
+                stringResource(
+                    R.string.onboarding_ha_error,
+                    r.exceptionOrNull()?.message ?: stringResource(R.string.onboarding_ha_error_generic),
+                )
+            },
             color = if (r.isSuccess) br.safe else br.danger,
         )
     }
@@ -626,7 +648,7 @@ internal fun HaFieldsBlock(
     // gating explicit without crowding the populated state.
     if (!canSubmit && pingResult == null) {
         Text(
-            text = "Enter URL and token to continue.",
+            text = stringResource(R.string.onboarding_ha_enter_to_continue),
             color = br.fgDim,
             fontSize = 11.sp,
         )
@@ -645,14 +667,14 @@ internal fun HaSkippedCard(onChangeMind: () -> Unit) {
             .padding(14.dp),
     ) {
         Text(
-            text = "Skipped",
+            text = stringResource(R.string.onboarding_ha_skipped_title),
             color = br.fg,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "You can add Home Assistant any time from Settings → Home Assistant.",
+            text = stringResource(R.string.onboarding_ha_skipped_body),
             color = br.fgMuted,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -669,7 +691,7 @@ internal fun HaSkippedCard(onChangeMind: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "Use Home Assistant",
+                text = stringResource(R.string.onboarding_ha_use_ha_button),
                 color = br.fg,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
@@ -751,9 +773,9 @@ internal fun PairingStepContent(
             StepHeroBlock(
                 icon = Icons.Default.Bluetooth,
                 tint = br.brand,
-                mark = "Step 3 of 4",
-                title = "Pair your devices",
-                sub = "Pairing happens in Android's Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap Open Bluetooth settings.",
+                mark = stringResource(R.string.onboarding_step_3_of_4),
+                title = stringResource(R.string.onboarding_pair_title),
+                sub = stringResource(R.string.onboarding_pair_sub),
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -766,20 +788,20 @@ internal fun PairingStepContent(
                 DeviceRow(
                     icon = Icons.Default.Sensors,
                     tint = br.brand,
-                    title = "Rear radar",
+                    title = stringResource(R.string.onboarding_pair_radar_title),
                     optionalLabel = false,
                     bonded = radarBonded,
                     detail = if (radarBonded) {
-                        (radarLocalName ?: radarMac ?: "Rear radar")
+                        (radarLocalName ?: radarMac ?: stringResource(R.string.onboarding_pair_radar_title))
                     } else {
-                        "Not paired yet. The pairing screen is in Android's Bluetooth settings."
+                        stringResource(R.string.onboarding_pair_radar_detail_unpaired)
                     },
                     detailHint = if (!radarBonded) {
-                        "After pairing, press back to return here."
+                        stringResource(R.string.onboarding_pair_radar_hint)
                     } else {
                         null
                     },
-                    primaryCta = if (!radarBonded) "Open Bluetooth settings" else null,
+                    primaryCta = if (!radarBonded) stringResource(R.string.onboarding_pair_open_bt_settings) else null,
                     primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
                     onPrimary = onOpenBluetoothSettings,
                 )
@@ -799,12 +821,12 @@ internal fun PairingStepContent(
                     DashcamOwnership.NO -> DeviceRow(
                         icon = Icons.Default.Videocam,
                         tint = br.dashcam,
-                        title = "Front dashcam",
+                        title = stringResource(R.string.onboarding_pair_dashcam_title),
                         optionalLabel = true,
-                        subtitle = "You said you don't have one",
+                        subtitle = stringResource(R.string.onboarding_pair_dashcam_no_subtitle),
                         bonded = false,
-                        detail = "Change your mind any time from Settings → Dashcam.",
-                        primaryCta = "I do have one",
+                        detail = stringResource(R.string.onboarding_pair_dashcam_no_detail),
+                        primaryCta = stringResource(R.string.onboarding_pair_dashcam_have_one),
                         primaryCtaIcon = null,
                         onPrimary = onDashcamReclaim,
                     )
@@ -813,19 +835,28 @@ internal fun PairingStepContent(
                         DeviceRow(
                             icon = Icons.Default.Videocam,
                             tint = br.dashcam,
-                            title = "Front dashcam",
+                            title = stringResource(R.string.onboarding_pair_dashcam_title),
                             optionalLabel = true,
-                            subtitle = if (picked) "Warns you if it's off" else null,
+                            subtitle = if (picked) stringResource(R.string.onboarding_pair_dashcam_yes_subtitle) else null,
                             bonded = picked,
                             detail = if (picked) {
-                                "${dashcamDisplayName ?: "Picked"} · $dashcamMac"
+                                stringResource(
+                                    R.string.onboarding_pair_dashcam_picked_detail,
+                                    dashcamDisplayName ?: stringResource(R.string.onboarding_pair_dashcam_picked_fallback),
+                                    dashcamMac ?: "",
+                                )
                             } else {
-                                "Pick the dashcam you ride with to enable off-warnings."
+                                stringResource(R.string.onboarding_pair_dashcam_pick_detail)
                             },
-                            primaryCta = if (picked) "Change device" else "Pick device",
+                            primaryCta =
+                            if (picked) {
+                                stringResource(R.string.onboarding_pair_change_device)
+                            } else {
+                                stringResource(R.string.onboarding_pair_pick_device)
+                            },
                             primaryCtaIcon = null,
                             onPrimary = onPickDashcam,
-                            extraAction = "I don't have one",
+                            extraAction = stringResource(R.string.onboarding_pair_dont_have_one),
                             onExtra = onDashcamSkip,
                         )
                     }
@@ -835,17 +866,25 @@ internal fun PairingStepContent(
                 // the same thing in its detail box, so we'd be repeating
                 // ourselves.
                 if (dashcamOwnership != DashcamOwnership.NO) {
+                    // Whole sentence is one translatable unit with a %1$s slot
+                    // for the emphasised "Settings → Dashcam" link, so word
+                    // order stays correct in any language; the bold span is
+                    // re-applied over the substituted link text.
+                    val link = stringResource(R.string.onboarding_pair_settings_dashcam)
+                    val full = stringResource(R.string.onboarding_pair_comeback, link)
                     val hintText = androidx.compose.ui.text.buildAnnotatedString {
-                        append("You can come back to this later in ")
-                        pushStyle(
-                            androidx.compose.ui.text.SpanStyle(
-                                color = br.fg,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                        )
-                        append("Settings → Dashcam")
-                        pop()
-                        append(".")
+                        append(full)
+                        val start = full.indexOf(link)
+                        if (start >= 0) {
+                            addStyle(
+                                androidx.compose.ui.text.SpanStyle(
+                                    color = br.fg,
+                                    fontWeight = FontWeight.Medium,
+                                ),
+                                start,
+                                start + link.length,
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier
@@ -864,11 +903,11 @@ internal fun PairingStepContent(
                     }
                 }
                 StepPrivacyNote(
-                    heading = "What this can access",
+                    heading = stringResource(R.string.onboarding_pair_privacy_heading),
                     bullets = listOf(
-                        "Reads your paired-device list to find the radar and dashcam",
-                        "Saves which dashcam you ride with, on your phone",
-                        "Nothing from pairing is sent anywhere",
+                        stringResource(R.string.onboarding_pair_bullet_devices),
+                        stringResource(R.string.onboarding_pair_bullet_saves),
+                        stringResource(R.string.onboarding_pair_bullet_nothing_sent),
                     ),
                 )
             }
@@ -882,20 +921,20 @@ internal fun PairingStepContent(
             // overtake prediction) live behind a single Settings entry
             // so onboarding stays minimal.
             Text(
-                text = "More features in Settings -> Experimental once you're set up.",
+                text = stringResource(R.string.onboarding_pair_more_features),
                 color = br.fgDim,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
             )
             if (!radarBonded) {
                 Text(
-                    text = "You can pair the radar later from Bluetooth settings.",
+                    text = stringResource(R.string.onboarding_pair_radar_later),
                     color = br.fgDim,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
                 )
             }
-            FooterCta(label = "Continue", enabled = true, onClick = onFinish)
+            FooterCta(label = stringResource(R.string.common_continue), enabled = true, onClick = onFinish)
         }
     }
 }
@@ -932,12 +971,12 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "Front dashcam",
+                    text = stringResource(R.string.onboarding_pair_dashcam_title),
                     color = br.fg,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                 )
-                Mark("Optional")
+                Mark(stringResource(R.string.common_optional))
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -950,7 +989,7 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
                 .padding(10.dp),
         ) {
             Text(
-                text = "Got a Bluetooth dashcam? The overlay shows its battery and flags when it stops broadcasting.",
+                text = stringResource(R.string.onboarding_pair_dashcam_unanswered_detail),
                 color = br.fgMuted,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
@@ -967,7 +1006,12 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
                     .clickable(onClick = onSetUp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = "Pick device", color = br.bg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = stringResource(R.string.onboarding_pair_pick_device),
+                    color = br.bg,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Box(
                 modifier = Modifier
@@ -978,7 +1022,12 @@ private fun DashcamUnansweredCard(onSetUp: () -> Unit, onSkip: () -> Unit) {
                     .clickable(onClick = onSkip),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = "I don't have one", color = br.fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    text = stringResource(R.string.onboarding_pair_dont_have_one),
+                    color = br.fg,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
@@ -1001,6 +1050,8 @@ internal fun DeviceRow(
     onExtra: (() -> Unit)? = null,
 ) {
     val br = LocalBrColors.current
+    // Hoisted out of the semantics lambda below (not a @Composable scope).
+    val pairedWithDesc = stringResource(R.string.onboarding_device_paired_with, detail)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1025,7 +1076,7 @@ internal fun DeviceRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(text = title, color = br.fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    if (optionalLabel) Mark("Optional")
+                    if (optionalLabel) Mark(stringResource(R.string.common_optional))
                 }
                 if (subtitle != null) {
                     Spacer(modifier = Modifier.height(2.dp))
@@ -1054,7 +1105,7 @@ internal fun DeviceRow(
                     // Without context the screen-reader hears just the bare
                     // device name in monospace. The visual PairedChip
                     // alongside isn't part of this Text's a11y subtree.
-                    Modifier.semantics { contentDescription = "Paired with $detail" }
+                    Modifier.semantics { contentDescription = pairedWithDesc }
                 } else {
                     Modifier
                 },
@@ -1214,10 +1265,9 @@ internal fun EBikeStepContent(
                     StepHeroBlock(
                         icon = Icons.AutoMirrored.Filled.DirectionsBike,
                         tint = br.brand,
-                        mark = "Last step",
-                        title = "Your eBike status",
-                        sub = "Show your eBike battery and connection status while you ride - " +
-                            "works alongside the Bosch Flow app.",
+                        mark = stringResource(R.string.onboarding_last_step),
+                        title = stringResource(R.string.onboarding_ebike_title),
+                        sub = stringResource(R.string.onboarding_ebike_sub),
                     )
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -1240,7 +1290,7 @@ internal fun EBikeStepContent(
         // has said YES, a single Finish completes onboarding - the eBike status
         // shows on the home screen later whenever Flow is open.
         if (ownership == EBikeOwnership.YES) {
-            FooterCta(label = "Finish", enabled = true, onClick = onFinish)
+            FooterCta(label = stringResource(R.string.onboarding_finish), enabled = true, onClick = onFinish)
         }
     }
 }
@@ -1251,28 +1301,28 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = listOf(
-                "eBike battery and status on the home screen",
-                "Close-pass beeps stay on during a slow climb",
-                "Beep timing scales with your wheel speed",
+                stringResource(R.string.onboarding_ebike_bullet_status),
+                stringResource(R.string.onboarding_ebike_bullet_climb),
+                stringResource(R.string.onboarding_ebike_bullet_timing),
             ).joinToString("\n") { "•  $it" },
             color = br.fgMuted,
             fontSize = 13.sp,
             lineHeight = 19.sp,
         )
         IntentCard(
-            title = "I have one",
-            subtitle = "Turn it on.",
+            title = stringResource(R.string.onboarding_ebike_have_title),
+            subtitle = stringResource(R.string.onboarding_ebike_have_sub),
             filled = true,
             onClick = onHaveOne,
         )
         IntentCard(
-            title = "I don't have one",
-            subtitle = "Skip this step. The app works without it.",
+            title = stringResource(R.string.onboarding_ebike_donthave_title),
+            subtitle = stringResource(R.string.onboarding_ebike_donthave_sub),
             filled = false,
             onClick = onDontHaveOne,
         )
         Text(
-            text = "You can change this later from Settings -> eBike.",
+            text = stringResource(R.string.onboarding_ebike_change_later),
             color = br.fgDim,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp, start = 2.dp),
@@ -1305,12 +1355,17 @@ private fun EBikeHowItWorks(
     StepHeroBlock(
         icon = Icons.AutoMirrored.Filled.DirectionsBike,
         tint = if (receiving) br.safe else br.caution,
-        mark = "Last step",
-        title = if (receiving) "You're all set" else "Almost there",
+        mark = stringResource(R.string.onboarding_last_step),
+        title =
+        if (receiving) {
+            stringResource(R.string.onboarding_ebike_allset)
+        } else {
+            stringResource(R.string.onboarding_ebike_almost)
+        },
         sub = when {
-            receiving -> "We can read your eBike - no action needed."
-            flowInstalled -> "Open Bosch Flow and keep it running while you ride."
-            else -> "Install Bosch Flow to get your eBike's live data."
+            receiving -> stringResource(R.string.onboarding_ebike_sub_receiving)
+            flowInstalled -> stringResource(R.string.onboarding_ebike_sub_open)
+            else -> stringResource(R.string.onboarding_ebike_sub_install)
         },
     )
     Column(
@@ -1345,7 +1400,12 @@ private fun EBikeHowItWorks(
                         modifier = Modifier.size(14.dp),
                     )
                     Text(
-                        text = if (flowInstalled) "Open Bosch Flow" else "Install Bosch Flow",
+                        text =
+                        if (flowInstalled) {
+                            stringResource(R.string.onboarding_ebike_open_flow)
+                        } else {
+                            stringResource(R.string.onboarding_ebike_install_flow)
+                        },
                         color = br.bg,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1354,13 +1414,13 @@ private fun EBikeHowItWorks(
             }
             // Escape hatch: not everyone can get data flowing during setup.
             Text(
-                text = "You can finish now and set this up later.",
+                text = stringResource(R.string.onboarding_ebike_finish_later),
                 color = br.fgMuted,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
             )
             Text(
-                text = "Don't have a Bosch eBike? Go back",
+                text = stringResource(R.string.onboarding_ebike_go_back),
                 color = br.brand,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -1371,12 +1431,11 @@ private fun EBikeHowItWorks(
         }
 
         StepPrivacyNote(
-            heading = "What's collected",
+            heading = stringResource(R.string.onboarding_ebike_privacy_heading),
             bullets = listOf(
-                "Reads your bike's battery, speed and pedalling - read-only, " +
-                    "never sends anything to your bike",
-                "Stays on your phone, saved to the ride log",
-                "If Home Assistant is set up, ride and battery info is sent there",
+                stringResource(R.string.onboarding_ebike_bullet_reads),
+                stringResource(R.string.onboarding_ebike_bullet_phone),
+                stringResource(R.string.onboarding_ebike_bullet_ha),
             ),
         )
     }
@@ -1395,7 +1454,7 @@ private fun openFlowFromOnboarding(ctx: Context) {
     } catch (_: Exception) {
         android.widget.Toast.makeText(
             ctx,
-            "Couldn't open Flow. Install it from the Play Store and try again.",
+            ctx.getString(R.string.onboarding_ebike_flow_open_failed),
             android.widget.Toast.LENGTH_LONG,
         ).show()
     }
@@ -1440,7 +1499,7 @@ internal fun StepPrivacyNote(
             lineHeight = 18.sp,
         )
         Text(
-            text = "Full detail: Settings → Privacy",
+            text = stringResource(R.string.onboarding_privacy_full_detail),
             color = br.fgDim,
             fontSize = 11.sp,
         )
@@ -1457,12 +1516,11 @@ internal fun StepPrivacyNote(
 @Composable
 internal fun HaStepPrivacyNote() {
     StepPrivacyNote(
-        heading = "What's sent",
+        heading = stringResource(R.string.onboarding_ha_privacy_heading),
         bullets = listOf(
-            "Sends battery, light mode, ride times and ride stats " +
-                "(incl. close passes) to your HA",
-            "Goes only to your Home Assistant - never to the developer",
-            "Your HA address and token are encrypted on your phone",
+            stringResource(R.string.onboarding_ha_bullet_sends),
+            stringResource(R.string.onboarding_ha_bullet_only_ha),
+            stringResource(R.string.onboarding_ha_bullet_encrypted),
         ),
     )
 }

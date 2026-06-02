@@ -25,6 +25,8 @@
 
     <!-- ── Common / reused ──────────────────────────────────────────── -->
     <string name="common_settings">Settings</string>
+    <string name="common_continue">Continue</string>
+    <string name="common_optional">Optional</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)
@@ -93,5 +95,109 @@
     <string name="main_dashcam_prompt_body">The overlay shows its battery and flags when it stops broadcasting.</string>
     <string name="main_dashcam_prompt_yes">Set it up</string>
     <string name="main_dashcam_prompt_no">I don\'t have one</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Onboarding (OnboardingScreen.kt) - 4-step pager
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_skip_for_now">Skip for now</string>
+    <string name="onboarding_finish">Finish</string>
+    <string name="onboarding_step_1_of_4">Step 1 of 4</string>
+    <string name="onboarding_step_2_of_4">Step 2 of 4</string>
+    <string name="onboarding_step_3_of_4">Step 3 of 4</string>
+    <string name="onboarding_last_step">Last step</string>
+    <string name="onboarding_privacy_full_detail">Full detail: Settings → Privacy</string>
+
+    <!-- Step 1: permissions -->
+    <string name="onboarding_perm_title">Grant permissions</string>
+    <string name="onboarding_perm_sub">System permissions so the app can find your devices, post a status notification, and draw the overlay.</string>
+    <string name="onboarding_perm_privacy_heading">What these allow</string>
+    <string name="onboarding_perm_bullet_bluetooth">Bluetooth: finds and connects your radar, dashcam and eBike</string>
+    <string name="onboarding_perm_bullet_notifications">Notifications: shows ride status and alerts</string>
+    <string name="onboarding_perm_bullet_location">Location (approx, optional): sets your front and radar lights by local sunset - never tracks you</string>
+
+    <!-- Step 2: Home Assistant -->
+    <string name="onboarding_ha_title">Connect to Home Assistant</string>
+    <string name="onboarding_ha_sub">Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders.</string>
+    <string name="onboarding_ha_saved_without_testing">Saved without testing</string>
+    <string name="onboarding_ha_use_title">I use Home Assistant</string>
+    <string name="onboarding_ha_use_sub">Set up the URL and token now.</string>
+    <string name="onboarding_ha_notforme_title">Not for me</string>
+    <string name="onboarding_ha_notforme_sub">Skip this step. The app works without HA.</string>
+    <string name="onboarding_ha_change_later">You can change this later from Settings → Home Assistant.</string>
+    <string name="onboarding_ha_using_pill">Using Home Assistant · change</string>
+    <string name="onboarding_ha_url_label">Base URL</string>
+    <string name="onboarding_ha_token_label">Long-lived access token</string>
+    <string name="onboarding_ha_hide_token">Hide token</string>
+    <string name="onboarding_ha_show_token">Show token</string>
+    <string name="onboarding_ha_token_hint">In HA: Profile → Security → Long-lived access tokens.</string>
+    <string name="onboarding_ha_testing">Testing…</string>
+    <string name="onboarding_ha_test_connection">Test connection</string>
+    <string name="onboarding_ha_connected">HA: connected</string>
+    <string name="onboarding_ha_error">HA: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
+    <string name="onboarding_ha_error_generic">error</string>
+    <string name="onboarding_ha_enter_to_continue">Enter URL and token to continue.</string>
+    <string name="onboarding_ha_skipped_title">Skipped</string>
+    <string name="onboarding_ha_skipped_body">You can add Home Assistant any time from Settings → Home Assistant.</string>
+    <string name="onboarding_ha_use_ha_button">Use Home Assistant</string>
+    <string name="onboarding_ha_privacy_heading">What\'s sent</string>
+    <string name="onboarding_ha_bullet_sends">Sends battery, light mode, ride times and ride stats (incl. close passes) to your HA</string>
+    <string name="onboarding_ha_bullet_only_ha">Goes only to your Home Assistant - never to the developer</string>
+    <string name="onboarding_ha_bullet_encrypted">Your HA address and token are encrypted on your phone</string>
+
+    <!-- Step 3: pairing -->
+    <string name="onboarding_pair_title">Pair your devices</string>
+    <string name="onboarding_pair_sub">Pairing happens in Android\'s Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap Open Bluetooth settings.</string>
+    <string name="onboarding_pair_radar_title">Rear radar</string>
+    <string name="onboarding_pair_radar_detail_unpaired">Not paired yet. The pairing screen is in Android\'s Bluetooth settings.</string>
+    <string name="onboarding_pair_radar_hint">After pairing, press back to return here.</string>
+    <string name="onboarding_pair_open_bt_settings">Open Bluetooth settings</string>
+    <string name="onboarding_pair_dashcam_title">Front dashcam</string>
+    <string name="onboarding_pair_dashcam_no_subtitle">You said you don\'t have one</string>
+    <string name="onboarding_pair_dashcam_no_detail">Change your mind any time from Settings → Dashcam.</string>
+    <string name="onboarding_pair_dashcam_have_one">I do have one</string>
+    <string name="onboarding_pair_dashcam_yes_subtitle">Warns you if it\'s off</string>
+    <string name="onboarding_pair_dashcam_picked_fallback">Picked</string>
+    <string name="onboarding_pair_dashcam_picked_detail"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g></string>
+    <string name="onboarding_pair_dashcam_pick_detail">Pick the dashcam you ride with to enable off-warnings.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">Got a Bluetooth dashcam? The overlay shows its battery and flags when it stops broadcasting.</string>
+    <string name="onboarding_pair_change_device">Change device</string>
+    <string name="onboarding_pair_pick_device">Pick device</string>
+    <string name="onboarding_pair_dont_have_one">I don\'t have one</string>
+    <string name="onboarding_pair_settings_dashcam">Settings → Dashcam</string>
+    <string name="onboarding_pair_comeback">You can come back to this later in <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
+    <string name="onboarding_pair_privacy_heading">What this can access</string>
+    <string name="onboarding_pair_bullet_devices">Reads your paired-device list to find the radar and dashcam</string>
+    <string name="onboarding_pair_bullet_saves">Saves which dashcam you ride with, on your phone</string>
+    <string name="onboarding_pair_bullet_nothing_sent">Nothing from pairing is sent anywhere</string>
+    <string name="onboarding_pair_more_features">More features in Settings -> Experimental once you\'re set up.</string>
+    <string name="onboarding_pair_radar_later">You can pair the radar later from Bluetooth settings.</string>
+    <string name="onboarding_device_paired_with">Paired with <xliff:g id="device" example="RearVue8">%1$s</xliff:g></string>
+
+    <!-- Step 4: eBike -->
+    <string name="onboarding_ebike_title">Your eBike status</string>
+    <string name="onboarding_ebike_sub">Show your eBike battery and connection status while you ride - works alongside the Bosch Flow app.</string>
+    <string name="onboarding_ebike_bullet_status">eBike battery and status on the home screen</string>
+    <string name="onboarding_ebike_bullet_climb">Close-pass beeps stay on during a slow climb</string>
+    <string name="onboarding_ebike_bullet_timing">Beep timing scales with your wheel speed</string>
+    <string name="onboarding_ebike_have_title">I have one</string>
+    <string name="onboarding_ebike_have_sub">Turn it on.</string>
+    <string name="onboarding_ebike_donthave_title">I don\'t have one</string>
+    <string name="onboarding_ebike_donthave_sub">Skip this step. The app works without it.</string>
+    <string name="onboarding_ebike_change_later">You can change this later from Settings -> eBike.</string>
+    <string name="onboarding_ebike_allset">You\'re all set</string>
+    <string name="onboarding_ebike_almost">Almost there</string>
+    <string name="onboarding_ebike_sub_receiving">We can read your eBike - no action needed.</string>
+    <string name="onboarding_ebike_sub_open">Open Bosch Flow and keep it running while you ride.</string>
+    <string name="onboarding_ebike_sub_install">Install Bosch Flow to get your eBike\'s live data.</string>
+    <string name="onboarding_ebike_open_flow">Open Bosch Flow</string>
+    <string name="onboarding_ebike_install_flow">Install Bosch Flow</string>
+    <string name="onboarding_ebike_finish_later">You can finish now and set this up later.</string>
+    <string name="onboarding_ebike_go_back">Don\'t have a Bosch eBike? Go back</string>
+    <string name="onboarding_ebike_flow_open_failed">Couldn\'t open Flow. Install it from the Play Store and try again.</string>
+    <string name="onboarding_ebike_privacy_heading">What\'s collected</string>
+    <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends anything to your bike</string>
+    <string name="onboarding_ebike_bullet_phone">Stays on your phone, saved to the ride log</string>
+    <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride and battery info is sent there</string>
 
 </resources>

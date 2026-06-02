@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -33,26 +34,31 @@ class MainStatusDeriverTest {
         bluetoothEnabled = bluetoothEnabled,
     )
 
+    // formatTime returns a fixed sentinel so tests can assert the clock
+    // value is threaded into headlineArgs without depending on a real clock.
     private fun derive(inputs: MainStatusInputs, now: Long = 100L) = MainStatusDeriver.derive(inputs, now) { "HH:MM" }
 
     @Test fun firstRunTopsEverything() {
         val s = derive(baseInputs(firstRunComplete = false, hasBond = false))
         assertEquals(MainStatusIcon.PlayCircle, s.icon)
         assertEquals(MainStatusTone.Good, s.tone)
-        assertEquals("Let's set up your radar", s.headline)
+        assertEquals(R.string.main_status_setup_title, s.headlineRes)
     }
 
     @Test fun pausedBeatsBondCheck() {
         val s = derive(baseInputs(hasBond = false, pausedUntilEpochMs = 200L), now = 100L)
         assertEquals(MainStatusIcon.PauseCircle, s.icon)
         assertEquals(MainStatusTone.Info, s.tone)
+        assertEquals(R.string.main_status_paused_title, s.headlineRes)
+        // The injected formatTime result becomes the headline substitution.
+        assertEquals(listOf("HH:MM"), s.headlineArgs)
     }
 
     @Test fun notPairedFiresWhenBondMissing() {
         val s = derive(baseInputs(hasBond = false))
         assertEquals(MainStatusIcon.BluetoothDisabled, s.icon)
         assertEquals(MainStatusTone.Error, s.tone)
-        assertEquals("Radar not paired", s.headline)
+        assertEquals(R.string.main_status_not_paired_title, s.headlineRes)
     }
 
     @Test fun dashcamOffBeatsHaDown() {
@@ -68,8 +74,9 @@ class MainStatusDeriverTest {
         )
         assertEquals(MainStatusIcon.Warning, s.icon)
         assertEquals(MainStatusTone.Warn, s.tone)
-        assertEquals("Radar live, dashcam off", s.headline)
-        assertEquals("Turn on your Vue-123", s.subtitle)
+        assertEquals(R.string.main_status_dashcam_off_title, s.headlineRes)
+        assertEquals(R.string.main_status_dashcam_off_sub, s.subtitleRes)
+        assertEquals(listOf("Vue-123"), s.subtitleArgs)
     }
 
     @Test fun dashcamOffFallsBackWhenNoNameStored() {
@@ -80,7 +87,8 @@ class MainStatusDeriverTest {
                 dashcamFresh = false,
             ),
         )
-        assertEquals("Turn on your dashcam", s.subtitle)
+        assertEquals(R.string.main_status_dashcam_off_sub_generic, s.subtitleRes)
+        assertEquals(emptyList<String>(), s.subtitleArgs)
     }
 
     @Test fun haDownShowsWhenDashcamIsFine() {
@@ -93,8 +101,8 @@ class MainStatusDeriverTest {
             ),
         )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
-        assertEquals("Radar live", s.headline)
-        assertEquals("Home Assistant unreachable", s.subtitle)
+        assertEquals(R.string.main_status_live_title, s.headlineRes)
+        assertEquals(R.string.main_status_live_ha_down_sub, s.subtitleRes)
     }
 
     @Test fun warnDisabledSkipsDashcamStateEvenWhenDashcamIsOff() {
@@ -106,7 +114,7 @@ class MainStatusDeriverTest {
             ),
         )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
-        assertEquals("Radar live", s.headline)
+        assertEquals(R.string.main_status_live_title, s.headlineRes)
     }
 
     @Test fun allGoodWithDashcamShowsDashcamSubtitle() {
@@ -118,30 +126,30 @@ class MainStatusDeriverTest {
             ),
         )
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
-        assertEquals("Radar live", s.headline)
-        assertEquals("Dashcam on", s.subtitle)
+        assertEquals(R.string.main_status_live_title, s.headlineRes)
+        assertEquals(R.string.main_status_live_dashcam_on_sub, s.subtitleRes)
     }
 
     @Test fun allGoodWithoutDashcamHasNoSubtitle() {
         val s = derive(baseInputs())
         assertEquals(MainStatusIcon.CheckCircle, s.icon)
-        assertEquals("Radar live", s.headline)
-        assertNull(s.subtitle)
+        assertEquals(R.string.main_status_live_title, s.headlineRes)
+        assertNull(s.subtitleRes)
     }
 
     @Test fun waitingWhenPairedButRadarStale() {
         val s = derive(baseInputs(radarFresh = false))
         assertEquals(MainStatusIcon.Sensors, s.icon)
         assertEquals(MainStatusTone.Neutral, s.tone)
-        assertEquals("Waiting for radar", s.headline)
+        assertEquals(R.string.main_status_waiting_title, s.headlineRes)
     }
 
     @Test fun serviceStoppedFiresWhenServiceDisabled() {
         val s = derive(baseInputs(serviceEnabled = false))
         assertEquals(MainStatusIcon.PlayCircle, s.icon)
         assertEquals(MainStatusTone.Neutral, s.tone)
-        assertEquals("Service stopped", s.headline)
-        assertEquals("Tap Start to begin", s.subtitle)
+        assertEquals(R.string.main_status_service_off_title, s.headlineRes)
+        assertEquals(R.string.main_status_service_off_sub, s.subtitleRes)
     }
 
     @Test fun serviceStoppedBeatsPausedAndNotPaired() {
@@ -156,7 +164,7 @@ class MainStatusDeriverTest {
             ),
             now = 100L,
         )
-        assertEquals("Service stopped", s.headline)
+        assertEquals(R.string.main_status_service_off_title, s.headlineRes)
     }
 
     @Test fun firstRunStillBeatsServiceStopped() {
@@ -165,7 +173,7 @@ class MainStatusDeriverTest {
         // install state) — first-run should still win so the user is
         // walked through onboarding rather than seeing a Start CTA.
         val s = derive(baseInputs(firstRunComplete = false, serviceEnabled = false))
-        assertEquals("Let's set up your radar", s.headline)
+        assertEquals(R.string.main_status_setup_title, s.headlineRes)
     }
 
     // ── bluetooth-off ────────────────────────────────────────────────────────
@@ -174,8 +182,8 @@ class MainStatusDeriverTest {
         val s = derive(baseInputs(bluetoothEnabled = false))
         assertEquals(MainStatusIcon.BluetoothDisabled, s.icon)
         assertEquals(MainStatusTone.Warn, s.tone)
-        assertEquals("Bluetooth is off", s.headline)
-        assertEquals("Radar is offline", s.subtitle)
+        assertEquals(R.string.main_status_bt_off_title, s.headlineRes)
+        assertEquals(R.string.main_status_bt_off_sub, s.subtitleRes)
     }
 
     @Test fun btOffBeatsNotPaired() {
@@ -183,7 +191,7 @@ class MainStatusDeriverTest {
         // across BT toggles, so the right prompt is to turn BT back
         // on, not to go through the system pair flow.
         val s = derive(baseInputs(bluetoothEnabled = false, hasBond = false))
-        assertEquals("Bluetooth is off", s.headline)
+        assertEquals(R.string.main_status_bt_off_title, s.headlineRes)
     }
 
     @Test fun pausedBeatsBtOff() {
@@ -200,7 +208,7 @@ class MainStatusDeriverTest {
         // Service-stopped wins because nothing is scanning regardless
         // of the adapter state.
         val s = derive(baseInputs(serviceEnabled = false, bluetoothEnabled = false))
-        assertEquals("Service stopped", s.headline)
+        assertEquals(R.string.main_status_service_off_title, s.headlineRes)
     }
 
     @Test fun btOffWithRadarFreshStillFires() {
@@ -208,13 +216,13 @@ class MainStatusDeriverTest {
         // window; the BT-off branch must still win so the rider isn't
         // told "Radar live" while the adapter is actually off.
         val s = derive(baseInputs(bluetoothEnabled = false, radarFresh = true))
-        assertEquals("Bluetooth is off", s.headline)
+        assertEquals(R.string.main_status_bt_off_title, s.headlineRes)
     }
 
     @Test fun firstRunBeatsBtOff() {
         // First-run is the top of the priority list; even with BT off
         // the user should see onboarding rather than the BT prompt.
         val s = derive(baseInputs(firstRunComplete = false, bluetoothEnabled = false))
-        assertEquals("Let's set up your radar", s.headline)
+        assertEquals(R.string.main_status_setup_title, s.headlineRes)
     }
 }

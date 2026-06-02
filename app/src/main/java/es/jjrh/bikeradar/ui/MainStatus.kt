@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import androidx.annotation.StringRes
+import es.jjrh.bikeradar.R
+
 /**
  * Pure, Android-free derivation of the home-screen status card.
  *
@@ -21,11 +24,32 @@ enum class MainStatusIcon {
     Sensors,
 }
 
+/**
+ * Rendered status card. Carries the resolved display strings so the leaf
+ * Composables - and their snapshot tests - need no resources to draw it.
+ */
 data class MainStatus(
     val icon: MainStatusIcon,
     val tone: MainStatusTone,
     val headline: String,
     val subtitle: String? = null,
+)
+
+/**
+ * Resource-ID form of [MainStatus], produced by [MainStatusDeriver]. The
+ * deriver never touches a `Context` or `Resources`; it picks the state and
+ * the string IDs, and the Composable resolves [headlineRes] / [subtitleRes]
+ * - substituting [headlineArgs] / [subtitleArgs] - into a [MainStatus] via
+ * `stringResource`. Keeping the user-facing copy out of the pure logic is
+ * what lets the deriver stay JVM-testable and the strings translatable.
+ */
+data class MainStatusModel(
+    val icon: MainStatusIcon,
+    val tone: MainStatusTone,
+    @get:StringRes val headlineRes: Int,
+    val headlineArgs: List<String> = emptyList(),
+    @get:StringRes val subtitleRes: Int? = null,
+    val subtitleArgs: List<String> = emptyList(),
 )
 
 data class MainStatusInputs(
@@ -78,83 +102,101 @@ object MainStatusDeriver {
      *
      * BtOff beats NotPaired because the bond persists across BT toggles;
      * the right prompt is "turn BT back on", not "go pair".
+     *
+     * [formatTime] formats an epoch-ms instant into the user's wall clock
+     * (injected so the deriver needs no clock/locale of its own); its
+     * result becomes the [MainStatusModel.headlineArgs] substitution for
+     * the "Paused until …" headline.
      */
     fun derive(
         inputs: MainStatusInputs,
         nowMs: Long,
         formatTime: (Long) -> String,
-    ): MainStatus {
+    ): MainStatusModel {
         if (!inputs.firstRunComplete) {
-            return MainStatus(
+            return MainStatusModel(
                 icon = MainStatusIcon.PlayCircle,
                 tone = MainStatusTone.Good,
-                headline = "Let's set up your radar",
-                subtitle = "Tap Settings to begin",
+                headlineRes = R.string.main_status_setup_title,
+                subtitleRes = R.string.main_status_setup_sub,
             )
         }
         if (!inputs.serviceEnabled) {
-            return MainStatus(
+            return MainStatusModel(
                 icon = MainStatusIcon.PlayCircle,
                 tone = MainStatusTone.Neutral,
-                headline = "Service stopped",
-                subtitle = "Tap Start to begin",
+                headlineRes = R.string.main_status_service_off_title,
+                subtitleRes = R.string.main_status_service_off_sub,
             )
         }
         if (nowMs < inputs.pausedUntilEpochMs) {
-            return MainStatus(
+            return MainStatusModel(
                 icon = MainStatusIcon.PauseCircle,
                 tone = MainStatusTone.Info,
-                headline = "Paused until ${formatTime(inputs.pausedUntilEpochMs)}",
-                subtitle = "Alerts are silenced",
+                headlineRes = R.string.main_status_paused_title,
+                headlineArgs = listOf(formatTime(inputs.pausedUntilEpochMs)),
+                subtitleRes = R.string.main_status_paused_sub,
             )
         }
         if (!inputs.bluetoothEnabled) {
-            return MainStatus(
+            return MainStatusModel(
                 icon = MainStatusIcon.BluetoothDisabled,
                 tone = MainStatusTone.Warn,
-                headline = "Bluetooth is off",
-                subtitle = "Radar is offline",
+                headlineRes = R.string.main_status_bt_off_title,
+                subtitleRes = R.string.main_status_bt_off_sub,
             )
         }
         if (!inputs.hasBond) {
-            return MainStatus(
+            return MainStatusModel(
                 icon = MainStatusIcon.BluetoothDisabled,
                 tone = MainStatusTone.Error,
-                headline = "Radar not paired",
-                subtitle = "Pair in Settings",
+                headlineRes = R.string.main_status_not_paired_title,
+                subtitleRes = R.string.main_status_not_paired_sub,
             )
         }
         if (inputs.radarFresh) {
             val warnEnabled = inputs.dashcamOwned && inputs.dashcamWarnWhenOff
             if (warnEnabled && !inputs.dashcamFresh) {
-                return MainStatus(
+                val name = inputs.dashcamDisplayName
+                return MainStatusModel(
                     icon = MainStatusIcon.Warning,
                     tone = MainStatusTone.Warn,
-                    headline = "Radar live, dashcam off",
-                    subtitle = "Turn on your ${inputs.dashcamDisplayName ?: "dashcam"}",
+                    headlineRes = R.string.main_status_dashcam_off_title,
+                    subtitleRes =
+                    if (name != null) {
+                        R.string.main_status_dashcam_off_sub
+                    } else {
+                        R.string.main_status_dashcam_off_sub_generic
+                    },
+                    subtitleArgs = listOfNotNull(name),
                 )
             }
             if (inputs.haErrorRecent) {
-                return MainStatus(
+                return MainStatusModel(
                     icon = MainStatusIcon.CheckCircle,
                     tone = MainStatusTone.Good,
-                    headline = "Radar live",
-                    subtitle = "Home Assistant unreachable",
+                    headlineRes = R.string.main_status_live_title,
+                    subtitleRes = R.string.main_status_live_ha_down_sub,
                 )
             }
-            val subtitle = if (inputs.dashcamOwned && inputs.dashcamFresh) "Dashcam on" else null
-            return MainStatus(
+            val subtitleRes =
+                if (inputs.dashcamOwned && inputs.dashcamFresh) {
+                    R.string.main_status_live_dashcam_on_sub
+                } else {
+                    null
+                }
+            return MainStatusModel(
                 icon = MainStatusIcon.CheckCircle,
                 tone = MainStatusTone.Good,
-                headline = "Radar live",
-                subtitle = subtitle,
+                headlineRes = R.string.main_status_live_title,
+                subtitleRes = subtitleRes,
             )
         }
-        return MainStatus(
+        return MainStatusModel(
             icon = MainStatusIcon.Sensors,
             tone = MainStatusTone.Neutral,
-            headline = "Waiting for radar",
-            subtitle = "Turn on your radar",
+            headlineRes = R.string.main_status_waiting_title,
+            subtitleRes = R.string.main_status_waiting_sub,
         )
     }
 }

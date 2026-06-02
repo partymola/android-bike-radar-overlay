@@ -1,4 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Bike Radar</string>
+<!--
+  User-facing string resources (default / English).
+
+  Conventions for contributors and future strings:
+  - Key names are <screen_or_area>_<element>, lower_snake_case.
+  - Wrap every format argument in <xliff:g> so translators neither reorder
+    nor translate it. A dropped or mangled %1$s crashes the app at runtime,
+    which is why MissingTranslation + the StringFormat lint checks are a
+    hard CI gate (see app/build.gradle.kts).
+  - Count-dependent text uses <plurals> + pluralStringResource, never a
+    hand-rolled if (n == 1) - plural rules differ by language.
+  - Machine / diagnostic strings (capture-log lines, hex, JSON keys, BLE
+    protocol, log tags, navigation route ids) stay hardcoded in Kotlin and
+    are never translated.
+
+  Translating the app: see CONTRIBUTING.md. Copy this file to
+  values-<lang>/strings.xml and translate only the text between the tags.
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- Brand / launcher label. Not translated - the name is the same in
+         every language. -->
+    <string name="app_name" translatable="false">Bike Radar</string>
+
+    <!-- ── Common / reused ──────────────────────────────────────────── -->
+    <string name="common_settings">Settings</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Home screen (MainScreen.kt, MainStatus.kt)
+         ════════════════════════════════════════════════════════════════ -->
+
+    <!-- Hero status card. Headline + subtitle for each derived state. -->
+    <string name="main_status_setup_title">Let\'s set up your radar</string>
+    <string name="main_status_setup_sub">Tap Settings to begin</string>
+    <string name="main_status_service_off_title">Service stopped</string>
+    <string name="main_status_service_off_sub">Tap Start to begin</string>
+    <string name="main_status_paused_title">Paused until <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
+    <string name="main_status_paused_sub">Alerts are silenced</string>
+    <string name="main_status_bt_off_title">Bluetooth is off</string>
+    <string name="main_status_bt_off_sub">Radar is offline</string>
+    <string name="main_status_not_paired_title">Radar not paired</string>
+    <string name="main_status_not_paired_sub">Pair in Settings</string>
+    <string name="main_status_dashcam_off_title">Radar live, dashcam off</string>
+    <string name="main_status_dashcam_off_sub">Turn on your <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g></string>
+    <string name="main_status_dashcam_off_sub_generic">Turn on your dashcam</string>
+    <string name="main_status_live_title">Radar live</string>
+    <string name="main_status_live_ha_down_sub">Home Assistant unreachable</string>
+    <string name="main_status_live_dashcam_on_sub">Dashcam on</string>
+    <string name="main_status_waiting_title">Waiting for radar</string>
+    <string name="main_status_waiting_sub">Turn on your radar</string>
+
+    <!-- Hero status-card call-to-action buttons. -->
+    <string name="main_cta_set_up">Set up</string>
+    <string name="main_cta_start_scanning">Start scanning</string>
+    <string name="main_cta_resume">Resume</string>
+    <string name="main_cta_turn_on_bluetooth">Turn on Bluetooth</string>
+    <string name="main_cta_pair">Pair</string>
+
+    <!-- Home-screen toasts. -->
+    <string name="main_toast_dev_enabled">Developer options enabled</string>
+    <string name="main_toast_grant_bt">Grant Bluetooth permissions in Settings to start scanning</string>
+
+    <!-- Bluetooth-off banner (shown when the adapter is off but a state
+         other than the BT-off hero is on screen). -->
+    <string name="main_bt_banner_title">Bluetooth off</string>
+    <string name="main_bt_banner_action">Tap to enable</string>
+
+    <!-- SYSTEM card: per-device rows and their value text. -->
+    <string name="main_section_system">System</string>
+    <string name="main_system_rear_radar">Rear radar</string>
+    <string name="main_system_front_dashcam">Front dashcam</string>
+    <string name="main_system_ebike">eBike</string>
+    <string name="main_system_home_assistant">Home Assistant</string>
+    <string name="main_system_value_not_paired">Not paired</string>
+    <string name="main_system_value_live">Live</string>
+    <string name="main_system_value_no_signal">No signal</string>
+    <string name="main_system_value_waiting_flow">Waiting for Flow</string>
+    <string name="main_system_value_mqtt_ready">MQTT ready</string>
+    <string name="main_system_value_unreachable">Unreachable</string>
+
+    <!-- CLOSE PASSES stats card. -->
+    <string name="main_section_close_passes">Close passes</string>
+    <string name="main_close_passes_caption">this ride</string>
+    <string name="main_close_passes_empty_hint">Enable Settings → Alerts → Log to Home Assistant to keep a history of overtakes inside your set lateral threshold.</string>
+    <plurals name="main_close_passes_count_desc">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> close pass this ride</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> close passes this ride</item>
+    </plurals>
+
+    <!-- Dashcam-ownership prompt card (first-run flows). -->
+    <string name="main_dashcam_prompt_title">Do you run a dashcam?</string>
+    <string name="main_dashcam_prompt_body">The overlay shows its battery and flags when it stops broadcasting.</string>
+    <string name="main_dashcam_prompt_yes">Set it up</string>
+    <string name="main_dashcam_prompt_no">I don\'t have one</string>
+
 </resources>

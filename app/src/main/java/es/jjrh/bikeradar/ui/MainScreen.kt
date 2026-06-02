@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -80,6 +82,7 @@ import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.Permissions
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
@@ -195,11 +198,19 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         serviceEnabled = prefsSnap.serviceEnabled,
         bluetoothEnabled = btEnabled,
     )
-    val status = MainStatusDeriver.derive(
+    val statusModel = MainStatusDeriver.derive(
         inputs,
         nowMs = now,
         formatTime = {
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+        },
+    )
+    val status = MainStatus(
+        icon = statusModel.icon,
+        tone = statusModel.tone,
+        headline = stringResource(statusModel.headlineRes, *statusModel.headlineArgs.toTypedArray()),
+        subtitle = statusModel.subtitleRes?.let {
+            stringResource(it, *statusModel.subtitleArgs.toTypedArray())
         },
     )
     val cta = ctaFor(inputs, now, navController, ctx, prefs)
@@ -212,6 +223,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    val devEnabledMsg = stringResource(R.string.main_toast_dev_enabled)
     val onWordmarkLongPress = {
         val nowMs = System.currentTimeMillis()
         if (nowMs - lastDevTapMs > 2_000L) devTapCount = 0
@@ -220,7 +232,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         if (devTapCount >= 3 && !devUnlocked) {
             DevModeState.unlock(prefs)
             devTapCount = 0
-            Toast.makeText(ctx, "Developer options enabled", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, devEnabledMsg, Toast.LENGTH_SHORT).show()
         }
     }
     val onBtBannerTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) }
@@ -367,6 +379,7 @@ internal fun MainScreenContent(
 @Composable
 private fun TopBar(onWordmarkLongPress: () -> Unit) {
     val br = LocalBrColors.current
+    val wordmark = stringResource(R.string.app_name)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -376,7 +389,7 @@ private fun TopBar(onWordmarkLongPress: () -> Unit) {
     ) {
         BrMark(size = 26.dp)
         Text(
-            text = "Bike Radar",
+            text = wordmark,
             color = br.fg,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
@@ -390,7 +403,7 @@ private fun TopBar(onWordmarkLongPress: () -> Unit) {
                 // gesture), so clear the inherited "double-tap to activate"
                 // semantics and expose just the label. Touch handling for the
                 // long-press is unaffected.
-                .clearAndSetSemantics { contentDescription = "Bike Radar" },
+                .clearAndSetSemantics { contentDescription = wordmark },
         )
     }
 }
@@ -576,43 +589,44 @@ private fun ctaFor(
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
-): StatusCta? = when {
-    !inputs.firstRunComplete ->
-        StatusCta("Set up") { navController.navigate("onboarding") }
+): StatusCta? {
+    // Hoisted out of the onClick lambda below: stringResource is
+    // @Composable-only and cannot be called from the click handler.
+    val grantBtMsg = stringResource(R.string.main_toast_grant_bt)
+    return when {
+        !inputs.firstRunComplete ->
+            StatusCta(stringResource(R.string.main_cta_set_up)) { navController.navigate("onboarding") }
 
-    !inputs.serviceEnabled -> StatusCta("Start scanning") {
-        prefs.serviceEnabled = true
-        if (Permissions.hasRequiredForService(ctx)) {
-            ContextCompat.startForegroundService(
-                ctx,
-                Intent(ctx, BikeRadarService::class.java),
-            )
-        } else {
-            Toast.makeText(
-                ctx,
-                "Grant Bluetooth permissions in Settings to start scanning",
-                Toast.LENGTH_LONG,
-            ).show()
-            navController.navigate("settings")
+        !inputs.serviceEnabled -> StatusCta(stringResource(R.string.main_cta_start_scanning)) {
+            prefs.serviceEnabled = true
+            if (Permissions.hasRequiredForService(ctx)) {
+                ContextCompat.startForegroundService(
+                    ctx,
+                    Intent(ctx, BikeRadarService::class.java),
+                )
+            } else {
+                Toast.makeText(ctx, grantBtMsg, Toast.LENGTH_LONG).show()
+                navController.navigate("settings")
+            }
         }
+
+        nowMs < inputs.pausedUntilEpochMs ->
+            StatusCta(stringResource(R.string.main_cta_resume)) { prefs.pausedUntilEpochMs = 0L }
+
+        !inputs.bluetoothEnabled -> StatusCta(
+            label = stringResource(R.string.main_cta_turn_on_bluetooth),
+            onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+        )
+
+        !inputs.hasBond -> StatusCta(
+            label = stringResource(R.string.main_cta_pair),
+            onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+        )
+
+        // Dashcam-off Warn: no CTA per DEC-002.
+        // Live + good / Live + HA down / Waiting: no CTA.
+        else -> null
     }
-
-    nowMs < inputs.pausedUntilEpochMs ->
-        StatusCta("Resume") { prefs.pausedUntilEpochMs = 0L }
-
-    !inputs.bluetoothEnabled -> StatusCta(
-        label = "Turn on Bluetooth",
-        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
-    )
-
-    !inputs.hasBond -> StatusCta(
-        label = "Pair",
-        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
-    )
-
-    // Dashcam-off Warn: no CTA per DEC-002.
-    // Live + good / Live + HA down / Waiting: no CTA.
-    else -> null
 }
 
 @Composable
@@ -729,14 +743,14 @@ private fun BluetoothOffBanner(onTap: () -> Unit) {
         ) {
             StatusDot(color = br.danger, size = 8.dp)
             Text(
-                text = "Bluetooth off",
+                text = stringResource(R.string.main_bt_banner_title),
                 color = br.fg,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "Tap to enable",
+                text = stringResource(R.string.main_bt_banner_action),
                 color = br.danger,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
@@ -772,11 +786,11 @@ internal fun SystemCard(
     // Battery chip hides outside Live to avoid surfacing stale numbers.
     val radarRow = SystemRow(
         icon = Icons.Default.Sensors,
-        label = "Rear radar",
+        label = stringResource(R.string.main_system_rear_radar),
         value = when {
-            !btEnabled || !hasBond -> "Not paired"
-            radarFresh -> "Live"
-            else -> "No signal"
+            !btEnabled || !hasBond -> stringResource(R.string.main_system_value_not_paired)
+            radarFresh -> stringResource(R.string.main_system_value_live)
+            else -> stringResource(R.string.main_system_value_no_signal)
         },
         muted = !hasBond || !btEnabled,
         battery = if (radarFresh) radarBattery?.pct else null,
@@ -790,11 +804,11 @@ internal fun SystemCard(
 
     val dashcamRow = SystemRow(
         icon = Icons.Default.Videocam,
-        label = "Front dashcam",
+        label = stringResource(R.string.main_system_front_dashcam),
         value = when {
-            !dashcamOwned || !dashcamPaired -> "Not paired"
-            dashcamFresh -> dashcamDisplayName ?: "Live"
-            else -> "No signal"
+            !dashcamOwned || !dashcamPaired -> stringResource(R.string.main_system_value_not_paired)
+            dashcamFresh -> dashcamDisplayName ?: stringResource(R.string.main_system_value_live)
+            else -> stringResource(R.string.main_system_value_no_signal)
         },
         muted = !dashcamOwned || !dashcamPaired,
         battery = if (dashcamFresh) dashcamBattery?.pct else null,
@@ -810,8 +824,13 @@ internal fun SystemCard(
     // Battery % + dot, no data dump - shown only when the feature is on.
     val ebikeRow = SystemRow(
         icon = Icons.AutoMirrored.Filled.DirectionsBike,
-        label = "eBike",
-        value = if (ebikeReceiving) "Live" else "Waiting for Flow",
+        label = stringResource(R.string.main_system_ebike),
+        value =
+        if (ebikeReceiving) {
+            stringResource(R.string.main_system_value_live)
+        } else {
+            stringResource(R.string.main_system_value_waiting_flow)
+        },
         muted = !ebikeReceiving,
         battery = if (ebikeReceiving) ebikeBatterySoc else null,
         dot = if (ebikeReceiving) br.safe else br.caution,
@@ -819,8 +838,13 @@ internal fun SystemCard(
 
     val haRow = SystemRow(
         icon = Icons.Default.Home,
-        label = "Home Assistant",
-        value = if (haHealthy) "MQTT ready" else "Unreachable",
+        label = stringResource(R.string.main_system_home_assistant),
+        value =
+        if (haHealthy) {
+            stringResource(R.string.main_system_value_mqtt_ready)
+        } else {
+            stringResource(R.string.main_system_value_unreachable)
+        },
         muted = !haHealthy,
         battery = null,
         dot = if (haHealthy) br.safe else br.caution,
@@ -828,7 +852,7 @@ internal fun SystemCard(
 
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            SectionLabel("System")
+            SectionLabel(stringResource(R.string.main_section_system))
             Spacer(modifier = Modifier.height(10.dp))
             SystemRowRender(radarRow, isFirst = true)
             SystemRowRender(dashcamRow, isFirst = false)
@@ -910,8 +934,9 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
                 .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
                 .animateContentSize(),
         ) {
-            SectionLabel("Close passes")
+            SectionLabel(stringResource(R.string.main_section_close_passes))
             Spacer(modifier = Modifier.height(10.dp))
+            val countDesc = pluralStringResource(R.plurals.main_close_passes_count_desc, count, count)
             Text(
                 text = count.toString(),
                 color = if (count > 0) br.fg else br.fgDim,
@@ -923,13 +948,13 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics {
-                    contentDescription = "$count close passes this ride"
+                    contentDescription = countDesc
                 },
             )
             if (loggingEnabled || count > 0) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "this ride",
+                    text = stringResource(R.string.main_close_passes_caption),
                     color = br.fgDim,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
@@ -941,7 +966,7 @@ private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false
             if (!loggingEnabled && count == 0 && !compact) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Enable Settings → Alerts → Log to Home Assistant to keep a history of overtakes inside your set lateral threshold.",
+                    text = stringResource(R.string.main_close_passes_empty_hint),
                     color = br.fgDim,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
@@ -977,7 +1002,7 @@ private fun SettingsButton(onClick: () -> Unit) {
                 modifier = Modifier.size(16.dp),
             )
             Text(
-                text = "Settings",
+                text = stringResource(R.string.common_settings),
                 color = br.fg,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -994,14 +1019,14 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                text = "Do you run a dashcam?",
+                text = stringResource(R.string.main_dashcam_prompt_title),
                 color = br.fg,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "The overlay shows its battery and flags when it stops broadcasting.",
+                text = stringResource(R.string.main_dashcam_prompt_body),
                 color = br.fgMuted,
                 fontSize = 12.sp,
             )
@@ -1016,7 +1041,12 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
                         .combinedClickable(onClick = onYes),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Set it up", color = br.bg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.main_dashcam_prompt_yes),
+                        color = br.bg,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
                 Box(
                     modifier = Modifier
@@ -1027,7 +1057,12 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
                         .combinedClickable(onClick = onNo),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("I don't have one", color = br.fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        stringResource(R.string.main_dashcam_prompt_no),
+                        color = br.fg,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
             }
         }

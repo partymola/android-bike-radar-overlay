@@ -113,6 +113,34 @@ decoders in both Python and Kotlin live there.
   purpose — renaming would break existing subscribers. See
   `HaClient.kt:25-26`.
 
+## Writing copy (UI strings)
+
+User-facing text lives in `res/values/strings.xml` (en) + `values-es/`. When
+adding or editing it, follow these principles - the `/qc` copy reviewer
+enforces them, and CONTRIBUTING.md restates them for translators:
+
+- **Benefit, not mechanism.** Say what the rider gets, not how it works. "Set
+  your lights by local sunset" beats "compute sunrise/sunset for the auto-mode
+  state machine". Internals (MQTT discovery, BLE stack, GCM, file paths) are
+  noise on most screens.
+- **Short and scannable.** A phone screen is small and read mid-task. Prefer one
+  line; use `\n• ` bullets for any list of three or more items rather than a
+  dense paragraph (see the Privacy permissions/publish strings).
+- **No jargon, acronyms, or filler nouns** the rider can't parse: drop
+  "companion app", "telemetry", "bearer token", "phone home". Established
+  product terms stay (Bluetooth, Home Assistant, Bosch Flow, MQTT, eBike).
+- **es: Spain register** (tú), no LatAm vocab, and gender must match the
+  on-screen referent: a shared string under both "Radar" (m) and "Cámara" (f)
+  needs splitting (e.g. `_radar_not_seen` / `_cam_not_seen`).
+- **The Privacy screen is the deliberate exception.** It is the "verify by
+  reading the code" disclosure; it keeps full substance (and the literal tokens
+  `scripts/privacy-disclosure-check.sh` pins: permission names, AES-256,
+  Keystore, HTTPS, the DataDisclosure keywords). Trim it to bullets, never gut
+  it.
+- **Review with screen context, not a flat string list.** Verbosity and
+  gender-in-context bugs only show on the screen: use the English Roborazzi
+  goldens or map each string to its Composable referent before judging it.
+
 ## Testing
 
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`

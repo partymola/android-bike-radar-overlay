@@ -52,6 +52,24 @@ useful, but the more complete the better.
 (A hosted web translation platform may be set up later if there's demand; until
 then, plain pull requests are the way.)
 
+## Writing copy
+
+If you're adding or editing the English text (not just translating), keep it
+short - this is a phone app read mid-ride:
+
+- **Say what the rider gets, not how it works.** Lead with the benefit; leave
+  out internals (protocols, encryption, file paths) the rider doesn't need.
+- **One line where you can.** For a list of three or more things, use `\n• `
+  bullets instead of a dense paragraph.
+- **Skip jargon, acronyms and filler nouns.** Keep only established product
+  names (Bluetooth, Home Assistant, Bosch Flow, MQTT, eBike).
+- **Spanish (and other locales): use your region's everyday register**, and
+  make sure a word's gender matches what it labels on screen.
+
+The one exception is **Settings → Privacy**: it is a full, deliberate
+disclosure, so it keeps its detail (and some required technical terms). Tidy it,
+don't gut it.
+
 ## Bug reports
 
 Please include your phone model, Android version, and radar firmware. The Debug

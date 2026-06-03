@@ -168,6 +168,15 @@ and reuses it across rebuilds so `adb install -r` keeps working.
    Pair new device** while the radar is in pair mode. The app detects
    the bond automatically and starts tracking.
 
+## Translating
+
+The UI is fully externalised into Android string resources, so it can be
+translated without touching code - Spanish ships in
+[`values-es`](app/src/main/res/values-es/strings.xml). To add a language,
+fork, create `app/src/main/res/values-<code>/strings.xml`, translate the
+text between the tags, and open a PR. Full instructions (placeholders,
+plurals, what CI checks) are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Releases
 
 Signed APKs are published as GitHub Releases when a tag matching

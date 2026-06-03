@@ -254,7 +254,8 @@
     <string name="settings_home_quick_status">Quick Status</string>
     <string name="settings_home_chip_radar">Radar</string>
     <string name="settings_home_chip_cam">Cam</string>
-    <string name="settings_home_chip_not_seen">Not seen</string>
+    <string name="settings_home_chip_radar_not_seen">Not seen</string>
+    <string name="settings_home_chip_cam_not_seen">Not seen</string>
     <string name="settings_home_section_ride">Ride</string>
     <string name="settings_home_section_connections">Connections</string>
     <string name="settings_home_section_system">System</string>
@@ -308,7 +309,7 @@
     <string name="settings_about_title">About</string>
     <string name="settings_about_app_name">Bike Radar</string>
     <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g> · GPL-3.0</string>
-    <string name="settings_about_tagline">Android companion for rear-bike-radar head units on the V2 BLE protocol.</string>
+    <string name="settings_about_tagline">Rear-radar alerts, on screen and with sound.</string>
     <string name="settings_about_section_legal">Legal</string>
     <string name="settings_about_licences_title">Open source licences</string>
     <string name="settings_about_licences_subtitle">Every dependency the app ships with</string>

@@ -27,9 +27,9 @@
     <string name="permission_nearby_title">Dispositivos cercanos</string>
     <string name="permission_nearby_rationale">Buscar y conectar con tu radar, dashcam y eBike por Bluetooth.</string>
     <string name="permission_notifications_title">Notificaciones</string>
-    <string name="permission_notifications_rationale">Mostrar la notificación silenciosa del servicio y las alertas de ruta.</string>
+    <string name="permission_notifications_rationale">Mostrar la notificación silenciosa del servicio y las alertas durante la ruta.</string>
     <string name="permission_overlay_title">Dibujar sobre otras apps</string>
-    <string name="permission_overlay_rationale">Dibujar la superposición del radar encima de lo que tengas en pantalla. Sin esto, las alertas siguen sonando pero no verás la superposición.</string>
+    <string name="permission_overlay_rationale">Dibujar la barra lateral del radar encima de lo que tengas en pantalla. Sin esto, las alertas siguen sonando pero no verás la barra lateral.</string>
     <string name="permission_location_title">Ubicación aproximada</string>
     <string name="permission_location_rationale">Se usa una vez por ruta para calcular con precisión el amanecer y el atardecer y ajustar los modos automáticos de tu luz delantera y la del radar. Si la omites, el atardecer se estima para Londres.</string>
     <string name="permission_mark_recommended">Recomendado</string>
@@ -44,10 +44,10 @@
     <string name="settings_lightmode_solid">Fija</string>
     <string name="settings_lightmode_peloton">Pelotón</string>
 
-    <!-- Resumen de accesibilidad hablado de la superposición del radar
+    <!-- Resumen de accesibilidad hablado de la barra lateral del radar
          (RadarOverlayA11y.kt). Los separadores entre frases se añaden en el
          código, así que estas cadenas no llevan espacios al inicio ni al final. -->
-    <string name="overlay_a11y_prefix">Superposición del radar de bici.</string>
+    <string name="overlay_a11y_prefix">Barra lateral del radar de bici.</string>
     <string name="overlay_a11y_road_clear">Vía despejada.</string>
     <plurals name="overlay_a11y_vehicles">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> vehículo.</item>
@@ -118,7 +118,7 @@
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
     <string name="main_section_close_passes">Pases cercanos</string>
     <string name="main_close_passes_caption">esta ruta</string>
-    <string name="main_close_passes_empty_hint">Activa Ajustes → Alertas → Registrar en Home Assistant para guardar un historial de adelantamientos dentro del umbral lateral que hayas fijado.</string>
+    <string name="main_close_passes_empty_hint">Activa Ajustes → Alertas → Enviar a Home Assistant para guardar un historial de adelantamientos dentro del umbral lateral que hayas fijado.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano esta ruta</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos esta ruta</item>
@@ -126,7 +126,7 @@
 
     <!-- Tarjeta de aviso de si tienes dashcam (flujos de primer uso). -->
     <string name="main_dashcam_prompt_title">¿Usas una dashcam?</string>
-    <string name="main_dashcam_prompt_body">La superposición muestra su batería y avisa cuando deja de emitir.</string>
+    <string name="main_dashcam_prompt_body">La barra lateral muestra su batería y avisa cuando deja de emitir.</string>
     <string name="main_dashcam_prompt_yes">Configurarla</string>
     <string name="main_dashcam_prompt_no">No tengo</string>
 
@@ -144,7 +144,7 @@
 
     <!-- Paso 1: permisos -->
     <string name="onboarding_perm_title">Conceder permisos</string>
-    <string name="onboarding_perm_sub">Permisos del sistema para que la app encuentre tus dispositivos, muestre una notificación de estado y dibuje la superposición.</string>
+    <string name="onboarding_perm_sub">Permisos del sistema para que la app encuentre tus dispositivos, muestre una notificación de estado y dibuje la barra lateral.</string>
     <string name="onboarding_perm_privacy_heading">Para qué sirven</string>
     <string name="onboarding_perm_bullet_bluetooth">Bluetooth: encuentra y conecta tu radar, dashcam y eBike</string>
     <string name="onboarding_perm_bullet_notifications">Notificaciones: muestra el estado de la ruta y las alertas</string>
@@ -194,7 +194,7 @@
     <string name="onboarding_pair_dashcam_picked_fallback">Elegida</string>
     <string name="onboarding_pair_dashcam_picked_detail"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g></string>
     <string name="onboarding_pair_dashcam_pick_detail">Elige la dashcam con la que ruedas para activar los avisos de apagado.</string>
-    <string name="onboarding_pair_dashcam_unanswered_detail">¿Tienes una dashcam con Bluetooth? La superposición muestra su batería y avisa cuando deja de emitir.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">¿Tienes una dashcam con Bluetooth? La barra lateral muestra su batería y avisa cuando deja de emitir.</string>
     <string name="onboarding_pair_change_device">Cambiar dispositivo</string>
     <string name="onboarding_pair_pick_device">Elegir dispositivo</string>
     <string name="onboarding_pair_dont_have_one">No tengo</string>
@@ -242,7 +242,8 @@
     <string name="settings_home_quick_status">Estado rápido</string>
     <string name="settings_home_chip_radar">Radar</string>
     <string name="settings_home_chip_cam">Cámara</string>
-    <string name="settings_home_chip_not_seen">No detectado</string>
+    <string name="settings_home_chip_radar_not_seen">No detectado</string>
+    <string name="settings_home_chip_cam_not_seen">No detectada</string>
     <string name="settings_home_section_ride">Ruta</string>
     <string name="settings_home_section_connections">Conexiones</string>
     <string name="settings_home_section_system">Sistema</string>
@@ -296,14 +297,14 @@
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_about_app_name">Bike Radar</string>
     <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g> · GPL-3.0</string>
-    <string name="settings_about_tagline">App complementaria para Android de unidades de radar trasero para bici con el protocolo BLE V2.</string>
+    <string name="settings_about_tagline">Avisos de radar trasero, en pantalla y con sonido.</string>
     <string name="settings_about_section_legal">Legal</string>
     <string name="settings_about_licences_title">Licencias de código abierto</string>
     <string name="settings_about_licences_subtitle">Todas las dependencias que incluye la app</string>
     <string name="settings_about_privacy_title">Privacidad</string>
     <string name="settings_about_privacy_subtitle">Qué se queda en el teléfono y qué no</string>
     <string name="settings_about_unaffiliated_title">Sin relación con Garmin ni Bosch</string>
-    <string name="settings_about_unaffiliated_subtitle">Es una herramienta independiente</string>
+    <string name="settings_about_unaffiliated_subtitle">Esta es una app independiente</string>
 
     <!-- Ajustes → Experimental (SettingsExperimental.kt) -->
     <string name="settings_exp_title">Experimental</string>
@@ -311,19 +312,19 @@
     <string name="settings_exp_precog_title">Predecir trayectorias de adelantamiento (1 s de anticipación)</string>
     <string name="settings_exp_precog_subtitle">Dibuja cada vehículo 1 s en el futuro - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
     <string name="settings_exp_panning_title">Audio de alerta direccional</string>
-    <string name="settings_exp_panning_subtitle">Desplaza los pitidos y avisos urgentes hacia el lado de la amenaza por estéreo. Funciona con los altavoces del teléfono en horizontal (gira con el soporte) y con auriculares estéreo (BT, BLE, cable, USB, audífono). En vertical suena en mono.</string>
+    <string name="settings_exp_panning_subtitle">Los pitidos y avisos urgentes suenan por el altavoz del lado de la amenaza, para hacerlo más fácil de identificar. Funciona con los altavoces del teléfono en horizontal (gira con el soporte) y con auriculares estéreo (BT, BLE, cable, USB, audífono). En vertical suena en mono.</string>
     <string name="settings_exp_invert_title">Invertir izquierda/derecha</string>
     <string name="settings_exp_invert_subtitle">Invierte los canales si los avisos direccionales suenan en el oído equivocado (rareza poco frecuente del dispositivo o auriculares puestos al revés).</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>
     <string name="settings_radar_section_alerts">Alertas</string>
-    <string name="settings_radar_section_overlay">Superposición</string>
+    <string name="settings_radar_section_overlay">Barra lateral</string>
     <string name="settings_radar_section_adaptive">Adaptativo</string>
     <string name="settings_radar_section_connection">Conexión</string>
     <string name="settings_radar_section_battery">Avisos de batería</string>
     <string name="settings_radar_section_close_pass">Registro de pases cercanos</string>
-    <string name="settings_radar_section_danger">Zona de riesgo</string>
+    <string name="settings_radar_section_danger">Zona de peligro</string>
     <string name="settings_radar_percent_value"><xliff:g id="pct" example="80">%1$d</xliff:g>%%</string>
     <string name="settings_radar_meters_value"><xliff:g id="m" example="20">%1$d</xliff:g> m</string>
     <string name="settings_radar_minutes_value"><xliff:g id="min" example="15">%1$d</xliff:g> min</string>
@@ -332,13 +333,13 @@
     <string name="settings_radar_ms_value"><xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
     <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1.0">%1$s</xliff:g> m</string>
     <string name="settings_radar_alert_volume_title">Volumen de alerta</string>
-    <string name="settings_radar_alert_volume_helper">Volumen de los pitidos de aviso de aproximación. 0 silencia el audio; la superposición sigue parpadeando.</string>
+    <string name="settings_radar_alert_volume_helper">Volumen de los pitidos de aviso de aproximación. 0 silencia el audio; la barra lateral sigue parpadeando.</string>
     <string name="settings_radar_alert_distance_title">Distancia de alerta</string>
-    <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la superposición pero sin sonido. Se ajusta a la velocidad de la bici cuando las alertas adaptativas están activadas.</string>
+    <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la barra lateral pero sin sonido. Se ajusta a la velocidad de la bici cuando las alertas adaptativas están activadas.</string>
     <string name="settings_radar_visual_distance_title">Distancia visual</string>
-    <string name="settings_radar_visual_distance_helper">El vehículo más lejano que se dibuja en la superposición. Más allá de esto, el tráfico que se aproxima se ignora en pantalla.</string>
-    <string name="settings_radar_overlay_dimmer_title">Atenuador de la superposición</string>
-    <string name="settings_radar_overlay_dimmer_helper">Atenúa la superposición para que un mapa o una app de navegación por debajo siga legible. \"Apagado\" deja la superposición con su aspecto completo.</string>
+    <string name="settings_radar_visual_distance_helper">El vehículo más lejano que se dibuja en la barra lateral. Más allá de esto, el tráfico que se aproxima se ignora en pantalla.</string>
+    <string name="settings_radar_overlay_dimmer_title">Atenuador de la barra lateral</string>
+    <string name="settings_radar_overlay_dimmer_helper">Atenúa la barra lateral para que un mapa o una app de navegación por debajo siga legible. \"Apagado\" deja la barra lateral con su aspecto completo.</string>
     <string name="settings_radar_overlay_dim_off">Apagado</string>
     <string name="settings_radar_overlay_dim_light">Suave</string>
     <string name="settings_radar_overlay_dim_medium">Medio</string>
@@ -346,14 +347,14 @@
     <string name="settings_radar_adaptive_title">Colores de alerta adaptativos</string>
     <string name="settings_radar_adaptive_subtitle">Ajusta los umbrales ámbar / rojo según la velocidad de tu bici: más sensible al estar parado, menos al ir a velocidad de crucero.</string>
     <string name="settings_radar_idle_after_title">Radar inactivo tras</string>
-    <string name="settings_radar_idle_after_helper">Una vez que el radar ha estado fuera de alcance este tiempo, el intervalo de reconexión se relaja al valor de abajo para que la pila BLE descanse mientras la bici está aparcada.</string>
+    <string name="settings_radar_idle_after_helper">Una vez que el radar ha estado fuera de alcance este tiempo, el intervalo de reconexión se relaja al valor de abajo para que el Bluetooth descanse mientras la bici está aparcada.</string>
     <string name="settings_radar_idle_interval_title">Intervalo de reconexión en reposo</string>
     <string name="settings_radar_idle_interval_helper">Con qué frecuencia reintentar la conexión mientras el radar está en reposo. Los valores más largos ahorran batería por la noche; los más cortos detectan el radar más rápido al volver.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
     <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'DASHCAM 8%\' en pantalla en lugar de un tinte de aviso silencioso.</string>
-    <string name="settings_radar_log_to_ha_title">Registrar en Home Assistant</string>
+    <string name="settings_radar_log_to_ha_title">Enviar a Home Assistant</string>
     <string name="settings_radar_log_to_ha_subtitle_enabled">Publica los pases cercanos en HA cuando un vehículo adelanta dentro de la distancia lateral de abajo.</string>
     <string name="settings_radar_log_to_ha_subtitle_disabled">Requiere Home Assistant - configúralo abajo.</string>
     <string name="settings_radar_lateral_clearance_title">Umbral de holgura lateral</string>
@@ -363,11 +364,11 @@
     <string name="settings_radar_min_closing_speed_title">Velocidad mínima de acercamiento</string>
     <string name="settings_radar_min_closing_speed_helper">Aproximadamente <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h de velocidad relativa de aproximación.</string>
     <string name="settings_radar_stop_scanning">Detener la búsqueda</string>
-    <string name="settings_radar_stop_scanning_helper">Apaga el radar, la superposición y las actualizaciones a HA hasta que vuelvas a iniciarlos. No se inicia solo al reiniciar. Usa Pausa para una hora de silencio.</string>
+    <string name="settings_radar_stop_scanning_helper">Apaga el radar, la barra lateral y las actualizaciones a HA hasta que vuelvas a iniciarlos. No se inicia solo al reiniciar. Usa Pausa para una hora de silencio.</string>
     <string name="settings_radar_scanning_stopped_title">Búsqueda detenida</string>
     <string name="settings_radar_scanning_stopped_subtitle">Vuelve a iniciarla desde la pantalla de inicio.</string>
     <string name="settings_radar_stop_dialog_title">¿Detener la búsqueda?</string>
-    <string name="settings_radar_stop_dialog_body">El radar, la superposición y las actualizaciones a Home Assistant se detienen hasta que vuelvas a iniciarlos desde la pantalla de inicio - incluso tras un reinicio. Usa Pausa si solo necesitas una hora de silencio.</string>
+    <string name="settings_radar_stop_dialog_body">El radar, la barra lateral y las actualizaciones a Home Assistant se detienen hasta que vuelvas a iniciarlos desde la pantalla de inicio - incluso tras un reinicio. Usa Pausa si solo necesitas una hora de silencio.</string>
     <string name="settings_radar_cancel">Cancelar</string>
 
     <!-- Ajustes → Dispositivo radar (SettingsRadarDevice.kt) -->
@@ -451,14 +452,14 @@
     <string name="settings_dashcam_pick">Elegir</string>
     <string name="settings_dashcam_change">Cambiar</string>
     <string name="settings_dashcam_behaviour_label">Comportamiento</string>
-    <string name="settings_dashcam_warn_off">Avisar en la superposición cuando la dashcam está apagada</string>
+    <string name="settings_dashcam_warn_off">Avisar en la barra lateral cuando la dashcam está apagada</string>
     <string name="settings_dashcam_warn_off_subtitle">Muestra un icono de cámara apagada junto al ciclista cuando no se detecta ninguna emisión Vue.</string>
     <string name="settings_dashcam_walkaway_label">Alarma al alejarte</string>
     <string name="settings_dashcam_walkaway_alert">Avisar si la dashcam sigue encendida</string>
     <string name="settings_dashcam_walkaway_alert_subtitle">El teléfono vibra y pita cuando te alejas fuera de alcance con la dashcam aún encendida (cámara, luz o ambas).</string>
     <string name="settings_dashcam_override_dnd">Saltarse No molestar</string>
-    <string name="settings_dashcam_override_dnd_subtitle_allowed">Permitido actualmente. La alarma sonará aunque DND esté activado.</string>
-    <string name="settings_dashcam_override_dnd_subtitle_tap">Toca para permitir que esta alarma suene con DND activado en los ajustes del sistema.</string>
+    <string name="settings_dashcam_override_dnd_subtitle_allowed">Permitido actualmente. La alarma sonará aunque No molestar esté activado.</string>
+    <string name="settings_dashcam_override_dnd_subtitle_tap">Toca para permitir que esta alarma suene con No molestar activado en los ajustes del sistema.</string>
     <string name="settings_dashcam_threshold_title">Umbral de fuera de alcance</string>
     <string name="settings_dashcam_threshold_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
     <string name="settings_dashcam_threshold_helper">Cuánto tiempo debe estar inaccesible la dashcam antes de que suene la alarma.</string>
@@ -479,7 +480,7 @@
     <string name="settings_privacy_networking_destination">El único destino de red que contacta la app es la URL de HA que indicas. No hay endpoints de analítica, informadores de fallos, redes publicitarias ni bibliotecas de terceros que llamen a casa.</string>
     <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token de portador en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
     <string name="settings_privacy_permissions_label">Permisos</string>
-    <string name="settings_privacy_permissions_body">BLUETOOTH_SCAN y BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (la notificación de estado del servicio en primer plano), SYSTEM_ALERT_WINDOW (la superposición del radar sobre tu app de mapas) y FOREGROUND_SERVICE (se mantiene activo durante las rutas). ACCESS_COARSE_LOCATION se lee una vez por ruta solo para ajustar tu luz delantera y la del radar según el amanecer/atardecer local; nunca se usa para rastrearte y nunca sale del teléfono. La función de captura de pantalla, desactivada por defecto, solicita además el consentimiento de MediaProjection cada vez que se inicia; captura toda la pantalla, así que se incluye cualquier cosa que esté detrás de la superposición (como tu mapa).</string>
+    <string name="settings_privacy_permissions_body">BLUETOOTH_SCAN y BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (la notificación de estado del servicio en primer plano), SYSTEM_ALERT_WINDOW (la barra lateral del radar sobre tu app de mapas) y FOREGROUND_SERVICE (se mantiene activo durante las rutas). ACCESS_COARSE_LOCATION se lee una vez por ruta solo para ajustar tu luz delantera y la del radar según el amanecer/atardecer local; nunca se usa para rastrearte y nunca sale del teléfono. La función de captura de pantalla, desactivada por defecto, solicita además el consentimiento de MediaProjection cada vez que se inicia; captura toda la pantalla, así que se incluye cualquier cosa que esté detrás de la barra lateral (como tu mapa).</string>
     <string name="settings_privacy_source_label">Código fuente</string>
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
 
@@ -492,7 +493,7 @@
     <string name="settings_lights_daytime_mode">Modo diurno</string>
     <string name="settings_lights_night_mode">Modo nocturno</string>
     <string name="settings_lights_night_sub"><xliff:g id="mode" example="Day Flash">%1$s</xliff:g> - se cambia al atardecer local</string>
-    <string name="settings_lights_radar_caveat">El radar no puede confirmar el cambio - si tienes dudas, echa un vistazo a la luz trasera.</string>
+    <string name="settings_lights_radar_caveat">El radar no puede confirmar que la luz ha cambiado - si tienes dudas echa un vistazo a la luz trasera.</string>
     <string name="settings_lights_dashcam_section">Luz de la dashcam</string>
     <string name="settings_lights_dashcam_auto_sub">Ajusta la luz de la dashcam al conectar y al atardecer</string>
     <string name="settings_lights_dashcam_row_title">Luz de la dashcam</string>
@@ -543,7 +544,7 @@
     <string name="debug_delete_log_cd">Eliminar <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g></string>
     <string name="debug_section_screenshot_capture">Captura de pantalla</string>
     <string name="debug_periodic_screenshots_title">Capturas periódicas</string>
-    <string name="debug_periodic_screenshots_subtitle">Captura la pantalla cada minuto mientras la superposición del radar está activa. Se guarda en el directorio de archivos de la app, bajo screenshots/.</string>
+    <string name="debug_periodic_screenshots_subtitle">Captura la pantalla cada minuto mientras la barra lateral del radar está activa. Se guarda en el directorio de archivos de la app, bajo screenshots/.</string>
     <string name="debug_section_manual_ha_push">Envío manual a HA</string>
     <string name="debug_send_discovery">Enviar detección</string>
     <string name="debug_send_battery_50">Enviar batería al 50 %</string>
@@ -604,13 +605,13 @@
     <!-- ScreenshotCaptureService.kt -->
     <string name="svc_screenshot_channel_name">Captura de pantalla</string>
     <string name="svc_screenshot_notif_title">Bike Radar</string>
-    <string name="svc_screenshot_notif_text">Capturando pantallas mientras la superposición está activa</string>
+    <string name="svc_screenshot_notif_text">Capturando pantallas mientras la barra lateral está activa</string>
     <string name="svc_screenshot_action_stop">Detener</string>
 
     <!-- DebugOverlayService.kt -->
-    <string name="svc_debugoverlay_channel_name">Superposición de depuración del radar</string>
+    <string name="svc_debugoverlay_channel_name">Barra lateral de depuración del radar</string>
     <string name="svc_debugoverlay_notif_title">Bike Radar</string>
-    <string name="svc_debugoverlay_notif_text">Superposición de depuración</string>
+    <string name="svc_debugoverlay_notif_text">Barra lateral de depuración</string>
 
     <!-- SyntheticScenarioService.kt -->
     <string name="svc_synthetic_channel_name">Escenario sintético</string>

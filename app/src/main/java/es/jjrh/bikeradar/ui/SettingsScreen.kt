@@ -272,12 +272,14 @@ private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: Battery
         ) {
             SystemHealthChip(
                 label = stringResource(R.string.settings_home_chip_radar),
+                notSeen = stringResource(R.string.settings_home_chip_radar_not_seen),
                 battery = radarBattery,
                 color = if (radarBattery != null) br.safe else br.fgDim,
                 modifier = Modifier.weight(1f),
             )
             SystemHealthChip(
                 label = stringResource(R.string.settings_home_chip_cam),
+                notSeen = stringResource(R.string.settings_home_chip_cam_not_seen),
                 battery = dashcamBattery,
                 color = if (dashcamBattery != null) br.safe else br.fgDim,
                 modifier = Modifier.weight(1f),
@@ -289,6 +291,7 @@ private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: Battery
 @Composable
 private fun SystemHealthChip(
     label: String,
+    notSeen: String,
     battery: BatteryEntry?,
     color: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
@@ -305,7 +308,7 @@ private fun SystemHealthChip(
             BatteryChip(pct = battery.pct)
         } else {
             Text(
-                text = stringResource(R.string.settings_home_chip_not_seen),
+                text = notSeen,
                 color = br.fgFaint,
                 fontSize = 11.sp,
             )

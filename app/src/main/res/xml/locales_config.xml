@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Locales the app ships translations for. Declaring this enables the
+     Android 13+ per-app language picker (Settings -> Apps -> Bike Radar ->
+     Language), so a rider can run the app in one language without changing
+     their whole phone. Add a line here whenever a new values-<code>/ lands. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+</locale-config>

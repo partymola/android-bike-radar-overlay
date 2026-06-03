@@ -43,7 +43,7 @@
     <string name="permission_overlay_title">Draw over other apps</string>
     <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
     <string name="permission_location_title">Approximate location</string>
-    <string name="permission_location_rationale">Used once per ride to compute accurate sunrise/sunset for your front and radar light auto-modes. Skip it and sunset is estimated for London.</string>
+    <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Skip it and sunset is estimated for London.</string>
     <string name="permission_mark_recommended">Recommended</string>
 
     <!-- Shared light-mode display names (SettingsAtoms.kt) -->
@@ -130,7 +130,7 @@
     <!-- CLOSE PASSES stats card. -->
     <string name="main_section_close_passes">Close passes</string>
     <string name="main_close_passes_caption">this ride</string>
-    <string name="main_close_passes_empty_hint">Enable Settings → Alerts → Log to Home Assistant to keep a history of overtakes inside your set lateral threshold.</string>
+    <string name="main_close_passes_empty_hint">Enable Settings → Alerts → Log to Home Assistant to keep a history of close passes.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> close pass this ride</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> close passes this ride</item>
@@ -164,7 +164,7 @@
 
     <!-- Step 2: Home Assistant -->
     <string name="onboarding_ha_title">Connect to Home Assistant</string>
-    <string name="onboarding_ha_sub">Publish ride and battery telemetry to HA for logging, dashboards, and pre-ride reminders.</string>
+    <string name="onboarding_ha_sub">Send ride and battery data to HA for logging, dashboards, and pre-ride reminders.</string>
     <string name="onboarding_ha_saved_without_testing">Saved without testing</string>
     <string name="onboarding_ha_use_title">I use Home Assistant</string>
     <string name="onboarding_ha_use_sub">Set up the URL and token now.</string>
@@ -193,7 +193,7 @@
 
     <!-- Step 3: pairing -->
     <string name="onboarding_pair_title">Pair your devices</string>
-    <string name="onboarding_pair_sub">Pairing happens in Android\'s Bluetooth settings, not in this app. Put the radar in pair mode (check the manual if unsure), then tap Open Bluetooth settings.</string>
+    <string name="onboarding_pair_sub">Pairing happens in Android\'s Bluetooth settings, not here. Put the radar in pair mode, then tap Open Bluetooth settings.</string>
     <string name="onboarding_pair_radar_title">Rear radar</string>
     <string name="onboarding_pair_radar_detail_unpaired">Not paired yet. The pairing screen is in Android\'s Bluetooth settings.</string>
     <string name="onboarding_pair_radar_hint">After pairing, press back to return here.</string>
@@ -295,7 +295,7 @@
     <string name="settings_home_ha_mqtt_ready">Connected · MQTT ready</string>
     <string name="settings_home_ha_connected">Connected</string>
     <string name="settings_home_exp_precog">Precog</string>
-    <string name="settings_home_exp_panning">Panning</string>
+    <string name="settings_home_exp_panning">Directional</string>
     <string name="settings_home_exp_all_off">All off</string>
     <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> on</string>
 
@@ -359,7 +359,7 @@
     <string name="settings_radar_adaptive_title">Adaptive alert colours</string>
     <string name="settings_radar_adaptive_subtitle">Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.</string>
     <string name="settings_radar_idle_after_title">Idle radar after</string>
-    <string name="settings_radar_idle_after_helper">Once the radar has been out of range this long, the reconnect interval relaxes to the value below to let the BLE stack idle while the bike is parked.</string>
+    <string name="settings_radar_idle_after_helper">Once the radar\'s been out of range this long, retries slow to the interval below so Bluetooth can rest while the bike is parked.</string>
     <string name="settings_radar_idle_interval_title">Idle reconnect interval</string>
     <string name="settings_radar_idle_interval_helper">How often to retry the connection while the radar is idled out. Longer values save battery overnight; shorter values pick up the radar faster when you come back.</string>
     <string name="settings_radar_low_battery_title">Low-battery threshold</string>
@@ -420,7 +420,7 @@
     <string name="settings_ha_not_configured">Not configured</string>
     <string name="settings_ha_add_url_token">Add your URL + token below.</string>
     <string name="settings_ha_last_error">Last error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>
-    <string name="settings_ha_mqtt_discovery_active">MQTT discovery active</string>
+    <string name="settings_ha_mqtt_discovery_active">Publishing to Home Assistant via MQTT</string>
     <string name="settings_ha_saved_without_testing_toast">Saved without testing</string>
     <string name="settings_ha_config_cleared_toast">HA configuration cleared</string>
 
@@ -478,21 +478,21 @@
 
     <!-- Settings → Privacy (SettingsPrivacy.kt) -->
     <string name="settings_privacy_title">Privacy</string>
-    <string name="settings_privacy_intro">Bike Radar is a self-hosted companion. The app collects no telemetry, runs no analytics, and sends no data to anyone other than the Home Assistant instance you configure.</string>
+    <string name="settings_privacy_intro">Bike Radar collects no telemetry and runs no analytics. Your data goes only to the Home Assistant you set up - nowhere else.</string>
     <string name="settings_privacy_on_phone_label">What stays on your phone</string>
     <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
-    <string name="settings_privacy_on_phone_creds">Your Home Assistant base URL and long-lived bearer token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The encryption key never leaves the secure element. An attacker with raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
-    <string name="settings_privacy_on_phone_capture">Capture logging is off by default. If you turn it on (Debug screen), a capture log is written for every ride (radar packets, BLE characteristic notifications, eBike data read from Bosch Flow, phone-battery samples - no location) to the app\'s external files dir under `bike-radar-capture-*.log`. Logs are gzipped on close to save space (`*.log.gz`). They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.</string>
+    <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The key never leaves the secure element, so raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
+    <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples; no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
-    <string name="settings_privacy_to_ha_publish">If you configure HA in Settings, the app publishes to your HA instance via MQTT discovery: the radar\'s and the dashcam\'s battery levels, your front-light mode, ride start/end events, and an end-of-ride summary (distance, close-pass counts, closing speeds and lateral clearances). It also publishes a per-event close-pass log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.</string>
+    <string name="settings_privacy_to_ha_publish">If you set up HA, the app publishes over MQTT, straight to your HA URL - nothing routed through the developer or any third party:\n• radar and dashcam battery\n• front-light mode\n• ride start/end events\n• an end-of-ride summary (distance, close-pass counts, closing speeds, clearances)\n• a per-event close-pass log, if you turn it on</string>
     <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">Pairing happens in Android\'s system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.</string>
     <string name="settings_privacy_networking_label">Networking</string>
-    <string name="settings_privacy_networking_destination">The only network destination the app contacts is the HA URL you provide. There are no analytics endpoints, crash reporters, ad networks, or third-party libraries that phone home.</string>
-    <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your bearer token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
+    <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
+    <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">BLUETOOTH_SCAN and BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). ACCESS_COARSE_LOCATION is read once per ride only to set your front and radar lights for local sunrise/sunset; it is never used to track you and never leaves the phone. The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts; it captures the whole screen, so anything behind the overlay (such as your map) is included.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: the ride status notification\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 

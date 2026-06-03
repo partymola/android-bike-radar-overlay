@@ -31,7 +31,7 @@
     <string name="permission_overlay_title">Dibujar sobre otras apps</string>
     <string name="permission_overlay_rationale">Dibujar la barra lateral del radar encima de lo que tengas en pantalla. Sin esto, las alertas siguen sonando pero no verás la barra lateral.</string>
     <string name="permission_location_title">Ubicación aproximada</string>
-    <string name="permission_location_rationale">Se usa una vez por ruta para calcular con precisión el amanecer y el atardecer y ajustar los modos automáticos de tu luz delantera y la del radar. Si la omites, el atardecer se estima para Londres.</string>
+    <string name="permission_location_rationale">Se usa una vez por ruta para ajustar tu luz delantera y la del radar según el atardecer local. Si la omites, el atardecer se estima para Londres.</string>
     <string name="permission_mark_recommended">Recomendado</string>
 
     <!-- Nombres de modos de luz compartidos (SettingsAtoms.kt) -->
@@ -118,7 +118,7 @@
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
     <string name="main_section_close_passes">Pases cercanos</string>
     <string name="main_close_passes_caption">esta ruta</string>
-    <string name="main_close_passes_empty_hint">Activa Ajustes → Alertas → Enviar a Home Assistant para guardar un historial de adelantamientos dentro del umbral lateral que hayas fijado.</string>
+    <string name="main_close_passes_empty_hint">Activa Ajustes → Alertas → Enviar a Home Assistant para guardar un historial de pases cercanos.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano esta ruta</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos esta ruta</item>
@@ -152,7 +152,7 @@
 
     <!-- Paso 2: Home Assistant -->
     <string name="onboarding_ha_title">Conectar con Home Assistant</string>
-    <string name="onboarding_ha_sub">Publica la telemetría de ruta y batería en HA para registro, paneles y recordatorios antes de salir.</string>
+    <string name="onboarding_ha_sub">Envía los datos de ruta y batería a HA para registro, paneles y recordatorios antes de salir.</string>
     <string name="onboarding_ha_saved_without_testing">Guardado sin probar</string>
     <string name="onboarding_ha_use_title">Uso Home Assistant</string>
     <string name="onboarding_ha_use_sub">Configura ahora la URL y el token.</string>
@@ -181,7 +181,7 @@
 
     <!-- Paso 3: emparejamiento -->
     <string name="onboarding_pair_title">Empareja tus dispositivos</string>
-    <string name="onboarding_pair_sub">El emparejamiento se hace en los ajustes de Bluetooth de Android, no en esta app. Pon el radar en modo de emparejamiento (consulta el manual si tienes dudas) y luego toca Abrir ajustes de Bluetooth.</string>
+    <string name="onboarding_pair_sub">El emparejamiento se hace en los ajustes de Bluetooth de Android, no aquí. Pon el radar en modo de emparejamiento y luego toca Abrir ajustes de Bluetooth.</string>
     <string name="onboarding_pair_radar_title">Radar trasero</string>
     <string name="onboarding_pair_radar_detail_unpaired">Aún sin emparejar. La pantalla de emparejamiento está en los ajustes de Bluetooth de Android.</string>
     <string name="onboarding_pair_radar_hint">Tras emparejar, pulsa Atrás para volver aquí.</string>
@@ -283,7 +283,7 @@
     <string name="settings_home_ha_mqtt_ready">Conectado · MQTT listo</string>
     <string name="settings_home_ha_connected">Conectado</string>
     <string name="settings_home_exp_precog">Precog</string>
-    <string name="settings_home_exp_panning">Paneo</string>
+    <string name="settings_home_exp_panning">Direccional</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
     <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> activado</string>
 
@@ -346,8 +346,8 @@
     <string name="settings_radar_overlay_dim_strong">Fuerte</string>
     <string name="settings_radar_adaptive_title">Colores de alerta adaptativos</string>
     <string name="settings_radar_adaptive_subtitle">Ajusta los umbrales ámbar / rojo según la velocidad de tu bici: más sensible al estar parado, menos al ir a velocidad de crucero.</string>
-    <string name="settings_radar_idle_after_title">Radar inactivo tras</string>
-    <string name="settings_radar_idle_after_helper">Una vez que el radar ha estado fuera de alcance este tiempo, el intervalo de reconexión se relaja al valor de abajo para que el Bluetooth descanse mientras la bici está aparcada.</string>
+    <string name="settings_radar_idle_after_title">Radar en reposo tras</string>
+    <string name="settings_radar_idle_after_helper">Cuando el radar lleva fuera de alcance este tiempo, los reintentos se espacian al intervalo de abajo para que el Bluetooth descanse mientras la bici está aparcada.</string>
     <string name="settings_radar_idle_interval_title">Intervalo de reconexión en reposo</string>
     <string name="settings_radar_idle_interval_helper">Con qué frecuencia reintentar la conexión mientras el radar está en reposo. Los valores más largos ahorran batería por la noche; los más cortos detectan el radar más rápido al volver.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
@@ -361,7 +361,7 @@
     <string name="settings_radar_lateral_clearance_helper">Solo publica cuando la holgura lateral mínima baja de esta distancia.</string>
     <string name="settings_radar_min_rider_speed_title">Velocidad mínima del ciclista</string>
     <string name="settings_radar_min_rider_speed_helper">El detector ignora las situaciones con el ciclista parado (semáforos en rojo, empujar la bici).</string>
-    <string name="settings_radar_min_closing_speed_title">Velocidad mínima de acercamiento</string>
+    <string name="settings_radar_min_closing_speed_title">Velocidad mínima de aproximación</string>
     <string name="settings_radar_min_closing_speed_helper">Aproximadamente <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h de velocidad relativa de aproximación.</string>
     <string name="settings_radar_stop_scanning">Detener la búsqueda</string>
     <string name="settings_radar_stop_scanning_helper">Apaga el radar, la barra lateral y las actualizaciones a HA hasta que vuelvas a iniciarlos. No se inicia solo al reiniciar. Usa Pausa para una hora de silencio.</string>
@@ -408,7 +408,7 @@
     <string name="settings_ha_not_configured">Sin configurar</string>
     <string name="settings_ha_add_url_token">Añade tu URL + token abajo.</string>
     <string name="settings_ha_last_error">Último error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>
-    <string name="settings_ha_mqtt_discovery_active">Detección MQTT activa</string>
+    <string name="settings_ha_mqtt_discovery_active">Publicando en tu HA por MQTT</string>
     <string name="settings_ha_saved_without_testing_toast">Guardado sin probar</string>
     <string name="settings_ha_config_cleared_toast">Configuración de HA borrada</string>
 
@@ -466,21 +466,21 @@
 
     <!-- Ajustes → Privacidad (SettingsPrivacy.kt) -->
     <string name="settings_privacy_title">Privacidad</string>
-    <string name="settings_privacy_intro">Bike Radar es una app complementaria autoalojada. La app no recopila telemetría, no ejecuta analíticas y no envía datos a nadie salvo a la instancia de Home Assistant que tú configures.</string>
+    <string name="settings_privacy_intro">Bike Radar no recopila telemetría ni ejecuta analíticas. Tus datos van solo al Home Assistant que configures - a ningún otro sitio.</string>
     <string name="settings_privacy_on_phone_label">Qué se queda en tu teléfono</string>
     <string name="settings_privacy_on_phone_settings">Tus ajustes (volumen de alerta, distancia de alerta, estado del radar emparejado, preferencias de la dashcam y similares) residen en el almacenamiento privado de la app de Android y nunca salen del dispositivo.</string>
-    <string name="settings_privacy_on_phone_creds">La URL base de tu Home Assistant y el token de portador de larga duración se cifran en reposo con una clave AES-256/GCM respaldada por hardware del Android Keystore. La clave de cifrado nunca sale del elemento seguro. Un atacante con acceso directo al sistema de archivos (p. ej. `adb pull`) solo recupera texto cifrado.</string>
-    <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), se escribe un registro de capturas en cada ruta (paquetes del radar, notificaciones de características BLE, datos de la eBike leídos de Bosch Flow, muestras de batería del teléfono - sin ubicación) en el directorio de archivos externos de la app, bajo `bike-radar-capture-*.log`. Los registros se comprimen con gzip al cerrarse para ahorrar espacio (`*.log.gz`). Residen en tu teléfono, no en ninguna nube, y solo se comparten si tocas Compartir en la pantalla de Depuración.</string>
+    <string name="settings_privacy_on_phone_creds">La URL de tu Home Assistant y el token se cifran en reposo con una clave AES-256/GCM respaldada por hardware del Android Keystore. La clave nunca sale del elemento seguro, así que el acceso directo al sistema de archivos (p. ej. `adb pull`) solo recupera texto cifrado.</string>
+    <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono; sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
     <string name="settings_privacy_to_ha_label">Qué va a tu Home Assistant</string>
-    <string name="settings_privacy_to_ha_publish">Si configuras HA en Ajustes, la app publica en tu instancia de HA mediante detección MQTT: los niveles de batería del radar y de la dashcam, el modo de tu luz delantera, los eventos de inicio/fin de ruta y un resumen de fin de ruta (distancia, recuento de pases cercanos, velocidades de aproximación y holguras laterales). También publica un registro de pases cercanos por evento si lo activas. Estos mensajes van directamente a la URL de HA que indicaste. Nada pasa por el desarrollador ni por ningún tercero.</string>
+    <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la dashcam\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de pases cercanos, velocidades de aproximación, holguras)\n• un registro de pases cercanos por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del almacén cifrado de inmediato.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">El emparejamiento se hace en el flujo de Bluetooth del sistema Android, no en esta app. La app lee tu lista de dispositivos vinculados para identificar el radar, la dashcam y tu eBike Bosch. Los permisos de Bluetooth se declaran con `usesPermissionFlags=\"neverForLocation\"`, de modo que la búsqueda por Bluetooth nunca deduce la ubicación.</string>
     <string name="settings_privacy_networking_label">Red</string>
-    <string name="settings_privacy_networking_destination">El único destino de red que contacta la app es la URL de HA que indicas. No hay endpoints de analítica, informadores de fallos, redes publicitarias ni bibliotecas de terceros que llamen a casa.</string>
-    <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token de portador en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
+    <string name="settings_privacy_networking_destination">El único destino de red es la URL de HA que indicas. No hay endpoints de analítica, servicios de informe de fallos, redes publicitarias ni bibliotecas de terceros que envíen datos fuera.</string>
+    <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
     <string name="settings_privacy_permissions_label">Permisos</string>
-    <string name="settings_privacy_permissions_body">BLUETOOTH_SCAN y BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (la notificación de estado del servicio en primer plano), SYSTEM_ALERT_WINDOW (la barra lateral del radar sobre tu app de mapas) y FOREGROUND_SERVICE (se mantiene activo durante las rutas). ACCESS_COARSE_LOCATION se lee una vez por ruta solo para ajustar tu luz delantera y la del radar según el amanecer/atardecer local; nunca se usa para rastrearte y nunca sale del teléfono. La función de captura de pantalla, desactivada por defecto, solicita además el consentimiento de MediaProjection cada vez que se inicia; captura toda la pantalla, así que se incluye cualquier cosa que esté detrás de la barra lateral (como tu mapa).</string>
+    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, dashcam y eBike\n• POST_NOTIFICATIONS: la notificación de estado de la ruta\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
     <string name="settings_privacy_source_label">Código fuente</string>
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
 

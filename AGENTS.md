@@ -81,6 +81,9 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   When the toggle is off, `openCaptureLog` no-ops and no file is created.
   `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
   release builds keep BLE/movement payloads out of logcat.
+  A fresh capture file is opened per radar connection (after handshake) and
+  closed on disconnect, so a mid-ride radar drop splits one ride across
+  multiple files and the dead-radar window between them is uncaptured.
 
 ## Key files
 

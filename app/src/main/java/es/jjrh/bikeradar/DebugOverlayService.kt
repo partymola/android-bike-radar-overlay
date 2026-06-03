@@ -182,14 +182,14 @@ class DebugOverlayService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Radar debug overlay", NotificationManager.IMPORTANCE_MIN),
+                NotificationChannel(CHANNEL_ID, getString(R.string.svc_debugoverlay_channel_name), NotificationManager.IMPORTANCE_MIN),
             )
         }
     }
 
     private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle("Bike Radar")
-        .setContentText("Debug overlay")
+        .setContentTitle(getString(R.string.svc_debugoverlay_notif_title))
+        .setContentText(getString(R.string.svc_debugoverlay_notif_text))
         .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
         .setOngoing(true).setOnlyAlertOnce(true)
         .setPriority(NotificationCompat.PRIORITY_MIN)

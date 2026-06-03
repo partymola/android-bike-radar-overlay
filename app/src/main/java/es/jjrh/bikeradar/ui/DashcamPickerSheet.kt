@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +52,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryScanReceiver
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
 import android.provider.Settings as AndroidSettings
@@ -171,7 +173,7 @@ internal fun DashcamPickerContent(
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar (matches SettingsHeader)
-        SettingsHeader("Select dashcam", onBack = onBack)
+        SettingsHeader(stringResource(R.string.dashcam_picker_title), onBack = onBack)
 
         // Explainer banner
         ExplainerBanner()
@@ -187,7 +189,7 @@ internal fun DashcamPickerContent(
         ) {
             item("none") {
                 PickerRow(
-                    title = "None — I don't have one",
+                    title = stringResource(R.string.dashcam_picker_none),
                     subtitle = null,
                     tag = null,
                     selected = selectedMac == null,
@@ -197,7 +199,7 @@ internal fun DashcamPickerContent(
 
             if (likely.isNotEmpty()) {
                 item("likely-header") {
-                    PickerSectionLabel("Likely matches")
+                    PickerSectionLabel(stringResource(R.string.dashcam_picker_likely_matches))
                 }
                 items(likely, key = { "l-" + it.mac }) { d ->
                     PickerRow(
@@ -212,7 +214,7 @@ internal fun DashcamPickerContent(
 
             if (other.isNotEmpty()) {
                 item("other-header") {
-                    PickerSectionLabel("Other paired devices")
+                    PickerSectionLabel(stringResource(R.string.dashcam_picker_other_paired_devices))
                 }
                 items(other, key = { "o-" + it.mac }) { d ->
                     PickerRow(
@@ -252,7 +254,7 @@ internal fun DashcamPickerContent(
                             modifier = Modifier.size(16.dp),
                         )
                         Text(
-                            text = "Pair a new device in Android Settings",
+                            text = stringResource(R.string.dashcam_picker_pair_new_device),
                             color = br.fgMuted,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
@@ -295,14 +297,14 @@ private fun ExplainerBanner() {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "i",
+                text = stringResource(R.string.dashcam_picker_info_badge),
                 color = br.bg,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Text(
-            text = "Likely matches are paired devices whose name looks like a cycling dashcam or that have advertised battery this session.",
+            text = stringResource(R.string.dashcam_picker_explainer),
             color = br.fgMuted,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -417,7 +419,7 @@ private fun RefreshIndicator() {
     ) {
         StatusDot(color = br.fgDim, size = 6.dp)
         Text(
-            text = "REFRESHING EVERY 2 s",
+            text = stringResource(R.string.dashcam_picker_refreshing),
             color = br.fgDim,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
@@ -450,7 +452,7 @@ private fun FooterButtons(
                 .clickable(onClick = onCancel),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "Cancel", color = br.fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(text = stringResource(R.string.dashcam_picker_cancel), color = br.fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
         Box(
             modifier = Modifier
@@ -462,7 +464,7 @@ private fun FooterButtons(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "Save",
+                text = stringResource(R.string.dashcam_picker_save),
                 color = if (saveEnabled) br.bg else br.fgDim,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,

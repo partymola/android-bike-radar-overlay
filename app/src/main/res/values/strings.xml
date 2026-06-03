@@ -27,6 +27,52 @@
     <string name="common_settings">Settings</string>
     <string name="common_continue">Continue</string>
     <string name="common_optional">Optional</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_back">Back</string>
+
+    <!-- UI primitives (UiPrimitives.kt) -->
+    <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
+    <string name="ui_chip_paired">PAIRED</string>
+
+    <!-- OS permission specs (PermissionSpec.kt) - shown on the onboarding
+         permissions step and Settings → Permissions. -->
+    <string name="permission_nearby_title">Nearby devices</string>
+    <string name="permission_nearby_rationale">Scan for and connect to your radar, dashcam and eBike over Bluetooth.</string>
+    <string name="permission_notifications_title">Notifications</string>
+    <string name="permission_notifications_rationale">Post the silent service notification and any ride alerts.</string>
+    <string name="permission_overlay_title">Draw over other apps</string>
+    <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
+    <string name="permission_location_title">Approximate location</string>
+    <string name="permission_location_rationale">Used once per ride to compute accurate sunrise/sunset for your front and radar light auto-modes. Skip it and sunset is estimated for London.</string>
+    <string name="permission_mark_recommended">Recommended</string>
+
+    <!-- Shared light-mode display names (SettingsAtoms.kt) -->
+    <string name="settings_lightmode_high">High</string>
+    <string name="settings_lightmode_medium">Medium</string>
+    <string name="settings_lightmode_low">Low</string>
+    <string name="settings_lightmode_night_flash">Night flash</string>
+    <string name="settings_lightmode_day_flash">Day flash</string>
+    <string name="settings_lightmode_off">Off</string>
+    <string name="settings_lightmode_solid">Solid</string>
+    <string name="settings_lightmode_peloton">Peloton</string>
+
+    <!-- Radar overlay spoken accessibility summary (RadarOverlayA11y.kt).
+         Separators between clauses are added in code, so these stay free of
+         leading/trailing whitespace. -->
+    <string name="overlay_a11y_prefix">Bike radar overlay.</string>
+    <string name="overlay_a11y_road_clear">Road clear.</string>
+    <plurals name="overlay_a11y_vehicles">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> vehicle.</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> vehicles.</item>
+    </plurals>
+    <plurals name="overlay_a11y_vehicles_nearest">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> vehicle, nearest <xliff:g id="metres" example="8">%2$d</xliff:g> metres.</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> vehicles, nearest <xliff:g id="metres" example="8">%2$d</xliff:g> metres.</item>
+    </plurals>
+    <string name="overlay_a11y_dashcam_dropped">Dashcam connection lost.</string>
+    <string name="overlay_a11y_dashcam_missing">Dashcam not found.</string>
+    <string name="overlay_a11y_dashcam_searching">Searching for dashcam.</string>
+    <string name="overlay_a11y_low_battery">Low battery.</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)
@@ -199,5 +245,387 @@
     <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends anything to your bike</string>
     <string name="onboarding_ebike_bullet_phone">Stays on your phone, saved to the ride log</string>
     <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride and battery info is sent there</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Settings (SettingsScreen.kt + per-section screens)
+         ════════════════════════════════════════════════════════════════ -->
+
+    <!-- Settings home (SettingsScreen.kt) -->
+    <string name="settings_home_quick_status">Quick Status</string>
+    <string name="settings_home_chip_radar">Radar</string>
+    <string name="settings_home_chip_cam">Cam</string>
+    <string name="settings_home_chip_not_seen">Not seen</string>
+    <string name="settings_home_section_ride">Ride</string>
+    <string name="settings_home_section_connections">Connections</string>
+    <string name="settings_home_section_system">System</string>
+    <string name="settings_home_alerts_title">Alerts</string>
+    <string name="settings_home_alerts_subtitle">Volume <xliff:g id="volume" example="80">%1$d</xliff:g>%% · alert at <xliff:g id="distance" example="140">%2$d</xliff:g> m</string>
+    <string name="settings_home_lights_title">Light auto-mode</string>
+    <string name="settings_home_radar_title">Radar</string>
+    <string name="settings_home_dashcam_title">Dashcam</string>
+    <string name="settings_home_ebike_title">eBike</string>
+    <string name="settings_home_ha_title">Home Assistant</string>
+    <string name="settings_home_permissions_title">Permissions</string>
+    <string name="settings_home_permissions_subtitle_action"><xliff:g id="missing" example="2">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g> need action</string>
+    <string name="settings_home_permissions_subtitle_granted">All granted (<xliff:g id="granted" example="7">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g>)</string>
+    <string name="settings_home_experimental_title">Experimental</string>
+    <string name="settings_home_debug_title">Debug</string>
+    <string name="settings_home_debug_subtitle">Developer mode unlocked</string>
+    <string name="settings_home_about_title">About</string>
+    <string name="settings_home_about_subtitle">Version <xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g></string>
+    <!-- Settings-home row subtitles (derived in SettingsScreen.kt helpers) -->
+    <string name="settings_home_lights_on">on</string>
+    <string name="settings_home_lights_off">off</string>
+    <string name="settings_home_lights_rear_only">Rear <xliff:g id="state" example="on">%1$s</xliff:g></string>
+    <string name="settings_home_lights_summary">Rear <xliff:g id="rear" example="on">%1$s</xliff:g> · Front <xliff:g id="front" example="off">%2$s</xliff:g></string>
+    <string name="settings_home_lights_all_off">Off</string>
+    <string name="settings_home_conn_connected">Connected · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
+    <string name="settings_home_conn_not_connected">Not connected</string>
+    <string name="settings_home_ebike_setup">Set up your eBike</string>
+    <string name="settings_home_dont_have_one">Don\'t have one</string>
+    <string name="settings_home_ebike_off">Off</string>
+    <string name="settings_home_ebike_on">On</string>
+    <string name="settings_home_dashcam_setup">Set up your dashcam</string>
+    <string name="settings_home_dashcam_paired_named"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · paired</string>
+    <string name="settings_home_dashcam_paired">Paired</string>
+    <string name="settings_home_dashcam_pick">Pick a device</string>
+    <string name="settings_home_ha_not_configured">Not configured</string>
+    <string name="settings_home_ha_issue">Connection issue</string>
+    <string name="settings_home_ha_mqtt_ready">Connected · MQTT ready</string>
+    <string name="settings_home_ha_connected">Connected</string>
+    <string name="settings_home_exp_precog">Precog</string>
+    <string name="settings_home_exp_panning">Panning</string>
+    <string name="settings_home_exp_all_off">All off</string>
+    <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> on</string>
+
+    <!-- Settings → Permissions chrome (SettingsPermissions.kt) -->
+    <string name="settings_perm_title">Permissions</string>
+    <string name="settings_perm_open_app_info">Open App info</string>
+    <string name="settings_perm_grant">Grant</string>
+    <string name="settings_perm_enable">Enable</string>
+
+    <!-- Settings → About (SettingsAbout.kt) -->
+    <string name="settings_about_title">About</string>
+    <string name="settings_about_app_name">Bike Radar</string>
+    <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g> · GPL-3.0</string>
+    <string name="settings_about_tagline">Android companion for rear-bike-radar head units on the V2 BLE protocol.</string>
+    <string name="settings_about_section_legal">Legal</string>
+    <string name="settings_about_licences_title">Open source licences</string>
+    <string name="settings_about_licences_subtitle">Every dependency the app ships with</string>
+    <string name="settings_about_privacy_title">Privacy</string>
+    <string name="settings_about_privacy_subtitle">What stays on the phone, what doesn\'t</string>
+    <string name="settings_about_unaffiliated_title">Not affiliated with Garmin or Bosch</string>
+    <string name="settings_about_unaffiliated_subtitle">This is an independent tool</string>
+
+    <!-- Settings → Experimental (SettingsExperimental.kt) -->
+    <string name="settings_exp_title">Experimental</string>
+    <string name="settings_exp_intro">Features still being tested. May be jittery or change without notice.</string>
+    <string name="settings_exp_precog_title">Predict overtake paths (1 s lookahead)</string>
+    <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
+    <string name="settings_exp_panning_title">Directional alert audio</string>
+    <string name="settings_exp_panning_subtitle">Pan beeps and urgent cues to the threat\'s side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.</string>
+    <string name="settings_exp_invert_title">Invert left/right</string>
+    <string name="settings_exp_invert_subtitle">Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).</string>
+
+    <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
+    <string name="settings_radar_header">Alerts</string>
+    <string name="settings_radar_section_alerts">Alerts</string>
+    <string name="settings_radar_section_overlay">Overlay</string>
+    <string name="settings_radar_section_adaptive">Adaptive</string>
+    <string name="settings_radar_section_connection">Connection</string>
+    <string name="settings_radar_section_battery">Battery warnings</string>
+    <string name="settings_radar_section_close_pass">Close-pass logging</string>
+    <string name="settings_radar_section_danger">Danger zone</string>
+    <string name="settings_radar_percent_value"><xliff:g id="pct" example="80">%1$d</xliff:g>%%</string>
+    <string name="settings_radar_meters_value"><xliff:g id="m" example="20">%1$d</xliff:g> m</string>
+    <string name="settings_radar_minutes_value"><xliff:g id="min" example="15">%1$d</xliff:g> min</string>
+    <string name="settings_radar_seconds_value"><xliff:g id="s" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_radar_kmh_value"><xliff:g id="kmh" example="10">%1$d</xliff:g> km/h</string>
+    <string name="settings_radar_ms_value"><xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
+    <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1.0">%1$s</xliff:g> m</string>
+    <string name="settings_radar_alert_volume_title">Alert volume</string>
+    <string name="settings_radar_alert_volume_helper">Beep volume for approach alerts. 0 silences audio; the overlay still flashes.</string>
+    <string name="settings_radar_alert_distance_title">Alert distance</string>
+    <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
+    <string name="settings_radar_visual_distance_title">Visual distance</string>
+    <string name="settings_radar_visual_distance_helper">Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.</string>
+    <string name="settings_radar_overlay_dimmer_title">Overlay dimmer</string>
+    <string name="settings_radar_overlay_dimmer_helper">Fade the overlay so a map or navigation app underneath stays readable. \"Off\" leaves the overlay at its full look.</string>
+    <string name="settings_radar_overlay_dim_off">Off</string>
+    <string name="settings_radar_overlay_dim_light">Light</string>
+    <string name="settings_radar_overlay_dim_medium">Medium</string>
+    <string name="settings_radar_overlay_dim_strong">Strong</string>
+    <string name="settings_radar_adaptive_title">Adaptive alert colours</string>
+    <string name="settings_radar_adaptive_subtitle">Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.</string>
+    <string name="settings_radar_idle_after_title">Idle radar after</string>
+    <string name="settings_radar_idle_after_helper">Once the radar has been out of range this long, the reconnect interval relaxes to the value below to let the BLE stack idle while the bike is parked.</string>
+    <string name="settings_radar_idle_interval_title">Idle reconnect interval</string>
+    <string name="settings_radar_idle_interval_helper">How often to retry the connection while the radar is idled out. Longer values save battery overnight; shorter values pick up the radar faster when you come back.</string>
+    <string name="settings_radar_low_battery_title">Low-battery threshold</string>
+    <string name="settings_radar_low_battery_helper">Show an amber warning beside the rider when any paired device drops below this level.</string>
+    <string name="settings_radar_show_labels_title">Show device labels</string>
+    <string name="settings_radar_show_labels_subtitle">Show \'RADAR 12%\' or \'DASHCAM 8%\' on screen instead of a silent warning tint.</string>
+    <string name="settings_radar_log_to_ha_title">Log to Home Assistant</string>
+    <string name="settings_radar_log_to_ha_subtitle_enabled">Publish close passes to HA when a vehicle overtakes inside the lateral distance below.</string>
+    <string name="settings_radar_log_to_ha_subtitle_disabled">Requires Home Assistant - set it up below.</string>
+    <string name="settings_radar_lateral_clearance_title">Lateral clearance threshold</string>
+    <string name="settings_radar_lateral_clearance_helper">Only publish when the minimum lateral clearance drops below this distance.</string>
+    <string name="settings_radar_min_rider_speed_title">Minimum rider speed</string>
+    <string name="settings_radar_min_rider_speed_helper">Detector ignores stationary-rider situations (red lights, pushing the bike).</string>
+    <string name="settings_radar_min_closing_speed_title">Minimum closing speed</string>
+    <string name="settings_radar_min_closing_speed_helper">Roughly <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h of relative approach speed.</string>
+    <string name="settings_radar_stop_scanning">Stop scanning</string>
+    <string name="settings_radar_stop_scanning_helper">Shuts down radar, overlay, and HA updates until you start them again. No auto-start on reboot. Use Pause for a quiet hour instead.</string>
+    <string name="settings_radar_scanning_stopped_title">Scanning stopped</string>
+    <string name="settings_radar_scanning_stopped_subtitle">Start it again from the home screen.</string>
+    <string name="settings_radar_stop_dialog_title">Stop scanning?</string>
+    <string name="settings_radar_stop_dialog_body">The radar, overlay, and Home Assistant updates stop until you start them again from the home screen - including after a reboot. Use Pause if you only need a quiet hour.</string>
+    <string name="settings_radar_cancel">Cancel</string>
+
+    <!-- Settings → Radar device (SettingsRadarDevice.kt) -->
+    <string name="settings_radardev_header">Radar</string>
+    <string name="settings_radardev_intro">Your rear radar - the core of the app.</string>
+    <string name="settings_radardev_pair_title">Pair your radar</string>
+    <string name="settings_radardev_pair_subtitle">Put the radar in pair mode, then pair it in Android\'s Bluetooth settings.</string>
+    <string name="settings_radardev_not_selected">Not selected</string>
+    <string name="settings_radardev_pick_radar">Pick this bike\'s radar below</string>
+    <string name="settings_radardev_connected">Connected</string>
+    <string name="settings_radardev_not_in_range">Not in range</string>
+    <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
+    <string name="settings_radardev_selected">Selected</string>
+    <string name="settings_radardev_tap_to_use">Tap to use this radar</string>
+    <string name="settings_radardev_section_actions">Actions</string>
+    <string name="settings_radardev_pair_different_title">Pair a different radar</string>
+    <string name="settings_radardev_open">Open</string>
+    <string name="settings_radardev_pair_different_subtitle">Opens Bluetooth settings. Forget the old radar there first.</string>
+
+    <!-- Settings → Home Assistant (SettingsHa.kt) -->
+    <string name="settings_ha_title">Home Assistant</string>
+    <string name="settings_ha_base_url_label">Base URL</string>
+    <string name="settings_ha_token_label">Long-lived token</string>
+    <string name="settings_ha_show_token">Show token</string>
+    <string name="settings_ha_hide_token">Hide token</string>
+    <string name="settings_ha_testing">Testing…</string>
+    <string name="settings_ha_test_and_save">Test and save</string>
+    <string name="settings_ha_save_without_testing">Save without testing</string>
+    <string name="settings_ha_clear_config">Clear HA configuration</string>
+    <string name="settings_ha_error">error</string>
+    <string name="settings_ha_chip_ha_saved">HA: saved</string>
+    <string name="settings_ha_chip_ha_error">HA: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
+    <string name="settings_ha_chip_mqtt_ready">MQTT: ready</string>
+    <string name="settings_ha_chip_mqtt_error">MQTT: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
+    <string name="settings_ha_published_entities">Published entities</string>
+    <string name="settings_ha_connected">Connected</string>
+    <string name="settings_ha_not_configured">Not configured</string>
+    <string name="settings_ha_add_url_token">Add your URL + token below.</string>
+    <string name="settings_ha_last_error">Last error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>
+    <string name="settings_ha_mqtt_discovery_active">MQTT discovery active</string>
+    <string name="settings_ha_saved_without_testing_toast">Saved without testing</string>
+    <string name="settings_ha_config_cleared_toast">HA configuration cleared</string>
+
+    <!-- Settings → eBike (SettingsEBike.kt) -->
+    <string name="settings_ebike_title">eBike</string>
+    <string name="settings_ebike_data_on_toast">Live eBike data is on. Leave Bosch Flow running in the background while you ride.</string>
+    <string name="settings_ebike_data_off_toast">Live eBike data is off.</string>
+    <string name="settings_ebike_intro">Shows your eBike battery and connection status on the home screen, while Bosch Flow runs in the background on this phone.</string>
+    <string name="settings_ebike_requirements">Needs a Bosch Smart System eBike and the Bosch Flow app.</string>
+    <string name="settings_ebike_intent_title">I have a Bosch Smart System eBike now</string>
+    <string name="settings_ebike_intent_subtitle">Tap to turn on live data.</string>
+    <string name="settings_ebike_use_data">Use eBike data</string>
+    <string name="settings_ebike_use_data_subtitle_off">Turn on to show eBike battery and status on the home screen.</string>
+    <string name="settings_ebike_use_data_subtitle_on">Battery and status - shown while Bosch Flow runs in the background.</string>
+    <string name="settings_ebike_status_label">Status</string>
+    <string name="settings_ebike_receiving">Receiving live data</string>
+    <string name="settings_ebike_waiting">Waiting for Bosch Flow</string>
+    <string name="settings_ebike_receiving_subtitle">Battery and ride status from your bike.</string>
+    <string name="settings_ebike_waiting_subtitle">Open Flow and ride - data appears here automatically.</string>
+    <string name="settings_ebike_actions_label">Actions</string>
+    <string name="settings_ebike_open_flow">Open Bosch Flow</string>
+    <string name="settings_ebike_open_flow_subtitle">Live data needs Flow running in the background while you ride.</string>
+    <string name="settings_ebike_open">Open</string>
+    <string name="settings_ebike_what_it_does_label">What it does</string>
+    <string name="settings_ebike_does_item_battery">Shows eBike battery and connection status on the home screen</string>
+    <string name="settings_ebike_does_item_beeps">Keeps close-pass beeps firing on a slow climb</string>
+    <string name="settings_ebike_does_item_timing">Scales beep timing to your wheel speed</string>
+    <string name="settings_ebike_whats_collected_label">What\'s collected</string>
+    <string name="settings_ebike_collected_item_reads">Reads battery, speed and pedalling - read-only, never sends anything to your bike</string>
+    <string name="settings_ebike_collected_item_phone">Stays on your phone, saved to the ride log</string>
+    <string name="settings_ebike_collected_item_ha">Ride and battery info goes to Home Assistant only if you set it up</string>
+    <string name="settings_ebike_privacy_detail">Full detail in the Privacy screen.</string>
+    <string name="settings_ebike_open_flow_failed_toast">Couldn\'t open Flow. Install it from the Play Store and try again.</string>
+
+    <!-- Settings → Dashcam (SettingsDashcam.kt) -->
+    <string name="settings_dashcam_title">Dashcam</string>
+    <string name="settings_dashcam_have_dashcam">I have a front dashcam</string>
+    <string name="settings_dashcam_have_dashcam_subtitle_on">Set up your dashcam below.</string>
+    <string name="settings_dashcam_have_dashcam_subtitle_off">Turn this on if you want to track a Bluetooth dashcam alongside the radar.</string>
+    <string name="settings_dashcam_not_selected">Not selected</string>
+    <string name="settings_dashcam_pick">Pick</string>
+    <string name="settings_dashcam_change">Change</string>
+    <string name="settings_dashcam_behaviour_label">Behaviour</string>
+    <string name="settings_dashcam_warn_off">Warn on overlay when dashcam is off</string>
+    <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon next to the rider when no Vue advert is seen.</string>
+    <string name="settings_dashcam_walkaway_label">Walk-away alarm</string>
+    <string name="settings_dashcam_walkaway_alert">Alert if dashcam remains on</string>
+    <string name="settings_dashcam_walkaway_alert_subtitle">Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).</string>
+    <string name="settings_dashcam_override_dnd">Override Do Not Disturb</string>
+    <string name="settings_dashcam_override_dnd_subtitle_allowed">Currently allowed. Alarm will sound even with DND on.</string>
+    <string name="settings_dashcam_override_dnd_subtitle_tap">Tap to allow this alarm to play through DND in system settings.</string>
+    <string name="settings_dashcam_threshold_title">Out-of-range threshold</string>
+    <string name="settings_dashcam_threshold_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_dashcam_threshold_helper">How long the dashcam must be unreachable before the alarm fires.</string>
+
+    <!-- Settings → Privacy (SettingsPrivacy.kt) -->
+    <string name="settings_privacy_title">Privacy</string>
+    <string name="settings_privacy_intro">Bike Radar is a self-hosted companion. The app collects no telemetry, runs no analytics, and sends no data to anyone other than the Home Assistant instance you configure.</string>
+    <string name="settings_privacy_on_phone_label">What stays on your phone</string>
+    <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
+    <string name="settings_privacy_on_phone_creds">Your Home Assistant base URL and long-lived bearer token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The encryption key never leaves the secure element. An attacker with raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
+    <string name="settings_privacy_on_phone_capture">Capture logging is off by default. If you turn it on (Debug screen), a capture log is written for every ride (radar packets, BLE characteristic notifications, eBike data read from Bosch Flow, phone-battery samples - no location) to the app\'s external files dir under `bike-radar-capture-*.log`. Logs are gzipped on close to save space (`*.log.gz`). They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.</string>
+    <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
+    <string name="settings_privacy_to_ha_publish">If you configure HA in Settings, the app publishes to your HA instance via MQTT discovery: the radar\'s and the dashcam\'s battery levels, your front-light mode, ride start/end events, and an end-of-ride summary (distance, close-pass counts, closing speeds and lateral clearances). It also publishes a per-event close-pass log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.</string>
+    <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.</string>
+    <string name="settings_privacy_bluetooth_label">Bluetooth</string>
+    <string name="settings_privacy_bluetooth_body">Pairing happens in Android\'s system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.</string>
+    <string name="settings_privacy_networking_label">Networking</string>
+    <string name="settings_privacy_networking_destination">The only network destination the app contacts is the HA URL you provide. There are no analytics endpoints, crash reporters, ad networks, or third-party libraries that phone home.</string>
+    <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your bearer token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
+    <string name="settings_privacy_permissions_label">Permissions</string>
+    <string name="settings_privacy_permissions_body">BLUETOOTH_SCAN and BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). ACCESS_COARSE_LOCATION is read once per ride only to set your front and radar lights for local sunrise/sunset; it is never used to track you and never leaves the phone. The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts; it captures the whole screen, so anything behind the overlay (such as your map) is included.</string>
+    <string name="settings_privacy_source_label">Source</string>
+    <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
+
+    <!-- Settings → Light auto-mode (SettingsLights.kt) -->
+    <string name="settings_lights_loc_rationale">Used once per ride to compute accurate sunrise/sunset for the light auto-modes. Skip it and sunset is estimated for London.</string>
+    <string name="settings_lights_title">Light auto-mode</string>
+    <string name="settings_lights_radar_section">Radar tail light</string>
+    <string name="settings_lights_auto_switch">Auto-switch day/night</string>
+    <string name="settings_lights_radar_auto_sub">Sets the radar tail light on connect and at sunset</string>
+    <string name="settings_lights_daytime_mode">Daytime mode</string>
+    <string name="settings_lights_night_mode">Night mode</string>
+    <string name="settings_lights_night_sub"><xliff:g id="mode" example="Day Flash">%1$s</xliff:g> - switched at local sunset</string>
+    <string name="settings_lights_radar_caveat">The radar can\'t confirm the switch - if in doubt, glance at the tail light.</string>
+    <string name="settings_lights_dashcam_section">Dashcam light</string>
+    <string name="settings_lights_dashcam_auto_sub">Sets the dashcam light on connect and at sunset</string>
+    <string name="settings_lights_dashcam_row_title">Dashcam light</string>
+    <string name="settings_lights_dashcam_no">You don\'t have one</string>
+    <string name="settings_lights_dashcam_setup">Set up your dashcam</string>
+
+    <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
+         authors and SPDX licence names stay hardcoded as legal attribution. -->
+    <string name="settings_licenses_title">Open source licences</string>
+    <string name="settings_licenses_intro">Bike Radar is itself GPL-3.0-or-later. Every third-party library it depends on is listed below with its licence. All licences are compatible with GPL-3.0.</string>
+    <string name="settings_licenses_section_language_runtime">Language &amp; runtime</string>
+    <string name="settings_licenses_section_android_platform">Android platform</string>
+    <string name="settings_licenses_section_ui">UI</string>
+    <string name="settings_licenses_section_build_test">Build &amp; test</string>
+
+    <!-- Dashcam picker bottom sheet (DashcamPickerSheet.kt) -->
+    <string name="dashcam_picker_title">Select dashcam</string>
+    <string name="dashcam_picker_none">None - I don\'t have one</string>
+    <string name="dashcam_picker_likely_matches">Likely matches</string>
+    <string name="dashcam_picker_other_paired_devices">Other paired devices</string>
+    <string name="dashcam_picker_pair_new_device">Pair a new device in Android Settings</string>
+    <string name="dashcam_picker_info_badge">i</string>
+    <string name="dashcam_picker_explainer">Likely matches are paired devices whose name looks like a cycling dashcam or that have advertised battery this session.</string>
+    <string name="dashcam_picker_refreshing">REFRESHING EVERY 2 s</string>
+    <string name="dashcam_picker_cancel">Cancel</string>
+    <string name="dashcam_picker_save">Save</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Debug screen (DebugScreen.kt) - dev-unlock-gated diagnostics
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="debug_title">Debug</string>
+    <string name="debug_section_scenarios">Scenarios</string>
+    <string name="debug_replay">Replay</string>
+    <string name="debug_stop_replay">Stop Replay</string>
+    <string name="debug_synthetic">Synthetic</string>
+    <string name="debug_stop_synthetic">Stop Synthetic</string>
+    <string name="debug_section_service_control">Service control</string>
+    <string name="debug_force_radar_reconnect">Force radar reconnect</string>
+    <string name="debug_section_capture_logging">Capture logging</string>
+    <string name="debug_write_capture_logs_title">Write capture logs</string>
+    <string name="debug_write_capture_logs_subtitle">Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride\'s log finishes either way).</string>
+    <string name="debug_section_capture_logs">Capture logs</string>
+    <string name="debug_no_capture_logs">No capture logs yet.</string>
+    <string name="debug_capture_logs_header">CAPTURE LOGS</string>
+    <string name="debug_delete_all">Delete all</string>
+    <string name="debug_share">Share</string>
+    <string name="debug_capture_log_meta"><xliff:g id="size_kb" example="12">%1$d</xliff:g> KB · <xliff:g id="modified">%2$s</xliff:g></string>
+    <string name="debug_delete_log_cd">Delete <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g></string>
+    <string name="debug_section_screenshot_capture">Screenshot capture</string>
+    <string name="debug_periodic_screenshots_title">Periodic screenshots</string>
+    <string name="debug_periodic_screenshots_subtitle">Capture the screen every minute while the radar overlay is active. Saved to the app\'s files dir under screenshots/.</string>
+    <string name="debug_section_manual_ha_push">Manual HA push</string>
+    <string name="debug_send_discovery">Send discovery</string>
+    <string name="debug_send_battery_50">Send battery 50%</string>
+    <string name="debug_section_diagnostics">Diagnostics</string>
+    <string name="debug_log_unknown_ebike_ids_title">Log unknown eBike object IDs</string>
+    <string name="debug_log_unknown_ebike_ids_subtitle">Writes ebike_unk lines for unmapped records. Toggle each bike state during a capture to pin lock/light/charger IDs, then turn off.</string>
+    <string name="debug_probe_radar_settings_title">Probe radar settings channel</string>
+    <string name="debug_probe_radar_settings_subtitle">Logs radar_2f14 / radar_2f12 lines from the radar control service. Cycle the tail-light modes (button or vendor app) to pin the night/day encoding, then turn off.</string>
+    <string name="debug_send">Send</string>
+    <string name="debug_copy_diagnostic_bundle">Copy diagnostic bundle</string>
+    <string name="debug_radar_state_log">RADAR STATE LOG (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_no_states_received">No states received yet.</string>
+    <string name="debug_lock_developer_mode">Lock developer mode</string>
+    <string name="debug_share_log_dialog_title">Share this capture log?</string>
+    <string name="debug_share_log_dialog_body">This log records the exact time of every radar packet. Anyone you share it with can work out when and where you rode, and how often vehicles passed close. Only share with people you trust.</string>
+    <string name="debug_share_anyway">Share anyway</string>
+    <string name="debug_delete_all_dialog_title">Delete all capture logs?</string>
+    <string name="debug_delete_all_dialog_body">This permanently removes all <xliff:g id="count" example="3">%1$d</xliff:g> capture log(s) from this phone. It can\'t be undone. The current ride\'s log (if any) is not in this list and is kept.</string>
+    <string name="debug_toast_screenshot_armed">Screenshot capture armed</string>
+    <string name="debug_toast_screen_capture_denied">Screen capture permission denied</string>
+    <string name="debug_toast_force_reconnect_sent">Force reconnect sent</string>
+    <string name="debug_toast_discovery_sent">Discovery sent</string>
+    <string name="debug_toast_state_sent">State sent at 50%</string>
+    <string name="debug_toast_log_missing_or_empty">Log file missing or empty</string>
+    <string name="debug_toast_cannot_share_file">Cannot share this file: <xliff:g id="reason" example="not found">%1$s</xliff:g></string>
+    <string name="debug_share_chooser_title">Share <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g></string>
+    <string name="debug_toast_diagnostic_copied">Diagnostic bundle copied to clipboard</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Foreground-service notifications (channel names + notification text)
+         ════════════════════════════════════════════════════════════════ -->
+    <!-- BikeRadarService.kt -->
+    <string name="svc_main_channel_name">Bike Radar</string>
+    <string name="svc_main_notif_title">Bike Radar</string>
+    <string name="svc_main_notif_active">Active</string>
+    <string name="svc_main_notif_paused_until">Paused until <xliff:g id="time" example="14:30">%1$s</xliff:g></string>
+    <string name="svc_main_notif_action_resume">Resume</string>
+    <string name="svc_main_notif_action_pause">Pause 1h</string>
+    <string name="svc_main_bond_lost_text">Radar pairing was removed. Re-pair in Bluetooth settings to resume.</string>
+    <string name="svc_main_dashcam_light_title">Dashcam light</string>
+    <string name="svc_main_radar_light_title">Radar light</string>
+    <string name="svc_main_light_fail_text">Couldn\'t switch to <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - check connection.</string>
+    <string name="svc_main_light_fail_channel_name">Dashcam light</string>
+    <string name="svc_main_light_fail_channel_desc">Alerts when the front camera/light mode could not be applied.</string>
+    <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
+    <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
+    <string name="svc_main_walkaway_notif_title">Dashcam left on bike</string>
+    <string name="svc_main_walkaway_notif_text">Radar is off but the dashcam is still on your bike. Battery draining, easy to forget.</string>
+    <string name="svc_main_walkaway_action_dismiss">Dismiss</string>
+    <string name="svc_main_walkaway_action_snooze">Remind in 2 min</string>
+
+    <!-- ReplayService.kt -->
+    <string name="svc_replay_channel_name">Replay</string>
+    <string name="svc_replay_notif_title">Bike Radar replay</string>
+    <string name="svc_replay_notif_starting">Replay starting…</string>
+    <string name="svc_replay_notif_frame">Replaying frame <xliff:g id="index" example="12">%1$d</xliff:g>/<xliff:g id="total" example="340">%2$d</xliff:g></string>
+
+    <!-- ScreenshotCaptureService.kt -->
+    <string name="svc_screenshot_channel_name">Screenshot capture</string>
+    <string name="svc_screenshot_notif_title">Bike Radar</string>
+    <string name="svc_screenshot_notif_text">Capturing screenshots while overlay is active</string>
+    <string name="svc_screenshot_action_stop">Stop</string>
+
+    <!-- DebugOverlayService.kt -->
+    <string name="svc_debugoverlay_channel_name">Radar debug overlay</string>
+    <string name="svc_debugoverlay_notif_title">Bike Radar</string>
+    <string name="svc_debugoverlay_notif_text">Debug overlay</string>
+
+    <!-- SyntheticScenarioService.kt -->
+    <string name="svc_synthetic_channel_name">Synthetic scenario</string>
+    <string name="svc_synthetic_notif_title">Bike Radar synthetic scenario</string>
 
 </resources>

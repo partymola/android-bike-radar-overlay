@@ -397,7 +397,7 @@ class ScreenshotCaptureService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Screenshot capture", NotificationManager.IMPORTANCE_MIN),
+            NotificationChannel(CHANNEL_ID, getString(R.string.svc_screenshot_channel_name), NotificationManager.IMPORTANCE_MIN),
         )
     }
 
@@ -413,12 +413,12 @@ class ScreenshotCaptureService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setContentTitle("Bike Radar")
-            .setContentText("Capturing screenshots while overlay is active")
+            .setContentTitle(getString(R.string.svc_screenshot_notif_title))
+            .setContentText(getString(R.string.svc_screenshot_notif_text))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPi)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.svc_screenshot_action_stop), stopPi)
             .build()
     }
 

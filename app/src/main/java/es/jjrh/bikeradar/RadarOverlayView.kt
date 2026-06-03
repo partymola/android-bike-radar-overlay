@@ -173,11 +173,13 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     /** Spoken state summary for accessibility services - built only when one
-     *  is listening (see [a11yManager]). The string logic is the pure,
-     *  unit-tested [buildOverlayA11ySummary]. */
+     *  is listening (see [a11yManager]). The state logic is the pure,
+     *  unit-tested [buildOverlayA11yModel]; [overlayA11yDescription] resolves
+     *  it to the localized, translatable spoken string. */
     private fun updateA11y() {
         if (!a11yManager.isEnabled) return
-        contentDescription = buildOverlayA11ySummary(state, dashcamStatus, batteryLowSlugs.isNotEmpty())
+        val model = buildOverlayA11yModel(state, dashcamStatus, batteryLowSlugs.isNotEmpty())
+        contentDescription = context.overlayA11yDescription(model)
     }
 
     override fun onDraw(canvas: Canvas) {

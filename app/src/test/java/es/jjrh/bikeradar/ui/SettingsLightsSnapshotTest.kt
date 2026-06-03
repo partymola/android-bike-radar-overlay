@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.ui
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
 import org.junit.Test
@@ -29,11 +30,12 @@ class SettingsLightsSnapshotTest {
 
     private val location = PermissionSpec(
         permissions = listOf("android.permission.ACCESS_COARSE_LOCATION"),
-        title = "Approximate location",
-        rationale = "Used once per ride to compute accurate sunrise/sunset for the " +
-            "light auto-modes. Skip it and sunset is estimated for London.",
+        titleRes = R.string.permission_location_title,
+        // The production SettingsLights screen overrides the base location
+        // rationale with this lights-specific copy, so the golden mirrors it.
+        rationaleRes = R.string.settings_lights_loc_rationale,
         required = false,
-        markLabel = "Optional",
+        markLabelRes = R.string.common_optional,
     )
 
     @Test

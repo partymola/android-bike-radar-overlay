@@ -34,10 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
@@ -90,10 +92,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
     // launcher-free card). Rationale names both lights, not one.
     val locSpec = remember {
         PERMISSIONS.first { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
-            .copy(
-                rationale = "Used once per ride to compute accurate sunrise/sunset for the " +
-                    "light auto-modes. Skip it and sunset is estimated for London.",
-            )
+            .copy(rationaleRes = R.string.settings_lights_loc_rationale)
     }
     var locPermTick by rememberSaveable { mutableStateOf(0) }
     val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
@@ -128,7 +127,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
 
     when (openPicker) {
         LightPicker.RADAR_DAY -> RadarModePickerDialog(
-            title = "Daytime mode",
+            title = stringResource(R.string.settings_lights_daytime_mode),
             current = radarDay,
             onSelect = {
                 radarDay = it
@@ -138,7 +137,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             onDismiss = { openPicker = null },
         )
         LightPicker.RADAR_NIGHT -> RadarModePickerDialog(
-            title = "Night mode",
+            title = stringResource(R.string.settings_lights_night_mode),
             current = radarNight,
             onSelect = {
                 radarNight = it
@@ -148,7 +147,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             onDismiss = { openPicker = null },
         )
         LightPicker.DASHCAM_DAY -> DashcamModePickerDialog(
-            title = "Daytime mode",
+            title = stringResource(R.string.settings_lights_daytime_mode),
             current = dashcamDay,
             onSelect = {
                 dashcamDay = it
@@ -158,7 +157,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             onDismiss = { openPicker = null },
         )
         LightPicker.DASHCAM_NIGHT -> DashcamModePickerDialog(
-            title = "Night mode",
+            title = stringResource(R.string.settings_lights_night_mode),
             current = dashcamNight,
             onSelect = {
                 dashcamNight = it
@@ -201,13 +200,13 @@ internal fun SettingsLightsContent(
     val dashcamOwned = dashcamOwnership == DashcamOwnership.YES
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SettingsHeader("Light auto-mode", onBack = onBack)
+            SettingsHeader(stringResource(R.string.settings_lights_title), onBack = onBack)
 
-            SettingsSectionLabel("Radar tail light")
+            SettingsSectionLabel(stringResource(R.string.settings_lights_radar_section))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Auto-switch day/night",
-                    subtitle = "Sets the radar tail light on connect and at sunset",
+                    title = stringResource(R.string.settings_lights_auto_switch),
+                    subtitle = stringResource(R.string.settings_lights_radar_auto_sub),
                     checked = rearAuto,
                     onCheckedChange = onRearAutoChanged,
                     leadingIcon = Icons.Default.WbSunny,
@@ -217,7 +216,7 @@ internal fun SettingsLightsContent(
                 SettingsRow(
                     icon = Icons.Default.LightMode,
                     iconTint = if (rearAuto) br.brand else br.fgMuted,
-                    title = "Daytime mode",
+                    title = stringResource(R.string.settings_lights_daytime_mode),
                     subtitle = radarDay.displayName(),
                     onClick = onRadarDayClick,
                     chevron = false,
@@ -228,8 +227,8 @@ internal fun SettingsLightsContent(
                 SettingsRow(
                     icon = Icons.Default.DarkMode,
                     iconTint = if (rearAuto) br.brand else br.fgMuted,
-                    title = "Night mode",
-                    subtitle = "${radarNight.displayName()} - switched at local sunset",
+                    title = stringResource(R.string.settings_lights_night_mode),
+                    subtitle = stringResource(R.string.settings_lights_night_sub, radarNight.displayName()),
                     onClick = onRadarNightClick,
                     chevron = false,
                     clickable = rearAuto,
@@ -244,19 +243,19 @@ internal fun SettingsLightsContent(
             // supplementary light, no alarm warranted.
             if (rearAuto) {
                 Text(
-                    text = "The radar can't confirm the switch - if in doubt, glance at the tail light.",
+                    text = stringResource(R.string.settings_lights_radar_caveat),
                     color = br.fgMuted,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
 
-            SettingsSectionLabel("Dashcam light")
+            SettingsSectionLabel(stringResource(R.string.settings_lights_dashcam_section))
             if (dashcamOwned) {
                 SettingsRowGroup {
                     SettingsToggleRow(
-                        title = "Auto-switch day/night",
-                        subtitle = "Sets the dashcam light on connect and at sunset",
+                        title = stringResource(R.string.settings_lights_auto_switch),
+                        subtitle = stringResource(R.string.settings_lights_dashcam_auto_sub),
                         checked = frontAuto,
                         onCheckedChange = onFrontAutoChanged,
                         leadingIcon = Icons.Default.WbSunny,
@@ -266,7 +265,7 @@ internal fun SettingsLightsContent(
                     SettingsRow(
                         icon = Icons.Default.LightMode,
                         iconTint = if (frontAuto) br.brand else br.fgMuted,
-                        title = "Daytime mode",
+                        title = stringResource(R.string.settings_lights_daytime_mode),
                         subtitle = dashcamDay.displayName(),
                         onClick = onDashcamDayClick,
                         chevron = false,
@@ -277,8 +276,8 @@ internal fun SettingsLightsContent(
                     SettingsRow(
                         icon = Icons.Default.DarkMode,
                         iconTint = if (frontAuto) br.brand else br.fgMuted,
-                        title = "Night mode",
-                        subtitle = "${dashcamNight.displayName()} - switched at local sunset",
+                        title = stringResource(R.string.settings_lights_night_mode),
+                        subtitle = stringResource(R.string.settings_lights_night_sub, dashcamNight.displayName()),
                         onClick = onDashcamNightClick,
                         chevron = false,
                         clickable = frontAuto,
@@ -293,10 +292,10 @@ internal fun SettingsLightsContent(
                     SettingsRow(
                         icon = Icons.Default.Videocam,
                         iconTint = br.dashcam,
-                        title = "Dashcam light",
+                        title = stringResource(R.string.settings_lights_dashcam_row_title),
                         subtitle = when (dashcamOwnership) {
-                            DashcamOwnership.NO -> "You don't have one"
-                            else -> "Set up your dashcam"
+                            DashcamOwnership.NO -> stringResource(R.string.settings_lights_dashcam_no)
+                            else -> stringResource(R.string.settings_lights_dashcam_setup)
                         },
                         onClick = onSetUpDashcam,
                         isLast = true,
@@ -343,7 +342,7 @@ private fun RadarModePickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -375,6 +374,6 @@ private fun DashcamModePickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }

@@ -27,12 +27,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BuildConfig
+import es.jjrh.bikeradar.R
 
 @Composable
 fun SettingsAbout(navController: NavController) {
@@ -50,7 +52,7 @@ private fun SettingsAboutBody(navController: NavController) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("About", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_about_title), onBack = { navController.popBackStack() })
 
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
@@ -62,7 +64,7 @@ private fun SettingsAboutBody(navController: NavController) {
                 BrMark(size = 88.dp)
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    text = "Bike Radar",
+                    text = stringResource(R.string.settings_about_app_name),
                     color = br.fg,
                     fontWeight = FontWeight.Medium,
                     fontSize = 24.sp,
@@ -70,14 +72,14 @@ private fun SettingsAboutBody(navController: NavController) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "v${BuildConfig.VERSION_NAME} · GPL-3.0",
+                    text = stringResource(R.string.settings_about_version_line, BuildConfig.VERSION_NAME),
                     color = br.fgDim,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
                 )
                 Spacer(modifier = Modifier.height(22.dp))
                 Text(
-                    text = "Android companion for rear-bike-radar head units on the V2 BLE protocol.",
+                    text = stringResource(R.string.settings_about_tagline),
                     color = br.fgMuted,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -106,27 +108,27 @@ private fun SettingsAboutBody(navController: NavController) {
                 }
             }
 
-            SettingsSectionLabel("Legal")
+            SettingsSectionLabel(stringResource(R.string.settings_about_section_legal))
             SettingsRowGroup {
                 SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
-                    title = "Open source licences",
-                    subtitle = "Every dependency the app ships with",
+                    title = stringResource(R.string.settings_about_licences_title),
+                    subtitle = stringResource(R.string.settings_about_licences_subtitle),
                     onClick = { navController.navigate("settings/licenses") },
                 )
                 SettingsRow(
                     icon = Icons.Default.Lock,
                     iconTint = br.fgMuted,
-                    title = "Privacy",
-                    subtitle = "What stays on the phone, what doesn't",
+                    title = stringResource(R.string.settings_about_privacy_title),
+                    subtitle = stringResource(R.string.settings_about_privacy_subtitle),
                     onClick = { navController.navigate("settings/privacy") },
                 )
                 SettingsRow(
                     icon = Icons.Default.Info,
                     iconTint = br.fgMuted,
-                    title = "Not affiliated with Garmin or Bosch",
-                    subtitle = "This is an independent tool",
+                    title = stringResource(R.string.settings_about_unaffiliated_title),
+                    subtitle = stringResource(R.string.settings_about_unaffiliated_subtitle),
                     onClick = {},
                     chevron = false,
                     clickable = false,

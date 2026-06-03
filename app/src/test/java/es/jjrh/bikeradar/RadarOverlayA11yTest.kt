@@ -1,23 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
- * Pins [buildOverlayA11ySummary] - the spoken overlay summary backing the
- * Canvas view's a11y node. The view's rendering is covered by
- * RadarOverlayViewTest (Roborazzi); this pins the text as plain JVM logic,
- * no Robolectric.
+ * Pins the spoken overlay summary backing the Canvas view's a11y node:
+ * the pure [buildOverlayA11yModel] state logic resolved through
+ * [overlayA11yDescription]. Runs under Robolectric so the externalised copy
+ * + the "N vehicles" quantity string resolve from the real resources; the
+ * assertions pin the exact spoken English. The view's rendering is covered
+ * separately by RadarOverlayViewTest.
  */
+@RunWith(RobolectricTestRunner::class)
 class RadarOverlayA11yTest {
 
+    private val ctx: Context = ApplicationProvider.getApplicationContext()
+
     private fun state(vararg v: Vehicle) = RadarState(vehicles = v.toList())
+
+    private fun summary(
+        state: RadarState,
+        dashcamStatus: DashcamStatus,
+        batteryLow: Boolean,
+    ) = ctx.overlayA11yDescription(buildOverlayA11yModel(state, dashcamStatus, batteryLow))
 
     @Test fun clearRoadWhenNoVehicles() {
         assertEquals(
             "Bike radar overlay. Road clear.",
-            buildOverlayA11ySummary(RadarState(), DashcamStatus.Ok, batteryLow = false),
+            summary(RadarState(), DashcamStatus.Ok, batteryLow = false),
         )
     }
 
@@ -26,7 +41,7 @@ class RadarOverlayA11yTest {
         val s = state(Vehicle(id = 1, distanceM = 10, speedMs = -5f, isBehind = true))
         assertEquals(
             "Bike radar overlay. Road clear.",
-            buildOverlayA11ySummary(s, DashcamStatus.Ok, batteryLow = false),
+            summary(s, DashcamStatus.Ok, batteryLow = false),
         )
     }
 
@@ -34,7 +49,7 @@ class RadarOverlayA11yTest {
         val s = state(Vehicle(id = 1, distanceM = 15, speedMs = -5f))
         assertEquals(
             "Bike radar overlay. 1 vehicle, nearest 15 metres.",
-            buildOverlayA11ySummary(s, DashcamStatus.Ok, batteryLow = false),
+            summary(s, DashcamStatus.Ok, batteryLow = false),
         )
     }
 
@@ -45,34 +60,34 @@ class RadarOverlayA11yTest {
         )
         assertEquals(
             "Bike radar overlay. 2 vehicles, nearest 8 metres.",
-            buildOverlayA11ySummary(s, DashcamStatus.Ok, batteryLow = false),
+            summary(s, DashcamStatus.Ok, batteryLow = false),
         )
     }
 
     @Test fun dashcamWarningsAppendPerStatus() {
         assertEquals(
             "Bike radar overlay. Road clear. Dashcam connection lost.",
-            buildOverlayA11ySummary(RadarState(), DashcamStatus.Dropped, batteryLow = false),
+            summary(RadarState(), DashcamStatus.Dropped, batteryLow = false),
         )
         assertEquals(
             "Bike radar overlay. Road clear. Dashcam not found.",
-            buildOverlayA11ySummary(RadarState(), DashcamStatus.Missing, batteryLow = false),
+            summary(RadarState(), DashcamStatus.Missing, batteryLow = false),
         )
         assertEquals(
             "Bike radar overlay. Road clear. Searching for dashcam.",
-            buildOverlayA11ySummary(RadarState(), DashcamStatus.Searching, batteryLow = false),
+            summary(RadarState(), DashcamStatus.Searching, batteryLow = false),
         )
     }
 
     @Test fun lowBatterySuffixAndCombinedWarnings() {
         assertEquals(
             "Bike radar overlay. Road clear. Low battery.",
-            buildOverlayA11ySummary(RadarState(), DashcamStatus.Ok, batteryLow = true),
+            summary(RadarState(), DashcamStatus.Ok, batteryLow = true),
         )
         val s = state(Vehicle(id = 1, distanceM = 15, speedMs = -5f))
         assertEquals(
             "Bike radar overlay. 1 vehicle, nearest 15 metres. Dashcam not found. Low battery.",
-            buildOverlayA11ySummary(s, DashcamStatus.Missing, batteryLow = true),
+            summary(s, DashcamStatus.Missing, batteryLow = true),
         )
     }
 }

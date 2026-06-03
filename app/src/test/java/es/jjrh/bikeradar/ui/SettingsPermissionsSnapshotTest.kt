@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.ui
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -27,25 +28,24 @@ class SettingsPermissionsSnapshotTest {
 
     private val nearby = PermissionSpec(
         permissions = listOf("android.permission.BLUETOOTH_SCAN"),
-        title = "Nearby devices",
-        rationale = "Scan for and connect to your radar and dashcam over Bluetooth.",
+        titleRes = R.string.permission_nearby_title,
+        rationaleRes = R.string.permission_nearby_rationale,
         required = true,
     )
 
     private val notifications = PermissionSpec(
         permissions = listOf("android.permission.POST_NOTIFICATIONS"),
-        title = "Notifications",
-        rationale = "Post the silent service notification and any ride alerts.",
+        titleRes = R.string.permission_notifications_title,
+        rationaleRes = R.string.permission_notifications_rationale,
         required = true,
     )
 
     private val overlay = PermissionSpec(
         permissions = emptyList(),
-        title = "Draw over other apps",
-        rationale = "Draw the radar overlay on top of whatever's on screen. " +
-            "Without this, alerts still play but you won't see the overlay.",
+        titleRes = R.string.permission_overlay_title,
+        rationaleRes = R.string.permission_overlay_rationale,
         required = false,
-        markLabel = "Recommended",
+        markLabelRes = R.string.permission_mark_recommended,
     )
 
     @Test

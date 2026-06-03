@@ -33,12 +33,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import es.jjrh.bikeradar.R
 import kotlin.math.max
 
 /**
@@ -208,7 +210,7 @@ fun BatteryChip(
             )
         }
         Text(
-            text = "$pct%",
+            text = stringResource(R.string.ui_battery_pct, pct),
             color = color,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
@@ -631,7 +633,7 @@ fun PairedChip(modifier: Modifier = Modifier) {
                 .background(br.safe),
         )
         Text(
-            text = "PAIRED",
+            text = stringResource(R.string.ui_chip_paired),
             color = br.safe,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,

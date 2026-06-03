@@ -20,9 +20,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 
 @Composable
@@ -65,10 +67,10 @@ internal fun SettingsExperimentalContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Experimental", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_exp_title), onBack = { navController.popBackStack() })
 
             Text(
-                text = "Features still being tested. May be jittery or change without notice.",
+                text = stringResource(R.string.settings_exp_intro),
                 color = br.fgDim,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -79,8 +81,8 @@ internal fun SettingsExperimentalContent(
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.FlashOn,
                     leadingTint = br.brand,
-                    title = "Predict overtake paths (1 s lookahead)",
-                    subtitle = "Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.",
+                    title = stringResource(R.string.settings_exp_precog_title),
+                    subtitle = stringResource(R.string.settings_exp_precog_subtitle),
                     checked = precogEnabled,
                     onCheckedChange = onPrecogChange,
                 )
@@ -91,8 +93,8 @@ internal fun SettingsExperimentalContent(
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.Headphones,
                     leadingTint = br.brand,
-                    title = "Directional alert audio",
-                    subtitle = "Pan beeps and urgent cues to the threat's side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.",
+                    title = stringResource(R.string.settings_exp_panning_title),
+                    subtitle = stringResource(R.string.settings_exp_panning_subtitle),
                     checked = lateralPanningEnabled,
                     onCheckedChange = onLateralPanningChange,
                 )
@@ -100,8 +102,8 @@ internal fun SettingsExperimentalContent(
                     SettingsToggleRow(
                         leadingIcon = Icons.Default.SwapHoriz,
                         leadingTint = br.fgDim,
-                        title = "Invert left/right",
-                        subtitle = "Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).",
+                        title = stringResource(R.string.settings_exp_invert_title),
+                        subtitle = stringResource(R.string.settings_exp_invert_subtitle),
                         checked = lateralPanningInvertLR,
                         onCheckedChange = onLateralPanningInvertLRChange,
                     )

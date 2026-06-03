@@ -38,12 +38,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -143,16 +145,16 @@ internal fun SettingsDashcamContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Dashcam", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_dashcam_title), onBack = { navController.popBackStack() })
 
             // Ownership toggle (top section before any device card)
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "I have a front dashcam",
+                    title = stringResource(R.string.settings_dashcam_have_dashcam),
                     subtitle = if (ownership == DashcamOwnership.YES) {
-                        "Set up your dashcam below."
+                        stringResource(R.string.settings_dashcam_have_dashcam_subtitle_on)
                     } else {
-                        "Turn this on if you want to track a Bluetooth dashcam alongside the radar."
+                        stringResource(R.string.settings_dashcam_have_dashcam_subtitle_off)
                     },
                     checked = ownership == DashcamOwnership.YES,
                     onCheckedChange = onOwnershipChange,
@@ -189,7 +191,7 @@ internal fun SettingsDashcamContent(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = dashcamDisplayName ?: "Not selected",
+                                text = dashcamDisplayName ?: stringResource(R.string.settings_dashcam_not_selected),
                                 color = br.fg,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
@@ -226,7 +228,11 @@ internal fun SettingsDashcamContent(
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) {
                             Text(
-                                text = if (dashcamMac == null) "Pick" else "Change",
+                                text = if (dashcamMac == null) {
+                                    stringResource(R.string.settings_dashcam_pick)
+                                } else {
+                                    stringResource(R.string.settings_dashcam_change)
+                                },
                                 color = br.fg,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -235,11 +241,11 @@ internal fun SettingsDashcamContent(
                     }
                 }
 
-                SettingsSectionLabel("Behaviour")
+                SettingsSectionLabel(stringResource(R.string.settings_dashcam_behaviour_label))
                 SettingsRowGroup {
                     SettingsToggleRow(
-                        title = "Warn on overlay when dashcam is off",
-                        subtitle = "Show a camera-off icon next to the rider when no Vue advert is seen.",
+                        title = stringResource(R.string.settings_dashcam_warn_off),
+                        subtitle = stringResource(R.string.settings_dashcam_warn_off_subtitle),
                         checked = dashcamWarnWhenOff,
                         enabled = dashcamMac != null,
                         onCheckedChange = onWarnWhenOffChange,
@@ -247,11 +253,11 @@ internal fun SettingsDashcamContent(
                 }
 
                 if (dashcamMac != null && dashcamWarnWhenOff) {
-                    SettingsSectionLabel("Walk-away alarm")
+                    SettingsSectionLabel(stringResource(R.string.settings_dashcam_walkaway_label))
                     SettingsRowGroup {
                         SettingsToggleRow(
-                            title = "Alert if dashcam remains on",
-                            subtitle = "Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).",
+                            title = stringResource(R.string.settings_dashcam_walkaway_alert),
+                            subtitle = stringResource(R.string.settings_dashcam_walkaway_alert_subtitle),
                             checked = walkAwayAlarmEnabled,
                             onCheckedChange = onWalkAwayEnabledChange,
                             isLast = !walkAwayAlarmEnabled,
@@ -260,11 +266,11 @@ internal fun SettingsDashcamContent(
                             SettingsRow(
                                 icon = Icons.Default.NotificationsActive,
                                 iconTint = br.dashcam,
-                                title = "Override Do Not Disturb",
+                                title = stringResource(R.string.settings_dashcam_override_dnd),
                                 subtitle = if (canBypassDnd) {
-                                    "Currently allowed. Alarm will sound even with DND on."
+                                    stringResource(R.string.settings_dashcam_override_dnd_subtitle_allowed)
                                 } else {
-                                    "Tap to allow this alarm to play through DND in system settings."
+                                    stringResource(R.string.settings_dashcam_override_dnd_subtitle_tap)
                                 },
                                 onClick = onOverrideDndClick,
                                 isLast = true,
@@ -275,9 +281,9 @@ internal fun SettingsDashcamContent(
                         Spacer(modifier = Modifier.height(6.dp))
                         NestedCard {
                             SettingsSliderRow(
-                                title = "Out-of-range threshold",
-                                valueDisplay = "$walkAwayThreshold s",
-                                helper = "How long the dashcam must be unreachable before the alarm fires.",
+                                title = stringResource(R.string.settings_dashcam_threshold_title),
+                                valueDisplay = stringResource(R.string.settings_dashcam_threshold_value, walkAwayThreshold),
+                                helper = stringResource(R.string.settings_dashcam_threshold_helper),
                                 value = walkAwayThreshold.toFloat(),
                                 valueRange = 15f..120f,
                                 steps = 6,

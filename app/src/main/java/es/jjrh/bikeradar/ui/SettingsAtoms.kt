@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import es.jjrh.bikeradar.CameraLightMode
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLightMode
 
 /**
@@ -65,7 +67,7 @@ fun SettingsHeader(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.common_back),
                 tint = br.fg,
                 modifier = Modifier.size(22.dp),
             )
@@ -495,19 +497,21 @@ fun NestedCard(
     }
 }
 
+@Composable
 internal fun CameraLightMode.displayName(): String = when (this) {
-    CameraLightMode.HIGH -> "High"
-    CameraLightMode.MEDIUM -> "Medium"
-    CameraLightMode.LOW -> "Low"
-    CameraLightMode.NIGHT_FLASH -> "Night flash"
-    CameraLightMode.DAY_FLASH -> "Day flash"
-    CameraLightMode.OFF -> "Off"
+    CameraLightMode.HIGH -> stringResource(R.string.settings_lightmode_high)
+    CameraLightMode.MEDIUM -> stringResource(R.string.settings_lightmode_medium)
+    CameraLightMode.LOW -> stringResource(R.string.settings_lightmode_low)
+    CameraLightMode.NIGHT_FLASH -> stringResource(R.string.settings_lightmode_night_flash)
+    CameraLightMode.DAY_FLASH -> stringResource(R.string.settings_lightmode_day_flash)
+    CameraLightMode.OFF -> stringResource(R.string.settings_lightmode_off)
 }
 
+@Composable
 internal fun RadarLightMode.displayName(): String = when (this) {
-    RadarLightMode.NIGHT_FLASH -> "Night flash"
-    RadarLightMode.DAY_FLASH -> "Day flash"
-    RadarLightMode.SOLID -> "Solid"
-    RadarLightMode.PELOTON -> "Peloton"
-    RadarLightMode.OFF -> "Off"
+    RadarLightMode.NIGHT_FLASH -> stringResource(R.string.settings_lightmode_night_flash)
+    RadarLightMode.DAY_FLASH -> stringResource(R.string.settings_lightmode_day_flash)
+    RadarLightMode.SOLID -> stringResource(R.string.settings_lightmode_solid)
+    RadarLightMode.PELOTON -> stringResource(R.string.settings_lightmode_peloton)
+    RadarLightMode.OFF -> stringResource(R.string.settings_lightmode_off)
 }

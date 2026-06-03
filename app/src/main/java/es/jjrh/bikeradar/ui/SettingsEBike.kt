@@ -29,10 +29,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.EBikeStateBus
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.eBikeDataIsFresh
@@ -79,6 +81,8 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         }
     }
     val receiving = eBikeDataIsFresh(lastUpdated, tickNowMs)
+    val dataOnMsg = stringResource(R.string.settings_ebike_data_on_toast)
+    val dataOffMsg = stringResource(R.string.settings_ebike_data_off_toast)
 
     SettingsEBikeContent(
         navController = navController,
@@ -91,12 +95,7 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         },
         onToggleEBikeData = { enabled ->
             prefs.eBikeDataEnabled = enabled
-            val msg = if (enabled) {
-                "Live eBike data is on. Leave Bosch Flow running in the background while you ride."
-            } else {
-                "Live eBike data is off."
-            }
-            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx, if (enabled) dataOnMsg else dataOffMsg, Toast.LENGTH_LONG).show()
         },
         onOpenFlow = { openFlow(ctx) },
     )
@@ -121,19 +120,18 @@ internal fun SettingsEBikeContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader(title = "eBike", onBack = { navController.popBackStack() })
+            SettingsHeader(title = stringResource(R.string.settings_ebike_title), onBack = { navController.popBackStack() })
 
             // Introductory line - lead with the payoff, state the dependency.
             Text(
-                text = "Shows your eBike battery and connection status on the home " +
-                    "screen, while Bosch Flow runs in the background on this phone.",
+                text = stringResource(R.string.settings_ebike_intro),
                 color = br.fgDim,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
             Text(
-                text = "Needs a Bosch Smart System eBike and the Bosch Flow app.",
+                text = stringResource(R.string.settings_ebike_requirements),
                 color = br.fgMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
@@ -146,8 +144,8 @@ internal fun SettingsEBikeContent(
                 // card instead of a toggle they can't usefully flip.
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     IntentCard(
-                        title = "I have a Bosch Smart System eBike now",
-                        subtitle = "Tap to turn on live data.",
+                        title = stringResource(R.string.settings_ebike_intent_title),
+                        subtitle = stringResource(R.string.settings_ebike_intent_subtitle),
                         filled = true,
                         onClick = onOwnershipYes,
                     )
@@ -157,11 +155,11 @@ internal fun SettingsEBikeContent(
                     SettingsToggleRow(
                         leadingIcon = Icons.AutoMirrored.Filled.DirectionsBike,
                         leadingTint = br.brand,
-                        title = "Use eBike data",
+                        title = stringResource(R.string.settings_ebike_use_data),
                         subtitle = if (!eBikeDataEnabled) {
-                            "Turn on to show eBike battery and status on the home screen."
+                            stringResource(R.string.settings_ebike_use_data_subtitle_off)
                         } else {
-                            "Battery and status - shown while Bosch Flow runs in the background."
+                            stringResource(R.string.settings_ebike_use_data_subtitle_on)
                         },
                         checked = eBikeDataEnabled,
                         onCheckedChange = onToggleEBikeData,
@@ -171,16 +169,20 @@ internal fun SettingsEBikeContent(
 
             if (ownership == EBikeOwnership.YES && eBikeDataEnabled) {
                 Spacer(modifier = Modifier.height(16.dp))
-                SettingsSectionLabel("Status")
+                SettingsSectionLabel(stringResource(R.string.settings_ebike_status_label))
                 SettingsRowGroup {
                     SettingsRow(
                         icon = Icons.AutoMirrored.Filled.DirectionsBike,
                         iconTint = if (receiving) br.safe else br.fgMuted,
-                        title = if (receiving) "Receiving live data" else "Waiting for Bosch Flow",
-                        subtitle = if (receiving) {
-                            "Battery and ride status from your bike."
+                        title = if (receiving) {
+                            stringResource(R.string.settings_ebike_receiving)
                         } else {
-                            "Open Flow and ride - data appears here automatically."
+                            stringResource(R.string.settings_ebike_waiting)
+                        },
+                        subtitle = if (receiving) {
+                            stringResource(R.string.settings_ebike_receiving_subtitle)
+                        } else {
+                            stringResource(R.string.settings_ebike_waiting_subtitle)
                         },
                         onClick = {},
                         clickable = false,
@@ -190,26 +192,26 @@ internal fun SettingsEBikeContent(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                SettingsSectionLabel("Actions")
+                SettingsSectionLabel(stringResource(R.string.settings_ebike_actions_label))
                 SettingsRowGroup {
                     SettingsActionRow(
                         leadingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                         leadingTint = br.brand,
-                        title = "Open Bosch Flow",
-                        subtitle = "Live data needs Flow running in the background while you ride.",
-                        actionLabel = "Open",
+                        title = stringResource(R.string.settings_ebike_open_flow),
+                        subtitle = stringResource(R.string.settings_ebike_open_flow_subtitle),
+                        actionLabel = stringResource(R.string.settings_ebike_open),
                         onAction = onOpenFlow,
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            SettingsSectionLabel("What it does")
+            SettingsSectionLabel(stringResource(R.string.settings_ebike_what_it_does_label))
             Text(
                 text = listOf(
-                    "Shows eBike battery and connection status on the home screen",
-                    "Keeps close-pass beeps firing on a slow climb",
-                    "Scales beep timing to your wheel speed",
+                    stringResource(R.string.settings_ebike_does_item_battery),
+                    stringResource(R.string.settings_ebike_does_item_beeps),
+                    stringResource(R.string.settings_ebike_does_item_timing),
                 ).joinToString("\n") { "•  $it" },
                 color = br.fgMuted,
                 fontSize = 12.sp,
@@ -218,13 +220,12 @@ internal fun SettingsEBikeContent(
             )
 
             Spacer(modifier = Modifier.height(20.dp))
-            SettingsSectionLabel("What's collected")
+            SettingsSectionLabel(stringResource(R.string.settings_ebike_whats_collected_label))
             Text(
                 text = listOf(
-                    "Reads battery, speed and pedalling - read-only, never sends " +
-                        "anything to your bike",
-                    "Stays on your phone, saved to the ride log",
-                    "Ride and battery info goes to Home Assistant only if you set it up",
+                    stringResource(R.string.settings_ebike_collected_item_reads),
+                    stringResource(R.string.settings_ebike_collected_item_phone),
+                    stringResource(R.string.settings_ebike_collected_item_ha),
                 ).joinToString("\n") { "•  $it" },
                 color = br.fgMuted,
                 fontSize = 12.sp,
@@ -232,7 +233,7 @@ internal fun SettingsEBikeContent(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
             Text(
-                text = "Full detail in the Privacy screen.",
+                text = stringResource(R.string.settings_ebike_privacy_detail),
                 color = br.fgDim,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
@@ -257,7 +258,7 @@ private fun openFlow(ctx: Context) {
     } catch (_: Exception) {
         Toast.makeText(
             ctx,
-            "Couldn't open Flow. Install it from the Play Store and try again.",
+            ctx.getString(R.string.settings_ebike_open_flow_failed_toast),
             Toast.LENGTH_LONG,
         ).show()
     }

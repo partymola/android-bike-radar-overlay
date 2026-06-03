@@ -20,11 +20,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.R
 
 /**
  * Open-source licences for the dependencies the app ships with. Hand-
@@ -48,19 +50,17 @@ private fun SettingsLicensesBody(navController: NavController) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Open source licences", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_licenses_title), onBack = { navController.popBackStack() })
 
             Text(
-                text = "Bike Radar is itself GPL-3.0-or-later. Every third-party " +
-                    "library it depends on is listed below with its licence. " +
-                    "All licences are compatible with GPL-3.0.",
+                text = stringResource(R.string.settings_licenses_intro),
                 color = br.fgMuted,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
             )
 
-            SettingsSectionLabel("Language & runtime")
+            SettingsSectionLabel(stringResource(R.string.settings_licenses_section_language_runtime))
             LicenseGroup(
                 listOf(
                     LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0"),
@@ -68,7 +68,7 @@ private fun SettingsLicensesBody(navController: NavController) {
                 ),
             )
 
-            SettingsSectionLabel("Android platform")
+            SettingsSectionLabel(stringResource(R.string.settings_licenses_section_android_platform))
             LicenseGroup(
                 listOf(
                     LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
@@ -78,14 +78,14 @@ private fun SettingsLicensesBody(navController: NavController) {
                 ),
             )
 
-            SettingsSectionLabel("UI")
+            SettingsSectionLabel(stringResource(R.string.settings_licenses_section_ui))
             LicenseGroup(
                 listOf(
                     LicenseEntry("Jetpack Compose UI / Material 3 / Material Icons Extended", "The Android Open Source Project", "Apache 2.0"),
                 ),
             )
 
-            SettingsSectionLabel("Build & test")
+            SettingsSectionLabel(stringResource(R.string.settings_licenses_section_build_test))
             LicenseGroup(
                 listOf(
                     LicenseEntry("Android Gradle Plugin", "Google", "Apache 2.0"),

@@ -14,9 +14,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.R
 
 /**
  * Privacy summary. Bike Radar is a self-hosted companion: the app does
@@ -41,31 +43,31 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Privacy", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_privacy_title), onBack = { navController.popBackStack() })
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                PrivacyP("Bike Radar is a self-hosted companion. The app collects no telemetry, runs no analytics, and sends no data to anyone other than the Home Assistant instance you configure.")
+                PrivacyP(stringResource(R.string.settings_privacy_intro))
 
-                PrivacySectionLabel("What stays on your phone")
-                PrivacyP("Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android's app-private storage and never leave the device.")
-                PrivacyP("Your Home Assistant base URL and long-lived bearer token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The encryption key never leaves the secure element. An attacker with raw filesystem access (e.g. `adb pull`) recovers only ciphertext.")
-                PrivacyP("Capture logging is off by default. If you turn it on (Debug screen), a capture log is written for every ride (radar packets, BLE characteristic notifications, eBike data read from Bosch Flow, phone-battery samples - no location) to the app's external files dir under `bike-radar-capture-*.log`. Logs are gzipped on close to save space (`*.log.gz`). They live on your phone, not in any cloud, and are only shared if you tap Share in the Debug screen.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_on_phone_label))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_settings))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_creds))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_capture))
 
-                PrivacySectionLabel("What goes to your Home Assistant")
-                PrivacyP("If you configure HA in Settings, the app publishes to your HA instance via MQTT discovery: the radar's and the dashcam's battery levels, your front-light mode, ride start/end events, and an end-of-ride summary (distance, close-pass counts, closing speeds and lateral clearances). It also publishes a per-event close-pass log if you enable it. These messages go directly to the HA URL you provided. Nothing is routed through the developer or any third party.")
-                PrivacyP("You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_to_ha_label))
+                PrivacyP(stringResource(R.string.settings_privacy_to_ha_publish))
+                PrivacyP(stringResource(R.string.settings_privacy_to_ha_stop))
 
-                PrivacySectionLabel("Bluetooth")
-                PrivacyP("Pairing happens in Android's system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_bluetooth_label))
+                PrivacyP(stringResource(R.string.settings_privacy_bluetooth_body))
 
-                PrivacySectionLabel("Networking")
-                PrivacyP("The only network destination the app contacts is the HA URL you provide. There are no analytics endpoints, crash reporters, ad networks, or third-party libraries that phone home.")
-                PrivacyP("If your HA URL points outside your home network, the app requires HTTPS and refuses to send your bearer token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_networking_label))
+                PrivacyP(stringResource(R.string.settings_privacy_networking_destination))
+                PrivacyP(stringResource(R.string.settings_privacy_networking_https))
 
-                PrivacySectionLabel("Permissions")
-                PrivacyP("BLUETOOTH_SCAN and BLUETOOTH_CONNECT (radar, dashcam, eBike), POST_NOTIFICATIONS (the foreground-service status notification), SYSTEM_ALERT_WINDOW (the radar overlay over your map app), and FOREGROUND_SERVICE (kept alive during rides). ACCESS_COARSE_LOCATION is read once per ride only to set your front and radar lights for local sunrise/sunset; it is never used to track you and never leaves the phone. The screenshot-capture feature, off by default, additionally requests MediaProjection consent every time it starts; it captures the whole screen, so anything behind the overlay (such as your map) is included.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_permissions_label))
+                PrivacyP(stringResource(R.string.settings_privacy_permissions_body))
 
-                PrivacySectionLabel("Source")
-                PrivacyP("The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.")
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_source_label))
+                PrivacyP(stringResource(R.string.settings_privacy_source_body))
 
                 Spacer(modifier = Modifier.height(28.dp))
             }

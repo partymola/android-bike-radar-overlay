@@ -275,7 +275,7 @@ class SyntheticScenarioService : Service() {
 
     private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-        .setContentTitle("Bike Radar synthetic scenario")
+        .setContentTitle(getString(R.string.svc_synthetic_notif_title))
         .setOngoing(true)
         .setPriority(NotificationCompat.PRIORITY_MIN)
         .build()
@@ -284,7 +284,7 @@ class SyntheticScenarioService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Synthetic scenario", NotificationManager.IMPORTANCE_MIN),
+            NotificationChannel(CHANNEL_ID, getString(R.string.svc_synthetic_channel_name), NotificationManager.IMPORTANCE_MIN),
         )
     }
 

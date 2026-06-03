@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,7 @@ import es.jjrh.bikeradar.CaptureLogFiles
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.ReplayService
 import es.jjrh.bikeradar.ScreenshotCaptureService
@@ -116,6 +118,12 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     // which is fine in a debug screen.
     var pendingShareFile by remember { mutableStateOf<File?>(null) }
 
+    val msgScreenshotArmed = stringResource(R.string.debug_toast_screenshot_armed)
+    val msgScreenCaptureDenied = stringResource(R.string.debug_toast_screen_capture_denied)
+    val msgForceReconnectSent = stringResource(R.string.debug_toast_force_reconnect_sent)
+    val msgDiscoverySent = stringResource(R.string.debug_toast_discovery_sent)
+    val msgStateSent = stringResource(R.string.debug_toast_state_sent)
+
     val projectionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -127,10 +135,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             }
             startForegroundServiceCompat(ctx, intent)
             screenshotRunning = true
-            Toast.makeText(ctx, "Screenshot capture armed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, msgScreenshotArmed, Toast.LENGTH_SHORT).show()
         } else {
             screenshotRunning = false
-            Toast.makeText(ctx, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, msgScreenCaptureDenied, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -173,7 +181,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Debug", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.debug_title), onBack = { navController.popBackStack() })
 
             // Scenarios
             DebugScenarioControls(
@@ -200,10 +208,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             )
 
             // Service control
-            SettingsSectionLabel("Service control")
+            SettingsSectionLabel(stringResource(R.string.debug_section_service_control))
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
-                    text = "Force radar reconnect",
+                    text = stringResource(R.string.debug_force_radar_reconnect),
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         ctx.startService(
@@ -211,7 +219,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                                 action = BikeRadarService.ACTION_FORCE_RECONNECT
                             },
                         )
-                        Toast.makeText(ctx, "Force reconnect sent", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, msgForceReconnectSent, Toast.LENGTH_SHORT).show()
                     },
                 )
             }
@@ -219,11 +227,11 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             // Capture logging master switch (opt-in, off by default). Placed
             // high - above the niche dev tools below - because it (and the logs
             // it produces) is the most-used Debug surface.
-            SettingsSectionLabel("Capture logging")
+            SettingsSectionLabel(stringResource(R.string.debug_section_capture_logging))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Write capture logs",
-                    subtitle = "Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride's log finishes either way).",
+                    title = stringResource(R.string.debug_write_capture_logs_title),
+                    subtitle = stringResource(R.string.debug_write_capture_logs_subtitle),
                     checked = prefsSnap.captureLoggingEnabled,
                     onCheckedChange = { prefs.captureLoggingEnabled = it },
                 )
@@ -247,11 +255,11 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             )
 
             // Screenshot capture
-            SettingsSectionLabel("Screenshot capture")
+            SettingsSectionLabel(stringResource(R.string.debug_section_screenshot_capture))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Periodic screenshots",
-                    subtitle = "Capture the screen every minute while the radar overlay is active. Saved to the app's files dir under screenshots/.",
+                    title = stringResource(R.string.debug_periodic_screenshots_title),
+                    subtitle = stringResource(R.string.debug_periodic_screenshots_subtitle),
                     checked = screenshotRunning,
                     onCheckedChange = { wantOn ->
                         if (wantOn) {
@@ -271,7 +279,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             }
 
             // Manual HA push
-            SettingsSectionLabel("Manual HA push")
+            SettingsSectionLabel(stringResource(R.string.debug_section_manual_ha_push))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -279,7 +287,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 DbgGhostButton(
-                    text = "Send discovery",
+                    text = stringResource(R.string.debug_send_discovery),
                     modifier = Modifier.weight(1f),
                     onClick = {
                         val creds = HaCredentials(ctx)
@@ -287,11 +295,11 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                             HaClient(creds.baseUrl, creds.token)
                                 .publishBatteryDiscovery("debug_dummy", "Debug Dummy")
                         }
-                        Toast.makeText(ctx, "Discovery sent", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, msgDiscoverySent, Toast.LENGTH_SHORT).show()
                     },
                 )
                 DbgGhostButton(
-                    text = "Send battery 50%",
+                    text = stringResource(R.string.debug_send_battery_50),
                     modifier = Modifier.weight(1f),
                     onClick = {
                         val creds = HaCredentials(ctx)
@@ -299,23 +307,23 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                             HaClient(creds.baseUrl, creds.token)
                                 .publishBatteryState("debug_dummy", 50)
                         }
-                        Toast.makeText(ctx, "State 50% sent", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, msgStateSent, Toast.LENGTH_SHORT).show()
                     },
                 )
             }
 
             // Diagnostics
-            SettingsSectionLabel("Diagnostics")
+            SettingsSectionLabel(stringResource(R.string.debug_section_diagnostics))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Log unknown eBike object IDs",
-                    subtitle = "Writes ebike_unk lines for unmapped records. Toggle each bike state during a capture to pin lock/light/charger IDs, then turn off.",
+                    title = stringResource(R.string.debug_log_unknown_ebike_ids_title),
+                    subtitle = stringResource(R.string.debug_log_unknown_ebike_ids_subtitle),
                     checked = prefsSnap.eBikeUnknownObjectLogEnabled,
                     onCheckedChange = { prefs.eBikeUnknownObjectLogEnabled = it },
                 )
                 SettingsToggleRow(
-                    title = "Probe radar settings channel",
-                    subtitle = "Logs radar_2f14 / radar_2f12 lines from the radar control service. Cycle the tail-light modes (button or vendor app) to pin the night/day encoding, then turn off.",
+                    title = stringResource(R.string.debug_probe_radar_settings_title),
+                    subtitle = stringResource(R.string.debug_probe_radar_settings_subtitle),
                     checked = prefsSnap.radarSettingsProbeEnabled,
                     onCheckedChange = { prefs.radarSettingsProbeEnabled = it },
                 )
@@ -388,14 +396,14 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                         modifier = Modifier.weight(1f),
                     )
                     DbgGhostButton(
-                        text = "Send",
+                        text = stringResource(R.string.debug_send),
                         onClick = { sendRadarHex(radarRawHex) },
                     )
                 }
             }
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
-                    text = "Copy diagnostic bundle",
+                    text = stringResource(R.string.debug_copy_diagnostic_bundle),
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { shareDiagnosticBundle(ctx, prefs) },
                 )
@@ -412,7 +420,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "RADAR STATE LOG (${stateLog.size})",
+                    text = stringResource(R.string.debug_radar_state_log, stateLog.size),
                     color = br.fgDim,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
@@ -434,7 +442,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             if (stateLogExpanded) {
                 if (stateLog.isEmpty()) {
                     Text(
-                        text = "No states received yet.",
+                        text = stringResource(R.string.debug_no_states_received),
                         color = br.fgDim,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -466,7 +474,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             // Lock developer mode (last)
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 DbgGhostButton(
-                    text = "Lock developer mode",
+                    text = stringResource(R.string.debug_lock_developer_mode),
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         DevModeState.lock(prefs)
@@ -481,13 +489,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     pendingShareFile?.let { file ->
         AlertDialog(
             onDismissRequest = { pendingShareFile = null },
-            title = { Text("Share this capture log?") },
+            title = { Text(stringResource(R.string.debug_share_log_dialog_title)) },
             text = {
                 Text(
-                    "This log records the exact time of every radar packet. " +
-                        "Anyone you share it with can work out when and where " +
-                        "you rode, and how often vehicles passed close. Only " +
-                        "share with people you trust.",
+                    stringResource(R.string.debug_share_log_dialog_body),
                 )
             },
             confirmButton = {
@@ -495,10 +500,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     prefs.captureLogShareWarningSeen = true
                     pendingShareFile = null
                     shareFile(ctx, file)
-                }) { Text("Share anyway") }
+                }) { Text(stringResource(R.string.debug_share_anyway)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingShareFile = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingShareFile = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -506,12 +511,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     if (pendingDeleteAll) {
         AlertDialog(
             onDismissRequest = { pendingDeleteAll = false },
-            title = { Text("Delete all capture logs?") },
+            title = { Text(stringResource(R.string.debug_delete_all_dialog_title)) },
             text = {
                 Text(
-                    "This permanently removes all ${logFiles.size} capture " +
-                        "log(s) from this phone. It can't be undone. The current " +
-                        "ride's log (if any) is not in this list and is kept.",
+                    stringResource(R.string.debug_delete_all_dialog_body, logFiles.size),
                 )
             },
             confirmButton = {
@@ -519,10 +522,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     logFiles.forEach { it.delete() }
                     logFiles = enumerateCaptureLogs(ctx)
                     pendingDeleteAll = false
-                }) { Text("Delete all") }
+                }) { Text(stringResource(R.string.debug_delete_all)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDeleteAll = false }) { Text("Cancel") }
+                TextButton(onClick = { pendingDeleteAll = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -561,7 +564,7 @@ internal fun DebugScenarioControls(
     onStartSynthetic: () -> Unit,
     onStopSynthetic: () -> Unit,
 ) {
-    SettingsSectionLabel("Scenarios")
+    SettingsSectionLabel(stringResource(R.string.debug_section_scenarios))
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -569,13 +572,21 @@ internal fun DebugScenarioControls(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         DbgPrimaryButton(
-            text = if (replayRunning) "Stop Replay" else "Replay",
+            text = if (replayRunning) {
+                stringResource(R.string.debug_stop_replay)
+            } else {
+                stringResource(R.string.debug_replay)
+            },
             active = replayRunning,
             modifier = Modifier.weight(1f),
             onClick = if (replayRunning) onStopReplay else onStartReplay,
         )
         DbgPrimaryButton(
-            text = if (syntheticRunning) "Stop Synthetic" else "Synthetic",
+            text = if (syntheticRunning) {
+                stringResource(R.string.debug_stop_synthetic)
+            } else {
+                stringResource(R.string.debug_synthetic)
+            },
             active = syntheticRunning,
             modifier = Modifier.weight(1f),
             onClick = if (syntheticRunning) onStopSynthetic else onStartSynthetic,
@@ -597,9 +608,9 @@ internal fun DebugCaptureLogList(
 ) {
     val br = LocalBrColors.current
     if (logFiles.isEmpty()) {
-        SettingsSectionLabel("Capture logs")
+        SettingsSectionLabel(stringResource(R.string.debug_section_capture_logs))
         Text(
-            text = "No capture logs yet.",
+            text = stringResource(R.string.debug_no_capture_logs),
             color = br.fgDim,
             fontSize = 12.sp,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -615,14 +626,14 @@ internal fun DebugCaptureLogList(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "CAPTURE LOGS",
+                text = stringResource(R.string.debug_capture_logs_header),
                 color = br.fgDim,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 10.sp,
                 letterSpacing = 1.4.sp,
             )
-            DbgGhostButton(text = "Delete all", onClick = onDeleteAll)
+            DbgGhostButton(text = stringResource(R.string.debug_delete_all), onClick = onDeleteAll)
         }
         Column(
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -711,18 +722,22 @@ private fun CaptureLogCard(file: File, onShare: () -> Unit, onDelete: () -> Unit
                 lineHeight = 15.sp,
             )
             Text(
-                text = "${file.length() / 1024} KB · ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date(file.lastModified()))}",
+                text = stringResource(
+                    R.string.debug_capture_log_meta,
+                    file.length() / 1024,
+                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date(file.lastModified())),
+                ),
                 color = br.fgDim,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
             )
         }
-        DbgGhostButton(text = "Share", onClick = onShare)
+        DbgGhostButton(text = stringResource(R.string.debug_share), onClick = onShare)
         IconButton(onClick = onDelete) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = "Delete ${file.name}",
+                contentDescription = stringResource(R.string.debug_delete_log_cd, file.name),
                 // Match the "Share" label's weight, not the dim caption grey -
                 // a no-undo destructive control shouldn't be the faintest thing
                 // in the row.
@@ -738,13 +753,13 @@ private fun startForegroundServiceCompat(ctx: Context, intent: Intent) {
 
 private fun shareFile(ctx: Context, f: File) {
     if (!f.exists() || f.length() == 0L) {
-        Toast.makeText(ctx, "Log file missing or empty", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, ctx.getString(R.string.debug_toast_log_missing_or_empty), Toast.LENGTH_SHORT).show()
         return
     }
     val uri = try {
         FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
     } catch (t: IllegalArgumentException) {
-        Toast.makeText(ctx, "Cannot share this file: ${t.message}", Toast.LENGTH_LONG).show()
+        Toast.makeText(ctx, ctx.getString(R.string.debug_toast_cannot_share_file, t.message), Toast.LENGTH_LONG).show()
         return
     }
     val mime = ctx.contentResolver.getType(uri) ?: "text/plain"
@@ -755,7 +770,7 @@ private fun shareFile(ctx: Context, f: File) {
         clipData = ClipData.newUri(ctx.contentResolver, f.name, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    ctx.startActivity(Intent.createChooser(send, "Share ${f.name}"))
+    ctx.startActivity(Intent.createChooser(send, ctx.getString(R.string.debug_share_chooser_title, f.name)))
 }
 
 private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
@@ -778,5 +793,5 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
 
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("diagnostic", sb.toString()))
-    Toast.makeText(ctx, "Diagnostic bundle copied to clipboard", Toast.LENGTH_SHORT).show()
+    Toast.makeText(ctx, ctx.getString(R.string.debug_toast_diagnostic_copied), Toast.LENGTH_SHORT).show()
 }

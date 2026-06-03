@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
+import es.jjrh.bikeradar.R
 
 // `permissions` is the list of runtime perms to request. Empty means the
 // special overlay permission, routed via Settings intent. BLUETOOTH_SCAN +
@@ -14,13 +16,17 @@ import androidx.core.content.ContextCompat
 // Android 12+ treats them as one NEARBY_DEVICES permission group with a single
 // system prompt. The app is BLE-central only (radar, dashcam, eBike), so it
 // needs no BLUETOOTH_ADVERTISE.
+//
+// title / rationale / markLabel are carried as @StringRes ids, not finished
+// strings, so this spec list can stay a plain top-level val (no Context) while
+// the copy is still translatable: PermissionCardContent resolves the ids with
+// stringResource at render. markLabelRes is null when there is no badge.
 internal data class PermissionSpec(
     val permissions: List<String>,
-    val title: String,
-    val rationale: String,
+    @get:StringRes val titleRes: Int,
+    @get:StringRes val rationaleRes: Int,
     val required: Boolean,
-    // Optional badge text shown next to the title. null = no badge.
-    val markLabel: String? = null,
+    @get:StringRes val markLabelRes: Int? = null,
 )
 
 internal val PERMISSIONS = buildList {
@@ -30,8 +36,8 @@ internal val PERMISSIONS = buildList {
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
             ),
-            "Nearby devices",
-            "Scan for and connect to your radar, dashcam and eBike over Bluetooth.",
+            R.string.permission_nearby_title,
+            R.string.permission_nearby_rationale,
             required = true,
         ),
     )
@@ -39,8 +45,8 @@ internal val PERMISSIONS = buildList {
         add(
             PermissionSpec(
                 listOf(Manifest.permission.POST_NOTIFICATIONS),
-                "Notifications",
-                "Post the silent service notification and any ride alerts.",
+                R.string.permission_notifications_title,
+                R.string.permission_notifications_rationale,
                 required = true,
             ),
         )
@@ -52,10 +58,10 @@ internal val PERMISSIONS = buildList {
     add(
         PermissionSpec(
             emptyList(),
-            "Draw over other apps",
-            "Draw the radar overlay on top of whatever's on screen. Without this, alerts still play but you won't see the overlay.",
+            R.string.permission_overlay_title,
+            R.string.permission_overlay_rationale,
             required = false,
-            markLabel = "Recommended",
+            markLabelRes = R.string.permission_mark_recommended,
         ),
     )
     // Approximate location, read once per ride for the front- and radar-light
@@ -67,10 +73,10 @@ internal val PERMISSIONS = buildList {
     add(
         PermissionSpec(
             listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
-            "Approximate location",
-            "Used once per ride to compute accurate sunrise/sunset for your front and radar light auto-modes. Skip it and sunset is estimated for London.",
+            R.string.permission_location_title,
+            R.string.permission_location_rationale,
             required = false,
-            markLabel = "Optional",
+            markLabelRes = R.string.common_optional,
         ),
     )
 }

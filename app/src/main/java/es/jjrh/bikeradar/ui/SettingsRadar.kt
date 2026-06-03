@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -37,11 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -142,13 +145,9 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         LaunchedEffect(Unit) { cancelFocus.requestFocus() }
         AlertDialog(
             onDismissRequest = { showStopDialog = false },
-            title = { Text("Stop scanning?") },
+            title = { Text(stringResource(R.string.settings_radar_stop_dialog_title)) },
             text = {
-                Text(
-                    "The radar, overlay, and Home Assistant updates stop until " +
-                        "you start them again from the home screen — including " +
-                        "after a reboot. Use Pause if you only need a quiet hour.",
-                )
+                Text(stringResource(R.string.settings_radar_stop_dialog_body))
             },
             confirmButton = {
                 TextButton(
@@ -160,7 +159,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                         ctx.stopService(Intent(ctx, BikeRadarService::class.java))
                         showStopDialog = false
                     },
-                ) { Text("Stop scanning", color = br.danger) }
+                ) { Text(stringResource(R.string.settings_radar_stop_scanning), color = br.danger) }
             },
             dismissButton = {
                 TextButton(
@@ -168,7 +167,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
                     modifier = Modifier
                         .focusRequester(cancelFocus)
                         .focusable(),
-                ) { Text("Cancel") }
+                ) { Text(stringResource(R.string.settings_radar_cancel)) }
             },
         )
     }
@@ -186,11 +185,11 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
  * label. The slider is stepped at 4 stops so the float lands close to
  * one of these regardless of jitter.
  */
-internal fun overlayDimLabel(opacity: Float): String = when {
-    opacity >= 0.95f -> "Off"
-    opacity >= 0.78f -> "Light"
-    opacity >= 0.6f -> "Medium"
-    else -> "Strong"
+internal fun overlayDimLabel(context: Context, opacity: Float): String = when {
+    opacity >= 0.95f -> context.getString(R.string.settings_radar_overlay_dim_off)
+    opacity >= 0.78f -> context.getString(R.string.settings_radar_overlay_dim_light)
+    opacity >= 0.6f -> context.getString(R.string.settings_radar_overlay_dim_medium)
+    else -> context.getString(R.string.settings_radar_overlay_dim_strong)
 }
 
 @Composable
@@ -237,47 +236,48 @@ internal fun SettingsRadarContent(
     onStopScanningClick: () -> Unit,
 ) {
     val br = LocalBrColors.current
+    val ctx = LocalContext.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Alerts", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_radar_header), onBack = { navController.popBackStack() })
 
             // Alerts group — sliders sit directly on the screen background
             // matching the JSX which puts them outside any card.
-            SettingsSectionLabel("Alerts")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_alerts))
             SettingsSliderRow(
-                title = "Alert volume",
-                valueDisplay = "$alertVol%",
-                helper = "Beep volume for approach alerts. 0 silences audio; the overlay still flashes.",
+                title = stringResource(R.string.settings_radar_alert_volume_title),
+                valueDisplay = stringResource(R.string.settings_radar_percent_value, alertVol),
+                helper = stringResource(R.string.settings_radar_alert_volume_helper),
                 value = alertVol.toFloat(),
                 valueRange = 0f..100f,
                 onValueChange = { onAlertVolChange(it.toInt()) },
                 onValueChangeFinished = onAlertVolFinished,
             )
             SettingsSliderRow(
-                title = "Alert distance",
-                valueDisplay = "$alertDist m",
-                helper = "Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.",
+                title = stringResource(R.string.settings_radar_alert_distance_title),
+                valueDisplay = stringResource(R.string.settings_radar_meters_value, alertDist),
+                helper = stringResource(R.string.settings_radar_alert_distance_helper),
                 value = alertDist.toFloat(),
                 valueRange = 10f..40f,
                 onValueChange = { onAlertDistChange(it.toInt()) },
                 onValueChangeFinished = onAlertDistFinished,
             )
-            SettingsSectionLabel("Overlay")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_overlay))
             SettingsSliderRow(
-                title = "Visual distance",
-                valueDisplay = "$visualDist m",
-                helper = "Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.",
+                title = stringResource(R.string.settings_radar_visual_distance_title),
+                valueDisplay = stringResource(R.string.settings_radar_meters_value, visualDist),
+                helper = stringResource(R.string.settings_radar_visual_distance_helper),
                 value = visualDist.toFloat(),
                 valueRange = 10f..80f,
                 onValueChange = { onVisualDistChange(it.toInt()) },
                 onValueChangeFinished = onVisualDistFinished,
             )
             SettingsSliderRow(
-                title = "Overlay dimmer",
-                valueDisplay = overlayDimLabel(overlayOpacity),
-                helper = "Fade the overlay so a map or navigation app underneath stays readable. \"Off\" leaves the overlay at its full look.",
+                title = stringResource(R.string.settings_radar_overlay_dimmer_title),
+                valueDisplay = overlayDimLabel(ctx, overlayOpacity),
+                helper = stringResource(R.string.settings_radar_overlay_dimmer_helper),
                 value = overlayOpacity,
                 valueRange = 0.5f..1.0f,
                 steps = 2,
@@ -285,44 +285,44 @@ internal fun SettingsRadarContent(
                 onValueChangeFinished = onOverlayOpacityFinished,
             )
 
-            SettingsSectionLabel("Adaptive")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_adaptive))
             SettingsRowGroup {
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.Speed,
                     leadingTint = br.brand,
-                    title = "Adaptive alert colours",
-                    subtitle = "Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.",
+                    title = stringResource(R.string.settings_radar_adaptive_title),
+                    subtitle = stringResource(R.string.settings_radar_adaptive_subtitle),
                     checked = adaptive,
                     onCheckedChange = onAdaptiveChange,
                 )
             }
 
-            SettingsSectionLabel("Connection")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_connection))
             SettingsSliderRow(
-                title = "Idle radar after",
-                valueDisplay = "$radarLongOfflineThreshold min",
-                helper = "Once the radar has been out of range this long, the reconnect interval relaxes to the value below to let the BLE stack idle while the bike is parked.",
+                title = stringResource(R.string.settings_radar_idle_after_title),
+                valueDisplay = stringResource(R.string.settings_radar_minutes_value, radarLongOfflineThreshold),
+                helper = stringResource(R.string.settings_radar_idle_after_helper),
                 value = radarLongOfflineThreshold.toFloat(),
                 valueRange = 5f..120f,
                 onValueChange = { onRadarLongOfflineThresholdChange(it.toInt()) },
                 onValueChangeFinished = onRadarLongOfflineThresholdFinished,
             )
             SettingsSliderRow(
-                title = "Idle reconnect interval",
-                valueDisplay = "$radarLongOfflineCap s",
-                helper = "How often to retry the connection while the radar is idled out. Longer values save battery overnight; shorter values pick up the radar faster when you come back.",
+                title = stringResource(R.string.settings_radar_idle_interval_title),
+                valueDisplay = stringResource(R.string.settings_radar_seconds_value, radarLongOfflineCap),
+                helper = stringResource(R.string.settings_radar_idle_interval_helper),
                 value = radarLongOfflineCap.toFloat(),
                 valueRange = 5f..120f,
                 onValueChange = { onRadarLongOfflineCapChange(it.toInt()) },
                 onValueChangeFinished = onRadarLongOfflineCapFinished,
             )
 
-            SettingsSectionLabel("Battery warnings")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_battery))
             NestedCard {
                 SettingsSliderRow(
-                    title = "Low-battery threshold",
-                    valueDisplay = "$batteryThreshold%",
-                    helper = "Show an amber warning beside the rider when any paired device drops below this level.",
+                    title = stringResource(R.string.settings_radar_low_battery_title),
+                    valueDisplay = stringResource(R.string.settings_radar_percent_value, batteryThreshold),
+                    helper = stringResource(R.string.settings_radar_low_battery_helper),
                     value = batteryThreshold.toFloat(),
                     valueRange = 10f..50f,
                     onValueChange = { onBatteryThresholdChange(it.toInt()) },
@@ -334,23 +334,23 @@ internal fun SettingsRadarContent(
             Spacer(modifier = Modifier.height(6.dp))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    title = "Show device labels",
-                    subtitle = "Show 'RADAR 12%' or 'DASHCAM 8%' on screen instead of a silent warning tint.",
+                    title = stringResource(R.string.settings_radar_show_labels_title),
+                    subtitle = stringResource(R.string.settings_radar_show_labels_subtitle),
                     checked = batteryShowLabels,
                     onCheckedChange = onBatteryShowLabelsChange,
                 )
             }
 
-            SettingsSectionLabel("Close-pass logging")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_close_pass))
             SettingsRowGroup {
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.Home,
                     leadingTint = br.safe,
-                    title = "Log to Home Assistant",
+                    title = stringResource(R.string.settings_radar_log_to_ha_title),
                     subtitle = if (haConfigured) {
-                        "Publish close passes to HA when a vehicle overtakes inside the lateral distance below."
+                        stringResource(R.string.settings_radar_log_to_ha_subtitle_enabled)
                     } else {
-                        "Requires Home Assistant - set it up below."
+                        stringResource(R.string.settings_radar_log_to_ha_subtitle_disabled)
                     },
                     checked = closePassLogging,
                     enabled = haConfigured,
@@ -363,9 +363,12 @@ internal fun SettingsRadarContent(
                 NestedCard {
                     Column {
                         SettingsSliderRow(
-                            title = "Lateral clearance threshold",
-                            valueDisplay = "${String.format(Locale.US, "%.1f", closePassEmitMinX)} m",
-                            helper = "Only publish when the minimum lateral clearance drops below this distance.",
+                            title = stringResource(R.string.settings_radar_lateral_clearance_title),
+                            valueDisplay = stringResource(
+                                R.string.settings_radar_meters_decimal_value,
+                                String.format(Locale.US, "%.1f", closePassEmitMinX),
+                            ),
+                            helper = stringResource(R.string.settings_radar_lateral_clearance_helper),
                             value = closePassEmitMinX,
                             valueRange = 0.5f..2.0f,
                             steps = 14,
@@ -375,9 +378,9 @@ internal fun SettingsRadarContent(
                             paddingBottom = 14.dp,
                         )
                         SettingsSliderRow(
-                            title = "Minimum rider speed",
-                            valueDisplay = "$closePassRiderFloor km/h",
-                            helper = "Detector ignores stationary-rider situations (red lights, pushing the bike).",
+                            title = stringResource(R.string.settings_radar_min_rider_speed_title),
+                            valueDisplay = stringResource(R.string.settings_radar_kmh_value, closePassRiderFloor),
+                            helper = stringResource(R.string.settings_radar_min_rider_speed_helper),
                             value = closePassRiderFloor.toFloat(),
                             valueRange = 5f..30f,
                             steps = 4,
@@ -387,9 +390,12 @@ internal fun SettingsRadarContent(
                             paddingBottom = 14.dp,
                         )
                         SettingsSliderRow(
-                            title = "Minimum closing speed",
-                            valueDisplay = "$closePassClosingFloor m/s",
-                            helper = "Roughly ${(closePassClosingFloor * 3.6).toInt()} km/h of relative approach speed.",
+                            title = stringResource(R.string.settings_radar_min_closing_speed_title),
+                            valueDisplay = stringResource(R.string.settings_radar_ms_value, closePassClosingFloor),
+                            helper = stringResource(
+                                R.string.settings_radar_min_closing_speed_helper,
+                                (closePassClosingFloor * 3.6).toInt(),
+                            ),
                             value = closePassClosingFloor.toFloat(),
                             valueRange = 3f..15f,
                             steps = 11,
@@ -403,7 +409,7 @@ internal fun SettingsRadarContent(
             }
 
             // Indefinite kill-switch (survives reboot). Pause is the time-bounded variant.
-            SettingsSectionLabel("Danger zone")
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_danger))
             SettingsRowGroup {
                 if (serviceEnabled) {
                     Column(
@@ -413,13 +419,13 @@ internal fun SettingsRadarContent(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         BrOutlinedButton(
-                            label = "Stop scanning",
+                            label = stringResource(R.string.settings_radar_stop_scanning),
                             tone = br.danger,
                             leadingIcon = Icons.Default.PowerSettingsNew,
                             onClick = onStopScanningClick,
                         )
                         Text(
-                            text = "Shuts down radar, overlay, and HA updates until you start them again. No auto-start on reboot. Use Pause for a quiet hour instead.",
+                            text = stringResource(R.string.settings_radar_stop_scanning_helper),
                             color = br.fgDim,
                             fontSize = 12.sp,
                         )
@@ -429,8 +435,8 @@ internal fun SettingsRadarContent(
                         SettingsRow(
                             icon = Icons.Default.PowerOff,
                             iconTint = br.fgMuted,
-                            title = "Scanning stopped",
-                            subtitle = "Start it again from the home screen.",
+                            title = stringResource(R.string.settings_radar_scanning_stopped_title),
+                            subtitle = stringResource(R.string.settings_radar_scanning_stopped_subtitle),
                             onClick = {},
                             clickable = false,
                             chevron = false,

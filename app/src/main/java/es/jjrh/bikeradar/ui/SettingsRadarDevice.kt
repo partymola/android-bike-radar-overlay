@@ -33,11 +33,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.Prefs
 
@@ -120,10 +122,10 @@ internal fun SettingsRadarDeviceContent(
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            SettingsHeader("Radar", onBack = onBack)
+            SettingsHeader(stringResource(R.string.settings_radardev_header), onBack = onBack)
 
             Text(
-                text = "Your rear radar - the core of the app.",
+                text = stringResource(R.string.settings_radardev_intro),
                 color = br.fgDim,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -134,8 +136,8 @@ internal fun SettingsRadarDeviceContent(
                 // Never paired: the radar is required, so prompt pairing.
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     IntentCard(
-                        title = "Pair your radar",
-                        subtitle = "Put the radar in pair mode, then pair it in Android's Bluetooth settings.",
+                        title = stringResource(R.string.settings_radardev_pair_title),
+                        subtitle = stringResource(R.string.settings_radardev_pair_subtitle),
                         filled = true,
                         onClick = onPairDifferent,
                     )
@@ -172,7 +174,7 @@ internal fun SettingsRadarDeviceContent(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = activeName ?: "Not selected",
+                            text = activeName ?: stringResource(R.string.settings_radardev_not_selected),
                             color = br.fg,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
@@ -193,9 +195,9 @@ internal fun SettingsRadarDeviceContent(
                             )
                             Text(
                                 text = when {
-                                    activeName == null -> "Pick this bike's radar below"
-                                    connected -> "Connected"
-                                    else -> "Not in range"
+                                    activeName == null -> stringResource(R.string.settings_radardev_pick_radar)
+                                    connected -> stringResource(R.string.settings_radardev_connected)
+                                    else -> stringResource(R.string.settings_radardev_not_in_range)
                                 },
                                 color = br.fgMuted,
                                 fontSize = 12.sp,
@@ -211,7 +213,7 @@ internal fun SettingsRadarDeviceContent(
             // Ambiguity: more than one bonded radar -> let the rider pin which
             // one is on this bike (RadarSelection honours the pinned MAC).
             if (bonded.size > 1) {
-                SettingsSectionLabel("Choose this bike's radar")
+                SettingsSectionLabel(stringResource(R.string.settings_radardev_choose_radar))
                 SettingsRowGroup {
                     bonded.forEachIndexed { i, radar ->
                         val isChosen = radar.mac.equals(chosenMac, ignoreCase = true)
@@ -219,7 +221,11 @@ internal fun SettingsRadarDeviceContent(
                             icon = Icons.Default.Sensors,
                             iconTint = if (isChosen) br.brand else br.fgMuted,
                             title = radar.name,
-                            subtitle = if (isChosen) "Selected" else "Tap to use this radar",
+                            subtitle = if (isChosen) {
+                                stringResource(R.string.settings_radardev_selected)
+                            } else {
+                                stringResource(R.string.settings_radardev_tap_to_use)
+                            },
                             onClick = { onSelectRadar(radar) },
                             chevron = false,
                             isLast = i == bonded.lastIndex,
@@ -228,15 +234,15 @@ internal fun SettingsRadarDeviceContent(
                 }
             }
 
-            SettingsSectionLabel("Actions")
+            SettingsSectionLabel(stringResource(R.string.settings_radardev_section_actions))
             SettingsRowGroup {
                 SettingsActionRow(
                     leadingIcon = Icons.Default.Bluetooth,
                     leadingTint = br.brand,
-                    title = "Pair a different radar",
-                    actionLabel = "Open",
+                    title = stringResource(R.string.settings_radardev_pair_different_title),
+                    actionLabel = stringResource(R.string.settings_radardev_open),
                     onAction = onPairDifferent,
-                    subtitle = "Opens Bluetooth settings. Forget the old radar there first.",
+                    subtitle = stringResource(R.string.settings_radardev_pair_different_subtitle),
                 )
             }
 

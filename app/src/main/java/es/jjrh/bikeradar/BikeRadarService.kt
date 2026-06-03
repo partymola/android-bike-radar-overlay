@@ -998,8 +998,8 @@ class BikeRadarService : Service() {
             piFlags,
         )
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Bike Radar")
-            .setContentText("Radar pairing was removed. Re-pair in Bluetooth settings to resume.")
+            .setContentTitle(getString(R.string.svc_main_notif_title))
+            .setContentText(getString(R.string.svc_main_bond_lost_text))
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
@@ -1689,20 +1689,22 @@ class BikeRadarService : Service() {
     }
 
     private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
-        val modeName = when (mode) {
-            CameraLightMode.HIGH -> "High"
-            CameraLightMode.MEDIUM -> "Medium"
-            CameraLightMode.LOW -> "Low"
-            CameraLightMode.NIGHT_FLASH -> "Night flash"
-            CameraLightMode.DAY_FLASH -> "Day flash"
-            CameraLightMode.OFF -> "Off"
-        }
+        val modeName = getString(
+            when (mode) {
+                CameraLightMode.HIGH -> R.string.settings_lightmode_high
+                CameraLightMode.MEDIUM -> R.string.settings_lightmode_medium
+                CameraLightMode.LOW -> R.string.settings_lightmode_low
+                CameraLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
+                CameraLightMode.DAY_FLASH -> R.string.settings_lightmode_day_flash
+                CameraLightMode.OFF -> R.string.settings_lightmode_off
+            },
+        )
 
         ensureNotificationChannel()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
-            .setContentTitle("Dashcam light")
-            .setContentText("Couldn't switch to $modeName - check connection.")
+            .setContentTitle(getString(R.string.svc_main_dashcam_light_title))
+            .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
@@ -1729,19 +1731,21 @@ class BikeRadarService : Service() {
      *  write was not ACKed after the retries - it can't catch the rarer "ACKed
      *  but the light element didn't change" case (no read-back). */
     private suspend fun postRadarLightModeFailNotification(mode: RadarLightMode) {
-        val modeName = when (mode) {
-            RadarLightMode.NIGHT_FLASH -> "Night flash"
-            RadarLightMode.DAY_FLASH -> "Day flash"
-            RadarLightMode.SOLID -> "Solid"
-            RadarLightMode.PELOTON -> "Peloton"
-            RadarLightMode.OFF -> "Off"
-        }
+        val modeName = getString(
+            when (mode) {
+                RadarLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
+                RadarLightMode.DAY_FLASH -> R.string.settings_lightmode_day_flash
+                RadarLightMode.SOLID -> R.string.settings_lightmode_solid
+                RadarLightMode.PELOTON -> R.string.settings_lightmode_peloton
+                RadarLightMode.OFF -> R.string.settings_lightmode_off
+            },
+        )
 
         ensureNotificationChannel()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
-            .setContentTitle("Radar light")
-            .setContentText("Couldn't switch to $modeName - check connection.")
+            .setContentTitle(getString(R.string.svc_main_radar_light_title))
+            .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
@@ -2013,7 +2017,7 @@ class BikeRadarService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Bike Radar", NotificationManager.IMPORTANCE_MIN),
+                NotificationChannel(CHANNEL_ID, getString(R.string.svc_main_channel_name), NotificationManager.IMPORTANCE_MIN),
             )
         }
         // Drop legacy walk-away channels. Channel properties (sound,
@@ -2031,10 +2035,10 @@ class BikeRadarService : Service() {
             nm.createNotificationChannel(
                 NotificationChannel(
                     LIGHT_FAIL_CHANNEL_ID,
-                    "Dashcam light",
+                    getString(R.string.svc_main_light_fail_channel_name),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "Alerts when the front camera/light mode could not be applied."
+                    description = getString(R.string.svc_main_light_fail_channel_desc)
                     enableVibration(true)
                     vibrationPattern = LIGHT_FAIL_VIBRATE_PATTERN
                 },
@@ -2053,11 +2057,10 @@ class BikeRadarService : Service() {
             // regardless of the user's per-channel preferences.
             val ch = NotificationChannel(
                 WALKAWAY_CHANNEL_ID,
-                "Dashcam left on bike",
+                getString(R.string.svc_main_walkaway_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description =
-                    "Alerts when the radar turns off but the dashcam is still broadcasting from the bike."
+                description = getString(R.string.svc_main_walkaway_channel_desc)
                 enableVibration(false)
                 setSound(null, null)
             }
@@ -2624,19 +2627,16 @@ class BikeRadarService : Service() {
             piFlags,
         )
         val notif = NotificationCompat.Builder(this, WALKAWAY_CHANNEL_ID)
-            .setContentTitle("Dashcam left on bike")
-            .setContentText(
-                "Radar is off but the dashcam is still on your bike. " +
-                    "Battery draining, easy to forget.",
-            )
+            .setContentTitle(getString(R.string.svc_main_walkaway_notif_title))
+            .setContentText(getString(R.string.svc_main_walkaway_notif_text))
             .setSmallIcon(R.drawable.ic_videocam_off)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setOngoing(false)
             .setVibrate(WALKAWAY_VIBRATE_PATTERN)
-            .addAction(0, "Dismiss", dismissPi)
-            .addAction(0, "Remind in 2 min", snoozePi)
+            .addAction(0, getString(R.string.svc_main_walkaway_action_dismiss), dismissPi)
+            .addAction(0, getString(R.string.svc_main_walkaway_action_snooze), snoozePi)
             // Tapping the notification body is treated as Dismiss; swipe-
             // dismiss via setDeleteIntent also marks the episode handled.
             .setContentIntent(dismissPi)
@@ -2651,11 +2651,11 @@ class BikeRadarService : Service() {
         val contentText = if (paused) {
             val t = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                 .format(java.util.Date(prefs.pausedUntilEpochMs))
-            "Paused until $t"
+            getString(R.string.svc_main_notif_paused_until, t)
         } else {
-            "Active"
+            getString(R.string.svc_main_notif_active)
         }
-        val actionLabel = if (paused) "Resume" else "Pause 1h"
+        val actionLabel = if (paused) getString(R.string.svc_main_notif_action_resume) else getString(R.string.svc_main_notif_action_pause)
         val actionBroadcast = if (paused) InternalControlReceiver.ACTION_RESUME else InternalControlReceiver.ACTION_PAUSE_1H
         val piFlags = if (Build.VERSION.SDK_INT >= 23) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -2669,7 +2669,7 @@ class BikeRadarService : Service() {
             piFlags,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Bike Radar")
+            .setContentTitle(getString(R.string.svc_main_notif_title))
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)

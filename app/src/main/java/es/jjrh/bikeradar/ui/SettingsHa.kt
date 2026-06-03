@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -53,6 +54,7 @@ import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaUrlPolicy
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +107,8 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         }
     }
 
+    val savedWithoutTestingMsg = stringResource(R.string.settings_ha_saved_without_testing_toast)
+    val configClearedMsg = stringResource(R.string.settings_ha_config_cleared_toast)
     SettingsHaContent(
         urlField = urlField,
         onUrlChange = { urlField = it },
@@ -165,7 +169,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
             prefs.haLastValidatedEpochMs = 0L
             prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
             haConfigured = url.isNotBlank() && tok.isNotBlank()
-            android.widget.Toast.makeText(ctx, "Saved without testing", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, savedWithoutTestingMsg, android.widget.Toast.LENGTH_SHORT).show()
         },
         onClear = {
             creds.clear()
@@ -182,7 +186,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
             resultForCreds = null
             android.widget.Toast.makeText(
                 ctx,
-                "HA configuration cleared",
+                configClearedMsg,
                 android.widget.Toast.LENGTH_SHORT,
             ).show()
         },
@@ -219,7 +223,7 @@ internal fun SettingsHaContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Home Assistant", onBack = onBack)
+            SettingsHeader(stringResource(R.string.settings_ha_title), onBack = onBack)
 
             // Connection state pill
             val connected = haConfigured && haHealth !is HaHealth.Error
@@ -227,7 +231,7 @@ internal fun SettingsHaContent(
 
             Spacer(modifier = Modifier.height(14.dp))
             HaField(
-                label = "Base URL",
+                label = stringResource(R.string.settings_ha_base_url_label),
                 value = urlField,
                 onChange = onUrlChange,
                 placeholder = "https://homeassistant.local:8123",
@@ -239,7 +243,7 @@ internal fun SettingsHaContent(
                 ),
             )
             HaField(
-                label = "Long-lived token",
+                label = stringResource(R.string.settings_ha_token_label),
                 value = tokenField,
                 onChange = onTokenChange,
                 placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
@@ -258,7 +262,11 @@ internal fun SettingsHaContent(
                     IconButton(onClick = onToggleTokenVisible) {
                         Icon(
                             imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                            contentDescription = if (tokenVisible) {
+                                stringResource(R.string.settings_ha_hide_token)
+                            } else {
+                                stringResource(R.string.settings_ha_show_token)
+                            },
                             tint = br.fgMuted,
                         )
                     }
@@ -273,13 +281,17 @@ internal fun SettingsHaContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 BrandButton(
-                    text = if (pinging) "Testing…" else "Test and save",
+                    text = if (pinging) {
+                        stringResource(R.string.settings_ha_testing)
+                    } else {
+                        stringResource(R.string.settings_ha_test_and_save)
+                    },
                     enabled = !pinging && urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     onClick = onTestAndSave,
                 )
                 GhostButton(
-                    text = "Save without testing",
+                    text = stringResource(R.string.settings_ha_save_without_testing),
                     enabled = urlField.isNotBlank() && tokenField.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     onClick = onSaveWithoutTesting,
@@ -297,7 +309,7 @@ internal fun SettingsHaContent(
                     .padding(horizontal = 16.dp),
             ) {
                 GhostButton(
-                    text = "Clear HA configuration",
+                    text = stringResource(R.string.settings_ha_clear_config),
                     enabled = haConfigured,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onClear,
@@ -311,15 +323,24 @@ internal fun SettingsHaContent(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    val errorFallback = stringResource(R.string.settings_ha_error)
                     pingResult?.let { r ->
                         BrChip(
-                            text = if (r.isSuccess) "HA: saved" else "HA: ${r.exceptionOrNull()?.message ?: "error"}",
+                            text = if (r.isSuccess) {
+                                stringResource(R.string.settings_ha_chip_ha_saved)
+                            } else {
+                                stringResource(R.string.settings_ha_chip_ha_error, r.exceptionOrNull()?.message ?: errorFallback)
+                            },
                             color = if (r.isSuccess) br.safe else br.danger,
                         )
                     }
                     mqttResult?.let { r ->
                         BrChip(
-                            text = if (r.isSuccess) "MQTT: ready" else "MQTT: ${r.exceptionOrNull()?.message ?: "error"}",
+                            text = if (r.isSuccess) {
+                                stringResource(R.string.settings_ha_chip_mqtt_ready)
+                            } else {
+                                stringResource(R.string.settings_ha_chip_mqtt_error, r.exceptionOrNull()?.message ?: errorFallback)
+                            },
                             color = if (r.isSuccess) br.safe else br.caution,
                         )
                     }
@@ -330,7 +351,7 @@ internal fun SettingsHaContent(
             // entries the app is known to publish; live count would
             // require a query we don't run yet). The status dot reflects
             // whether HA is currently reachable, not the entity value.
-            SettingsSectionLabel("Published entities")
+            SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
             SettingsRowGroup {
                 EntityRow(name = "sensor.bike_radar_battery", value = "—", connected = connected, isLast = false)
                 EntityRow(name = "sensor.bike_dashcam_battery", value = "—", connected = connected, isLast = false)
@@ -371,15 +392,19 @@ private fun ConnectionStateCard(connected: Boolean, health: HaHealth) {
         StatusDot(color = accent, size = 8.dp)
         Column {
             Text(
-                text = if (connected) "Connected" else "Not configured",
+                text = if (connected) {
+                    stringResource(R.string.settings_ha_connected)
+                } else {
+                    stringResource(R.string.settings_ha_not_configured)
+                },
                 color = accent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
             val subtitle = when {
-                !connected -> "Add your URL + token below."
-                health is HaHealth.Error -> "Last error: ${health.message}"
-                else -> "MQTT discovery active"
+                !connected -> stringResource(R.string.settings_ha_add_url_token)
+                health is HaHealth.Error -> stringResource(R.string.settings_ha_last_error, health.message)
+                else -> stringResource(R.string.settings_ha_mqtt_discovery_active)
             }
             Text(
                 text = subtitle,

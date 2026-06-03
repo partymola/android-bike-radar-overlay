@@ -39,11 +39,11 @@ class ReplayService : Service() {
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
                 NOTIF_ID,
-                buildNotification("Replay starting…"),
+                buildNotification(getString(R.string.svc_replay_notif_starting)),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
             )
         } else {
-            startForeground(NOTIF_ID, buildNotification("Replay starting…"))
+            startForeground(NOTIF_ID, buildNotification(getString(R.string.svc_replay_notif_starting)))
         }
         scope.launch { runReplay() }
     }
@@ -88,7 +88,7 @@ class ReplayService : Service() {
 
             val elapsed = SystemClock.elapsedRealtime() - wallStart
             if (elapsed - lastNotifUpdateMs > 1000) {
-                updateNotif("Replaying frame ${i + 1}/${frames.size}")
+                updateNotif(getString(R.string.svc_replay_notif_frame, i + 1, frames.size))
                 lastNotifUpdateMs = elapsed
             }
         }
@@ -126,7 +126,7 @@ class ReplayService : Service() {
 
     private fun buildNotification(text: String): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-        .setContentTitle("Bike Radar replay")
+        .setContentTitle(getString(R.string.svc_replay_notif_title))
         .setContentText(text)
         .setOngoing(true)
         .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -136,7 +136,7 @@ class ReplayService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Replay", NotificationManager.IMPORTANCE_MIN),
+            NotificationChannel(CHANNEL_ID, getString(R.string.svc_replay_channel_name), NotificationManager.IMPORTANCE_MIN),
         )
     }
 

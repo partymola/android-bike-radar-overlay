@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import android.provider.Settings as AndroidSettings
 
@@ -88,7 +90,7 @@ private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNU
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Permissions", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_perm_title), onBack = { navController.popBackStack() })
 
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -123,7 +125,7 @@ internal fun SettingsPermissionsContent(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            SettingsHeader("Permissions", onBack = { navController.popBackStack() })
+            SettingsHeader(stringResource(R.string.settings_perm_title), onBack = { navController.popBackStack() })
 
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -151,7 +153,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
     // Track whether we've ever asked for this spec in this card's
     // lifetime so we can disambiguate "never asked" (rationale=false)
     // from "tapped 'Don't ask again'" (rationale=false, but attempted).
-    var requestAttempted by rememberSaveable(spec.title) { mutableStateOf(false) }
+    var requestAttempted by rememberSaveable(spec.titleRes) { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { onChanged() }
@@ -258,16 +260,16 @@ internal fun PermissionCardContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = spec.title,
+                        text = stringResource(spec.titleRes),
                         color = br.fg,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    spec.markLabel?.let { Mark(text = it) }
+                    spec.markLabelRes?.let { Mark(text = stringResource(it)) }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = spec.rationale,
+                    text = stringResource(spec.rationaleRes),
                     color = br.fgMuted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
@@ -292,9 +294,9 @@ internal fun PermissionCardContent(
             ) {
                 Text(
                     text = when {
-                        permanentlyDenied -> "Open App info"
-                        spec.required -> "Grant"
-                        else -> "Enable"
+                        permanentlyDenied -> stringResource(R.string.settings_perm_open_app_info)
+                        spec.required -> stringResource(R.string.settings_perm_grant)
+                        else -> stringResource(R.string.settings_perm_enable)
                     },
                     color = if (spec.required) br.bg else br.fg,
                     fontSize = 12.sp,

@@ -83,6 +83,14 @@ class BikeRadarService : Service() {
 
     // Battery path state
     private val attemptInFlight = ConcurrentHashMap<String, Long>()
+
+    // Dashcam-probe backoff state (BatteryProbeBackoff): guards against the
+    // dashcam-off connect storm that would otherwise contend with the radar link.
+    // lastDashcamProbeMs = last probe-launch time; dashcamProbeFailures =
+    // consecutive read-failure count. Consulted only by the dashcam ticker while
+    // the radar is connected; reset on a successful read and at ride start.
+    private val lastDashcamProbeMs = ConcurrentHashMap<String, Long>()
+    private val dashcamProbeFailures = ConcurrentHashMap<String, Int>()
     private val discoveredSlugs = ConcurrentHashMap.newKeySet<String>()
     private val lastHaPublishMs = ConcurrentHashMap<String, Long>()
     private val lastPublishedPct = ConcurrentHashMap<String, Int>()
@@ -776,8 +784,17 @@ class BikeRadarService : Service() {
 
         val pct = readBattery(mac) ?: run {
             Log.w(TAG, "battery read failed: $name $mac")
+            // Count the consecutive failure so the dashcam ticker can back its
+            // probe off. Scoped to the dashcam mac (the only one the ticker reads)
+            // so this stays in sync with the map's name; only the readBattery==null
+            // branch counts - an HA publish failure below is not a read failure.
+            if (prefs.dashcamMac.equals(mac, ignoreCase = true)) {
+                dashcamProbeFailures[mac] = (dashcamProbeFailures[mac] ?: 0) + 1
+            }
             return
         }
+        // Successful read: the device answered, so clear any backoff.
+        dashcamProbeFailures.remove(mac)
         Log.i(TAG, "battery $name: $pct%")
         val s = slug(name)
         macToSlug[mac] = s
@@ -2260,7 +2277,27 @@ class BikeRadarService : Service() {
                     val entry = slug?.let { BatteryStateBus.entries.value[it] }
                     val now = System.currentTimeMillis()
                     val ageMs = entry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
-                    if (ageMs >= DASHCAM_REFRESH_MS) launchBatteryRead(name, mac)
+                    if (ageMs >= DASHCAM_REFRESH_MS) {
+                        // Connect-storm guard: while the radar is connected, a
+                        // probe that keeps failing (dashcam powered off) backs off
+                        // so it can't connect-storm and contend with the radar
+                        // link. While the radar is DISCONNECTED the walk-away alarm
+                        // consumes this same liveness freshness, so backoff is
+                        // bypassed there - the probe keeps its full age-gated
+                        // cadence, byte-identical to the pre-fix behaviour.
+                        val probeOk = BatteryProbeBackoff.shouldProbe(
+                            link.radarGattActive,
+                            now,
+                            lastDashcamProbeMs[mac],
+                            dashcamProbeFailures[mac] ?: 0,
+                            DASHCAM_REFRESH_MS,
+                            DASHCAM_PROBE_BACKOFF_CAP_MS,
+                        )
+                        if (probeOk) {
+                            lastDashcamProbeMs[mac] = now
+                            launchBatteryRead(name, mac)
+                        }
+                    }
                 }
                 delay(DASHCAM_TICK_MS)
             }
@@ -2369,6 +2406,12 @@ class BikeRadarService : Service() {
                     radarGattActive = true,
                 )
             }
+        }
+        // New radar presence episode: clear dashcam-probe backoff so the camera
+        // is re-probed promptly this ride (the storm guard resets per ride).
+        prefs.dashcamMac?.let {
+            dashcamProbeFailures.remove(it)
+            lastDashcamProbeMs.remove(it)
         }
         if (prev.radarOffSinceMs != null) {
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
@@ -2958,6 +3001,14 @@ class BikeRadarService : Service() {
         // defeating the alarm. Set just under DASHCAM_FRESH_MS so a
         // single failed probe is enough to flip the glyph red.
         const val DASHCAM_REFRESH_MS = 20_000L
+
+        // Connect-storm guard: while the radar is connected, a dashcam whose
+        // liveness probe keeps failing (powered off) is retried with doubling
+        // backoff (base DASHCAM_REFRESH_MS) capped here, so it can't connect-storm
+        // the radar link. 60s: a dashcam switched back on mid-ride is re-detected
+        // within <=60s (auto-light-off config; the camera-light link detects
+        // faster when on). Backoff never applies while the radar is disconnected.
+        const val DASHCAM_PROBE_BACKOFF_CAP_MS = 60_000L
 
         // Walk-away alarm tick cadence + snooze. Tick interval matches the
         // dashcam status tick so the feature reacts on the same cadence

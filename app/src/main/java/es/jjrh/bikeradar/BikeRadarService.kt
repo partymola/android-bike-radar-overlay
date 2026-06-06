@@ -74,6 +74,7 @@ class BikeRadarService : Service() {
     private lateinit var ha: HaClient
     private lateinit var haPublisher: HaPublisher
     private lateinit var notifications: ServiceNotifications
+    private lateinit var knownDevices: KnownDevices
 
     // Battery path state
     private val attemptInFlight = ConcurrentHashMap<String, Long>()
@@ -335,6 +336,7 @@ class BikeRadarService : Service() {
         ClosePassStateBus.reset()
         rideStats = RideStatsAccumulator()
         prefs = Prefs(this)
+        knownDevices = KnownDevices(getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE))
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
         creds = HaCredentials(this)
@@ -402,7 +404,7 @@ class BikeRadarService : Service() {
             rideStats = { rideStats },
             currentRadarMac = { currentRadarMac },
             macToSlug = { macToSlug },
-            loadKnownDevices = { loadKnownDevices() },
+            loadKnownDevices = { knownDevices.load() },
             slug = { name -> slug(name) },
         )
 
@@ -680,7 +682,7 @@ class BikeRadarService : Service() {
     // ── battery scan kickstart ────────────────────────────────────────────────
 
     private suspend fun kickstartFromCache() {
-        val known = loadKnownDevices()
+        val known = knownDevices.load()
         for ((name, mac) in known) scheduleRead(name, mac)
 
         // Always-on PendingIntent scan (registerEventScan) covers ongoing
@@ -691,7 +693,7 @@ class BikeRadarService : Service() {
 
         val fresh = scanForDevices(timeoutMs = 3_000)
         if (fresh.isNotEmpty()) {
-            saveKnownDevices(fresh)
+            knownDevices.save(fresh)
             for ((name, mac) in fresh) scheduleRead(name, mac)
         }
     }
@@ -775,11 +777,11 @@ class BikeRadarService : Service() {
     private suspend fun doReadBattery(name: String, mac: String) {
         val sp = getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE)
 
-        val known = loadKnownDevices().toMutableList()
+        val known = knownDevices.load().toMutableList()
         if (known.none { it.second == mac }) {
             known.removeAll { it.first == name }
             known.add(name to mac)
-            saveKnownDevices(known)
+            knownDevices.save(known)
         }
 
         val pct = readBattery(mac) ?: run {
@@ -1868,22 +1870,6 @@ class BikeRadarService : Service() {
         return found.values.toList()
     }
 
-    // ── known-device cache ────────────────────────────────────────────────────
-
-    private fun loadKnownDevices(): List<Pair<String, String>> {
-        val sp = getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE)
-        val raw = sp.getStringSet(KEY_KNOWN, emptySet()) ?: emptySet()
-        return raw.mapNotNull {
-            val p = it.split("|", limit = 2)
-            if (p.size == 2) p[0] to p[1] else null
-        }
-    }
-
-    private fun saveKnownDevices(devs: List<Pair<String, String>>) {
-        val sp = getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE)
-        sp.edit().putStringSet(KEY_KNOWN, devs.map { "${it.first}|${it.second}" }.toSet()).apply()
-    }
-
     // ── walk-away alarm tone ─────────────────────────────────────────────────
 
     /**
@@ -2493,7 +2479,6 @@ class BikeRadarService : Service() {
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
         private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
         private const val PREFS_THROTTLE = "bike_radar_throttle"
-        private const val KEY_KNOWN = "known_devices"
         private const val KEY_LAST_TS = "last_ts"
         private const val SCAN_PI_REQ = 0xB1CC
 

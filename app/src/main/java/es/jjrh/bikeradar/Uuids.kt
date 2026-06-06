@@ -21,10 +21,11 @@ object Uuids {
     // Radar service (rear radar only)
     val SVC_RADAR: UUID = UUID.fromString("6a4e3200-667b-11e3-949a-0800200c9a66")
 
-    // V1 cleartext stream. We receive V1 frames WITHOUT writing its CCCD -
-    // the radar broadcasts 3203 regardless. Subscribing the CCCD signals us
-    // as a legacy V1 client and locks the radar to 3203-only, suppressing 3204.
-    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66") // NOTIFY (no CCCD write)
+    // V1 cleartext stream. The app deliberately never subscribes this: 3203 only
+    // emits once its CCCD is written (it does NOT broadcast regardless), and
+    // subscribing it can pin the radar into V1-only mode, suppressing the 3204
+    // stream we rely on. So we never write this CCCD and never receive V1.
+    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66") // NOTIFY (never subscribed)
     val RADAR_V2: UUID = UUID.fromString("6a4e3204-667b-11e3-949a-0800200c9a66") // NOTIFY (subscribe post-handshake)
 
     // Control / settings service (rear radar only)

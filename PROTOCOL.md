@@ -52,12 +52,12 @@ has to match on `0xfe1f` to catch both devices (see `BatteryScanReceiver`).
 
 ### Critical: never subscribe the V1 CCCD
 
-Subscribing the CCCD for `6a4e3203` signals the radar that the client is a
-legacy V1-only peer and permanently suppresses V2 frames for the session.
-The radar broadcasts `3203` cleartext regardless of any CCCD state, but
-the app doesn't currently decode V1 — it only routes `6a4e3204` to the
-decoder. The rule exists so that subscribing V1 doesn't accidentally kill
-the V2 stream we rely on. See `Uuids.kt` for the permanent warning.
+`6a4e3203` only starts notifying once its CCCD is subscribed - it does not
+broadcast regardless - and subscribing it can pin the radar in V1 mode and
+suppress the `6a4e3204` stream we rely on (the official app never subscribes
+it during a V2 session). So the app never writes this CCCD and never receives
+V1; only `6a4e3204` is routed to the decoder. See `Uuids.kt` for the
+permanent warning and the canonical spec for the firmware behaviour it guards.
 
 ## CCCD subscribe order
 
@@ -116,7 +116,7 @@ Header bits:
 | Bit | Meaning |
 |-----|---------|
 | `0x0001` | Status/ack frame, no target payload. Skip. |
-| `0x0004` | Device-status frame, no targets. Skip. |
+| `0x0004` | Device-status frame: no targets. The body's final byte is the rider's own bike speed (`x0.25` m/s), used for adaptive alerts. |
 | anything else | Decode N target structs from body. |
 
 ### 9-byte target struct
@@ -124,41 +124,39 @@ Header bits:
 | Byte | Type | Field | Notes |
 |------|------|-------|-------|
 | 0 | u8 | `targetId` | Radar-assigned track ID, stable across frames |
-| 1 | u8 | `targetClass` | See `CLASS_*` constants in `RadarV2Decoder.kt` |
-| 2 | u8 | `rangeY` low | Longitudinal distance within current 25.6 m zone, x0.1 m (0..25.5 m) |
-| 3 | bits 0..2 | `rangeY` zone | 3-bit counter; zone = `((b3 & 7) + 1) & 7` |
-| 3 | bits 3..7 | unknown | Change per packet; not correlated with range, class, x, or speed. Not decoded. |
-| 4 | i8 | `rangeX` | Lateral offset, x0.1 m, -12.8..+12.7 m (positive = right) |
+| 1 | u8 | `targetClass` | Signature class; see `CLASS_*` constants in `RadarV2Decoder.kt` |
+| 2..4 | - | `rangeY` + `rangeX` | 24-bit little-endian packed pair; see below |
 | 5 | u8 | length | Class template, x0.25 m. **Not** a real measurement |
 | 6 | u8 | width | Class template, x0.25 m. **Not** a real measurement |
-| 7 | i8 | `speedY` | Approach velocity, x0.5 m/s, negative = closing |
-| 8 | u8 | `0x80` | Constant sentinel across all observed samples |
+| 7 | i8 | `speedY` | Longitudinal closing speed, x0.5 m/s, negative = approaching |
+| 8 | i8 | `speedX` | Lateral velocity, x0.5 m/s; `0x80` = "no lateral velocity" sentinel |
 
-**True `rangeY`** = `zone * 25.6 m + (b2 * 0.1 m)`, giving 0..179.2 m in
-25.6 m zones. This covers the 820's full ~175 m sensor range.
+**Range decode.** Bytes [2..4] are a 24-bit little-endian word packing two
+signed fields: bits 0..10 = `rangeX` (11-bit signed, x0.1 m) and bits 11..23
+= `rangeY` (13-bit signed, x0.1 m, ~220 m in practice). `rangeY > 0` is
+behind the rider; `rangeY < 0` is a target that has overtaken (ahead);
+`rangeX > 0` is to the right. See `RadarV2Decoder.decodeTarget` and the
+canonical spec for the full derivation. An earlier big-endian "25.6 m
+zone-counter" reading (separate low byte, 3-bit zone, separate i8 `rangeX`)
+was wrong and is retracted.
 
-The old app pre-2026-04-21 read only `b2` and capped at 25.5 m, which made
-cars beyond 25 m silently vanish from the overlay. See
-[`RadarV2DecoderTest.kt`](app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt)
-for the zone-wrap test cases.
+### Speed
 
-### Speed derivation
+The decoder takes closing speed straight from `byte[7]` (x0.5 m/s; negative
+= approaching). An earlier revision ignored byte[7] and derived speed from
+frame-to-frame `rangeY` deltas; byte[7] is the radar's own approach-speed
+signal and is smoother, so the delta method was dropped.
 
-The app ignores `byte[7]` and computes speed from frame-to-frame deltas of
-`rangeY`. Reasoning: byte[7] is quantised at x0.5 m/s and we can get a
-smoother estimate from `SPEED_DT_MIN_MS`/`SPEED_DT_MAX_MS`-windowed deltas.
-See `RadarV2Decoder.kt` for the windowing logic.
+## V1 stream (`6a4e3203`) - not used
 
-## V1 stream (`6a4e3203`) — received but not decoded
+V1 and V2 are mutually exclusive: the radar streams one or the other, and
+reaching V2 (via the unlock handshake) is what keeps V1 silent. The app
+targets V2 only and never subscribes `6a4e3203`, so V1 frames are not
+received and never appear in the capture log.
 
-The radar broadcasts V1 cleartext frames in parallel regardless of V2
-state. The app currently does not decode them; only `6a4e3204` is routed
-to the decoder. V1 frames are still observable in the capture log under
-the `3203` tag — useful for offline analysis but not used live.
-
-If a V2 handshake fails, the app today has no V1 fallback and the overlay
-will stay empty. See `bike-radar-docs/PROTOCOL.md` for the full V1 layout
-if you want to add one.
+If a V2 handshake fails the overlay stays empty until V2 reconnects; there
+is no V1 fallback (it would need its own CCCD subscribe, which can pin the
+radar in V1 mode). See `bike-radar-docs/PROTOCOL.md` for the full V1 layout.
 
 ## Battery read (both devices)
 
@@ -178,8 +176,9 @@ Two read paths:
    battery when one is already live.
 
 The rear radar also NOTIFIES `0x2a19` at ~5 s intervals once the CCCD is
-enabled during the handshake. The app currently ignores those notifies;
-see the v0.2 backlog in the triage notes.
+enabled during the handshake; the app consumes these to refresh the radar
+battery and drive throttled HA publishes, so a live radar link keeps the
+reading current without extra reads.
 
 ## Capture log format
 
@@ -209,4 +208,4 @@ never got past "connect attempt") are pruned as no-signal noise.
 - `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` — connection,
   capture log, battery scheduling.
 - `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` — decoder
-  unit tests, including the zone-wrap cases.
+  unit tests.

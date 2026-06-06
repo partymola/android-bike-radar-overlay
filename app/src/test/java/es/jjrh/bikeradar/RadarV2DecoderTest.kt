@@ -624,7 +624,7 @@ class RadarV2DecoderTest {
                 clock += 1L
                 val len = rng.nextInt(0, 1024)
                 val bytes = ByteArray(len) { rng.nextInt(256).toByte() }
-                try {
+                val st = try {
                     fuzzDecoder.feed(bytes)
                 } catch (t: Throwable) {
                     throw AssertionError(
@@ -632,6 +632,7 @@ class RadarV2DecoderTest {
                         t,
                     )
                 }
+                assertVehiclesValid(st, "seed=$seed len=$len")
             }
         }
     }
@@ -648,11 +649,12 @@ class RadarV2DecoderTest {
             if (rng.nextInt(50) == 0) fuzzDecoder.reset()
             val len = rng.nextInt(0, 512)
             val bytes = ByteArray(len) { rng.nextInt(256).toByte() }
-            try {
+            val st = try {
                 fuzzDecoder.feed(bytes)
             } catch (t: Throwable) {
                 throw AssertionError("feed threw post-reset on len=$len", t)
             }
+            assertVehiclesValid(st, "post-reset len=$len")
         }
     }
 
@@ -679,12 +681,31 @@ class RadarV2DecoderTest {
             byteArrayOf(0x04, 0x00) + ByteArray(64) { 0x55 },
         )
         for ((i, b) in edges.withIndex()) {
-            try {
+            val st = try {
                 decoder.feed(b)
             } catch (t: Throwable) {
                 throw AssertionError("feed threw on edge case index=$i len=${b.size}", t)
             }
+            assertVehiclesValid(st, "edge index=$i len=${b.size}")
         }
+    }
+}
+
+/**
+ * Fuzz invariant: every vehicle the decoder emits has in-range geometry -
+ * distance within the representable 0..410 m, lateral position clamped to
+ * [-1, 1] (the range check also rejects NaN), finite closing speed, and a sane
+ * lateral velocity. Proves the decoder never emits garbage from adversarial
+ * bytes, not just that it does not throw.
+ */
+private fun assertVehiclesValid(state: RadarState?, ctx: String) {
+    val vehicles = state?.vehicles ?: return
+    for (v in vehicles) {
+        assertTrue("$ctx: distanceM out of range: ${v.distanceM}", v.distanceM in 0..410)
+        assertTrue("$ctx: lateralPos out of [-1,1] or NaN: ${v.lateralPos}", v.lateralPos in -1f..1f)
+        assertTrue("$ctx: speedMs not finite: ${v.speedMs}", v.speedMs.isFinite())
+        val sx = v.speedXMs
+        assertTrue("$ctx: speedXMs out of range: $sx", sx == null || sx in -200..200)
     }
 }
 

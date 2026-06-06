@@ -62,10 +62,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -327,14 +323,16 @@ class BikeRadarService : Service() {
     // MODE_IN_CALL guard survive across radar drops.
     @Volatile private var alertBeeper: AlertBeeper? = null
 
-    // Capture log (written from GATT callback threads + coroutine threads)
-    private val captureLogLock = Any()
-
-    @Volatile private var captureLogWriter: PrintWriter? = null
-
-    // Wall-clock of the last capture-log flush; drives the periodic flush in
-    // writeCaptureLine. Guarded by captureLogLock.
-    private var lastCaptureFlushMs: Long = 0L
+    // Capture log: owns the per-ride file lifecycle, buffered append, prune/gzip.
+    // mirror echoes to logcat only in debug builds (release keeps BLE/movement
+    // payloads out of logcat); onActiveName mirrors the active name to the
+    // companion DebugScreen reads.
+    private val captureLog = CaptureLogManager(
+        externalFilesDir = { getExternalFilesDir(null) },
+        captureLoggingEnabled = { prefs.captureLoggingEnabled },
+        mirror = { if (BuildConfig.DEBUG) Log.d(TAG_RADAR, it) },
+        onActiveName = { activeCaptureLogName = it },
+    )
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -1784,87 +1782,11 @@ class BikeRadarService : Service() {
 
     // ── capture log ───────────────────────────────────────────────────────────
 
-    private fun openCaptureLog() {
-        // Opt-in: capture logging is off by default. When off, no log file is
-        // ever created and every writeCaptureLine no-ops on the null writer.
-        // Toggled on the Debug screen (Prefs.captureLoggingEnabled); takes
-        // effect on the next radar connection, which is when this is called.
-        if (!prefs.captureLoggingEnabled) return
-        val root = getExternalFilesDir(null) ?: return
-        val dir = File(root, CAPTURE_DIR).apply { mkdirs() }
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
-        val file = java.io.File(dir, "bike-radar-capture-$stamp.log")
-        try {
-            // No autoFlush: it write()s on every println, defeating the
-            // BufferedWriter and adding a syscall per BLE notify (~11 Hz).
-            // closeCaptureLog() flushes on the normal onDestroy path, and
-            // writeCaptureLine flushes at most every CAPTURE_LOG_FLUSH_INTERVAL_MS
-            // so an abnormal kill loses at most one flush window.
-            val pw = PrintWriter(BufferedWriter(FileWriter(file)))
-            synchronized(captureLogLock) {
-                captureLogWriter = pw
-                // Force the first line (the header) of a fresh log to flush.
-                lastCaptureFlushMs = 0L
-            }
-            activeCaptureLogName = file.name
-            clog("# bike-radar capture started ${java.time.Instant.now()}")
-            clog("# format: unix_ms char_tail_4hex hex_bytes_no_spaces")
-            Log.i(TAG_RADAR, "capture log: ${file.absolutePath}")
-            // Prune after the new file exists so steady-state count is
-            // MAX_CAPTURE_LOGS, not MAX_CAPTURE_LOGS+1. The active file is
-            // skipped by name inside pruneCaptureLogs.
-            pruneCaptureLogs()
-        } catch (t: Throwable) {
-            Log.w(TAG_RADAR, "failed to open capture log: $t")
-        }
-    }
+    private fun openCaptureLog() = captureLog.open()
 
-    private fun closeCaptureLog() {
-        synchronized(captureLogLock) {
-            captureLogWriter?.flush()
-            captureLogWriter?.close()
-            captureLogWriter = null
-        }
-        val closedName = activeCaptureLogName
-        activeCaptureLogName = null
-        // Gzip the just-finalised file. Runs after the PrintWriter close so
-        // the live write path is never on a gzip stream (which would lose
-        // its un-finalised tail on a crash). Failure preserves the .log so
-        // the next pruneCaptureLogs pass can retry.
-        if (closedName != null) {
-            val dir = getExternalFilesDir(null)?.let { File(it, CAPTURE_DIR) }
-            if (dir != null) {
-                val src = java.io.File(dir, closedName)
-                if (src.exists()) CaptureLogFiles.gzipAndDelete(src, TAG_RADAR)
-            }
-        }
-    }
+    private fun closeCaptureLog() = captureLog.close()
 
-    /**
-     * Append one line to the capture log and flush at most every
-     * [CAPTURE_LOG_FLUSH_INTERVAL_MS]. The writer has no autoFlush, so this
-     * bounds data loss on an abnormal kill to one flush window while keeping
-     * the per-notify path a buffered write rather than a syscall.
-     */
-    private fun writeCaptureLine(line: String) {
-        synchronized(captureLogLock) {
-            val w = captureLogWriter ?: return
-            w.println(line)
-            val now = System.currentTimeMillis()
-            if (now - lastCaptureFlushMs >= CAPTURE_LOG_FLUSH_INTERVAL_MS) {
-                w.flush()
-                lastCaptureFlushMs = now
-            }
-        }
-    }
-
-    fun clog(msg: String) {
-        writeCaptureLine(msg)
-        // Mirror to logcat only in debug builds. The capture log carries BLE /
-        // movement payloads; release builds keep those out of logcat where any
-        // app with READ_LOGS (or an adb pull) could harvest them.
-        if (BuildConfig.DEBUG) Log.d(TAG_RADAR, msg)
-    }
+    fun clog(msg: String) = captureLog.clog(msg)
 
     /** Capture-log line for a non-None AlertDecider event. Pairs the
      *  emitted event with the in-front, in-alert-range closest vehicle
@@ -1900,14 +1822,7 @@ class BikeRadarService : Service() {
         )
     }
 
-    private fun clogPacket(uuid: UUID, bytes: ByteArray) {
-        // Use chars 4-7 of the first UUID segment as the tag (e.g. "3203", "3204", "2a19").
-        // All Garmin chars share the suffix 667b-11e3-949a-0800200c9a66 so the last 4 are
-        // always "9a66" — chars 4-7 of the first segment give the meaningful discriminator.
-        val tag = uuid.toString().substring(4, 8)
-        val line = "${System.currentTimeMillis()} $tag ${bytes.toHex()}"
-        writeCaptureLine(line)
-    }
+    private fun clogPacket(uuid: UUID, bytes: ByteArray) = captureLog.clogPacket(uuid, bytes)
 
     // ── event scan registration ───────────────────────────────────────────────
 
@@ -2739,60 +2654,7 @@ class BikeRadarService : Service() {
         }
     }
 
-    private fun pruneCaptureLogs() {
-        val dir = getExternalFilesDir(null)?.let { File(it, CAPTURE_DIR) } ?: return
-        val logs = dir.listFiles { f -> CaptureLogFiles.isCaptureLog(f) } ?: return
-        val active = activeCaptureLogName
-        // A real session logs thousands of packet lines; anything under a few
-        // hundred bytes is just the header + maybe a connect-state line from a
-        // session where the radar never actually connected. Only applies to
-        // plain `.log` files - the `MIN_USEFUL_LOG_BYTES` threshold was sized
-        // for plain text, and a `.log.gz` is always small (a real session
-        // compresses to hundreds of KB, but even a multi-KB plain session can
-        // gzip below the threshold).
-        val tiny = logs.filter {
-            it.name != active &&
-                !CaptureLogFiles.isGzipped(it) &&
-                it.length() < MIN_USEFUL_LOG_BYTES
-        }
-        tiny.forEach { it.delete() }
-        // Gzipped archives always pass the size gate (the threshold was sized
-        // for plain text); only the plain-text size gate has to discriminate.
-        var remaining = logs.filter {
-            it.name != active &&
-                (CaptureLogFiles.isGzipped(it) || it.length() >= MIN_USEFUL_LOG_BYTES)
-        }
-
-        // Opportunistic backfill: gzip any plain .log files that aren't the
-        // active write target. closeCaptureLog gzips on the normal path; this
-        // covers logs left plain by a previous install (pre-gzip code) or by a
-        // crash before closeCaptureLog ran. .gz outputs replace their .log
-        // sources in `remaining` so the size cap is computed on the final set.
-        var backfilled = 0
-        remaining = remaining.map { src ->
-            if (!CaptureLogFiles.isGzipped(src)) {
-                val gz = CaptureLogFiles.gzipAndDelete(src, TAG)
-                if (gz != null) backfilled++
-                gz ?: src
-            } else {
-                src
-            }
-        }
-
-        val keepFromOld = if (active != null) MAX_CAPTURE_LOGS - 1 else MAX_CAPTURE_LOGS
-        if (remaining.size <= keepFromOld) {
-            if (tiny.isNotEmpty() || backfilled > 0) {
-                Log.d(TAG, "deleted ${tiny.size} header-only + gzipped $backfilled legacy capture logs")
-            }
-            return
-        }
-        val pruned = remaining.sortedByDescending { it.lastModified() }.drop(keepFromOld)
-        pruned.forEach { it.delete() }
-        Log.d(
-            TAG,
-            "deleted ${tiny.size} header-only + ${pruned.size} old + gzipped $backfilled legacy capture logs",
-        )
-    }
+    private fun pruneCaptureLogs() = captureLog.prune()
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -2973,13 +2835,6 @@ class BikeRadarService : Service() {
          *  long enough that a sub-30-min commute gets exactly one heads-up
          *  per device at connect, and it re-arms for the next ride. */
         const val PREFLIGHT_BATTERY_CUE_INTERVAL_MS = 30 * 60 * 1000L
-        const val MAX_CAPTURE_LOGS = 50
-        const val MIN_USEFUL_LOG_BYTES = 500L
-
-        /** Subdirectory under the app's external files dir where capture logs
-         *  live. Narrows the FileProvider share subtree (file_paths.xml) to
-         *  just the logs rather than the whole external-files root. */
-        const val CAPTURE_DIR = "captures"
 
         // Dashcam presence-by-advert timing. Fresh threshold accommodates
         // SCAN_MODE_LOW_POWER batching; cold-start grace covers the window
@@ -3037,11 +2892,6 @@ class BikeRadarService : Service() {
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
-
-        // Capture-log flush cadence. The writer is unbuffered-flushed at most
-        // this often (only while lines are being written), bounding loss on an
-        // abnormal kill to ~5 s without an fsync per BLE notify.
-        private const val CAPTURE_LOG_FLUSH_INTERVAL_MS = 5_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

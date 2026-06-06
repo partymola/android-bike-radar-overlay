@@ -64,6 +64,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.CaptureLogFiles
+import es.jjrh.bikeradar.CaptureLogManager
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
@@ -539,7 +540,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
 private fun enumerateCaptureLogs(ctx: Context): List<File> {
     val active = BikeRadarService.activeCaptureLogName
     return ctx.getExternalFilesDir(null)
-        ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
+        ?.let { File(it, CaptureLogManager.CAPTURE_DIR) }
         ?.listFiles { f ->
             CaptureLogFiles.isCaptureLog(f) &&
                 f.length() > 0L &&
@@ -784,7 +785,7 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
     sb.appendLine("adb shell dumpsys bluetooth_manager | grep -E 'PairingAlgorithm|le_encrypted'")
     sb.appendLine()
     val logFiles = ctx.getExternalFilesDir(null)
-        ?.let { File(it, BikeRadarService.CAPTURE_DIR) }
+        ?.let { File(it, CaptureLogManager.CAPTURE_DIR) }
         ?.listFiles { f -> CaptureLogFiles.isCaptureLog(f) }
         ?.sortedByDescending { it.lastModified() }
         ?: emptyList()

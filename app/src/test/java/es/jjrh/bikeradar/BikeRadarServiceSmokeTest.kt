@@ -128,7 +128,7 @@ class BikeRadarServiceSmokeTest {
     @Test
     fun retentionCapConstantIsFifty() {
         // Pins the M9 retention reduction (was 500). A revert trips this.
-        assertEquals(50, BikeRadarService.MAX_CAPTURE_LOGS)
+        assertEquals(50, CaptureLogManager.MAX_CAPTURE_LOGS)
     }
 
     @Test
@@ -141,12 +141,12 @@ class BikeRadarServiceSmokeTest {
         // Assert survivor COUNT only: prune gzips the seeds (resetting mtime),
         // so which files get dropped is not deterministic.
         val root = app.getExternalFilesDir(null)!!
-        val captures = File(root, BikeRadarService.CAPTURE_DIR).apply {
+        val captures = File(root, CaptureLogManager.CAPTURE_DIR).apply {
             deleteRecursively()
             mkdirs()
         }
-        val body = "x".repeat(BikeRadarService.MIN_USEFUL_LOG_BYTES.toInt() + 100)
-        repeat(BikeRadarService.MAX_CAPTURE_LOGS + 10) { i ->
+        val body = "x".repeat(CaptureLogManager.MIN_USEFUL_LOG_BYTES.toInt() + 100)
+        repeat(CaptureLogManager.MAX_CAPTURE_LOGS + 10) { i ->
             File(captures, "bike-radar-capture-20260101-0000%02d.log".format(i)).writeText(body)
         }
         val rootSentinel = File(root, "bike-radar-capture-19990101-000000.log").apply {
@@ -158,7 +158,7 @@ class BikeRadarServiceSmokeTest {
         val kept = captures.listFiles { f -> CaptureLogFiles.isCaptureLog(f) }.orEmpty()
         assertEquals(
             "capture logs should be pruned to the cap",
-            BikeRadarService.MAX_CAPTURE_LOGS,
+            CaptureLogManager.MAX_CAPTURE_LOGS,
             kept.size,
         )
         assertTrue(

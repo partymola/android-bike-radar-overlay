@@ -11,7 +11,7 @@ import java.util.zip.GZIPOutputStream
  * Single source of truth for the capture-log file shape: the
  * `bike-radar-capture-YYYYMMDD-HHMMSS.log` (active write target) /
  * `.log.gz` (post-close compressed archive) naming, the listing predicate
- * used by [BikeRadarService.pruneCaptureLogs] and the Debug screen, and
+ * used by [CaptureLogManager.prune] and the Debug screen, and
  * the gzip helper used at log-close and during opportunistic backfill.
  *
  * Gzipping happens AFTER `closeCaptureLog` has flushed + closed the

@@ -76,6 +76,7 @@ class BikeRadarService : Service() {
     private lateinit var prefs: Prefs
     private lateinit var creds: HaCredentials
     private lateinit var ha: HaClient
+    private lateinit var haPublisher: HaPublisher
 
     // Battery path state
     private val attemptInFlight = ConcurrentHashMap<String, Long>()
@@ -87,9 +88,6 @@ class BikeRadarService : Service() {
     // the radar is connected; reset on a successful read and at ride start.
     private val lastDashcamProbeMs = ConcurrentHashMap<String, Long>()
     private val dashcamProbeFailures = ConcurrentHashMap<String, Int>()
-    private val discoveredSlugs = ConcurrentHashMap.newKeySet<String>()
-    private val lastHaPublishMs = ConcurrentHashMap<String, Long>()
-    private val lastPublishedPct = ConcurrentHashMap<String, Int>()
 
     @Volatile private var scanRegistered = false
 
@@ -97,7 +95,6 @@ class BikeRadarService : Service() {
     // when the service starts. Published to HA via the periodic loop
     // started below.
     private var rideStats = RideStatsAccumulator()
-    private val rideSummaryDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     // Radar link state
     @Volatile private var radarJob: Job? = null
@@ -340,7 +337,6 @@ class BikeRadarService : Service() {
         super.onCreate()
         ClosePassStateBus.reset()
         rideStats = RideStatsAccumulator()
-        rideSummaryDiscoveredSlugs.clear()
         prefs = Prefs(this)
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
@@ -402,6 +398,15 @@ class BikeRadarService : Service() {
             macToSlug = { macToSlug },
             clog = { line -> clog(line) },
         )
+        haPublisher = HaPublisher(
+            scope = scope,
+            creds = creds,
+            rideStats = { rideStats },
+            currentRadarMac = { currentRadarMac },
+            macToSlug = { macToSlug },
+            loadKnownDevices = { loadKnownDevices() },
+            slug = { name -> slug(name) },
+        )
 
         pruneCaptureLogs()
         schedulePauseExpiry()
@@ -410,7 +415,7 @@ class BikeRadarService : Service() {
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
         launchDashcamRefresh()
-        launchRideSummaryPublishLoop()
+        haPublisher.launchRideSummaryPublishLoop()
         maybeStartEBikeReader()
     }
 
@@ -488,7 +493,7 @@ class BikeRadarService : Service() {
             val edgeName = if (edge == RideEdgeDetector.Edge.STARTED) "started" else "ended"
             val nowIso = java.time.Instant.now().toString()
             clog("# ebike ride_edge=$edgeName t=$nowIso")
-            publishRideEdgeIfHa(edgeName, nowIso)
+            haPublisher.publishRideEdgeIfHa(edgeName, nowIso)
         }
         // Thread the climb state. Sustained high rider_power (default >= 250 W
         // for >= 30 s) flips the climbing bit, which the AlertDecider
@@ -805,70 +810,9 @@ class BikeRadarService : Service() {
         // configured at all). On a transient HA failure we want the next
         // advert to retry within ATTEMPT_COOLDOWN_MS rather than waiting
         // 5 minutes with no HA state update.
-        if (publishBatteryToHa(name, pct)) {
+        if (haPublisher.publishBatteryToHa(name, pct)) {
             sp.edit().putLong("${KEY_LAST_TS}_$s", System.currentTimeMillis()).apply()
         }
-    }
-
-    // Throttles HA publishes driven by the 2a19 notify stream (~5 s cadence).
-    // Publishes immediately on pct change; otherwise one heartbeat every
-    // BATTERY_HA_HEARTBEAT_MS to keep HA's last-update recent.
-    private suspend fun maybePublishBatteryToHa(name: String, pct: Int) {
-        val s = slug(name)
-        val now = System.currentTimeMillis()
-        val lastPct = lastPublishedPct[s]
-        val lastMs = lastHaPublishMs[s] ?: 0L
-        val shouldPublish = pct != lastPct || (now - lastMs) >= BATTERY_HA_HEARTBEAT_MS
-        if (!shouldPublish) return
-        if (publishBatteryToHa(name, pct)) {
-            lastHaPublishMs[s] = now
-            lastPublishedPct[s] = pct
-        }
-    }
-
-    /**
-     * Fire-and-forget HA publish for ride-edge events. Called from
-     * the BLE callback thread; launches into [scope] so the BLE thread is
-     * never blocked. Silently no-ops when HA isn't configured; the
-     * decider still keeps state, just nothing reaches the dashboard for
-     * radar-only riders who never set up HA.
-     */
-    private fun publishRideEdgeIfHa(edgeName: String, timestampIso: String) {
-        scope.launch {
-            ha = HaClient(creds.baseUrl, creds.token)
-            if (!ha.isConfigured()) return@launch
-            val ok = ha.publishRideEdge(edgeName, timestampIso)
-            if (ok) {
-                HaHealthBus.reportOk()
-            } else {
-                HaHealthBus.reportError("ride-edge publish failed")
-                Log.w(TAG, "HA ride-edge publish failed: $edgeName")
-            }
-        }
-    }
-
-    private suspend fun publishBatteryToHa(name: String, pct: Int): Boolean {
-        ha = HaClient(creds.baseUrl, creds.token)
-        if (!ha.isConfigured()) return true
-
-        val s = slug(name)
-        if (discoveredSlugs.add(s)) {
-            val ok = ha.publishBatteryDiscovery(s, name)
-            if (!ok) {
-                discoveredSlugs.remove(s)
-                Log.w(TAG, "HA discovery failed for varia_${s}_battery")
-                return false
-            }
-            Log.i(TAG, "HA discovery published for varia_${s}_battery")
-        }
-        val ok = ha.publishBatteryState(s, pct)
-        if (ok) {
-            HaHealthBus.reportOk()
-        } else {
-            HaHealthBus.reportError("battery publish failed")
-            Log.w(TAG, "HA state publish failed for varia/$s/battery")
-        }
-        return ok
     }
 
     @SuppressLint("MissingPermission")
@@ -1275,7 +1219,7 @@ class BikeRadarService : Service() {
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
                         BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
-                        if (!prefs.isPaused) maybePublishBatteryToHa(name, pct)
+                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
                     }
                     Uuids.SETTINGS_14 -> {
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
@@ -1664,7 +1608,7 @@ class BikeRadarService : Service() {
                         val s = slug(name)
                         if (rearMac != null) macToSlug[rearMac] = s
                         BatteryStateBus.update(BatteryEntry(s, name, pct))
-                        if (!prefs.isPaused) maybePublishBatteryToHa(name, pct)
+                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
                     }
                 }
             }
@@ -1683,7 +1627,7 @@ class BikeRadarService : Service() {
             RadarStateBus.clear()
             // Fire-and-forget final flush of the ride summary so HA sees
             // the latest values before the next reconnect's backoff delay.
-            scope.launch(Dispatchers.IO) { publishRideSummaryIfChanged() }
+            scope.launch(Dispatchers.IO) { haPublisher.publishRideSummaryIfChanged() }
             closeOnce()
             closeCaptureLog()
         }
@@ -2241,54 +2185,6 @@ class BikeRadarService : Service() {
         }
     }
 
-    private fun launchRideSummaryPublishLoop() {
-        scope.launch(Dispatchers.IO) {
-            while (true) {
-                delay(RIDE_SUMMARY_PUBLISH_PERIOD_MS)
-                publishRideSummaryIfChanged()
-            }
-        }
-    }
-
-    /**
-     * Publishes the current ride-summary snapshot if anything changed since
-     * the last successful publish. Called periodically by the publish loop
-     * and ad-hoc on radar disconnect for a snappier final value.
-     *
-     * Discovery is published once per slug per service lifetime, gated by
-     * [rideSummaryDiscoveredSlugs]. A discovery failure is rolled back so
-     * the next call retries.
-     */
-    private suspend fun publishRideSummaryIfChanged() {
-        if (!ha.isConfigured()) return
-        if (!rideStats.changedSinceLast()) return
-        val mac = currentRadarMac ?: return
-        val slug = macToSlug[mac]
-            ?: macToSlug[mac.uppercase(Locale.ROOT)]
-            ?: return
-        val deviceName = loadKnownDevices()
-            .firstOrNull { it.second.equals(mac, ignoreCase = true) }
-            ?.first
-            ?: "radar"
-
-        if (rideSummaryDiscoveredSlugs.add(slug)) {
-            val ok = ha.publishRideSummaryDiscovery(slug, deviceName)
-            if (!ok) {
-                rideSummaryDiscoveredSlugs.remove(slug)
-                Log.w(TAG, "ride-summary discovery publish failed; will retry")
-                return
-            }
-            Log.i(TAG, "ride-summary discovery published for $slug")
-        }
-
-        val ok = ha.publishRideSummaryState(slug, rideStats.snapshot())
-        if (ok) {
-            rideStats.markPublished()
-        } else {
-            Log.w(TAG, "ride-summary state publish failed")
-        }
-    }
-
     /** Off-instant is stamped at the actual disconnect callback so it
      *  isn't tied to tick cadence (the idle tick is 30 s; that would
      *  drift the walk-away threshold by up to 30 s). Clean-reconnect
@@ -2791,13 +2687,6 @@ class BikeRadarService : Service() {
         // torn down so the outer loop reconnects.
         const val V2_WATCHDOG_TICK_MS = 2_000L
         const val V2_FRAME_STALL_MS = 5_000L
-        const val BATTERY_HA_HEARTBEAT_MS = 5 * 60 * 1000L
-
-        // Ride-summary publish cadence. The accumulator only changes on
-        // radar events, so most ticks short-circuit via changedSinceLast.
-        // 60 s is fine-grained enough that a close-pass shows up in HA
-        // within a minute, while still cheap when the rider is parked.
-        const val RIDE_SUMMARY_PUBLISH_PERIOD_MS = 60_000L
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
 
         /** Rear-radar battery percentage below which the in-ride audible

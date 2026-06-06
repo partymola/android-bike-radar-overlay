@@ -3,6 +3,7 @@ package es.jjrh.bikeradar
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -39,12 +40,20 @@ object CrashLogger {
 
     private const val TAG = "BikeRadar.Crash"
 
+    /** Install once per process. The platform default handler is process-global,
+     *  so chaining a fresh wrapper on every call - e.g. when a test harness
+     *  re-instantiates the Application per test - would leak a growing chain of
+     *  handlers, each capturing a Context. */
+    @Volatile private var installed = false
+
     /**
-     * Install the handler. It chains (does not replace) the existing default
-     * handler so the platform still terminates the process and shows its crash
-     * UI. [nowMs] is injectable for tests.
+     * Install the handler, at most once per process. It chains (does not
+     * replace) the existing default handler so the platform still terminates
+     * the process and shows its crash UI. [nowMs] is injectable for tests.
      */
     fun install(context: Context, nowMs: () -> Long = { System.currentTimeMillis() }) {
+        if (installed) return
+        installed = true
         val appContext = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -61,6 +70,12 @@ object CrashLogger {
             }
             previous?.uncaughtException(thread, throwable)
         }
+    }
+
+    /** Test seam: clear the install-once guard so a per-test harness can re-install. */
+    @VisibleForTesting
+    internal fun resetForTest() {
+        installed = false
     }
 
     /** Write a crash report into [dir]; returns the file, or null on failure. */

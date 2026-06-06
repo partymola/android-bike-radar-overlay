@@ -29,6 +29,7 @@ class CrashLoggerChainingTest {
         var chained: Throwable? = null
         try {
             Thread.setDefaultUncaughtExceptionHandler { _, t -> chained = t }
+            CrashLogger.resetForTest()
             CrashLogger.install(ctx) { 123_000L }
 
             val handler = Thread.getDefaultUncaughtExceptionHandler()!!
@@ -58,6 +59,7 @@ class CrashLoggerChainingTest {
         var chained: Throwable? = null
         try {
             Thread.setDefaultUncaughtExceptionHandler { _, t -> chained = t }
+            CrashLogger.resetForTest()
             CrashLogger.install(failing) { 1L }
             val boom = RuntimeException("kaboom")
             Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), boom)

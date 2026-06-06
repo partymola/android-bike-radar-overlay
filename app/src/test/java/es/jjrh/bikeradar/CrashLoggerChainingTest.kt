@@ -68,4 +68,26 @@ class CrashLoggerChainingTest {
             Thread.setDefaultUncaughtExceptionHandler(original)
         }
     }
+
+    @Test fun secondInstallIsANoOp() {
+        // The install-once guard (the CI-OOM fix): once installed, a second
+        // install must NOT chain another handler. A regression that dropped the
+        // guard would replace the handler reference and reintroduce the per-test
+        // handler-chain leak.
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            CrashLogger.resetForTest()
+            CrashLogger.install(ctx) { 1L }
+            val afterFirst = Thread.getDefaultUncaughtExceptionHandler()
+            CrashLogger.install(ctx) { 1L }
+            assertSame(
+                "second install must be a no-op (handler reference unchanged)",
+                afterFirst,
+                Thread.getDefaultUncaughtExceptionHandler(),
+            )
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
 }

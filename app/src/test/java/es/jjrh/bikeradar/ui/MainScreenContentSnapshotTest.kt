@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
+import es.jjrh.bikeradar.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -124,6 +126,52 @@ class MainScreenContentSnapshotTest {
                         dashcamFresh = true,
                         dashcamPaired = true,
                         dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haHealthy = true,
+                        eBikeDataEnabled = true,
+                        ebikeReceiving = true,
+                        ebikeBatterySoc = 80,
+                        closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun fullyConfiguredEs() {
+        // The fully-configured main screen rendered in Spanish (values-es) -
+        // the README language-gallery shot, and a guard that the es copy fits
+        // the layout. Hero text comes from string resources so it translates;
+        // the rest of MainScreenContent already resolves res IDs.
+        captureRoboImage {
+            UiTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = stringResource(R.string.main_status_live_title),
+                            subtitle = stringResource(R.string.main_status_live_dashcam_on_sub),
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Cámara delantera",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haHealthy = true,

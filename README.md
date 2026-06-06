@@ -28,6 +28,8 @@ The app speaks the V2 (bonded) BLE rear-radar protocol. See
 and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
 repository for the wire protocol, reference decoder, and unit tests.
 
+*¿Hablas español? Hay un resumen [en español](#en-español) al final.*
+
 ## Features
 
 - Live radar overlay with per-vehicle distance, closing speed and
@@ -206,6 +208,43 @@ shell (with `ANDROID_KEYSTORE_PATH` pointing at the keystore
 file on disk) and otherwise fall back to the debug signing config
 so the `release` variant can still be built for inspection
 without the production key.
+
+## En español
+
+**Bike Radar** es una app de Android que te avisa del tráfico que tienes
+detrás usando el radar trasero de tu bici. Dibuja una barra lateral en el
+borde de la pantalla, encima de cualquier app que tengas abierta (un mapa,
+Bosch Flow, etc.), y pita cuando se acerca un coche. El número de pitidos
+aumenta según se aproxima, y suena un aviso distinto si el impacto parece
+inminente.
+
+La app está totalmente traducida al español. Si tu teléfono está en español,
+Bike Radar se mostrará en español automáticamente. Si prefieres usar solo
+esta app en español con el teléfono en otro idioma, puedes hacerlo desde los
+ajustes de idioma por aplicación de Android (Android 13 o posterior).
+
+<p align="left">
+  <img src="screenshots/main-es.png" width="200" alt="Pantalla principal en español" />
+</p>
+
+Funciones principales:
+
+- Radar en pantalla con la distancia, la velocidad de aproximación y la
+  posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
+  distinto para impacto inminente.
+- Integración opcional con Home Assistant por MQTT: batería del radar y de
+  la cámara, modo de la luz delantera, eventos de pase cercano y resumen de
+  fin de ruta (distancia, número de pases, velocidades de aproximación y
+  holguras laterales).
+- Luz delantera y luz trasera del radar en modo automático según el
+  atardecer local.
+- Datos en vivo de la eBike Bosch (solo lectura) mientras Bosch Flow está
+  activo: velocidad, cadencia, potencia, batería, etc. Nunca envía nada a la
+  bici.
+- Aviso de cámara olvidada: te avisa si la dashcam sigue encendida cuando te
+  alejas de la bici después de aparcarla.
+
+El radar funciona por sí solo; Home Assistant y la eBike son opcionales.
 
 ## License
 

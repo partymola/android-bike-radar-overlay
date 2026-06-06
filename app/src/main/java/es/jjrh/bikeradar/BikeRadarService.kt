@@ -3,8 +3,6 @@ package es.jjrh.bikeradar
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -62,8 +60,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -77,6 +73,7 @@ class BikeRadarService : Service() {
     private lateinit var creds: HaCredentials
     private lateinit var ha: HaClient
     private lateinit var haPublisher: HaPublisher
+    private lateinit var notifications: ServiceNotifications
 
     // Battery path state
     private val attemptInFlight = ConcurrentHashMap<String, Long>()
@@ -343,11 +340,12 @@ class BikeRadarService : Service() {
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
         ha = HaClient(creds.baseUrl, creds.token)
+        notifications = ServiceNotifications(this) { prefs }
 
-        ensureNotificationChannel()
+        notifications.ensureChannels()
         startForeground(
-            NOTIF_ID,
-            buildNotification(),
+            ServiceNotifications.NOTIF_ID,
+            notifications.buildForeground(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
 
@@ -530,8 +528,7 @@ class BikeRadarService : Service() {
             }
             ACTION_UPDATE_NOTIF -> {
                 schedulePauseExpiry()
-                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.notify(NOTIF_ID, buildNotification())
+                notifications.postForeground()
             }
             ACTION_FORCE_RECONNECT -> {
                 Log.i(TAG_RADAR, "force reconnect requested")
@@ -944,7 +941,7 @@ class BikeRadarService : Service() {
 
     private fun notifyBondLost() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        ensureNotificationChannel()
+        notifications.ensureChannels()
         val piFlags = if (Build.VERSION.SDK_INT >= 23) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
@@ -956,7 +953,7 @@ class BikeRadarService : Service() {
             Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             piFlags,
         )
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notif = NotificationCompat.Builder(this, ServiceNotifications.CHANNEL_ID)
             .setContentTitle(getString(R.string.svc_main_notif_title))
             .setContentText(getString(R.string.svc_main_bond_lost_text))
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
@@ -1659,16 +1656,16 @@ class BikeRadarService : Service() {
             },
         )
 
-        ensureNotificationChannel()
+        notifications.ensureChannels()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
+        val notif = NotificationCompat.Builder(this, ServiceNotifications.LIGHT_FAIL_CHANNEL_ID)
             .setContentTitle(getString(R.string.svc_main_dashcam_light_title))
             .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
             .setAutoCancel(true)
-            .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
+            .setVibrate(ServiceNotifications.LIGHT_FAIL_VIBRATE_PATTERN)
             .build()
         nm.notify(NOTIF_LIGHT_FAIL_ID, notif)
 
@@ -1700,16 +1697,16 @@ class BikeRadarService : Service() {
             },
         )
 
-        ensureNotificationChannel()
+        notifications.ensureChannels()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notif = NotificationCompat.Builder(this, LIGHT_FAIL_CHANNEL_ID)
+        val notif = NotificationCompat.Builder(this, ServiceNotifications.LIGHT_FAIL_CHANNEL_ID)
             .setContentTitle(getString(R.string.svc_main_radar_light_title))
             .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
             .setAutoCancel(true)
-            .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
+            .setVibrate(ServiceNotifications.LIGHT_FAIL_VIBRATE_PATTERN)
             .build()
         nm.notify(NOTIF_RADAR_LIGHT_FAIL_ID, notif)
 
@@ -1885,63 +1882,6 @@ class BikeRadarService : Service() {
     private fun saveKnownDevices(devs: List<Pair<String, String>>) {
         val sp = getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE)
         sp.edit().putStringSet(KEY_KNOWN, devs.map { "${it.first}|${it.second}" }.toSet()).apply()
-    }
-
-    // ── notification ──────────────────────────────────────────────────────────
-
-    private fun ensureNotificationChannel() {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, getString(R.string.svc_main_channel_name), NotificationManager.IMPORTANCE_MIN),
-            )
-        }
-        // Drop legacy walk-away channels. Channel properties (sound,
-        // vibration pattern, importance) are immutable post-creation,
-        // so any code change has to migrate to a fresh ID and delete
-        // the old one. The user's per-channel preferences (e.g. Override
-        // Do Not Disturb) reset on this migration; the dashcam settings
-        // row deeplinks back to the new channel for re-grant.
-        WALKAWAY_CHANNEL_IDS_LEGACY.forEach { id ->
-            if (nm.getNotificationChannel(id) != null) {
-                nm.deleteNotificationChannel(id)
-            }
-        }
-        if (nm.getNotificationChannel(LIGHT_FAIL_CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    LIGHT_FAIL_CHANNEL_ID,
-                    getString(R.string.svc_main_light_fail_channel_name),
-                    NotificationManager.IMPORTANCE_HIGH,
-                ).apply {
-                    description = getString(R.string.svc_main_light_fail_channel_desc)
-                    enableVibration(true)
-                    vibrationPattern = LIGHT_FAIL_VIBRATE_PATTERN
-                },
-            )
-        }
-
-        if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
-            // HIGH importance, no sound and no vibration on the channel.
-            // Both modalities are driven explicitly from the FIRE path:
-            // - audio: Ringtone with USAGE_ALARM (channel sound is
-            //   normalised to USAGE_NOTIFICATION, which DND silences).
-            // - haptics: Vibrator service (channel vibration is
-            //   suppressed under DND when canBypassDnd is false, and
-            //   the migration to v3 resets the user's bypass grant).
-            // Driving both explicitly means the alarm fires through DND
-            // regardless of the user's per-channel preferences.
-            val ch = NotificationChannel(
-                WALKAWAY_CHANNEL_ID,
-                getString(R.string.svc_main_walkaway_channel_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = getString(R.string.svc_main_walkaway_channel_desc)
-                enableVibration(false)
-                setSound(null, null)
-            }
-            nm.createNotificationChannel(ch)
-        }
     }
 
     // ── walk-away alarm tone ─────────────────────────────────────────────────
@@ -2480,7 +2420,7 @@ class BikeRadarService : Service() {
             },
             piFlags,
         )
-        val notif = NotificationCompat.Builder(this, WALKAWAY_CHANNEL_ID)
+        val notif = NotificationCompat.Builder(this, ServiceNotifications.WALKAWAY_CHANNEL_ID)
             .setContentTitle(getString(R.string.svc_main_walkaway_notif_title))
             .setContentText(getString(R.string.svc_main_walkaway_notif_text))
             .setSmallIcon(R.drawable.ic_videocam_off)
@@ -2500,39 +2440,6 @@ class BikeRadarService : Service() {
         nm.notify(NOTIF_WALKAWAY_ID, notif)
     }
 
-    private fun buildNotification(): Notification {
-        val paused = prefs.isPaused
-        val contentText = if (paused) {
-            val t = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                .format(java.util.Date(prefs.pausedUntilEpochMs))
-            getString(R.string.svc_main_notif_paused_until, t)
-        } else {
-            getString(R.string.svc_main_notif_active)
-        }
-        val actionLabel = if (paused) getString(R.string.svc_main_notif_action_resume) else getString(R.string.svc_main_notif_action_pause)
-        val actionBroadcast = if (paused) InternalControlReceiver.ACTION_RESUME else InternalControlReceiver.ACTION_PAUSE_1H
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        val actionPi = PendingIntent.getBroadcast(
-            this,
-            NOTIF_ACTION_REQ,
-            Intent(this, InternalControlReceiver::class.java).apply { action = actionBroadcast },
-            piFlags,
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.svc_main_notif_title))
-            .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .addAction(0, actionLabel, actionPi)
-            .build()
-    }
-
     // ── pause expiry + capture prune ──────────────────────────────────────────
 
     private var pauseExpiryJob: Job? = null
@@ -2545,8 +2452,7 @@ class BikeRadarService : Service() {
         pauseExpiryJob = scope.launch {
             delay(remaining)
             prefs.pausedUntilEpochMs = 0L
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            nm.notify(NOTIF_ID, buildNotification())
+            notifications.postForeground()
         }
     }
 
@@ -2579,17 +2485,6 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         private const val TAG_LIGHT = "BikeRadar.Light"
-        const val CHANNEL_ID = "bike_radar_min"
-
-        // v2 channel created with alarm-stream sound; the v1 legacy id
-        // is deleted on channel-ensure so an upgrade picks up sound.
-        const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
-        const val LIGHT_FAIL_CHANNEL_ID = "bike_radar_light_fail"
-        private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
-            "bike_radar_walkaway",
-            "bike_radar_walkaway_v2",
-        )
-        const val NOTIF_ID = 1
         const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3
         const val NOTIF_LIGHT_FAIL_ID = 4
@@ -2632,7 +2527,6 @@ class BikeRadarService : Service() {
         const val EXTRA_NAME = "name"
         const val EXTRA_RADAR_LIGHT_NN = "nn"
         const val EXTRA_RADAR_LIGHT_HEX = "hex"
-        private const val NOTIF_ACTION_REQ = 0xB1CD
 
         const val THROTTLE_MS = 5 * 60 * 1000L
         const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
@@ -2770,7 +2664,6 @@ class BikeRadarService : Service() {
         // ~7 s total. Long enough to feel through fabric, recognisable as
         // an alarm rather than a routine notification.
         private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
-        private val LIGHT_FAIL_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
 
         // Hard cap on how long the looping alarm tone keeps playing
         // before it is force-stopped. Without this the tone loops until

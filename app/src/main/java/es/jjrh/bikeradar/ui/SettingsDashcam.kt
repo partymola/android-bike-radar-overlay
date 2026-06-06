@@ -46,6 +46,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.ServiceNotifications
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -76,7 +77,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
 
     val nm = remember(ctx) { ctx.getSystemService(NotificationManager::class.java) }
     val canBypassDnd = nm
-        ?.getNotificationChannel(BikeRadarService.WALKAWAY_CHANNEL_ID)
+        ?.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID)
         ?.canBypassDnd() == true
 
     SettingsDashcamContent(
@@ -106,7 +107,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         onOverrideDndClick = {
             val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
                 putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                putExtra(Settings.EXTRA_CHANNEL_ID, BikeRadarService.WALKAWAY_CHANNEL_ID)
+                putExtra(Settings.EXTRA_CHANNEL_ID, ServiceNotifications.WALKAWAY_CHANNEL_ID)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             ctx.startActivity(intent)

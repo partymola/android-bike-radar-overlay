@@ -71,4 +71,47 @@ class ServiceNotificationsTest {
             "paused notification must not show the active text"
         }
     }
+
+    private fun title(sbn: android.service.notification.StatusBarNotification) = sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+
+    @Test fun bondLostPostsToMinChannelThenCancels() {
+        val n = notifications()
+        n.postBondLost()
+        val sbn = nm.activeNotifications.single()
+        assertEquals(ServiceNotifications.CHANNEL_ID, sbn.notification.channelId)
+        assertEquals(
+            app.getString(R.string.svc_main_bond_lost_text),
+            sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+        n.cancelBondLost()
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test fun walkAwayPostsWithDismissAndSnoozeActionsThenCancels() {
+        val n = notifications()
+        n.postWalkAway()
+        val sbn = nm.activeNotifications.single()
+        assertEquals(ServiceNotifications.WALKAWAY_CHANNEL_ID, sbn.notification.channelId)
+        assertEquals(app.getString(R.string.svc_main_walkaway_notif_title), title(sbn))
+        // Dismiss + Snooze: both actions must be present for the rider to act.
+        assertEquals(2, sbn.notification.actions.size)
+        n.cancelWalkAway()
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test fun lightFailAndRadarLightFailUseDistinctIdsAndTitles() {
+        // Distinct ids are load-bearing: a dashcam-light failure and a
+        // radar-light failure must coexist, not clobber each other.
+        val n = notifications()
+        n.postLightFail("Day Flash")
+        n.postRadarLightFail("Solid")
+        assertEquals(2, nm.activeNotifications.size)
+        assertEquals(
+            setOf(
+                app.getString(R.string.svc_main_dashcam_light_title),
+                app.getString(R.string.svc_main_radar_light_title),
+            ),
+            nm.activeNotifications.map { title(it) }.toSet(),
+        )
+    }
 }

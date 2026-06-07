@@ -548,8 +548,7 @@ class BikeRadarService : Service() {
                 Log.i(TAG, "walk-away dismissed")
                 _radarLinkState.update { it.copy(walkAwayDismissed = true) }
                 walkAwaySnoozeJob.getAndSet(null)?.cancel()
-                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.cancel(NOTIF_WALKAWAY_ID)
+                notifications.cancelWalkAway()
                 stopWalkAwayAlarmTone()
             }
             ACTION_START_EBIKE_READER -> {
@@ -570,8 +569,7 @@ class BikeRadarService : Service() {
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
                 _radarLinkState.update { it.copy(walkAwayDismissed = true) }
-                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.cancel(NOTIF_WALKAWAY_ID)
+                notifications.cancelWalkAway()
                 stopWalkAwayAlarmTone()
                 val newJob = scope.launch {
                     delay(WALKAWAY_SNOOZE_MS)
@@ -678,8 +676,7 @@ class BikeRadarService : Service() {
         scope.cancel()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancel(NOTIF_WALKAWAY_ID)
+        notifications.cancelWalkAway()
         notifications.cancelBondLost()
         // Companion-object cache survives across service instances within the
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
@@ -1873,7 +1870,7 @@ class BikeRadarService : Service() {
             getSystemService(VIBRATOR_SERVICE) as? Vibrator
         }
         if (vibrator == null || !vibrator.hasVibrator()) return
-        val effect = VibrationEffect.createWaveform(WALKAWAY_VIBRATE_PATTERN, -1)
+        val effect = VibrationEffect.createWaveform(ServiceNotifications.WALKAWAY_VIBRATE_PATTERN, -1)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 vibrator.vibrate(
@@ -2141,8 +2138,7 @@ class BikeRadarService : Service() {
         if (prev.radarOffSinceMs != null) {
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
             walkAwaySnoozeJob.getAndSet(null)?.cancel()
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            nm.cancel(NOTIF_WALKAWAY_ID)
+            notifications.cancelWalkAway()
             clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
         }
         // Radar is back: hide the reconnecting banner now rather than waiting
@@ -2279,13 +2275,12 @@ class BikeRadarService : Service() {
         )
         when (WalkAwayDecider.decide(input)) {
             WalkAwayDecider.Action.FIRE -> {
-                postWalkAwayNotification()
+                notifications.postWalkAway()
                 startWalkAwayAlarmTone()
                 _radarLinkState.update { it.copy(lastWalkAwayFireMs = nowMs) }
             }
             WalkAwayDecider.Action.AUTO_DISMISS -> {
-                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.cancel(NOTIF_WALKAWAY_ID)
+                notifications.cancelWalkAway()
                 stopWalkAwayAlarmTone()
                 _radarLinkState.update { it.copy(lastWalkAwayFireMs = null) }
             }
@@ -2415,48 +2410,6 @@ class BikeRadarService : Service() {
             ?: prefs.dashcamDisplayName?.let { slug(it) }
     }
 
-    private fun postWalkAwayNotification() {
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        val dismissPi = PendingIntent.getBroadcast(
-            this,
-            NOTIF_WALKAWAY_DISMISS_REQ,
-            Intent(this, InternalControlReceiver::class.java).apply {
-                action = InternalControlReceiver.ACTION_WALKAWAY_DISMISS
-            },
-            piFlags,
-        )
-        val snoozePi = PendingIntent.getBroadcast(
-            this,
-            NOTIF_WALKAWAY_SNOOZE_REQ,
-            Intent(this, InternalControlReceiver::class.java).apply {
-                action = InternalControlReceiver.ACTION_WALKAWAY_SNOOZE
-            },
-            piFlags,
-        )
-        val notif = NotificationCompat.Builder(this, ServiceNotifications.WALKAWAY_CHANNEL_ID)
-            .setContentTitle(getString(R.string.svc_main_walkaway_notif_title))
-            .setContentText(getString(R.string.svc_main_walkaway_notif_text))
-            .setSmallIcon(R.drawable.ic_videocam_off)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setAutoCancel(true)
-            .setOngoing(false)
-            .setVibrate(WALKAWAY_VIBRATE_PATTERN)
-            .addAction(0, getString(R.string.svc_main_walkaway_action_dismiss), dismissPi)
-            .addAction(0, getString(R.string.svc_main_walkaway_action_snooze), snoozePi)
-            // Tapping the notification body is treated as Dismiss; swipe-
-            // dismiss via setDeleteIntent also marks the episode handled.
-            .setContentIntent(dismissPi)
-            .setDeleteIntent(dismissPi)
-            .build()
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIF_WALKAWAY_ID, notif)
-    }
-
     // ── pause expiry + capture prune ──────────────────────────────────────────
 
     private var pauseExpiryJob: Job? = null
@@ -2502,11 +2455,8 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         private const val TAG_LIGHT = "BikeRadar.Light"
-        const val NOTIF_WALKAWAY_ID = 3
         const val NOTIF_LIGHT_FAIL_ID = 4
         const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
-        private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
-        private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
         private const val PREFS_THROTTLE = "bike_radar_throttle"
         private const val KEY_LAST_TS = "last_ts"
         private const val SCAN_PI_REQ = 0xB1CC
@@ -2681,11 +2631,6 @@ class BikeRadarService : Service() {
         // long parked periods.
         const val WALKAWAY_IDLE_TICK_MS = 30_000L
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
-
-        // Pixel native alarm cadence: three 1.5 s pulses with 0.8 s gaps,
-        // ~7 s total. Long enough to feel through fabric, recognisable as
-        // an alarm rather than a routine notification.
-        private val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
 
         // Hard cap on how long the looping alarm tone keeps playing
         // before it is force-stopped. Without this the tone loops until

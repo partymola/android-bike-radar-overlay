@@ -22,12 +22,11 @@ import java.util.Locale
  * IDs) and the ongoing "active / paused until HH:mm" notification with its
  * pause/resume action.
  *
- * The feature alerts that POST to the walk-away and light-fail channels
- * (walk-away alarm, bond-lost, light-switch-failed) still live in the service
- * for now and reference the channel IDs here; they move to their own
- * coordinators in later steps of the service split. This class therefore
- * defines every channel the service uses, but only builds the foreground
- * notification itself.
+ * It also builds the feature notifications whose channels it owns: the
+ * walk-away alarm ([postWalkAway]) and the bond-lost alert ([postBondLost]).
+ * The light-switch-failed notifications still live in the service and reference
+ * the channel IDs defined here; they move here in a later step of the service
+ * split. This class defines every channel the service uses.
  */
 internal class ServiceNotifications(
     private val context: Context,
@@ -157,6 +156,53 @@ internal class ServiceNotifications(
     /** Clear the bond-lost notification (service teardown). */
     fun cancelBondLost() = nm.cancel(NOTIF_BOND_LOST_ID)
 
+    /** Walk-away alarm notification ("you left the dashcam on the bike"): a
+     *  HIGH-priority reminder on the walk-away channel with Dismiss + Snooze
+     *  actions (tapping or swiping the body counts as Dismiss). The audible +
+     *  haptic alarm tone is driven separately by the service. */
+    fun postWalkAway() {
+        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val dismissPi = PendingIntent.getBroadcast(
+            context,
+            NOTIF_WALKAWAY_DISMISS_REQ,
+            Intent(context, InternalControlReceiver::class.java).apply {
+                action = InternalControlReceiver.ACTION_WALKAWAY_DISMISS
+            },
+            piFlags,
+        )
+        val snoozePi = PendingIntent.getBroadcast(
+            context,
+            NOTIF_WALKAWAY_SNOOZE_REQ,
+            Intent(context, InternalControlReceiver::class.java).apply {
+                action = InternalControlReceiver.ACTION_WALKAWAY_SNOOZE
+            },
+            piFlags,
+        )
+        val notif = NotificationCompat.Builder(context, WALKAWAY_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.svc_main_walkaway_notif_title))
+            .setContentText(context.getString(R.string.svc_main_walkaway_notif_text))
+            .setSmallIcon(R.drawable.ic_videocam_off)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .setVibrate(WALKAWAY_VIBRATE_PATTERN)
+            .addAction(0, context.getString(R.string.svc_main_walkaway_action_dismiss), dismissPi)
+            .addAction(0, context.getString(R.string.svc_main_walkaway_action_snooze), snoozePi)
+            // Tapping the body or swipe-dismissing both mark the episode handled.
+            .setContentIntent(dismissPi)
+            .setDeleteIntent(dismissPi)
+            .build()
+        nm.notify(NOTIF_WALKAWAY_ID, notif)
+    }
+
+    /** Clear the walk-away alarm notification. */
+    fun cancelWalkAway() = nm.cancel(NOTIF_WALKAWAY_ID)
+
     companion object {
         const val CHANNEL_ID = "bike_radar_min"
 
@@ -172,7 +218,16 @@ internal class ServiceNotifications(
 
         const val NOTIF_ID = 1
         private const val NOTIF_BOND_LOST_ID = 2
+        private const val NOTIF_WALKAWAY_ID = 3
         private const val NOTIF_ACTION_REQ = 0xB1CD
         private const val BOND_NOTIF_REQ = 0xB1CE
+        private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
+        private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
+
+        // Pixel native alarm cadence: three 1.5 s pulses with 0.8 s gaps, ~7 s
+        // total - long enough to feel through fabric and recognisable as an
+        // alarm, not a routine notification. Shared with the service's walk-away
+        // alarm-tone path, which fires haptics explicitly through the Vibrator.
+        val WALKAWAY_VIBRATE_PATTERN = longArrayOf(0, 1500, 800, 1500, 800, 1500)
     }
 }

@@ -361,15 +361,15 @@ roborazzi {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation("com.google.android.material:material:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.google.android.material:material:1.14.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation(platform("androidx.compose:compose-bom:2026.04.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
@@ -379,18 +379,18 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
-    testImplementation("org.robolectric:robolectric:4.14.1")
-    testImplementation("androidx.test:core-ktx:1.6.1")
-    testImplementation("androidx.test.ext:junit:1.2.1")
-    testImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.test:core-ktx:1.7.0")
+    testImplementation("androidx.test.ext:junit:1.3.0")
+    testImplementation(platform("androidx.compose:compose-bom:2026.05.01"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.63.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.63.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.63.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.05.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

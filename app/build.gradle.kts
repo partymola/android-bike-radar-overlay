@@ -317,14 +317,15 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
         }
     }
     violationRules {
-        // Overall line coverage holds at the baseline, with slack below the
-        // current figure so legitimately hard-to-test new code doesn't trip
-        // it. Raise as coverage grows.
+        // Project line floor, ratcheted to sit a few points below the current
+        // figure (~67% after the BikeRadarService coordinator split) so
+        // legitimately hard-to-test new code doesn't trip it. Raise as coverage
+        // grows.
         rule {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.55".toBigDecimal()
+                minimum = "0.62".toBigDecimal()
             }
         }
         // Branch coverage on the safety-critical deciders. LiveDataDecoder is

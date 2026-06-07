@@ -3,7 +3,6 @@ package es.jjrh.bikeradar
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothDevice
@@ -40,7 +39,6 @@ import android.util.Log
 import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -1643,18 +1641,7 @@ class BikeRadarService : Service() {
             },
         )
 
-        notifications.ensureChannels()
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notif = NotificationCompat.Builder(this, ServiceNotifications.LIGHT_FAIL_CHANNEL_ID)
-            .setContentTitle(getString(R.string.svc_main_dashcam_light_title))
-            .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ERROR)
-            .setAutoCancel(true)
-            .setVibrate(ServiceNotifications.LIGHT_FAIL_VIBRATE_PATTERN)
-            .build()
-        nm.notify(NOTIF_LIGHT_FAIL_ID, notif)
+        notifications.postLightFail(modeName)
 
         // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
         var tg: android.media.ToneGenerator? = null
@@ -1684,18 +1671,7 @@ class BikeRadarService : Service() {
             },
         )
 
-        notifications.ensureChannels()
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notif = NotificationCompat.Builder(this, ServiceNotifications.LIGHT_FAIL_CHANNEL_ID)
-            .setContentTitle(getString(R.string.svc_main_radar_light_title))
-            .setContentText(getString(R.string.svc_main_light_fail_text, modeName))
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ERROR)
-            .setAutoCancel(true)
-            .setVibrate(ServiceNotifications.LIGHT_FAIL_VIBRATE_PATTERN)
-            .build()
-        nm.notify(NOTIF_RADAR_LIGHT_FAIL_ID, notif)
+        notifications.postRadarLightFail(modeName)
 
         var tg: android.media.ToneGenerator? = null
         try {
@@ -2455,8 +2431,6 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         private const val TAG_LIGHT = "BikeRadar.Light"
-        const val NOTIF_LIGHT_FAIL_ID = 4
-        const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
         private const val PREFS_THROTTLE = "bike_radar_throttle"
         private const val KEY_LAST_TS = "last_ts"
         private const val SCAN_PI_REQ = 0xB1CC

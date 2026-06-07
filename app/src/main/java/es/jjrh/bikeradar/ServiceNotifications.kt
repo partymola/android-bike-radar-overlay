@@ -23,10 +23,10 @@ import java.util.Locale
  * pause/resume action.
  *
  * It also builds the feature notifications whose channels it owns: the
- * walk-away alarm ([postWalkAway]) and the bond-lost alert ([postBondLost]).
- * The light-switch-failed notifications still live in the service and reference
- * the channel IDs defined here; they move here in a later step of the service
- * split. This class defines every channel the service uses.
+ * walk-away alarm ([postWalkAway]), the bond-lost alert ([postBondLost]), and
+ * the light-switch-failed alerts ([postLightFail] / [postRadarLightFail]). The
+ * service still drives the accompanying alarm tone / NACK beep; this class owns
+ * every channel and builds every notification the service posts.
  */
 internal class ServiceNotifications(
     private val context: Context,
@@ -203,6 +203,37 @@ internal class ServiceNotifications(
     /** Clear the walk-away alarm notification. */
     fun cancelWalkAway() = nm.cancel(NOTIF_WALKAWAY_ID)
 
+    /** Front camera/dashcam light-mode-switch-failed alert: the BLE write to set
+     *  the mode was not ACKed. [modeName] is the localized failed-mode label.
+     *  The NACK beep is played separately by the service. */
+    fun postLightFail(modeName: String) = postLightFail(
+        R.string.svc_main_dashcam_light_title,
+        modeName,
+        NOTIF_LIGHT_FAIL_ID,
+    )
+
+    /** Rear radar tail-light variant, with a distinct id so it and the dashcam
+     *  light-fail notification never clobber each other. */
+    fun postRadarLightFail(modeName: String) = postLightFail(
+        R.string.svc_main_radar_light_title,
+        modeName,
+        NOTIF_RADAR_LIGHT_FAIL_ID,
+    )
+
+    private fun postLightFail(titleRes: Int, modeName: String, notifId: Int) {
+        ensureChannels()
+        val notif = NotificationCompat.Builder(context, LIGHT_FAIL_CHANNEL_ID)
+            .setContentTitle(context.getString(titleRes))
+            .setContentText(context.getString(R.string.svc_main_light_fail_text, modeName))
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
+            .build()
+        nm.notify(notifId, notif)
+    }
+
     companion object {
         const val CHANNEL_ID = "bike_radar_min"
 
@@ -219,6 +250,8 @@ internal class ServiceNotifications(
         const val NOTIF_ID = 1
         private const val NOTIF_BOND_LOST_ID = 2
         private const val NOTIF_WALKAWAY_ID = 3
+        private const val NOTIF_LIGHT_FAIL_ID = 4
+        private const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
         private const val NOTIF_ACTION_REQ = 0xB1CD
         private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF

@@ -12,3 +12,23 @@ updates:
     labels:
       - dependencies
       - github-actions
+
+  # Keep the Gradle dependencies + plugin versions current. The submitted
+  # dependency graph is scoped to the release runtime classpath (see
+  # `dependency-submission.yml`), so alerts cover what ships in the APK;
+  # bumping AGP / the plugins here is also what lifts their build-tooling
+  # transitives (Netty, Bouncy Castle, etc.) to patched versions over time.
+  # Grouped so the weekly bumps arrive as one PR rather than many.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+    labels:
+      - dependencies
+      - gradle
+    groups:
+      gradle:
+        patterns:
+          - "*"

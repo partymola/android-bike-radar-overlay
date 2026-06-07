@@ -1,0 +1,37 @@
+name: Dependency submission
+
+# Submits ONLY the shipped release-runtime dependency graph to GitHub, so the
+# Dependabot alert feed reflects what actually links into app-release.apk
+# (AndroidX, Compose, kotlinx) and NOT the Gradle plugin/build classpath. The
+# build tooling (AGP, ktlint, Roborazzi) drags in server-side libraries such as
+# Netty and Bouncy Castle that run only on the build host and never reach a
+# rider's phone; including them produced ~32 build-only CVE alerts with no path
+# to a user. The repo's managed "Automatic dependency submission" setting is
+# turned OFF so this scoped graph is the only one submitted.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Set up JDK
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+      - name: Submit release-runtime dependency graph
+        uses: gradle/actions/dependency-submission@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e  # v6.1.0
+        env:
+          # Only the app's shipped release runtime closure goes into the graph;
+          # the plugin/build classpath (a separate, non-Runtime configuration)
+          # is excluded, so build-host-only CVEs stop generating alerts.
+          DEPENDENCY_GRAPH_INCLUDE_CONFIGURATIONS: "^releaseRuntimeClasspath$"
+          DEPENDENCY_GRAPH_INCLUDE_PROJECTS: "^:app$"

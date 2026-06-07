@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.10.0-alpha - 2026-06-07
+
+### Features
+
+- **Bike Radar ya está disponible en español.** Está totalmente traducido:
+  si tu teléfono está en español, se muestra en español automáticamente.
+  Para usar solo esta app en español con el teléfono en otro idioma, usa los
+  ajustes de idioma por aplicación de Android (13 o posterior).
+
+  The app is now fully translated to Spanish: a Spanish-language phone shows
+  it in Spanish automatically, or use Android 13+'s per-app language setting
+  to run just this app in Spanish. The text lives entirely in Android string
+  resources, so adding another language is a `values-<code>/strings.xml`
+  translation with no code changes - see `CONTRIBUTING.md`.
+
+### UX
+
+- **Tighter wording across the app.** A copy pass trimmed Settings and
+  status text to say what you get rather than how it works.
+
+### Diagnostics
+
+- **Uncaught crashes are recorded to app-private storage.** If the app ever
+  crashes, the stack trace is written to a local file so a bug report can
+  say what happened instead of losing it. The handler installs once per
+  process and chains the platform default, so nothing else is suppressed.
+
+### Reliability
+
+- **The dashcam battery probe backs off when the camera is off.** It no
+  longer retries on a fixed cadence against a dashcam that isn't
+  broadcasting, which was waking the Bluetooth stack needlessly and
+  contending with the radar link.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36.
+- No change to the Home Assistant payloads or the BLE protocol.
+
+### Internal
+
+- Continued splitting the foreground service into focused, unit-tested
+  coordinators (capture-log lifecycle, Home Assistant publishing,
+  notification channels, the known-device cache), with no change to
+  behaviour. Plus the usual test-coverage, CI, and documentation refreshes.
+
 ## v0.9.0-alpha - 2026-06-02
 
 ### Features

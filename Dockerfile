@@ -15,7 +15,7 @@ RUN set -eux; \
     mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest; \
     rm commandlinetools-linux-11076708_latest.zip; \
     yes | sdkmanager --licenses > /dev/null; \
-    sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"; \
+    sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "platforms;android-37.0" "build-tools;37.0.0"; \
     chmod -R a+rwX $ANDROID_HOME
 
 WORKDIR /workspace

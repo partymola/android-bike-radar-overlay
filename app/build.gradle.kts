@@ -72,7 +72,7 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 
 android {
     namespace = "es.jjrh.bikeradar"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "es.jjrh.bikeradar"

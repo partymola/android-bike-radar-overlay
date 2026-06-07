@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import es.jjrh.bikeradar.data.Prefs
 import java.text.SimpleDateFormat
@@ -125,6 +126,37 @@ internal class ServiceNotifications(
      *  pause-expiry). The initial post is the service's startForeground. */
     fun postForeground() = nm.notify(NOTIF_ID, buildForeground())
 
+    /** Bond-lost alert: the radar's bond was removed in system settings, so the
+     *  reconnect loop was stopped. Deep-links to Bluetooth settings so the rider
+     *  can re-pair, and explains why the link went silent. Posted from the
+     *  service's bond-lost path. */
+    fun postBondLost() {
+        ensureChannels()
+        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val openSettings = PendingIntent.getActivity(
+            context,
+            BOND_NOTIF_REQ,
+            Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            piFlags,
+        )
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.svc_main_notif_title))
+            .setContentText(context.getString(R.string.svc_main_bond_lost_text))
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openSettings)
+            .build()
+        nm.notify(NOTIF_BOND_LOST_ID, notif)
+    }
+
+    /** Clear the bond-lost notification (service teardown). */
+    fun cancelBondLost() = nm.cancel(NOTIF_BOND_LOST_ID)
+
     companion object {
         const val CHANNEL_ID = "bike_radar_min"
 
@@ -139,6 +171,8 @@ internal class ServiceNotifications(
         val LIGHT_FAIL_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
 
         const val NOTIF_ID = 1
+        private const val NOTIF_BOND_LOST_ID = 2
         private const val NOTIF_ACTION_REQ = 0xB1CD
+        private const val BOND_NOTIF_REQ = 0xB1CE
     }
 }

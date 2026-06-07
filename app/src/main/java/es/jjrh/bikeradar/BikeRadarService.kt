@@ -36,7 +36,6 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
 import android.util.Log
 import android.view.Display
 import android.view.Gravity
@@ -681,7 +680,7 @@ class BikeRadarService : Service() {
         // after scope.cancel() so no in-flight coroutine can re-emit them.
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(NOTIF_WALKAWAY_ID)
-        nm.cancel(NOTIF_BOND_LOST_ID)
+        notifications.cancelBondLost()
         // Companion-object cache survives across service instances within the
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
         macToSlug.clear()
@@ -952,32 +951,7 @@ class BikeRadarService : Service() {
         radarJob = null
         markRadarDisconnected()
         currentRadarMac = null
-        notifyBondLost()
-    }
-
-    private fun notifyBondLost() {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notifications.ensureChannels()
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        val openSettings = PendingIntent.getActivity(
-            this,
-            BOND_NOTIF_REQ,
-            Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            piFlags,
-        )
-        val notif = NotificationCompat.Builder(this, ServiceNotifications.CHANNEL_ID)
-            .setContentTitle(getString(R.string.svc_main_notif_title))
-            .setContentText(getString(R.string.svc_main_bond_lost_text))
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .setContentIntent(openSettings)
-            .build()
-        nm.notify(NOTIF_BOND_LOST_ID, notif)
+        notifications.postBondLost()
     }
 
     @Synchronized
@@ -2528,11 +2502,9 @@ class BikeRadarService : Service() {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
         private const val TAG_LIGHT = "BikeRadar.Light"
-        const val NOTIF_BOND_LOST_ID = 2
         const val NOTIF_WALKAWAY_ID = 3
         const val NOTIF_LIGHT_FAIL_ID = 4
         const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
-        private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
         private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0
         private const val PREFS_THROTTLE = "bike_radar_throttle"

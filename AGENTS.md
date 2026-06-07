@@ -195,9 +195,9 @@ enforces them, and CONTRIBUTING.md restates them for translators:
   - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
     project LINE >= 0.55, BRANCH >= 0.93 on the safety-critical deciders.
     Raise the floors in `app/build.gradle.kts` as coverage grows.
-- **detekt** is intentionally not wired: only its 2.0.0-alpha targets the
-  pinned Kotlin 2.3, and an alpha doesn't belong in a public build. Revisit
-  when a stable detekt supports the toolchain.
+- **detekt** is intentionally not wired: no stable release targets the
+  pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
+  in a public build. Revisit when a stable detekt supports the toolchain.
 
 ## Gotchas
 

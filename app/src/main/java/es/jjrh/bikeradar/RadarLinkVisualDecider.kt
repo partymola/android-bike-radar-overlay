@@ -40,12 +40,23 @@ object RadarLinkVisualDecider {
      * @param radarDownForMs how long the radar has been continuously down, or
      *   null when it is currently connected.
      * @param visualThresholdMs how long down before the screen is marked blind.
+     * @param paused whether the rider has paused alerts. Paused stays
+     *   [LinkVisual.LIVE] so the banner never appears (or is hidden) while the
+     *   rider has muted the app - keeping this in the pure decider means the
+     *   hide-while-paused branch is unit-tested, not buried in the caller's
+     *   ordering.
      */
     fun decide(
         radarEverLive: Boolean,
         radarDownForMs: Long?,
         visualThresholdMs: Long,
-    ): LinkVisual = if (radarEverLive && radarDownForMs != null && radarDownForMs >= visualThresholdMs) {
+        paused: Boolean,
+    ): LinkVisual = if (
+        !paused &&
+        radarEverLive &&
+        radarDownForMs != null &&
+        radarDownForMs >= visualThresholdMs
+    ) {
         LinkVisual.RECONNECTING
     } else {
         LinkVisual.LIVE

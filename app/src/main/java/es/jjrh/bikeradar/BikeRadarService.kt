@@ -2346,8 +2346,11 @@ class BikeRadarService : Service() {
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
             visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
+            paused = prefs.isPaused,
         )
-        setReconnectBanner(visual == RadarLinkVisualDecider.LinkVisual.RECONNECTING && !prefs.isPaused)
+        // Must run before the isPaused early-return below so a pause HIDES an
+        // already-shown banner (decide() returns LIVE when paused).
+        setReconnectBanner(visual == RadarLinkVisualDecider.LinkVisual.RECONNECTING)
         if (prefs.isPaused) return
         val snap = lastEBikeSnapshot
         val ebikeAgeMs = nowMs - lastEBikeSnapshotMs

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only: the scan only reads commits + the diff, never writes.
+permissions:
+  contents: read
+
 jobs:
   scan:
     name: Commit message + diff keyword scan

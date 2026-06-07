@@ -55,8 +55,14 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 ## Architecture
 
-- Single foreground service (`BikeRadarService`) handles BLE scan, GATT,
-  radar decode, overlay draw, HA MQTT push. No fragments, Compose-only UI.
+- Single foreground service (`BikeRadarService`), Compose-only UI, no
+  fragments. It owns the BLE scan, GATT, and radar decode/alert hot path, and
+  is being thinned into single-responsibility coordinators injected at
+  `onCreate` (overlay pipeline, radar-link state, HA publishing, notifications,
+  capture log, known-device cache - see Key files). New non-radar-core
+  behaviour goes in a coordinator, not the service; the service stays the sole
+  owner of `scope`, the warm `AlertBeeper`, and `_radarLinkState`, and the
+  radar/BLE core is extracted last.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
@@ -89,7 +95,11 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 | Path | Role |
 |------|------|
-| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Unified foreground service |
+| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + radar/BLE core; coordinators injected at onCreate |
+| `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
+| `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
+| `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
+| `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |

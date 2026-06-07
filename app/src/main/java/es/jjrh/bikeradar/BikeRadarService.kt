@@ -306,6 +306,14 @@ class BikeRadarService : Service() {
     // params on rotation.
     private lateinit var overlayHost: AndroidOverlayHost
 
+    // Second overlay host for the service-owned "reconnecting" banner shown
+    // while the rear-radar link is down (the per-connection pipeline and its
+    // view are torn down during the drop, so this is a separate surface).
+    // Driven off RadarLinkVisualDecider from the walk-away tick. The view ref
+    // is touched only on the main thread (show/hide dispatch to Main).
+    private lateinit var reconnectHost: AndroidOverlayHost
+    private var reconnectBannerView: RadarOverlayView? = null
+
     // Pipeline orchestrates the per-frame combine(RadarStateBus +
     // BatteryStateBus + ticker) loop that drives the overlay view, the
     // beeper cues, and the close-pass detector + HA publish. Allocated in
@@ -384,6 +392,7 @@ class BikeRadarService : Service() {
         }
 
         overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
+        reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)
         overlayPipeline = OverlayPipeline(
             prefs = prefs,
             ha = ha,
@@ -653,6 +662,10 @@ class BikeRadarService : Service() {
         unregisterBondReceiver()
         closeCaptureLog()
         RadarStateBus.clear()
+        if (::reconnectHost.isInitialized) {
+            reconnectBannerView?.let { reconnectHost.detach(it) }
+            reconnectBannerView = null
+        }
         stopWalkAwayAlarmTone()
         alertBeeper?.release()
         alertBeeper = null
@@ -677,6 +690,7 @@ class BikeRadarService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (::overlayHost.isInitialized) overlayHost.onConfigurationChanged()
+        if (::reconnectHost.isInitialized) reconnectHost.onConfigurationChanged()
     }
 
     // ── battery scan kickstart ────────────────────────────────────────────────
@@ -2157,6 +2171,9 @@ class BikeRadarService : Service() {
             nm.cancel(NOTIF_WALKAWAY_ID)
             clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
         }
+        // Radar is back: hide the reconnecting banner now rather than waiting
+        // for the next (up to 30s idle) tick of evaluateRadarDrop.
+        setReconnectBanner(false)
     }
 
     private fun markRadarDisconnected() {
@@ -2317,10 +2334,22 @@ class BikeRadarService : Service() {
      * Full design rationale + scenario matrix in [RadarDropDecider]'s KDoc.
      */
     private fun evaluateRadarDrop(nowMs: Long) {
-        if (prefs.isPaused) return
-        val snap = lastEBikeSnapshot
         val link = _radarLinkState.value
         val downForMs = link.radarOffSinceMs?.let { nowMs - it }
+        // Visual "reconnecting" banner: shown whenever the rear link is down
+        // past the visual threshold. NOT eBike-gated (unlike the audio cue
+        // below) - it is a glanceable status and the only dead-radar signal a
+        // radar-only rider gets. Hidden while paused; the eager hide on
+        // reconnect lives in markRadarConnected so it doesn't wait for the
+        // (up to 30s) idle tick.
+        val visual = RadarLinkVisualDecider.decide(
+            radarEverLive = link.sessionRadarConnectedMs > 0L,
+            radarDownForMs = downForMs,
+            visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
+        )
+        setReconnectBanner(visual == RadarLinkVisualDecider.LinkVisual.RECONNECTING && !prefs.isPaused)
+        if (prefs.isPaused) return
+        val snap = lastEBikeSnapshot
         val ebikeAgeMs = nowMs - lastEBikeSnapshotMs
         val ridingConfirmed = RadarDropDecider.ridingConfirmed(
             systemLocked = snap?.systemLocked,
@@ -2374,6 +2403,31 @@ class BikeRadarService : Service() {
         if (decision.fireReconnect) {
             alertBeeper?.playRadarReconnected()
             clog("# radar_reconnect_cue")
+        }
+    }
+
+    /** Show/hide the service-owned "reconnecting" banner. Idempotent; all
+     *  WindowManager work runs on the main thread, where the view ref is the
+     *  only reader/writer (so no extra synchronisation). A null view + show
+     *  attaches a fresh reconnecting overlay; a non-null view + hide detaches
+     *  it. canDrawOverlays is re-checked for the permission TOCTOU, mirroring
+     *  the pipeline's attach path. */
+    private fun setReconnectBanner(show: Boolean) {
+        scope.launch(Dispatchers.Main) {
+            val current = reconnectBannerView
+            if (show && current == null) {
+                if (!reconnectHost.canDrawOverlays()) return@launch
+                val v = reconnectHost.createView()
+                v.setReconnecting(true)
+                if (reconnectHost.attach(v) == null) {
+                    reconnectBannerView = v
+                    clog("# reconnect_banner shown")
+                }
+            } else if (!show && current != null) {
+                reconnectBannerView = null
+                reconnectHost.detach(current)
+                clog("# reconnect_banner hidden")
+            }
         }
     }
 
@@ -2584,6 +2638,14 @@ class BikeRadarService : Service() {
          *  Deliberately generous so the normal end-of-ride wind-down (radar
          *  off around when the dashcam goes off) never trips it. */
         const val RADAR_DROP_THRESHOLD_MS = 60_000L
+
+        /** Visual "reconnecting" banner: continuous radar-off time before the
+         *  overlay marks the rear blind. Far shorter than the audio cue's 60s
+         *  because a glanceable status banner is cheap (not an interruptive
+         *  nag) and is the ONLY dead-radar signal a radar-only rider gets. 10s
+         *  rides through normal reconnects (corpus median 8.4s, floor 5.3s) and
+         *  marks the screen only once a drop is likely real. Not eBike-gated. */
+        const val RADAR_DROP_VISUAL_THRESHOLD_MS = 10_000L
 
         /** Radar-drop cue re-fire gap while the radar stays down. */
         const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L

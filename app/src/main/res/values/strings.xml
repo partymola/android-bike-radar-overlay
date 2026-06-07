@@ -74,6 +74,11 @@
     <string name="overlay_a11y_dashcam_searching">Searching for dashcam.</string>
     <string name="overlay_a11y_low_battery">Low battery.</string>
 
+    <!-- On-screen banner shown on the overlay while the rear-radar link is down
+         past the reconnect threshold (RadarOverlayView.setReconnecting). -->
+    <string name="overlay_reconnecting">Reconnecting</string>
+    <string name="overlay_no_rear_data">No rear data</string>
+
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)
          ════════════════════════════════════════════════════════════════ -->

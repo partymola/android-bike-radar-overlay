@@ -167,6 +167,15 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun reconnecting() {
+        // Rear-radar link down past the visual threshold: the overlay shows
+        // only the "reconnecting" banner, no radar canvas.
+        overlay().apply {
+            setReconnecting(true)
+        }.capture()
+    }
+
+    @Test
     fun scenarioModeLabel() {
         // Non-null scenarioTimeMs triggers the t+... replay label.
         overlay().apply {

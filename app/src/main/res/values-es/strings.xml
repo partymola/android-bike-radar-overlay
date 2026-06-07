@@ -62,6 +62,11 @@
     <string name="overlay_a11y_dashcam_searching">Buscando la dashcam.</string>
     <string name="overlay_a11y_low_battery">Batería baja.</string>
 
+    <!-- Aviso en la barra lateral mientras el radar trasero está sin enlace
+         (RadarOverlayView.setReconnecting). -->
+    <string name="overlay_reconnecting">Reconectando</string>
+    <string name="overlay_no_rear_data">Sin señal</string>
+
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)
          ════════════════════════════════════════════════════════════════ -->

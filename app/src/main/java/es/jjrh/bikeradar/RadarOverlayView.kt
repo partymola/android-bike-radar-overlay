@@ -108,6 +108,12 @@ class RadarOverlayView(context: Context) : View(context) {
     private var dashcamStatus: DashcamStatus = DashcamStatus.Ok
     private var dashcamSlug: String? = null
 
+    // When true the view draws ONLY a "reconnecting" banner (the rear-radar
+    // link is down past the visual threshold) and skips the radar canvas. Set
+    // by the service-owned reconnect overlay, never by the per-connection
+    // pipeline (which is torn down during the drop). See RadarLinkVisualDecider.
+    private var reconnecting = false
+
     private val batteryDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = COLOR_AMBER
@@ -124,6 +130,26 @@ class RadarOverlayView(context: Context) : View(context) {
             R.drawable.ic_videocam_off,
             null,
         )
+
+    private val reconnectBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(225, 20, 20, 20)
+    }
+    private val reconnectTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        textSize = dp(12f)
+        color = COLOR_AMBER
+        typeface = android.graphics.Typeface.create(
+            android.graphics.Typeface.MONOSPACE,
+            android.graphics.Typeface.BOLD,
+        )
+    }
+    private val reconnectSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        textSize = dp(9.5f)
+        color = Color.argb(210, 215, 215, 215)
+        typeface = android.graphics.Typeface.MONOSPACE
+    }
 
     fun setState(s: RadarState) {
         if (s == state) return
@@ -172,6 +198,16 @@ class RadarOverlayView(context: Context) : View(context) {
         postInvalidate()
     }
 
+    /** Toggle the "rear link down" banner. When on, [onDraw] renders only the
+     *  reconnecting banner. Driven by the service-owned reconnect overlay off
+     *  [RadarLinkVisualDecider]; the per-connection pipeline never sets it. */
+    fun setReconnecting(on: Boolean) {
+        if (on == reconnecting) return
+        reconnecting = on
+        contentDescription = if (on) context.getString(R.string.overlay_reconnecting) else null
+        postInvalidate()
+    }
+
     /** Spoken state summary for accessibility services - built only when one
      *  is listening (see [a11yManager]). The state logic is the pure,
      *  unit-tested [buildOverlayA11yModel]; [overlayA11yDescription] resolves
@@ -185,6 +221,10 @@ class RadarOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
+        if (reconnecting) {
+            drawReconnecting(canvas, w)
+            return
+        }
         val clear = state.isClear
 
         val bgAlpha = if (clear) 12 else 100
@@ -339,6 +379,24 @@ class RadarOverlayView(context: Context) : View(context) {
         // happen to be at the same lateral position. drawBatteryWarning is a
         // no-op when there is no warning, so the paint cost is negligible.
         drawBatteryWarning(canvas, w, h)
+    }
+
+    /** Draws the "rear link down" pill near the top of the strip (where the
+     *  rider marker normally sits, so a glance to the usual spot reads it).
+     *  Honest status, not an alarm: amber on a dark pill, no danger border. */
+    private fun drawReconnecting(canvas: Canvas, w: Float) {
+        val pad = dp(8f)
+        val top = dp(16f)
+        val cx = w / 2f
+        val titleFm = reconnectTitlePaint.fontMetrics
+        val subFm = reconnectSubPaint.fontMetrics
+        val titleBaseline = top + dp(12f) - titleFm.ascent
+        val subBaseline = titleBaseline + titleFm.descent + dp(3f) - subFm.ascent
+        val bottom = subBaseline + subFm.descent + dp(12f)
+        tmpRect.set(pad, top, w - pad, bottom)
+        canvas.drawRoundRect(tmpRect, dp(10f), dp(10f), reconnectBgPaint)
+        canvas.drawText(context.getString(R.string.overlay_reconnecting), cx, titleBaseline, reconnectTitlePaint)
+        canvas.drawText(context.getString(R.string.overlay_no_rear_data), cx, subBaseline, reconnectSubPaint)
     }
 
     private fun drawBatteryWarning(canvas: Canvas, w: Float, h: Float) {

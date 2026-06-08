@@ -5,11 +5,9 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanFilter
@@ -37,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +59,7 @@ class BikeRadarService : Service() {
     private lateinit var notifications: ServiceNotifications
     private lateinit var walkAwayAlarm: WalkAwayAlarm
     private lateinit var radarLink: RadarLinkController
+    private lateinit var cameraLink: CameraLightLinkController
     private lateinit var knownDevices: KnownDevices
 
     // Battery path state
@@ -81,18 +79,6 @@ class BikeRadarService : Service() {
     // when the service starts. Published to HA via the periodic loop
     // started below.
     private var rideStats = RideStatsAccumulator()
-
-    // Front camera/light link state
-    @Volatile private var cameraLightJob: Job? = null
-
-    @Volatile private var cameraLightGattActive = false
-
-    @Volatile private var cameraLightUserOverride = false
-
-    @Volatile private var cameraLightLastWrittenMode: CameraLightMode? = null
-
-    @Volatile private var cameraLightOffSinceMs: Long? = null
-    private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     // ── Walk-away alarm state ────────────────────────────────────────────────
     // See WalkAwayDecider for the decision logic. The service owns all
@@ -329,6 +315,17 @@ class BikeRadarService : Service() {
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
         )
+        cameraLink = CameraLightLinkController(
+            context = this,
+            scope = scope,
+            prefs = prefs,
+            ha = ha,
+            haPublisher = haPublisher,
+            notifications = notifications,
+            macToSlug = macToSlug,
+            slug = { name -> slug(name) },
+            radarOffSinceMs = { _radarLinkState.value.radarOffSinceMs },
+        )
 
         pruneCaptureLogs()
         schedulePauseExpiry()
@@ -512,7 +509,7 @@ class BikeRadarService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         pauseExpiryJob?.cancel()
-        cameraLightJob?.cancel()
+        cameraLink.stop()
         unregisterEventScan()
         radarLink.shutdown()
         closeCaptureLog()
@@ -595,8 +592,8 @@ class BikeRadarService : Service() {
 
         // Start or gate the camera light link when this is the configured dashcam.
         val isDashcam = prefs.dashcamMac?.equals(mac, ignoreCase = true) == true
-        if (isDashcam && prefs.autoLightModeEnabled) maybeStartCameraLightLink(name, mac)
-        if (isDashcam && (cameraLightGattActive || cameraLightJob?.isActive == true)) {
+        if (isDashcam && prefs.autoLightModeEnabled) cameraLink.start(name, mac)
+        if (isDashcam && (cameraLink.isGattActive() || cameraLink.isActive())) {
             BatteryStateBus.markSeen(slug(name), System.currentTimeMillis())
             Log.d(TAG, "skip $name (camera light gatt active)")
             return
@@ -768,301 +765,6 @@ class BikeRadarService : Service() {
                 }
                 cont.invokeOnCancellation { closeOnce() }
             }
-        }
-    }
-
-    @Synchronized
-    private fun maybeStartCameraLightLink(name: String, mac: String) {
-        if (cameraLightJob?.isActive == true) return
-        Log.i(TAG_LIGHT, "starting camera light link to $name $mac")
-        cameraLightJob = scope.launch { runCameraLightConnection(mac, name) }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun runCameraLightConnection(mac: String, name: String) {
-        val btMgr = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager ?: return
-        val device = try {
-            btMgr.adapter?.getRemoteDevice(mac)
-        } catch (_: Throwable) {
-            null
-        } ?: return
-
-        var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
-        try {
-            while (true) {
-                if (!prefs.autoLightModeEnabled) {
-                    Log.i(TAG_LIGHT, "auto light mode disabled; exiting link")
-                    return
-                }
-                Log.i(TAG_LIGHT, "connect attempt to $name $mac")
-                val quickReconnect = connectAndRunCameraLight(device, name)
-                cameraLightGattActive = false
-                val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else jittered(backoffMs)
-                Log.i(TAG_LIGHT, "reconnecting in ${delayMs}ms")
-                kotlinx.coroutines.delay(delayMs)
-                if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(
-                            now = System.currentTimeMillis(),
-                            offSinceMs = radarOffSinceMs,
-                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
-                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
-                        ),
-                    )
-                } else {
-                    backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
-                }
-            }
-        } finally {
-            cameraLightGattActive = false
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun connectAndRunCameraLight(device: BluetoothDevice, name: String): Boolean {
-        val notifyChannel = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
-        val queue = BleOpQueue()
-        val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
-        var gatt: BluetoothGatt? = null
-        var gattClosed = false
-        fun closeOnce() {
-            if (gattClosed) return
-            gattClosed = true
-            val g = gatt ?: return
-            try {
-                g.disconnect()
-            } catch (_: Throwable) {}
-            try {
-                g.close()
-            } catch (_: Throwable) {}
-        }
-
-        val cb = object : BluetoothGattCallback() {
-            override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-                when (newState) {
-                    BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        cameraLightGattActive = false
-                        queue.cancel()
-                        notifyChannel.close()
-                        if (!servicesReady.isCompleted) servicesReady.complete(false)
-                        closeOnce()
-                    }
-                }
-            }
-
-            override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                if (!servicesReady.isCompleted) servicesReady.complete(status == BluetoothGatt.GATT_SUCCESS)
-            }
-
-            override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
-                queue.onDescriptorWrite(d, status)
-            }
-
-            @Deprecated("API < 33 compat")
-            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-                @Suppress("DEPRECATION")
-                queue.onCharacteristicRead(ch, ch.value ?: ByteArray(0), status)
-            }
-
-            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-                queue.onCharacteristicRead(ch, value, status)
-            }
-
-            override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-                queue.onCharacteristicWrite(ch, status)
-            }
-
-            override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-                queue.onMtuChanged(mtu, status)
-            }
-
-            @Deprecated("API < 33 compat")
-            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
-                @Suppress("DEPRECATION")
-                notifyChannel.trySend(ch.uuid to (ch.value ?: ByteArray(0)))
-            }
-
-            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
-                notifyChannel.trySend(ch.uuid to value)
-            }
-        }
-
-        gatt = connectGattLe(this, device, true, cb)
-        if (gatt == null) {
-            Log.w(TAG_LIGHT, "connectGatt returned null")
-            return false
-        }
-
-        val queueJob = scope.launch { queue.run() }
-
-        var sunsetJob: Job? = null
-        var sunriseJob: Job? = null
-        return try {
-            val ok = servicesReady.await()
-            if (!ok) {
-                Log.w(TAG_LIGHT, "service discovery failed")
-                return false
-            }
-
-            cameraLightGattActive = true
-            val offSince = cameraLightOffSinceMs
-            if (offSince != null &&
-                System.currentTimeMillis() - offSince >= CAMERA_LIGHT_OVERRIDE_DEADBAND_MS
-            ) {
-                cameraLightUserOverride = false
-                Log.i(TAG_LIGHT, "override cleared after ${(System.currentTimeMillis() - offSince) / 1000}s off")
-            }
-            cameraLightOffSinceMs = null
-            Log.i(TAG_LIGHT, "connected, running handshake")
-
-            val handshakeOk = RadarUnlock.runHandshake(
-                gatt,
-                queue,
-                notifyChannel,
-                DeviceVariant.FRONT_CAMERA,
-            ) { msg -> Log.d(TAG_LIGHT, msg) }
-
-            if (!handshakeOk) {
-                Log.w(TAG_LIGHT, "handshake failed; closing for quick reconnect")
-                gatt.disconnect()
-                return true
-            }
-
-            Log.i(TAG_LIGHT, "handshake complete; subscribing mode-state notify")
-            // Refresh the location cache for sunrise/sunset before scheduling
-            // the dusk/dawn flips below. Idempotent with the radar-side
-            // refresh: if either device handshook first, the cache is warm.
-            LocationCache.refreshIfStale(this@BikeRadarService)
-            val ch14 = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_14)
-            if (ch14 != null) queue.writeCccd(gatt, ch14)
-
-            val lightSlugEarly = slug(name)
-            val lightMacEarly = gatt.device?.address
-            if (lightMacEarly != null) macToSlug[lightMacEarly] = lightSlugEarly
-            if (ha.isConfigured() && frontModeDiscoveredSlugs.add(lightSlugEarly)) {
-                if (!ha.publishFrontModeDiscovery(lightSlugEarly, name)) {
-                    frontModeDiscoveredSlugs.remove(lightSlugEarly)
-                }
-            }
-
-            val controller = CameraLightController(gatt, queue)
-            val nowMs = System.currentTimeMillis()
-            val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-            val loc = LocationCache.current()
-            val (sunriseMs, sunsetMs) = if (loc != null) {
-                SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
-                    SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
-            } else {
-                // No location available (permission denied, or no last-known
-                // fix yet). Fall back to SunsetCalculator's London defaults.
-                SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
-            }
-            val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-            // Provenance only - never the coordinates. This line goes to release
-            // logcat via Log.i; 2-decimal lat/lon would localise the rider's
-            // ride-start to a ~1 km cell for anything with READ_LOGS.
-            val locLog = if (loc != null) "gps" else "London-fallback"
-            val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
-
-            // Same time-of-day scheduling as the radar tail light, via the shared
-            // pure LightAutoModeDecider: DAY -> cameraLightDayMode, NIGHT ->
-            // cameraLightNightMode. A manual side-button override suppresses both
-            // the initial apply and the scheduled flip; the flip is also
-            // re-checked at fire time in case the override or link changed.
-            val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, isNight, cameraLightUserOverride)
-            Log.i(TAG_LIGHT, "auto-mode: night=$isNight override=$cameraLightUserOverride sunset=$sunsetLog")
-            suspend fun applyPhase(phase: LightAutoModeDecider.Phase, label: String) {
-                val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
-                    prefs.cameraLightNightMode
-                } else {
-                    prefs.cameraLightDayMode
-                }
-                val ok = applyWithRetry { controller.setMode(mode) }
-                Log.i(TAG_LIGHT, "$label mode=$mode applied=$ok")
-                if (ok) {
-                    cameraLightLastWrittenMode = mode
-                    if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
-                } else {
-                    postLightModeFailNotification(mode)
-                }
-            }
-            if (plan.initial != null) {
-                applyPhase(plan.initial, "initial")
-            } else {
-                Log.i(TAG_LIGHT, "initial mode skipped (manual override active)")
-            }
-            val flipAt = plan.flipAtMs
-            val flipTo = plan.flipTo
-            if (flipAt != null && flipTo != null) {
-                val job = scope.launch {
-                    kotlinx.coroutines.delay(flipAt - nowMs)
-                    if (cameraLightGattActive && !cameraLightUserOverride) {
-                        applyPhase(
-                            flipTo,
-                            if (flipTo == LightAutoModeDecider.Phase.NIGHT) "sunset" else "sunrise",
-                        )
-                    }
-                }
-                if (flipTo == LightAutoModeDecider.Phase.NIGHT) sunsetJob = job else sunriseJob = job
-            }
-
-            for ((uuid, bytes) in notifyChannel) {
-                when (uuid) {
-                    Uuids.CHAR_BATTERY -> {
-                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
-                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
-                    }
-                    Uuids.SETTINGS_14 -> {
-                        val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
-                        Log.d(TAG_LIGHT, "mode-state notify: $mode")
-                        val expected = cameraLightLastWrittenMode
-                        if (expected != null && mode != expected && !cameraLightUserOverride) {
-                            cameraLightUserOverride = true
-                            Log.i(TAG_LIGHT, "override detected: expected=$expected device=$mode")
-                        }
-                        if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
-                    }
-                }
-            }
-            false
-        } finally {
-            cameraLightGattActive = false
-            if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = System.currentTimeMillis()
-            sunsetJob?.cancel()
-            sunriseJob?.cancel()
-            queueJob.cancel()
-            queue.cancel()
-            closeOnce()
-        }
-    }
-
-    // ── light failure feedback ─────────────────────────────────────────────────
-
-    private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
-        val modeName = getString(
-            when (mode) {
-                CameraLightMode.HIGH -> R.string.settings_lightmode_high
-                CameraLightMode.MEDIUM -> R.string.settings_lightmode_medium
-                CameraLightMode.LOW -> R.string.settings_lightmode_low
-                CameraLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
-                CameraLightMode.DAY_FLASH -> R.string.settings_lightmode_day_flash
-                CameraLightMode.OFF -> R.string.settings_lightmode_off
-            },
-        )
-
-        notifications.postLightFail(modeName)
-
-        // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
-        var tg: android.media.ToneGenerator? = null
-        try {
-            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
-            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
-            kotlinx.coroutines.delay(600)
-        } catch (_: Exception) {
-        } finally {
-            tg?.release()
         }
     }
 
@@ -1648,7 +1350,6 @@ class BikeRadarService : Service() {
     companion object {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
-        private const val TAG_LIGHT = "BikeRadar.Light"
         private const val PREFS_THROTTLE = "bike_radar_throttle"
         private const val KEY_LAST_TS = "last_ts"
         private const val SCAN_PI_REQ = 0xB1CC
@@ -1790,9 +1491,6 @@ class BikeRadarService : Service() {
         // long parked periods.
         const val WALKAWAY_IDLE_TICK_MS = 30_000L
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
-
-        // Override detection: blips shorter than this are treated as the same ride session.
-        private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

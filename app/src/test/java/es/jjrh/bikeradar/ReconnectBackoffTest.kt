@@ -16,14 +16,14 @@ import kotlin.random.Random
  */
 class ReconnectBackoffTest {
 
-    private val short = BikeRadarService.RADAR_RECONNECT_BACKOFF_MAX_MS
+    private val short = RADAR_RECONNECT_BACKOFF_MAX_MS
     private val threshold = 30L * 60 * 1000 // 30 min, default
     private val longCap = 30L * 1000 // 30 s, default
 
     @Test fun nullOffSinceUsesShortCap() {
         assertEquals(
             short,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = 1_000_000L,
                 offSinceMs = null,
                 longOfflineThresholdMs = threshold,
@@ -35,7 +35,7 @@ class ReconnectBackoffTest {
     @Test fun zeroElapsedUsesShortCap() {
         assertEquals(
             short,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = 5_000L,
                 offSinceMs = 5_000L,
                 longOfflineThresholdMs = threshold,
@@ -47,7 +47,7 @@ class ReconnectBackoffTest {
     @Test fun justUnderThresholdUsesShortCap() {
         assertEquals(
             short,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = threshold - 1,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,
@@ -59,7 +59,7 @@ class ReconnectBackoffTest {
     @Test fun atThresholdStillUsesShortCap() {
         assertEquals(
             short,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = threshold,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,
@@ -71,7 +71,7 @@ class ReconnectBackoffTest {
     @Test fun pastThresholdUsesLongCap() {
         assertEquals(
             longCap,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = threshold + 1,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,
@@ -84,7 +84,7 @@ class ReconnectBackoffTest {
         val twentyFourHoursMs = 24L * 60 * 60 * 1000
         assertEquals(
             longCap,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = twentyFourHoursMs,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,
@@ -99,7 +99,7 @@ class ReconnectBackoffTest {
         val tightThreshold = 5L * 60 * 1000
         assertEquals(
             longCap,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = 6L * 60 * 1000,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = tightThreshold,
@@ -112,7 +112,7 @@ class ReconnectBackoffTest {
         val customCap = 90L * 1000
         assertEquals(
             customCap,
-            BikeRadarService.reconnectBackoffCap(
+            reconnectBackoffCap(
                 now = threshold + 1,
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,

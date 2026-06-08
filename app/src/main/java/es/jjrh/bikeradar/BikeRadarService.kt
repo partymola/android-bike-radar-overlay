@@ -2261,34 +2261,6 @@ class BikeRadarService : Service() {
         const val THROTTLE_MS = 5 * 60 * 1000L
         const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
 
-        // Reconnect backoff: starts fast, doubles on each consecutive failure,
-        // caps at 8 s. Resets to the initial value once a connection reaches
-        // the V2 decode loop. Quick-reconnect (post-handshake-ABORT) bypasses
-        // backoff entirely.
-        const val RADAR_RECONNECT_BACKOFF_INITIAL_MS = 1_000L
-        const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
-        const val RADAR_QUICK_RECONNECT_MS = 1_500L
-
-        // After the radar has been offline past `longOfflineThresholdMs`,
-        // the cap relaxes to `longOfflineCapMs`. At the steady-state 8 s
-        // ceiling a parked-overnight bike would otherwise trigger ~10,800
-        // GATT opens per 24 h; the longer cap lets the radio idle while
-        // still picking up the radar within one cycle of return.
-        @androidx.annotation.VisibleForTesting
-        internal fun reconnectBackoffCap(
-            now: Long,
-            offSinceMs: Long?,
-            longOfflineThresholdMs: Long,
-            longOfflineCapMs: Long,
-        ): Long {
-            if (offSinceMs == null) return RADAR_RECONNECT_BACKOFF_MAX_MS
-            return if (now - offSinceMs > longOfflineThresholdMs) {
-                longOfflineCapMs
-            } else {
-                RADAR_RECONNECT_BACKOFF_MAX_MS
-            }
-        }
-
         // Phone-battery sample written into the capture log at most once per
         // this period. The capture-log line is comment-prefixed so existing
         // decoders skip it cleanly.

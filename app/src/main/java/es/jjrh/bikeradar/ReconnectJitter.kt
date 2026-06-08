@@ -25,3 +25,34 @@ internal fun jittered(baseMs: Long, random: Random = Random.Default): Long {
     if (jitterRangeMs <= 0L) return baseMs
     return baseMs + random.nextLong(-jitterRangeMs, jitterRangeMs + 1)
 }
+
+// Reconnect backoff: starts fast, doubles on each consecutive failure, caps at
+// 8 s. Resets to the initial value once a connection reaches the V2 decode loop.
+// Quick-reconnect (post-handshake-ABORT) bypasses backoff entirely. Shared by
+// the rear-radar and front-camera reconnect loops (the "RADAR_" prefix is
+// historical - both loops run the same schedule).
+internal const val RADAR_RECONNECT_BACKOFF_INITIAL_MS = 1_000L
+internal const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
+internal const val RADAR_QUICK_RECONNECT_MS = 1_500L
+
+/**
+ * The reconnect-backoff ceiling for the current moment. After the device has
+ * been offline past [longOfflineThresholdMs] the cap relaxes to
+ * [longOfflineCapMs]: at the steady-state 8 s ceiling a parked-overnight bike
+ * would otherwise trigger ~10,800 GATT opens per 24 h; the longer cap lets the
+ * radio idle while still picking the device up within one cycle of return.
+ */
+@androidx.annotation.VisibleForTesting
+internal fun reconnectBackoffCap(
+    now: Long,
+    offSinceMs: Long?,
+    longOfflineThresholdMs: Long,
+    longOfflineCapMs: Long,
+): Long {
+    if (offSinceMs == null) return RADAR_RECONNECT_BACKOFF_MAX_MS
+    return if (now - offSinceMs > longOfflineThresholdMs) {
+        longOfflineCapMs
+    } else {
+        RADAR_RECONNECT_BACKOFF_MAX_MS
+    }
+}

@@ -474,7 +474,7 @@ class Prefs(context: Context) {
      *  records the exact timing of every radar packet, BLE notify and eBike
      *  snapshot to app-private storage - ride-tracking-grade data the app
      *  should not write unprompted. Enable it on the Debug screen to produce a
-     *  log for bug reports or analysis; when off, [BikeRadarService.openCaptureLog]
+     *  log for bug reports or analysis; when off, [CaptureLogManager.open]
      *  is a no-op and no file is created. */
     var captureLoggingEnabled: Boolean
         get() = sp.getBoolean(KEY_CAPTURE_LOGGING, false)

@@ -510,16 +510,16 @@ class BikeRadarService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         pauseExpiryJob?.cancel()
-        cameraLink.stop()
+        if (::cameraLink.isInitialized) cameraLink.stop()
         unregisterEventScan()
-        radarLink.shutdown()
+        if (::radarLink.isInitialized) radarLink.shutdown()
         closeCaptureLog()
         RadarStateBus.clear()
         if (::reconnectHost.isInitialized) {
             reconnectBannerView?.let { reconnectHost.detach(it) }
             reconnectBannerView = null
         }
-        walkAwayAlarm.stop()
+        if (::walkAwayAlarm.isInitialized) walkAwayAlarm.stop()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -617,47 +617,9 @@ class BikeRadarService : Service() {
 
     // ── capture log ───────────────────────────────────────────────────────────
 
-    private fun openCaptureLog() = captureLog.open()
-
     private fun closeCaptureLog() = captureLog.close()
 
     fun clog(msg: String) = captureLog.clog(msg)
-
-    /** Capture-log line for a non-None AlertDecider event. Pairs the
-     *  emitted event with the in-front, in-alert-range closest vehicle
-     *  observed in the same frame so a replay can attribute the beep
-     *  to a specific track without re-deriving the AlertDecider's
-     *  internal stable-close set. */
-    private fun logAlertEvent(ev: AlertDecider.Event, state: RadarState, nowMs: Long) {
-        val evStr = when (ev) {
-            is AlertDecider.Event.Beep -> "Beep(${ev.count})"
-            AlertDecider.Event.Clear -> "Clear"
-            is AlertDecider.Event.UrgentApproach -> "UrgentApproach"
-            AlertDecider.Event.None -> "None"
-        }
-        val alertMax = prefs.alertMaxDistanceM
-        val closest = state.vehicles
-            .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMax }
-            .minByOrNull { it.distanceM }
-        // `frame_closest_*` is the in-front, in-range vehicle with the
-        // smallest distance THIS FRAME, not the track the decider
-        // actually attributed the event to. The decider applies
-        // `sustainFrames`, per-tid latches, and stationary suppress on
-        // top of frame closeness; same-frame closest is a diagnostic
-        // anchor, not the attribution. `_mps` suffix on speed fields
-        // distinguishes m/s from the `_ms` (milliseconds) suffix used
-        // elsewhere in the capture log. `-1` is the sentinel for "no
-        // close vehicle this frame" across all numeric fields.
-        clog(
-            "# alert ts=$nowMs event=$evStr " +
-                "frame_closest_tid=${closest?.id ?: -1} " +
-                "frame_closest_d=${closest?.distanceM ?: -1} " +
-                "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +
-                "bike_speed_mps=${state.bikeSpeedMs ?: -1f}",
-        )
-    }
-
-    private fun clogPacket(uuid: UUID, bytes: ByteArray) = captureLog.clogPacket(uuid, bytes)
 
     // ── event scan registration ───────────────────────────────────────────────
 

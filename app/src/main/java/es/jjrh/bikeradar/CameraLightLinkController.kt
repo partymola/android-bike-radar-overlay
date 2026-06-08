@@ -207,11 +207,9 @@ internal class CameraLightLinkController(
 
             cameraLightGattActive = true
             val offSince = cameraLightOffSinceMs
-            if (offSince != null &&
-                System.currentTimeMillis() - offSince >= CAMERA_LIGHT_OVERRIDE_DEADBAND_MS
-            ) {
+            if (CameraLightOverrideDecider.shouldClearOverride(offSince, System.currentTimeMillis(), CAMERA_LIGHT_OVERRIDE_DEADBAND_MS)) {
                 cameraLightUserOverride = false
-                Log.i(TAG, "override cleared after ${(System.currentTimeMillis() - offSince) / 1000}s off")
+                Log.i(TAG, "override cleared after ${(System.currentTimeMillis() - (offSince ?: 0)) / 1000}s off")
             }
             cameraLightOffSinceMs = null
             Log.i(TAG, "connected, running handshake")
@@ -318,7 +316,7 @@ internal class CameraLightLinkController(
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
                         Log.d(TAG, "mode-state notify: $mode")
                         val expected = cameraLightLastWrittenMode
-                        if (expected != null && mode != expected && !cameraLightUserOverride) {
+                        if (!cameraLightUserOverride && CameraLightOverrideDecider.isOverride(expected, mode)) {
                             cameraLightUserOverride = true
                             Log.i(TAG, "override detected: expected=$expected device=$mode")
                         }

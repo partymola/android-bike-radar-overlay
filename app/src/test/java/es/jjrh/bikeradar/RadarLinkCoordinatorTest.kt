@@ -40,6 +40,7 @@ class RadarLinkCoordinatorTest {
     private var ebikeAtMs = 0L
     private var dashcamSlug: String? = null
     private var hasEBike = false
+    private var sawTrack = true // default: a real ride where the radar saw traffic
 
     private val live = RadarLinkVisualDecider.LinkVisual.LIVE
     private val plain = RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN
@@ -75,6 +76,7 @@ class RadarLinkCoordinatorTest {
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs },
             hasEBikeSignal = { hasEBike },
+            everSawTrack = { sawTrack },
             cancelWalkAwaySnooze = { snoozeCancelCount++ },
             clearDashcamBackoff = { dashcamBackoffClearCount++ },
         )
@@ -402,6 +404,20 @@ class RadarLinkCoordinatorTest {
         bannerStates.clear()
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_BANNER_RADAR_ONLY_MAX_MS + 60_000L)
         assertEquals(listOf(plain), bannerStates) // toggle keeps it up past the cap
+    }
+
+    @Test
+    fun bannerSuppressedWhenNoTrackEverSeen() {
+        // Radar connected + dropped but never saw traffic this session -> bench
+        // test -> banner stays hidden (both cohorts; here radar-only).
+        prefs.pausedUntilEpochMs = 0L
+        sawTrack = false
+        hasEBike = false
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(live), bannerStates)
     }
 
     @Test

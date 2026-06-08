@@ -40,6 +40,7 @@ internal class RadarLinkCoordinator(
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
     private val eBikeSnapshotAtMs: () -> Long,
     private val hasEBikeSignal: () -> Boolean,
+    private val everSawTrack: () -> Boolean,
     private val cancelWalkAwaySnooze: () -> Unit,
     private val clearDashcamBackoff: () -> Unit,
 ) : RadarLinkStateGateway {
@@ -286,6 +287,7 @@ internal class RadarLinkCoordinator(
         val explicitParked = ebikeAgeMs < RADAR_DROP_EBIKE_FRESH_MS && snap?.systemLocked == true
         val visual = RadarLinkVisualDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
+            everSawTrack = everSawTrack(),
             radarDownForMs = downForMs,
             visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
             paused = prefs.isPaused,

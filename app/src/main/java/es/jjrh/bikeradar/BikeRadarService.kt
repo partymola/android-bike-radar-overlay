@@ -95,6 +95,11 @@ class BikeRadarService : Service() {
     // graceful-degradation path radar-only riders take.
     private lateinit var ebikeSnapshotCoordinator: EBikeSnapshotCoordinator
 
+    // Sticky: true once the radar has decoded >=1 vehicle this session. Gates the
+    // dead-radar banner - no traffic ever seen means a bench test, not a ride.
+    // Set by a RadarStateBus collector in onCreate; read by RadarLinkCoordinator.
+    @Volatile private var sawTrack = false
+
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
     // of times a session. Kept fresh by a prefs.flow collector in onCreate
@@ -168,6 +173,7 @@ class BikeRadarService : Service() {
         knownDevices = KnownDevices(getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE))
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
+        scope.launch { RadarStateBus.state.collect { if (it.vehicles.isNotEmpty()) sawTrack = true } }
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
         ha = HaClient(creds.baseUrl, creds.token)
@@ -258,6 +264,7 @@ class BikeRadarService : Service() {
             eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
             hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
+            everSawTrack = { sawTrack },
             cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
             clearDashcamBackoff = {
                 prefs.dashcamMac?.let {

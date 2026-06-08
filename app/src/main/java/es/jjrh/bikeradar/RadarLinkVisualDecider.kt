@@ -46,6 +46,18 @@ package es.jjrh.bikeradar
  * 8.4s, hard floor 5.3s), so a ~10s threshold rides through normal reconnects
  * and only marks the screen blind once a drop is likely real. The screen
  * auto-clears the instant the radar returns ([radarDownForMs] back to null).
+ *
+ * ## Bench-test suppression ([everSawTrack])
+ * The banner stays hidden until the radar has decoded at least one vehicle this
+ * session. If it has connected but NEVER seen any traffic, the rider is almost
+ * certainly not out on a road (a bench test at home, an empty test) - so a
+ * dropped radar is not worth a banner. This is a session-CUMULATIVE proxy for
+ * "actually riding" off the radar's own already-decoded targets (no sensor, no
+ * permission); once any vehicle is seen the flag sticks for the rest of the
+ * session. Safety edge: a real ride whose radar dies BEFORE it ever sees a car,
+ * then meets traffic still down, gets no banner until reconnect - accepted
+ * because zero-traffic-so-far is the lowest-risk blind-rear window and it
+ * self-corrects the instant a vehicle is detected.
  */
 object RadarLinkVisualDecider {
 
@@ -57,6 +69,9 @@ object RadarLinkVisualDecider {
      * @param radarEverLive whether the radar has connected at least once this
      *   session. A cold start (never connected) stays [LinkVisual.LIVE] - there
      *   was no link to lose, so a banner would be a lie.
+     * @param everSawTrack whether the radar has decoded >=1 vehicle this session
+     *   (sticky). False -> [LinkVisual.LIVE]: no traffic ever seen means a bench
+     *   test, not a ride. See the class KDoc.
      * @param radarDownForMs how long the radar has been continuously down, or
      *   null when it is currently connected. Doubles as the per-episode
      *   display-age clock for the caps (it resets to null on reconnect).
@@ -77,6 +92,7 @@ object RadarLinkVisualDecider {
      */
     fun decide(
         radarEverLive: Boolean,
+        everSawTrack: Boolean,
         radarDownForMs: Long?,
         visualThresholdMs: Long,
         paused: Boolean,
@@ -86,7 +102,7 @@ object RadarLinkVisualDecider {
         radarOnlyMaxMs: Long,
         radarOnlyPersistent: Boolean,
     ): LinkVisual {
-        if (paused || !radarEverLive || radarDownForMs == null || radarDownForMs < visualThresholdMs) {
+        if (paused || !radarEverLive || !everSawTrack || radarDownForMs == null || radarDownForMs < visualThresholdMs) {
             return LinkVisual.LIVE
         }
         return if (hasEBikeSignal) {

@@ -26,6 +26,7 @@ class RadarLinkVisualDeciderTest {
 
     private fun decide(
         everLive: Boolean = true,
+        everSawTrack: Boolean = true,
         downForMs: Long?,
         paused: Boolean = false,
         hasEBike: Boolean = false,
@@ -33,6 +34,7 @@ class RadarLinkVisualDeciderTest {
         persistent: Boolean = false,
     ) = RadarLinkVisualDecider.decide(
         radarEverLive = everLive,
+        everSawTrack = everSawTrack,
         radarDownForMs = downForMs,
         visualThresholdMs = threshold,
         paused = paused,
@@ -52,6 +54,11 @@ class RadarLinkVisualDeciderTest {
     @Test fun coldStartIsLiveEvenWhenLongDown() = assertEquals(live, decide(everLive = false, downForMs = threshold * 100))
 
     @Test fun pausedStaysLiveEvenWhenDown() = assertEquals(live, decide(downForMs = threshold + 5_000, paused = true))
+
+    // Radar connected but never decoded a vehicle -> bench test, suppress (both cohorts).
+    @Test fun noTrackEverSeenSuppressesRadarOnly() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, hasEBike = false))
+
+    @Test fun noTrackEverSeenSuppressesEbikeUnlocked() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, hasEBike = true, explicitParked = false))
 
     // ── radar-only cohort (no eBike signal) ──────────────────────────────────
 

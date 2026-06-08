@@ -49,6 +49,14 @@ class EBikeSnapshotCoordinatorTest {
         assertNull(coord.snapshot())
         assertEquals(0L, coord.snapshotAtMs())
         assertFalse(coord.climbing())
+        assertFalse(coord.hasEverSeenSnapshot())
+    }
+
+    @Test
+    fun hasEverSeenSnapshotIsStickyAfterFirstFrame() {
+        assertFalse(coord.hasEverSeenSnapshot())
+        feed(LiveDataSnapshot(batterySoc = 50))
+        assertTrue(coord.hasEverSeenSnapshot())
     }
 
     @Test

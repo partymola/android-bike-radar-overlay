@@ -39,6 +39,11 @@ class RadarLinkCoordinatorTest {
     private var ebike: LiveDataSnapshot? = null
     private var ebikeAtMs = 0L
     private var dashcamSlug: String? = null
+    private var hasEBike = false
+
+    private val live = RadarLinkVisualDecider.LinkVisual.LIVE
+    private val plain = RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN
+    private val unlocked = RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
 
     private var postWalkAwayCount = 0
     private var cancelWalkAwayCount = 0
@@ -46,7 +51,7 @@ class RadarLinkCoordinatorTest {
     private var alarmStopCount = 0
     private var snoozeCancelCount = 0
     private var dashcamBackoffClearCount = 0
-    private val bannerStates = mutableListOf<Boolean>()
+    private val bannerStates = mutableListOf<RadarLinkVisualDecider.LinkVisual>()
     private val clogLines = mutableListOf<String>()
 
     private lateinit var coordinator: RadarLinkCoordinator
@@ -69,6 +74,7 @@ class RadarLinkCoordinatorTest {
             resolveDashcamSlug = { dashcamSlug },
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs },
+            hasEBikeSignal = { hasEBike },
             cancelWalkAwaySnooze = { snoozeCancelCount++ },
             clearDashcamBackoff = { dashcamBackoffClearCount++ },
         )
@@ -105,7 +111,7 @@ class RadarLinkCoordinatorTest {
         // No prior off-episode: no IDLE-transition effects, just the
         // unconditional dashcam-backoff clear + banner hide.
         assertEquals(1, dashcamBackoffClearCount)
-        assertEquals(false, bannerStates.last())
+        assertEquals(live, bannerStates.last())
         assertEquals(0, snoozeCancelCount)
         assertEquals(0, cancelWalkAwayCount)
         assertEquals(0, clogged("state=IDLE"))
@@ -203,7 +209,7 @@ class RadarLinkCoordinatorTest {
         assertEquals(1, cancelWalkAwayCount)
         assertEquals(1, clogged("state=IDLE"))
         assertEquals(1, clogged("prev_state=ARMED"))
-        assertEquals(false, bannerStates.last())
+        assertEquals(live, bannerStates.last())
     }
 
     @Test
@@ -318,7 +324,7 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L) // radarEverLive (session 3000 > 0), off 4000
         bannerStates.clear()
         coordinator.evaluateRadarDrop(4_000L + 11_000L) // down 11 s > 10 s visual
-        assertEquals(listOf(false), bannerStates) // hidden, even though paused
+        assertEquals(listOf(live), bannerStates) // hidden, even though paused
         assertEquals(0, clogged("radar_drop_cue")) // audio path skipped when paused
     }
 
@@ -329,7 +335,104 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L)
         bannerStates.clear()
         coordinator.evaluateRadarDrop(4_000L + 11_000L)
-        assertEquals(listOf(true), bannerStates)
+        assertEquals(listOf(plain), bannerStates) // radar-only (no eBike) -> plain message
+    }
+
+    @Test
+    fun bannerEbikeUnlockedVariantWhileRiding() {
+        // eBike rider, bike unlocked + fresh -> the "...but bike unlocked" variant.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        ebikeAtMs = 4_000L + 11_000L - 1_000L // fresh
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(unlocked), bannerStates)
+    }
+
+    @Test
+    fun bannerHidesWhenEbikeExplicitlyLocked() {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = true) // parked
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        ebikeAtMs = 4_000L + 11_000L - 1_000L // fresh lock
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(live), bannerStates) // explicit fresh lock hides it
+    }
+
+    @Test
+    fun bannerStaleEbikeLockKeepsShowing() {
+        // A locked-but-STALE snapshot (Flow dropped) is not an explicit park, so
+        // a simultaneous Flow+radar dropout must not hide the banner.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = true)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        ebikeAtMs = (4_000L + 11_000L) - 40_000L // 40 s stale
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(unlocked), bannerStates)
+    }
+
+    @Test
+    fun bannerRadarOnlyRetiresAtCap() {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = false
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        // Down to the 40 s radar-only cap (inclusive) -> hidden.
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_BANNER_RADAR_ONLY_MAX_MS)
+        assertEquals(listOf(live), bannerStates)
+    }
+
+    @Test
+    fun bannerRadarOnlyPersistsWithToggle() {
+        prefs.pausedUntilEpochMs = 0L
+        prefs.reconnectBannerPersistent = true
+        hasEBike = false
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_BANNER_RADAR_ONLY_MAX_MS + 60_000L)
+        assertEquals(listOf(plain), bannerStates) // toggle keeps it up past the cap
+    }
+
+    @Test
+    fun bannerEbikeRetiresAtForgotToLockBackstop() {
+        // Confirms the coordinator wires RADAR_BANNER_EBIKE_MAX_MS as ebikeMaxMs:
+        // a still-unlocked eBike banner retires at the 5-min backstop. Keep the
+        // snapshot fresh at the eval instant so only the backstop is under test.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        val at = 4_000L + RadarLinkCoordinator.RADAR_BANNER_EBIKE_MAX_MS
+        ebikeAtMs = at - 1_000L // fresh
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(listOf(live), bannerStates)
+    }
+
+    @Test
+    fun bannerEbikeJustUnderBackstopStillShows() {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        val at = 4_000L + RadarLinkCoordinator.RADAR_BANNER_EBIKE_MAX_MS - 1_000L
+        ebikeAtMs = at - 1_000L // fresh
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(listOf(unlocked), bannerStates)
     }
 
     @Test

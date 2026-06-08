@@ -40,10 +40,20 @@ internal class EBikeSnapshotCoordinator(
 
     @Volatile private var climbingFlag: Boolean = false
 
+    // Sticky: true once any snapshot has arrived this session, i.e. the rider
+    // has a Bosch eBike streaming. Stays true through a Flow dropout so a
+    // momentarily-null snapshot doesn't reclassify an eBike rider as radar-only.
+    @Volatile private var everSeen: Boolean = false
+
     /** Last-known snapshot, or null until the first frame (no eBike / flag off /
      *  permission missing). Consumed by [WalkAwayArmingGate] and the AlertDecider
      *  stationary override. */
     fun snapshot(): LiveDataSnapshot? = lastSnapshot
+
+    /** True once any eBike snapshot has arrived this session (sticky) - i.e. this
+     *  is an eBike rider, not a radar-only one. Used to pick the dead-radar
+     *  banner's cohort behaviour even if Flow has momentarily dropped. */
+    fun hasEverSeenSnapshot(): Boolean = everSeen
 
     /** Wall-clock of the last snapshot. The radar-drop cue trusts
      *  `system_locked == false` only while this is fresh: a stale snapshot means
@@ -63,6 +73,7 @@ internal class EBikeSnapshotCoordinator(
     fun onSnapshot(snap: LiveDataSnapshot) {
         lastSnapshot = snap
         lastSnapshotMs = clock()
+        everSeen = true
         // Capture odometer baseline on first sighting, then log the snapshot
         // delta-only. format() returns null when every field is still
         // unobserved so we skip logging empty stubs.

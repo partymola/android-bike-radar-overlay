@@ -257,6 +257,7 @@ class BikeRadarService : Service() {
             resolveDashcamSlug = ::resolveDashcamSlug,
             eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
+            hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
             cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
             clearDashcamBackoff = {
                 prefs.dashcamMac?.let {
@@ -727,24 +728,29 @@ class BikeRadarService : Service() {
         }
     }
 
-    /** Show/hide the service-owned "reconnecting" banner. Idempotent; all
-     *  WindowManager work runs on the main thread, where the view ref is the
-     *  only reader/writer (so no extra synchronisation). A null view + show
-     *  attaches a fresh reconnecting overlay; a non-null view + hide detaches
-     *  it. canDrawOverlays is re-checked for the permission TOCTOU, mirroring
-     *  the pipeline's attach path. */
-    private fun setReconnectBanner(show: Boolean) {
+    /** Show/hide/retitle the service-owned dead-radar banner per the
+     *  [RadarLinkVisualDecider.LinkVisual]. Idempotent; all WindowManager work
+     *  runs on the main thread, where the view ref is the only reader/writer (so
+     *  no extra synchronisation). LIVE detaches; a non-LIVE variant attaches a
+     *  fresh overlay (or updates the message on an already-attached one, e.g. a
+     *  late eBike snapshot flipping PLAIN -> UNLOCKED). canDrawOverlays is
+     *  re-checked for the permission TOCTOU, mirroring the pipeline's attach. */
+    private fun setReconnectBanner(visual: RadarLinkVisualDecider.LinkVisual) {
         scope.launch(Dispatchers.Main) {
             val current = reconnectBannerView
-            if (show && current == null) {
-                if (!reconnectHost.canDrawOverlays()) return@launch
-                val v = reconnectHost.createView()
-                v.setReconnecting(true)
-                if (reconnectHost.attach(v) == null) {
-                    reconnectBannerView = v
-                    clog("# reconnect_banner shown")
+            if (visual != RadarLinkVisualDecider.LinkVisual.LIVE) {
+                if (current == null) {
+                    if (!reconnectHost.canDrawOverlays()) return@launch
+                    val v = reconnectHost.createView()
+                    v.setReconnecting(visual)
+                    if (reconnectHost.attach(v) == null) {
+                        reconnectBannerView = v
+                        clog("# reconnect_banner shown variant=$visual")
+                    }
+                } else {
+                    current.setReconnecting(visual)
                 }
-            } else if (!show && current != null) {
+            } else if (current != null) {
                 reconnectBannerView = null
                 reconnectHost.detach(current)
                 clog("# reconnect_banner hidden")

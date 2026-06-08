@@ -62,10 +62,12 @@
     <string name="overlay_a11y_dashcam_searching">Buscando la dashcam.</string>
     <string name="overlay_a11y_low_battery">Batería baja.</string>
 
-    <!-- Aviso en la barra lateral mientras el radar trasero está sin enlace
-         (RadarOverlayView.setReconnecting). -->
-    <string name="overlay_reconnecting">Reconectando</string>
-    <string name="overlay_no_rear_data">Sin señal</string>
+    <!-- Aviso en la superposición mientras el radar trasero está desconectado
+         (RadarLinkVisualDecider). El subtítulo "desbloqueada" solo se añade para
+         quien tiene eBike y la bici sigue desbloqueada - sirve también de aviso
+         de "se te ha olvidado bloquearla". -->
+    <string name="overlay_radar_disconnected">Radar trasero desconectado</string>
+    <string name="overlay_radar_disconnected_unlocked">pero bicicleta desbloqueada</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)
@@ -355,6 +357,8 @@
     <string name="settings_radar_idle_after_helper">Cuando el radar lleva fuera de alcance este tiempo, los reintentos se espacian al intervalo de abajo para que el Bluetooth descanse mientras la bici está aparcada.</string>
     <string name="settings_radar_idle_interval_title">Intervalo de reconexión en reposo</string>
     <string name="settings_radar_idle_interval_helper">Con qué frecuencia reintentar la conexión mientras el radar está en reposo. Los valores más largos ahorran batería por la noche; los más cortos detectan el radar más rápido al volver.</string>
+    <string name="settings_radar_banner_persistent_title">Mantener el aviso de radar</string>
+    <string name="settings_radar_banner_persistent_subtitle">Sin eBike Bosch: mantén el aviso del radar trasero en pantalla hasta que se reconecte, en vez de ocultarlo a los pocos segundos.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>

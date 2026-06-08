@@ -203,6 +203,18 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply()
         }
 
+    /** Keep the dead-radar overlay banner up until the radar reconnects, instead
+     *  of retiring it after the short cap. Only affects riders with NO Bosch
+     *  eBike (eBike riders' banner is already gated on the lock state); for them
+     *  the banner is the sole dead-radar signal, so a safety-first rider can opt
+     *  to never hide it mid-ride. Default off - an unbounded overlay is otherwise
+     *  an uninstall driver. See [RadarLinkVisualDecider]. */
+    var reconnectBannerPersistent: Boolean
+        get() = sp.getBoolean(KEY_RECONNECT_BANNER_PERSISTENT, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_RECONNECT_BANNER_PERSISTENT, v).apply()
+        }
+
     /** Sticky bit set the first time the user dismisses the capture-log
      *  share warning dialog. Used so the warning only shows once. */
     var captureLogShareWarningSeen: Boolean
@@ -613,6 +625,7 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
+        const val KEY_RECONNECT_BANNER_PERSISTENT = "reconnect_banner_persistent"
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
         const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"

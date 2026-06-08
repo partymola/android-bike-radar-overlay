@@ -108,11 +108,12 @@ class RadarOverlayView(context: Context) : View(context) {
     private var dashcamStatus: DashcamStatus = DashcamStatus.Ok
     private var dashcamSlug: String? = null
 
-    // When true the view draws ONLY a "reconnecting" banner (the rear-radar
-    // link is down past the visual threshold) and skips the radar canvas. Set
-    // by the service-owned reconnect overlay, never by the per-connection
-    // pipeline (which is torn down during the drop). See RadarLinkVisualDecider.
-    private var reconnecting = false
+    // Non-LIVE means the view draws ONLY the dead-radar banner (the rear-radar
+    // link is down past the visual threshold) and skips the radar canvas. The
+    // variant picks the message (plain vs "...but bike unlocked"). Set by the
+    // service-owned reconnect overlay, never by the per-connection pipeline
+    // (which is torn down during the drop). See RadarLinkVisualDecider.
+    private var reconnectVisual = RadarLinkVisualDecider.LinkVisual.LIVE
 
     private val batteryDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -135,8 +136,12 @@ class RadarOverlayView(context: Context) : View(context) {
         style = Paint.Style.FILL
         color = Color.argb(225, 20, 20, 20)
     }
-    private val reconnectTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
+
+    // TextPaint (not Paint) so the banner can wrap via StaticLayout - the
+    // "Rear radar disconnected" / "...but bike unlocked" copy is too long for the
+    // narrow 130dp overlay on one line. Alignment is the layout's (ALIGN_CENTER),
+    // so the paint stays LEFT-aligned.
+    private val reconnectTitlePaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = dp(12f)
         color = COLOR_AMBER
         typeface = android.graphics.Typeface.create(
@@ -144,8 +149,7 @@ class RadarOverlayView(context: Context) : View(context) {
             android.graphics.Typeface.BOLD,
         )
     }
-    private val reconnectSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
+    private val reconnectSubPaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = dp(9.5f)
         color = Color.argb(210, 215, 215, 215)
         typeface = android.graphics.Typeface.MONOSPACE
@@ -198,13 +202,21 @@ class RadarOverlayView(context: Context) : View(context) {
         postInvalidate()
     }
 
-    /** Toggle the "rear link down" banner. When on, [onDraw] renders only the
-     *  reconnecting banner. Driven by the service-owned reconnect overlay off
-     *  [RadarLinkVisualDecider]; the per-connection pipeline never sets it. */
-    fun setReconnecting(on: Boolean) {
-        if (on == reconnecting) return
-        reconnecting = on
-        contentDescription = if (on) context.getString(R.string.overlay_reconnecting) else null
+    /** Set the dead-radar banner state. Non-LIVE makes [onDraw] render only the
+     *  banner (PLAIN, or with the "...but bike unlocked" line for UNLOCKED).
+     *  Driven by the service-owned reconnect overlay off [RadarLinkVisualDecider];
+     *  the per-connection pipeline never sets it. */
+    fun setReconnecting(visual: RadarLinkVisualDecider.LinkVisual) {
+        if (visual == reconnectVisual) return
+        reconnectVisual = visual
+        contentDescription = when (visual) {
+            RadarLinkVisualDecider.LinkVisual.LIVE -> null
+            RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN ->
+                context.getString(R.string.overlay_radar_disconnected)
+            RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED ->
+                context.getString(R.string.overlay_radar_disconnected) + ", " +
+                    context.getString(R.string.overlay_radar_disconnected_unlocked)
+        }
         postInvalidate()
     }
 
@@ -221,7 +233,7 @@ class RadarOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
-        if (reconnecting) {
+        if (reconnectVisual != RadarLinkVisualDecider.LinkVisual.LIVE) {
             drawReconnecting(canvas, w)
             return
         }
@@ -387,17 +399,39 @@ class RadarOverlayView(context: Context) : View(context) {
     private fun drawReconnecting(canvas: Canvas, w: Float) {
         val pad = dp(8f)
         val top = dp(16f)
-        val cx = w / 2f
-        val titleFm = reconnectTitlePaint.fontMetrics
-        val subFm = reconnectSubPaint.fontMetrics
-        val titleBaseline = top + dp(12f) - titleFm.ascent
-        val subBaseline = titleBaseline + titleFm.descent + dp(3f) - subFm.ascent
-        val bottom = subBaseline + subFm.descent + dp(12f)
+        val innerPad = dp(8f)
+        val vPad = dp(10f)
+        // The "...but bike unlocked" subtitle is drawn only for the eBike-unlocked
+        // variant; the radar-only banner is the title alone. Both wrap to the
+        // narrow pill via StaticLayout (the copy is too long for one line at 130dp).
+        val showUnlocked = reconnectVisual == RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
+        val innerWidth = (w - 2f * pad - 2f * innerPad).toInt().coerceAtLeast(1)
+        val titleLayout = bannerLayout(context.getString(R.string.overlay_radar_disconnected), reconnectTitlePaint, innerWidth)
+        val subLayout = if (showUnlocked) {
+            bannerLayout(context.getString(R.string.overlay_radar_disconnected_unlocked), reconnectSubPaint, innerWidth)
+        } else {
+            null
+        }
+        val gap = if (subLayout != null) dp(3f) else 0f
+        val contentH = titleLayout.height + (subLayout?.height ?: 0) + gap
+        val bottom = top + vPad + contentH + vPad
         tmpRect.set(pad, top, w - pad, bottom)
         canvas.drawRoundRect(tmpRect, dp(10f), dp(10f), reconnectBgPaint)
-        canvas.drawText(context.getString(R.string.overlay_reconnecting), cx, titleBaseline, reconnectTitlePaint)
-        canvas.drawText(context.getString(R.string.overlay_no_rear_data), cx, subBaseline, reconnectSubPaint)
+        val textLeft = pad + innerPad
+        canvas.save()
+        canvas.translate(textLeft, top + vPad)
+        titleLayout.draw(canvas)
+        if (subLayout != null) {
+            canvas.translate(0f, titleLayout.height + gap)
+            subLayout.draw(canvas)
+        }
+        canvas.restore()
     }
+
+    private fun bannerLayout(text: String, paint: android.text.TextPaint, width: Int): android.text.StaticLayout = android.text.StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
+        .setAlignment(android.text.Layout.Alignment.ALIGN_CENTER)
+        .setIncludePad(false)
+        .build()
 
     private fun drawBatteryWarning(canvas: Canvas, w: Float, h: Float) {
         // Warning sits at the bottom-centre of the panel. The top of

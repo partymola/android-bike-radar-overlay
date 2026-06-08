@@ -35,10 +35,11 @@ internal class RadarLinkCoordinator(
     private val stopWalkAwayAlarm: () -> Unit,
     private val alertBeeper: () -> AlertBeeper?,
     private val clog: (String) -> Unit,
-    private val setReconnectBanner: (Boolean) -> Unit,
+    private val setReconnectBanner: (RadarLinkVisualDecider.LinkVisual) -> Unit,
     private val resolveDashcamSlug: () -> String?,
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
     private val eBikeSnapshotAtMs: () -> Long,
+    private val hasEBikeSignal: () -> Boolean,
     private val cancelWalkAwaySnooze: () -> Unit,
     private val clearDashcamBackoff: () -> Unit,
 ) : RadarLinkStateGateway {
@@ -110,7 +111,7 @@ internal class RadarLinkCoordinator(
         }
         // Radar is back: hide the reconnecting banner now rather than waiting
         // for the next (up to 30s idle) tick of evaluateRadarDrop.
-        setReconnectBanner(false)
+        setReconnectBanner(RadarLinkVisualDecider.LinkVisual.LIVE)
     }
 
     override fun markDisconnected() {
@@ -272,24 +273,30 @@ internal class RadarLinkCoordinator(
     fun evaluateRadarDrop(nowMs: Long) {
         val link = _radarLinkState.value
         val downForMs = link.radarOffSinceMs?.let { nowMs - it }
-        // Visual "reconnecting" banner: shown whenever the rear link is down
-        // past the visual threshold. NOT eBike-gated (unlike the audio cue
-        // below) - it is a glanceable status and the only dead-radar signal a
-        // radar-only rider gets. Hidden while paused; the eager hide on
-        // reconnect lives in markConnected so it doesn't wait for the
-        // (up to 30s) idle tick.
+        val snap = eBikeSnapshot()
+        val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
+        // Dead-radar banner: cohort-aware + bounded (see RadarLinkVisualDecider).
+        // eBike riders -> "...but bike unlocked" while unlocked, hidden on an
+        // explicit fresh lock, capped by a forgot-to-lock backstop; radar-only ->
+        // plain message, retires after the short cap unless the rider opted into
+        // persistence. A STALE eBike snapshot is NOT an explicit park (so a
+        // simultaneous Flow+radar dropout keeps the banner up). Must run before
+        // the isPaused early-return so a pause HIDES the banner (decide() returns
+        // LIVE when paused); the eager hide on reconnect lives in markConnected.
+        val explicitParked = ebikeAgeMs < RADAR_DROP_EBIKE_FRESH_MS && snap?.systemLocked == true
         val visual = RadarLinkVisualDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
             visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
             paused = prefs.isPaused,
+            hasEBikeSignal = hasEBikeSignal(),
+            explicitParked = explicitParked,
+            ebikeMaxMs = RADAR_BANNER_EBIKE_MAX_MS,
+            radarOnlyMaxMs = RADAR_BANNER_RADAR_ONLY_MAX_MS,
+            radarOnlyPersistent = prefs.reconnectBannerPersistent,
         )
-        // Must run before the isPaused early-return below so a pause HIDES an
-        // already-shown banner (decide() returns LIVE when paused).
-        setReconnectBanner(visual == RadarLinkVisualDecider.LinkVisual.RECONNECTING)
+        setReconnectBanner(visual)
         if (prefs.isPaused) return
-        val snap = eBikeSnapshot()
-        val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
         val ridingConfirmed = RadarDropDecider.ridingConfirmed(
             systemLocked = snap?.systemLocked,
             snapshotAgeMs = ebikeAgeMs,
@@ -351,13 +358,26 @@ internal class RadarLinkCoordinator(
          *  off around when the dashcam goes off) never trips it. */
         const val RADAR_DROP_THRESHOLD_MS = 60_000L
 
-        /** Visual "reconnecting" banner: continuous radar-off time before the
-         *  overlay marks the rear blind. Far shorter than the audio cue's 60s
-         *  because a glanceable status banner is cheap (not an interruptive
-         *  nag) and is the ONLY dead-radar signal a radar-only rider gets. 10s
-         *  rides through normal reconnects (corpus median 8.4s, floor 5.3s) and
-         *  marks the screen only once a drop is likely real. Not eBike-gated. */
+        /** Dead-radar banner: continuous radar-off time before the overlay marks
+         *  the rear blind. Far shorter than the audio cue's 60s because a
+         *  glanceable status banner is cheap (not an interruptive nag). 10s rides
+         *  through normal reconnects (corpus median 8.4s, floor 5.3s) and marks
+         *  the screen only once a drop is likely real. */
         const val RADAR_DROP_VISUAL_THRESHOLD_MS = 10_000L
+
+        /** Radar-only banner retire cap: down-duration after which the banner
+         *  hides for a rider with no eBike lock signal (~30s visible past the
+         *  10s threshold). Avoids a permanent overlay; the rider can opt into
+         *  persistence (`Prefs.reconnectBannerPersistent`). See
+         *  [RadarLinkVisualDecider]. */
+        const val RADAR_BANNER_RADAR_ONLY_MAX_MS = 40_000L
+
+        /** eBike banner forgot-to-lock backstop: down-duration after which an
+         *  eBike rider's still-unlocked banner retires anyway. Generous (5 min)
+         *  because the repeating audio cue keeps warning after the visual caps,
+         *  and an unlocked-but-radar-down state is a useful "you forgot to lock"
+         *  hint until then. See [RadarLinkVisualDecider]. */
+        const val RADAR_BANNER_EBIKE_MAX_MS = 300_000L
 
         /** Radar-drop cue re-fire gap while the radar stays down. */
         const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L

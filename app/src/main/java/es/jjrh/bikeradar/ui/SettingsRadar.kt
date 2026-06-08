@@ -79,6 +79,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var closePassClosingFloor by rememberSaveable { mutableIntStateOf(prefs.closePassClosingSpeedFloorMs) }
     var radarLongOfflineThreshold by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineThresholdMinutes) }
     var radarLongOfflineCap by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineCapSec) }
+    var bannerPersistent by rememberSaveable { mutableStateOf(prefs.reconnectBannerPersistent) }
     // serviceEnabled is binary and atomic — no in-progress drag state to mirror —
     // so derive from prefs.flow instead of a local rememberSaveable. Keeps the
     // Danger-zone row honest if anything else (future MainScreen action,
@@ -136,6 +137,11 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         radarLongOfflineCap = radarLongOfflineCap,
         onRadarLongOfflineCapChange = { radarLongOfflineCap = it },
         onRadarLongOfflineCapFinished = { prefs.radarLongOfflineCapSec = radarLongOfflineCap },
+        bannerPersistent = bannerPersistent,
+        onBannerPersistentChange = {
+            bannerPersistent = it
+            prefs.reconnectBannerPersistent = it
+        },
         onStopScanningClick = { showStopDialog = true },
     )
 
@@ -233,6 +239,8 @@ internal fun SettingsRadarContent(
     radarLongOfflineCap: Int,
     onRadarLongOfflineCapChange: (Int) -> Unit,
     onRadarLongOfflineCapFinished: () -> Unit,
+    bannerPersistent: Boolean,
+    onBannerPersistentChange: (Boolean) -> Unit,
     onStopScanningClick: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -316,6 +324,14 @@ internal fun SettingsRadarContent(
                 onValueChange = { onRadarLongOfflineCapChange(it.toInt()) },
                 onValueChangeFinished = onRadarLongOfflineCapFinished,
             )
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = stringResource(R.string.settings_radar_banner_persistent_title),
+                    subtitle = stringResource(R.string.settings_radar_banner_persistent_subtitle),
+                    checked = bannerPersistent,
+                    onCheckedChange = onBannerPersistentChange,
+                )
+            }
 
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_battery))
             NestedCard {

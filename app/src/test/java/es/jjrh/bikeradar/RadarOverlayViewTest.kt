@@ -168,10 +168,19 @@ class RadarOverlayViewTest {
 
     @Test
     fun reconnecting() {
-        // Rear-radar link down past the visual threshold: the overlay shows
-        // only the "reconnecting" banner, no radar canvas.
+        // Rear-radar link down past the visual threshold, radar-only rider: the
+        // overlay shows only the dead-radar banner (title alone), no radar canvas.
         overlay().apply {
-            setReconnecting(true)
+            setReconnecting(RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN)
+        }.capture()
+    }
+
+    @Test
+    fun reconnectingUnlocked() {
+        // eBike rider, bike still unlocked: the banner adds the "...but bike
+        // unlocked" line (also a forgot-to-lock hint).
+        overlay().apply {
+            setReconnecting(RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED)
         }.capture()
     }
 

@@ -5,11 +5,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
 import android.content.Intent
@@ -41,13 +37,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.resume
 
 class BikeRadarService : Service() {
 
@@ -60,10 +53,8 @@ class BikeRadarService : Service() {
     private lateinit var walkAwayAlarm: WalkAwayAlarm
     private lateinit var radarLink: RadarLinkController
     private lateinit var cameraLink: CameraLightLinkController
+    private lateinit var batteryReader: BatteryReader
     private lateinit var knownDevices: KnownDevices
-
-    // Battery path state
-    private val attemptInFlight = ConcurrentHashMap<String, Long>()
 
     // Dashcam-probe backoff state (BatteryProbeBackoff): guards against the
     // dashcam-off connect storm that would otherwise contend with the radar link.
@@ -325,6 +316,16 @@ class BikeRadarService : Service() {
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
             radarOffSinceMs = { _radarLinkState.value.radarOffSinceMs },
+        )
+        batteryReader = BatteryReader(
+            context = this,
+            scope = scope,
+            prefs = prefs,
+            knownDevices = knownDevices,
+            haPublisher = haPublisher,
+            macToSlug = macToSlug,
+            slug = { name -> slug(name) },
+            dashcamProbeFailures = dashcamProbeFailures,
         )
 
         pruneCaptureLogs()
@@ -611,161 +612,7 @@ class BikeRadarService : Service() {
             Log.d(TAG, "skip $name (throttled); marked seen")
             return
         }
-        launchBatteryRead(name, mac)
-    }
-
-    /**
-     * Real GATT battery read, bypassing the SharedPrefs throttle but still
-     * gated by [ATTEMPT_COOLDOWN_MS] so back-to-back fires from different
-     * paths don't stack. Use this for liveness probes (e.g. dashcam
-     * periodic refresh) where [scheduleRead]'s `markSeen` shortcut
-     * would falsely keep the entry fresh without an actual sighting.
-     */
-    private fun launchBatteryRead(name: String, mac: String) {
-        val now = System.currentTimeMillis()
-        val lastAttempt = attemptInFlight[mac] ?: 0L
-        if (now - lastAttempt < ATTEMPT_COOLDOWN_MS) {
-            Log.d(TAG, "skip $name (attempt in flight)")
-            return
-        }
-        attemptInFlight[mac] = now
-        scope.launch {
-            try {
-                doReadBattery(name, mac)
-            } finally {
-                attemptInFlight.remove(mac)
-            }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun doReadBattery(name: String, mac: String) {
-        val sp = getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE)
-
-        val known = knownDevices.load().toMutableList()
-        if (known.none { it.second == mac }) {
-            known.removeAll { it.first == name }
-            known.add(name to mac)
-            knownDevices.save(known)
-        }
-
-        val pct = readBattery(mac) ?: run {
-            Log.w(TAG, "battery read failed: $name $mac")
-            // Count the consecutive failure so the dashcam ticker can back its
-            // probe off. Scoped to the dashcam mac (the only one the ticker reads)
-            // so this stays in sync with the map's name; only the readBattery==null
-            // branch counts - an HA publish failure below is not a read failure.
-            if (prefs.dashcamMac.equals(mac, ignoreCase = true)) {
-                dashcamProbeFailures[mac] = (dashcamProbeFailures[mac] ?: 0) + 1
-            }
-            return
-        }
-        // Successful read: the device answered, so clear any backoff.
-        dashcamProbeFailures.remove(mac)
-        Log.i(TAG, "battery $name: $pct%")
-        val s = slug(name)
-        macToSlug[mac] = s
-        if (prefs.dashcamMac.equals(mac, ignoreCase = true) && prefs.dashcamDisplayName != name) {
-            prefs.dashcamDisplayName = name
-        }
-        BatteryStateBus.update(BatteryEntry(s, name, pct))
-
-        // Only arm the 5-min throttle if publish succeeded (or HA isn't
-        // configured at all). On a transient HA failure we want the next
-        // advert to retry within ATTEMPT_COOLDOWN_MS rather than waiting
-        // 5 minutes with no HA state update.
-        if (haPublisher.publishBatteryToHa(name, pct)) {
-            sp.edit().putLong("${KEY_LAST_TS}_$s", System.currentTimeMillis()).apply()
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun readBattery(mac: String, timeoutMs: Long = 15_000): Int? {
-        val btMgr = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager ?: return null
-        val adapter = btMgr.adapter ?: return null
-        if (!adapter.isEnabled) return null
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            return null
-        }
-
-        val device = try {
-            adapter.getRemoteDevice(mac)
-        } catch (_: Throwable) {
-            return null
-        }
-
-        return withTimeoutOrNull(timeoutMs) {
-            suspendCancellableCoroutine { cont ->
-                var done = false
-                var gattClosed = false
-                var gatt: BluetoothGatt? = null
-                fun closeOnce() {
-                    if (gattClosed) return
-                    gattClosed = true
-                    val g = gatt ?: return
-                    try {
-                        g.disconnect()
-                    } catch (_: Throwable) {}
-                    try {
-                        g.close()
-                    } catch (_: Throwable) {}
-                }
-                val cb = object : BluetoothGattCallback() {
-                    override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-                        when (newState) {
-                            BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
-                            BluetoothProfile.STATE_DISCONNECTED -> {
-                                closeOnce()
-                                if (!done) {
-                                    done = true
-                                    cont.resume(null)
-                                }
-                            }
-                        }
-                    }
-
-                    override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                        val ch = g.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY)
-                        if (ch == null) {
-                            g.disconnect()
-                            return
-                        }
-                        g.readCharacteristic(ch)
-                    }
-
-                    @Deprecated("API < 33 compat")
-                    override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-                        @Suppress("DEPRECATION")
-                        finishRead(g, ch, ch.value ?: ByteArray(0), status)
-                    }
-
-                    override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-                        finishRead(g, ch, value, status)
-                    }
-
-                    private fun finishRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-                        if (ch.uuid == Uuids.CHAR_BATTERY && status == BluetoothGatt.GATT_SUCCESS && value.isNotEmpty()) {
-                            if (!done) {
-                                done = true
-                                cont.resume(value[0].toInt() and 0xFF)
-                            }
-                        }
-                        g.disconnect()
-                    }
-                }
-                gatt = connectGattLe(this@BikeRadarService, device, false, cb)
-                if (gatt == null) {
-                    if (!done) {
-                        done = true
-                        cont.resume(null)
-                    }
-                    return@suspendCancellableCoroutine
-                }
-                cont.invokeOnCancellation { closeOnce() }
-            }
-        }
+        batteryReader.launch(name, mac)
     }
 
     // ── capture log ───────────────────────────────────────────────────────────
@@ -961,7 +808,7 @@ class BikeRadarService : Service() {
                         )
                         if (probeOk) {
                             lastDashcamProbeMs[mac] = now
-                            launchBatteryRead(name, mac)
+                            batteryReader.launch(name, mac)
                         }
                     }
                 }
@@ -1350,8 +1197,6 @@ class BikeRadarService : Service() {
     companion object {
         private const val TAG = "BikeRadar"
         private const val TAG_RADAR = "BikeRadar.Radar"
-        private const val PREFS_THROTTLE = "bike_radar_throttle"
-        private const val KEY_LAST_TS = "last_ts"
         private const val SCAN_PI_REQ = 0xB1CC
 
         const val ACTION_READ_DEVICE = "es.jjrh.bikeradar.READ_DEVICE"
@@ -1386,7 +1231,6 @@ class BikeRadarService : Service() {
         const val EXTRA_RADAR_LIGHT_HEX = "hex"
 
         const val THROTTLE_MS = 5 * 60 * 1000L
-        const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
 
         // Phone-battery sample written into the capture log at most once per
         // this period. The capture-log line is comment-prefixed so existing
@@ -1496,9 +1340,9 @@ class BikeRadarService : Service() {
             internal set
 
         /** MAC (identity address) -> slug used in BatteryStateBus entries.
-         *  Populated by doReadBattery + the piggyback read path; read by the
-         *  overlay composer to resolve the user-selected dashcam MAC to the
-         *  right battery entry. */
+         *  Populated by the battery read path ([BatteryReader]) + the radar/
+         *  camera piggyback reads; read by the overlay composer to resolve the
+         *  user-selected dashcam MAC to the right battery entry. */
         val macToSlug = java.util.concurrent.ConcurrentHashMap<String, String>()
 
         fun slug(name: String): String = name.lowercase(Locale.ROOT)

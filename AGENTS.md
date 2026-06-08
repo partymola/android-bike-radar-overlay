@@ -58,15 +58,17 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 - Single foreground service (`BikeRadarService`), Compose-only UI, no
   fragments. The two BLE links now live in their own coordinators -
   `RadarLinkController` (rear radar) and `CameraLightLinkController` (front
-  camera/light); what remains in the service is the coordinator hub plus the
-  battery-read path and the walk-away state machine. Behaviour is split across
-  single-responsibility coordinators injected at `onCreate` (overlay pipeline,
-  radar link, camera-light link, HA publishing, notifications, capture log,
-  known-device cache - see Key files). The service stays the sole owner of
-  `scope`, the warm `AlertBeeper`, and `_radarLinkState`; the radar controller
-  reaches the link state through a `RadarLinkStateGateway`, and the camera
-  controller reads the radar off-time through an injected lambda for its shared
-  backoff cap. The battery-read path is the natural next extraction.
+  camera/light); the one-shot battery reads live in `BatteryReader`. What
+  remains in the service is the coordinator hub - the BLE-scan dispatch
+  (`scheduleRead` routes a sighting to the radar link / camera link / battery
+  read), the foreground-service lifecycle, and the walk-away state machine.
+  Behaviour is split across single-responsibility coordinators injected at
+  `onCreate` (overlay pipeline, radar link, camera-light link, battery reader,
+  HA publishing, notifications, capture log, known-device cache - see Key
+  files). The service stays the sole owner of `scope`, the warm `AlertBeeper`,
+  and `_radarLinkState`; the radar controller reaches the link state through a
+  `RadarLinkStateGateway`, and the camera controller reads the radar off-time
+  through an injected lambda for its shared backoff cap.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
@@ -102,6 +104,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 | `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + battery reads + walk-away state machine; coordinators injected at onCreate |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches `_radarLinkState` via `RadarLinkStateGateway`) |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
 | `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
 | `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |

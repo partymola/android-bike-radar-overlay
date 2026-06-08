@@ -866,7 +866,7 @@ class BikeRadarService : Service() {
                         g.disconnect()
                     }
                 }
-                gatt = device.connectGatt(this@BikeRadarService, false, cb, BluetoothDevice.TRANSPORT_LE)
+                gatt = connectGattLe(this@BikeRadarService, device, false, cb)
                 if (gatt == null) {
                     if (!done) {
                         done = true
@@ -1045,7 +1045,7 @@ class BikeRadarService : Service() {
             }
         }
 
-        gatt = device.connectGatt(this, true, cb, BluetoothDevice.TRANSPORT_LE)
+        gatt = connectGattLe(this, device, true, cb)
         if (gatt == null) {
             Log.w(TAG_LIGHT, "connectGatt returned null")
             return false
@@ -1370,7 +1370,7 @@ class BikeRadarService : Service() {
             }
         }
 
-        gatt = device.connectGatt(this, true, cb, BluetoothDevice.TRANSPORT_LE)
+        gatt = connectGattLe(this, device, true, cb)
         if (gatt == null) {
             clog("# connectGatt returned null")
             return false

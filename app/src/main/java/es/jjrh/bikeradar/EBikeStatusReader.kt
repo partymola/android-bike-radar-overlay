@@ -163,7 +163,7 @@ class EBikeStatusReader(
             }
         }
 
-        gatt = device.connectGatt(context, true, cb, BluetoothDevice.TRANSPORT_LE)
+        gatt = connectGattLe(context, device, true, cb)
         if (gatt == null) {
             Log.w(TAG, "connectGatt returned null")
             return false

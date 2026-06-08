@@ -40,6 +40,7 @@ class CameraLightControllerHarnessTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val noopCallback = object : BluetoothGattCallback() {}
 
+    @Suppress("DEPRECATION") // 3-arg connectGatt: Robolectric harness setup
     private fun connectedGatt(): BluetoothGatt {
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         return manager.adapter.getRemoteDevice("AA:BB:CC:DD:EE:FF")

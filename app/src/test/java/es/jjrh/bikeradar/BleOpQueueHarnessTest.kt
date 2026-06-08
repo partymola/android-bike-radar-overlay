@@ -49,6 +49,7 @@ class BleOpQueueHarnessTest {
     private val noopCallback = object : BluetoothGattCallback() {}
 
     /** A connected real GATT with a registered no-op callback. */
+    @Suppress("DEPRECATION") // 3-arg connectGatt: Robolectric harness setup
     private fun connectedGatt(): BluetoothGatt {
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val device = manager.adapter.getRemoteDevice("AA:BB:CC:DD:EE:FF")

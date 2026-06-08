@@ -51,6 +51,7 @@ class RadarUnlockHarnessTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     /** Builds a GATT whose callback forwards every completion into [queue]. */
+    @Suppress("DEPRECATION") // 3-arg connectGatt: Robolectric harness setup
     private fun forwardingGatt(queue: BleOpQueue): BluetoothGatt {
         val cb = object : BluetoothGattCallback() {
             override fun onCharacteristicWrite(g: BluetoothGatt?, c: BluetoothGattCharacteristic, s: Int) = queue.onCharacteristicWrite(c, s)

@@ -41,6 +41,8 @@ internal class RadarLinkCoordinator(
     private val eBikeSnapshotAtMs: () -> Long,
     private val hasEBikeSignal: () -> Boolean,
     private val everSawTrack: () -> Boolean,
+    private val postForgotToLock: () -> Unit,
+    private val cancelForgotToLock: () -> Unit,
     private val cancelWalkAwaySnooze: () -> Unit,
     private val clearDashcamBackoff: () -> Unit,
 ) : RadarLinkStateGateway {
@@ -54,6 +56,10 @@ internal class RadarLinkCoordinator(
     @Volatile private var radarDropLastCueMs: Long? = null
 
     @Volatile private var radarDropSuppressLogged = false
+
+    // Fired-once latch for the forgot-to-lock wrist haptic, scoped to the current
+    // off-episode; reset in markConnected on radar return.
+    @Volatile private var forgotToLockFired = false
 
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
@@ -108,6 +114,10 @@ internal class RadarLinkCoordinator(
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
             cancelWalkAwaySnooze()
             cancelWalkAwayNotification()
+            // Radar back = rider returned to the bike: clear the forgot-to-lock
+            // reminder and re-arm it for the next off-episode.
+            forgotToLockFired = false
+            cancelForgotToLock()
             clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
         }
         // Radar is back: hide the reconnecting banner now rather than waiting
@@ -352,6 +362,29 @@ internal class RadarLinkCoordinator(
             alertBeeper()?.playRadarReconnected()
             clog("# radar_reconnect_cue")
         }
+        // Forgot-to-lock reminder: the rider walked off (radar down + eBike
+        // snapshot stale = out of range) with the bike's last reading unlocked,
+        // the case the walk-away alarm stays silent for. Fires the wrist haptic
+        // once per off-episode; reset + cancelled on reconnect (markConnected).
+        // Re-read the off-instant fresh so a reconnect that lands mid-tick
+        // (clearing radarOffSinceMs after the snapshot above) can't fire on a
+        // stale down-duration and re-latch past markConnected's eager reset.
+        val ftlDownForMs = _radarLinkState.value.radarOffSinceMs?.let { nowMs - it }
+        if (ForgotToLockDecider.shouldFire(
+                enabled = prefs.forgotToLockAlertEnabled,
+                radarEverLive = link.sessionRadarConnectedMs > 0L,
+                radarDownForMs = ftlDownForMs,
+                systemLocked = snap?.systemLocked,
+                snapshotAgeMs = ebikeAgeMs,
+                freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+                downThresholdMs = FORGOT_LOCK_DOWN_THRESHOLD_MS,
+                alreadyFired = forgotToLockFired,
+            )
+        ) {
+            forgotToLockFired = true
+            postForgotToLock()
+            clog("# forgot_to_lock_alert down_ms=$ftlDownForMs ebike_age_ms=$ebikeAgeMs")
+        }
     }
 
     companion object {
@@ -388,6 +421,11 @@ internal class RadarLinkCoordinator(
          *  by the radar-drop cue. Older than this means the eBike link has
          *  itself dropped (rider left), so "unlocked" can't be believed. */
         const val RADAR_DROP_EBIKE_FRESH_MS = 30_000L
+
+        /** Min radar-down time before the forgot-to-lock reminder is considered:
+         *  long enough that the rider has actually walked off, not a mid-ride
+         *  radar blip. See [ForgotToLockDecider]. */
+        const val FORGOT_LOCK_DOWN_THRESHOLD_MS = 30_000L
 
         /** Same trust window for the walk-away arming gate: a `system_locked =
          *  false` older than this is a stale reading from before the eBike link

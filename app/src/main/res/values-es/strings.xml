@@ -437,6 +437,9 @@
     <string name="settings_ebike_waiting">Esperando a Bosch Flow</string>
     <string name="settings_ebike_receiving_subtitle">Batería y estado de ruta de tu bici.</string>
     <string name="settings_ebike_waiting_subtitle">Abre Flow y rueda - los datos aparecen aquí automáticamente.</string>
+    <string name="settings_ebike_alerts_label">Avisos</string>
+    <string name="settings_ebike_forgot_lock_title">Aviso de olvido de bloqueo</string>
+    <string name="settings_ebike_forgot_lock_subtitle">Vibra tu reloj si te alejas con la bici aún sin bloquear.</string>
     <string name="settings_ebike_actions_label">Acciones</string>
     <string name="settings_ebike_open_flow">Abrir Bosch Flow</string>
     <string name="settings_ebike_open_flow_subtitle">Los datos en vivo necesitan que Flow se ejecute en segundo plano mientras ruedas.</string>
@@ -598,6 +601,10 @@
     <string name="svc_main_light_fail_text">No se pudo cambiar a <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - comprueba la conexión.</string>
     <string name="svc_main_light_fail_channel_name">Luz de la dashcam</string>
     <string name="svc_main_light_fail_channel_desc">Avisa cuando no se pudo aplicar el modo de la cámara/luz delantera.</string>
+    <string name="svc_main_forgot_lock_channel_name">Olvido de bloqueo</string>
+    <string name="svc_main_forgot_lock_channel_desc">Te avisa si te vas sin bloquear la eBike.</string>
+    <string name="svc_main_forgot_lock_title">Bici sin bloquear</string>
+    <string name="svc_main_forgot_lock_text">Te has ido sin bloquearla</string>
     <string name="svc_main_walkaway_channel_name">Dashcam dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la dashcam sigue emitiendo desde la bici.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam dejada en la bici</string>

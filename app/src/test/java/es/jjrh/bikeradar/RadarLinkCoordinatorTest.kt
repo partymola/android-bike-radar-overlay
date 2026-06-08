@@ -52,6 +52,8 @@ class RadarLinkCoordinatorTest {
     private var alarmStopCount = 0
     private var snoozeCancelCount = 0
     private var dashcamBackoffClearCount = 0
+    private var forgotToLockPostCount = 0
+    private var forgotToLockCancelCount = 0
     private val bannerStates = mutableListOf<RadarLinkVisualDecider.LinkVisual>()
     private val clogLines = mutableListOf<String>()
 
@@ -77,6 +79,8 @@ class RadarLinkCoordinatorTest {
             eBikeSnapshotAtMs = { ebikeAtMs },
             hasEBikeSignal = { hasEBike },
             everSawTrack = { sawTrack },
+            postForgotToLock = { forgotToLockPostCount++ },
+            cancelForgotToLock = { forgotToLockCancelCount++ },
             cancelWalkAwaySnooze = { snoozeCancelCount++ },
             clearDashcamBackoff = { dashcamBackoffClearCount++ },
         )
@@ -404,6 +408,84 @@ class RadarLinkCoordinatorTest {
         bannerStates.clear()
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_BANNER_RADAR_ONLY_MAX_MS + 60_000L)
         assertEquals(listOf(plain), bannerStates) // toggle keeps it up past the cap
+    }
+
+    @Test
+    fun forgotToLockFiresWhenLeftUnlocked() {
+        // Walked off (radar down 35s, eBike snapshot 35s stale) with the bike
+        // last seen unlocked -> the wrist-haptic reminder fires once.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val at = 4_000L + 35_000L
+        ebikeAtMs = at - 35_000L // age 35s >= 30s fresh -> stale
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(1, forgotToLockPostCount)
+        assertEquals(1, clogged("forgot_to_lock_alert"))
+    }
+
+    @Test
+    fun forgotToLockLatchesThenResetsOnReconnect() {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val at = 4_000L + 35_000L
+        ebikeAtMs = at - 35_000L
+        coordinator.evaluateRadarDrop(at)
+        coordinator.evaluateRadarDrop(at + 5_000L) // latched -> no second fire
+        assertEquals(1, forgotToLockPostCount)
+        connectAt(at + 10_000L) // radar back -> cancel + re-arm
+        assertEquals(1, forgotToLockCancelCount)
+        disconnectAt(at + 11_000L)
+        val at2 = at + 11_000L + 35_000L
+        ebikeAtMs = at2 - 35_000L
+        coordinator.evaluateRadarDrop(at2)
+        assertEquals(2, forgotToLockPostCount)
+    }
+
+    @Test
+    fun forgotToLockSuppressedWhenDisabled() {
+        prefs.pausedUntilEpochMs = 0L
+        prefs.forgotToLockAlertEnabled = false
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val at = 4_000L + 35_000L
+        ebikeAtMs = at - 35_000L
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(0, forgotToLockPostCount)
+    }
+
+    @Test
+    fun forgotToLockDoesNotFireWhenLocked() {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = true) // locked before leaving
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val at = 4_000L + 35_000L
+        ebikeAtMs = at - 35_000L
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(0, forgotToLockPostCount)
+    }
+
+    @Test
+    fun forgotToLockSuppressedWhenPaused() {
+        // A paused session early-returns before the forgot-to-lock check.
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val at = 4_000L + 35_000L
+        ebikeAtMs = at - 35_000L
+        coordinator.evaluateRadarDrop(at)
+        assertEquals(0, forgotToLockPostCount)
     }
 
     @Test

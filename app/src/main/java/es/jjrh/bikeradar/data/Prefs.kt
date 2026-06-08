@@ -215,6 +215,16 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_RECONNECT_BANNER_PERSISTENT, v).apply()
         }
 
+    /** Wrist-haptic reminder when you walk off without locking the eBike (the
+     *  case the walk-away alarm stays silent for). Default on - a theft-prevention
+     *  nudge with an asymmetric cost (a dismissable buzz vs a stolen bike).
+     *  eBike-only. See [ForgotToLockDecider]. */
+    var forgotToLockAlertEnabled: Boolean
+        get() = sp.getBoolean(KEY_FORGOT_TO_LOCK_ALERT, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_FORGOT_TO_LOCK_ALERT, v).apply()
+        }
+
     /** Sticky bit set the first time the user dismisses the capture-log
      *  share warning dialog. Used so the warning only shows once. */
     var captureLogShareWarningSeen: Boolean
@@ -626,6 +636,7 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
         const val KEY_RECONNECT_BANNER_PERSISTENT = "reconnect_banner_persistent"
+        const val KEY_FORGOT_TO_LOCK_ALERT = "forgot_to_lock_alert_enabled"
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
         const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"
         const val KEY_CAMERA_LIGHT_NIGHT_MODE = "camera_light_night_mode"

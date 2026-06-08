@@ -25,7 +25,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -83,12 +85,14 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
     val receiving = eBikeDataIsFresh(lastUpdated, tickNowMs)
     val dataOnMsg = stringResource(R.string.settings_ebike_data_on_toast)
     val dataOffMsg = stringResource(R.string.settings_ebike_data_off_toast)
+    var forgotToLock by rememberSaveable { mutableStateOf(prefs.forgotToLockAlertEnabled) }
 
     SettingsEBikeContent(
         navController = navController,
         ownership = prefsSnap.eBikeOwnership,
         eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
         receiving = receiving,
+        forgotToLockEnabled = forgotToLock,
         onOwnershipYes = {
             prefs.eBikeOwnership = EBikeOwnership.YES
             prefs.eBikeDataEnabled = true
@@ -96,6 +100,10 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         onToggleEBikeData = { enabled ->
             prefs.eBikeDataEnabled = enabled
             Toast.makeText(ctx, if (enabled) dataOnMsg else dataOffMsg, Toast.LENGTH_LONG).show()
+        },
+        onToggleForgotToLock = {
+            forgotToLock = it
+            prefs.forgotToLockAlertEnabled = it
         },
         onOpenFlow = { openFlow(ctx) },
     )
@@ -111,8 +119,10 @@ internal fun SettingsEBikeContent(
     ownership: EBikeOwnership,
     eBikeDataEnabled: Boolean,
     receiving: Boolean,
+    forgotToLockEnabled: Boolean,
     onOwnershipYes: () -> Unit,
     onToggleEBikeData: (Boolean) -> Unit,
+    onToggleForgotToLock: (Boolean) -> Unit,
     onOpenFlow: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -201,6 +211,17 @@ internal fun SettingsEBikeContent(
                         subtitle = stringResource(R.string.settings_ebike_open_flow_subtitle),
                         actionLabel = stringResource(R.string.settings_ebike_open),
                         onAction = onOpenFlow,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                SettingsSectionLabel(stringResource(R.string.settings_ebike_alerts_label))
+                SettingsRowGroup {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_ebike_forgot_lock_title),
+                        subtitle = stringResource(R.string.settings_ebike_forgot_lock_subtitle),
+                        checked = forgotToLockEnabled,
+                        onCheckedChange = onToggleForgotToLock,
                     )
                 }
             }

@@ -65,6 +65,20 @@ internal class ServiceNotifications(
             )
         }
 
+        if (nm.getNotificationChannel(FORGOT_LOCK_CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    FORGOT_LOCK_CHANNEL_ID,
+                    context.getString(R.string.svc_main_forgot_lock_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = context.getString(R.string.svc_main_forgot_lock_channel_desc)
+                    enableVibration(true)
+                    vibrationPattern = FORGOT_LOCK_VIBRATE_PATTERN
+                },
+            )
+        }
+
         if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
             // HIGH importance, no sound and no vibration on the channel.
             // Both modalities are driven explicitly from the FIRE path:
@@ -234,6 +248,26 @@ internal class ServiceNotifications(
         nm.notify(notifId, notif)
     }
 
+    /** Wrist-haptic reminder that the rider walked off with the eBike unlocked -
+     *  a high-importance notification the Pixel Watch mirrors. No actions (the
+     *  app is read-only on the bike and cannot lock it). Cancelled on radar
+     *  reconnect (the rider came back). See [ForgotToLockDecider]. */
+    fun postForgotToLock() {
+        ensureChannels()
+        val notif = NotificationCompat.Builder(context, FORGOT_LOCK_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.svc_main_forgot_lock_title))
+            .setContentText(context.getString(R.string.svc_main_forgot_lock_text))
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setVibrate(FORGOT_LOCK_VIBRATE_PATTERN)
+            .build()
+        nm.notify(NOTIF_FORGOT_LOCK_ID, notif)
+    }
+
+    fun cancelForgotToLock() = nm.cancel(NOTIF_FORGOT_LOCK_ID)
+
     companion object {
         const val CHANNEL_ID = "bike_radar_min"
 
@@ -241,17 +275,23 @@ internal class ServiceNotifications(
         // is deleted on channel-ensure so an upgrade picks up sound.
         const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
         const val LIGHT_FAIL_CHANNEL_ID = "bike_radar_light_fail"
+        const val FORGOT_LOCK_CHANNEL_ID = "bike_radar_forgot_lock"
         private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
             "bike_radar_walkaway",
             "bike_radar_walkaway_v2",
         )
         val LIGHT_FAIL_VIBRATE_PATTERN = longArrayOf(0, 300, 150, 300)
 
+        // Distinct from the light-fail pattern - two firmer 450ms pulses so the
+        // forgot-to-lock reminder reads differently on the wrist.
+        val FORGOT_LOCK_VIBRATE_PATTERN = longArrayOf(0, 450, 200, 450)
+
         const val NOTIF_ID = 1
         private const val NOTIF_BOND_LOST_ID = 2
         private const val NOTIF_WALKAWAY_ID = 3
         private const val NOTIF_LIGHT_FAIL_ID = 4
         private const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
+        private const val NOTIF_FORGOT_LOCK_ID = 6
         private const val NOTIF_ACTION_REQ = 0xB1CD
         private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF

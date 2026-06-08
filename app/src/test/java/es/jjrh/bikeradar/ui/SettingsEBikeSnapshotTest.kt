@@ -42,6 +42,8 @@ class SettingsEBikeSnapshotTest {
                     receiving = false,
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
+                    forgotToLockEnabled = true,
+                    onToggleForgotToLock = {},
                     onOpenFlow = {},
                 )
             }
@@ -59,6 +61,8 @@ class SettingsEBikeSnapshotTest {
                     receiving = false,
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
+                    forgotToLockEnabled = true,
+                    onToggleForgotToLock = {},
                     onOpenFlow = {},
                 )
             }
@@ -76,6 +80,8 @@ class SettingsEBikeSnapshotTest {
                     receiving = false,
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
+                    forgotToLockEnabled = true,
+                    onToggleForgotToLock = {},
                     onOpenFlow = {},
                 )
             }
@@ -93,6 +99,8 @@ class SettingsEBikeSnapshotTest {
                     receiving = true,
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
+                    forgotToLockEnabled = true,
+                    onToggleForgotToLock = {},
                     onOpenFlow = {},
                 )
             }

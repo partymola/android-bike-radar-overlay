@@ -265,6 +265,8 @@ class BikeRadarService : Service() {
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
             hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
             everSawTrack = { sawTrack },
+            postForgotToLock = notifications::postForgotToLock,
+            cancelForgotToLock = notifications::cancelForgotToLock,
             cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
             clearDashcamBackoff = {
                 prefs.dashcamMac?.let {

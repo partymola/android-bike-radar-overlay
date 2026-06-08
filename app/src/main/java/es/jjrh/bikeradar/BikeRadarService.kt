@@ -14,10 +14,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
@@ -64,6 +61,7 @@ class BikeRadarService : Service() {
     private lateinit var haPublisher: HaPublisher
     private lateinit var notifications: ServiceNotifications
     private lateinit var walkAwayAlarm: WalkAwayAlarm
+    private lateinit var radarLink: RadarLinkController
     private lateinit var knownDevices: KnownDevices
 
     // Battery path state
@@ -84,9 +82,6 @@ class BikeRadarService : Service() {
     // started below.
     private var rideStats = RideStatsAccumulator()
 
-    // Radar link state
-    @Volatile private var radarJob: Job? = null
-
     // Front camera/light link state
     @Volatile private var cameraLightJob: Job? = null
 
@@ -98,35 +93,6 @@ class BikeRadarService : Service() {
 
     @Volatile private var cameraLightOffSinceMs: Long? = null
     private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
-
-    // Radar tail-light auto-mode state (the radar light shares the radar's GATT
-    // link, so unlike the camera there is no separate connection - the schedule
-    // jobs are locals inside connectAndRun). Override is detected from 2f14 slot
-    // changes against a per-connect baseline (see [RadarLightOverrideDecider]);
-    // it persists across brief reconnects and is cleared only past a deadband.
-    @Volatile private var radarLightUserOverride = false
-
-    @Volatile private var radarLightBaselineKey: Int? = null
-
-    @Volatile private var radarLightOffSinceMs: Long? = null
-
-    // MAC currently being driven by the radar link, exposed so the bond-state
-    // receiver can match the right device. Null when no link is active.
-    @Volatile private var currentRadarMac: String? = null
-
-    // True when the user un-paired the radar in system settings. The reconnect
-    // loop in runRadarConnection bails out instead of looping forever; cleared
-    // when the user re-pairs (next bond state == BONDED) or restarts the app.
-    @Volatile private var bondLost = false
-
-    // Last time the V2 stream produced a frame, set inside the decode loop and
-    // read by the watchdog. 0 means no frame has been seen yet on this link.
-    @Volatile private var lastV2FrameMs: Long = 0L
-
-    // Set true when the current connection reaches the V2 decode loop. Read
-    // by runRadarConnection after connectAndRun returns to decide whether to
-    // reset the reconnect backoff.
-    @Volatile private var lastConnectionReachedDecode = false
 
     // ── Walk-away alarm state ────────────────────────────────────────────────
     // See WalkAwayDecider for the decision logic. The service owns all
@@ -184,14 +150,6 @@ class BikeRadarService : Service() {
     // at most one suppression line - enough to tune the gate, no per-tick spam.
     @Volatile private var radarDropSuppressLogged = false
 
-    // Live radar GATT + queue, set in connectAndRun after the V2 handshake and
-    // cleared in its finally. Used ONLY by the debug-only radar light-mode
-    // write-probe ([probeWriteRadarLight]); production code paths address the
-    // gatt/queue locally inside connectAndRun.
-    @Volatile private var liveRadarGatt: BluetoothGatt? = null
-
-    @Volatile private var liveRadarQueue: BleOpQueue? = null
-
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
     // of times a session. Kept fresh by a prefs.flow collector in onCreate
@@ -238,32 +196,6 @@ class BikeRadarService : Service() {
      *  (notification action handlers) and GATT callback / IO threads
      *  (lifecycle transitions in [markRadarConnected]). */
     private val walkAwaySnoozeJob = AtomicReference<Job?>(null)
-
-    private var bondReceiverRegistered = false
-    private val bondReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
-            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-            }
-            val mac = device?.address ?: return
-            val expected = currentRadarMac ?: return
-            if (!mac.equals(expected, ignoreCase = true)) return
-            val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
-            when (state) {
-                BluetoothDevice.BOND_NONE -> onRadarBondLost(mac)
-                BluetoothDevice.BOND_BONDED -> {
-                    if (bondLost) {
-                        Log.i(TAG_RADAR, "radar re-paired ($mac); allowing reconnect")
-                        bondLost = false
-                    }
-                }
-            }
-        }
-    }
 
     // Overlay window + view ownership lives in AndroidOverlayHost; the
     // service forwards onConfigurationChanged so the host re-applies layout
@@ -367,7 +299,7 @@ class BikeRadarService : Service() {
             overlayPrefsSnapshot = { cachedOverlayPrefs ?: prefs.snapshot() },
             ebikeSnapshot = { lastEBikeSnapshot },
             climbingNow = { climbing },
-            currentRadarMac = { currentRadarMac },
+            currentRadarMac = { radarLink.currentRadarMac },
             macToSlug = { macToSlug },
             clog = { line -> clog(line) },
         )
@@ -375,17 +307,33 @@ class BikeRadarService : Service() {
             scope = scope,
             creds = creds,
             rideStats = { rideStats },
-            currentRadarMac = { currentRadarMac },
+            currentRadarMac = { radarLink.currentRadarMac },
             macToSlug = { macToSlug },
             loadKnownDevices = { knownDevices.load() },
             slug = { name -> slug(name) },
         )
         walkAwayAlarm = WalkAwayAlarm(this, scope)
+        radarLink = RadarLinkController(
+            context = this,
+            scope = scope,
+            prefs = prefs,
+            captureLog = captureLog,
+            overlayPipeline = overlayPipeline,
+            haPublisher = haPublisher,
+            notifications = notifications,
+            linkState = object : RadarLinkStateGateway {
+                override fun markConnected() = markRadarConnected()
+                override fun markDisconnected() = markRadarDisconnected()
+                override fun snapshot(): RadarLinkState = _radarLinkState.value
+            },
+            macToSlug = macToSlug,
+            slug = { name -> slug(name) },
+        )
 
         pruneCaptureLogs()
         schedulePauseExpiry()
         registerEventScan()
-        registerBondReceiver()
+        radarLink.registerBondReceiver()
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
         launchDashcamRefresh()
@@ -508,7 +456,7 @@ class BikeRadarService : Service() {
             }
             ACTION_FORCE_RECONNECT -> {
                 Log.i(TAG_RADAR, "force reconnect requested")
-                radarJob?.cancel()
+                radarLink.forceReconnect()
             }
             ACTION_WALKAWAY_DISMISS -> {
                 Log.i(TAG, "walk-away dismissed")
@@ -552,69 +500,13 @@ class BikeRadarService : Service() {
             ACTION_RADAR_LIGHT_PROBE_WRITE -> {
                 val hex = intent.getStringExtra(EXTRA_RADAR_LIGHT_HEX)
                 if (hex != null) {
-                    probeWriteRadarRaw(hex)
+                    radarLink.probeWriteRadarRaw(hex)
                 } else {
-                    probeWriteRadarLight(intent.getIntExtra(EXTRA_RADAR_LIGHT_NN, -1))
+                    radarLink.probeWriteRadarLight(intent.getIntExtra(EXTRA_RADAR_LIGHT_NN, -1))
                 }
             }
         }
         return START_STICKY
-    }
-
-    /**
-     * Debug-only radar tail-light mode-set write-probe. Writes `07 00 NN` to
-     * the radar's SETTINGS_ACK (6a4e2f11), mirroring the front camera's mode-set,
-     * so a bench sweep can find which command sets the tail-light mode (and
-     * whether NN selects a cycle-slot or a stable mode-type). Reached only via
-     * the dev-only [RemoteControlReceiver] with the probe toggle on; the write
-     * lands on the live radar connection if one is up. Not a shipping path - the
-     * production controller will be derived once the encoding is pinned.
-     */
-    private fun probeWriteRadarLight(nn: Int) {
-        if (nn !in 0..0xFF) {
-            clog("# radar_probe_write skipped (bad nn=$nn)")
-            return
-        }
-        probeWriteRadar(byteArrayOf(0x07, 0x00, nn.toByte()))
-    }
-
-    /** Parse a hex string (spaces ignored) and write it raw to the radar's
-     *  control char. Lets the bench probe send any command - mode-set by type
-     *  (`06 09 01 TT`), slot-list config (`06 09 05 ...`), etc. - not just
-     *  the `07 00 NN` slot select. */
-    private fun probeWriteRadarRaw(hex: String) {
-        val clean = hex.filterNot { it.isWhitespace() }
-        val bytes = try {
-            require(clean.isNotEmpty() && clean.length % 2 == 0)
-            clean.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        } catch (_: Exception) {
-            clog("# radar_probe_write skipped (bad hex='$hex')")
-            return
-        }
-        probeWriteRadar(bytes)
-    }
-
-    private fun probeWriteRadar(payload: ByteArray) {
-        val label = payload.joinToString(" ") { "%02x".format(it) }
-        if (!prefs.radarSettingsProbeEnabled) {
-            clog("# radar_probe_write skipped (probe off) [$label]")
-            return
-        }
-        val gatt = liveRadarGatt
-        val queue = liveRadarQueue
-        if (gatt == null || queue == null) {
-            clog("# radar_probe_write skipped (no live radar) [$label]")
-            return
-        }
-        val ch = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_ACK)
-        if (ch == null) {
-            clog("# radar_probe_write skipped (no 2f11) [$label]")
-            return
-        }
-        scope.launch {
-            val ok = queue.write(gatt, ch, payload, noResponse = false)
-            clog("# radar_probe_write [$label] ok=$ok")
-        }
     }
 
     override fun onDestroy() {
@@ -622,7 +514,7 @@ class BikeRadarService : Service() {
         pauseExpiryJob?.cancel()
         cameraLightJob?.cancel()
         unregisterEventScan()
-        unregisterBondReceiver()
+        radarLink.shutdown()
         closeCaptureLog()
         RadarStateBus.clear()
         if (::reconnectHost.isInitialized) {
@@ -694,9 +586,9 @@ class BikeRadarService : Service() {
                 bondedRadarMacs = RadarSelection.bondedRadars(this).mapTo(HashSet()) { it.mac },
             )
         }
-        if (shouldLinkRadar) maybeStartRadarLink(name, mac)
+        if (shouldLinkRadar) radarLink.start(name, mac)
 
-        if (isRearDevice(name) && (radarGattActive || radarJob?.isActive == true)) {
+        if (isRearDevice(name) && (radarGattActive || radarLink.isActive())) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
             return
         }
@@ -877,55 +769,6 @@ class BikeRadarService : Service() {
                 cont.invokeOnCancellation { closeOnce() }
             }
         }
-    }
-
-    // ── radar link ────────────────────────────────────────────────────────────
-
-    private fun registerBondReceiver() {
-        if (bondReceiverRegistered) return
-        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(bondReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(bondReceiver, filter)
-        }
-        bondReceiverRegistered = true
-    }
-
-    private fun unregisterBondReceiver() {
-        if (!bondReceiverRegistered) return
-        try {
-            unregisterReceiver(bondReceiver)
-        } catch (_: Throwable) {}
-        bondReceiverRegistered = false
-    }
-
-    /**
-     * Called when the radar's bond is removed in system Bluetooth settings.
-     * Stops the reconnect loop (which would otherwise spin forever against a
-     * peer that will refuse the LESC handshake) and posts a notification so
-     * the user knows why the link went silent.
-     */
-    private fun onRadarBondLost(mac: String) {
-        Log.w(TAG_RADAR, "radar bond removed ($mac); stopping reconnect loop")
-        bondLost = true
-        radarJob?.cancel()
-        radarJob = null
-        markRadarDisconnected()
-        currentRadarMac = null
-        notifications.postBondLost()
-    }
-
-    @Synchronized
-    private fun maybeStartRadarLink(name: String, mac: String) {
-        if (radarJob?.isActive == true) return
-        if (bondLost) {
-            Log.d(TAG_RADAR, "skip radar link start: bond lost, waiting for re-pair")
-            return
-        }
-        Log.i(TAG_RADAR, "starting radar link to $name $mac")
-        radarJob = scope.launch { runRadarConnection(mac, name) }
     }
 
     @Synchronized
@@ -1195,394 +1038,6 @@ class BikeRadarService : Service() {
         }
     }
 
-    /**
-     * Invokes the hidden BluetoothGatt.refresh() method via reflection.
-     *
-     * Known Android workaround for stale GATT cache after a firmware-side
-     * service change; widely used in OSS BLE projects (Punch Through,
-     * Stack Overflow). Android caches the remote GATT database between
-     * connections; if the peer's services have changed since the cache
-     * was populated, service discovery returns the stale list. The
-     * @hide refresh() method clears that cache so the next
-     * discoverServices() sees the live characteristics.
-     *
-     * The method is @hide and could in theory be removed in a future
-     * Android release, so the call is wrapped in try/catch and the
-     * caller falls back to the original behaviour on failure.
-     */
-    private fun refreshGattCache(gatt: BluetoothGatt): Boolean = try {
-        val method = BluetoothGatt::class.java.getMethod("refresh")
-        method.invoke(gatt) as? Boolean ?: false
-    } catch (t: Throwable) {
-        Log.w(TAG_RADAR, "BluetoothGatt.refresh() unavailable: $t")
-        false
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun runRadarConnection(mac: String, name: String) {
-        val btMgr = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager ?: return
-        val device = try {
-            btMgr.adapter?.getRemoteDevice(mac)
-        } catch (_: Throwable) {
-            null
-        } ?: return
-
-        currentRadarMac = mac
-        var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
-        try {
-            while (true) {
-                if (bondLost) {
-                    Log.i(TAG_RADAR, "bond lost for $mac; reconnect loop suspended")
-                    return
-                }
-                Log.i(TAG_RADAR, "connect attempt to $name $mac")
-                lastConnectionReachedDecode = false
-                val quickReconnect = connectAndRun(device, name)
-                markRadarDisconnected()
-                if (bondLost) {
-                    Log.i(TAG_RADAR, "bond lost during attempt; exiting reconnect loop")
-                    return
-                }
-                if (lastConnectionReachedDecode) {
-                    // Healthy session — reset the backoff so the next reconnect
-                    // is fast.
-                    backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
-                }
-                val delayMs = when {
-                    quickReconnect -> RADAR_QUICK_RECONNECT_MS
-                    else -> jittered(backoffMs)
-                }
-                val tag = when {
-                    quickReconnect -> " (post-ABORT)"
-                    else -> " (backoff=${backoffMs}ms)"
-                }
-                Log.i(TAG_RADAR, "reconnecting in ${delayMs}ms$tag")
-                kotlinx.coroutines.delay(delayMs)
-                if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(
-                            now = System.currentTimeMillis(),
-                            offSinceMs = radarOffSinceMs,
-                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
-                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
-                        ),
-                    )
-                }
-            }
-        } finally {
-            currentRadarMac = null
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun connectAndRun(device: BluetoothDevice, name: String): Boolean {
-        val notifyChannel = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
-        val queue = BleOpQueue()
-        val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
-        var gatt: BluetoothGatt? = null
-        var overlayJob: Job? = null
-        var watchdogJob: Job? = null
-        var cacheRefreshed = false
-        var gattClosed = false
-        fun closeOnce() {
-            if (gattClosed) return
-            gattClosed = true
-            val g = gatt ?: return
-            try {
-                g.disconnect()
-            } catch (_: Throwable) {}
-            try {
-                g.close()
-            } catch (_: Throwable) {}
-        }
-
-        val cb = object : BluetoothGattCallback() {
-            override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-                clog("# conn state: status=$status newState=$newState")
-                when (newState) {
-                    BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        markRadarDisconnected()
-                        queue.cancel()
-                        notifyChannel.close()
-                        if (!servicesReady.isCompleted) servicesReady.complete(false)
-                        closeOnce()
-                    }
-                }
-            }
-
-            override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                clog("# services discovered status=$status services=${g.services.size}")
-                val ok = status == BluetoothGatt.GATT_SUCCESS
-                val radarPresent = g.getService(Uuids.SVC_RADAR) != null
-                if (ok && !cacheRefreshed && (g.services.isEmpty() || !radarPresent)) {
-                    // Stale GATT cache from a prior session can leave the
-                    // service list empty or missing the radar service even
-                    // when the connection is healthy. Clear the cache and
-                    // re-discover once before reporting failure.
-                    cacheRefreshed = true
-                    val refreshed = refreshGattCache(g)
-                    clog("# stale cache detected, refresh=$refreshed, retrying discoverServices")
-                    if (refreshed) {
-                        g.discoverServices()
-                        return
-                    }
-                }
-                if (!servicesReady.isCompleted) {
-                    servicesReady.complete(ok)
-                }
-            }
-
-            override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
-                queue.onDescriptorWrite(d, status)
-            }
-
-            @Deprecated("API < 33 compat")
-            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-                @Suppress("DEPRECATION")
-                queue.onCharacteristicRead(ch, ch.value ?: ByteArray(0), status)
-            }
-
-            override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-                queue.onCharacteristicRead(ch, value, status)
-            }
-
-            override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-                queue.onCharacteristicWrite(ch, status)
-            }
-
-            override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-                clog("# MTU: $mtu status=$status")
-                queue.onMtuChanged(mtu, status)
-            }
-
-            @Deprecated("API < 33 compat")
-            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
-                @Suppress("DEPRECATION")
-                val bytes = ch.value ?: ByteArray(0)
-                clogPacket(ch.uuid, bytes)
-                notifyChannel.trySend(ch.uuid to bytes)
-            }
-
-            override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
-                clogPacket(ch.uuid, value)
-                notifyChannel.trySend(ch.uuid to value)
-            }
-        }
-
-        gatt = connectGattLe(this, device, true, cb)
-        if (gatt == null) {
-            clog("# connectGatt returned null")
-            return false
-        }
-
-        val queueJob = scope.launch { queue.run() }
-
-        // Radar tail-light dusk/dawn flip jobs - declared here so the finally can
-        // cancel them (scheduling happens post-handshake when auto-mode is on).
-        var radarSunsetJob: Job? = null
-        var radarSunriseJob: Job? = null
-
-        return try {
-            val ok = servicesReady.await()
-            if (!ok) {
-                clog("# services discovery failed")
-                return false
-            }
-
-            markRadarConnected()
-            Log.i(TAG_RADAR, "connected, running handshake")
-
-            val handshakeOk = RadarUnlock.runHandshake(gatt, queue, notifyChannel) { msg ->
-                clog("# script: $msg")
-            }
-
-            if (!handshakeOk) {
-                clog("# handshake aborted — closing gatt for quick reconnect")
-                gatt.disconnect()
-                return true
-            }
-
-            Log.i(TAG_RADAR, "handshake complete, decoding frames")
-            // First chance per ride to refresh the location cache used by
-            // SunsetCalculator (front- and radar-light auto-modes). 60-min staleness
-            // gate means quick stop-and-go reconnects don't re-poll.
-            LocationCache.refreshIfStale(this@BikeRadarService)
-            openCaptureLog()
-            // Overlay + alert coroutine, extracted into OverlayPipeline.
-            overlayJob = overlayPipeline.attach(scope, name)
-
-            val rearMac = gatt.device?.address
-            val v2Dec = RadarV2Decoder()
-            var v2FrameCount = 0
-
-            // Mark this connection as healthy so the reconnect loop resets
-            // its backoff. Initialise the watchdog clock to "now" so we give
-            // the first frame a fair chance to arrive.
-            lastConnectionReachedDecode = true
-            lastV2FrameMs = System.currentTimeMillis()
-
-            // Drop the connection interval from BALANCED to LOW_POWER once
-            // the V2 stream is up: the radar pushes notifications at its own
-            // cadence, so a tighter interval just wastes the phone radio.
-            try {
-                val ok = gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
-                if (!ok) Log.w(TAG_RADAR, "requestConnectionPriority(LOW_POWER) returned false")
-            } catch (t: Throwable) {
-                Log.w(TAG_RADAR, "requestConnectionPriority threw: $t")
-            }
-
-            // Data-flow watchdog: if no V2 frame arrives for V2_FRAME_STALL_MS,
-            // tear down the GATT so the outer loop can reconnect. Catches the
-            // case where the stack thinks we are still connected but the radar
-            // has gone silent.
-            val capturedGatt = gatt
-            watchdogJob = scope.launch {
-                while (true) {
-                    delay(V2_WATCHDOG_TICK_MS)
-                    val last = lastV2FrameMs
-                    if (last == 0L) continue
-                    val ageMs = System.currentTimeMillis() - last
-                    if (ageMs > V2_FRAME_STALL_MS) {
-                        Log.w(TAG_RADAR, "V2 stream silent for ${ageMs}ms; tearing down GATT")
-                        try {
-                            capturedGatt.disconnect()
-                        } catch (_: Throwable) {}
-                        return@launch
-                    }
-                }
-            }
-
-            // Subscribe the radar control-service mode-state notify (6a4e2f14)
-            // when EITHER the production light auto-mode OR the debug probe needs
-            // it. Done here, AFTER the V2 handshake, so it cannot interfere with
-            // the unlock (verified safe on-bench). 6a4e2f12 and the live
-            // write-probe handles stay strictly debug-gated - never exposed in a
-            // normal ride. Never touch 6a4e3203 (V1 char) here.
-            val controlSvc = gatt.getService(Uuids.SVC_CONTROL)
-            val ch2f14 = controlSvc?.getCharacteristic(Uuids.SETTINGS_14)
-            if ((prefs.radarSettingsProbeEnabled || prefs.radarLightAutoModeEnabled) && ch2f14 != null) {
-                queue.writeCccd(gatt, ch2f14)
-            }
-            if (prefs.radarSettingsProbeEnabled) {
-                val probe12 = controlSvc?.getCharacteristic(Uuids.SETTINGS_12)
-                clog("# radar_settings_probe svc=${controlSvc != null} 2f14=${ch2f14 != null} 2f12=${probe12 != null}")
-                if (probe12 != null) queue.writeCccd(gatt, probe12)
-                liveRadarGatt = gatt
-                liveRadarQueue = queue
-            }
-
-            // Radar tail-light auto day/night. The radar light shares THIS
-            // connection (no separate device), so set the mode now and schedule
-            // the dusk/dawn flip as locals cancelled in finally. Override (rider
-            // button press) is detected from 2f14 slot changes in the loop below,
-            // against a baseline captured fresh this connect. A manual override
-            // sticks across brief reconnects and clears only past a deadband.
-            // Supplementary rear light (built-in rear is primary), so failures
-            // are non-critical; rider chose dashcam-parity fail feedback.
-            radarLightBaselineKey = null
-            if (RadarLightOverrideDecider.shouldClearOverride(
-                    radarLightOffSinceMs,
-                    System.currentTimeMillis(),
-                    RADAR_LIGHT_OVERRIDE_DEADBAND_MS,
-                )
-            ) {
-                radarLightUserOverride = false
-            }
-            radarLightOffSinceMs = null
-            if (prefs.radarLightAutoModeEnabled && controlSvc != null) {
-                val controller = RadarLightController(gatt, queue)
-                val nowMs = System.currentTimeMillis()
-                val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-                val loc = LocationCache.current()
-                val (sunriseMs, sunsetMs) = if (loc != null) {
-                    SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
-                        SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
-                } else {
-                    SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
-                }
-                val night = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-                val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, night, radarLightUserOverride)
-                suspend fun applyPhase(phase: LightAutoModeDecider.Phase) {
-                    val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
-                        prefs.radarLightNightMode
-                    } else {
-                        prefs.radarLightDayMode
-                    }
-                    val okSet = applyWithRetry { controller.setMode(mode) }
-                    Log.i(TAG_RADAR, "radar light $phase mode=$mode applied=$okSet")
-                    if (!okSet) postRadarLightModeFailNotification(mode)
-                }
-                plan.initial?.let { applyPhase(it) }
-                val flipAt = plan.flipAtMs
-                val flipTo = plan.flipTo
-                if (flipAt != null && flipTo != null) {
-                    val job = scope.launch {
-                        kotlinx.coroutines.delay(flipAt - nowMs)
-                        if (_radarLinkState.value.radarGattActive && !radarLightUserOverride) {
-                            applyPhase(flipTo)
-                        }
-                    }
-                    if (flipTo == LightAutoModeDecider.Phase.NIGHT) radarSunsetJob = job else radarSunriseJob = job
-                }
-            }
-
-            for ((uuid, bytes) in notifyChannel) {
-                when (uuid) {
-                    Uuids.RADAR_V2 -> {
-                        lastV2FrameMs = System.currentTimeMillis()
-                        if (v2FrameCount++ == 0) Log.i(TAG_RADAR, "first V2 frame: ${bytes.toHex()}")
-                        v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
-                    }
-                    Uuids.SETTINGS_14 -> {
-                        if (prefs.radarSettingsProbeEnabled) clog("# radar_2f14 ${bytes.toHex()}")
-                        if (prefs.radarLightAutoModeEnabled) {
-                            RadarLightController.parseModeState(bytes)?.let { ms ->
-                                val key = RadarLightOverrideDecider.key(ms.slot, ms.type)
-                                if (radarLightBaselineKey == null) {
-                                    radarLightBaselineKey = key
-                                } else if (!radarLightUserOverride &&
-                                    RadarLightOverrideDecider.isOverride(radarLightBaselineKey, key)
-                                ) {
-                                    radarLightUserOverride = true
-                                    radarSunsetJob?.cancel()
-                                    radarSunriseJob?.cancel()
-                                    clog("# radar_light_override (2f14 slot change)")
-                                }
-                            }
-                        }
-                    }
-                    Uuids.SETTINGS_12 -> if (prefs.radarSettingsProbeEnabled) clog("# radar_2f12 ${bytes.toHex()}")
-                    Uuids.CHAR_BATTERY -> {
-                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        val s = slug(name)
-                        if (rearMac != null) macToSlug[rearMac] = s
-                        BatteryStateBus.update(BatteryEntry(s, name, pct))
-                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
-                    }
-                }
-            }
-            false
-        } finally {
-            radarSunsetJob?.cancel()
-            radarSunriseJob?.cancel()
-            radarLightOffSinceMs = System.currentTimeMillis()
-            liveRadarGatt = null
-            liveRadarQueue = null
-            watchdogJob?.cancel()
-            overlayJob?.cancel()
-            queue.cancel()
-            queueJob.cancel()
-            markRadarDisconnected()
-            RadarStateBus.clear()
-            // Fire-and-forget final flush of the ride summary so HA sees
-            // the latest values before the next reconnect's backoff delay.
-            scope.launch(Dispatchers.IO) { haPublisher.publishRideSummaryIfChanged() }
-            closeOnce()
-            closeCaptureLog()
-        }
-    }
-
     // ── light failure feedback ─────────────────────────────────────────────────
 
     private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
@@ -1600,35 +1055,6 @@ class BikeRadarService : Service() {
         notifications.postLightFail(modeName)
 
         // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
-        var tg: android.media.ToneGenerator? = null
-        try {
-            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
-            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
-            kotlinx.coroutines.delay(600)
-        } catch (_: Exception) {
-        } finally {
-            tg?.release()
-        }
-    }
-
-    /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
-     *  a HIGH-priority notification + the NACK beep. Distinct notification ID
-     *  from the dashcam so neither clobbers the other. Fires only when the GATT
-     *  write was not ACKed after the retries - it can't catch the rarer "ACKed
-     *  but the light element didn't change" case (no read-back). */
-    private suspend fun postRadarLightModeFailNotification(mode: RadarLightMode) {
-        val modeName = getString(
-            when (mode) {
-                RadarLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
-                RadarLightMode.DAY_FLASH -> R.string.settings_lightmode_day_flash
-                RadarLightMode.SOLID -> R.string.settings_lightmode_solid
-                RadarLightMode.PELOTON -> R.string.settings_lightmode_peloton
-                RadarLightMode.OFF -> R.string.settings_lightmode_off
-            },
-        )
-
-        notifications.postRadarLightFail(modeName)
-
         var tg: android.media.ToneGenerator? = null
         try {
             tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
@@ -2278,11 +1704,6 @@ class BikeRadarService : Service() {
             return "# phone t=$unixMs level=$pct temp_dc=$tempDc charging=${plugged != 0}"
         }
 
-        // V2 data-flow watchdog: if no V2 notification has been observed for
-        // V2_FRAME_STALL_MS, the link is considered stuck and the GATT is
-        // torn down so the outer loop reconnects.
-        const val V2_WATCHDOG_TICK_MS = 2_000L
-        const val V2_FRAME_STALL_MS = 5_000L
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
 
         /** Rear-radar battery percentage below which the in-ride audible
@@ -2372,7 +1793,6 @@ class BikeRadarService : Service() {
 
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
-        private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
 
         @Volatile var activeCaptureLogName: String? = null
             internal set

@@ -88,18 +88,12 @@ class BikeRadarService : Service() {
     private val radarOffSinceMs get() = radarLinkCoordinator.snapshot().radarOffSinceMs
 
     // ── Bosch eBike live-data snapshot ───────────────────────────────
-    // Last-known eBike snapshot from the status reader, or null when the
-    // feature is off (no Bosch eBike, experimental flag off, or Flow not
-    // running so no frames arrive). Consumed by [WalkAwayArmingGate] and by the
-    // AlertDecider stationary override. The null case is the
-    // graceful-degradation path that radar-only riders take.
-    @Volatile private var lastEBikeSnapshot: LiveDataSnapshot? = null
-
-    // Wall-clock of the last eBike snapshot. The radar-drop cue trusts
-    // `system_locked == false` only while this is fresh: a stale snapshot
-    // means the eBike link itself has dropped (rider walked away), so
-    // "unlocked" can no longer be believed.
-    @Volatile private var lastEBikeSnapshotMs: Long = 0L
+    // The snapshot cache + everything derived from it (odometer baseline,
+    // ride-edge + climb detection) live in [EBikeSnapshotCoordinator], fed by
+    // the status reader's callback. The service keeps only the reader lifecycle
+    // (below). snapshot()==null when the feature is off / no bonded eBike - the
+    // graceful-degradation path radar-only riders take.
+    private lateinit var ebikeSnapshotCoordinator: EBikeSnapshotCoordinator
 
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
@@ -113,26 +107,6 @@ class BikeRadarService : Service() {
     // the Bosch Flow app uses). Sources the live snapshot. Null when the eBike
     // feature is off or no bonded eBike is present.
     @Volatile private var ebikeStatusReader: EBikeStatusReader? = null
-
-    // Absolute odometer at the first snapshot of this session; the
-    // capture log writes `odo_delta_m = current - baseline` rather than
-    // the absolute (privacy hardening, see EBikeCaptureFormatter).
-    @Volatile private var sessionStartOdometerM: Long? = null
-
-    // Ride-edge detector state, mutated only on the BLE callback
-    // thread inside onSnapshot. Tracks whether the rider is currently
-    // riding (per eBike lock + wheel-motion signals) so STARTED / ENDED
-    // edges can publish to HA. See RideEdgeDetector.
-    @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
-
-    // Climb-detector state. Accumulates the duration of sustained
-    // high rider_power; when the dwell elapses, the AlertDecider's
-    // stationary-suppress gate is forced off so a slow climb on Fitzjohns
-    // or similar still gets alerts. Mutated only on the BLE callback
-    // thread inside onSnapshot. See ClimbDetector.
-    @Volatile private var climbState: ClimbDetector.State = ClimbDetector.State()
-
-    @Volatile private var climbing: Boolean = false
 
     // The radar-link / walk-away cluster (radarOffSinceMs, sessionRadarConnectedMs,
     // walkAwayArmed, walkAwayDismissed, lastWalkAwayFireMs ...) and its
@@ -248,8 +222,8 @@ class BikeRadarService : Service() {
             phoneBattery = AndroidPhoneBatterySource(this),
             rideStats = { rideStats },
             overlayPrefsSnapshot = { cachedOverlayPrefs ?: prefs.snapshot() },
-            ebikeSnapshot = { lastEBikeSnapshot },
-            climbingNow = { climbing },
+            ebikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
+            climbingNow = { ebikeSnapshotCoordinator.climbing() },
             currentRadarMac = { radarLink.currentRadarMac },
             macToSlug = { macToSlug },
             clog = { line -> clog(line) },
@@ -263,6 +237,12 @@ class BikeRadarService : Service() {
             loadKnownDevices = { knownDevices.load() },
             slug = { name -> slug(name) },
         )
+        ebikeSnapshotCoordinator = EBikeSnapshotCoordinator(
+            clock = { System.currentTimeMillis() },
+            clog = ::clog,
+            publishRideEdge = { edge, iso -> haPublisher.publishRideEdgeIfHa(edge, iso) },
+            nowIso = { java.time.Instant.now().toString() },
+        )
         walkAwayAlarm = WalkAwayAlarm(this, scope)
         radarLinkCoordinator = RadarLinkCoordinator(
             clock = { System.currentTimeMillis() },
@@ -275,8 +255,8 @@ class BikeRadarService : Service() {
             clog = ::clog,
             setReconnectBanner = ::setReconnectBanner,
             resolveDashcamSlug = ::resolveDashcamSlug,
-            eBikeSnapshot = { lastEBikeSnapshot },
-            eBikeSnapshotAtMs = { lastEBikeSnapshotMs },
+            eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
+            eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
             cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
             clearDashcamBackoff = {
                 prefs.dashcamMac?.let {
@@ -335,13 +315,13 @@ class BikeRadarService : Service() {
      * flag is on AND BLE permissions are granted. [EBikeStatusReader]
      * subscribes to the bike's proprietary status stream (the channel the
      * Bosch Flow app uses) over the existing bonded link, and pushes snapshots
-     * into [lastEBikeSnapshot] (for the AlertDecider stationary override +
+     * into [EBikeSnapshotCoordinator] (for the AlertDecider stationary override +
      * walk-away gate) and [EBikeStateBus] (for the SYSTEM-card eBike row). It
      * never writes to the bike.
      *
      * Flag off / permission missing / no bonded eBike → reader not started,
-     * `lastEBikeSnapshot` stays null, all downstream consumers fall back to the
-     * radar's own bike-speed reading. Graceful degradation for radar-only riders.
+     * the coordinator snapshot stays null, all downstream consumers fall back to
+     * the radar's own bike-speed reading. Graceful degradation for radar-only riders.
      */
     @SuppressLint("MissingPermission")
     private fun maybeStartEBikeReader() {
@@ -360,7 +340,7 @@ class BikeRadarService : Service() {
             scope = scope,
             mac = ebikeMac,
             onSnapshot = { snap ->
-                onEBikeSnapshot(snap)
+                ebikeSnapshotCoordinator.onSnapshot(snap)
                 EBikeStateBus.setSnapshot(snap)
             },
             log = { m -> Log.i("BikeRadar.EBikeStatus", m) },
@@ -376,49 +356,6 @@ class BikeRadarService : Service() {
         ebikeStatusReader = reader
         reader.start()
         clog("# ebike status-reader started")
-    }
-
-    /**
-     * Handle a fresh live-data snapshot (from [EBikeStatusReader]): cache it
-     * for the AlertDecider stationary override and the walk-away arming gate,
-     * append a delta-only line to the capture log, and drive ride-edge + climb
-     * detection. Extracted so both the (defunct) eb21 path and the proprietary
-     * status reader feed identical downstream behaviour.
-     */
-    private fun onEBikeSnapshot(snap: LiveDataSnapshot) {
-        lastEBikeSnapshot = snap
-        lastEBikeSnapshotMs = System.currentTimeMillis()
-        // Capture odometer baseline on first sighting, then log the snapshot
-        // delta-only. format() returns null when every field is still
-        // unobserved so we skip logging empty stubs.
-        if (sessionStartOdometerM == null) {
-            sessionStartOdometerM = snap.odometerM
-        }
-        EBikeCaptureFormatter.format(snap, sessionStartOdometerM)?.let(::clog)
-        // Feed the edge detector; on STARTED / ENDED publish to HA so
-        // dashboards and automations have bike-truth ride boundaries
-        // (independent of GPS drift on the office side).
-        val (nextState, edge) = RideEdgeDetector.next(rideEdgeState, snap)
-        rideEdgeState = nextState
-        if (edge != RideEdgeDetector.Edge.NONE) {
-            val edgeName = if (edge == RideEdgeDetector.Edge.STARTED) "started" else "ended"
-            val nowIso = java.time.Instant.now().toString()
-            clog("# ebike ride_edge=$edgeName t=$nowIso")
-            haPublisher.publishRideEdgeIfHa(edgeName, nowIso)
-        }
-        // Thread the climb state. Sustained high rider_power (default >= 250 W
-        // for >= 30 s) flips the climbing bit, which the AlertDecider
-        // stationary override consults to keep alerts firing on a slow climb.
-        val (nextClimb, isClimbing) = ClimbDetector.classify(
-            prev = climbState,
-            nowMs = System.currentTimeMillis(),
-            riderPowerW = snap.riderPower,
-        )
-        climbState = nextClimb
-        if (isClimbing != climbing) {
-            climbing = isClimbing
-            clog("# ebike climbing=$isClimbing rider_power=${snap.riderPower}")
-        }
     }
 
     private fun hasBlePermissions(): Boolean {

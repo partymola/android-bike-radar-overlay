@@ -118,6 +118,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
 | `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
+| `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge + climb detection); fed by the status reader's callback |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusDecoder.kt` | TLV decoder for the proprietary status stream (add new object IDs here) |
 | `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |
 

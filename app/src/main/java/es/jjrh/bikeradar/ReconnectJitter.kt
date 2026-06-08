@@ -56,3 +56,43 @@ internal fun reconnectBackoffCap(
         RADAR_RECONNECT_BACKOFF_MAX_MS
     }
 }
+
+/**
+ * Pure backoff-schedule arithmetic shared by the rear-radar and front-camera
+ * reconnect loops. Each loop keeps its own distinct reset trigger - the radar
+ * resets the backoff on a healthy V2 decode, the camera on a quick post-ABORT
+ * reconnect - so only the two stateless steps live here: how long to wait
+ * before the next attempt, and how to grow the backoff after a failure.
+ */
+internal object ReconnectLoopPlanner {
+    /**
+     * Delay before the next connect attempt. A quick (post-ABORT) reconnect
+     * bypasses backoff with a fixed short wait; every other path jitters the
+     * current backoff so concurrent riders dephase their retries ([jittered]).
+     */
+    fun nextDelayMs(
+        backoffMs: Long,
+        quickReconnect: Boolean,
+        random: Random = Random.Default,
+    ): Long = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else jittered(backoffMs, random)
+
+    /**
+     * Grow the backoff after a non-quick failure: double it, clamped to the
+     * moment's ceiling ([reconnectBackoffCap], which relaxes once the device has
+     * been offline a long time). Callers gate this on `!quickReconnect`.
+     */
+    fun grow(
+        backoffMs: Long,
+        nowMs: Long,
+        offSinceMs: Long?,
+        longOfflineThresholdMs: Long,
+        longOfflineCapMs: Long,
+    ): Long = (backoffMs * 2).coerceAtMost(
+        reconnectBackoffCap(
+            now = nowMs,
+            offSinceMs = offSinceMs,
+            longOfflineThresholdMs = longOfflineThresholdMs,
+            longOfflineCapMs = longOfflineCapMs,
+        ),
+    )
+}

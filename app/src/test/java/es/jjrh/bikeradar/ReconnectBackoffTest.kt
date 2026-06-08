@@ -165,4 +165,105 @@ class ReconnectBackoffTest {
         // Random.nextLong(0, 1) and biasing toward zero.
         assertEquals(4L, jittered(4L, Random(0L)))
     }
+
+    // ReconnectLoopPlanner: the stateless backoff steps shared by the rear-radar
+    // and front-camera reconnect loops. Each loop keeps its own reset trigger;
+    // these pin only the delay-selection and grow arithmetic both lean on.
+
+    @Test fun nextDelayQuickUsesFixedShortWaitRegardlessOfBackoff() {
+        // A quick (post-ABORT) reconnect ignores the accumulated backoff.
+        assertEquals(
+            RADAR_QUICK_RECONNECT_MS,
+            ReconnectLoopPlanner.nextDelayMs(backoffMs = 8_000L, quickReconnect = true, random = Random(0L)),
+        )
+    }
+
+    @Test fun nextDelayNonQuickJittersTheBackoff() {
+        // Non-quick delay is the current backoff with +/-20% jitter applied.
+        val base = 4_000L
+        val low = (base * 0.8).toLong()
+        val high = (base * 1.2).toLong()
+        val v = ReconnectLoopPlanner.nextDelayMs(backoffMs = base, quickReconnect = false, random = Random(99L))
+        assertTrue("$v not in [$low, $high]", v in low..high)
+    }
+
+    @Test fun nextDelayNonQuickDelegatesToJitteredExactly() {
+        // Same seed through the planner and the raw helper must agree, proving
+        // the planner adds no hidden transform.
+        assertEquals(
+            jittered(4_000L, Random(55L)),
+            ReconnectLoopPlanner.nextDelayMs(backoffMs = 4_000L, quickReconnect = false, random = Random(55L)),
+        )
+    }
+
+    @Test fun growDoublesBelowCeiling() {
+        // 1 s -> 2 s, well under the 8 s steady-state ceiling.
+        assertEquals(
+            2_000L,
+            ReconnectLoopPlanner.grow(
+                backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS,
+                nowMs = 5_000L,
+                offSinceMs = 5_000L,
+                longOfflineThresholdMs = threshold,
+                longOfflineCapMs = longCap,
+            ),
+        )
+    }
+
+    @Test fun growClampsToSteadyStateCeiling() {
+        // 8 s doubled is 16 s but the short-offline ceiling holds it at 8 s.
+        assertEquals(
+            RADAR_RECONNECT_BACKOFF_MAX_MS,
+            ReconnectLoopPlanner.grow(
+                backoffMs = RADAR_RECONNECT_BACKOFF_MAX_MS,
+                nowMs = 5_000L,
+                offSinceMs = 5_000L,
+                longOfflineThresholdMs = threshold,
+                longOfflineCapMs = longCap,
+            ),
+        )
+    }
+
+    @Test fun growMidValueClampsToCeiling() {
+        // 5 s doubled is 10 s, clamped down to the 8 s ceiling (not left at 10).
+        assertEquals(
+            RADAR_RECONNECT_BACKOFF_MAX_MS,
+            ReconnectLoopPlanner.grow(
+                backoffMs = 5_000L,
+                nowMs = 5_000L,
+                offSinceMs = 5_000L,
+                longOfflineThresholdMs = threshold,
+                longOfflineCapMs = longCap,
+            ),
+        )
+    }
+
+    @Test fun growRelaxesCeilingOnceLongOffline() {
+        // Past the long-offline threshold the ceiling lifts to longCap (30 s),
+        // so 8 s can double past the steady-state 8 s cap toward the relaxed one.
+        assertEquals(
+            16_000L,
+            ReconnectLoopPlanner.grow(
+                backoffMs = RADAR_RECONNECT_BACKOFF_MAX_MS,
+                nowMs = threshold + 1,
+                offSinceMs = 0L,
+                longOfflineThresholdMs = threshold,
+                longOfflineCapMs = longCap,
+            ),
+        )
+    }
+
+    @Test fun growClampsToRelaxedCeilingWhenLongOffline() {
+        // Above the relaxed cap, doubling is held at longCap (20 s -> 30 s, not 40).
+        assertEquals(
+            longCap,
+            ReconnectLoopPlanner.grow(
+                backoffMs = 20_000L,
+                nowMs = threshold + 1,
+                offSinceMs = 0L,
+                longOfflineThresholdMs = threshold,
+                longOfflineCapMs = longCap,
+            ),
+        )
+    }
 }

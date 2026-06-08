@@ -97,20 +97,19 @@ internal class CameraLightLinkController(
                 Log.i(TAG, "connect attempt to $name $mac")
                 val quickReconnect = connectAndRunCameraLight(device, name)
                 cameraLightGattActive = false
-                val delayMs = if (quickReconnect) RADAR_QUICK_RECONNECT_MS else jittered(backoffMs)
+                val delayMs = ReconnectLoopPlanner.nextDelayMs(backoffMs, quickReconnect)
                 Log.i(TAG, "reconnecting in ${delayMs}ms")
                 kotlinx.coroutines.delay(delayMs)
-                if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(
-                            now = System.currentTimeMillis(),
-                            offSinceMs = radarOffSinceMs(),
-                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
-                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
-                        ),
+                backoffMs = if (!quickReconnect) {
+                    ReconnectLoopPlanner.grow(
+                        backoffMs = backoffMs,
+                        nowMs = System.currentTimeMillis(),
+                        offSinceMs = radarOffSinceMs(),
+                        longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
+                        longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
                     )
                 } else {
-                    backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+                    RADAR_RECONNECT_BACKOFF_INITIAL_MS
                 }
             }
         } finally {

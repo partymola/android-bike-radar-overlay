@@ -220,10 +220,7 @@ internal class RadarLinkController(
                     // is fast.
                     backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
                 }
-                val delayMs = when {
-                    quickReconnect -> RADAR_QUICK_RECONNECT_MS
-                    else -> jittered(backoffMs)
-                }
+                val delayMs = ReconnectLoopPlanner.nextDelayMs(backoffMs, quickReconnect)
                 val tag = when {
                     quickReconnect -> " (post-ABORT)"
                     else -> " (backoff=${backoffMs}ms)"
@@ -231,13 +228,12 @@ internal class RadarLinkController(
                 Log.i(TAG, "reconnecting in ${delayMs}ms$tag")
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
-                    backoffMs = (backoffMs * 2).coerceAtMost(
-                        reconnectBackoffCap(
-                            now = System.currentTimeMillis(),
-                            offSinceMs = linkState.snapshot().radarOffSinceMs,
-                            longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
-                            longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
-                        ),
+                    backoffMs = ReconnectLoopPlanner.grow(
+                        backoffMs = backoffMs,
+                        nowMs = System.currentTimeMillis(),
+                        offSinceMs = linkState.snapshot().radarOffSinceMs,
+                        longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
+                        longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,
                     )
                 }
             }

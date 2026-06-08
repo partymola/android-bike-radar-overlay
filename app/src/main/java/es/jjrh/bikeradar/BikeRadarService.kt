@@ -23,18 +23,10 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelUuid
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import android.view.Display
 import android.view.Gravity
@@ -71,6 +63,7 @@ class BikeRadarService : Service() {
     private lateinit var ha: HaClient
     private lateinit var haPublisher: HaPublisher
     private lateinit var notifications: ServiceNotifications
+    private lateinit var walkAwayAlarm: WalkAwayAlarm
     private lateinit var knownDevices: KnownDevices
 
     // Battery path state
@@ -246,32 +239,6 @@ class BikeRadarService : Service() {
      *  (lifecycle transitions in [markRadarConnected]). */
     private val walkAwaySnoozeJob = AtomicReference<Job?>(null)
 
-    /** Looping alarm-stream ringtone played alongside the walk-away
-     *  notification; null when not playing. The notification channel's
-     *  audio attributes are normalised to USAGE_NOTIFICATION on modern
-     *  Pixel/Android, which DND silences even with mBypassDnd=true.
-     *  We play the alarm tone explicitly with USAGE_ALARM so it routes
-     *  through the alarm stream and follows the user's alarm-volume
-     *  policy regardless of DND state. */
-    @Volatile private var walkAwayRingtone: Ringtone? = null
-
-    /** Audio-focus token held while [walkAwayRingtone] is playing.
-     *  Released in [stopWalkAwayAlarmTone]. */
-    @Volatile private var walkAwayAudioFocusRequest: AudioFocusRequest? = null
-
-    /** Pre-alert STREAM_ALARM volume, captured before the walk-away tone
-     *  forces the alarm stream to max so the rider can't sleep through a
-     *  forgotten-dashcam alert just because their alarm slider was low.
-     *  Restored in [stopWalkAwayAlarmTone]. Null when no override is in
-     *  effect. */
-    @Volatile private var walkAwaySavedAlarmVolume: Int? = null
-
-    /** Single-slot job that stops the alarm tone after
-     *  [WALKAWAY_RINGTONE_CAP_MS]. Without this cap a forgotten alert
-     *  would loop forever; the decider's rate limit then re-fires the
-     *  notification, re-starting the tone for another bounded window. */
-    private var walkAwayRingtoneCapJob: Job? = null
-
     private var bondReceiverRegistered = false
     private val bondReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -413,6 +380,7 @@ class BikeRadarService : Service() {
             loadKnownDevices = { knownDevices.load() },
             slug = { name -> slug(name) },
         )
+        walkAwayAlarm = WalkAwayAlarm(this, scope)
 
         pruneCaptureLogs()
         schedulePauseExpiry()
@@ -547,7 +515,7 @@ class BikeRadarService : Service() {
                 _radarLinkState.update { it.copy(walkAwayDismissed = true) }
                 walkAwaySnoozeJob.getAndSet(null)?.cancel()
                 notifications.cancelWalkAway()
-                stopWalkAwayAlarmTone()
+                walkAwayAlarm.stop()
             }
             ACTION_START_EBIKE_READER -> {
                 // Onboarding eBike step just enabled the feature; bring up the
@@ -568,7 +536,7 @@ class BikeRadarService : Service() {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
                 _radarLinkState.update { it.copy(walkAwayDismissed = true) }
                 notifications.cancelWalkAway()
-                stopWalkAwayAlarmTone()
+                walkAwayAlarm.stop()
                 val newJob = scope.launch {
                     delay(WALKAWAY_SNOOZE_MS)
                     // Clear both gates so the decider can re-evaluate
@@ -661,7 +629,7 @@ class BikeRadarService : Service() {
             reconnectBannerView?.let { reconnectHost.detach(it) }
             reconnectBannerView = null
         }
-        stopWalkAwayAlarmTone()
+        walkAwayAlarm.stop()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -1831,170 +1799,6 @@ class BikeRadarService : Service() {
         return found.values.toList()
     }
 
-    // ── walk-away alarm tone ─────────────────────────────────────────────────
-
-    /**
-     * Vibrate the walk-away pattern explicitly via the Vibrator
-     * service. Channel-level vibration is suppressed by DND when the
-     * channel doesn't bypass DND; explicit Vibrator calls are not.
-     */
-    private fun vibrateWalkAwayPattern() {
-        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as? Vibrator
-        }
-        if (vibrator == null || !vibrator.hasVibrator()) return
-        val effect = VibrationEffect.createWaveform(ServiceNotifications.WALKAWAY_VIBRATE_PATTERN, -1)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                vibrator.vibrate(
-                    effect,
-                    VibrationAttributes.Builder()
-                        .setUsage(VibrationAttributes.USAGE_ALARM)
-                        .build(),
-                )
-            } else {
-                val attrs = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(effect, attrs)
-            }
-        } catch (t: Throwable) {
-            Log.w(TAG, "vibrate failed: $t")
-        }
-    }
-
-    @Synchronized
-    private fun startWalkAwayAlarmTone() {
-        vibrateWalkAwayPattern()
-        if (walkAwayRingtone?.isPlaying == true) return
-
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        val focusReq = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-            .setAudioAttributes(attrs)
-            // Empty listener is intentional: a walk-away alarm should
-            // not duck or pause for transient focus loss. The whole
-            // point is to keep alerting until the rider acts.
-            .setOnAudioFocusChangeListener { }
-            .build()
-        if (am.requestAudioFocus(focusReq) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            Log.w(TAG, "walk-away audio focus denied; playing without focus")
-        }
-
-        // System default alarm tone. A bundled sound asset was dropped
-        // because its licence was not GPL-compatible; the device alarm
-        // keeps the app asset-free. It does share the rider's wake-up
-        // tone, but the alarm stream is forced to max below and the cue
-        // loops under USAGE_ALARM, so it still cuts through. Fall back
-        // through ringtone/notification if no default alarm is set.
-        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val rt = try {
-            RingtoneManager.getRingtone(this, uri).apply {
-                audioAttributes = attrs
-                isLooping = true
-            }
-        } catch (t: Throwable) {
-            Log.w(TAG, "ringtone setup failed: $t")
-            try {
-                am.abandonAudioFocusRequest(focusReq)
-            } catch (_: Throwable) {}
-            return
-        }
-        // Force the alarm stream to max for the duration of the alert.
-        // Mirrors the alarm-clock pattern: a rider whose phone alarm
-        // volume is set low for sleep shouldn't lose a £200 dashcam to
-        // their bedside-tone preference. Saved level is restored in
-        // stopWalkAwayAlarmTone. Best-effort; some OEMs reject volume
-        // writes from background services and that's fine.
-        val savedAlarmVolume = try {
-            am.getStreamVolume(AudioManager.STREAM_ALARM)
-        } catch (_: Throwable) {
-            null
-        }
-        if (savedAlarmVolume != null) {
-            try {
-                am.setStreamVolume(
-                    AudioManager.STREAM_ALARM,
-                    am.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-                    0,
-                )
-            } catch (t: Throwable) {
-                Log.w(TAG, "alarm-stream max-out failed: $t")
-            }
-        }
-
-        try {
-            rt.play()
-        } catch (t: Throwable) {
-            Log.w(TAG, "ringtone play failed: $t")
-            try {
-                am.abandonAudioFocusRequest(focusReq)
-            } catch (_: Throwable) {}
-            // Roll back the alarm-stream override so a play() failure
-            // doesn't leave the rider's morning alarm stuck at max.
-            if (savedAlarmVolume != null) {
-                try {
-                    am.setStreamVolume(AudioManager.STREAM_ALARM, savedAlarmVolume, 0)
-                } catch (_: Throwable) {}
-            }
-            return
-        }
-
-        // Commit the new state only after play() succeeds, so a partial
-        // setup never leaks a focus token or a half-initialised ringtone.
-        walkAwayAudioFocusRequest = focusReq
-        walkAwayRingtone = rt
-        walkAwaySavedAlarmVolume = savedAlarmVolume
-        walkAwayRingtoneCapJob?.cancel()
-        walkAwayRingtoneCapJob = scope.launch {
-            delay(WALKAWAY_RINGTONE_CAP_MS)
-            stopWalkAwayAlarmTone()
-        }
-        Log.i(TAG, "walk-away alarm tone started (cap=${WALKAWAY_RINGTONE_CAP_MS / 1000}s)")
-    }
-
-    /**
-     * Stop the alarm tone and release audio focus. Safe to call
-     * unconditionally - all paths null-check.
-     */
-    @Synchronized
-    private fun stopWalkAwayAlarmTone() {
-        walkAwayRingtoneCapJob?.cancel()
-        walkAwayRingtoneCapJob = null
-        walkAwayRingtone?.let {
-            try {
-                it.stop()
-            } catch (_: Throwable) {}
-        }
-        walkAwayRingtone = null
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        walkAwayAudioFocusRequest?.let { req ->
-            try {
-                am.abandonAudioFocusRequest(req)
-            } catch (_: Throwable) {}
-        }
-        walkAwayAudioFocusRequest = null
-        walkAwaySavedAlarmVolume?.let { saved ->
-            try {
-                am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
-            } catch (t: Throwable) {
-                Log.w(TAG, "alarm-stream restore failed: $t")
-            }
-        }
-        walkAwaySavedAlarmVolume = null
-    }
-
     // ── dashcam liveness probe ───────────────────────────────────────────────
 
     /**
@@ -2252,12 +2056,12 @@ class BikeRadarService : Service() {
         when (WalkAwayDecider.decide(input)) {
             WalkAwayDecider.Action.FIRE -> {
                 notifications.postWalkAway()
-                startWalkAwayAlarmTone()
+                walkAwayAlarm.start()
                 _radarLinkState.update { it.copy(lastWalkAwayFireMs = nowMs) }
             }
             WalkAwayDecider.Action.AUTO_DISMISS -> {
                 notifications.cancelWalkAway()
-                stopWalkAwayAlarmTone()
+                walkAwayAlarm.stop()
                 _radarLinkState.update { it.copy(lastWalkAwayFireMs = null) }
             }
             WalkAwayDecider.Action.NONE -> {}
@@ -2605,12 +2409,6 @@ class BikeRadarService : Service() {
         // long parked periods.
         const val WALKAWAY_IDLE_TICK_MS = 30_000L
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
-
-        // Hard cap on how long the looping alarm tone keeps playing
-        // before it is force-stopped. Without this the tone loops until
-        // the user dismisses; this caps a forgotten alert at one
-        // bounded burst.
-        private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
 
         // Override detection: blips shorter than this are treated as the same ride session.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L

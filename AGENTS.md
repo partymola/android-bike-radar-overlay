@@ -61,12 +61,14 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
   camera/light); the one-shot battery reads live in `BatteryReader`. What
   remains in the service is the coordinator hub - the BLE-scan dispatch
   (`scheduleRead` routes a sighting to the radar link / camera link / battery
-  read), the foreground-service lifecycle, and the walk-away state machine.
-  Behaviour is split across single-responsibility coordinators injected at
-  `onCreate` (overlay pipeline, radar link, camera-light link, battery reader,
-  HA publishing, notifications, capture log, known-device cache - see Key
-  files). The service stays the sole owner of `scope`, the warm `AlertBeeper`,
-  and `_radarLinkState`; the radar controller reaches the link state through a
+  read) and the foreground-service lifecycle. Behaviour is split across
+  single-responsibility coordinators injected at `onCreate` (overlay pipeline,
+  radar link, camera-light link, radar-link/walk-away state machine, battery
+  reader, HA publishing, notifications, capture log, known-device cache - see
+  Key files). The service stays the sole owner of `scope` and the warm
+  `AlertBeeper`; `RadarLinkCoordinator` owns the radar-link/walk-away state
+  (`_radarLinkState`) and the transitions that drive the dismount alarm + the
+  dropped-radar cue. The radar controller reaches the state through a
   `RadarLinkStateGateway`, and the camera controller reads the radar off-time
   through an injected lambda for its shared backoff cap.
 - The app connects to two BLE device classes: the rear radar and the front
@@ -101,8 +103,9 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 | Path | Role |
 |------|------|
-| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + battery reads + walk-away state machine; coordinators injected at onCreate |
-| `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches `_radarLinkState` via `RadarLinkStateGateway`) |
+| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + sighting dispatch + battery reads; coordinators injected at onCreate |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkCoordinator.kt` | Owns `_radarLinkState` + the walk-away/radar-drop transitions (markConnected/markDisconnected/tick/evaluate*); the `RadarLinkStateGateway` impl |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches the link state via `RadarLinkStateGateway`) |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
 | `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |

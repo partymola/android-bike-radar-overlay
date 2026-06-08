@@ -32,10 +32,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
@@ -76,31 +72,20 @@ class BikeRadarService : Service() {
     // mutable fields and samples them from a separate 2 s tick coroutine so
     // the alarm can evaluate while the radar is disconnected and no
     // RadarState is flowing.
-    // The radar-link / walk-away cluster lives in a single MutableStateFlow
-    // so multi-field transitions in markRadarConnected / markRadarDisconnected
-    // /tickWalkAwayState are observed atomically by readers. See
-    // [RadarLinkState] for per-field semantics and the ARMED/BLANK/IDLE walk-
-    // away state machine. The snooze-job AtomicReference (below) is NOT in
-    // the cluster: it's a cancellable side effect, and `update { }` may run
-    // its lambda multiple times under contention.
-    private val _radarLinkState = MutableStateFlow(RadarLinkState())
+    // The radar-link / walk-away cluster + its transition logic live in
+    // [RadarLinkCoordinator], built in onCreate. It owns the single
+    // MutableStateFlow so multi-field transitions are atomic against readers,
+    // drives the walk-away alarm + radar-drop cue, and is the
+    // [RadarLinkStateGateway] the radar GATT loop reports connect/disconnect to.
+    // The snooze-job AtomicReference (below) stays service-owned: it's a
+    // cancellable side effect, not state.
+    private lateinit var radarLinkCoordinator: RadarLinkCoordinator
 
-    /** Read-only view of the radar-link / walk-away cluster. Currently has no
-     *  external consumers; exposed so the planned overlay-pipeline extraction
-     *  (audit H2) and future tests can observe transitions without reaching
-     *  into private service fields. */
-    val radarLinkState: StateFlow<RadarLinkState> = _radarLinkState
-
-    // Convenience read-only accessors so the existing inline read sites do
-    // not need to spell out `_radarLinkState.value.xxx` everywhere. Writes go
-    // through `_radarLinkState.update { }` in the transition methods only.
-    private val radarGattActive get() = _radarLinkState.value.radarGattActive
-    private val radarOffSinceMs get() = _radarLinkState.value.radarOffSinceMs
-    private val radarConnectStartMs get() = _radarLinkState.value.radarConnectStartMs
-    private val sessionRadarConnectedMs get() = _radarLinkState.value.sessionRadarConnectedMs
-    private val walkAwayArmed get() = _radarLinkState.value.walkAwayArmed
-    private val walkAwayDismissed get() = _radarLinkState.value.walkAwayDismissed
-    private val lastWalkAwayFireMs get() = _radarLinkState.value.lastWalkAwayFireMs
+    // Thin read accessors for the two remaining service-side read sites
+    // (scheduleRead light-flip guard, walk-away tick cadence). All other reads
+    // moved into the coordinator with the transitions.
+    private val radarGattActive get() = radarLinkCoordinator.snapshot().radarGattActive
+    private val radarOffSinceMs get() = radarLinkCoordinator.snapshot().radarOffSinceMs
 
     // ── Bosch eBike live-data snapshot ───────────────────────────────
     // Last-known eBike snapshot from the status reader, or null when the
@@ -115,17 +100,6 @@ class BikeRadarService : Service() {
     // means the eBike link itself has dropped (rider walked away), so
     // "unlocked" can no longer be believed.
     @Volatile private var lastEBikeSnapshotMs: Long = 0L
-
-    // Radar-drop cue latch (RadarDropDecider). Set to the last cue time;
-    // reset to null on radar reconnect. See [RadarDropDecider] for the
-    // full rationale.
-    @Volatile private var radarDropLastCueMs: Long? = null
-
-    // Diagnostics latch: true once a radar-drop "near miss" (radar down past
-    // threshold but the cue held because riding wasn't confirmed) has been
-    // logged this down-episode. Reset on radar reconnect so each episode logs
-    // at most one suppression line - enough to tune the gate, no per-tick spam.
-    @Volatile private var radarDropSuppressLogged = false
 
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
@@ -160,18 +134,18 @@ class BikeRadarService : Service() {
 
     @Volatile private var climbing: Boolean = false
 
-    // sessionRadarConnectedMs, radarConnectStartMs, walkAwayArmed,
-    // walkAwayDismissed, lastWalkAwayFireMs are part of [_radarLinkState]
-    // above. The walk-away ARMED/BLANK/IDLE state machine - re-arm only via
-    // a fresh radar power-on, not via an inter-ride dashcam advert - is the
-    // canonical model pinned by WalkAwayDeciderTest; see [WalkAwayDecider]
+    // The radar-link / walk-away cluster (radarOffSinceMs, sessionRadarConnectedMs,
+    // walkAwayArmed, walkAwayDismissed, lastWalkAwayFireMs ...) and its
+    // ARMED/BLANK/IDLE state machine live in [RadarLinkCoordinator] - re-arm
+    // only via a fresh radar power-on, not via an inter-ride dashcam advert,
+    // the canonical model pinned by WalkAwayDeciderTest; see [WalkAwayDecider]
     // class KDoc for the full rationale.
 
-    /** Single-slot job that clears [walkAwayDismissed] after a snooze
+    /** Single-slot job that clears the walk-away dismissal after a snooze
      *  window expires, re-arming the decider. AtomicReference makes
      *  the cancel-then-replace pattern atomic across the main thread
      *  (notification action handlers) and GATT callback / IO threads
-     *  (lifecycle transitions in [markRadarConnected]). */
+     *  (the coordinator's markConnected). */
     private val walkAwaySnoozeJob = AtomicReference<Job?>(null)
 
     // Overlay window + view ownership lives in AndroidOverlayHost; the
@@ -290,6 +264,27 @@ class BikeRadarService : Service() {
             slug = { name -> slug(name) },
         )
         walkAwayAlarm = WalkAwayAlarm(this, scope)
+        radarLinkCoordinator = RadarLinkCoordinator(
+            clock = { System.currentTimeMillis() },
+            prefs = prefs,
+            postWalkAwayNotification = notifications::postWalkAway,
+            cancelWalkAwayNotification = notifications::cancelWalkAway,
+            startWalkAwayAlarm = walkAwayAlarm::start,
+            stopWalkAwayAlarm = walkAwayAlarm::stop,
+            alertBeeper = { alertBeeper },
+            clog = ::clog,
+            setReconnectBanner = ::setReconnectBanner,
+            resolveDashcamSlug = ::resolveDashcamSlug,
+            eBikeSnapshot = { lastEBikeSnapshot },
+            eBikeSnapshotAtMs = { lastEBikeSnapshotMs },
+            cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
+            clearDashcamBackoff = {
+                prefs.dashcamMac?.let {
+                    dashcamProbeFailures.remove(it)
+                    lastDashcamProbeMs.remove(it)
+                }
+            },
+        )
         radarLink = RadarLinkController(
             context = this,
             scope = scope,
@@ -298,11 +293,7 @@ class BikeRadarService : Service() {
             overlayPipeline = overlayPipeline,
             haPublisher = haPublisher,
             notifications = notifications,
-            linkState = object : RadarLinkStateGateway {
-                override fun markConnected() = markRadarConnected()
-                override fun markDisconnected() = markRadarDisconnected()
-                override fun snapshot(): RadarLinkState = _radarLinkState.value
-            },
+            linkState = radarLinkCoordinator,
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
         )
@@ -315,7 +306,7 @@ class BikeRadarService : Service() {
             notifications = notifications,
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
-            radarOffSinceMs = { _radarLinkState.value.radarOffSinceMs },
+            radarOffSinceMs = { radarLinkCoordinator.snapshot().radarOffSinceMs },
         )
         batteryReader = BatteryReader(
             context = this,
@@ -458,7 +449,7 @@ class BikeRadarService : Service() {
             }
             ACTION_WALKAWAY_DISMISS -> {
                 Log.i(TAG, "walk-away dismissed")
-                _radarLinkState.update { it.copy(walkAwayDismissed = true) }
+                radarLinkCoordinator.markWalkAwayDismissed()
                 walkAwaySnoozeJob.getAndSet(null)?.cancel()
                 notifications.cancelWalkAway()
                 walkAwayAlarm.stop()
@@ -480,7 +471,7 @@ class BikeRadarService : Service() {
             }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
-                _radarLinkState.update { it.copy(walkAwayDismissed = true) }
+                radarLinkCoordinator.markWalkAwayDismissed()
                 notifications.cancelWalkAway()
                 walkAwayAlarm.stop()
                 val newJob = scope.launch {
@@ -489,9 +480,7 @@ class BikeRadarService : Service() {
                     // cleanly: treat the snooze as a full re-arm for this
                     // episode rather than "it's been 2 minutes, fire
                     // again immediately".
-                    _radarLinkState.update {
-                        it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null)
-                    }
+                    radarLinkCoordinator.clearWalkAwayDismissalForReArm()
                 }
                 walkAwaySnoozeJob.getAndSet(newJob)?.cancel()
             }
@@ -741,7 +730,7 @@ class BikeRadarService : Service() {
             while (true) {
                 val mac = prefs.dashcamMac
                 val name = prefs.dashcamDisplayName
-                val link = _radarLinkState.value
+                val link = radarLinkCoordinator.snapshot()
                 val gateOpen = IdleGate.shouldRefreshDashcam(
                     radarGattActive = link.radarGattActive,
                     radarOffSinceMs = link.radarOffSinceMs,
@@ -794,292 +783,10 @@ class BikeRadarService : Service() {
                 val now = System.currentTimeMillis()
                 val elapsed = now - prevTickMs
                 prevTickMs = now
-                tickWalkAwayState(now, elapsed)
-                evaluateWalkAway(now)
-                evaluateRadarDrop(now)
+                radarLinkCoordinator.tickWalkAwayState(now, elapsed)
+                radarLinkCoordinator.evaluateWalkAway(now)
+                radarLinkCoordinator.evaluateRadarDrop(now)
             }
-        }
-    }
-
-    /** Off-instant is stamped at the actual disconnect callback so it
-     *  isn't tied to tick cadence (the idle tick is 30 s; that would
-     *  drift the walk-away threshold by up to 30 s). Clean-reconnect
-     *  cleanup likewise fires at the connection-success site, not
-     *  lazily on the next tick.
-     *
-     *  Side effects (notification cancel, snooze-job cancel, clog) sit
-     *  OUTSIDE the [update] lambda - the lambda may run multiple times
-     *  on a CAS retry, but these effects must fire exactly once per
-     *  observed transition. The snapshot read of the prior state is the
-     *  arbiter for whether to fire the effects. */
-    private fun markRadarConnected() {
-        val nowMs = System.currentTimeMillis()
-        val prev = _radarLinkState.value
-        _radarLinkState.update { current ->
-            if (current.radarOffSinceMs != null) {
-                // Any → IDLE: radar is back, leave-behind tracking off.
-                // Re-arming requires the next radar disconnect.
-                current.copy(
-                    radarOffSinceMs = null,
-                    walkAwayArmed = false,
-                    walkAwayDismissed = false,
-                    lastWalkAwayFireMs = null,
-                    radarConnectStartMs = nowMs,
-                    radarGattActive = true,
-                )
-            } else {
-                current.copy(
-                    radarConnectStartMs = nowMs,
-                    radarGattActive = true,
-                )
-            }
-        }
-        // New radar presence episode: clear dashcam-probe backoff so the camera
-        // is re-probed promptly this ride (the storm guard resets per ride).
-        prefs.dashcamMac?.let {
-            dashcamProbeFailures.remove(it)
-            lastDashcamProbeMs.remove(it)
-        }
-        if (prev.radarOffSinceMs != null) {
-            val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
-            walkAwaySnoozeJob.getAndSet(null)?.cancel()
-            notifications.cancelWalkAway()
-            clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
-        }
-        // Radar is back: hide the reconnecting banner now rather than waiting
-        // for the next (up to 30s idle) tick of evaluateRadarDrop.
-        setReconnectBanner(false)
-    }
-
-    private fun markRadarDisconnected() {
-        val nowMs = System.currentTimeMillis()
-        val prev = _radarLinkState.value
-        // Computed once from prev and reused across any CAS retries below.
-        // walkAwayArmed is monotonic within an off-episode (only cleared by
-        // markRadarConnected / tickWalkAwayState BLANK), so re-evaluating
-        // it per retry wouldn't change the post-state semantically.
-        val armOnDisconnect = prev.radarOffSinceMs == null &&
-            WalkAwayArmingGate.shouldArm(
-                lastEBikeSnapshot,
-                snapshotAgeMs = nowMs - lastEBikeSnapshotMs,
-                freshMs = WALKAWAY_EBIKE_FRESH_MS,
-            )
-        _radarLinkState.update { current ->
-            val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
-            current.copy(
-                radarGattActive = false,
-                radarConnectStartMs = null,
-                sessionRadarConnectedMs = current.sessionRadarConnectedMs + addedMs,
-                // Off-instant is stamped on the FIRST disconnect; a stutter
-                // mid-off-episode must not refresh it.
-                radarOffSinceMs = current.radarOffSinceMs ?: nowMs,
-                // Consult the eBike snapshot before arming. When the bike
-                // reports system_locked=false the rider is on the bike
-                // (mid-ride radar BLE blip); arming would misfire. Any other
-                // case (locked, null systemLocked, null snapshot, eBike flag
-                // off) falls through to the existing IDLE → ARMED path.
-                walkAwayArmed = current.walkAwayArmed || armOnDisconnect,
-            )
-        }
-        if (prev.radarOffSinceMs == null) {
-            // ebike_locked + ebike_age_ms make the arming decision tunable: a
-            // BLANK is always a fresh unlocked reading; an ARMED is one of
-            // locked / stale-unlocked / no-eBike, told apart by these two.
-            val ebikeAgeMs = nowMs - lastEBikeSnapshotMs
-            if (armOnDisconnect) {
-                clog(
-                    "# walkaway state=ARMED transition_reason=radar-disconnected " +
-                        "ebike_locked=${lastEBikeSnapshot?.systemLocked} ebike_age_ms=$ebikeAgeMs",
-                )
-            } else {
-                clog(
-                    "# walkaway state=BLANK transition_reason=radar-disconnected-but-ebike-unlocked " +
-                        "ebike_age_ms=$ebikeAgeMs",
-                )
-            }
-        }
-    }
-
-    private fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
-        // sessionRadarConnectedMs is integrated on connect→disconnect
-        // transitions in [markRadarDisconnected], not per-tick. The idle
-        // tick is 30 s; a connection that ends within that window would
-        // never have its duration counted under the old per-tick scheme.
-
-        // ARMED → BLANK transition: while the radar is still off, watch
-        // for the dashcam going stale. The "stale window" is anchored at
-        // the LATER of (radarOffSinceMs, dashcamLastAdvertMs):
-        //   - if the dashcam has adverted since radar-off, the window
-        //     starts at the most recent advert (rider walked away from
-        //     a continuously-fresh dashcam, then dashcam dropped out);
-        //   - if the dashcam was already silent at radar-off, the window
-        //     starts at the disconnect itself (rider stopped with the
-        //     camera already off — never was a leave-behind risk).
-        // Once the window exceeds dashcamFreshMs we declare BLANK; the
-        // alarm is permanently disarmed for this off-episode regardless
-        // of whether the dashcam comes back later.
-        //
-        // Once disarmed, the rider has packed up the bike for now;
-        // re-arming requires the next ride (radar power-on then off).
-        val snapshot = _radarLinkState.value
-        val offAt = snapshot.radarOffSinceMs
-        if (offAt != null && snapshot.walkAwayArmed) {
-            val slug = resolveDashcamSlug()
-            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
-            val anchorMs = maxOf(offAt, lastAdvert)
-            val freshMs = WalkAwayDecider.Config(
-                enabled = false,
-                thresholdMs = 0,
-            ).dashcamFreshMs
-            if (nowMs - anchorMs > freshMs) {
-                // Conditional disarm: if a concurrent markRadarConnected
-                // arrived between the snapshot above and this update, the
-                // off-episode that motivated BLANK is already over and
-                // walkAwayArmed has been cleared / a fresh episode may have
-                // begun with a new offAt. Only disarm when the cluster is
-                // still on the same off-episode we observed.
-                _radarLinkState.update { current ->
-                    if (current.walkAwayArmed && current.radarOffSinceMs == offAt) {
-                        current.copy(walkAwayArmed = false)
-                    } else {
-                        current
-                    }
-                }
-                clog(
-                    "# walkaway state=BLANK transition_reason=dashcam-stale " +
-                        "window_ms=${nowMs - anchorMs} fresh_ms=$freshMs",
-                )
-            }
-        }
-    }
-
-    private fun evaluateWalkAway(nowMs: Long) {
-        val slug = resolveDashcamSlug()
-        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
-        val link = _radarLinkState.value
-        val input = WalkAwayDecider.Input(
-            nowMs = nowMs,
-            config = WalkAwayDecider.Config(
-                // Gate on both the dedicated toggle AND the dashcam-warn
-                // master switch. If the rider explicitly said "don't
-                // warn me about the dashcam at all" we respect that.
-                enabled = prefs.walkAwayAlarmEnabled &&
-                    prefs.dashcamWarnWhenOff &&
-                    slug != null,
-                thresholdMs = prefs.walkAwayAlarmThresholdSec * 1000L,
-            ),
-            // Snapshot the cluster once so the decider sees a coherent set
-            // of fields rather than a sequence of independent volatile reads.
-            radarConnected = link.radarGattActive,
-            radarOffSinceMs = link.radarOffSinceMs,
-            dashcamLastAdvertMs = dashcamLastAdvertMs,
-            armed = link.walkAwayArmed,
-            sessionTotalRadarConnectedMs = link.sessionRadarConnectedMs,
-            lastFireMs = link.lastWalkAwayFireMs,
-            dismissedForEpisode = link.walkAwayDismissed,
-        )
-        when (WalkAwayDecider.decide(input)) {
-            WalkAwayDecider.Action.FIRE -> {
-                notifications.postWalkAway()
-                walkAwayAlarm.start()
-                _radarLinkState.update { it.copy(lastWalkAwayFireMs = nowMs) }
-            }
-            WalkAwayDecider.Action.AUTO_DISMISS -> {
-                notifications.cancelWalkAway()
-                walkAwayAlarm.stop()
-                _radarLinkState.update { it.copy(lastWalkAwayFireMs = null) }
-            }
-            WalkAwayDecider.Action.NONE -> {}
-        }
-    }
-
-    /**
-     * Radar-drop audio cue: a dropped radar link looks identical to a clear
-     * road on the overlay, and the rider's eyes are on the road, so the
-     * warning must be audible. Fires when the radar has been down for
-     * [RADAR_DROP_THRESHOLD_MS] while eBike confirms the rider is still on the
-     * bike, then repeats every [RADAR_DROP_CUE_INTERVAL_MS] until reconnect.
-     *
-     * eBike-gated on purpose: a fresh `system_locked == false` is the only
-     * signal that separates a mid-ride radar loss (cue) from a ride-end
-     * dismount (no cue). That makes this mutually exclusive with the walk-away
-     * alarm, which arms only when NOT unlocked. Without an eBike signal there is
-     * no cue - a radar-only / no-eBike rider never gets a false ride-end fire.
-     * Full design rationale + scenario matrix in [RadarDropDecider]'s KDoc.
-     */
-    private fun evaluateRadarDrop(nowMs: Long) {
-        val link = _radarLinkState.value
-        val downForMs = link.radarOffSinceMs?.let { nowMs - it }
-        // Visual "reconnecting" banner: shown whenever the rear link is down
-        // past the visual threshold. NOT eBike-gated (unlike the audio cue
-        // below) - it is a glanceable status and the only dead-radar signal a
-        // radar-only rider gets. Hidden while paused; the eager hide on
-        // reconnect lives in markRadarConnected so it doesn't wait for the
-        // (up to 30s) idle tick.
-        val visual = RadarLinkVisualDecider.decide(
-            radarEverLive = link.sessionRadarConnectedMs > 0L,
-            radarDownForMs = downForMs,
-            visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
-            paused = prefs.isPaused,
-        )
-        // Must run before the isPaused early-return below so a pause HIDES an
-        // already-shown banner (decide() returns LIVE when paused).
-        setReconnectBanner(visual == RadarLinkVisualDecider.LinkVisual.RECONNECTING)
-        if (prefs.isPaused) return
-        val snap = lastEBikeSnapshot
-        val ebikeAgeMs = nowMs - lastEBikeSnapshotMs
-        val ridingConfirmed = RadarDropDecider.ridingConfirmed(
-            systemLocked = snap?.systemLocked,
-            snapshotAgeMs = ebikeAgeMs,
-            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
-        )
-        val decision = RadarDropDecider.decide(
-            radarEverLive = link.sessionRadarConnectedMs > 0L,
-            radarDownForMs = downForMs,
-            ridingConfirmed = ridingConfirmed,
-            nowMs = nowMs,
-            thresholdMs = RADAR_DROP_THRESHOLD_MS,
-            cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
-            lastCueMs = radarDropLastCueMs,
-        )
-        // The latch resets lazily here on the next tick that sees the radar
-        // back up (downForMs == null), NOT eagerly in markRadarConnected like
-        // the walk-away state. Safe because a fresh drop re-stamps
-        // radarOffSinceMs and restarts below the threshold.
-        radarDropLastCueMs = decision.lastCueMs
-        if (decision.fire) {
-            alertBeeper?.playRadarDropped()
-            clog(
-                "# radar_drop_cue down_ms=${downForMs ?: -1L} " +
-                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs",
-            )
-        }
-        // Near-miss diagnostics: an eBike IS present but the radar-down cue is
-        // held because riding isn't confirmed (the snapshot went stale, or the
-        // bike is locked). Log once per down-episode so the freshness gate is
-        // tunable from ride logs; reset the latch when the radar returns. Gated
-        // on a non-null snapshot so a radar-only rider - whose cue is suppressed
-        // by design, with nothing to tune - never logs it.
-        val suppressed = link.sessionRadarConnectedMs > 0L &&
-            snap != null &&
-            downForMs != null &&
-            downForMs >= RADAR_DROP_THRESHOLD_MS &&
-            !ridingConfirmed
-        if (suppressed && !radarDropSuppressLogged) {
-            radarDropSuppressLogged = true
-            clog(
-                "# radar_drop_suppressed down_ms=$downForMs reason=riding-not-confirmed " +
-                    "system_locked=${snap.systemLocked} ebike_age_ms=$ebikeAgeMs",
-            )
-        }
-        if (downForMs == null) radarDropSuppressLogged = false
-        // Reconnect acknowledgement: fires once on the tick the radar comes
-        // back up, but only when a drop cue had been raised this down-episode
-        // (decided in [RadarDropDecider]). Closes the ambiguity a bare silence
-        // leaves after a drop cue - "back" vs "still dead".
-        if (decision.fireReconnect) {
-            alertBeeper?.playRadarReconnected()
-            clog("# radar_reconnect_cue")
         }
     }
 
@@ -1224,33 +931,6 @@ class BikeRadarService : Service() {
          *  design: a critical battery the rider cannot fix mid-ride must not
          *  nag. */
         const val CRITICAL_BATTERY_CUE_INTERVAL_MS = 120_000L
-
-        /** Radar-drop cue: continuous radar-off time before the first cue.
-         *  Deliberately generous so the normal end-of-ride wind-down (radar
-         *  off around when the dashcam goes off) never trips it. */
-        const val RADAR_DROP_THRESHOLD_MS = 60_000L
-
-        /** Visual "reconnecting" banner: continuous radar-off time before the
-         *  overlay marks the rear blind. Far shorter than the audio cue's 60s
-         *  because a glanceable status banner is cheap (not an interruptive
-         *  nag) and is the ONLY dead-radar signal a radar-only rider gets. 10s
-         *  rides through normal reconnects (corpus median 8.4s, floor 5.3s) and
-         *  marks the screen only once a drop is likely real. Not eBike-gated. */
-        const val RADAR_DROP_VISUAL_THRESHOLD_MS = 10_000L
-
-        /** Radar-drop cue re-fire gap while the radar stays down. */
-        const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L
-
-        /** Max age of the eBike snapshot for its `system_locked` to be trusted
-         *  by the radar-drop cue. Older than this means the eBike link has
-         *  itself dropped (rider left), so "unlocked" can't be believed. */
-        const val RADAR_DROP_EBIKE_FRESH_MS = 30_000L
-
-        /** Same trust window for the walk-away arming gate: a `system_locked =
-         *  false` older than this is a stale reading from before the eBike link
-         *  dropped and must NOT suppress arming. Separate from the radar-drop
-         *  constant so the two gates can be tuned independently. */
-        const val WALKAWAY_EBIKE_FRESH_MS = 30_000L
 
         /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
          *  long enough that a sub-30-min commute gets exactly one heads-up

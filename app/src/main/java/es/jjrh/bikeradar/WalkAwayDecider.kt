@@ -33,11 +33,11 @@ package es.jjrh.bikeradar
  *                    the next disconnect, NOT on advert returns within
  *                    the same off-episode).
  *
- * The state machine is OWNED BY THE CALLER (`BikeRadarService`); this
+ * The state machine is OWNED BY THE CALLER (`RadarLinkCoordinator`); this
  * decider just receives `armed` as a single boolean each tick and uses
  * it as the master gate. That keeps the state-management logic
  * (timestamp tracking, advert observation) co-located with the live
- * BLE state in the service, while the FIRE/AUTO_DISMISS decision rules
+ * BLE state in the coordinator, while the FIRE/AUTO_DISMISS decision rules
  * stay JVM-pure for testability.
  *
  * The decider is stateless; the caller owns all mutable fields and
@@ -116,11 +116,11 @@ object WalkAwayDecider {
          *           again.
          *
          *  Caller transitions:
-         *    IDLE  -> ARMED : on radar disconnect (`markRadarDisconnected`).
+         *    IDLE  -> ARMED : on radar disconnect (`markDisconnected`).
          *    ARMED -> BLANK : when dashcam stale-since-or-before-radar-off
          *                     exceeds freshness window during the tick
-         *                     (see `BikeRadarService.tickWalkAwayState`).
-         *    ARMED -> IDLE  : on radar reconnect (`markRadarConnected`).
+         *                     (see `RadarLinkCoordinator.tickWalkAwayState`).
+         *    ARMED -> IDLE  : on radar reconnect (`markConnected`).
          *    BLANK -> IDLE  : on radar reconnect.
          *
          *  Critically: `armed` does NOT re-flip to true mid-off-
@@ -174,7 +174,7 @@ object WalkAwayDecider {
         // ── State-machine master gate ─────────────────────────────────
         // FIRE is only legal in the ARMED state. The state-machine
         // logic (IDLE -> ARMED -> BLANK -> IDLE) lives in
-        // BikeRadarService; this decider treats `armed` as the master
+        // RadarLinkCoordinator; this decider treats `armed` as the master
         // gate. The BLANK state (armed=false mid-off-episode) blocks
         // a spurious alarm when the rider turns the camera back on
         // between rides without first powering the radar on. Re-arm

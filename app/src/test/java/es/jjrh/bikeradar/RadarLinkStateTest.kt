@@ -7,16 +7,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Atomicity / coherency contract for [RadarLinkState]. The data class itself
- * is plain Kotlin; the contract under test is that wrapping it in a
- * [MutableStateFlow] gives us multi-field transitions that readers cannot
- * tear (the seven-`@Volatile`-field cluster could).
+ * Atomicity / coherency contract for the [RadarLinkState] data class wrapped in
+ * a [MutableStateFlow] - the mechanism [RadarLinkCoordinator] relies on for
+ * tear-free multi-field transitions. The transitions themselves (markConnected
+ * / markDisconnected / tickWalkAwayState / evaluate*) are exercised against the
+ * real coordinator in [RadarLinkCoordinatorTest]; this file only pins the
+ * wrapper's guarantees (defaults, CAS convergence, snapshot immutability).
  */
 class RadarLinkStateTest {
 
@@ -30,80 +31,6 @@ class RadarLinkStateTest {
         assertEquals(false, s.walkAwayArmed)
         assertEquals(false, s.walkAwayDismissed)
         assertNull(s.lastWalkAwayFireMs)
-    }
-
-    @Test
-    fun connectThenDisconnectIntegratesSessionTime() {
-        // Mirrors the markRadarConnected / markRadarDisconnected pair on the
-        // service. radarConnectStartMs is the integration anchor; on the next
-        // disconnect, sessionRadarConnectedMs accumulates the elapsed delta
-        // and the anchor is cleared.
-        val flow = MutableStateFlow(RadarLinkState())
-        flow.update { it.copy(radarConnectStartMs = 1_000L, radarGattActive = true) }
-        flow.update { current ->
-            val added = current.radarConnectStartMs?.let { 4_000L - it } ?: 0L
-            current.copy(
-                radarGattActive = false,
-                radarConnectStartMs = null,
-                sessionRadarConnectedMs = current.sessionRadarConnectedMs + added,
-                radarOffSinceMs = current.radarOffSinceMs ?: 4_000L,
-            )
-        }
-        val s = flow.value
-        assertEquals(false, s.radarGattActive)
-        assertNull(s.radarConnectStartMs)
-        assertEquals(3_000L, s.sessionRadarConnectedMs)
-        assertEquals(4_000L, s.radarOffSinceMs)
-    }
-
-    @Test
-    fun midEpisodeDisconnectStutterDoesNotRefreshOffInstant() {
-        // The walk-away threshold is measured from the FIRST disconnect of
-        // the off-episode. A radar stutter mid-episode must not slide the
-        // off-instant forward; otherwise the alarm would keep getting
-        // pushed back.
-        val flow = MutableStateFlow(RadarLinkState(radarOffSinceMs = 1_000L, walkAwayArmed = true))
-        flow.update { current ->
-            current.copy(radarOffSinceMs = current.radarOffSinceMs ?: 99_999L)
-        }
-        assertEquals(1_000L, flow.value.radarOffSinceMs)
-    }
-
-    @Test
-    fun reconnectClearsWalkAwayFieldsTogether() {
-        // The any -> IDLE transition resets the walk-away machine. Readers
-        // must never see a half-cleared cluster (radarOffSinceMs cleared but
-        // walkAwayArmed still true would mis-fire the decider).
-        val flow = MutableStateFlow(
-            RadarLinkState(
-                radarOffSinceMs = 1_000L,
-                walkAwayArmed = true,
-                walkAwayDismissed = true,
-                lastWalkAwayFireMs = 2_500L,
-                radarGattActive = false,
-            ),
-        )
-        flow.update { current ->
-            if (current.radarOffSinceMs != null) {
-                current.copy(
-                    radarOffSinceMs = null,
-                    walkAwayArmed = false,
-                    walkAwayDismissed = false,
-                    lastWalkAwayFireMs = null,
-                    radarConnectStartMs = 5_000L,
-                    radarGattActive = true,
-                )
-            } else {
-                current.copy(radarConnectStartMs = 5_000L, radarGattActive = true)
-            }
-        }
-        val s = flow.value
-        assertNull(s.radarOffSinceMs)
-        assertEquals(false, s.walkAwayArmed)
-        assertEquals(false, s.walkAwayDismissed)
-        assertNull(s.lastWalkAwayFireMs)
-        assertNotNull(s.radarConnectStartMs)
-        assertEquals(true, s.radarGattActive)
     }
 
     @Test

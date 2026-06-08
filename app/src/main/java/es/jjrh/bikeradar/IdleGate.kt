@@ -11,7 +11,7 @@ package es.jjrh.bikeradar
 internal object IdleGate {
     /**
      * Window opens when the radar disconnects (`radarOffSinceMs` set
-     * by `markRadarDisconnected`). Long enough to cover the walk-away
+     * by `RadarLinkCoordinator.markDisconnected`). Long enough to cover the walk-away
      * alarm's full lifetime: threshold (max 120 s per the Settings
      * slider) + auto-dismiss-after-fire (10 min default in
      * `WalkAwayDecider.Config`) + margin. The constants sanity test

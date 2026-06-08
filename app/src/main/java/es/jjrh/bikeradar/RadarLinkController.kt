@@ -26,11 +26,11 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * The boundary back to the service-owned [RadarLinkState]. The service stays the
- * sole writer of `_radarLinkState` (per AGENTS.md); the controller signals
- * connect/disconnect through this gateway and reads a snapshot for the two
- * fields its connection loop needs (radarGattActive for the light-flip guard,
- * radarOffSinceMs for the reconnect-backoff cap).
+ * The boundary to the [RadarLinkState] owned by [RadarLinkCoordinator] (the sole
+ * writer of the state flow). The controller signals connect/disconnect through
+ * this gateway and reads a snapshot for the two fields its connection loop needs
+ * (radarGattActive for the light-flip guard, radarOffSinceMs for the
+ * reconnect-backoff cap).
  */
 internal interface RadarLinkStateGateway {
     fun markConnected()
@@ -50,10 +50,10 @@ internal interface RadarLinkStateGateway {
  * NOT to be confused with [RadarLightController], which only issues tail-light
  * mode-set writes over the link this class owns.
  *
- * The service keeps ownership of `scope`, the warm `AlertBeeper`, and
- * `_radarLinkState`; all three are reached here only through injected
- * collaborators (scope passed in, the alert path lives in [OverlayPipeline], the
- * link state via [RadarLinkStateGateway]).
+ * The service keeps ownership of `scope` and the warm `AlertBeeper`, and
+ * [RadarLinkCoordinator] owns the link state; all are reached here only through
+ * injected collaborators (scope passed in, the alert path lives in
+ * [OverlayPipeline], the link state via [RadarLinkStateGateway]).
  */
 @SuppressLint("MissingPermission")
 internal class RadarLinkController(

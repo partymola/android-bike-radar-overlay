@@ -2,7 +2,7 @@
 package es.jjrh.bikeradar
 
 /**
- * Pure-function gate consulted by [BikeRadarService.markRadarDisconnected]
+ * Pure-function gate consulted by [RadarLinkCoordinator.markDisconnected]
  * before transitioning to ARMED. The walk-away decider itself stays
  * stateless and unchanged; this gate is the caller-owned arming bit's
  * single point of eBike-aware decision.
@@ -36,7 +36,7 @@ package es.jjrh.bikeradar
 object WalkAwayArmingGate {
 
     /**
-     * Returns true when [BikeRadarService.markRadarDisconnected] should
+     * Returns true when [RadarLinkCoordinator.markDisconnected] should
      * proceed with the existing IDLE → ARMED transition; false to
      * suppress arming for this disconnect. Suppress only when the eBike
      * snapshot is FRESH ([snapshotAgeMs] < [freshMs]) and reports

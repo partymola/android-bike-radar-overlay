@@ -50,6 +50,8 @@ class SettingsRadarSnapshotTest {
                     onOverlayOpacityFinished = {},
                     adaptive = true,
                     onAdaptiveChange = {},
+                    urgentLowSpeed = true,
+                    onUrgentLowSpeedChange = {},
                     batteryThreshold = 20,
                     onBatteryThresholdChange = {},
                     onBatteryThresholdFinished = {},

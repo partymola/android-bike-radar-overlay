@@ -309,8 +309,9 @@ internal class OverlayPipeline(
             bikeSpeedMs = preferredBikeSpeedMs,
             bikeNotDriving = snap?.bikeNotDriving,
             climbing = climbingNow(),
+            urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
         )
-        if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowMs)
+        if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowMs, preferredBikeSpeedMs)
         beeper.setPanning(
             enabled = overlayPrefs.experimentalLateralPanning,
             invertLR = overlayPrefs.experimentalLateralPanningInvertLR,
@@ -323,13 +324,26 @@ internal class OverlayPipeline(
         }
     }
 
-    private fun logAlertEvent(ev: AlertDecider.Event, state: RadarState, nowMs: Long) {
+    private fun logAlertEvent(
+        ev: AlertDecider.Event,
+        state: RadarState,
+        nowMs: Long,
+        gateBikeSpeedMs: Float?,
+    ) {
         val evStr = when (ev) {
             is AlertDecider.Event.Beep -> "Beep(${ev.count})"
             AlertDecider.Event.Clear -> "Clear"
             is AlertDecider.Event.UrgentApproach -> "UrgentApproach"
             AlertDecider.Event.None -> "None"
         }
+        // urgent_path attributes each urgent fire to the gate that opened it
+        // (low-speed moving extension vs stationary path) so post-ride
+        // threshold tuning can count moving fires directly. gate_speed_mps
+        // is the speed decide() actually gated on (eBike wheel speed when
+        // bonded), which can differ from the radar's bike_speed_mps.
+        val urgentPath = (ev as? AlertDecider.Event.UrgentApproach)?.let {
+            " urgent_path=${if (it.viaMovingPath) "moving" else "stationary"}"
+        } ?: ""
         val alertMax = prefs.alertMaxDistanceM
         val closest = state.vehicles
             .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMax }
@@ -339,7 +353,8 @@ internal class OverlayPipeline(
                 "frame_closest_tid=${closest?.id ?: -1} " +
                 "frame_closest_d=${closest?.distanceM ?: -1} " +
                 "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +
-                "bike_speed_mps=${state.bikeSpeedMs ?: -1f}",
+                "bike_speed_mps=${state.bikeSpeedMs ?: -1f} " +
+                "gate_speed_mps=${gateBikeSpeedMs ?: -1f}$urgentPath",
         )
     }
 

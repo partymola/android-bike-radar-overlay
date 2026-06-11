@@ -801,8 +801,9 @@ class AlertDeciderTest {
     }
 
     @Test fun `moving rider with fast-closing car beeps normally not urgent`() {
-        // Override only applies to stationary riders. A moving rider gets
-        // the normal Beep at the appropriate urgency.
+        // A rider above URGENT_MOVING_MAX_KMH (6 m/s = 21.6 km/h here)
+        // gets the normal Beep at the appropriate urgency; the override
+        // is reserved for stationary and low-speed riders.
         val d = AlertDecider()
         val c = Clock()
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
@@ -863,6 +864,141 @@ class AlertDeciderTest {
         // Rider is back above threshold; no urgent. Ordinary Beep(3)
         // fires per the moving-rider path.
         assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    // ── low-speed urgent extension ──────────────────────────────────────
+
+    @Test fun `slow-moving rider with very fast closer fires UrgentApproach`() {
+        // Rider at 4 m/s (14.4 km/h, inside the moving gate), car at
+        // near-third proximity closing 10.5 m/s (past the 10 m/s moving
+        // floor): the urgent tone fires while still rolling. The
+        // motivating decelerating-into-junction case.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -10.5f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.UrgentApproach(viaMovingPath = true), ev)
+    }
+
+    @Test fun `moving TTC gate fires beyond near-third for a very fast closer`() {
+        // Distance 18 m (outside near-third = 7 m at alertMax 21) but
+        // TTC = 18/10.5 = 1.7 s: the TTC disjunct fires on the moving
+        // path just as it does when stationary.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 18, speedMs = -10.5f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.UrgentApproach(viaMovingPath = true), ev)
+    }
+
+    @Test fun `slow-moving rider below the moving closing floor beeps normally`() {
+        // 9.5 m/s closing (raw -19) is one radar quantum short of the
+        // 10 m/s moving floor: above the stationary 6 m/s bar, but a
+        // moving rider gets the ordinary Beep(3), not urgent. Pins the
+        // quantum-strict moving floor.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -9.5f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `moving closing floor inclusive at exactly 10 m_per_s`() {
+        // Raw -20 = -10.0 m/s sits exactly on the floor and must fire
+        // (>= semantics), mirroring the stationary -6f boundary test.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -10f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.UrgentApproach(viaMovingPath = true), ev)
+    }
+
+    @Test fun `rider above 15 kmh beeps normally even for a very fast closer`() {
+        // 4.25 m/s = 15.3 km/h, one radar speed quantum above the
+        // moving gate: ordinary tiered beep, no urgent. Pins the gate
+        // boundary on the radar's actual 0.25 m/s value grid.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -16f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4.25f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4.25f)
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `low-speed toggle off restores stationary-only urgent behaviour`() {
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -16f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f, urgentLowSpeedEnabled = false)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f, urgentLowSpeedEnabled = false)
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `no speed signal keeps the moving gate closed`() {
+        // bikeSpeedMs == null means no signal at all: neither the
+        // stationary dwell nor the moving gate can open (fail-closed),
+        // so the rider gets the ordinary beep path.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -16f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = null)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = null)
+        assertEquals(AlertDecider.Event.Beep(3), ev)
+    }
+
+    @Test fun `just-stopped rider in the 6-10 closing band waits out the mini-dwell`() {
+        // Handoff seam: a rider who has just dropped below the
+        // stationary threshold is still on the MOVING path (floor 10)
+        // until the 500 ms mini-dwell elapses, so a 6-10 m/s closer
+        // beeps first and goes urgent only once the stationary floor
+        // (6 m/s) takes over. Pins the bounded <= 500 ms delay so a
+        // refactor can't silently widen it.
+        val d = AlertDecider()
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f) // dwell starts
+        val before = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f) // ~100 ms below
+        assertEquals(AlertDecider.Event.Beep(3), before)
+        c.jump(700) // past URGENT_OVERRIDE_DWELL_MS and the beep cooldown
+        val after = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), after)
+    }
+
+    @Test fun `held moving-path urgent repeats every base cooldown`() {
+        // Repeat-while-held holds on the moving path too, and at the
+        // BASE cooldown: 4 m/s sits in the slow band whose ordinary
+        // beeps wait out a doubled 1400 ms gap, but a held imminent
+        // threat must re-fire after the base 700 ms regardless of
+        // rider speed. The re-fire also re-evaluates the moving gate
+        // on the held frame, so a regression requiring a fresh
+        // stationary-to-moving transition would fail here.
+        val d = AlertDecider() // minBeepGapMs = 700
+        val c = Clock()
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -10.5f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        val first = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.UrgentApproach(viaMovingPath = true), first)
+        c.jump(700)
+        val again = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 4f)
+        assertEquals(AlertDecider.Event.UrgentApproach(viaMovingPath = true), again)
+    }
+
+    @Test fun `stationary path keeps the 6 m_per_s floor with extension enabled`() {
+        // A stopped rider's override must not inherit the stricter
+        // moving floor: -6.5 m/s (well short of 10) still fires once
+        // the stationary mini-dwell is satisfied.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -6.5f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
     @Test fun `escalation from slow to fast triggers UrgentApproach`() {
@@ -999,11 +1135,11 @@ class AlertDeciderTest {
     }
 
     @Test fun `ttc gate does not fire when rider is moving`() {
-        // The stationary safety override (in either disjunct) only
-        // engages when the rider has been below stationaryMsThreshold
-        // for the mini-dwell. A moving rider with a TTC-imminent
-        // threat gets the ordinary Beep at the appropriate urgency
-        // tier, not UrgentApproach.
+        // Above the low-speed gate (6 m/s = 21.6 km/h > URGENT_MOVING_
+        // MAX_KMH) the override engages only once the rider has been
+        // below stationaryMsThreshold for the mini-dwell. A rider at
+        // cruising speed with a TTC-imminent threat gets the ordinary
+        // Beep at the appropriate urgency tier, not UrgentApproach.
         val d = AlertDecider()
         val c = Clock()
         val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)

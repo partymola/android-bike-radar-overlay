@@ -343,6 +343,8 @@
     <string name="settings_radar_alert_volume_helper">Volumen de los pitidos de aviso de aproximación. 0 silencia el audio; la barra lateral sigue parpadeando.</string>
     <string name="settings_radar_alert_distance_title">Distancia de alerta</string>
     <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la barra lateral pero sin sonido. Se ajusta a la velocidad de la bici cuando las alertas adaptativas están activadas.</string>
+    <string name="settings_radar_urgent_low_speed_title">Aviso urgente a baja velocidad</string>
+    <string name="settings_radar_urgent_low_speed_subtitle">Hace sonar el aviso urgente cuando un vehículo se te echa encima mientras circulas despacio, no solo cuando te detienes.</string>
     <string name="settings_radar_visual_distance_title">Distancia visual</string>
     <string name="settings_radar_visual_distance_helper">El vehículo más lejano que se dibuja en la barra lateral. Más allá de esto, el tráfico que se aproxima se ignora en pantalla.</string>
     <string name="settings_radar_overlay_dimmer_title">Atenuador de la barra lateral</string>

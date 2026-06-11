@@ -50,6 +50,7 @@ data class PrefsSnapshot(
     val walkAwayAlarmEnabled: Boolean,
     val walkAwayAlarmThresholdSec: Int,
     val adaptiveAlertsEnabled: Boolean,
+    val urgentLowSpeedEnabled: Boolean,
     val precogEnabled: Boolean,
     val experimentalLateralPanning: Boolean,
     val experimentalLateralPanningInvertLR: Boolean,
@@ -264,6 +265,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_ADAPTIVE_ALERTS, true)
         set(v) {
             sp.edit().putBoolean(KEY_ADAPTIVE_ALERTS, v).apply()
+        }
+
+    /** Fire the urgent imminent-impact cue while still riding at low speed
+     *  (<= [es.jjrh.bikeradar.AlertDecider.URGENT_MOVING_MAX_KMH]), not only
+     *  once stopped - the decelerating-into-a-junction case. Moving fires
+     *  demand a stricter closing floor so routine overtakes stay on the
+     *  ordinary tier beeps. Default on; the toggle is the safety valve if
+     *  the extra urgents prove annoying on real rides. */
+    var urgentLowSpeedEnabled: Boolean
+        get() = sp.getBoolean(KEY_URGENT_LOW_SPEED, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_URGENT_LOW_SPEED, v).apply()
         }
 
     /** Experimental. When true, the overlay renders each vehicle at its
@@ -528,6 +541,7 @@ class Prefs(context: Context) {
         walkAwayAlarmEnabled = walkAwayAlarmEnabled,
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
+        urgentLowSpeedEnabled = urgentLowSpeedEnabled,
         precogEnabled = precogEnabled,
         experimentalLateralPanning = experimentalLateralPanning,
         experimentalLateralPanningInvertLR = experimentalLateralPanningInvertLR,
@@ -584,6 +598,7 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
+        appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("precog_enabled=$precogEnabled")
         appendLine("experimental_lateral_panning=$experimentalLateralPanning")
         appendLine("experimental_lateral_panning_invert_lr=$experimentalLateralPanningInvertLR")
@@ -627,6 +642,7 @@ class Prefs(context: Context) {
         const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
+        const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_LATERAL_PANNING = "experimental_lateral_panning"
         const val KEY_LATERAL_PANNING_INVERT = "experimental_lateral_panning_invert_lr"

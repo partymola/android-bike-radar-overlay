@@ -355,6 +355,8 @@
     <string name="settings_radar_alert_volume_helper">Beep volume for approach alerts. 0 silences audio; the overlay still flashes.</string>
     <string name="settings_radar_alert_distance_title">Alert distance</string>
     <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
+    <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
+    <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
     <string name="settings_radar_visual_distance_title">Visual distance</string>
     <string name="settings_radar_visual_distance_helper">Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.</string>
     <string name="settings_radar_overlay_dimmer_title">Overlay dimmer</string>

@@ -79,7 +79,8 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    wall-clock time, Beep events are mapped to None. Clear still
  *    fires. Lets the rider sit at a traffic light without beep/clear
  *    loops from the queue of stopped cars behind them.
- *  - **Stationary safety override.** While stationary-suppressed, an
+ *  - **Imminent-impact safety override.** While stationary-suppressed
+ *    (and, via the low-speed extension below, while moving slowly), an
  *    [Event.UrgentApproach] (distinct audio) fires anyway when any
  *    close vehicle satisfies either:
  *      a) **proximity gate** - at near-third proximity (`distanceM <=
@@ -98,6 +99,20 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    The closing-speed floor on the TTC gate filters slow-queue
  *    traffic merging into a stopped rider, where the driver is
  *    clearly tracking and braking.
+ *  - **Low-speed urgent extension.** When `urgentLowSpeedEnabled`
+ *    (Settings toggle, default on), the same override is also
+ *    evaluated while the rider is MOVING at or below
+ *    [URGENT_MOVING_MAX_KMH], with both disjuncts' closing floor
+ *    raised to [URGENT_MOVING_CLOSING_FLOOR_MS]. The rider-speed gate
+ *    is justified by relative-doppler semantics, not "escape options":
+ *    decoded closing speed is measured relative to the rider, so the
+ *    same floor means a much faster absolute vehicle when the rider is
+ *    slow. At the stationary 6 m/s floor the moving extension also
+ *    caught routine 35-45 km/h overtakes of a slow rider (corpus
+ *    replay over 105 rides: ~1 extra urgent episode per ride);
+ *    the 10 m/s moving floor keeps only the genuinely fast closers
+ *    (~4-5 episodes/week) including the motivating
+ *    decelerating-into-junction case.
  *
  * Threading: instances are not thread-safe; serialise calls (the radar
  * stream is naturally single-producer).
@@ -144,18 +159,27 @@ class AlertDecider(
         data class Beep(val count: Int, val lateralPos: Float = 0f) : Event()
         object Clear : Event()
 
-        /** Stationary-suppress override: rider is stopped AND a close
-         *  vehicle satisfies either the proximity gate (near-third
-         *  distance + closing past [SAFETY_OVERRIDE_CLOSING_MS]) or
-         *  the TTC gate (TTC <= [TTC_GATE_SECONDS] + closing >=
-         *  [TTC_GATE_CLOSING_FLOOR_MS]). Audible regardless of the
-         *  suppress dwell; the audio is intentionally distinct from a
-         *  normal Beep so the rider knows this is the impact-warning
-         *  case. See the class KDoc for the full gate semantics.
+        /** Imminent-impact override: the rider is stopped - or, with the
+         *  low-speed extension on, still moving at or below
+         *  [URGENT_MOVING_MAX_KMH] - AND a close vehicle satisfies
+         *  either the proximity gate (near-third distance + closing
+         *  past [SAFETY_OVERRIDE_CLOSING_MS]) or the TTC gate (TTC <=
+         *  [TTC_GATE_SECONDS] + closing >= [TTC_GATE_CLOSING_FLOOR_MS]);
+         *  moving fires demand [URGENT_MOVING_CLOSING_FLOOR_MS] on both
+         *  gates. Audible regardless of the suppress dwell; the audio
+         *  is intentionally distinct from a normal Beep so the rider
+         *  knows this is the impact-warning case. See the class KDoc
+         *  for the full gate semantics.
          *  `lateralPos` is the triggering vehicle's lateral position
          *  for directional audio (experimental flag); `0f` when not
-         *  available. */
-        data class UrgentApproach(val lateralPos: Float = 0f) : Event()
+         *  available. `viaMovingPath` records which gate opened - the
+         *  low-speed moving extension vs the stationary path - so the
+         *  capture log can attribute each fire for threshold tuning;
+         *  the audio cue is identical either way. */
+        data class UrgentApproach(
+            val lateralPos: Float = 0f,
+            val viaMovingPath: Boolean = false,
+        ) : Event()
         object None : Event()
     }
 
@@ -238,6 +262,7 @@ class AlertDecider(
         bikeSpeedMs: Float? = null,
         bikeNotDriving: Boolean? = null,
         climbing: Boolean = false,
+        urgentLowSpeedEnabled: Boolean = true,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -394,13 +419,17 @@ class AlertDecider(
         val escalation = closestVehicle != null &&
             closestUrgency > prevClosestUrgency &&
             closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
-        // Stationary-impact safety override. While the rider is at or
-        // below the stationary speed threshold and ANY vehicle in the
-        // close set looks imminent, fire UrgentApproach every cooldown.
+        // Imminent-impact safety override. While the rider is at or
+        // below the stationary speed threshold - or, with the low-speed
+        // extension on, still moving at <= URGENT_MOVING_MAX_KMH - and
+        // ANY vehicle in the close set looks imminent, fire
+        // UrgentApproach every cooldown.
         //
         // Two disjunct gates (a vehicle satisfying either fires):
         //   1. Proximity gate (radar-quantum strict): near-third
-        //      distance AND closing faster than SAFETY_OVERRIDE_CLOSING_MS.
+        //      distance AND closing faster than SAFETY_OVERRIDE_CLOSING_MS
+        //      (URGENT_MOVING_CLOSING_FLOOR_MS is the binding floor on
+        //      the moving path).
         //   2. TTC gate: time-to-collision below TTC_GATE_SECONDS,
         //      with a closing-speed floor (TTC_GATE_CLOSING_FLOOR_MS)
         //      that filters slow-queue traffic merging into the rider,
@@ -416,28 +445,47 @@ class AlertDecider(
         // proxy for "rider has committed to a stop". When an imminent
         // threat is present the dwell is the wrong gate: TTC is sub-
         // 2 s, and waiting it out leaves the urgent tone silent
-        // during the entire reaction window (a rider decelerating
-        // into a junction with a closing vehicle is not "rolling stop
-        // mid-turn" — they ARE the case the override exists for).
+        // during the entire reaction window. A rider decelerating into
+        // a junction with a closing vehicle is covered by the moving
+        // path below, which has NO dwell at all: the threat predicate
+        // itself (raised closing floor + proximity/TTC) carries the
+        // discrimination, and a dwell would eat most of the sub-2 s
+        // reaction window the cue exists to protect.
         //
         // No per-tid latch. Industry standards (TCAS, automotive FCW,
         // IEC 60601-1-8 medical, NFPA 72 smoke T3, ISO 7731 industrial)
         // all repeat-while-held for imminent-danger cues. DO NOT add a
-        // per-tid latch.
+        // per-tid latch. Known interaction: because UrgentApproach never
+        // writes firedTierPerTid, a car that de-escalates a full tier
+        // after an urgent volley and then re-approaches can re-Beep
+        // where the stationary-only behaviour stayed latched. Corpus
+        // replay measured 11 such beeps across 105 rides - accepted,
+        // since the re-approach is genuinely new threat information
+        // after an imminent episode.
         // `stableClose` preserves the upstream order from
         // `RadarV2Decoder.snapshot()`, which sorts by `distanceM`
         // ascending. So `firstOrNull` here returns the CLOSEST
         // imminent-impact threat - the right one to pan the urgent
         // cue toward.
-        val imminentImpactTrigger = if (!riderBelowStationaryForUrgent) {
+        val urgentViaMoving = urgentLowSpeedEnabled &&
+            !riderBelowStationaryForUrgent &&
+            bikeSpeedMs != null &&
+            bikeSpeedMs * 3.6f <= URGENT_MOVING_MAX_KMH
+        // Moving fires demand a stricter closing floor than the
+        // stationary 6 m/s; a stationary rider keeps the shipped floors.
+        val urgentClosingFloor =
+            if (urgentViaMoving) URGENT_MOVING_CLOSING_FLOOR_MS else TTC_GATE_CLOSING_FLOOR_MS
+        val imminentImpactTrigger = if (!riderBelowStationaryForUrgent && !urgentViaMoving) {
             null
         } else {
             stableClose.firstOrNull { v ->
-                val byProximity = v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
-                    v.distanceM <= alertMaxM / 3
                 // Closing speed in m/s, positive = approaching.
                 val closingMs = -v.speedMs
-                val byTtc = closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
+                val byProximity = closingMs >= urgentClosingFloor &&
+                    v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS &&
+                    v.distanceM <= alertMaxM / 3
+                val byTtc = closingMs >= urgentClosingFloor &&
+                    closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
                     v.distanceM in 0..alertMaxM &&
                     v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
                 byProximity || byTtc
@@ -508,6 +556,7 @@ class AlertDecider(
                         beepPending = false
                         Event.UrgentApproach(
                             lateralPos = imminentImpactTrigger.lateralPos,
+                            viaMovingPath = urgentViaMoving,
                         )
                     }
                     riderStationary -> {
@@ -652,7 +701,7 @@ class AlertDecider(
         const val URGENT_OVERRIDE_DWELL_MS = 500L
 
         /** Time-to-collision threshold (seconds) for the TTC disjunct
-         *  of the stationary-impact safety override. Below the 2.8 s
+         *  of the imminent-impact safety override. Below the 2.8 s
          *  lower bound of automotive forward-collision-warning systems
          *  (NHTSA Burgett & Carter, Mercedes Pre-Safe, Volvo RCW use
          *  2.8-4 s) - they assume a driver in a vehicle with AEB. A
@@ -668,14 +717,42 @@ class AlertDecider(
 
         /** Minimum closing speed (m/s, positive = approaching) for the
          *  TTC disjunct to engage. Mirrors [SAFETY_OVERRIDE_CLOSING_MS]
-         *  on the proximity disjunct so both gates of the stationary
-         *  override share the same quantum-strict closing bound - the
+         *  on the proximity disjunct so both gates of the override's
+         *  stationary path share the same quantum-strict closing bound - the
          *  -5/-6 quantum boundary on the proximity gate exists to
          *  avoid radar-noise flap, and the same reasoning applies
          *  here. Anything below 6 m/s catches too much queueing
          *  traffic merging into a stopped rider, where the driver is
          *  clearly tracking and braking. */
         const val TTC_GATE_CLOSING_FLOOR_MS = 6f
+
+        /** Rider speed (km/h) at or below which the imminent-impact
+         *  override is also evaluated while MOVING (when the rider has
+         *  not satisfied the stationary mini-dwell and the Settings
+         *  toggle is on). The justification is relative-doppler
+         *  semantics, not "escape options": decoded closing speed is
+         *  measured relative to the rider, so the same closing floor
+         *  means a much faster absolute vehicle when the rider is slow.
+         *  At <= 15 km/h a [URGENT_MOVING_CLOSING_FLOOR_MS] closer is a
+         *  ~50+ km/h vehicle bearing down on a slow or decelerating
+         *  rider; at 25 km/h rider speed the same floor would catch
+         *  ordinary overtakes. Deliberately its own constant - NOT a
+         *  reuse of [SPEED_AWARE_COOLDOWN_SLOW_KMH] - so cooldown-band
+         *  tuning can never silently move a safety gate. */
+        const val URGENT_MOVING_MAX_KMH = 15f
+
+        /** Closing-speed floor (m/s, positive = approaching) applied to
+         *  BOTH urgent disjuncts when the gate opened via the moving
+         *  path; the stationary path keeps the shipped 6 m/s floors.
+         *  Corpus-tuned over 105 ride captures: at the
+         *  stationary 6 m/s floor the moving extension fired roughly
+         *  once per ride, dominated by routine 35-45 km/h overtakes of
+         *  a slow rider; at 10 m/s it fires ~4-5 times per week, all on
+         *  genuinely fast closers, while still catching the motivating
+         *  decelerating-into-junction truck pass. Sits on the radar's
+         *  0.5 m/s speed quantum like the stationary floors (raw -20 =
+         *  -10.0 m/s fires; raw -19 = -9.5 m/s does not). */
+        const val URGENT_MOVING_CLOSING_FLOOR_MS = 10f
 
         /** Bike speeds below this (km/h) double the [minBeepGapMs]
          *  cooldown. Slow urban crawl is where flapping beeps come from

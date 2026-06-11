@@ -37,6 +37,7 @@ internal object SnapshotFixtures {
         walkAwayAlarmEnabled = true,
         walkAwayAlarmThresholdSec = 30,
         adaptiveAlertsEnabled = true,
+        urgentLowSpeedEnabled = true,
         precogEnabled = false,
         experimentalLateralPanning = false,
         experimentalLateralPanningInvertLR = false,

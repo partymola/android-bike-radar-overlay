@@ -24,7 +24,7 @@ import kotlin.math.sin
  *   playClear() -> softer two-tone descent (1100 -> 700 Hz) for "all clear".
  *   playUrgent() -> rapid 4-pulse 3800 Hz pattern with tight 50 ms gaps,
  *                   intentionally distinct from play(3) so the rider
- *                   recognises the stationary-safety-override case.
+ *                   recognises the imminent-impact override case.
  *   playCriticalBattery() -> low (520 Hz) soft slow two-tone for "rear
  *                   radar battery critical". Deliberately a different
  *                   timbre-CLASS from the sharp/high threat beeps and from

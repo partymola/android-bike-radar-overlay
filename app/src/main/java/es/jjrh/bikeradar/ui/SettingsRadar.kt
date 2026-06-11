@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Speed
@@ -71,6 +72,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var visualDist by rememberSaveable { mutableIntStateOf(prefs.visualMaxDistanceM) }
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
+    var urgentLowSpeed by rememberSaveable { mutableStateOf(prefs.urgentLowSpeedEnabled) }
     var batteryThreshold by rememberSaveable { mutableIntStateOf(prefs.batteryLowThresholdPct) }
     var batteryShowLabels by rememberSaveable { mutableStateOf(prefs.batteryShowLabels) }
     var closePassLogging by rememberSaveable { mutableStateOf(prefs.closePassLoggingEnabled) }
@@ -108,6 +110,11 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         onAdaptiveChange = {
             adaptive = it
             prefs.adaptiveAlertsEnabled = it
+        },
+        urgentLowSpeed = urgentLowSpeed,
+        onUrgentLowSpeedChange = {
+            urgentLowSpeed = it
+            prefs.urgentLowSpeedEnabled = it
         },
         batteryThreshold = batteryThreshold,
         onBatteryThresholdChange = { batteryThreshold = it },
@@ -217,6 +224,8 @@ internal fun SettingsRadarContent(
     onOverlayOpacityFinished: () -> Unit,
     adaptive: Boolean,
     onAdaptiveChange: (Boolean) -> Unit,
+    urgentLowSpeed: Boolean,
+    onUrgentLowSpeedChange: (Boolean) -> Unit,
     batteryThreshold: Int,
     onBatteryThresholdChange: (Int) -> Unit,
     onBatteryThresholdFinished: () -> Unit,
@@ -272,6 +281,16 @@ internal fun SettingsRadarContent(
                 onValueChange = { onAlertDistChange(it.toInt()) },
                 onValueChangeFinished = onAlertDistFinished,
             )
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.NotificationsActive,
+                    leadingTint = br.danger,
+                    title = stringResource(R.string.settings_radar_urgent_low_speed_title),
+                    subtitle = stringResource(R.string.settings_radar_urgent_low_speed_subtitle),
+                    checked = urgentLowSpeed,
+                    onCheckedChange = onUrgentLowSpeedChange,
+                )
+            }
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_overlay))
             SettingsSliderRow(
                 title = stringResource(R.string.settings_radar_visual_distance_title),

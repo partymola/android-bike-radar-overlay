@@ -46,6 +46,13 @@ object CrashLogger {
      *  handlers, each capturing a Context. */
     @Volatile private var installed = false
 
+    /** Best-effort hook the service registers so the in-flight capture log's
+     *  buffered tail reaches disk before the process dies - the seconds before
+     *  a crash are exactly the ride data worth keeping. Invoked first in the
+     *  handler and independently wrapped: a flush failure must never mask or
+     *  delay the crash report. Null whenever the service is not running. */
+    @Volatile var emergencyFlush: (() -> Unit)? = null
+
     /**
      * Install the handler, at most once per process. It chains (does not
      * replace) the existing default handler so the platform still terminates
@@ -57,6 +64,11 @@ object CrashLogger {
         val appContext = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                emergencyFlush?.invoke()
+            } catch (t: Throwable) {
+                Log.w(TAG, "emergency capture flush failed", t)
+            }
             try {
                 val root = appContext.getExternalFilesDir(null)
                 if (root != null) {

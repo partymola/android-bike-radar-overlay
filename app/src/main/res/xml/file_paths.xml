@@ -3,4 +3,7 @@
     <external-files-path
         name="capture-logs"
         path="captures/" />
+    <external-files-path
+        name="crash-logs"
+        path="crashes/" />
 </paths>

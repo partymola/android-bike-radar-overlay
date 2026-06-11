@@ -69,6 +69,47 @@ class CrashLoggerChainingTest {
         }
     }
 
+    @Test fun handlerInvokesEmergencyFlushBeforeTheReport() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        var flushed = false
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+            CrashLogger.resetForTest()
+            CrashLogger.install(ctx) { 1L }
+            CrashLogger.emergencyFlush = { flushed = true }
+            Thread.getDefaultUncaughtExceptionHandler()!!
+                .uncaughtException(Thread.currentThread(), RuntimeException("kaboom"))
+            assertTrue("registered capture flush must run on crash", flushed)
+        } finally {
+            CrashLogger.emergencyFlush = null
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
+
+    @Test fun flushFailureMasksNeitherTheReportNorTheChain() {
+        // The flush is best-effort: a throwing flush hook must not stop the
+        // crash report from being written nor the previous handler from running.
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        var chained: Throwable? = null
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, t -> chained = t }
+            CrashLogger.resetForTest()
+            CrashLogger.install(ctx) { 456_000L }
+            CrashLogger.emergencyFlush = { throw IllegalStateException("flush boom") }
+            val boom = RuntimeException("kaboom")
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), boom)
+            assertSame("previous handler must run despite the flush failure", boom, chained)
+            val dir = File(ctx.getExternalFilesDir(null), CrashLogger.CRASH_DIR)
+            val reports = dir.listFiles { f -> f.name.startsWith(CrashLogger.FILE_PREFIX) }
+            assertTrue("report still written despite the flush failure", (reports?.size ?: 0) >= 1)
+        } finally {
+            CrashLogger.emergencyFlush = null
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
+
     @Test fun secondInstallIsANoOp() {
         // The install-once guard (the CI-OOM fix): once installed, a second
         // install must NOT chain another handler. A regression that dropped the

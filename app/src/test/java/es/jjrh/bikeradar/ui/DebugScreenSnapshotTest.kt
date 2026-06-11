@@ -15,9 +15,10 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Roborazzi goldens for the two stateless leaves of the Debug screen:
+ * Roborazzi goldens for the stateless leaves of the Debug screen:
  *  - [DebugScenarioControls] for the Replay / Synthetic state row
  *  - [DebugCaptureLogList] for the capture-log file list
+ *  - [DebugCrashLogList] for the crash-report list + unclean-restart counter
  *
  * The radar-state log feed is intentionally out of scope - it's a
  * streaming source unsuitable for static goldens. We also avoid the
@@ -107,6 +108,45 @@ class DebugScreenSnapshotTest {
                         onShare = {},
                         onDelete = {},
                         onDeleteAll = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun crashesEmpty() {
+        captureRoboImage {
+            UiTheme {
+                Column(Modifier.background(LocalBrColors.current.bg)) {
+                    DebugCrashLogList(
+                        crashFiles = emptyList(),
+                        dirtyRestarts = 0,
+                        onShare = {},
+                        onDelete = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun crashesPresent() {
+        val files = (0 until 2).map { i ->
+            fakeLog(
+                name = "bike-radar-crash-2023111$i-120000.log",
+                kb = 2,
+                mtime = pinnedMs - i * 3_600_000L,
+            )
+        }
+        captureRoboImage {
+            UiTheme {
+                Column(Modifier.background(LocalBrColors.current.bg)) {
+                    DebugCrashLogList(
+                        crashFiles = files,
+                        dirtyRestarts = 3,
+                        onShare = {},
+                        onDelete = {},
                     )
                 }
             }

@@ -497,6 +497,7 @@
     <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
     <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The key never leaves the secure element, so raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
     <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples; no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
+    <string name="settings_privacy_on_phone_crashes">If the app crashes, a report (app version, thread, stack trace - no ride data, no location) is kept in app-private storage and shared only if you tap Share on the Debug screen.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">If you set up HA, the app publishes over MQTT, straight to your HA URL - nothing routed through the developer or any third party:\n• radar and dashcam battery\n• front-light mode\n• ride start/end events\n• an end-of-ride summary (distance, close-pass counts, closing speeds, clearances)\n• a per-event close-pass log, if you turn it on</string>
     <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.</string>
@@ -563,6 +564,9 @@
     <string name="debug_write_capture_logs_subtitle">Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride\'s log finishes either way).</string>
     <string name="debug_section_capture_logs">Capture logs</string>
     <string name="debug_no_capture_logs">No capture logs yet.</string>
+    <string name="debug_section_crashes">Crashes</string>
+    <string name="debug_no_crashes">No crashes recorded.</string>
+    <string name="debug_dirty_restart_count">unclean service restarts: <xliff:g id="count" example="0">%1$d</xliff:g></string>
     <string name="debug_capture_logs_header">CAPTURE LOGS</string>
     <string name="debug_delete_all">Delete all</string>
     <string name="debug_share">Share</string>

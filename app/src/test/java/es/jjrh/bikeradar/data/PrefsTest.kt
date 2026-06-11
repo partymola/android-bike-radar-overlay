@@ -229,6 +229,16 @@ class PrefsTest {
         prefs.captureLogShareWarningSeen = true
         val fresh = Prefs(context)
         assertTrue(fresh.captureLogShareWarningSeen)
+
+        // Same class of property: the dirty-restart diagnostics persist
+        // across process death by definition, so their key wiring matters.
+        assertFalse(prefs.serviceRunningMarker)
+        assertEquals(0, prefs.dirtyRestartCount)
+        prefs.serviceRunningMarker = true
+        prefs.dirtyRestartCount += 1
+        val fresh2 = Prefs(context)
+        assertTrue(fresh2.serviceRunningMarker)
+        assertEquals(1, fresh2.dirtyRestartCount)
     }
 
     @Test

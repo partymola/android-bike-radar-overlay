@@ -51,6 +51,7 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_settings))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_creds))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_capture))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_crashes))
 
                 PrivacySectionLabel(stringResource(R.string.settings_privacy_to_ha_label))
                 PrivacyP(stringResource(R.string.settings_privacy_to_ha_publish))

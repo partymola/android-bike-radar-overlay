@@ -99,6 +99,16 @@ internal class CaptureLogManager(
         }
     }
 
+    /** Crash-path flush: push the buffered tail to disk without closing.
+     *  Registered with [CrashLogger.emergencyFlush] by the service - the last
+     *  [FLUSH_INTERVAL_MS] window of ride data is exactly what a crash report
+     *  needs for context. Safe no-op when no file is open. */
+    fun flushNow() {
+        synchronized(lock) {
+            writer?.flush()
+        }
+    }
+
     /** Append one line; mirrors to the injected [mirror] sink (debug logcat). */
     fun clog(msg: String) {
         writeLine(msg)

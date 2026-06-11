@@ -65,6 +65,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.CaptureLogFiles
 import es.jjrh.bikeradar.CaptureLogManager
+import es.jjrh.bikeradar.CrashLogger
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
@@ -107,6 +108,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     // Mutable so the list re-renders after a delete. Re-enumerated from disk
     // (not mutated in place) so it always reflects the true on-disk state.
     var logFiles by remember { mutableStateOf(enumerateCaptureLogs(ctx)) }
+    var crashFiles by remember { mutableStateOf(enumerateCrashLogs(ctx)) }
     var pendingDeleteAll by remember { mutableStateOf(false) }
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
@@ -148,9 +150,11 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     // up the static fields every half-second from the background.
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            // Refresh the log list once on resume so a capture written while
-            // this screen was backgrounded shows up without forcing a delete.
+            // Refresh the log lists once on resume so a capture or crash
+            // written while this screen was backgrounded shows up without
+            // forcing a delete.
             logFiles = enumerateCaptureLogs(ctx)
+            crashFiles = enumerateCrashLogs(ctx)
             while (true) {
                 delay(500)
                 replayRunning = ReplayService.isRunning
@@ -253,6 +257,18 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     logFiles = enumerateCaptureLogs(ctx)
                 },
                 onDeleteAll = { pendingDeleteAll = true },
+            )
+
+            // Crash reports. Stack traces only - no ride data - so sharing
+            // skips the capture-log privacy warning dialog.
+            DebugCrashLogList(
+                crashFiles = crashFiles,
+                dirtyRestarts = prefs.dirtyRestartCount,
+                onShare = { f -> shareFile(ctx, f) },
+                onDelete = { f ->
+                    f.delete()
+                    crashFiles = enumerateCrashLogs(ctx)
+                },
             )
 
             // Screenshot capture
@@ -595,6 +611,55 @@ internal fun DebugScenarioControls(
     }
 }
 
+/** Crash reports on disk, newest first (written by [CrashLogger]). */
+private fun enumerateCrashLogs(ctx: Context): List<File> = ctx.getExternalFilesDir(null)
+    ?.let { File(it, CrashLogger.CRASH_DIR) }
+    ?.listFiles { f -> f.isFile && f.name.startsWith(CrashLogger.FILE_PREFIX) }
+    ?.sortedByDescending { it.lastModified() }
+    ?: emptyList()
+
+/**
+ * Stateless leaf rendering the crash-report list plus the unclean-restart
+ * counter. The counter surfaces silent crash/kill loops the rider would
+ * never notice mid-ride; the list makes the actual reports shareable from
+ * the phone instead of needing `adb pull`.
+ */
+@Composable
+internal fun DebugCrashLogList(
+    crashFiles: List<File>,
+    dirtyRestarts: Int,
+    onShare: (File) -> Unit,
+    onDelete: (File) -> Unit,
+) {
+    val br = LocalBrColors.current
+    SettingsSectionLabel(stringResource(R.string.debug_section_crashes))
+    Text(
+        text = stringResource(R.string.debug_dirty_restart_count, dirtyRestarts),
+        color = br.fgDim,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    if (crashFiles.isEmpty()) {
+        Text(
+            text = stringResource(R.string.debug_no_crashes),
+            color = br.fgDim,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+    } else {
+        Spacer(modifier = Modifier.height(6.dp))
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (f in crashFiles) {
+                CaptureLogCard(file = f, onShare = { onShare(f) }, onDelete = { onDelete(f) })
+            }
+        }
+    }
+}
+
 /**
  * Stateless leaf rendering the capture-log file list with per-row
  * share buttons. Body owns the disk enumeration of log files and the
@@ -791,6 +856,16 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
         ?: emptyList()
     sb.appendLine("--- Capture logs (${logFiles.size} on disk) ---")
     logFiles.take(3).forEach { sb.appendLine("${it.name}  ${it.length() / 1024}KB") }
+    val crashFiles = enumerateCrashLogs(ctx)
+    sb.appendLine()
+    sb.appendLine("--- Crash reports (${crashFiles.size} on disk) ---")
+    crashFiles.take(3).forEach { sb.appendLine(it.name) }
+    crashFiles.firstOrNull()?.let { newest ->
+        sb.appendLine()
+        sb.appendLine("--- Newest crash report ---")
+        // Crash reports are version + thread + stack trace, a few KB at most.
+        sb.append(runCatching { newest.readText() }.getOrDefault("(unreadable)"))
+    }
 
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("diagnostic", sb.toString()))

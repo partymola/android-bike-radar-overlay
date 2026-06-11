@@ -517,6 +517,26 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_CAPTURE_LOGGING, v).apply()
         }
 
+    /** Diagnostic: set while [es.jjrh.bikeradar.BikeRadarService] is running,
+     *  cleared by its onDestroy. A set marker at the NEXT onCreate means the
+     *  previous service instance never shut down cleanly - a crash, a system
+     *  kill, or a force-stop - and increments [dirtyRestartCount]. */
+    var serviceRunningMarker: Boolean
+        get() = sp.getBoolean(KEY_SERVICE_RUNNING_MARKER, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_SERVICE_RUNNING_MARKER, v).apply()
+        }
+
+    /** Diagnostic counter of unclean service restarts (see
+     *  [serviceRunningMarker]). Shown on the Debug screen and included in the
+     *  diagnostic bundle; a climbing count is the tell for a silent
+     *  crash/kill loop that the rider would otherwise never notice. */
+    var dirtyRestartCount: Int
+        get() = sp.getInt(KEY_DIRTY_RESTART_COUNT, 0)
+        set(v) {
+            sp.edit().putInt(KEY_DIRTY_RESTART_COUNT, v).apply()
+        }
+
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
@@ -617,6 +637,7 @@ class Prefs(context: Context) {
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
         appendLine("radar_settings_probe_enabled=$radarSettingsProbeEnabled")
         appendLine("capture_logging_enabled=$captureLoggingEnabled")
+        appendLine("dirty_restart_count=$dirtyRestartCount")
     }
 
     companion object {
@@ -666,6 +687,8 @@ class Prefs(context: Context) {
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"
         const val KEY_RADAR_SETTINGS_PROBE = "radar_settings_probe_enabled"
         const val KEY_CAPTURE_LOGGING = "capture_logging_enabled"
+        const val KEY_SERVICE_RUNNING_MARKER = "service_running_marker"
+        const val KEY_DIRTY_RESTART_COUNT = "dirty_restart_count"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

@@ -60,6 +60,31 @@ class CaptureLogManagerTest {
         assertEquals("one gzipped archive after close", 1, dir.listFiles { f -> f.name.endsWith(".log.gz") }!!.size)
     }
 
+    @Test fun flushNowMakesBufferedLinesVisibleWithoutClosing() {
+        // The crash path: writeLine buffers up to a flush window, so a line
+        // logged just before a crash is only on disk if flushNow pushes it.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val m = CaptureLogManager(
+            externalFilesDir = { root },
+            captureLoggingEnabled = { true },
+        )
+        val dir = File(root, CaptureLogManager.CAPTURE_DIR)
+        m.open()
+        m.clog("buffered-tail-line")
+        m.flushNow()
+        val active = dir.listFiles { f -> f.name.endsWith(".log") }!!.single()
+        assertTrue(
+            "flushed line on disk while the file is still open",
+            active.readText().contains("buffered-tail-line"),
+        )
+        m.close()
+    }
+
+    @Test fun flushNowIsANoOpWithNoOpenFile() {
+        // Crash before open / after close: the hook must be safe to call.
+        CaptureLogManager(externalFilesDir = { null }, captureLoggingEnabled = { true }).flushNow()
+    }
+
     @Test fun openIsANoOpWhenExternalDirIsNull() {
         // No external storage (e.g. ejected/unavailable): open must bail before
         // touching the filesystem, leaving no active file.

@@ -485,6 +485,7 @@
     <string name="settings_privacy_on_phone_settings">Tus ajustes (volumen de alerta, distancia de alerta, estado del radar emparejado, preferencias de la dashcam y similares) residen en el almacenamiento privado de la app de Android y nunca salen del dispositivo.</string>
     <string name="settings_privacy_on_phone_creds">La URL de tu Home Assistant y el token se cifran en reposo con una clave AES-256/GCM respaldada por hardware del Android Keystore. La clave nunca sale del elemento seguro, así que el acceso directo al sistema de archivos (p. ej. `adb pull`) solo recupera texto cifrado.</string>
     <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono; sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
+    <string name="settings_privacy_on_phone_crashes">Si la app falla, se guarda un informe (versión de la app, hilo y traza del error; sin datos de rutas ni ubicación) en el almacenamiento privado de la app, y solo se comparte si tocas Compartir en la pantalla de Depuración.</string>
     <string name="settings_privacy_to_ha_label">Qué va a tu Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la dashcam\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de pases cercanos, velocidades de aproximación, holguras)\n• un registro de pases cercanos por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del almacén cifrado de inmediato.</string>
@@ -551,6 +552,9 @@
     <string name="debug_write_capture_logs_subtitle">Desactivado por defecto. Registra cada paquete del radar, notificación BLE e instantánea de la eBike con tiempos exactos - útil para informes de errores, pero son datos de nivel de seguimiento de rutas que se guardan en el teléfono. Surte efecto en la siguiente conexión del radar (el registro de la ruta actual termina igualmente).</string>
     <string name="debug_section_capture_logs">Registros de capturas</string>
     <string name="debug_no_capture_logs">Aún no hay registros de capturas.</string>
+    <string name="debug_section_crashes">Fallos</string>
+    <string name="debug_no_crashes">No hay fallos registrados.</string>
+    <string name="debug_dirty_restart_count">reinicios no limpios del servicio: <xliff:g id="count" example="0">%1$d</xliff:g></string>
     <string name="debug_capture_logs_header">REGISTROS DE CAPTURAS</string>
     <string name="debug_delete_all">Eliminar todo</string>
     <string name="debug_share">Compartir</string>

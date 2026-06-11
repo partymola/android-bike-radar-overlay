@@ -188,6 +188,14 @@ class BikeRadarService : Service() {
         ClosePassStateBus.reset()
         rideStats = RideStatsAccumulator()
         prefs = Prefs(this)
+        // Dirty-restart detection: the marker survives a crash / system kill /
+        // force-stop (only onDestroy clears it), so finding it set here means
+        // the previous instance died without a clean shutdown.
+        if (prefs.serviceRunningMarker) prefs.dirtyRestartCount += 1
+        prefs.serviceRunningMarker = true
+        // Crash-path capture flush: the seconds before a crash are the ride
+        // data worth keeping, and the writer buffers up to a flush window.
+        CrashLogger.emergencyFlush = { captureLog.flushNow() }
         knownDevices = KnownDevices(getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE))
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
@@ -469,6 +477,8 @@ class BikeRadarService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         if (::creds.isInitialized) creds.unregisterOnChangeListener(haCredsListener)
+        CrashLogger.emergencyFlush = null
+        if (::prefs.isInitialized) prefs.serviceRunningMarker = false
         pauseExpiryJob?.cancel()
         if (::cameraLink.isInitialized) cameraLink.stop()
         unregisterEventScan()

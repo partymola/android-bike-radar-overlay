@@ -189,8 +189,8 @@ into *Add App* and enable "Include prereleases" while the app is in
 alpha. Each install is signed with the same key, so updates apply over
 the top without uninstalling.
 
-F-Droid listing metadata lives under `fastlane/metadata/android/`
-(en-US + es-ES), ready for the IzzyOnDroid / F-Droid submission.
+Store-listing metadata lives under `fastlane/metadata/android/`
+(en-US + es-ES) in the standard fastlane structure that catalogues read.
 
 ## Releases
 

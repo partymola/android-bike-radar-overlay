@@ -179,6 +179,19 @@ fork, create `app/src/main/res/values-<code>/strings.xml`, translate the
 text between the tags, and open a PR. Full instructions (placeholders,
 plurals, what CI checks) are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## Install
+
+Signed APKs are attached to every [GitHub Release](../../releases).
+Download the latest APK and install it, or - to get updates
+automatically - add this repository to
+[Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL
+into *Add App* and enable "Include prereleases" while the app is in
+alpha. Each install is signed with the same key, so updates apply over
+the top without uninstalling.
+
+F-Droid listing metadata lives under `fastlane/metadata/android/`
+(en-US + es-ES), ready for the IzzyOnDroid / F-Droid submission.
+
 ## Releases
 
 Signed APKs are published as GitHub Releases when a tag matching

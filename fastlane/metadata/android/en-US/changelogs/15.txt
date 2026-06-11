@@ -1,0 +1,1 @@
+Fully translated to Spanish, with a per-app language option on Android 13+. Tighter wording across Settings and onboarding. Uncaught crashes are now recorded to app-private storage for bug reports. The dashcam battery probe backs off while the camera is off, saving radio and battery. Internal: service split into testable coordinators.

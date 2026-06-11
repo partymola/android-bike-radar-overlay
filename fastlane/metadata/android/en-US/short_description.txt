@@ -1,0 +1,1 @@
+Overlay and audio alerts for BLE bike radars. Offline, no account, no cloud.

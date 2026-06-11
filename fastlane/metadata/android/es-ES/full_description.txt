@@ -1,0 +1,22 @@
+Bike Radar muestra y hace sonar lo que ve el radar trasero de tu bici, encima de la app que ya estés usando.
+
+Una barra fina en el borde de la pantalla muestra la distancia, velocidad de aproximación y posición lateral de cada vehículo sobre tu mapa o app de navegación. Los pitidos suben de nivel según se acerca el vehículo más próximo, y un tono urgente distinto suena cuando un impacto parece inminente, incluso mientras ruedas despacio hacia un cruce con un vehículo rápido detrás. Un aviso de vía despejada suena cuando el radar deja de ver vehículos detrás.
+
+Todo funciona en tu teléfono: sin cuenta, sin nube, sin analíticas. La integración opcional con Home Assistant publica las estadísticas de tus rutas en tu propio servidor y en ningún otro sitio.
+
+Funciones:
+
+- Barra lateral en vivo con distancia, velocidad de aproximación y posición lateral por vehículo
+- Pitidos por niveles de proximidad, aviso urgente de impacto inminente, aviso de vía despejada
+- Notificación de resumen al terminar la ruta: adelantamientos, pases cercanos, distancia, pase más ajustado
+- Modo automático de la cámara/luz delantera según el atardecer local (una lectura aproximada de ubicación por ruta)
+- Telemetría de eBike Bosch Smart System, estrictamente de solo lectura
+- Recordatorios de alejamiento y de bici sin bloquear
+- Publicación opcional en Home Assistant: baterías, pases cercanos, resúmenes de ruta
+- En español e inglés
+
+Necesita un radar trasero que hable el protocolo BLE V2 (emparéjalo una vez en los Ajustes del sistema) y Android 12 o posterior. Las integraciones de radar, cámara y eBike son independientes: cada una funciona sin las demás.
+
+Bike Radar es una ayuda para tus rutas, no una garantía de seguridad. Complementa tu propia atención y tus espejos; nunca los sustituye.
+
+Es un proyecto independiente de código abierto (GPL-3.0-or-later), sin afiliación ni respaldo de ningún fabricante de radares o eBikes.

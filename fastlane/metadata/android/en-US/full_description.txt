@@ -1,0 +1,22 @@
+Bike Radar shows and sounds what your rear bike radar sees, on top of whatever app you are already running.
+
+A thin strip down the edge of the screen shows each approaching vehicle's distance, closing speed and lateral position over your map or navigation app. Tiered beeps rise as the closest vehicle gets nearer, and a distinct urgent tone fires when an impact looks imminent - including while you are rolling slowly toward a junction with a fast vehicle behind. A clear chime sounds when the radar no longer sees vehicles behind.
+
+Everything runs on your phone: no account, no cloud, no analytics. The optional Home Assistant integration publishes ride stats to your own server and nowhere else.
+
+Features:
+
+- Live overlay with per-vehicle distance, closing speed and lateral position
+- Tiered proximity beeps, urgent imminent-impact tone, all-clear chime
+- Post-ride summary notification: overtakes, close passes, distance, tightest pass
+- Front camera/light auto mode by local sunset (one coarse location read per ride)
+- Bosch Smart System eBike telemetry, strictly read-only
+- Walk-away and forgot-to-lock reminders
+- Optional Home Assistant publishing: batteries, close passes, ride summaries
+- English and Spanish
+
+Requires a rear radar that speaks the V2 BLE protocol (pair it once in system Settings) and Android 12 or newer. The radar, camera and eBike integrations degrade gracefully: each works without the others.
+
+Bike Radar is a riding aid, not a safety guarantee. It supplements your own attention and mirrors - it never replaces them.
+
+This is an independent open-source project (GPL-3.0-or-later), not affiliated with or endorsed by any radar or eBike manufacturer.

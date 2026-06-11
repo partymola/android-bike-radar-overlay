@@ -494,7 +494,7 @@
     <string name="settings_privacy_networking_destination">El único destino de red es la URL de HA que indicas. No hay endpoints de analítica, servicios de informe de fallos, redes publicitarias ni bibliotecas de terceros que envíen datos fuera.</string>
     <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
     <string name="settings_privacy_permissions_label">Permisos</string>
-    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, dashcam y eBike\n• POST_NOTIFICATIONS: la notificación de estado de la ruta\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
+    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, dashcam y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
     <string name="settings_privacy_source_label">Código fuente</string>
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
 
@@ -607,6 +607,12 @@
     <string name="svc_main_forgot_lock_channel_desc">Te avisa si te vas sin bloquear la eBike.</string>
     <string name="svc_main_forgot_lock_title">Bici sin bloquear</string>
     <string name="svc_main_forgot_lock_text">Te has ido sin bloquearla</string>
+    <string name="notif_ride_summary_channel_name">Resúmenes de ruta</string>
+    <string name="notif_ride_summary_channel_desc">Un repaso silencioso de cada ruta cuando el radar se apaga.</string>
+    <string name="notif_ride_summary_title">Resumen de la ruta</string>
+    <string name="notif_ride_summary_text">Adelantamientos: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Pases cercanos: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12,4">%3$s</xliff:g> km</string>
+    <string name="notif_ride_summary_alerts">Alertas por km: <xliff:g id="rate" example="1,4">%1$s</xliff:g></string>
+    <string name="notif_ride_summary_tightest">Pase más ajustado: <xliff:g id="m" example="0,8">%1$s</xliff:g> m a <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
     <string name="svc_main_walkaway_channel_name">Dashcam dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la dashcam sigue emitiendo desde la bici.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam dejada en la bici</string>

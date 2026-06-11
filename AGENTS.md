@@ -109,6 +109,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
 | `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
+| `app/src/main/java/es/jjrh/bikeradar/RideSummaryNotificationDecider.kt` | Pure decider for the post-ride summary notification (ride end = sustained radar-off; new-ride stats reset on long-gap reconnect) |
 | `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |

@@ -72,10 +72,18 @@ class BikeRadarService : Service() {
 
     @Volatile private var scanRegistered = false
 
-    // Per-ride statistics. Reset on each onCreate so "this ride" begins
-    // when the service starts. Published to HA via the periodic loop
-    // started below.
-    private var rideStats = RideStatsAccumulator()
+    // Per-ride statistics. Reset on onCreate AND when the radar reconnects
+    // after the long-offline gap (the bike was parked - a new ride starts
+    // with fresh numbers; see maybePostRideSummary). Published to HA via
+    // the periodic loop started below and summarised in the post-ride
+    // notification. @Volatile: the tick coroutine replaces the instance;
+    // the overlay loop and beeper-cue closure read it from other threads.
+    @Volatile private var rideStats = RideStatsAccumulator()
+
+    // Ride-summary notification state: one post per radar-off episode.
+    // Tick-coroutine-confined; see maybePostRideSummary.
+    private var rideSummaryPosted = false
+    private var lastRadarOffSinceMs: Long? = null
 
     // ── Walk-away alarm state ────────────────────────────────────────────────
     // See WalkAwayDecider for the decision logic. The service owns all
@@ -749,7 +757,43 @@ class BikeRadarService : Service() {
                 radarLinkCoordinator.tickWalkAwayState(now, elapsed)
                 radarLinkCoordinator.evaluateWalkAway(now)
                 radarLinkCoordinator.evaluateRadarDrop(now)
+                maybePostRideSummary(now)
             }
+        }
+    }
+
+    /** Ride-summary notification + new-ride stats reset, evaluated from the
+     *  walk-away tick (the only loop that keeps running while the radar is
+     *  off). Decision logic lives in [RideSummaryNotificationDecider]; this
+     *  glue tracks the off-episode edges: a sustained off-episode posts the
+     *  summary once, and a reconnect after the long-offline gap (the same
+     *  Settings boundary the reconnect loop treats as "parked") starts a new
+     *  ride with fresh stats. */
+    private fun maybePostRideSummary(nowMs: Long) {
+        val off = radarOffSinceMs
+        if (off == null) {
+            lastRadarOffSinceMs?.let { wasOffSince ->
+                val offDuration = nowMs - wasOffSince
+                val longOffMs = prefs.radarLongOfflineThresholdMinutes * 60_000L
+                if (RideSummaryNotificationDecider.shouldStartNewRide(offDuration, longOffMs)) {
+                    rideStats = RideStatsAccumulator()
+                }
+                rideSummaryPosted = false
+            }
+            lastRadarOffSinceMs = null
+            return
+        }
+        lastRadarOffSinceMs = off
+        // Snapshot only once the dwell could pass. The accumulator is
+        // single-context by contract and its Main-thread writer can still be
+        // in its cancellation tail for a moment after a disconnect; the
+        // 3-minute dwell dwarfs that window, so gating the read on it keeps
+        // this IO-side reader out of the race entirely.
+        if (rideSummaryPosted || nowMs - off < RideSummaryNotificationDecider.POST_DWELL_MS) return
+        val snap = rideStats.snapshot()
+        if (RideSummaryNotificationDecider.shouldPost(off, nowMs, rideSummaryPosted, snap)) {
+            rideSummaryPosted = true
+            notifications.postRideSummary(snap)
         }
     }
 

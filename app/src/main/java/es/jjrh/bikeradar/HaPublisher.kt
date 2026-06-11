@@ -19,15 +19,19 @@ import java.util.concurrent.ConcurrentHashMap
  * A fresh [HaClient] is built per publish call from [creds] (whose `baseUrl` /
  * `token` getters re-read storage live), so a credential change takes effect on
  * the next publish here without restarting the service. The client this does NOT
- * own is the service's onCreate-built one, used by the overlay pipeline's
- * close-pass publish and the camera-light front-mode publish; both stay pinned to
- * the credentials captured at service start until the next restart.
+ * own is the service-held one, used by the overlay pipeline's close-pass
+ * publish and the camera-light front-mode publish through `() -> HaClient`
+ * providers; the service rebuilds that client when the stored credentials
+ * change, so every consumer follows a mid-session save.
  *
  * Threading: [publishRideEdgeIfHa] and the ride-summary loop launch into the
  * injected [scope]; the summary path runs on IO and reads + marks the
  * [rideStats] accumulator there. The accumulator stays single-writer-on-Main
  * for its tally side (see BikeRadarService.onCue); this IO reader only consumes
- * a consistent snapshot and never mutates the running totals.
+ * a consistent snapshot and never mutates the running totals. The accumulator
+ * REFERENCE is swapped from the walk-away tick (IO) when a long radar-off gap
+ * starts a new ride - @Volatile on the service field makes the fresh instance
+ * visible here on the next loop pass.
  */
 internal class HaPublisher(
     private val scope: CoroutineScope,

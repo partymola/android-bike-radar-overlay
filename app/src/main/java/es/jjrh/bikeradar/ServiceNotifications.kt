@@ -79,6 +79,20 @@ internal class ServiceNotifications(
             )
         }
 
+        if (nm.getNotificationChannel(RIDE_SUMMARY_CHANNEL_ID) == null) {
+            // LOW importance: appears in the shade without sound or heads-up.
+            // Post-ride informational surface - never an in-ride channel.
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    RIDE_SUMMARY_CHANNEL_ID,
+                    context.getString(R.string.notif_ride_summary_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = context.getString(R.string.notif_ride_summary_channel_desc)
+                },
+            )
+        }
+
         if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
             // HIGH importance, no sound and no vibration on the channel.
             // Both modalities are driven explicitly from the FIRE path:
@@ -268,6 +282,63 @@ internal class ServiceNotifications(
 
     fun cancelForgotToLock() = nm.cancel(NOTIF_FORGOT_LOCK_ID)
 
+    /**
+     * Post (or replace) the post-ride summary notification. Silent
+     * (LOW-importance channel); tapping opens the app. A fixed
+     * notification ID means each ride's summary replaces the previous
+     * one rather than stacking. Opt-out is the channel itself in the
+     * system notification settings.
+     */
+    fun postRideSummary(snap: RideStatsSnapshot) {
+        ensureChannels()
+        val distance = String.format(Locale.getDefault(), "%.1f", snap.distanceRiddenKm)
+        val text = context.getString(
+            R.string.notif_ride_summary_text,
+            snap.overtakesTotal,
+            snap.closePassCount,
+            distance,
+        )
+        val detailLines = buildList {
+            add(text)
+            snap.alertsPerKm?.let {
+                add(
+                    context.getString(
+                        R.string.notif_ride_summary_alerts,
+                        String.format(Locale.getDefault(), "%.1f", it),
+                    ),
+                )
+            }
+            snap.tightestPass?.let {
+                add(
+                    context.getString(
+                        R.string.notif_ride_summary_tightest,
+                        String.format(Locale.getDefault(), "%.1f", it.clearanceM),
+                        it.closingKmh,
+                    ),
+                )
+            }
+        }
+        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val openApp = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+            PendingIntent.getActivity(context, NOTIF_RIDE_SUMMARY_REQ, it, piFlags)
+        }
+        val notif = NotificationCompat.Builder(context, RIDE_SUMMARY_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.notif_ride_summary_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detailLines.joinToString("\n")))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .apply { openApp?.let { setContentIntent(it) } }
+            .build()
+        nm.notify(NOTIF_RIDE_SUMMARY_ID, notif)
+    }
+
     companion object {
         const val CHANNEL_ID = "bike_radar_min"
 
@@ -276,6 +347,7 @@ internal class ServiceNotifications(
         const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
         const val LIGHT_FAIL_CHANNEL_ID = "bike_radar_light_fail"
         const val FORGOT_LOCK_CHANNEL_ID = "bike_radar_forgot_lock"
+        const val RIDE_SUMMARY_CHANNEL_ID = "bike_radar_ride_summary"
         private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
             "bike_radar_walkaway",
             "bike_radar_walkaway_v2",
@@ -292,7 +364,9 @@ internal class ServiceNotifications(
         private const val NOTIF_LIGHT_FAIL_ID = 4
         private const val NOTIF_RADAR_LIGHT_FAIL_ID = 5
         private const val NOTIF_FORGOT_LOCK_ID = 6
+        private const val NOTIF_RIDE_SUMMARY_ID = 7
         private const val NOTIF_ACTION_REQ = 0xB1CD
+        private const val NOTIF_RIDE_SUMMARY_REQ = 0xB1D1
         private const val BOND_NOTIF_REQ = 0xB1CE
         private const val NOTIF_WALKAWAY_DISMISS_REQ = 0xB1CF
         private const val NOTIF_WALKAWAY_SNOOZE_REQ = 0xB1D0

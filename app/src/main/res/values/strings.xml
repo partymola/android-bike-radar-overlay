@@ -506,7 +506,7 @@
     <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
     <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: the ride status notification\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 
@@ -619,6 +619,12 @@
     <string name="svc_main_forgot_lock_channel_desc">Reminds you if you walk off without locking the eBike.</string>
     <string name="svc_main_forgot_lock_title">Bike unlocked</string>
     <string name="svc_main_forgot_lock_text">You left without locking it</string>
+    <string name="notif_ride_summary_channel_name">Ride summaries</string>
+    <string name="notif_ride_summary_channel_desc">A quiet recap of each ride once the radar powers down.</string>
+    <string name="notif_ride_summary_title">Ride summary</string>
+    <string name="notif_ride_summary_text">Overtakes: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Close passes: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km</string>
+    <string name="notif_ride_summary_alerts">Alerts per km: <xliff:g id="rate" example="1.4">%1$s</xliff:g></string>
+    <string name="notif_ride_summary_tightest">Tightest pass: <xliff:g id="m" example="0.8">%1$s</xliff:g> m at <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
     <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
     <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam left on bike</string>

@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
@@ -43,7 +44,16 @@ class BikeRadarService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var prefs: Prefs
     private lateinit var creds: HaCredentials
-    private lateinit var ha: HaClient
+
+    @Volatile private lateinit var ha: HaClient
+
+    /** Strong reference required: SharedPreferences holds listeners weakly,
+     *  so an inline lambda would be collected and silently stop firing. */
+    private val haCredsListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            ha = HaClient(creds.baseUrl, creds.token)
+        }
+
     private lateinit var haPublisher: HaPublisher
     private lateinit var notifications: ServiceNotifications
     private lateinit var walkAwayAlarm: WalkAwayAlarm
@@ -177,6 +187,11 @@ class BikeRadarService : Service() {
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
         ha = HaClient(creds.baseUrl, creds.token)
+        // Rebuild the client when the user saves new HA credentials
+        // mid-session; consumers hold `{ ha }` providers, so close-pass and
+        // front-mode publishes pick up the change without a service restart.
+        // The decryption cost lands here (once per save), not per frame.
+        creds.registerOnChangeListener(haCredsListener)
         notifications = ServiceNotifications(this) { prefs }
 
         notifications.ensureChannels()
@@ -222,7 +237,7 @@ class BikeRadarService : Service() {
         reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)
         overlayPipeline = OverlayPipeline(
             prefs = prefs,
-            ha = ha,
+            ha = { ha },
             beeper = alertBeeper!!,
             overlayHost = overlayHost,
             phoneBattery = AndroidPhoneBatterySource(this),
@@ -291,7 +306,7 @@ class BikeRadarService : Service() {
             context = this,
             scope = scope,
             prefs = prefs,
-            ha = ha,
+            ha = { ha },
             haPublisher = haPublisher,
             notifications = notifications,
             macToSlug = macToSlug,
@@ -445,6 +460,7 @@ class BikeRadarService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (::creds.isInitialized) creds.unregisterOnChangeListener(haCredsListener)
         pauseExpiryJob?.cancel()
         if (::cameraLink.isInitialized) cameraLink.stop()
         unregisterEventScan()

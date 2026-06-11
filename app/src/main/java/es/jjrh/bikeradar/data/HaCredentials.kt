@@ -53,6 +53,20 @@ class HaCredentials(context: Context) {
         sp.edit().remove(KEY_BASE_URL).remove(KEY_TOKEN).apply()
     }
 
+    /** Notify [listener] when the stored credentials change (any writer:
+     *  Settings, onboarding, clear). Lets the service rebuild its
+     *  long-lived HaClient mid-session instead of publishing with stale
+     *  credentials until restart. SharedPreferences holds listeners
+     *  weakly - the caller must keep a strong reference and pair this
+     *  with [unregisterOnChangeListener]. */
+    fun registerOnChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        sp.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterOnChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        sp.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     // On first launch, seed from BuildConfig if local.properties was
     // populated at build time and the store is still empty. End users
     // do not need local.properties; this only matters for development

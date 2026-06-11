@@ -44,7 +44,12 @@ import java.util.concurrent.ConcurrentHashMap
  */
 internal class OverlayPipeline(
     private val prefs: Prefs,
-    private val ha: HaClient,
+    /** Provider, not an instance: the service rebuilds its HaClient when
+     *  the stored credentials change, and a captured instance would keep
+     *  publishing with the stale token until restart. The lambda deref is
+     *  free on the per-frame `isConfigured` check (no decryption - the
+     *  service hands out an already-built client). */
+    private val ha: () -> HaClient,
     private val beeper: AlertBeeper,
     private val overlayHost: OverlayHost,
     private val phoneBattery: PhoneBatterySource,
@@ -173,7 +178,7 @@ internal class OverlayPipeline(
                         // guard suppresses re-issue while the publish is
                         // pending.
                         val cpCfg = ClosePassDetector.Config(
-                            enabled = prefs.closePassLoggingEnabled && ha.isConfigured(),
+                            enabled = prefs.closePassLoggingEnabled && ha().isConfigured(),
                             riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
                             closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat(),
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
@@ -184,7 +189,7 @@ internal class OverlayPipeline(
                         if (cpCfg.enabled && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {
                             closePassDiscoveryInFlight = true
                             launch(Dispatchers.IO) {
-                                val ok = ha.publishClosePassDiscovery(radarSlug, deviceName)
+                                val ok = ha().publishClosePassDiscovery(radarSlug, deviceName)
                                 if (ok) {
                                     closePassDiscoveryPublished = true
                                 } else {
@@ -205,7 +210,7 @@ internal class OverlayPipeline(
                             if (radarSlug != null) {
                                 launch(Dispatchers.IO) {
                                     for (ev in cpEvents) {
-                                        val ok = ha.publishClosePassEvent(radarSlug, closePassJson(ev))
+                                        val ok = ha().publishClosePassEvent(radarSlug, closePassJson(ev))
                                         if (!ok) Log.w(TAG, "close-pass publish failed")
                                     }
                                 }

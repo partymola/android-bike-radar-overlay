@@ -133,7 +133,7 @@ class OverlayPipelineDrivingTest {
 
     private fun buildPipeline(): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
-        ha = HaClient("", ""),
+        ha = { HaClient("", "") },
         beeper = beeper,
         overlayHost = fakeHost,
         phoneBattery = object : PhoneBatterySource {

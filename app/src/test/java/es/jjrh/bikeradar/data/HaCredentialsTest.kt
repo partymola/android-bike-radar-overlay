@@ -95,6 +95,26 @@ class HaCredentialsTest {
     }
 
     @Test
+    fun changeListenerFiresOnSaveFromAnotherInstance() {
+        // The service registers a listener and rebuilds its HaClient when
+        // credentials change; Settings writes through a DIFFERENT
+        // HaCredentials instance over the same prefs file, so the listener
+        // must fire across instances. The listener reference is held by the
+        // test for the registration's lifetime (SharedPreferences holds
+        // listeners weakly).
+        val serviceSide = HaCredentials(app)
+        var fired = 0
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> fired++ }
+        serviceSide.registerOnChangeListener(listener)
+        HaCredentials(app).save("https://new.example", "tok-new")
+        assertTrue("listener must fire on save", fired > 0)
+        val before = fired
+        serviceSide.unregisterOnChangeListener(listener)
+        HaCredentials(app).clear()
+        assertEquals("listener must not fire after unregister", before, fired)
+    }
+
+    @Test
     fun seedFromBuildConfigIsNoOpWhenAlreadyConfigured() {
         val creds = HaCredentials(app)
         creds.save("https://existing.example", "existing-token")

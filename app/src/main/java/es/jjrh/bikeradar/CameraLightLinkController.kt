@@ -39,7 +39,9 @@ internal class CameraLightLinkController(
     private val context: Context,
     private val scope: CoroutineScope,
     private val prefs: Prefs,
-    private val ha: HaClient,
+    /** Provider, not an instance - see OverlayPipeline: the service
+     *  rebuilds its HaClient when stored credentials change. */
+    private val ha: () -> HaClient,
     private val haPublisher: HaPublisher,
     private val notifications: ServiceNotifications,
     private val macToSlug: MutableMap<String, String>,
@@ -237,8 +239,8 @@ internal class CameraLightLinkController(
             val lightSlugEarly = slug(name)
             val lightMacEarly = gatt.device?.address
             if (lightMacEarly != null) macToSlug[lightMacEarly] = lightSlugEarly
-            if (ha.isConfigured() && frontModeDiscoveredSlugs.add(lightSlugEarly)) {
-                if (!ha.publishFrontModeDiscovery(lightSlugEarly, name)) {
+            if (ha().isConfigured() && frontModeDiscoveredSlugs.add(lightSlugEarly)) {
+                if (!ha().publishFrontModeDiscovery(lightSlugEarly, name)) {
                     frontModeDiscoveredSlugs.remove(lightSlugEarly)
                 }
             }
@@ -279,7 +281,7 @@ internal class CameraLightLinkController(
                 Log.i(TAG, "$label mode=$mode applied=$ok")
                 if (ok) {
                     cameraLightLastWrittenMode = mode
-                    if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
+                    if (ha().isConfigured()) ha().publishFrontModeState(lightSlugEarly, mode.name)
                 } else {
                     postLightModeFailNotification(mode)
                 }
@@ -319,7 +321,7 @@ internal class CameraLightLinkController(
                             cameraLightUserOverride = true
                             Log.i(TAG, "override detected: expected=$expected device=$mode")
                         }
-                        if (ha.isConfigured()) ha.publishFrontModeState(lightSlugEarly, mode.name)
+                        if (ha().isConfigured()) ha().publishFrontModeState(lightSlugEarly, mode.name)
                     }
                 }
             }

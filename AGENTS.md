@@ -186,6 +186,18 @@ enforces them, and CONTRIBUTING.md restates them for translators:
   Activity and fails with "View should have Activity"; instead measure + lay
   out the view, draw it to a `Bitmap`, and capture that (see
   `RadarOverlayViewTest`).
+- **Corpus-replay gate** (`CorpusReplayGate`): replays a private ride-capture
+  corpus through the real decoder + decider and compares per-capture alert
+  tallies against a baseline stored alongside the corpus. Run before pushing
+  any alert-behaviour change:
+  `scripts/dev gradle :app:testDebugUnitTest --tests es.jjrh.bikeradar.CorpusReplayGate
+  -Pbikeradar.corpusDir=<your capture directory>`. Without the property the
+  test assume-skips (CI and corpus-less checkouts are unaffected). On an
+  intentional change, re-record with `-Pbikeradar.corpusRecord=true` and cite
+  the failure diff as the before/after evidence in review. Add
+  `--no-configuration-cache` to corpus runs: the property is captured into
+  the configuration cache, so a cached entry can leak a previous run's
+  corpus path into an invocation that omitted the flag.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

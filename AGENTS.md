@@ -164,6 +164,35 @@ enforces them, and CONTRIBUTING.md restates them for translators:
 - **es: Spain register** (tú), no LatAm vocab, and gender must match the
   on-screen referent: a shared string under both "Radar" (m) and "Cámara" (f)
   needs splitting (e.g. `_radar_not_seen` / `_cam_not_seen`).
+- **es runs long - keep it tight.** Spanish averages ~15-30% longer than
+  English, but the SHORT strings in the tightest spots expand worst - single
+  labels and chips can grow 100-300% ("Dashcam" 7 chars -> "Cámara delantera"
+  16). The layout-sensitive surfaces are labels, button text, screen/section
+  titles, chips, and notification titles; size them to the longest es form,
+  never the en width. Concrete levers (Spain UI convention, tú register):
+  - **Infinitive for action labels** (buttons, menu items, chips): "Configurar",
+    "Cancelar", "Seleccionar todo". **Imperative tú for prompts** that tell the
+    rider to act: "Configúrala", "Elige", "Pulsa Aceptar". Both beat
+    "Configurar la cámara delantera" - drop the object the screen already shows.
+  - **Omit articles/possessives where Spanish allows** - "Crear carpeta" not
+    "Crear una carpeta", "Modo de luz" not "Modo de la luz", "del eBike" not
+    "de tu eBike". Don't stack "de la ... delantera" ("Luz de cámara").
+  - **Drop a qualifier the screen already supplies** - "Cámara" not "Cámara
+    delantera" on a chip / glyph legend / switch-row (the app has one camera).
+  - **No gerund for titles/labels** - translate -ing as an infinitive or noun
+    ("Configurar", "Búsqueda"); reserve the gerund for genuine progress
+    ("Buscando…", "Imprimiendo…").
+  - **Nominal style in short status strings** - drop ser/estar: "Disco lleno",
+    "Cámara no disponible", not "El disco está lleno".
+  - **Symbols, not abbreviations, for units** (no period, no plural, space):
+    "30 s", "2 min", "10 km", "%". Ordinary abbreviations keep the dot and
+    accent ("máx.", "mín.", "núm."). Reuse the Android-es words riders know
+    ("Ajustes", "No molestar").
+  - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
+  - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
+    "Seguir Mi Luz").
+  A term that fits the en layout can overflow es - verify against the es
+  Roborazzi golden (or on-device) for clipping/wrapping before committing.
 - **The Privacy screen is the deliberate exception.** It is the "verify by
   reading the code" disclosure; it keeps full substance (and the literal tokens
   `scripts/privacy-disclosure-check.sh` pins: permission names, AES-256,

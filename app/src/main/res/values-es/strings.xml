@@ -488,6 +488,7 @@
     <string name="settings_privacy_on_phone_rides">Se guarda un breve historial de rutas (horas, distancia, recuentos de adelantamientos y pases cercanos, y a qué distancia y velocidad pasaron los vehículos más cercanos - sin ubicación, sin recorrido) en el almacenamiento privado de la app para la pantalla Historial de rutas. Las entradas más antiguas se descartan a partir de 200 rutas; no se comparte nada.</string>
     <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono; sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
     <string name="settings_privacy_on_phone_crashes">Si la app falla, se guarda un informe (versión de la app, hilo y traza del error; sin datos de rutas ni ubicación) en el almacenamiento privado de la app, y solo se comparte si tocas Compartir en la pantalla de Depuración.</string>
+    <string name="settings_privacy_on_phone_linklog">Se guarda un pequeño registro de conexiones (cuándo el radar, la dashcam y el servicio de la app se conectaron, desconectaron o fallaron al conectar; solo nombres de dispositivo y horas, sin datos de rutas ni ubicación) en el almacenamiento privado de la app para diagnóstico en la pantalla de Depuración.</string>
     <string name="settings_privacy_to_ha_label">Qué va a tu Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la dashcam\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de pases cercanos, velocidades de aproximación, holguras)\n• un registro de pases cercanos por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del almacén cifrado de inmediato.</string>
@@ -593,6 +594,8 @@
     <string name="debug_send">Enviar</string>
     <string name="debug_copy_diagnostic_bundle">Copiar paquete de diagnóstico</string>
     <string name="debug_radar_state_log">REGISTRO DE ESTADO DEL RADAR (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_link_journal">DIARIO DE CONEXIONES (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_no_link_events">Aún no hay eventos de conexión.</string>
     <string name="debug_no_states_received">Aún no se han recibido estados.</string>
     <string name="debug_lock_developer_mode">Bloquear modo de desarrollador</string>
     <string name="debug_share_log_dialog_title">¿Compartir este registro de capturas?</string>

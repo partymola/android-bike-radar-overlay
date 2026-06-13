@@ -67,6 +67,9 @@ internal class RadarLinkController(
     private val linkState: RadarLinkStateGateway,
     private val macToSlug: MutableMap<String, String>,
     private val slug: (String) -> String,
+    /** Always-on link-event sink ([LinkEventJournal]); unlike the capture
+     *  log it records the attempts that never produced a connection. */
+    private val journal: (String) -> Unit,
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
@@ -121,6 +124,7 @@ internal class RadarLinkController(
                 BluetoothDevice.BOND_BONDED -> {
                     if (bondLost) {
                         Log.i(TAG, "radar re-paired ($mac); allowing reconnect")
+                        journal("radar re-paired")
                         bondLost = false
                     }
                 }
@@ -156,6 +160,7 @@ internal class RadarLinkController(
      */
     private fun onRadarBondLost(mac: String) {
         Log.w(TAG, "radar bond removed ($mac); stopping reconnect loop")
+        journal("radar bond removed; reconnect loop stopped")
         bondLost = true
         radarJob?.cancel()
         radarJob = null
@@ -172,6 +177,7 @@ internal class RadarLinkController(
             return
         }
         Log.i(TAG, "starting radar link to $name $mac")
+        journal("radar link start $name")
         radarJob = scope.launch { runRadarConnection(mac, name) }
     }
 
@@ -226,6 +232,7 @@ internal class RadarLinkController(
                     else -> " (backoff=${backoffMs}ms)"
                 }
                 Log.i(TAG, "reconnecting in ${delayMs}ms$tag")
+                journal("radar reconnect in ${delayMs}ms$tag")
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
                     backoffMs = ReconnectLoopPlanner.grow(
@@ -267,6 +274,7 @@ internal class RadarLinkController(
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
                 captureLog.clog("# conn state: status=$status newState=$newState")
+                journal("radar conn state status=$status newState=$newState")
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
@@ -341,6 +349,7 @@ internal class RadarLinkController(
         gatt = connectGattLe(context, device, true, cb)
         if (gatt == null) {
             captureLog.clog("# connectGatt returned null")
+            journal("radar connectGatt returned null")
             return false
         }
 
@@ -355,11 +364,13 @@ internal class RadarLinkController(
             val ok = servicesReady.await()
             if (!ok) {
                 captureLog.clog("# services discovery failed")
+                journal("radar services discovery failed")
                 return false
             }
 
             linkState.markConnected()
             Log.i(TAG, "connected, running handshake")
+            journal("radar connected, running handshake")
 
             val handshakeOk = RadarUnlock.runHandshake(gatt, queue, notifyChannel) { msg ->
                 captureLog.clog("# script: $msg")
@@ -367,11 +378,13 @@ internal class RadarLinkController(
 
             if (!handshakeOk) {
                 captureLog.clog("# handshake aborted - closing gatt for quick reconnect")
+                journal("radar handshake aborted (quick reconnect)")
                 gatt.disconnect()
                 return true
             }
 
             Log.i(TAG, "handshake complete, decoding frames")
+            journal("radar handshake complete")
             // First chance per ride to refresh the location cache used by
             // SunsetCalculator (front- and radar-light auto-modes). 60-min staleness
             // gate means quick stop-and-go reconnects don't re-poll.
@@ -413,6 +426,7 @@ internal class RadarLinkController(
                     val ageMs = System.currentTimeMillis() - last
                     if (ageMs > V2_FRAME_STALL_MS) {
                         Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
+                        journal("radar V2 stream silent ${ageMs}ms; tearing down")
                         try {
                             capturedGatt.disconnect()
                         } catch (_: Throwable) {}

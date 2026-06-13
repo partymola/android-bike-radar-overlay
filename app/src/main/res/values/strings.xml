@@ -500,6 +500,7 @@
     <string name="settings_privacy_on_phone_rides">A short ride history (ride times, distance, overtake and close-pass counts, and how close and how fast the closest passes were - no location, no route) is kept in app-private storage for the Ride history screen. The oldest entries are dropped after 200 rides; nothing is shared.</string>
     <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples; no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
     <string name="settings_privacy_on_phone_crashes">If the app crashes, a report (app version, thread, stack trace - no ride data, no location) is kept in app-private storage and shared only if you tap Share on the Debug screen.</string>
+    <string name="settings_privacy_on_phone_linklog">A small connection log (when the radar, dashcam and the app\'s service connected, disconnected or failed to connect - device names and times only, no ride data, no location) is kept in app-private storage for troubleshooting on the Debug screen.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">If you set up HA, the app publishes over MQTT, straight to your HA URL - nothing routed through the developer or any third party:\n• radar and dashcam battery\n• front-light mode\n• ride start/end events\n• an end-of-ride summary (distance, close-pass counts, closing speeds, clearances)\n• a per-event close-pass log, if you turn it on</string>
     <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.</string>
@@ -605,6 +606,8 @@
     <string name="debug_send">Send</string>
     <string name="debug_copy_diagnostic_bundle">Copy diagnostic bundle</string>
     <string name="debug_radar_state_log">RADAR STATE LOG (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_link_journal">LINK JOURNAL (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_no_link_events">No link events yet.</string>
     <string name="debug_no_states_received">No states received yet.</string>
     <string name="debug_lock_developer_mode">Lock developer mode</string>
     <string name="debug_share_log_dialog_title">Share this capture log?</string>

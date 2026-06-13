@@ -47,6 +47,9 @@ internal class CameraLightLinkController(
     private val macToSlug: MutableMap<String, String>,
     private val slug: (String) -> String,
     private val radarOffSinceMs: () -> Long?,
+    /** Always-on link-event sink ([LinkEventJournal]); this link has no
+     *  capture log at all, so the journal is its only persistent trace. */
+    private val journal: (String) -> Unit,
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var cameraLightJob: Job? = null
@@ -65,6 +68,7 @@ internal class CameraLightLinkController(
     fun start(name: String, mac: String) {
         if (cameraLightJob?.isActive == true) return
         Log.i(TAG, "starting camera light link to $name $mac")
+        journal("camera link start $name")
         cameraLightJob = scope.launch { runCameraLightConnection(mac, name) }
     }
 
@@ -140,6 +144,7 @@ internal class CameraLightLinkController(
 
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+                journal("camera conn state status=$status newState=$newState")
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
@@ -192,6 +197,7 @@ internal class CameraLightLinkController(
         gatt = connectGattLe(context, device, true, cb)
         if (gatt == null) {
             Log.w(TAG, "connectGatt returned null")
+            journal("camera connectGatt returned null")
             return false
         }
 
@@ -203,6 +209,7 @@ internal class CameraLightLinkController(
             val ok = servicesReady.await()
             if (!ok) {
                 Log.w(TAG, "service discovery failed")
+                journal("camera services discovery failed")
                 return false
             }
 
@@ -224,11 +231,13 @@ internal class CameraLightLinkController(
 
             if (!handshakeOk) {
                 Log.w(TAG, "handshake failed; closing for quick reconnect")
+                journal("camera handshake failed (quick reconnect)")
                 gatt.disconnect()
                 return true
             }
 
             Log.i(TAG, "handshake complete; subscribing mode-state notify")
+            journal("camera handshake complete")
             // Refresh the location cache for sunrise/sunset before scheduling
             // the dusk/dawn flips below. Idempotent with the radar-side
             // refresh: if either device handshook first, the cache is warm.

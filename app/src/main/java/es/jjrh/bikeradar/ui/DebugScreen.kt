@@ -69,6 +69,7 @@ import es.jjrh.bikeradar.CrashLogger
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
+import es.jjrh.bikeradar.LinkEventJournal
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.ReplayService
@@ -109,6 +110,8 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
     // (not mutated in place) so it always reflects the true on-disk state.
     var logFiles by remember { mutableStateOf(enumerateCaptureLogs(ctx)) }
     var crashFiles by remember { mutableStateOf(enumerateCrashLogs(ctx)) }
+    var journalTail by remember { mutableStateOf(readLinkJournal(ctx)) }
+    var journalExpanded by remember { mutableStateOf(false) }
     var pendingDeleteAll by remember { mutableStateOf(false) }
 
     var replayRunning by remember { mutableStateOf(ReplayService.isRunning) }
@@ -155,6 +158,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             // forcing a delete.
             logFiles = enumerateCaptureLogs(ctx)
             crashFiles = enumerateCrashLogs(ctx)
+            journalTail = readLinkJournal(ctx)
             while (true) {
                 delay(500)
                 replayRunning = ReplayService.isRunning
@@ -270,6 +274,69 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     crashFiles = enumerateCrashLogs(ctx)
                 },
             )
+
+            // Link-event journal: always-on lifecycle log for both BLE links.
+            // Answers "why didn't it reconnect?" after the fact - the capture
+            // log can't (opt-in, and only open while a connection is live).
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clickable { journalExpanded = !journalExpanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.debug_link_journal, journalTail.size),
+                    color = br.fgDim,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.4.sp,
+                )
+                Icon(
+                    imageVector = if (journalExpanded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
+                    contentDescription = null,
+                    tint = br.fgDim,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            if (journalExpanded) {
+                if (journalTail.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.debug_no_link_events),
+                        color = br.fgDim,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(br.bgElev1)
+                            .border(1.dp, br.hairline, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        for (entry in journalTail.take(50)) {
+                            Text(
+                                text = entry,
+                                color = br.fgMuted,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                            )
+                        }
+                    }
+                }
+            }
 
             // Screenshot capture
             SettingsSectionLabel(stringResource(R.string.debug_section_screenshot_capture))
@@ -611,6 +678,9 @@ internal fun DebugScenarioControls(
     }
 }
 
+/** Newest-first tail of the always-on BLE link-event journal. */
+private fun readLinkJournal(ctx: Context): List<String> = LinkEventJournal({ ctx.getExternalFilesDir(null) }).readTail()
+
 /** Crash reports on disk, newest first (written by [CrashLogger]). */
 private fun enumerateCrashLogs(ctx: Context): List<File> = ctx.getExternalFilesDir(null)
     ?.let { File(it, CrashLogger.CRASH_DIR) }
@@ -856,6 +926,9 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
         ?: emptyList()
     sb.appendLine("--- Capture logs (${logFiles.size} on disk) ---")
     logFiles.take(3).forEach { sb.appendLine("${it.name}  ${it.length() / 1024}KB") }
+    val journal = readLinkJournal(ctx)
+    sb.appendLine("--- Link journal (newest ${journal.size.coerceAtMost(40)}) ---")
+    journal.take(40).forEach { sb.appendLine(it) }
     val crashFiles = enumerateCrashLogs(ctx)
     sb.appendLine()
     sb.appendLine("--- Crash reports (${crashFiles.size} on disk) ---")

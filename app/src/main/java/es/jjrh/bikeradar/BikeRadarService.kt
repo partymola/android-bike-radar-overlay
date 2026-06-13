@@ -186,6 +186,12 @@ class BikeRadarService : Service() {
     // meaningful-ride gate); read back by the Ride history screen.
     private val rideHistory = RideHistoryStore({ getExternalFilesDir(null) })
 
+    // Always-on BLE link-event journal. The capture log is opt-in and only
+    // open during a live radar connection, so connection FAILURES used to
+    // leave no persistent trace; the journal records the link lifecycle for
+    // both BLE links and is read by the Debug screen.
+    private val linkJournal = LinkEventJournal({ getExternalFilesDir(null) })
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -198,6 +204,9 @@ class BikeRadarService : Service() {
         // the previous instance died without a clean shutdown.
         if (prefs.serviceRunningMarker) prefs.dirtyRestartCount += 1
         prefs.serviceRunningMarker = true
+        // Service edges bracket the link events so a journal gap reads as
+        // "service wasn't running", not "links were silent".
+        linkJournal.log("service started (unclean restarts=${prefs.dirtyRestartCount})")
         // Crash-path capture flush: the seconds before a crash are the ride
         // data worth keeping, and the writer buffers up to a flush window.
         CrashLogger.emergencyFlush = { captureLog.flushNow() }
@@ -322,6 +331,7 @@ class BikeRadarService : Service() {
             linkState = radarLinkCoordinator,
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
+            journal = linkJournal::log,
         )
         cameraLink = CameraLightLinkController(
             context = this,
@@ -333,6 +343,7 @@ class BikeRadarService : Service() {
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
             radarOffSinceMs = { radarLinkCoordinator.snapshot().radarOffSinceMs },
+            journal = linkJournal::log,
         )
         batteryReader = BatteryReader(
             context = this,
@@ -481,6 +492,7 @@ class BikeRadarService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        linkJournal.log("service stopping")
         if (::creds.isInitialized) creds.unregisterOnChangeListener(haCredsListener)
         CrashLogger.emergencyFlush = null
         if (::prefs.isInitialized) prefs.serviceRunningMarker = false

@@ -91,6 +91,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // AGP otherwise embeds a Google-signed dependency-metadata blob in the
+    // APK. It has no runtime purpose and can't be reproduced byte-for-byte, so
+    // it breaks F-Droid's build-from-source reproducibility check. Strip it.
+    // We ship APKs, not AABs; includeInBundle is set for completeness.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     signingConfigs {
         getByName("debug") {
             storeFile = debugKeystoreFile

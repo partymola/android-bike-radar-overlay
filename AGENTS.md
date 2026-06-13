@@ -39,7 +39,11 @@ Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the
 headings already in use - Features, Fix, Security, UX, Compatibility,
 Reliability, Stability, Power, Diagnostics, Internal - matching the tone
-of existing entries), then push a `v*` tag (e.g.
+of existing entries). Write each bullet on a SINGLE line, no hard
+wrapping: the release workflow copies the section verbatim into the
+GitHub release body, which renders every newline as a line break, so a
+wrapped bullet shows mid-sentence breaks on the Releases page. Then push
+a `v*` tag (e.g.
 `v0.7.1-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
 which builds a release-signed APK and publishes a GitHub pre-release.
 The workflow defaults `prerelease: true` until the app exits alpha.

@@ -4,137 +4,53 @@
 
 ### Features
 
-- **A dead-radar warning on the overlay.** When the rear radar drops
-  mid-ride, the overlay strip goes blank - which reads like clear road. After
-  about 10 seconds down, an amber "Rear radar disconnected" warning now marks
-  the rear blind and clears the instant the radar returns. It's the only
-  dead-radar
-  signal a radar-only rider gets, and it's bounded so it can't sit on screen
-  forever: a 30-second cap, with an opt-in "keep it on until the radar
-  reconnects" toggle in Settings -> Alerts, and it stays hidden on a bench
-  test where no traffic was ever seen. With a Bosch eBike it instead reads
-  "Rear radar disconnected but bike unlocked" while the bike is unlocked,
-  doubling as a forgot-to-lock hint.
-- **A quiet post-ride summary, no Home Assistant needed.** When the radar
-  has been silent for three minutes, the app posts a quiet notification
-  recapping the ride - overtakes, close passes, distance, alerts per km, and
-  the tightest pass - and a paired watch shows it too. This used to exist
-  only as a Home Assistant sensor. A bench connect that wasn't really a ride
-  stays silent.
-- **Close passes are now counted on the phone, with a ride history - no
-  Home Assistant needed.** The home-screen count, and the close-pass
-  detection behind it, used to switch on only when Home Assistant was
-  configured - so a rider without HA saw a permanent zero. Detection now
-  runs whenever you turn on close-pass counting in Settings -> Alerts, and
-  tapping the close-pass card opens a new Ride history screen with a per-ride
-  log: distance, overtakes, close passes, and how close and how fast the
-  closest passes came. It all stays on the phone - no location, no route -
-  and Home Assistant, if you use it, is just an extra place the same data is
-  sent.
-- **Urgent warning now fires when you're moving slowly, not only when
-  stopped.** The imminent-impact tone used to arm only once you were
-  essentially stopped, so a vehicle bearing down as you slowed into a
-  junction got ordinary beeps until standstill. It now also arms at or below
-  15 km/h, with a higher closing-speed bar on the moving path so a normal
-  overtake at walking pace doesn't trip it. Validated against 105 recorded
-  rides. On by default, in Settings -> Alerts.
-- **Forgot-to-lock wrist reminder (Bosch eBike).** Walk away from the bike
-  while it's still unlocked and out of radar range, and your watch buzzes
-  once - the walk-away alarm stays silent when the bike is unlocked, so this
-  covers that gap. eBike only, on by default, toggle in Settings -> eBike.
-  The app can't lock the bike for you, so it's a reminder only.
-- **Pin a radar the app doesn't recognise by name.** Settings -> Radar now
-  lists any paired Bluetooth device under "My radar isn't listed", so a rear
-  unit whose name the app's matcher doesn't recognise can still be selected
-  and tracked.
+- **A dead-radar warning on the overlay.** When the rear radar drops mid-ride, the overlay strip goes blank - which reads like clear road. After about 10 seconds down, an amber "Rear radar disconnected" warning now marks the rear blind and clears the instant the radar returns. It's the only dead-radar signal a radar-only rider gets, and it's bounded so it can't sit on screen forever: a 30-second cap, with an opt-in "keep it on until the radar reconnects" toggle in Settings -> Alerts, and it stays hidden on a bench test where no traffic was ever seen. With a Bosch eBike it instead reads "Rear radar disconnected but bike unlocked" while the bike is unlocked, doubling as a forgot-to-lock hint.
+- **A quiet post-ride summary, no Home Assistant needed.** When the radar has been silent for three minutes, the app posts a quiet notification recapping the ride - overtakes, close passes, distance, alerts per km, and the tightest pass - and a paired watch shows it too. This used to exist only as a Home Assistant sensor. A bench connect that wasn't really a ride stays silent.
+- **Close passes are now counted on the phone, with a ride history - no Home Assistant needed.** The home-screen count, and the close-pass detection behind it, used to switch on only when Home Assistant was configured - so a rider without HA saw a permanent zero. Detection now runs whenever you turn on close-pass counting in Settings -> Alerts, and tapping the close-pass card opens a new Ride history screen with a per-ride log: distance, overtakes, close passes, and how close and how fast the closest passes came. It all stays on the phone - no location, no route - and Home Assistant, if you use it, is just an extra place the same data is sent.
+- **Urgent warning now fires when you're moving slowly, not only when stopped.** The imminent-impact tone used to arm only once you were essentially stopped, so a vehicle bearing down as you slowed into a junction got ordinary beeps until standstill. It now also arms at or below 15 km/h, with a higher closing-speed bar on the moving path so a normal overtake at walking pace doesn't trip it. Validated against 105 recorded rides. On by default, in Settings -> Alerts.
+- **Forgot-to-lock wrist reminder (Bosch eBike).** Walk away from the bike while it's still unlocked and out of radar range, and your watch buzzes once - the walk-away alarm stays silent when the bike is unlocked, so this covers that gap. eBike only, on by default, toggle in Settings -> eBike. The app can't lock the bike for you, so it's a reminder only.
+- **Pin a radar the app doesn't recognise by name.** Settings -> Radar now lists any paired Bluetooth device under "My radar isn't listed", so a rear unit whose name the app's matcher doesn't recognise can still be selected and tracked.
 
 ### Fix
 
-- **Home Assistant picks up new credentials without an app restart.** Saving
-  a new HA URL or token mid-session used to leave close-pass and
-  front-light-mode publishes failing silently until you restarted the app.
-  They now switch to the new credentials immediately.
+- **Home Assistant picks up new credentials without an app restart.** Saving a new HA URL or token mid-session used to leave close-pass and front-light-mode publishes failing silently until you restarted the app. They now switch to the new credentials immediately.
 
 ### Diagnostics
 
-- **Crashes are now visible without a computer.** If the app crashes it
-  flushes the last of the capture log to disk first, keeps a running count of
-  unclean restarts so a silent crash-or-kill loop becomes noticeable, and
-  lists crash reports on the Debug screen with share and delete. The
-  diagnostic bundle includes the newest report; the Privacy screen discloses
-  that crash reports are stored on the phone.
-- **An always-on connection log for both Bluetooth links.** The app now
-  keeps a small record of when the radar and front camera connect, drop, or
-  fail to connect - on the Debug screen and in the copy-diagnostic bundle.
-  Unlike the opt-in capture log it is always on and survives across rides,
-  so a "why didn't it reconnect yesterday?" question has an answer. Device
-  names and times only; no ride data, no location.
+- **Crashes are now visible without a computer.** If the app crashes it flushes the last of the capture log to disk first, keeps a running count of unclean restarts so a silent crash-or-kill loop becomes noticeable, and lists crash reports on the Debug screen with share and delete. The diagnostic bundle includes the newest report; the Privacy screen discloses that crash reports are stored on the phone.
+- **An always-on connection log for both Bluetooth links.** The app now keeps a small record of when the radar and front camera connect, drop, or fail to connect - on the Debug screen and in the copy-diagnostic bundle. Unlike the opt-in capture log it is always on and survives across rides, so a "why didn't it reconnect yesterday?" question has an answer. Device names and times only; no ride data, no location.
 
 ### Compatibility
 
-- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE
-  protocol.
-- **Home Assistant ride-summary sensor is now per-ride.** It reports the
-  current ride's numbers and resets on a new ride, instead of a running total
-  since the service started. Existing subscribers keep working; the values
-  just reset per ride. No topic or schema change.
-- Two alert behaviours default on: the urgent cue now also fires below
-  15 km/h (turn off in Settings -> Alerts), and the overlay shows a
-  dead-radar warning when the rear radar drops. Riders without
-  Home Assistant will also now see real close-pass counts where the card
-  previously stayed at zero - turn close-pass counting on in Settings ->
-  Alerts. No migration needed.
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE protocol.
+- **Home Assistant ride-summary sensor is now per-ride.** It reports the current ride's numbers and resets on a new ride, instead of a running total since the service started. Existing subscribers keep working; the values just reset per ride. No topic or schema change.
+- Two alert behaviours default on: the urgent cue now also fires below 15 km/h (turn off in Settings -> Alerts), and the overlay shows a dead-radar warning when the rear radar drops. Riders without Home Assistant will also now see real close-pass counts where the card previously stayed at zero - turn close-pass counting on in Settings -> Alerts. No migration needed.
 
 ### Internal
 
-- The branch-coverage gate now holds every safety decider to its floor by
-  wildcard, instead of a hand-maintained list that silently exempted deciders
-  added after it was written. The radar/camera name-matching heuristic is
-  centralised in one place; it was duplicated across several screens that
-  could drift apart.
-- Continued splitting the foreground service into single-responsibility,
-  unit-tested coordinators (the rear-radar and front-camera links, one-shot
-  battery reads, the walk-away alarm, notifications, the shared reconnect
-  backoff), with no behaviour change. A guarded service-shutdown path and a
-  corpus-replay test gate for alert-behaviour changes were added.
-- A hardware-compatibility issue template and a code of conduct were added,
-  fastlane store metadata (en + es) and an Obtainium install section landed,
-  and the Privacy screen now discloses the on-phone ride history and
-  connection log. Plus the usual test and documentation refreshes.
+- The branch-coverage gate now holds every safety decider to its floor by wildcard, instead of a hand-maintained list that silently exempted deciders added after it was written. The radar/camera name-matching heuristic is centralised in one place; it was duplicated across several screens that could drift apart.
+- Continued splitting the foreground service into single-responsibility, unit-tested coordinators (the rear-radar and front-camera links, one-shot battery reads, the walk-away alarm, notifications, the shared reconnect backoff), with no behaviour change. A guarded service-shutdown path and a corpus-replay test gate for alert-behaviour changes were added.
+- A hardware-compatibility issue template and a code of conduct were added, fastlane store metadata (en + es) and an Obtainium install section landed, and the Privacy screen now discloses the on-phone ride history and connection log. Plus the usual test and documentation refreshes.
 
 ## v0.10.0-alpha - 2026-06-07
 
 ### Features
 
-- **Bike Radar ya está disponible en español.** Está totalmente traducido:
-  si tu teléfono está en español, se muestra en español automáticamente.
-  Para usar solo esta app en español con el teléfono en otro idioma, usa los
-  ajustes de idioma por aplicación de Android (13 o posterior).
+- **Bike Radar ya está disponible en español.** Está totalmente traducido: si tu teléfono está en español, se muestra en español automáticamente. Para usar solo esta app en español con el teléfono en otro idioma, usa los ajustes de idioma por aplicación de Android (13 o posterior).
 
-  The app is now fully translated to Spanish: a Spanish-language phone shows
-  it in Spanish automatically, or use Android 13+'s per-app language setting
-  to run just this app in Spanish. The text lives entirely in Android string
-  resources, so adding another language is a `values-<code>/strings.xml`
-  translation with no code changes - see `CONTRIBUTING.md`.
+  The app is now fully translated to Spanish: a Spanish-language phone shows it in Spanish automatically, or use Android 13+'s per-app language setting to run just this app in Spanish. The text lives entirely in Android string resources, so adding another language is a `values-<code>/strings.xml` translation with no code changes - see `CONTRIBUTING.md`.
 
 ### UX
 
-- **Tighter wording across the app.** A copy pass trimmed Settings and
-  status text to say what you get rather than how it works.
+- **Tighter wording across the app.** A copy pass trimmed Settings and status text to say what you get rather than how it works.
 
 ### Diagnostics
 
-- **Uncaught crashes are recorded to app-private storage.** If the app ever
-  crashes, the stack trace is written to a local file so a bug report can
-  say what happened instead of losing it. The handler installs once per
-  process and chains the platform default, so nothing else is suppressed.
+- **Uncaught crashes are recorded to app-private storage.** If the app ever crashes, the stack trace is written to a local file so a bug report can say what happened instead of losing it. The handler installs once per process and chains the platform default, so nothing else is suppressed.
 
 ### Reliability
 
-- **The dashcam battery probe backs off when the camera is off.** It no
-  longer retries on a fixed cadence against a dashcam that isn't
-  broadcasting, which was waking the Bluetooth stack needlessly and
-  contending with the radar link.
+- **The dashcam battery probe backs off when the camera is off.** It no longer retries on a fixed cadence against a dashcam that isn't broadcasting, which was waking the Bluetooth stack needlessly and contending with the radar link.
 
 ### Compatibility
 
@@ -143,10 +59,7 @@
 
 ### Internal
 
-- Continued splitting the foreground service into focused, unit-tested
-  coordinators (capture-log lifecycle, Home Assistant publishing,
-  notification channels, the known-device cache), with no change to
-  behaviour. Plus the usual test-coverage, CI, and documentation refreshes.
+- Continued splitting the foreground service into focused, unit-tested coordinators (capture-log lifecycle, Home Assistant publishing, notification channels, the known-device cache), with no change to behaviour. Plus the usual test-coverage, CI, and documentation refreshes.
 
 ## v0.9.0-alpha - 2026-06-02
 

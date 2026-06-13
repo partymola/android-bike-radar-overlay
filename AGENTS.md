@@ -42,7 +42,11 @@ Reliability, Stability, Power, Diagnostics, Internal - matching the tone
 of existing entries). Write each bullet on a SINGLE line, no hard
 wrapping: the release workflow copies the section verbatim into the
 GitHub release body, which renders every newline as a line break, so a
-wrapped bullet shows mid-sentence breaks on the Releases page. Then push
+wrapped bullet shows mid-sentence breaks on the Releases page. Also add a
+short per-version changelog at
+`fastlane/metadata/android/{en-US,es-ES}/changelogs/<versionCode>.txt` (the
+F-Droid / store "What's New"; keyed by `versionCode`, not the name) - a tight
+benefit-framed summary, not the full CHANGELOG section. Then push
 a `v*` tag (e.g.
 `v0.7.1-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
 which builds a release-signed APK and publishes a GitHub pre-release.

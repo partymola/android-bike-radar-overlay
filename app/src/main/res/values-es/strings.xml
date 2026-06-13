@@ -125,7 +125,8 @@
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
     <string name="main_section_close_passes">Pases cercanos</string>
     <string name="main_close_passes_caption">esta ruta</string>
-    <string name="main_close_passes_empty_hint">Activa Ajustes → Alertas → Enviar a Home Assistant para guardar un historial de pases cercanos.</string>
+    <string name="main_close_passes_history_link">Historial ›</string>
+    <string name="main_close_passes_empty_hint">Activa el recuento de pases cercanos en Ajustes → Alertas para contarlos aquí y guardar un historial de rutas.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano esta ruta</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos esta ruta</item>
@@ -365,11 +366,11 @@
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
     <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'DASHCAM 8%\' en pantalla en lugar de un tinte de aviso silencioso.</string>
-    <string name="settings_radar_log_to_ha_title">Enviar a Home Assistant</string>
-    <string name="settings_radar_log_to_ha_subtitle_enabled">Publica los pases cercanos en HA cuando un vehículo adelanta dentro de la distancia lateral de abajo.</string>
-    <string name="settings_radar_log_to_ha_subtitle_disabled">Requiere Home Assistant - configúralo abajo.</string>
+    <string name="settings_radar_close_pass_title">Contar pases cercanos</string>
+    <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio y en tu historial de rutas.</string>
+    <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio, en tu historial de rutas y enviados a Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Umbral de holgura lateral</string>
-    <string name="settings_radar_lateral_clearance_helper">Solo publica cuando la holgura lateral mínima baja de esta distancia.</string>
+    <string name="settings_radar_lateral_clearance_helper">Solo cuenta un pase cuando la holgura lateral mínima baja de esta distancia.</string>
     <string name="settings_radar_min_rider_speed_title">Velocidad mínima del ciclista</string>
     <string name="settings_radar_min_rider_speed_helper">El detector ignora las situaciones con el ciclista parado (semáforos en rojo, empujar la bici).</string>
     <string name="settings_radar_min_closing_speed_title">Velocidad mínima de aproximación</string>
@@ -484,6 +485,7 @@
     <string name="settings_privacy_on_phone_label">Qué se queda en tu teléfono</string>
     <string name="settings_privacy_on_phone_settings">Tus ajustes (volumen de alerta, distancia de alerta, estado del radar emparejado, preferencias de la dashcam y similares) residen en el almacenamiento privado de la app de Android y nunca salen del dispositivo.</string>
     <string name="settings_privacy_on_phone_creds">La URL de tu Home Assistant y el token se cifran en reposo con una clave AES-256/GCM respaldada por hardware del Android Keystore. La clave nunca sale del elemento seguro, así que el acceso directo al sistema de archivos (p. ej. `adb pull`) solo recupera texto cifrado.</string>
+    <string name="settings_privacy_on_phone_rides">Se guarda un breve historial de rutas (horas, distancia, recuentos de adelantamientos y pases cercanos, y a qué distancia y velocidad pasaron los vehículos más cercanos - sin ubicación, sin recorrido) en el almacenamiento privado de la app para la pantalla Historial de rutas. Las entradas más antiguas se descartan a partir de 200 rutas; no se comparte nada.</string>
     <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono; sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
     <string name="settings_privacy_on_phone_crashes">Si la app falla, se guarda un informe (versión de la app, hilo y traza del error; sin datos de rutas ni ubicación) en el almacenamiento privado de la app, y solo se comparte si tocas Compartir en la pantalla de Depuración.</string>
     <string name="settings_privacy_to_ha_label">Qué va a tu Home Assistant</string>
@@ -535,6 +537,23 @@
     <string name="dashcam_picker_refreshing">ACTUALIZANDO CADA 2 s</string>
     <string name="dashcam_picker_cancel">Cancelar</string>
     <string name="dashcam_picker_save">Guardar</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Historial de rutas (RideHistoryScreen.kt)
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="ride_history_title">Historial de rutas</string>
+    <string name="ride_history_empty_title">Aún no hay rutas</string>
+    <string name="ride_history_empty_body">Cada ruta aparece aquí unos minutos después de que el radar se apague. Todo se queda en tu teléfono.</string>
+    <plurals name="ride_history_overtakes">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> adelantamiento</item>
+        <item quantity="other"><xliff:g id="count" example="48">%1$d</xliff:g> adelantamientos</item>
+    </plurals>
+    <plurals name="ride_history_close_passes">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos</item>
+    </plurals>
+    <string name="ride_history_tightest">mínimo <xliff:g id="m" example="0,8">%1$s</xliff:g> m</string>
+    <string name="ride_history_km_value"><xliff:g id="km" example="12,4">%1$s</xliff:g> km</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de depuración (DebugScreen.kt) - diagnósticos tras desbloqueo de dev

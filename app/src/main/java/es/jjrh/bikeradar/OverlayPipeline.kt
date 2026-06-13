@@ -173,12 +173,16 @@ internal class OverlayPipeline(
                             alerts.reset()
                         }
 
-                        // Close-pass discovery is published lazily once HA is
-                        // configured + a radar slug is known. The in-flight
-                        // guard suppresses re-issue while the publish is
-                        // pending.
+                        // Close-pass detection runs whenever the user enabled
+                        // it - the count card, ride stats, and ride history
+                        // are local features. HA is an optional egress: the
+                        // discovery + event publishes below additionally
+                        // require ha().isConfigured(). Discovery is published
+                        // lazily once HA is configured + a radar slug is
+                        // known; the in-flight guard suppresses re-issue
+                        // while the publish is pending.
                         val cpCfg = ClosePassDetector.Config(
-                            enabled = prefs.closePassLoggingEnabled && ha().isConfigured(),
+                            enabled = prefs.closePassLoggingEnabled,
                             riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
                             closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat(),
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
@@ -186,7 +190,7 @@ internal class OverlayPipeline(
                         val table = macToSlug()
                         val radarMac = currentRadarMac()
                         val radarSlug = radarMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }
-                        if (cpCfg.enabled && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {
+                        if (cpCfg.enabled && ha().isConfigured() && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {
                             closePassDiscoveryInFlight = true
                             launch(Dispatchers.IO) {
                                 val ok = ha().publishClosePassDiscovery(radarSlug, deviceName)
@@ -207,7 +211,7 @@ internal class OverlayPipeline(
                         if (cpEvents.isNotEmpty()) {
                             ClosePassStateBus.increment(cpEvents.size)
                             for (ev in cpEvents) rideStats().observeClosePass(ev)
-                            if (radarSlug != null) {
+                            if (radarSlug != null && ha().isConfigured()) {
                                 launch(Dispatchers.IO) {
                                     for (ev in cpEvents) {
                                         val ok = ha().publishClosePassEvent(radarSlug, closePassJson(ev))

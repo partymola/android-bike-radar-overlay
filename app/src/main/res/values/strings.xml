@@ -137,7 +137,8 @@
     <!-- CLOSE PASSES stats card. -->
     <string name="main_section_close_passes">Close passes</string>
     <string name="main_close_passes_caption">this ride</string>
-    <string name="main_close_passes_empty_hint">Enable Settings → Alerts → Log to Home Assistant to keep a history of close passes.</string>
+    <string name="main_close_passes_history_link">History ›</string>
+    <string name="main_close_passes_empty_hint">Turn on close-pass counting in Settings → Alerts to count them here and keep a ride history.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> close pass this ride</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> close passes this ride</item>
@@ -377,11 +378,11 @@
     <string name="settings_radar_low_battery_helper">Show an amber warning beside the rider when any paired device drops below this level.</string>
     <string name="settings_radar_show_labels_title">Show device labels</string>
     <string name="settings_radar_show_labels_subtitle">Show \'RADAR 12%\' or \'DASHCAM 8%\' on screen instead of a silent warning tint.</string>
-    <string name="settings_radar_log_to_ha_title">Log to Home Assistant</string>
-    <string name="settings_radar_log_to_ha_subtitle_enabled">Publish close passes to HA when a vehicle overtakes inside the lateral distance below.</string>
-    <string name="settings_radar_log_to_ha_subtitle_disabled">Requires Home Assistant - set it up below.</string>
+    <string name="settings_radar_close_pass_title">Count close passes</string>
+    <string name="settings_radar_close_pass_subtitle">Count overtakes inside the clearance below - on the home screen and in your ride history.</string>
+    <string name="settings_radar_close_pass_subtitle_ha">Count overtakes inside the clearance below - on the home screen, in your ride history, and sent to Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Lateral clearance threshold</string>
-    <string name="settings_radar_lateral_clearance_helper">Only publish when the minimum lateral clearance drops below this distance.</string>
+    <string name="settings_radar_lateral_clearance_helper">Only count a pass when the minimum lateral clearance drops below this distance.</string>
     <string name="settings_radar_min_rider_speed_title">Minimum rider speed</string>
     <string name="settings_radar_min_rider_speed_helper">Detector ignores stationary-rider situations (red lights, pushing the bike).</string>
     <string name="settings_radar_min_closing_speed_title">Minimum closing speed</string>
@@ -496,6 +497,7 @@
     <string name="settings_privacy_on_phone_label">What stays on your phone</string>
     <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
     <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The key never leaves the secure element, so raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
+    <string name="settings_privacy_on_phone_rides">A short ride history (ride times, distance, overtake and close-pass counts, and how close and how fast the closest passes were - no location, no route) is kept in app-private storage for the Ride history screen. The oldest entries are dropped after 200 rides; nothing is shared.</string>
     <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples; no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
     <string name="settings_privacy_on_phone_crashes">If the app crashes, a report (app version, thread, stack trace - no ride data, no location) is kept in app-private storage and shared only if you tap Share on the Debug screen.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
@@ -547,6 +549,23 @@
     <string name="dashcam_picker_refreshing">REFRESHING EVERY 2 s</string>
     <string name="dashcam_picker_cancel">Cancel</string>
     <string name="dashcam_picker_save">Save</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Ride history (RideHistoryScreen.kt)
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="ride_history_title">Ride history</string>
+    <string name="ride_history_empty_title">No rides yet</string>
+    <string name="ride_history_empty_body">Each ride lands here a few minutes after the radar powers down. Everything stays on your phone.</string>
+    <plurals name="ride_history_overtakes">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> overtake</item>
+        <item quantity="other"><xliff:g id="count" example="48">%1$d</xliff:g> overtakes</item>
+    </plurals>
+    <plurals name="ride_history_close_passes">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> close pass</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> close passes</item>
+    </plurals>
+    <string name="ride_history_tightest">tightest <xliff:g id="m" example="0.8">%1$s</xliff:g> m</string>
+    <string name="ride_history_km_value"><xliff:g id="km" example="12.4">%1$s</xliff:g> km</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Debug screen (DebugScreen.kt) - dev-unlock-gated diagnostics

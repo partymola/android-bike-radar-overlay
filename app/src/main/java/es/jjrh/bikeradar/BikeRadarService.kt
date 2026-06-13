@@ -181,6 +181,11 @@ class BikeRadarService : Service() {
         onActiveName = { activeCaptureLogName = it },
     )
 
+    // Local ride history: one JSON line per finished ride, appended the
+    // moment the post-ride summary notification fires (same snapshot, same
+    // meaningful-ride gate); read back by the Ride history screen.
+    private val rideHistory = RideHistoryStore({ getExternalFilesDir(null) })
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -804,6 +809,9 @@ class BikeRadarService : Service() {
         if (RideSummaryNotificationDecider.shouldPost(off, nowMs, rideSummaryPosted, snap)) {
             rideSummaryPosted = true
             notifications.postRideSummary(snap)
+            // Ride end = the moment the radar went off, not "now" (the
+            // dwell is detection latency, not riding time).
+            rideHistory.append(RideHistoryRecord.fromSnapshot(snap, endedAtMs = off))
         }
     }
 

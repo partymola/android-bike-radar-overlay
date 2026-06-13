@@ -27,7 +27,11 @@ import java.net.URL
  * and user automations keep working after the rebrand. Renaming them is a
  * conscious opt-in migration, not an implicit upgrade side-effect.
  */
-class HaClient(private val baseUrl: String, private val token: String) {
+// `open` (and the two close-pass publishers below) so a test double can record
+// publish attempts without a live broker - the close-pass un-gating split
+// "detect locally" from "publish to HA", and the publish-when-configured half
+// is otherwise only reachable through real MQTT. See OverlayPipelineDrivingTest.
+open class HaClient(private val baseUrl: String, private val token: String) {
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
     /**
@@ -260,7 +264,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
      * every service start is a no-op on the HA side. Call once per
      * session if the feature is enabled.
      */
-    suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
+    open suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
         val topic = "$DISCOVERY_PREFIX/event/varia_${slug}_close_pass/config"
         val payload = buildClosePassDiscoveryPayload(slug, deviceName).toString()
         return publishMqtt(topic, payload, retain = true)
@@ -308,7 +312,7 @@ class HaClient(private val baseUrl: String, private val token: String) {
      * write to `/last` so a fresh dashboard card has something to
      * display on load without waiting for the next overtake.
      */
-    suspend fun publishClosePassEvent(slug: String, eventJson: JSONObject): Boolean {
+    open suspend fun publishClosePassEvent(slug: String, eventJson: JSONObject): Boolean {
         val topic = "varia/$slug/close_pass"
         val payload = JSONObject(eventJson.toString()).put("event_type", "close_pass").toString()
         return coroutineScope {

@@ -17,10 +17,10 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -379,16 +379,15 @@ internal fun SettingsRadarContent(
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_close_pass))
             SettingsRowGroup {
                 SettingsToggleRow(
-                    leadingIcon = Icons.Default.Home,
+                    leadingIcon = Icons.Default.Sensors,
                     leadingTint = br.safe,
-                    title = stringResource(R.string.settings_radar_log_to_ha_title),
+                    title = stringResource(R.string.settings_radar_close_pass_title),
                     subtitle = if (haConfigured) {
-                        stringResource(R.string.settings_radar_log_to_ha_subtitle_enabled)
+                        stringResource(R.string.settings_radar_close_pass_subtitle_ha)
                     } else {
-                        stringResource(R.string.settings_radar_log_to_ha_subtitle_disabled)
+                        stringResource(R.string.settings_radar_close_pass_subtitle)
                     },
                     checked = closePassLogging,
-                    enabled = haConfigured,
                     onCheckedChange = onClosePassLoggingChange,
                 )
             }

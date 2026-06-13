@@ -131,9 +131,65 @@ class OverlayPipelineDrivingTest {
         assertEquals(1, fakeHost.detachCount)
     }
 
-    private fun buildPipeline(): OverlayPipeline = OverlayPipeline(
+    @Test
+    fun closePassCountingWorksWithoutHomeAssistant() = runTest {
+        // The close-pass count card + ride history are local features:
+        // detection must run with the user toggle on even when HA was
+        // never configured (buildPipeline injects a blank HaClient).
+        prefs.closePassLoggingEnabled = true
+        try {
+            val pipeline = buildPipeline()
+            val job = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            // Drive an arming overtake: approaching fast (-8 m/s), inside
+            // the urban 1.5 m arm threshold and the 1.0 m emit threshold
+            // (lateralPos 0.25 * LATERAL_FULL_M 3.0 = 0.75 m), rider
+            // moving, >= minFramesToArm frames.
+            val base = System.currentTimeMillis()
+            repeat(4) { i ->
+                RadarStateBus.publish(
+                    RadarState(
+                        source = DataSource.V2,
+                        timestamp = base + i * 100L,
+                        vehicles = listOf(
+                            Vehicle(id = 7, distanceM = 20 - i * 3, speedMs = -8f, lateralPos = 0.25f),
+                        ),
+                        bikeSpeedMs = 5f,
+                    ),
+                )
+                runCurrent()
+            }
+            // Track disappears -> detector terminates it and emits.
+            RadarStateBus.publish(
+                RadarState(
+                    source = DataSource.V2,
+                    timestamp = base + 500L,
+                    vehicles = emptyList(),
+                    bikeSpeedMs = 5f,
+                ),
+            )
+            val counted = withTimeoutOrNull(2_000) {
+                while (ClosePassStateBus.sessionCount.value == 0) {
+                    runCurrent()
+                    kotlinx.coroutines.delay(10)
+                }
+                true
+            }
+            assertEquals("close pass must count with HA unconfigured", true, counted)
+            job.cancel()
+            job.join()
+        } finally {
+            prefs.closePassLoggingEnabled = false
+        }
+    }
+
+    private fun buildPipeline(
+        ha: () -> HaClient = { HaClient("", "") },
+        currentRadarMac: () -> String? = { null },
+        macToSlug: () -> Map<String, String> = { emptyMap() },
+    ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
-        ha = { HaClient("", "") },
+        ha = ha,
         beeper = beeper,
         overlayHost = fakeHost,
         phoneBattery = object : PhoneBatterySource {
@@ -143,10 +199,119 @@ class OverlayPipelineDrivingTest {
         overlayPrefsSnapshot = { prefs.snapshot() },
         ebikeSnapshot = { null },
         climbingNow = { false },
-        currentRadarMac = { null },
-        macToSlug = { emptyMap() },
+        currentRadarMac = currentRadarMac,
+        macToSlug = macToSlug,
         clog = {},
     )
+
+    /** Drive one arming overtake (4 closing frames then track-drop) into
+     *  [RadarStateBus] and pump the test scheduler. Mirrors the geometry of
+     *  [closePassCountingWorksWithoutHomeAssistant]: lateralPos 0.25 *
+     *  LATERAL_FULL_M 3.0 = 0.75 m (< 1.0 m emit), -8 m/s closing, rider
+     *  moving, >= minFramesToArm frames. */
+    private fun kotlinx.coroutines.test.TestScope.driveOneOvertake() {
+        val base = System.currentTimeMillis()
+        repeat(4) { i ->
+            RadarStateBus.publish(
+                RadarState(
+                    source = DataSource.V2,
+                    timestamp = base + i * 100L,
+                    vehicles = listOf(
+                        Vehicle(id = 7, distanceM = 20 - i * 3, speedMs = -8f, lateralPos = 0.25f),
+                    ),
+                    bikeSpeedMs = 5f,
+                ),
+            )
+            runCurrent()
+        }
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = base + 500L, vehicles = emptyList(), bikeSpeedMs = 5f),
+        )
+    }
+
+    /** HaClient double recording close-pass publish attempts. `configured`
+     *  drives [HaClient.isConfigured] via non-blank constructor args; the
+     *  overridden publishers record and skip the real MQTT path. */
+    private class RecordingHaClient(configured: Boolean) : HaClient(if (configured) "http://ha.test" else "", if (configured) "tok" else "") {
+        val discoveryCalls = java.util.concurrent.atomic.AtomicInteger(0)
+        val eventCalls = java.util.concurrent.atomic.AtomicInteger(0)
+
+        override suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
+            discoveryCalls.incrementAndGet()
+            return true
+        }
+
+        override suspend fun publishClosePassEvent(slug: String, eventJson: org.json.JSONObject): Boolean {
+            eventCalls.incrementAndGet()
+            return true
+        }
+    }
+
+    @Test
+    fun closePassPublishesToHaWhenConfigured() = runTest {
+        // The other half of the un-gating: an HA-configured user must still get
+        // the discovery + per-event publishes. radarSlug must resolve, so feed
+        // a MAC + macToSlug mapping.
+        prefs.closePassLoggingEnabled = true
+        val ha = RecordingHaClient(configured = true)
+        try {
+            val pipeline = buildPipeline(
+                ha = { ha },
+                currentRadarMac = { "AA:BB:CC:DD:EE:FF" },
+                macToSlug = { mapOf("AA:BB:CC:DD:EE:FF" to "testradar") },
+            )
+            val job = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            driveOneOvertake()
+            val published = withTimeoutOrNull(2_000) {
+                while (ha.eventCalls.get() == 0) {
+                    runCurrent()
+                    kotlinx.coroutines.delay(10)
+                }
+                true
+            }
+            assertEquals("configured HA must get the close-pass event publish", true, published)
+            assertTrue("discovery must publish once HA is configured", ha.discoveryCalls.get() >= 1)
+            job.cancel()
+            job.join()
+        } finally {
+            prefs.closePassLoggingEnabled = false
+        }
+    }
+
+    @Test
+    fun closePassNeverPublishesWhenHaUnconfigured() = runTest {
+        // The detection-runs-locally half must NOT leak to HA: a blank client
+        // gets zero publish attempts even though the count increments.
+        prefs.closePassLoggingEnabled = true
+        val ha = RecordingHaClient(configured = false)
+        try {
+            val pipeline = buildPipeline(
+                ha = { ha },
+                currentRadarMac = { "AA:BB:CC:DD:EE:FF" },
+                macToSlug = { mapOf("AA:BB:CC:DD:EE:FF" to "testradar") },
+            )
+            val job = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            driveOneOvertake()
+            // Pump to the point the count would have registered, so a publish
+            // (if it were going to happen) would have been attempted too.
+            withTimeoutOrNull(2_000) {
+                while (ClosePassStateBus.sessionCount.value == 0) {
+                    runCurrent()
+                    kotlinx.coroutines.delay(10)
+                }
+                true
+            }
+            runCurrent()
+            assertEquals("no discovery publish without HA", 0, ha.discoveryCalls.get())
+            assertEquals("no event publish without HA", 0, ha.eventCalls.get())
+            job.cancel()
+            job.join()
+        } finally {
+            prefs.closePassLoggingEnabled = false
+        }
+    }
 
     /** Test double that owns view-creation + tracks attach/detach calls. */
     private class FakeOverlayHost(private val ctx: Context) : OverlayHost {

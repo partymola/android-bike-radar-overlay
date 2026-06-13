@@ -237,6 +237,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     }
     val onBtBannerTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) }
     val onSettingsClick = { navController.navigate("settings") }
+    val onClosePassCardClick = { navController.navigate("ride-history") }
     val onDashcamYes = {
         prefs.dashcamOwnership = DashcamOwnership.YES
         navController.navigate("settings")
@@ -281,6 +282,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             onSettingsClick = onSettingsClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
+            onClosePassCardClick = onClosePassCardClick,
         )
     }
 }
@@ -320,6 +322,7 @@ internal fun MainScreenContent(
     onSettingsClick: () -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
+    onClosePassCardClick: () -> Unit = {},
 ) {
     if (isLandscape) {
         MainScreenLandscape(
@@ -346,6 +349,7 @@ internal fun MainScreenContent(
             onSettingsClick = onSettingsClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
+            onClosePassCardClick = onClosePassCardClick,
         )
     } else {
         MainScreenPortrait(
@@ -372,6 +376,7 @@ internal fun MainScreenContent(
             onSettingsClick = onSettingsClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
+            onClosePassCardClick = onClosePassCardClick,
         )
     }
 }
@@ -433,6 +438,7 @@ private fun MainScreenPortrait(
     onSettingsClick: () -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
+    onClosePassCardClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -467,7 +473,10 @@ private fun MainScreenPortrait(
                 ebikeBatterySoc = ebikeBatterySoc,
             )
             Spacer(modifier = Modifier.height(12.dp))
-            ClosePassStatsCard(loggingEnabled = closePassLoggingEnabled)
+            ClosePassStatsCard(
+                loggingEnabled = closePassLoggingEnabled,
+                onClick = onClosePassCardClick,
+            )
             if (showDashcamPrompt) {
                 Spacer(modifier = Modifier.height(14.dp))
                 DashcamPromptCard(onYes = onDashcamYes, onNo = onDashcamNo)
@@ -512,6 +521,7 @@ private fun MainScreenLandscape(
     onSettingsClick: () -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
+    onClosePassCardClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -535,6 +545,7 @@ private fun MainScreenLandscape(
                 ClosePassStatsCard(
                     loggingEnabled = closePassLoggingEnabled,
                     compact = true,
+                    onClick = onClosePassCardClick,
                 )
                 if (showBtOffBanner) {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -925,16 +936,39 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
 // ── Close-pass stats card ─────────────────────────────────────────────
 
 @Composable
-private fun ClosePassStatsCard(loggingEnabled: Boolean, compact: Boolean = false) {
+private fun ClosePassStatsCard(
+    loggingEnabled: Boolean,
+    compact: Boolean = false,
+    onClick: () -> Unit = {},
+) {
     val br = LocalBrColors.current
     val count by ClosePassStateBus.sessionCount.collectAsState()
-    BrCard(modifier = Modifier.fillMaxWidth()) {
+    // The card links to the ride-history screen, but only once there's
+    // plausibly history to see: with counting off and a zero session count a
+    // first-run rider would land on an empty screen, so the link + tap target
+    // stay inert until counting is on or this ride has logged a pass.
+    val historyAvailable = loggingEnabled || count > 0
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .let { if (historyAvailable) it.clickable(onClick = onClick) else it }
+    BrCard(modifier = cardModifier) {
         Column(
             modifier = Modifier
                 .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
                 .animateContentSize(),
         ) {
-            SectionLabel(stringResource(R.string.main_section_close_passes))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    SectionLabel(stringResource(R.string.main_section_close_passes))
+                }
+                if (historyAvailable) {
+                    Text(
+                        text = stringResource(R.string.main_close_passes_history_link),
+                        color = br.fgDim,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(10.dp))
             val countDesc = pluralStringResource(R.plurals.main_close_passes_count_desc, count, count)
             Text(

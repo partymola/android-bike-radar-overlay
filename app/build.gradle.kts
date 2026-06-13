@@ -333,25 +333,28 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     }
     violationRules {
         // Project line floor, ratcheted to sit a few points below the current
-        // figure (~70% after the WalkAwayAlarm coordinator was extracted behind
-        // an AlarmTone seam and unit-tested) so legitimately hard-to-test new
-        // code doesn't trip it. Raise as coverage grows.
+        // figure (~74% as of the ride-history / link-journal round) so
+        // legitimately hard-to-test new code doesn't trip it. Raise as
+        // coverage grows.
         rule {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.66".toBigDecimal()
+                minimum = "0.70".toBigDecimal()
             }
         }
-        // Branch coverage on the safety-critical deciders. LiveDataDecoder is
-        // intentionally not listed (lower branch coverage; held by the line
-        // floor above).
+        // Branch coverage on the safety-critical decision classes. Wildcards
+        // instead of an enumerated list so every NEW *Decider / *Deriver is
+        // born inside the gate - the old list silently exempted five deciders
+        // added after it was written (all measured >= 100% when widened).
+        // EBikeStatusDecoder is intentionally not matched ("Decoder", lower
+        // branch coverage; held by the line floor above); RadarV2Decoder is
+        // opted in by name.
         rule {
             element = "CLASS"
             includes = listOf(
-                "es.jjrh.bikeradar.AlertDecider",
-                "es.jjrh.bikeradar.WalkAwayDecider",
-                "es.jjrh.bikeradar.CriticalBatteryDecider",
+                "es.jjrh.bikeradar.*Decider",
+                "es.jjrh.bikeradar.*Deriver",
                 "es.jjrh.bikeradar.RadarV2Decoder",
             )
             limit {

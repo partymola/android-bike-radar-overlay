@@ -42,6 +42,20 @@ Rules that keep a translation from crashing the app:
   Assistant, Bosch Flow, MQTT, eBike, GPL-3.0, and similar.
 - The `app_name` is intentionally not translatable; don't add it.
 
+Two things that won't crash the app but make a translation better:
+
+- **Most languages run longer than English, and the shortest strings expand
+  worst** - a one-word button or chip can nearly double. The tight spots are
+  buttons, chips, switch labels, screen/section titles and notification titles;
+  keep those as short as your language naturally allows, and drop a word the
+  screen already makes obvious rather than translating it literally. Longer body
+  text has room - don't cramp it. You can't tell how it renders from the XML,
+  and you don't need to: if a label looks too long, say so in the pull request
+  and I'll check it fits before merging.
+- **Use your region's everyday register**, and make sure a word's gender matches
+  what it labels on screen (a label shared by a masculine and a feminine device
+  may need splitting).
+
 What CI checks on a translation PR: the full build runs, and `lintDebug`
 treats missing strings and broken format arguments as errors (`MissingTranslation`,
 the `StringFormat` checks). So a PR either has every string and valid
@@ -55,16 +69,10 @@ then, plain pull requests are the way.)
 ## Writing copy
 
 If you're adding or editing the English text (not just translating), keep it
-short - this is a phone app read mid-ride:
-
-- **Say what the rider gets, not how it works.** Lead with the benefit; leave
-  out internals (protocols, encryption, file paths) the rider doesn't need.
-- **One line where you can.** For a list of three or more things, use `\n• `
-  bullets instead of a dense paragraph.
-- **Skip jargon, acronyms and filler nouns.** Keep only established product
-  names (Bluetooth, Home Assistant, Bosch Flow, MQTT, eBike).
-- **Spanish (and other locales): use your region's everyday register**, and
-  make sure a word's gender matches what it labels on screen.
+short and lead with what the rider gets, not how it works - it's a phone app
+read mid-ride. The full set of copy principles lives in
+[`AGENTS.md`](AGENTS.md) under "Writing copy (UI strings)" (the `/qc` copy
+review enforces them there).
 
 The one exception is **Settings → Privacy**: it is a full, deliberate
 disclosure, so it keeps its detail (and some required technical terms). Tidy it,

@@ -78,6 +78,7 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.ClosePassStateBus
 import es.jjrh.bikeradar.DataSource
+import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -245,8 +246,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val onDashcamNo = { prefs.dashcamOwnership = DashcamOwnership.NO }
 
     val radarBattery = batteryEntries.values.firstOrNull { entry ->
-        val n = entry.name.lowercase()
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(entry.name)
     }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
     val haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown)
@@ -1109,8 +1109,7 @@ private fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
 private fun hasRearBond(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.any { dev ->
-        val n = dev.name?.lowercase() ?: ""
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(dev.name)
     } == true
 } catch (_: Throwable) {
     false

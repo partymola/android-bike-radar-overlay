@@ -407,6 +407,8 @@
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>
+    <string name="settings_radardev_not_listed_title">My radar isn\'t listed</string>
+    <string name="settings_radardev_not_listed_subtitle">Pick any paired device to use as this bike\'s radar.</string>
     <string name="settings_radardev_section_actions">Actions</string>
     <string name="settings_radardev_pair_different_title">Pair a different radar</string>
     <string name="settings_radardev_open">Open</string>

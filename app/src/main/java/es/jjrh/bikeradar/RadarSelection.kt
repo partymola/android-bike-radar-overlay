@@ -26,15 +26,11 @@ object RadarSelection {
 
     /** True if [name] looks like a rear radar by its advertised/bonded local
      *  name. Used for bonded-device enumeration and the picker. Deliberately a
-     *  SUPERSET of the live advert matcher (`BikeRadarService.isRearDevice`,
-     *  "rear"/"rtl"): it also accepts "varia" so a Varia-named unit can be
-     *  pinned/enumerated. The pin overrides the advert matcher anyway (a chosen
-     *  MAC links regardless of [shouldLinkRadar]'s `nameMatchesRadar`), so the
-     *  wider bonded matcher cannot strand a pinned radar. */
-    fun isRadarName(name: String?): Boolean {
-        val n = name?.lowercase() ?: return false
-        return n.contains("rear") || n.contains("rtl") || n.contains("varia")
-    }
+     *  SUPERSET of the live advert matcher ([DeviceNameMatcher.isRearAdvert]):
+     *  the pin overrides the advert matcher anyway (a chosen MAC links
+     *  regardless of [shouldLinkRadar]'s `nameMatchesRadar`), so the wider
+     *  bonded matcher cannot strand a pinned radar. */
+    fun isRadarName(name: String?): Boolean = DeviceNameMatcher.isRadarName(name)
 
     /**
      * Whether the scan sighting `(mac, nameMatchesRadar)` is THE radar to link.
@@ -71,16 +67,23 @@ object RadarSelection {
     /** Bonded devices whose name matches the radar heuristic. Empty on any
      *  Bluetooth permission / adapter error (the caller then falls back to
      *  name-match, preserving today's behaviour). */
+    fun bondedRadars(ctx: Context): List<BondedRadar> = bondedDevices(ctx).filter { isRadarName(it.name) }
+
+    /** ALL bonded devices, regardless of name. Backs the "my radar isn't
+     *  listed" escape hatch: a radar the name heuristic doesn't know can
+     *  still be pinned, and a pinned MAC must count as "still bonded" in
+     *  [shouldLinkRadar] even though its name never matched. Empty on any
+     *  Bluetooth permission / adapter error. */
     @SuppressLint("MissingPermission")
-    fun bondedRadars(ctx: Context): List<BondedRadar> = try {
+    fun bondedDevices(ctx: Context): List<BondedRadar> = try {
         val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        mgr?.adapter?.bondedDevices.orEmpty().mapNotNull { dev ->
+        mgr?.adapter?.bondedDevices.orEmpty().map { dev ->
             val n = try {
                 dev.name
             } catch (_: Throwable) {
                 null
             }
-            if (isRadarName(n)) BondedRadar(dev.address, n ?: dev.address) else null
+            BondedRadar(dev.address, n ?: dev.address)
         }
     } catch (_: Throwable) {
         emptyList()

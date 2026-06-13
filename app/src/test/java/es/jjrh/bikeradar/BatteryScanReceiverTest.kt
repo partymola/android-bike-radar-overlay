@@ -120,6 +120,38 @@ class BatteryScanReceiverTest {
     }
 
     @Test
+    fun pinnedMacBypassesTheNameGateWhenBonded() {
+        // The "my radar isn't listed" escape hatch: a bonded device pinned as
+        // this bike's radar forwards even with a name the heuristic rejects.
+        val prefs = es.jjrh.bikeradar.data.Prefs(app)
+        prefs.radarMac = "AA:BB:CC:DD:EE:FF"
+        try {
+            val r = scanResultFor("AA:BB:CC:DD:EE:FF", "Wahoo", BluetoothDevice.BOND_BONDED)
+            receiver.onReceive(app, batchIntent(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, r))
+            val started = shadowOf(app).peekNextStartedService()
+            assertEquals(BikeRadarService.ACTION_READ_DEVICE, started.action)
+            assertEquals("AA:BB:CC:DD:EE:FF", started.getStringExtra(BikeRadarService.EXTRA_MAC))
+        } finally {
+            prefs.radarMac = null
+        }
+    }
+
+    @Test
+    fun pinnedMacDoesNotBypassTheBondGate() {
+        // The pin relaxes only the NAME gate; an unbonded sighting of the
+        // pinned MAC must still be rejected (defence-in-depth stands).
+        val prefs = es.jjrh.bikeradar.data.Prefs(app)
+        prefs.radarMac = "AA:BB:CC:DD:EE:FF"
+        try {
+            val r = scanResultFor("AA:BB:CC:DD:EE:FF", "Wahoo", BluetoothDevice.BOND_NONE)
+            receiver.onReceive(app, batchIntent(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, r))
+            assertNull(shadowOf(app).peekNextStartedService())
+        } finally {
+            prefs.radarMac = null
+        }
+    }
+
+    @Test
     fun matchesVariaNameAcceptsTheKnownHeuristicKeywords() {
         for (n in listOf("Varia RTL515", "Vue 49548", "RearVue8", "RTL510", "Garmin Edge")) {
             assertTrue("expected $n to match", BatteryScanReceiver.matchesVariaName(n))

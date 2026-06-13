@@ -12,6 +12,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import es.jjrh.bikeradar.data.Prefs
 
 /**
  * Receives advertisement-batch broadcasts from the OS BLE scanner.
@@ -53,10 +54,16 @@ class BatteryScanReceiver : BroadcastReceiver() {
         val results = extractResults(intent)
         if (results.isEmpty()) return
 
+        // Escape hatch for radars the name heuristic doesn't know: a sighting
+        // of the explicitly pinned radar MAC passes even with a foreign name,
+        // so a pinned unit can reach the link path at all.
+        val pinnedRadarMac = Prefs(ctx).radarMac
+
         for (r in results) {
             val name = r.scanRecord?.deviceName ?: r.device?.name ?: continue
             val mac = r.device?.address ?: continue
-            if (!matchesVariaName(name)) continue
+            val pinned = pinnedRadarMac != null && mac.equals(pinnedRadarMac, ignoreCase = true)
+            if (!matchesVariaName(name) && !pinned) continue
             // Defence-in-depth: only act on devices the user has paired
             // with through the system. Without this gate, a peer
             // advertising the Garmin company UUID + a name matching the
@@ -99,13 +106,6 @@ class BatteryScanReceiver : BroadcastReceiver() {
         const val ACTION_SCAN_RESULT = "es.jjrh.bikeradar.BATTERY_SCAN_RESULT"
         private const val NO_ERROR_SENTINEL = Int.MIN_VALUE
 
-        fun matchesVariaName(n: String): Boolean {
-            val l = n.lowercase()
-            return l.contains("varia") ||
-                l.contains("vue") ||
-                l.contains("rearvue") ||
-                l.contains("rtl") ||
-                l.contains("garmin")
-        }
+        fun matchesVariaName(n: String): Boolean = DeviceNameMatcher.isKnownAccessory(n)
     }
 }

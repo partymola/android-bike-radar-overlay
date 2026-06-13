@@ -72,6 +72,28 @@ class SettingsRadarDeviceSnapshotTest {
     }
 
     @Test
+    fun othersEscapeHatch() {
+        // The collapsed "My radar isn't listed" row, shown when bonded
+        // devices exist that the radar name heuristic doesn't recognise.
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA),
+                    chosenMac = null,
+                    activeName = radarA.name,
+                    connected = false,
+                    batteryPct = null,
+                    others = listOf(
+                        RadarSelection.BondedRadar("CC:CC:CC:CC:CC:CC", "Pixel Watch"),
+                        RadarSelection.BondedRadar("DD:DD:DD:DD:DD:DD", "OffBrandRadar"),
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
     fun ambiguousTwoRadars() {
         captureRoboImage {
             UiTheme {

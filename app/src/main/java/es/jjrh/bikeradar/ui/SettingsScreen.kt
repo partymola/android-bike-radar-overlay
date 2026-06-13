@@ -45,6 +45,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.R
@@ -82,8 +83,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val haConfigured = creds.baseUrl.isNotBlank() && creds.token.isNotBlank()
 
     val radarBattery: BatteryEntry? = batteryEntries.values.firstOrNull { entry ->
-        val n = entry.name.lowercase()
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(entry.name)
     }
     val dashcamSlug = prefsSnap.dashcamMac?.let { mac ->
         BikeRadarService.macToSlug[mac]

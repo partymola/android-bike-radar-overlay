@@ -568,7 +568,11 @@ class BikeRadarService : Service() {
                 mac = mac,
                 nameMatchesRadar = isRearDevice(name),
                 chosenMac = pinnedRadar,
-                bondedRadarMacs = RadarSelection.bondedRadars(this).mapTo(HashSet()) { it.mac },
+                // ALL bonded MACs, not just radar-named ones: the pin must
+                // also work for a radar the name heuristic doesn't know (the
+                // "my radar isn't listed" escape hatch). The set only answers
+                // "is the chosen MAC still bonded?".
+                bondedRadarMacs = RadarSelection.bondedDevices(this).mapTo(HashSet()) { it.mac },
             )
         }
         if (shouldLinkRadar) radarLink.start(name, mac)
@@ -900,10 +904,7 @@ class BikeRadarService : Service() {
         it.y = 0
     }
 
-    private fun isRearDevice(name: String): Boolean {
-        val n = name.lowercase()
-        return n.contains("rear") || n.contains("rtl")
-    }
+    private fun isRearDevice(name: String): Boolean = DeviceNameMatcher.isRearAdvert(name)
 
     companion object {
         private const val TAG = "BikeRadar"

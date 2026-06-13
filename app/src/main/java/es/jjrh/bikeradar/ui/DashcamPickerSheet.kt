@@ -50,8 +50,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.BatteryScanReceiver
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
@@ -507,13 +507,9 @@ private fun listBonded(ctx: Context, seenSlugs: Set<String>): List<DashcamCandid
         // are NOT also dashcam-named. Garmin's Varia line includes
         // both radar (RTL...) and dashcam (Vue / VUE...) so we only
         // exclude when the name is unambiguously radar.
-        val n = name.lowercase()
-        val isUnambiguousRadar = n.contains("rearvue") ||
-            n.contains("rtl") ||
-            (n.contains("varia") && !n.contains("vue"))
-        if (isUnambiguousRadar) return@mapNotNull null
+        if (DeviceNameMatcher.isUnambiguousRadar(name)) return@mapNotNull null
         val likely = seenSlugs.contains(slugOf(name).removePrefix("varia_")) ||
-            BatteryScanReceiver.matchesVariaName(name)
+            DeviceNameMatcher.isKnownAccessory(name)
         DashcamCandidate(mac = d.address, name = name, likely = likely)
     }.sortedWith(
         compareByDescending<DashcamCandidate> { it.likely }.thenBy { it.name.lowercase() },

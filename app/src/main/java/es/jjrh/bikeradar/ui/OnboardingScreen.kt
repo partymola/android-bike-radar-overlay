@@ -82,6 +82,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.R
@@ -1694,8 +1695,7 @@ internal fun FooterCtaDual(
 private fun hasRadarBond(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.any { dev ->
-        val n = dev.name?.lowercase() ?: ""
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(dev.name)
     } == true
 } catch (_: Throwable) {
     false
@@ -1705,8 +1705,7 @@ private fun hasRadarBond(ctx: Context): Boolean = try {
 private fun currentRadarMac(ctx: Context): String? = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
-        val n = dev.name?.lowercase() ?: ""
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(dev.name)
     }?.address
 } catch (_: Throwable) {
     null
@@ -1716,8 +1715,7 @@ private fun currentRadarMac(ctx: Context): String? = try {
 private fun currentRadarLocalName(ctx: Context): String? = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
-        val n = dev.name?.lowercase() ?: ""
-        n.contains("rearvue") || n.contains("rtl") || n.contains("varia")
+        DeviceNameMatcher.isRadarName(dev.name)
     }?.name
 } catch (_: Throwable) {
     null

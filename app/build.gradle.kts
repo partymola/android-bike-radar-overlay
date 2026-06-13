@@ -262,6 +262,14 @@ tasks.withType<Test>().configureEach {
     (project.findProperty("bikeradar.corpusRecord") as String?)?.let {
         systemProperty("bikeradar.corpusRecord", it)
     }
+    // Cue-ledger golden regeneration: -Pbikeradar.cueLedgerRecord=true makes
+    // CueLedgerReplayTest print the freshly-computed ledger to stdout (paste
+    // it back into the test's GOLDEN constant) instead of asserting. Scoped
+    // so the ordinary suite stays quiet and the test still verifies in CI.
+    (project.findProperty("bikeradar.cueLedgerRecord") as String?)?.let {
+        systemProperty("bikeradar.cueLedgerRecord", it)
+        testLogging { showStandardStreams = true }
+    }
 }
 
 // Classes kept out of the coverage figure: Compose UI (covered by Roborazzi

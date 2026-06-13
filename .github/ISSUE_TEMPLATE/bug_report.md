@@ -27,9 +27,18 @@ What you expected to happen instead.
 - Radar / eBike / front-camera hardware and firmware version (if relevant):
 - Home Assistant integration in use? yes / no
 
-## Logs (optional)
+## Diagnostics (optional, very helpful)
 
-If you can, attach the capture log from
-`Android/data/es.jjrh.bikeradar/files/bike-radar-capture-*.log`. It
-contains BLE traffic plus speed/power for the ride but no location or
-account data - review it before sharing if that matters to you.
+Long-press the "Bike Radar" wordmark on the home screen three times to
+unlock Developer options, then open Settings -> Debug:
+
+- **Copy diagnostic bundle** puts app settings, recent crash reports and
+  the connection journal on your clipboard - paste it here. It contains
+  device names and ride times but no location or account data.
+- For connection problems, expand **LINK JOURNAL** on the same screen
+  and include the recent lines.
+- For decoding or alert problems, enable **Write capture logs**,
+  reproduce on a ride, then Share the log from the same screen (stored
+  gzipped under `Android/data/es.jjrh.bikeradar/files/captures/`).
+  Capture logs record exact packet timing, so anyone holding one can
+  work out when you rode - share only if you're comfortable with that.

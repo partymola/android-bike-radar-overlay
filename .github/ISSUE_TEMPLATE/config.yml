@@ -1,0 +1,8 @@
+# Steer reporters to a template (bug or hardware report) instead of a blank
+# issue, so the diagnostics prompts are always in front of them. Security
+# issues go through private vulnerability reporting, not the public tracker.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/partymola/android-bike-radar-overlay/security/advisories/new
+    about: Report security issues privately, not in a public issue. See SECURITY.md.

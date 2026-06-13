@@ -232,6 +232,13 @@ enforces them, and CONTRIBUTING.md points contributors here:
   `--no-configuration-cache` to corpus runs: the property is captured into
   the configuration cache, so a cached entry can leak a previous run's
   corpus path into an invocation that omitted the flag.
+- **Cue-ledger gate** (`CueLedgerReplayTest`): the in-repo, CI-run companion
+  to the corpus gate. Replays the committed `replay-fixture.txt` through the
+  real decoder -> decider -> cue and asserts the *ordered* cue ledger against
+  a baked golden, so any alert-parsimony change surfaces as a reviewable diff
+  with no private corpus. Regenerate after an intentional change with
+  `-Pbikeradar.cueLedgerRecord=true` and paste the printed ledger into the
+  test's `DEFAULT_GOLDEN`; cite the diff in review.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

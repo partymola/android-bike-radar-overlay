@@ -38,6 +38,11 @@ repository for the wire protocol, reference decoder, and unit tests.
 - Optional directional alert audio: in landscape, beeps pan to the
   threat's lateral side on the phone's built-in speakers, and on stereo
   headphone-class routes (BT, BLE, wired, USB, hearing aid).
+- Close-pass counting and a local ride history, no Home Assistant
+  needed: counts the overtakes that pass close on the home screen, and
+  keeps a per-ride history - distance, overtakes, close passes, and how
+  close and how fast the closest passes came - in app-private storage,
+  with no location and no route.
 - Home Assistant integration via MQTT discovery: radar and dashcam
   batteries, front-light mode, close-pass event entity, end-of-ride
   summary (distance, close-pass count, closing speeds, lateral
@@ -117,9 +122,10 @@ version + firmware.
   Bluetooth settings; the app does not attempt `createBond()` itself.
   (Legacy V1 (cleartext) frames the radar emits unsolicited are
   ignored; the app never subscribes the V1 channel.)
-- Optional: Home Assistant for battery reporting and close-pass
-  logging. See below for the bare-minimum HA-side set-up; the radar
-  overlay works standalone without it.
+- Optional: Home Assistant for battery reporting and pushing close-pass
+  and ride-summary events off the phone. See below for the bare-minimum
+  HA-side set-up; the overlay, close-pass counting and ride history all
+  work standalone without it.
 
 ## Home Assistant prerequisites (optional)
 
@@ -168,7 +174,9 @@ and reuses it across rebuilds so `adb install -r` keeps working.
 2. Enter your Home Assistant base URL and long-lived token (or skip).
 3. Pair your rear radar via Android's **Settings -> Connected devices ->
    Pair new device** while the radar is in pair mode. The app detects
-   the bond automatically and starts tracking.
+   the bond automatically and starts tracking. If it doesn't recognise
+   your radar by name, pick it from your paired devices in **Settings ->
+   Radar**.
 
 ## Translating
 
@@ -245,19 +253,25 @@ Funciones principales:
 - Radar en pantalla con la distancia, la velocidad de aproximación y la
   posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
   distinto para impacto inminente.
-- Integración opcional con Home Assistant por MQTT: batería del radar y de
-  la cámara, modo de la luz delantera, eventos de pase cercano y resumen de
-  fin de ruta (distancia, número de pases, velocidades de aproximación y
+- Recuento de pases cercanos e historial de rutas en el teléfono, sin
+  necesidad de Home Assistant: cuenta en la pantalla de inicio los
+  adelantamientos que pasan cerca y guarda un historial por ruta (distancia,
+  adelantamientos, pases cercanos, y a qué distancia y velocidad pasaron los
+  más cercanos), sin ubicación ni recorrido.
+- Integración opcional con Home Assistant por MQTT: batería del radar y de la
+  cámara delantera, modo de la luz delantera, eventos de pase cercano y resumen
+  de fin de ruta (distancia, número de pases, velocidades de aproximación y
   holguras laterales).
 - Luz delantera y luz trasera del radar en modo automático según el
   atardecer local.
 - Datos en vivo de la eBike Bosch (solo lectura) mientras Bosch Flow está
   activo: velocidad, cadencia, potencia, batería, etc. Nunca envía nada a la
   bici.
-- Aviso de cámara olvidada: te avisa si la dashcam sigue encendida cuando te
-  alejas de la bici después de aparcarla.
+- Aviso de cámara olvidada: te avisa si la cámara delantera sigue encendida
+  cuando te alejas de la bici después de aparcarla.
 
-El radar funciona por sí solo; Home Assistant y la eBike son opcionales.
+El radar funciona por sí solo; Home Assistant, la cámara delantera y la eBike
+son opcionales.
 
 ## License
 

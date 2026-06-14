@@ -113,7 +113,7 @@ internal class CameraLightLinkController(
                 backoffMs = if (!quickReconnect) {
                     ReconnectLoopPlanner.grow(
                         backoffMs = backoffMs,
-                        nowMs = SystemClock.elapsedRealtime(),
+                        nowMs = clock(),
                         offSinceMs = radarOffSinceMs(),
                         longOfflineThresholdMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
                         longOfflineCapMs = prefs.radarLongOfflineCapSec * 1_000L,

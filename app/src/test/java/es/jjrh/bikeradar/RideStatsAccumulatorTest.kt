@@ -365,13 +365,33 @@ class RideStatsAccumulatorTest {
     }
 
     @Test
+    fun rideStartTracksWallWhileDistanceTracksMonotonic() {
+        // The dual-clock split: rideStartedAtMs is the wall epoch
+        // (exported/persisted), while distance + duration integrate on the
+        // monotonic clock so a mid-ride wall jump can't inflate or drop them.
+        val wall = FakeClock(start = 1_700_000_000_000L)
+        val mono = FakeClock(start = 10_000L)
+        val a = RideStatsAccumulator(wall.provider, mono.provider)
+        assertEquals(1_700_000_000_000L, a.rideStartedAtMs)
+        a.observeFrame(radarState(bikeSpeedMs = 10f))
+        wall.advance(-3_600_000L) // wall clock steps back 1 h mid-ride
+        mono.advance(1_000L) // 1 s of real elapsed time
+        a.observeFrame(radarState(bikeSpeedMs = 10f))
+        val s = a.snapshot()
+        // rideStartedAtMs is the wall value captured at construction, immune to
+        // the later wall jump; distance is the 1 s monotonic dt at 10 m/s.
+        assertEquals(1_700_000_000_000L, s.rideStartedAtMs)
+        assertEquals(0.01f, s.distanceRiddenKm, 1e-4f)
+    }
+
+    @Test
     fun thirtyMinuteRideWithSixAlarmsYieldsTwelvePerHourAndHalfPerKm() {
         val clock = FakeClock()
         val a = acc(clock)
         rideTwelveKm(a, clock)
         repeat(3) { a.observeAlertCue("beep count=3") }
         repeat(3) { a.observeAlertCue("urgent") }
-        clock.advance(600_000L) // total ride wall-clock = 30 min
+        clock.advance(600_000L) // total ride elapsed (monotonic) = 30 min
         val s = a.snapshot()
         assertEquals(0.5f, s.alertsPerKm!!, 1e-4f)
         assertEquals(12.0f, s.alertsPerHourOfRide!!, 1e-4f)

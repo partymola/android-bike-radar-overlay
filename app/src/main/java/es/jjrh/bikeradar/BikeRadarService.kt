@@ -745,26 +745,30 @@ class BikeRadarService : Service() {
                 if (gateOpen && mac != null && !name.isNullOrEmpty()) {
                     val slug = resolveDashcamSlug()
                     val entry = slug?.let { BatteryStateBus.entries.value[it] }
-                    val now = System.currentTimeMillis()
-                    val ageMs = entry?.let { now - it.readAtMs } ?: Long.MAX_VALUE
+                    // Monotonic: age the dashcam against the same elapsedRealtime
+                    // freshness (lastSeenElapsedMs) the walk-away alarm reads, and
+                    // matching the monotonic IdleGate above, so a wall-clock jump
+                    // can't stall the probe that keeps that freshness current.
+                    val nowMono = SystemClock.elapsedRealtime()
+                    val ageMs = entry?.let { nowMono - it.lastSeenElapsedMs } ?: Long.MAX_VALUE
                     if (ageMs >= DASHCAM_REFRESH_MS) {
                         // Connect-storm guard: while the radar is connected, a
                         // probe that keeps failing (dashcam powered off) backs off
                         // so it can't connect-storm and contend with the radar
                         // link. While the radar is DISCONNECTED the walk-away alarm
-                        // consumes this same liveness freshness, so backoff is
-                        // bypassed there - the probe keeps its full age-gated
-                        // cadence, byte-identical to the pre-fix behaviour.
+                        // consumes this same monotonic liveness freshness, so
+                        // backoff is bypassed there - the probe keeps its full
+                        // age-gated cadence.
                         val probeOk = BatteryProbeBackoff.shouldProbe(
                             link.radarGattActive,
-                            now,
+                            nowMono,
                             lastDashcamProbeMs[mac],
                             dashcamProbeFailures[mac] ?: 0,
                             DASHCAM_REFRESH_MS,
                             DASHCAM_PROBE_BACKOFF_CAP_MS,
                         )
                         if (probeOk) {
-                            lastDashcamProbeMs[mac] = now
+                            lastDashcamProbeMs[mac] = nowMono
                             batteryReader.launch(name, mac)
                         }
                     }
@@ -833,7 +837,7 @@ class BikeRadarService : Service() {
             // detection latency, not riding time). off is monotonic
             // (elapsedRealtime); ride history persists a wall epoch, so convert
             // the off-instant back to wall time before storing.
-            val endedAtWallMs = ClockConversion.monotonicToWallMs(off, nowMs, System.currentTimeMillis())
+            val endedAtWallMs = ClockConversion.monotonicToWallMs(off, SystemClock.elapsedRealtime(), System.currentTimeMillis())
             rideHistory.append(RideHistoryRecord.fromSnapshot(snap, endedAtMs = endedAtWallMs))
         }
     }

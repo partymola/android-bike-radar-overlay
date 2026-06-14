@@ -199,7 +199,7 @@ internal class RadarLinkCoordinator(
         val offAt = snapshot.radarOffSinceMs
         if (offAt != null && snapshot.walkAwayArmed) {
             val slug = resolveDashcamSlug()
-            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: 0L
+            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: Long.MIN_VALUE / 2
             val anchorMs = maxOf(offAt, lastAdvert)
             val freshMs = WalkAwayDecider.Config(
                 enabled = false,
@@ -229,7 +229,10 @@ internal class RadarLinkCoordinator(
 
     fun evaluateWalkAway(nowMs: Long) {
         val slug = resolveDashcamSlug()
-        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: 0L
+        // Not-seen sentinel: Long.MIN_VALUE/2 (not 0L) so a dashcam never seen
+        // this session reads as unconditionally stale under the monotonic clock
+        // (0L is the boot instant, which could look "fresh" early in a session).
+        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: Long.MIN_VALUE / 2
         val link = _radarLinkState.value
         val input = WalkAwayDecider.Input(
             nowMs = nowMs,

@@ -82,9 +82,9 @@ class BikeRadarService : Service() {
     @Volatile private var rideStats = RideStatsAccumulator()
 
     // Ride-summary notification state: one post per radar-off episode.
-    // Tick-coroutine-confined; see maybePostRideSummary.
-    private var rideSummaryPosted = false
-    private var lastRadarOffSinceMs: Long? = null
+    // Tick-coroutine-confined; see maybePostRideSummary. The transitions live in
+    // the pure RideSummaryEdgeTracker; this holds only its rolling state.
+    private var rideSummaryEdge = RideSummaryEdgeTracker.State()
 
     // ── Walk-away alarm state ────────────────────────────────────────────────
     // See WalkAwayDecider for the decision logic. The service owns all
@@ -810,35 +810,40 @@ class BikeRadarService : Service() {
      *  ride with fresh stats. */
     private fun maybePostRideSummary(nowMs: Long) {
         val off = radarOffSinceMs
-        if (off == null) {
-            lastRadarOffSinceMs?.let { wasOffSince ->
-                val offDuration = nowMs - wasOffSince
-                val longOffMs = prefs.radarLongOfflineThresholdMinutes * 60_000L
-                if (RideSummaryNotificationDecider.shouldStartNewRide(offDuration, longOffMs)) {
-                    rideStats = RideStatsAccumulator()
+        val outcome = RideSummaryEdgeTracker.onTick(
+            prev = rideSummaryEdge,
+            radarOffSinceMs = off,
+            nowMs = nowMs,
+            longOffMs = prefs.radarLongOfflineThresholdMinutes * 60_000L,
+            dwellMs = RideSummaryNotificationDecider.POST_DWELL_MS,
+            // Snapshot only on the post path, which the tracker reaches only past
+            // the dwell. The accumulator is single-context by contract and its
+            // Main-thread writer can still be in its cancellation tail right after
+            // a disconnect; the dwell dwarfs that window, keeping this IO-side
+            // reader out of the race.
+            evaluatePost = {
+                val snap = rideStats.snapshot()
+                if (RideSummaryNotificationDecider.shouldPost(off, nowMs, false, snap)) snap else null
+            },
+        )
+        rideSummaryEdge = outcome.state
+        for (action in outcome.actions) {
+            when (action) {
+                RideSummaryEdgeTracker.Action.ResetRideStats -> rideStats = RideStatsAccumulator()
+                is RideSummaryEdgeTracker.Action.PostSummary -> {
+                    notifications.postRideSummary(action.snapshot)
+                    // Ride end = the moment the radar went off, not "now" (the
+                    // dwell is detection latency, not riding time). The off-instant
+                    // is monotonic (elapsedRealtime); ride history persists a wall
+                    // epoch, so convert it back to wall time before storing.
+                    val endedAtWallMs = ClockConversion.monotonicToWallMs(
+                        action.offInstantMs,
+                        SystemClock.elapsedRealtime(),
+                        System.currentTimeMillis(),
+                    )
+                    rideHistory.append(RideHistoryRecord.fromSnapshot(action.snapshot, endedAtMs = endedAtWallMs))
                 }
-                rideSummaryPosted = false
             }
-            lastRadarOffSinceMs = null
-            return
-        }
-        lastRadarOffSinceMs = off
-        // Snapshot only once the dwell could pass. The accumulator is
-        // single-context by contract and its Main-thread writer can still be
-        // in its cancellation tail for a moment after a disconnect; the
-        // 3-minute dwell dwarfs that window, so gating the read on it keeps
-        // this IO-side reader out of the race entirely.
-        if (rideSummaryPosted || nowMs - off < RideSummaryNotificationDecider.POST_DWELL_MS) return
-        val snap = rideStats.snapshot()
-        if (RideSummaryNotificationDecider.shouldPost(off, nowMs, rideSummaryPosted, snap)) {
-            rideSummaryPosted = true
-            notifications.postRideSummary(snap)
-            // Ride end = the moment the radar went off, not "now" (the dwell is
-            // detection latency, not riding time). off is monotonic
-            // (elapsedRealtime); ride history persists a wall epoch, so convert
-            // the off-instant back to wall time before storing.
-            val endedAtWallMs = ClockConversion.monotonicToWallMs(off, SystemClock.elapsedRealtime(), System.currentTimeMillis())
-            rideHistory.append(RideHistoryRecord.fromSnapshot(snap, endedAtMs = endedAtWallMs))
         }
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.data.PrefsSnapshot
@@ -60,6 +61,12 @@ internal class OverlayPipeline(
     private val currentRadarMac: () -> String?,
     private val macToSlug: () -> Map<String, String>,
     private val clog: (String) -> Unit,
+    /** Monotonic clock (elapsedRealtime) for the in-ride cue cadences -
+     *  AlertDecider's urgent-repeat gap, the close-pass emit cooldown, the
+     *  critical/preflight battery cadence - so a wall-clock jump can't stall or
+     *  early-fire a safety cue. Wall time is kept for the cosmetic battery /
+     *  dashcam freshness gates and the capture-log lines. */
+    private val clockMono: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
 
     // Cross-connection state. Sampling cadences must NOT reset on every
@@ -101,7 +108,11 @@ internal class OverlayPipeline(
             try {
                 combine(RadarStateBus.state, BatteryStateBus.entries, ticker) { s, b, _ -> s to b }
                     .collect { (state, batteries) ->
+                        // Wall clock for the cosmetic freshness gates and the
+                        // capture-log lines; monotonic for the in-ride cue
+                        // cadences so a wall-clock jump can't stall/early-fire them.
                         val now = System.currentTimeMillis()
+                        val nowMono = clockMono()
                         val overlayPrefs = overlayPrefsSnapshot()
 
                         maybeLogPhoneBattery(now)
@@ -167,8 +178,8 @@ internal class OverlayPipeline(
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            maybeFireBatteryCues(batteries, now, threshold)
-                            fireAlertCue(state, alerts, overlayPrefs, now)
+                            maybeFireBatteryCues(batteries, now, nowMono, threshold)
+                            fireAlertCue(state, alerts, overlayPrefs, nowMono, now)
                         } else {
                             alerts.reset()
                         }
@@ -202,6 +213,11 @@ internal class OverlayPipeline(
                                 closePassDiscoveryInFlight = false
                             }
                         }
+                        // Wall, not nowMono: the detector's `now` doubles as the
+                        // emitted Event.timestampMs, which is rendered as a unix
+                        // epoch (HA event ts, ride-summary tightest_pass.ts). Its
+                        // 2 s emit-dedup cooldown is the only duration use and a
+                        // wall jump there is a negligible single-event edge.
                         val cpEvents = closePassDetector.decide(
                             state.vehicles,
                             state.bikeSpeedMs,
@@ -255,6 +271,7 @@ internal class OverlayPipeline(
     private fun maybeFireBatteryCues(
         batteries: Map<String, BatteryEntry>,
         nowMs: Long,
+        nowMonoMs: Long,
         lowThresholdPct: Int,
     ) {
         val table = macToSlug()
@@ -265,7 +282,7 @@ internal class OverlayPipeline(
         val critDecision = CriticalBatteryDecider.decide(
             pct = critBatt?.pct,
             fresh = critFresh,
-            nowMs = nowMs,
+            nowMs = nowMonoMs,
             criticalPct = BikeRadarService.CRITICAL_BATTERY_PCT,
             cadenceMs = BikeRadarService.CRITICAL_BATTERY_CUE_INTERVAL_MS,
             lastCueMs = lastCriticalBatteryCueMs,
@@ -289,7 +306,7 @@ internal class OverlayPipeline(
             val pfDecision = CriticalBatteryDecider.decide(
                 pct = batt.pct,
                 fresh = pfFresh,
-                nowMs = nowMs,
+                nowMs = nowMonoMs,
                 criticalPct = lowThresholdPct,
                 cadenceMs = BikeRadarService.PREFLIGHT_BATTERY_CUE_INTERVAL_MS,
                 lastCueMs = preflightBatteryCueMs[batt.slug],
@@ -307,20 +324,21 @@ internal class OverlayPipeline(
         state: RadarState,
         alerts: AlertDecider,
         overlayPrefs: PrefsSnapshot,
-        nowMs: Long,
+        nowMonoMs: Long,
+        nowWallMs: Long,
     ) {
         val snap = ebikeSnapshot()
         val preferredBikeSpeedMs = snap?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs
         val ev = alerts.decide(
             vehicles = state.vehicles,
             alertMaxM = overlayPrefs.alertMaxDistanceM,
-            nowMs = nowMs,
+            nowMs = nowMonoMs,
             bikeSpeedMs = preferredBikeSpeedMs,
             bikeNotDriving = snap?.bikeNotDriving,
             climbing = climbingNow(),
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
         )
-        if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowMs, preferredBikeSpeedMs)
+        if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs)
         beeper.setPanning(
             enabled = overlayPrefs.experimentalLateralPanning,
             invertLR = overlayPrefs.experimentalLateralPanningInvertLR,

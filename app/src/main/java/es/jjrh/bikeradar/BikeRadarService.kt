@@ -279,6 +279,7 @@ class BikeRadarService : Service() {
             currentRadarMac = { radarLink.currentRadarMac },
             macToSlug = { macToSlug },
             clog = { line -> clog(line) },
+            clockMono = { SystemClock.elapsedRealtime() },
         )
         haPublisher = HaPublisher(
             scope = scope,

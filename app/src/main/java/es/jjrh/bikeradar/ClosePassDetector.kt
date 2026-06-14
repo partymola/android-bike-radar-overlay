@@ -118,7 +118,9 @@ class ClosePassDetector {
      * @param bikeSpeedMs rider's own bike speed (null when the decoder
      *   hasn't yet received a device-status frame; the detector is
      *   strictly gated on a known rider speed)
-     * @param nowMs monotonic timestamp
+     * @param nowMs wall-clock timestamp (currentTimeMillis): gates the emit
+     *   dedup cooldown and is captured as the emitted [Event.timestampMs], which
+     *   is rendered downstream as a unix epoch, so it must be wall, not monotonic
      * @return any [Event]s that fired on this frame. Usually empty.
      */
     fun decide(

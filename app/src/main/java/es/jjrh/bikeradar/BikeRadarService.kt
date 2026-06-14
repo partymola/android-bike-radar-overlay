@@ -19,6 +19,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.Gravity
@@ -332,6 +333,7 @@ class BikeRadarService : Service() {
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
             journal = linkJournal::log,
+            clock = { SystemClock.elapsedRealtime() },
         )
         cameraLink = CameraLightLinkController(
             context = this,
@@ -344,6 +346,7 @@ class BikeRadarService : Service() {
             slug = { name -> slug(name) },
             radarOffSinceMs = { radarLinkCoordinator.snapshot().radarOffSinceMs },
             journal = linkJournal::log,
+            clock = { SystemClock.elapsedRealtime() },
         )
         batteryReader = BatteryReader(
             context = this,

@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
@@ -50,6 +51,9 @@ internal class CameraLightLinkController(
     /** Always-on link-event sink ([LinkEventJournal]); this link has no
      *  capture log at all, so the journal is its only persistent trace. */
     private val journal: (String) -> Unit,
+    /** Monotonic clock for the camera-light override deadband; elapsedRealtime
+     *  so a wall-clock jump can't mis-clear the rider's manual override. */
+    private val clock: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var cameraLightJob: Job? = null
@@ -215,9 +219,9 @@ internal class CameraLightLinkController(
 
             cameraLightGattActive = true
             val offSince = cameraLightOffSinceMs
-            if (CameraLightOverrideDecider.shouldClearOverride(offSince, System.currentTimeMillis(), CAMERA_LIGHT_OVERRIDE_DEADBAND_MS)) {
+            if (CameraLightOverrideDecider.shouldClearOverride(offSince, clock(), CAMERA_LIGHT_OVERRIDE_DEADBAND_MS)) {
                 cameraLightUserOverride = false
-                Log.i(TAG, "override cleared after ${(System.currentTimeMillis() - (offSince ?: 0)) / 1000}s off")
+                Log.i(TAG, "override cleared after ${(clock() - (offSince ?: 0)) / 1000}s off")
             }
             cameraLightOffSinceMs = null
             Log.i(TAG, "connected, running handshake")
@@ -337,7 +341,7 @@ internal class CameraLightLinkController(
             false
         } finally {
             cameraLightGattActive = false
-            if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = System.currentTimeMillis()
+            if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = clock()
             sunsetJob?.cancel()
             sunriseJob?.cancel()
             queueJob.cancel()

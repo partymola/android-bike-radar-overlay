@@ -14,6 +14,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
@@ -70,6 +71,11 @@ internal class RadarLinkController(
     /** Always-on link-event sink ([LinkEventJournal]); unlike the capture
      *  log it records the attempts that never produced a connection. */
     private val journal: (String) -> Unit,
+    /** Monotonic clock for the V2 data-flow watchdog and the radar-light
+     *  override deadband. Injected as elapsedRealtime so an NTP/DST wall-clock
+     *  jump can't make a silently-dead radar look alive or mis-clear the
+     *  rider's manual light override. */
+    private val clock: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
@@ -401,7 +407,7 @@ internal class RadarLinkController(
             // its backoff. Initialise the watchdog clock to "now" so we give
             // the first frame a fair chance to arrive.
             lastConnectionReachedDecode = true
-            lastV2FrameMs = System.currentTimeMillis()
+            lastV2FrameMs = clock()
 
             // Drop the connection interval from BALANCED to LOW_POWER once
             // the V2 stream is up: the radar pushes notifications at its own
@@ -421,10 +427,10 @@ internal class RadarLinkController(
             watchdogJob = scope.launch {
                 while (true) {
                     delay(V2_WATCHDOG_TICK_MS)
+                    val now = clock()
                     val last = lastV2FrameMs
-                    if (last == 0L) continue
-                    val ageMs = System.currentTimeMillis() - last
-                    if (ageMs > V2_FRAME_STALL_MS) {
+                    if (V2WatchdogDecider.isStale(now, last, V2_FRAME_STALL_MS)) {
+                        val ageMs = now - last
                         Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
                         journal("radar V2 stream silent ${ageMs}ms; tearing down")
                         try {
@@ -465,7 +471,7 @@ internal class RadarLinkController(
             radarLightBaselineKey = null
             if (RadarLightOverrideDecider.shouldClearOverride(
                     radarLightOffSinceMs,
-                    System.currentTimeMillis(),
+                    clock(),
                     RADAR_LIGHT_OVERRIDE_DEADBAND_MS,
                 )
             ) {
@@ -512,7 +518,7 @@ internal class RadarLinkController(
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.RADAR_V2 -> {
-                        lastV2FrameMs = System.currentTimeMillis()
+                        lastV2FrameMs = clock()
                         if (v2FrameCount++ == 0) Log.i(TAG, "first V2 frame: ${bytes.toHex()}")
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
@@ -548,7 +554,7 @@ internal class RadarLinkController(
         } finally {
             radarSunsetJob?.cancel()
             radarSunriseJob?.cancel()
-            radarLightOffSinceMs = System.currentTimeMillis()
+            radarLightOffSinceMs = clock()
             liveRadarGatt = null
             liveRadarQueue = null
             watchdogJob?.cancel()

@@ -57,6 +57,11 @@ class EBikeStatusReader(
      *  reader). The service wires this for the Debug "log unknown eBike
      *  object IDs" pinning workflow. */
     private val onUnknownRecord: ((Int, Long) -> Unit)? = null,
+    /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
+     *  Injected only by the Robolectric harness so a test can capture the
+     *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
+     *  production keeps the real connect path unchanged. */
+    private val openGatt: (Context, BluetoothDevice, Boolean, BluetoothGattCallback) -> BluetoothGatt? = ::connectGattLe,
 ) {
     private var loopJob: Job? = null
 
@@ -179,7 +184,7 @@ class EBikeStatusReader(
             }
         }
 
-        gatt = connectGattLe(context, device, true, cb)
+        gatt = openGatt(context, device, true, cb)
         if (gatt == null) {
             Log.w(TAG, "connectGatt returned null")
             return false

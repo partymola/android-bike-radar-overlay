@@ -290,14 +290,14 @@ class BikeRadarService : Service() {
             slug = { name -> slug(name) },
         )
         ebikeSnapshotCoordinator = EBikeSnapshotCoordinator(
-            clock = { System.currentTimeMillis() },
+            clock = { SystemClock.elapsedRealtime() },
             clog = ::clog,
             publishRideEdge = { edge, iso -> haPublisher.publishRideEdgeIfHa(edge, iso) },
             nowIso = { java.time.Instant.now().toString() },
         )
         walkAwayAlarm = WalkAwayAlarm(this, scope)
         radarLinkCoordinator = RadarLinkCoordinator(
-            clock = { System.currentTimeMillis() },
+            clock = { SystemClock.elapsedRealtime() },
             prefs = prefs,
             postWalkAwayNotification = notifications::postWalkAway,
             cancelWalkAwayNotification = notifications::cancelWalkAway,
@@ -589,7 +589,7 @@ class BikeRadarService : Service() {
         val isDashcam = prefs.dashcamMac?.equals(mac, ignoreCase = true) == true
         if (isDashcam && prefs.autoLightModeEnabled) cameraLink.start(name, mac)
         if (isDashcam && (cameraLink.isGattActive() || cameraLink.isActive())) {
-            BatteryStateBus.markSeen(slug(name), System.currentTimeMillis())
+            BatteryStateBus.markSeen(slug(name), System.currentTimeMillis(), SystemClock.elapsedRealtime())
             Log.d(TAG, "skip $name (camera light gatt active)")
             return
         }
@@ -602,7 +602,7 @@ class BikeRadarService : Service() {
             // Advert sighting proves the device is still powered on even
             // though we're skipping the GATT read. Keep the entry fresh
             // so the dashcam presence indicator doesn't flip to Dropped.
-            BatteryStateBus.markSeen(key, now)
+            BatteryStateBus.markSeen(key, now, SystemClock.elapsedRealtime())
             Log.d(TAG, "skip $name (throttled); marked seen")
             return
         }
@@ -739,7 +739,7 @@ class BikeRadarService : Service() {
                 val gateOpen = IdleGate.shouldRefreshDashcam(
                     radarGattActive = link.radarGattActive,
                     radarOffSinceMs = link.radarOffSinceMs,
-                    nowMs = System.currentTimeMillis(),
+                    nowMs = SystemClock.elapsedRealtime(),
                 )
                 if (gateOpen && mac != null && !name.isNullOrEmpty()) {
                     val slug = resolveDashcamSlug()
@@ -777,7 +777,7 @@ class BikeRadarService : Service() {
 
     private fun launchWalkAwayTick() {
         scope.launch {
-            var prevTickMs = System.currentTimeMillis()
+            var prevTickMs = SystemClock.elapsedRealtime()
             while (true) {
                 // Only the off-episode path needs 2 s cadence; the connected
                 // path just needs to clear stale state once after reconnect,
@@ -785,7 +785,7 @@ class BikeRadarService : Service() {
                 // Slow ticks 15× when idle to drop background CPU wake-ups.
                 val activeTracking = radarOffSinceMs != null
                 delay(if (activeTracking) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS)
-                val now = System.currentTimeMillis()
+                val now = SystemClock.elapsedRealtime()
                 val elapsed = now - prevTickMs
                 prevTickMs = now
                 radarLinkCoordinator.tickWalkAwayState(now, elapsed)
@@ -828,9 +828,12 @@ class BikeRadarService : Service() {
         if (RideSummaryNotificationDecider.shouldPost(off, nowMs, rideSummaryPosted, snap)) {
             rideSummaryPosted = true
             notifications.postRideSummary(snap)
-            // Ride end = the moment the radar went off, not "now" (the
-            // dwell is detection latency, not riding time).
-            rideHistory.append(RideHistoryRecord.fromSnapshot(snap, endedAtMs = off))
+            // Ride end = the moment the radar went off, not "now" (the dwell is
+            // detection latency, not riding time). off is monotonic
+            // (elapsedRealtime); ride history persists a wall epoch, so convert
+            // the off-instant back to wall time before storing.
+            val endedAtWallMs = ClockConversion.monotonicToWallMs(off, nowMs, System.currentTimeMillis())
+            rideHistory.append(RideHistoryRecord.fromSnapshot(snap, endedAtMs = endedAtWallMs))
         }
     }
 

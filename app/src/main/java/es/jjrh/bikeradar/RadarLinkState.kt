@@ -21,13 +21,13 @@ package es.jjrh.bikeradar
 data class RadarLinkState(
     /** True while the GATT link to the rear radar is open. */
     val radarGattActive: Boolean = false,
-    /** Wall-clock ms when the radar last went from connected to
-     *  disconnected. Null while the radar is connected, or before the
+    /** Monotonic (elapsedRealtime) ms when the radar last went from connected
+     *  to disconnected. Null while the radar is connected, or before the
      *  first disconnect of the session. */
     val radarOffSinceMs: Long? = null,
-    /** Wall-clock ms when the current radar connection began. Null while
-     *  disconnected. Used to integrate [sessionRadarConnectedMs] on the
-     *  next disconnect. */
+    /** Monotonic (elapsedRealtime) ms when the current radar connection began.
+     *  Null while disconnected. Used to integrate [sessionRadarConnectedMs] on
+     *  the next disconnect. */
     val radarConnectStartMs: Long? = null,
     /** Total ms the radar has been GATT-connected this session, integrated
      *  on each connect -> disconnect transition (not per-tick: the idle
@@ -42,7 +42,7 @@ data class RadarLinkState(
      *  current off-episode (cleared when the radar reconnects or after the
      *  snooze window elapses). */
     val walkAwayDismissed: Boolean = false,
-    /** Wall-clock ms of the most recent walk-away alarm fire, or null if
-     *  none has fired this episode. */
+    /** Monotonic (elapsedRealtime) ms of the most recent walk-away alarm fire,
+     *  or null if none has fired this episode. */
     val lastWalkAwayFireMs: Long? = null,
 )

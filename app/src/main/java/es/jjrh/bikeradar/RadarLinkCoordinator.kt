@@ -22,9 +22,9 @@ import kotlinx.coroutines.flow.update
  * [WalkAwayArmingGate], [RadarDropDecider] and [RadarLinkVisualDecider]; this
  * class is the stateful orchestration that feeds them and fires the effects.
  *
- * The clock is injected as [clock] (was `System.currentTimeMillis()` inline) so
- * tests can pin the off-instant, session-time integration and re-fire cadences
- * deterministically.
+ * The clock is injected as [clock] (monotonic `SystemClock.elapsedRealtime()` in
+ * production) so tests can pin the off-instant, session-time integration and
+ * re-fire cadences deterministically.
  */
 internal class RadarLinkCoordinator(
     private val clock: () -> Long,
@@ -199,7 +199,7 @@ internal class RadarLinkCoordinator(
         val offAt = snapshot.radarOffSinceMs
         if (offAt != null && snapshot.walkAwayArmed) {
             val slug = resolveDashcamSlug()
-            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
+            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: 0L
             val anchorMs = maxOf(offAt, lastAdvert)
             val freshMs = WalkAwayDecider.Config(
                 enabled = false,
@@ -229,7 +229,7 @@ internal class RadarLinkCoordinator(
 
     fun evaluateWalkAway(nowMs: Long) {
         val slug = resolveDashcamSlug()
-        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.readAtMs ?: 0L
+        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: 0L
         val link = _radarLinkState.value
         val input = WalkAwayDecider.Input(
             nowMs = nowMs,

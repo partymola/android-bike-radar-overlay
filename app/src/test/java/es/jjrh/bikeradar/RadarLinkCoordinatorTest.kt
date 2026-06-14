@@ -286,7 +286,7 @@ class RadarLinkCoordinatorTest {
     fun evaluateWalkAwayFireWiring() {
         val off = armForFire()
         val fireAt = off + 31_000L // off 31 s > 30 s threshold
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L))
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, postWalkAwayCount)
         assertEquals(1, alarmStartCount)
@@ -297,7 +297,7 @@ class RadarLinkCoordinatorTest {
     fun evaluateWalkAwayAutoDismissWiring() {
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L))
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
         coordinator.evaluateWalkAway(fireAt) // FIRE, lastFire set
         assertEquals(fireAt, snap().lastWalkAwayFireMs)
 
@@ -312,7 +312,7 @@ class RadarLinkCoordinatorTest {
     @Test
     fun evaluateWalkAwayDoesNothingBelowThreshold() {
         val off = armForFire()
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = off))
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = off, lastSeenElapsedMs = off))
         coordinator.evaluateWalkAway(off + 1_000L) // 1 s off, well under 30 s
         assertEquals(0, postWalkAwayCount)
         assertEquals(0, alarmStartCount)

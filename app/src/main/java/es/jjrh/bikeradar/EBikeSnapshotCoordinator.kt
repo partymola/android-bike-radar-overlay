@@ -55,7 +55,7 @@ internal class EBikeSnapshotCoordinator(
      *  banner's cohort behaviour even if Flow has momentarily dropped. */
     fun hasEverSeenSnapshot(): Boolean = everSeen
 
-    /** Wall-clock of the last snapshot. The radar-drop cue trusts
+    /** Monotonic (elapsedRealtime) ms of the last snapshot. The radar-drop cue trusts
      *  `system_locked == false` only while this is fresh: a stale snapshot means
      *  the eBike link itself dropped (rider walked away), so "unlocked" can no
      *  longer be believed. */

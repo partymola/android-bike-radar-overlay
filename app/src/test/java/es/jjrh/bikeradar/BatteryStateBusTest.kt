@@ -40,4 +40,17 @@ class BatteryStateBusTest {
         assertEquals(42, e?.pct)
         assertEquals(99_999L, e?.readAtMs)
     }
+
+    @Test fun markSeenStampsLastSeenElapsedMs() {
+        BatteryStateBus.update(
+            BatteryEntry("dashcam3", "Vue", 70, readAtMs = 1_000L, lastSeenElapsedMs = 2_000L),
+        )
+        BatteryStateBus.markSeen("dashcam3", nowMs = 60_000L, elapsedMs = 65_000L)
+        val e = BatteryStateBus.entries.value["dashcam3"]
+        // markSeen must refresh the monotonic freshness clock the walk-away
+        // alarm reads, not just the wall readAtMs - else the alarm silently
+        // stops firing between full GATT reads.
+        assertEquals(65_000L, e?.lastSeenElapsedMs)
+        assertEquals(60_000L, e?.readAtMs)
+    }
 }

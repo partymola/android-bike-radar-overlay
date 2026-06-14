@@ -29,8 +29,8 @@ internal fun jittered(baseMs: Long, random: Random = Random.Default): Long {
 // Reconnect backoff: starts fast, doubles on each consecutive failure, caps at
 // 8 s. Resets to the initial value once a connection reaches the V2 decode loop.
 // Quick-reconnect (post-handshake-ABORT) bypasses backoff entirely. Shared by
-// the rear-radar and front-camera reconnect loops (the "RADAR_" prefix is
-// historical - both loops run the same schedule).
+// the rear-radar, front-camera, and eBike-status reconnect loops (the "RADAR_"
+// prefix is historical - all three run the same schedule).
 internal const val RADAR_RECONNECT_BACKOFF_INITIAL_MS = 1_000L
 internal const val RADAR_RECONNECT_BACKOFF_MAX_MS = 8_000L
 internal const val RADAR_QUICK_RECONNECT_MS = 1_500L
@@ -58,11 +58,12 @@ internal fun reconnectBackoffCap(
 }
 
 /**
- * Pure backoff-schedule arithmetic shared by the rear-radar and front-camera
- * reconnect loops. Each loop keeps its own distinct reset trigger - the radar
- * resets the backoff on a healthy V2 decode, the camera on a quick post-ABORT
- * reconnect - so only the two stateless steps live here: how long to wait
- * before the next attempt, and how to grow the backoff after a failure.
+ * Pure backoff-schedule arithmetic shared by the rear-radar, front-camera, and
+ * eBike-status reconnect loops. Each loop keeps its own distinct reset trigger -
+ * the radar resets the backoff on a healthy V2 decode, the camera on a quick
+ * post-ABORT reconnect, the eBike on a subscribed session - so only the two
+ * stateless steps live here: how long to wait before the next attempt, and how
+ * to grow the backoff after a failure.
  */
 internal object ReconnectLoopPlanner {
     /**

@@ -166,9 +166,10 @@ class ReconnectBackoffTest {
         assertEquals(4L, jittered(4L, Random(0L)))
     }
 
-    // ReconnectLoopPlanner: the stateless backoff steps shared by the rear-radar
-    // and front-camera reconnect loops. Each loop keeps its own reset trigger;
-    // these pin only the delay-selection and grow arithmetic both lean on.
+    // ReconnectLoopPlanner: the stateless backoff steps shared by the rear-radar,
+    // front-camera, and eBike-status reconnect loops. Each loop keeps its own
+    // reset trigger; these pin only the delay-selection and grow arithmetic they
+    // all lean on.
 
     @Test fun nextDelayQuickUsesFixedShortWaitRegardlessOfBackoff() {
         // A quick (post-ABORT) reconnect ignores the accumulated backoff.
@@ -263,6 +264,23 @@ class ReconnectBackoffTest {
                 offSinceMs = 0L,
                 longOfflineThresholdMs = threshold,
                 longOfflineCapMs = longCap,
+            ),
+        )
+    }
+
+    @Test fun growWithNullOffSinceHoldsShortCapNeverRelaxes() {
+        // The eBike loop tracks no off-instant and passes offSinceMs = null, so
+        // grow must clamp to the steady-state 8 s ceiling and never relax,
+        // regardless of the (inert) now / threshold / long-cap args. 6 s doubled
+        // is 12 s, held at 8 s.
+        assertEquals(
+            RADAR_RECONNECT_BACKOFF_MAX_MS,
+            ReconnectLoopPlanner.grow(
+                backoffMs = 6_000L,
+                nowMs = 0L,
+                offSinceMs = null,
+                longOfflineThresholdMs = 0L,
+                longOfflineCapMs = 0L,
             ),
         )
     }

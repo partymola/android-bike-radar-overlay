@@ -87,12 +87,28 @@ class EBikeStatusReader(
     }
 
     private suspend fun runLoop(device: BluetoothDevice) {
-        var backoffMs = BACKOFF_INITIAL_MS
+        // Same reconnect schedule as the radar + camera loops via the shared,
+        // tested ReconnectLoopPlanner. A subscribed session is the quick-reconnect
+        // + backoff-reset path; a failed attempt jitters the current backoff and
+        // then doubles it toward the cap. The eBike loop tracks no off-instant, so
+        // it passes offSinceMs = null (no long-offline relaxation; autoConnect
+        // idles the link between attempts anyway).
+        var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
         while (true) {
             log("eBike status: connect attempt")
             val subscribed = connectAndRun(device)
-            val delayMs = if (subscribed) QUICK_RECONNECT_MS else jittered(backoffMs)
-            backoffMs = if (subscribed) BACKOFF_INITIAL_MS else (backoffMs * 2).coerceAtMost(BACKOFF_CAP_MS)
+            val delayMs = ReconnectLoopPlanner.nextDelayMs(backoffMs, quickReconnect = subscribed)
+            backoffMs = if (subscribed) {
+                RADAR_RECONNECT_BACKOFF_INITIAL_MS
+            } else {
+                ReconnectLoopPlanner.grow(
+                    backoffMs = backoffMs,
+                    nowMs = 0L,
+                    offSinceMs = null,
+                    longOfflineThresholdMs = 0L,
+                    longOfflineCapMs = 0L,
+                )
+            }
             delay(delayMs)
         }
     }
@@ -220,9 +236,6 @@ class EBikeStatusReader(
 
     companion object {
         private const val TAG = "BikeRadar.EBikeStatus"
-        private const val QUICK_RECONNECT_MS = 2_000L
-        private const val BACKOFF_INITIAL_MS = 3_000L
-        private const val BACKOFF_CAP_MS = 30_000L
 
         /**
          * Find the bonded eBike's BLE address among the adapter's bonded

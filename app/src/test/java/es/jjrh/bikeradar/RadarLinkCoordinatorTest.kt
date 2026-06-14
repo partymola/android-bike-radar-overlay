@@ -238,7 +238,7 @@ class RadarLinkCoordinatorTest {
     @Test
     fun tickDisarmsArmedOnceDashcamStale() {
         ebike = null
-        dashcamSlug = "cam" // no BatteryStateBus entry -> lastAdvert 0 -> anchor = offAt
+        dashcamSlug = "cam" // no BatteryStateBus entry -> lastAdvert = stale sentinel -> anchor = offAt
         connectAt(1_000L)
         disconnectAt(4_000L) // armed, off-instant 4000
         // anchor = 4000; disarm once now - 4000 > tickFreshMs
@@ -317,6 +317,37 @@ class RadarLinkCoordinatorTest {
         assertEquals(0, postWalkAwayCount)
         assertEquals(0, alarmStartCount)
         assertNull(snap().lastWalkAwayFireMs)
+    }
+
+    @Test
+    fun evaluateWalkAwayReadsMonotonicAdvertNotWallReadAtMs() {
+        // Pins the monotonic field-switch: the alarm reads lastSeenElapsedMs
+        // (monotonic), NOT readAtMs (wall). Here readAtMs looks fresh (1 s) but
+        // the monotonic advert is 25 s stale (> the ~20 s window), so the alarm
+        // must NOT fire - reading the wall field would wrongly fire on a jump.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(
+            BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 25_000L),
+        )
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(0, postWalkAwayCount)
+        assertEquals(0, alarmStartCount)
+    }
+
+    @Test
+    fun evaluateWalkAwayNeverSeenDashcamDoesNotFire() {
+        // Radar-only rider: a dashcam slug is configured but the dashcam was
+        // never seen this session, so there is no BatteryStateBus entry and the
+        // freshness read falls through to the not-seen sentinel; the alarm must
+        // not fire. This pins the no-accessory behaviour. It does NOT distinguish
+        // the Long.MIN_VALUE/2 sentinel from 0L: the 60 s cold-start + 30 s off
+        // gates force nowMs well past the freshness window, so both read stale -
+        // the sentinel choice is defensive, documented at the read site.
+        val off = armForFire() // sets dashcamSlug = "cam" but adds no entry
+        coordinator.evaluateWalkAway(off + 31_000L)
+        assertEquals(0, postWalkAwayCount)
+        assertEquals(0, alarmStartCount)
     }
 
     // ── evaluateRadarDrop banner ordering + cue ──────────────────────────────

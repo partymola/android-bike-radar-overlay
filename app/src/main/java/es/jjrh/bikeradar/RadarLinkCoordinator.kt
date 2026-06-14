@@ -232,6 +232,10 @@ internal class RadarLinkCoordinator(
         // Not-seen sentinel: Long.MIN_VALUE/2 (not 0L) so a dashcam never seen
         // this session reads as unconditionally stale under the monotonic clock
         // (0L is the boot instant, which could look "fresh" early in a session).
+        // Defensive/future-proof: WalkAwayDecider's 60 s cold-start + 30 s
+        // off-threshold gates mean a fire is never evaluated before ~90 s of
+        // uptime, where even 0L is already stale - but the sentinel keeps the
+        // not-seen semantics correct if those constants ever shrink.
         val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: Long.MIN_VALUE / 2
         val link = _radarLinkState.value
         val input = WalkAwayDecider.Input(

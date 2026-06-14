@@ -76,6 +76,11 @@ internal class RadarLinkController(
      *  jump can't make a silently-dead radar look alive or mis-clear the
      *  rider's manual light override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
+    /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
+     *  Injected only by the Robolectric harness so a test can capture the
+     *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
+     *  production keeps the real connect path unchanged. */
+    private val openGatt: (Context, BluetoothDevice, Boolean, BluetoothGattCallback) -> BluetoothGatt? = ::connectGattLe,
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
@@ -352,7 +357,7 @@ internal class RadarLinkController(
             }
         }
 
-        gatt = connectGattLe(context, device, true, cb)
+        gatt = openGatt(context, device, true, cb)
         if (gatt == null) {
             captureLog.clog("# connectGatt returned null")
             journal("radar connectGatt returned null")

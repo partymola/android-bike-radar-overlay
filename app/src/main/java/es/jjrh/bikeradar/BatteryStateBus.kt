@@ -27,11 +27,12 @@ object BatteryStateBus {
         _entries.update { it + (entry.slug to entry) }
     }
 
-    /** Refresh readAtMs on an existing entry without changing pct.
-     *  Used when we see the device in an advert but the throttle is
-     *  skipping the actual GATT read - the advert itself proves liveness.
-     *  No-op if the slug has no prior entry (first sighting still goes
-     *  through a full read + [update]). */
+    /** Refresh readAtMs (wall, UI) and lastSeenElapsedMs (monotonic, the
+     *  control-loop freshness the walk-away alarm reads) on an existing entry
+     *  without changing pct. Used when we see the device in an advert but the
+     *  throttle is skipping the actual GATT read - the advert proves liveness.
+     *  No-op if the slug has no prior entry (first sighting still goes through
+     *  a full read + [update]). */
     fun markSeen(
         slug: String,
         nowMs: Long = System.currentTimeMillis(),

@@ -91,9 +91,11 @@ class IdleGateTest {
 
     @Test
     fun clockSkewNegativeDeltaReturnsTrue() {
-        // If the wall clock steps backward (NTP correction), nowMs -
-        // offMs can go negative. Negative is < windowMs so we keep
-        // refreshing — safer than going dark on a transient skew.
+        // The production caller now feeds the monotonic clock, which never
+        // steps backward, so a negative delta should not arise from an NTP
+        // correction. The decider still treats any negative delta as < windowMs
+        // and keeps refreshing - retained as a safe invariant of the pure
+        // function rather than a path expected in production.
         assertTrue(
             IdleGate.shouldRefreshDashcam(
                 radarGattActive = false,

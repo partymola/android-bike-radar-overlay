@@ -76,7 +76,7 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    unchanged - no alerting for cars first seen beyond `alertMaxM`.
  *  - **Stationary suppress.** Once the rider has been at or below
  *    `stationaryMsThreshold` for at least `stationaryDwellMs` of
- *    wall-clock time, Beep events are mapped to None. Clear still
+ *    elapsed (monotonic) time, Beep events are mapped to None. Clear still
  *    fires. Lets the rider sit at a traffic light without beep/clear
  *    loops from the queue of stopped cars behind them.
  *  - **Imminent-impact safety override.** While stationary-suppressed
@@ -119,7 +119,7 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  */
 class AlertDecider(
     private val sustainFrames: Int = 2,
-    /** Minimum wall-clock milliseconds between two audible beeps.
+    /** Minimum elapsed (monotonic) milliseconds between two audible beeps.
      *  The closest-only trigger rule already filters multi-track
      *  noise; this cooldown is for back-to-back triggers on the
      *  closest track itself (e.g. tier raise immediately after a
@@ -129,12 +129,12 @@ class AlertDecider(
      *  0.5 m/s catches raw bytes 0..2 inclusive (0, 0.25, 0.5 m/s),
      *  matching the prior 2 km/h gate exactly. */
     private val stationaryMsThreshold: Float = 0.5f,
-    /** Wall-clock milliseconds the rider's bike speed must stay at or
+    /** Elapsed (monotonic) milliseconds the rider's bike speed must stay at or
      *  below [stationaryMsThreshold] continuously before Beep events
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
      *  short enough to kick in at a normal traffic-light stop. */
     private val stationaryDwellMs: Long = 2_000L,
-    /** Wall-clock milliseconds the stable-close set must stay empty before a
+    /** Elapsed (monotonic) milliseconds the stable-close set must stay empty before a
      *  Clear chime fires. Defers the Clear (and the per-track latch wipe)
      *  so a single-frame radar dropout, or a boundary flap the distance
      *  band didn't absorb, can't fire a premature Clear immediately
@@ -249,7 +249,7 @@ class AlertDecider(
      */
     private val peakUrgencyPerTid = HashMap<Int, Int>()
 
-    /** Wall-clock ms of the most recent `decide()` call in which the rider
+    /** Monotonic (elapsedRealtime) ms of the most recent `decide()` call in which the rider
      *  was NOT at or below [stationaryMsThreshold]. Compared against
      *  `nowMs` each call to decide whether the stationary dwell has been
      *  satisfied. [NOT_INITIALIZED] until the first call of this session. */
@@ -268,7 +268,7 @@ class AlertDecider(
         // stationary; once that was more than stationaryDwellMs ago, Beep
         // events get mapped to None (Clear still fires). On the very first
         // call we initialise lastNotStationaryAtMs to nowMs so the dwell is
-        // measured from now, not from 1970.
+        // measured from now, not from zero.
         //
         // Stationary signal precedence: when the eBike snapshot reports
         // `bike_not_driving` (Bosch eBike wheel-speed ground truth), it

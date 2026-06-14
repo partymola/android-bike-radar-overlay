@@ -10,6 +10,9 @@ package es.jjrh.bikeradar
  * date. The wall time of [monotonicInstantMs] is [nowWallMs] minus the elapsed
  * time since it ([nowMonotonicMs] - [monotonicInstantMs]); the two `now` reads
  * are taken at effectively the same moment, so the residual skew is negligible.
+ * Valid only for a [monotonicInstantMs] from the current boot session, read
+ * close to [nowMonotonicMs]: elapsedRealtime resets at boot, so a value
+ * persisted across a reboot must not be passed in.
  */
 object ClockConversion {
     fun monotonicToWallMs(monotonicInstantMs: Long, nowMonotonicMs: Long, nowWallMs: Long): Long = nowWallMs - (nowMonotonicMs - monotonicInstantMs)

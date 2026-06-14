@@ -62,10 +62,11 @@ internal class OverlayPipeline(
     private val macToSlug: () -> Map<String, String>,
     private val clog: (String) -> Unit,
     /** Monotonic clock (elapsedRealtime) for the in-ride cue cadences -
-     *  AlertDecider's urgent-repeat gap, the close-pass emit cooldown, the
-     *  critical/preflight battery cadence - so a wall-clock jump can't stall or
-     *  early-fire a safety cue. Wall time is kept for the cosmetic battery /
-     *  dashcam freshness gates and the capture-log lines. */
+     *  AlertDecider's urgent-repeat gap and the critical/preflight battery
+     *  cadence - so a wall-clock jump can't stall or early-fire a safety cue.
+     *  Wall time (the per-frame `now`) is kept for the cosmetic battery /
+     *  dashcam freshness gates, the capture-log lines, and the close-pass emit
+     *  cooldown (whose `now` is also the emitted unix-epoch event timestamp). */
     private val clockMono: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
 

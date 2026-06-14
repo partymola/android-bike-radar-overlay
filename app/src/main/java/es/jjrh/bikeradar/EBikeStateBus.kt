@@ -20,7 +20,7 @@ object EBikeStateBus {
     private val _snapshot = MutableStateFlow(LiveDataSnapshot())
     val snapshot: StateFlow<LiveDataSnapshot> = _snapshot
 
-    // Wall-clock (elapsedRealtime) of the last snapshot update, so UI can tell
+    // Monotonic (elapsedRealtime) ms of the last snapshot update, so UI can tell
     // live from stale: the snapshot fields stay populated after Flow closes, so
     // freshness is the only honest "is data still flowing" signal. 0 = never.
     private val _lastUpdatedElapsedMs = MutableStateFlow(0L)

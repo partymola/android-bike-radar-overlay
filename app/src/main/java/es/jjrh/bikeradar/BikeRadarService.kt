@@ -354,7 +354,7 @@ class BikeRadarService : Service() {
             scope = scope,
             prefs = prefs,
             knownDevices = knownDevices,
-            haPublisher = haPublisher,
+            publishBattery = haPublisher::publishBatteryToHa,
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
             dashcamProbeFailures = dashcamProbeFailures,

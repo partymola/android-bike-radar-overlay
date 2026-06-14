@@ -35,6 +35,12 @@ internal const val KEY_LAST_TS = "last_ts"
  * [launch] when a read is due; this class owns only the in-flight cooldown and
  * the actual GATT read. The dashcam-probe-failure counter is shared with the
  * service's dashcam-refresh loop, so it is injected rather than owned.
+ *
+ * The HA publish ([publishBattery]) and the GATT read ([readBatteryFn]) are
+ * injected as function seams: production wires them to the real
+ * [HaPublisher.publishBatteryToHa] and the private [readBattery], while tests
+ * pass fakes so the whole post-read path (known-device upsert, failure counter,
+ * display-name sync, publish-gated throttle) is exercisable without a device.
  */
 @SuppressLint("MissingPermission")
 internal class BatteryReader(
@@ -42,10 +48,11 @@ internal class BatteryReader(
     private val scope: CoroutineScope,
     private val prefs: Prefs,
     private val knownDevices: KnownDevices,
-    private val haPublisher: HaPublisher,
+    private val publishBattery: suspend (String, Int) -> Boolean,
     private val macToSlug: MutableMap<String, String>,
     private val slug: (String) -> String,
     private val dashcamProbeFailures: MutableMap<String, Int>,
+    private val readBatteryFn: (suspend (String) -> Int?)? = null,
 ) {
     // Per-mac in-flight guard: a read launched within ATTEMPT_COOLDOWN_MS is
     // skipped so back-to-back fires from different paths don't stack.
@@ -76,7 +83,7 @@ internal class BatteryReader(
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun doReadBattery(name: String, mac: String) {
+    internal suspend fun doReadBattery(name: String, mac: String) {
         val sp = context.getSharedPreferences(PREFS_THROTTLE, Context.MODE_PRIVATE)
 
         val known = knownDevices.load().toMutableList()
@@ -86,7 +93,8 @@ internal class BatteryReader(
             knownDevices.save(known)
         }
 
-        val pct = readBattery(mac) ?: run {
+        val readFn = readBatteryFn ?: { m -> readBattery(m) }
+        val pct = readFn(mac) ?: run {
             Log.w(TAG, "battery read failed: $name $mac")
             // Count the consecutive failure so the dashcam ticker can back its
             // probe off. Scoped to the dashcam mac (the only one the ticker reads)
@@ -111,7 +119,7 @@ internal class BatteryReader(
         // configured at all). On a transient HA failure we want the next
         // advert to retry within ATTEMPT_COOLDOWN_MS rather than waiting
         // 5 minutes with no HA state update.
-        if (haPublisher.publishBatteryToHa(name, pct)) {
+        if (publishBattery(name, pct)) {
             sp.edit().putLong("${KEY_LAST_TS}_$s", System.currentTimeMillis()).apply()
         }
     }

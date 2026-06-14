@@ -54,6 +54,11 @@ internal class CameraLightLinkController(
     /** Monotonic clock for the camera-light override deadband; elapsedRealtime
      *  so a wall-clock jump can't mis-clear the rider's manual override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
+    /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
+     *  Injected only by the Robolectric harness so a test can capture the
+     *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
+     *  production keeps the real connect path unchanged. */
+    private val openGatt: (Context, BluetoothDevice, Boolean, BluetoothGattCallback) -> BluetoothGatt? = ::connectGattLe,
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var cameraLightJob: Job? = null
@@ -198,7 +203,7 @@ internal class CameraLightLinkController(
             }
         }
 
-        gatt = connectGattLe(context, device, true, cb)
+        gatt = openGatt(context, device, true, cb)
         if (gatt == null) {
             Log.w(TAG, "connectGatt returned null")
             journal("camera connectGatt returned null")

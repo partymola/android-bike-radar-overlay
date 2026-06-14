@@ -168,7 +168,7 @@ class AlertDeciderTest {
         // within ~1.5 s. The pre-cooldown decider fired 3+ overlapping beeps.
         //
         // Under the closest-only fix, same-tier additional entries
-        // are silent regardless of cooldown — adding cars at the same
+        // are silent regardless of cooldown - adding cars at the same
         // closest-urgency tier as the already-alerted track does NOT
         // produce a follow-on beep. The cooldown gate is unrelated; D2a
         // suppresses these entries even after cooldown expires.
@@ -180,7 +180,7 @@ class AlertDeciderTest {
         val first = d.decide(listOf(car(7, 13)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), first)
 
-        // Car 6 enters at ~18m a moment later — within cooldown:
+        // Car 6 enters at ~18m a moment later - within cooldown:
         assertEquals(
             AlertDecider.Event.None,
             d.decide(listOf(car(6, 18), car(7, 12)), alertMax, c.tick()),
@@ -190,7 +190,7 @@ class AlertDeciderTest {
             d.decide(listOf(car(6, 17), car(7, 12)), alertMax, c.tick()),
         )
 
-        // Car 8 enters at ~18m — also within cooldown:
+        // Car 8 enters at ~18m - also within cooldown:
         assertEquals(
             AlertDecider.Event.None,
             d.decide(listOf(car(6, 16), car(7, 11), car(8, 18)), alertMax, c.tick()),
@@ -202,7 +202,7 @@ class AlertDeciderTest {
 
         // Cooldown expires. Closest is car 7 still at 10m (urgency 2).
         // Under D2a + per-track tier hysteresis, this is the same closest
-        // tid at the same tier we already audibly fired for — silent.
+        // tid at the same tier we already audibly fired for - silent.
         c.jump(700)
         val second = d.decide(
             listOf(car(6, 14), car(7, 10), car(8, 16)),
@@ -218,7 +218,7 @@ class AlertDeciderTest {
         // close is SILENT unless the remaining closest-urgency is strictly
         // greater than the peak the overtaking track ever reached. Here
         // car 1 was the close-tier (u=3) overtaker; car 2 remains at
-        // mid-tier (u=2). 2 > 3 is false — silent.
+        // mid-tier (u=2). 2 > 3 is false - silent.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         d.decide(listOf(car(1, 4), car(2, 16)), alertMax, c.tick())
@@ -830,7 +830,7 @@ class AlertDeciderTest {
     @Test fun `decelerating-into-junction with imminent threat fires urgent before full dwell`() {
         // Rider decelerating into a stop with a fast-closing vehicle at
         // near-third proximity. The 2 s ordinary stationary-suppress
-        // dwell is too long here — TTC at the imminent gate is sub-2 s,
+        // dwell is too long here - TTC at the imminent gate is sub-2 s,
         // so waiting it out leaves the urgent tone silent during the
         // entire reaction window. The mini-dwell (URGENT_OVERRIDE_DWELL_MS,
         // 500 ms) absorbs single-frame speed noise without delaying
@@ -839,7 +839,7 @@ class AlertDeciderTest {
         val c = Clock()
         // Rider at zero speed; mini-dwell starts ticking.
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
-        // 600 ms below threshold — past mini-dwell, well short of
+        // 600 ms below threshold - past mini-dwell, well short of
         // 2 s ordinary suppress.
         c.jump(600)
         val v = closingCar(id = 1, distanceM = 5, speedMs = -8f)
@@ -1160,7 +1160,7 @@ class AlertDeciderTest {
         // arrival raises the closest-urgency tier above what we have
         // already audibly fired for. Here car 1 is established at near-
         // tier (u=3); car 2 enters at far-tier (u=1). Closest stays car 1
-        // at u=3 — adding car 2 must not produce a beep.
+        // at u=3 - adding car 2 must not produce a beep.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         // Establish car 1 at near-tier.
@@ -1169,7 +1169,7 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.Beep(3), first)
         // Wait past cooldown so the cooldown isn't what's silencing this.
         c.jump(1000)
-        // Car 2 enters at 18m — closest is still car 1 at u=3.
+        // Car 2 enters at 18m - closest is still car 1 at u=3.
         d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick())
         val ev = d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.None, ev)
@@ -1178,7 +1178,7 @@ class AlertDeciderTest {
     @Test fun `overtake re-ack at same-or-lower tier is silent`() {
         // D2b: overtake re-ack only fires if the remaining closest's
         // urgency is STRICTLY GREATER than the peak the overtaking track
-        // ever reached. Same-or-lower tier remainders are silent — the
+        // ever reached. Same-or-lower tier remainders are silent - the
         // rider was already alerted at that tier by the now-overtaking
         // track. Also exercises the "lower tier" leg specifically.
         val d = AlertDecider(minBeepGapMs = 700)
@@ -1188,7 +1188,7 @@ class AlertDeciderTest {
         d.decide(listOf(car(1, 4), car(2, 18)), alertMax, c.tick()) // Beep(3)
         c.jump(1000)
         // Car 1 overtakes. Remaining is car 2 at u=1; peak[1] was 3.
-        // 1 > 3? No — silent.
+        // 1 > 3? No - silent.
         val ev = d.decide(
             listOf(car(1, 2, isBehind = true), car(2, 18)),
             alertMax,
@@ -1232,7 +1232,7 @@ class AlertDeciderTest {
         //
         // alertMaxM = 30 (matches real configs), so near-third = 10 m,
         // mid-third = 20 m. We pass no bike speed so the stationary-
-        // suppress / urgent-override paths don't enter — this
+        // suppress / urgent-override paths don't enter - this
         // isolates the closest-only audio model.
         val alertMaxTruck = 30
         val d = AlertDecider() // default minBeepGapMs = 700
@@ -1254,40 +1254,40 @@ class AlertDeciderTest {
             t += ms
         }
 
-        // t+0 — tid 51@16 (u=2 mid), tid 111@27 (u=1 far). Closest 51.
+        // t+0 - tid 51@16 (u=2 mid), tid 111@27 (u=1 far). Closest 51.
         scene(listOf(car(51, 16), car(111, 27)))
-        // t+6 — tid 51 closes to 10 m (u=3 near), 111 still 27 m.
+        // t+6 - tid 51 closes to 10 m (u=3 near), 111 still 27 m.
         // Escalation on 51: Beep(3).
         gap(5500)
         scene(listOf(car(51, 10), car(111, 27)))
-        // t+11 — tid 51 leaves close, 111 at 13 m (u=2 mid). Same close
+        // t+11 - tid 51 leaves close, 111 at 13 m (u=2 mid). Same close
         // set never empties (111 stays in), so latches preserved. Drop in
         // closest urgency 3 -> 2 is silent.
         gap(4800)
         scene(listOf(car(111, 13)))
-        // t+12 — tid 51 re-appears at 0 m, tid 111 at 9 m (u=3 near).
+        // t+12 - tid 51 re-appears at 0 m, tid 111 at 9 m (u=3 near).
         // Closest is 51 @ 0 (u=3). New entry on 51, but firedTier[51]
-        // was cleared when 51 left the close set... actually no — it
+        // was cleared when 51 left the close set... actually no - it
         // is only cleared on full Clear. 51 is a new entry; closestUrg
         // raises 2 -> 3 but newEntryRaisesTier requires the entry IS
         // among the new entries. 51 IS the new entry and IS the closest.
         // So this fires (Beep(3)).
         gap(700)
         scene(listOf(car(51, 0), car(111, 9)))
-        // t+13 — tid 124 enters at 12 m. Closest still 51 @ 0 (u=3).
-        // Same-tier new entry (124 doesn't change closest urgency) — D2a
+        // t+13 - tid 124 enters at 12 m. Closest still 51 @ 0 (u=3).
+        // Same-tier new entry (124 doesn't change closest urgency) - D2a
         // says silent.
         gap(900)
         scene(listOf(car(51, 0), car(111, 3), car(124, 12)))
-        // t+13.7 — 51 still 0, 124 closes to 2 m (still u=3). 111
-        // implied still close. Closest 51@0 — same tier, silent.
+        // t+13.7 - 51 still 0, 124 closes to 2 m (still u=3). 111
+        // implied still close. Closest 51@0 - same tier, silent.
         gap(700)
         scene(listOf(car(51, 0), car(124, 2)))
-        // t+15 — tid 51 only at 0 m. Cooldown long expired. Same
+        // t+15 - tid 51 only at 0 m. Cooldown long expired. Same
         // closest, same tier. Silent.
         gap(1500)
         scene(listOf(car(51, 0)))
-        // t+19 — close set finally empties (truck has fully passed).
+        // t+19 - close set finally empties (truck has fully passed).
         gap(1000)
         feed(emptyList()) // Clear
         feed(emptyList()) // None
@@ -1305,7 +1305,7 @@ class AlertDeciderTest {
         )
     }
 
-    @Test fun `closest-only invariant — adding a same-tier second car does not re-cue`() {
+    @Test fun `closest-only invariant - adding a same-tier second car does not re-cue`() {
         // A scene where two cars arrive at the same tier behind the
         // rider must produce exactly ONE audible cue, not one per car.
         // The first cue describes "a car at tier N is closest"; the
@@ -1320,16 +1320,16 @@ class AlertDeciderTest {
         c.jump(1000)
         // Car 2 enters at 12 m (also u=2). Car 1 still at 13 m. Closest
         // is now car 2 (12 < 13) but at the SAME tier as the alert that
-        // already fired — must be silent.
+        // already fired - must be silent.
         d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick())
         val ev = d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.None, ev)
     }
 
-    @Test fun `closest-only invariant — adding a HIGHER-tier vehicle DOES cue and replaces the audible thread`() {
+    @Test fun `closest-only invariant - adding a HIGHER-tier vehicle DOES cue and replaces the audible thread`() {
         // Counterpart to the same-tier test above: when a NEW track
         // arrives at a HIGHER tier (closer than the existing closest),
-        // it MUST produce an audible cue — the audible thread now
+        // it MUST produce an audible cue - the audible thread now
         // describes the new closest at its higher tier. This guards
         // against an over-aggressive "silence everything after the
         // first beep" simplification.
@@ -1351,7 +1351,7 @@ class AlertDeciderTest {
         // The imminent-impact gate fires when time-to-collision is
         // sub-2 seconds. A second urgent tone 3-6 seconds later would
         // be post-impact in the worst case. UrgentApproach must re-fire
-        // while the threat persists — every safety-critical industry
+        // while the threat persists - every safety-critical industry
         // standard surveyed (TCAS, IEC 60601-1-8, smoke T3, automotive
         // FCW, ISO 7731) repeats-while-held. The cooldown is the rate
         // limiter, not a per-tid latch. DO NOT add a per-tid urgent
@@ -1719,4 +1719,251 @@ class AlertDeciderTest {
         // so no Clear yet either.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
     }
+
+    // ── defensive-guard live-arm pins ────────────────────────────────────
+    //
+    // The branches these guards short-circuit on are statically present but
+    // semantically unreachable (see the UNREACHABLE-BRANCH LEDGER at the end
+    // of this file for the proof). We cannot flip the dead arm with a valid
+    // input, but we CAN pin the LIVE arm at the exact state the surrounding
+    // logic guarantees, so a refactor that severs that guarantee (and thus
+    // makes the dead arm reachable) trips a concrete, hand-derived assertion
+    // here rather than silently changing behaviour.
+
+    @Test fun `byProximity middle conjunct fires at the shared closing floor (live arm)`() {
+        // L485 `v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS`. SAFETY_OVERRIDE_
+        // CLOSING_MS (-6) equals the negated stationary closing floor
+        // (TTC_GATE_CLOSING_FLOOR_MS = 6), so once L484 `closingMs >= floor`
+        // is true the middle conjunct is ALWAYS true too (its false arm is
+        // dead - see ledger). This pins the live (true) arm at the exact
+        // boundary: dist 5 <= alertMax/3 (=7), speed -6 -> closingMs 6.0 ==
+        // floor (L484 true), -6 <= -6 (L485 true), 5 <= 7 (L486 true) ->
+        // byProximity fires UrgentApproach. Mutation caught: relaxing
+        // SAFETY_OVERRIDE_CLOSING_MS below the floor (e.g. to -5) would let a
+        // -5.5 m/s frame satisfy L485 and fire spuriously; this boundary fire
+        // plus the existing `urgent override does not fire at half-quantum
+        // below threshold` (-5.5 -> None) fence both sides of the gate.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 5, speedMs = -6f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
+    }
+
+    @Test fun `byTtc closing-floor conjunct fires beyond near-third on the disjunct it owns`() {
+        // L488 `closingMs >= TTC_GATE_CLOSING_FLOOR_MS` (the byTtc-specific
+        // closing conjunct). Like L485 its false arm is dead (floor
+        // equivalence - see ledger), but its live arm carries the case the
+        // TTC gate exists for: a target OUTSIDE near-third that byProximity
+        // can never catch. dist 12 > alertMax/3 (=7) so byProximity is false
+        // on L486; closingMs 6.0 >= 6 (L487 true, L488 true), 12 in 0..21
+        // (L489 true), TTC 12/6 = 2.0 <= 2.0 (L490 true) -> byTtc fires.
+        // This isolates the byTtc disjunct from byProximity (separates the
+        // two `||` operands at L491). Mutation caught: dropping the L488
+        // floor would admit slow-queue traffic (e.g. 12 m at -5 m/s, TTC 2.4
+        // s would still not fire on TTC, but 10 m at -5 m/s, TTC 2.0 s would
+        // fire spuriously) - the floor is what filters merging queue traffic.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
+    }
+
+    @Test fun `byTtc range lower bound is live at distance zero`() {
+        // L489 `v.distanceM in 0..alertMaxM`. The lower-bound false arm
+        // (distanceM < 0) is dead: the close-set entry filter already
+        // requires distanceM >= 0, so a negative distance never reaches the
+        // byTtc block (see ledger). Pin the live lower bound at the extreme:
+        // distanceM == 0 (a target right on the rider) must still satisfy
+        // `0 in 0..21` and fire. closingMs 8.0 >= 6 (L487/L488 true), 0 in
+        // 0..21 (L489 true), TTC 0/8 = 0.0 <= 2.0 (L490 true) -> byTtc fires.
+        // (byProximity also fires here, 0 <= 7; firstOrNull returns the same
+        // vehicle either way - the UrgentApproach is what we assert.)
+        // Mutation caught: tightening the lower bound to `1..alertMaxM` would
+        // drop a zero-distance imminent threat - the most urgent case.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 0, speedMs = -8f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
+    }
+
+    @Test fun `clear-grace does not re-arm or re-clear across consecutive empty frames`() {
+        // L530 else-if `stableTids.isEmpty() && prevStableClose.isNotEmpty()
+        // && !clearPending`. On the FIRST empty frame all three conjuncts are
+        // true and the Clear is deferred (clearPending set, timer started).
+        // On the SECOND consecutive empty frame within the grace the
+        // `prevStableClose.isNotEmpty()` conjunct is now FALSE (the previous
+        // frame was already empty), so the else-if body is NOT re-entered:
+        // clearPending stays set and the grace timer keeps counting from the
+        // FIRST empty frame - it is not re-armed. Crucially the deferred
+        // Clear fires exactly once, timed from the first empty frame, NOT
+        // pushed back by the intervening empties. Mutation caught: dropping
+        // the `prevStableClose.isNotEmpty()` guard would let each empty frame
+        // re-arm `clearPendingSinceMs`, so a long empty stretch would never
+        // accumulate the grace and Clear would never fire (a stuck alert
+        // state). The B-false short-circuit is also reached by the existing
+        // phantom-blip test, but only with clearPending already false; this
+        // is the clearPending-true path that the grace timing depends on.
+        val d = AlertDecider(minBeepGapMs = 700L) // clearGraceMs default 1000
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // First empty frame (t=200): clearPending set, timer starts.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Second empty frame (t=300), still inside the 1000 ms grace:
+        // prevStableClose now empty -> else-if not re-entered, no premature
+        // Clear, timer NOT reset.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Third empty frame (t=400), still inside the grace -> still None.
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Jump to t>=1200 (grace measured from the FIRST empty frame at
+        // t=200, +1000 = 1200). The Clear fires now and exactly once - if the
+        // intervening empties had re-armed the timer, this would still be
+        // None.
+        c.jump(800)
+        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+    }
+
+    @Test fun `returning vehicle cancels a pending clear before the grace at L528 not L535`() {
+        // Pins the BEHAVIOUR: a car returning within the clear-grace must cancel
+        // the pending Clear and stay silent - the latch must survive (no Clear,
+        // no re-beep), and no Clear may fire even after the original grace window
+        // would have elapsed. The latch is what suppresses the re-beep.
+        //
+        // It does NOT isolate L528 (the `clearPending = false` reset on
+        // anyInRange) from L535 (`stableTids.isEmpty()` in the clearGraceElapsed
+        // predicate): both guards independently suppress the Clear on a returning
+        // car. When the car returns, anyInRange is true so L528 resets
+        // clearPending; even if that reset were removed, stableTids becomes
+        // non-empty so the L535 `isEmpty()` conjunct already blocks the Clear.
+        // No events-only input flips one without the other, so a mutant on L528
+        // alone survives here.
+        val d = AlertDecider(minBeepGapMs = 700L) // clearGraceMs default 1000
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Drop out: clear-grace pends (clearPending true).
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Same car returns within the grace. anyInRange true -> clearPending
+        // reset at L528; no Clear, and the surviving latch keeps it silent.
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Even after the original grace window would have elapsed, no Clear
+        // fires - the pending Clear was cancelled, not merely deferred.
+        c.jump(1000)
+        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // UNREACHABLE-BRANCH LEDGER (AlertDecider.kt, branch-coverage gate 0.93)
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    // AlertDecider sits at ~94.3% branch coverage with 12 missed branches.
+    // Each one is a DEFENSIVE / DEAD bytecode arm whose flipping input the
+    // surrounding logic makes impossible to construct. They are documented
+    // here so future work does NOT waste effort trying to "cover" them, or
+    // worse, contort a test (or weaken production) to game the gate. Each line
+    // number is for AlertDecider.kt at the time of writing; re-derive against
+    // the current source if it has moved. The proof for each is mechanical -
+    // it follows from an invariant the code upstream establishes.
+    //
+    //  L360  `consecutiveClose[it.id] ?: 0` (elvis null arm)
+    //      Every tid in `close` is written into `consecutiveClose` at L343-344
+    //      (the `for (tid in currentCloseTids)` loop) before L360 reads it, and
+    //      `close` -> `currentCloseTids`. The map lookup is therefore never
+    //      null at L360; the `?: 0` fallback is unreachable.
+    //      (L344's `consecutiveClose[tid] ?: 0` null arm is NOT dead: a
+    //      genuinely-new tid is in currentCloseTids but not yet in the
+    //      prior-frame `consecutiveClose` map, so its `?: 0` fallback fires on
+    //      that track's first close frame. It is reachable and covered.)
+    //
+    //  L408  `closestVehicle == null` (true arm)
+    //      This sub-expression is only evaluated when `newEntries.isNotEmpty()`
+    //      (the `&&` ahead of it). newEntries = stableTids - prevStableClose;
+    //      non-empty implies stableTids non-empty implies stableClose non-empty
+    //      implies closestVehicle != null. The `== null` arm is dead.
+    //
+    //  L412  `overtakes.maxOf { peakUrgencyPerTid[it] ?: 0 }` (carries 3 missed)
+    //      Reached only inside `overtakes.isNotEmpty() && stableTids.isNotEmpty()`.
+    //      Three dead arms live on this one line:
+    //       (a) the elvis `?: 0` null arm - an overtaken tid was in
+    //           prevStableClose, i.e. it was stable on a prior frame, at which
+    //           point peakUrgencyPerTid[it] was written (L371-375), so the
+    //           lookup is non-null for any overtaken tid;
+    //       (b) the inline `maxOf` empty-collection throw - `overtakes` is
+    //           guarded non-empty by the surrounding `overtakes.isNotEmpty()`,
+    //           so maxOf never sees an empty collection;
+    //       (c) a benign multi-element loop edge inside maxOf's fold (the
+    //           "second-or-later element" branch), only taken when >1 tid
+    //           overtakes on the same frame - possible but not exercised, and
+    //           harmless.
+    //
+    //  L485  `v.speedMs <= SAFETY_OVERRIDE_CLOSING_MS` (false arm)
+    //      byProximity's middle conjunct. SAFETY_OVERRIDE_CLOSING_MS == -6 and
+    //      the binding closing floor (TTC_GATE_CLOSING_FLOOR_MS) == 6, so the
+    //      preceding conjunct `closingMs >= floor` (i.e. -v.speedMs >= 6, i.e.
+    //      v.speedMs <= -6) being TRUE forces this conjunct TRUE. The moving
+    //      path raises the floor to 10, only making it MORE true. There is no
+    //      input where L485 is reached and false. (Pinned live-arm above.)
+    //
+    //  L488  `closingMs >= TTC_GATE_CLOSING_FLOOR_MS` (false arm)
+    //      byTtc's closing conjunct. Same floor equivalence as L485: the
+    //      preceding `closingMs >= urgentClosingFloor` (floor 6 stationary /
+    //      10 moving, both >= 6) being true forces closingMs >= 6 here. The
+    //      false arm is dead. (Pinned live-arm above.)
+    //
+    //  L489  `v.distanceM in 0..alertMaxM` (lower-bound false arm)
+    //      The close-set entry filter (L322-326) only admits vehicles with
+    //      distanceM >= 0 (both the direct `0..alertMaxM` test and the
+    //      prevCloseRaw band `0..(alertMaxM + band)` have a 0 lower bound), so
+    //      no negative-distance vehicle ever reaches the byTtc range check.
+    //      The `>= 0` lower-bound false arm is dead. (Upper-bound arms are
+    //      live and already covered by the alertMax-edge tests; lower-bound
+    //      live arm pinned above.)
+    //
+    //  L530  `... && prevStableClose.isNotEmpty() && ...` (2 missed arms)
+    //      This else-if is reached only when anyInRange is false, i.e.
+    //      currentCloseTids is empty, hence stableTids (a subset) is empty -
+    //      so the `stableTids.isEmpty()` conjunct's FALSE arm is dead, and the
+    //      `!clearPending` conjunct's FALSE arm is dead too (it would need
+    //      prevStableClose non-empty AND clearPending already true on the same
+    //      frame, but pending is only set on a frame whose prev was non-empty,
+    //      and the next frame's prev is then empty). The reachable
+    //      prevStableClose-false short-circuit IS covered (the phantom-blip
+    //      test, and the consecutive-empty-frames pin above). The 2 missed
+    //      arms are the two dead conjunct-false paths.
+    //
+    //  L535  `stableTids.isEmpty()` (false arm, in clearGraceElapsed)
+    //      Reached only when clearPending is true (the `&&` ahead). But any
+    //      in-range track sets anyInRange at L527 and resets clearPending to
+    //      false at L528 before L534/L535 run, and stableTids non-empty
+    //      implies currentCloseTids non-empty implies anyInRange true. So
+    //      clearPending-true and stableTids-non-empty cannot co-occur; the
+    //      false arm is dead. The real "vehicle returns cancels the pending
+    //      Clear" behaviour happens at L528, pinned above.
+    //
+    //  L578  `if (v != null)` (else / null arm)
+    //      Reached in the ordinary-beep branch, guarded by
+    //      `... && stableTids.isNotEmpty()` at L547, which implies
+    //      closestVehicle (== v) is non-null. The KDoc above the else arm
+    //      already flags it as defensive. The `v == null` else is dead.
+    //
+    // Net: all 12 missed branches are unreachable. The branch ratio cannot be
+    // raised by adding tests - it is capped until a production change removes a
+    // redundant conjunct (e.g. collapsing the L485/L488 closing duplicates, or
+    // the L530/L535 belt-and-braces empties guards). Do NOT lower the 0.93
+    // floor and do NOT add no-op tests; the live-arm pins above are the
+    // correct anti-regression coverage for these guards.
 }

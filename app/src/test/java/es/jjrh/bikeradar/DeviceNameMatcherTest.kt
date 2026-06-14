@@ -69,6 +69,31 @@ class DeviceNameMatcherTest {
         assertFalse(DeviceNameMatcher.isKnownAccessory("JBL Headphones"))
     }
 
+    @Test fun radarNameNullArmReturnsFalseDistinctlyFromEmptyString() {
+        // covers DeviceNameMatcher.kt:46
+        // The `name?.lowercase() ?: return false` elvis short-circuits on a
+        // genuinely null name BEFORE any contains() runs. Pair it against a
+        // non-null empty string (which reaches the contains chain and also
+        // returns false, but via a different path) so this pins the null arm
+        // specifically: a mutant changing the elvis default to `return true`
+        // is caught here, where the bundled null assertion alone could be
+        // mistaken for the empty-string false path.
+        assertFalse("null name must be rejected by the elvis arm", DeviceNameMatcher.isRadarName(null))
+        assertFalse("empty name reaches the contains chain and still fails", DeviceNameMatcher.isRadarName(""))
+    }
+
+    @Test fun unambiguousRadarMatchesOnRearvueTokenAlone() {
+        // covers DeviceNameMatcher.kt:55
+        // "RearVue8" satisfies isUnambiguousRadar ONLY through the
+        // contains("rearvue") disjunct: it does not contain "rtl", and the
+        // `varia && !vue` arm fails (no "varia"). Stripping the "rear" prefix
+        // to plain "Vue8" removes the only matching token and must flip the
+        // result to false - proving the rearvue disjunct is load-bearing and
+        // catching a mutant that deletes or negates it.
+        assertTrue(DeviceNameMatcher.isUnambiguousRadar("RearVue8"))
+        assertFalse("without 'rear' the rearvue token no longer matches", DeviceNameMatcher.isUnambiguousRadar("Vue8"))
+    }
+
     @Test fun matchingIsCaseInsensitive() {
         assertTrue(DeviceNameMatcher.isRearAdvert("REARVUE8"))
         assertTrue(DeviceNameMatcher.isRadarName("VARIA rtl515"))

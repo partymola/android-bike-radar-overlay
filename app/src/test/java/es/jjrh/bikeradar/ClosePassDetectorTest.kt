@@ -67,7 +67,7 @@ class ClosePassDetectorTest {
 
     @Test fun `fires for stationary-rider close pass at junction`() {
         // A junction close-pass happens while the rider is
-        // decelerating into a waiting line — a real safety
+        // decelerating into a waiting line - a real safety
         // event that should be logged. The previous rider-speed
         // floor excluded these from the HA log.
         // Floor is now 0; the other gates (closing speed,
@@ -94,7 +94,7 @@ class ClosePassDetectorTest {
 
     @Test fun `does not fire for lane-matched traffic at low closing speed`() {
         val d = ClosePassDetector()
-        // Only closing at 2 m/s — below the 6 m/s default floor.
+        // Only closing at 2 m/s - below the 6 m/s default floor.
         val frames = listOf(
             veh(distanceM = 20, lateralPos = 0.3f, speedMs = -2f) to 0L,
             veh(distanceM = 18, lateralPos = 0.3f, speedMs = -2f) to 100L,
@@ -265,6 +265,97 @@ class ClosePassDetectorTest {
         )
         val events = drive(d, frames, config = disabled)
         assertTrue(events.isEmpty())
+    }
+
+    // ── gate: rangeY out of band ─────────────────────────────────────────────
+
+    // covers ClosePassDetector.kt:176
+    @Test fun `does not arm when target stays beyond maxRangeY`() {
+        // Every frame sits at 45 m > maxRangeYM (40), so rangeYOk is false on
+        // each arm attempt; the lateral track is tight and closing fast, so
+        // only the rangeY gate is keeping it from arming. Track drops at the
+        // end and must NOT emit. Kills a mutant that drops the rangeY upper
+        // bound (e.g. `in 0..config.maxRangeYM` → `>= 0`).
+        val d = ClosePassDetector()
+        val frames = (0..4).map { i ->
+            listOf(veh(distanceM = 45, lateralPos = 0.1f, speedMs = -8f)) to i * 100L
+        } + listOf<Pair<List<Vehicle>, Long>>(emptyList<Vehicle>() to 600L)
+        val events = drive(d, frames)
+        assertTrue("a target beyond maxRangeY must never arm", events.isEmpty())
+    }
+
+    // ── gate: rider speed floor ──────────────────────────────────────────────
+
+    // covers ClosePassDetector.kt:178
+    @Test fun `does not arm when rider speed is below the configured floor`() {
+        // Non-default floor of 5 m/s with the rider at 3 m/s makes riderOk
+        // false on every arm attempt; all other gates (rangeY, closing, frames,
+        // lateral) pass. No event. Kills a mutant that flips the `>=` to `<=`
+        // or drops the riderOk conjunct.
+        val d = ClosePassDetector()
+        val floored = baseConfig.copy(riderSpeedFloorMs = 5f)
+        val frames = (0..4).map { i ->
+            listOf(veh(distanceM = 20 - i * 3, lateralPos = 0.1f, speedMs = -8f)) to i * 100L
+        } + listOf<Pair<List<Vehicle>, Long>>(emptyList<Vehicle>() to 600L)
+        val events = drive(d, frames, bikeSpeedMs = 3f, config = floored)
+        assertTrue("rider below the speed floor must never arm", events.isEmpty())
+    }
+
+    // ── rural arm threshold ──────────────────────────────────────────────────
+
+    // covers ClosePassDetector.kt:183
+    @Test fun `arms under the rural threshold above 8point25 ms only`() {
+        // Rider at 9 m/s (> 8.25) selects armRangeXRuralM = 2.0. Because
+        // framesSeen counts every frame the track is present (not just
+        // lateral-passing ones), the first frame eligible to arm is the third -
+        // the 0.9 m one - which is under BOTH the urban (1.5) and rural (2.0)
+        // gates, so an always-urban mutant still arms here and still drives to a
+        // 0.6 m min (< 1.0 emit cutoff) → both intact and mutant emit one event.
+        // The kill is therefore NOT the presence of an event: it is the
+        // `assertEquals(2.0f, e.thresholdArmedM)` assertion. The intact code
+        // records the rural 2.0 threshold; an always-urban mutant records 1.5,
+        // so the threshold assertion is the load-bearing kill.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 30, lateralPos = 0.6f, speedMs = -8f) to 0L, // 1.8 m (arms rural only)
+            veh(distanceM = 22, lateralPos = 0.4f, speedMs = -8f) to 100L, // 1.2 m
+            veh(distanceM = 14, lateralPos = 0.3f, speedMs = -8f) to 200L, // 0.9 m
+            veh(distanceM = 8, lateralPos = 0.2f, speedMs = -8f) to 300L, // 0.6 m (min)
+            veh(distanceM = 2, lateralPos = 0.25f, speedMs = -8f) to 400L,
+            veh(distanceM = 0, lateralPos = 0.3f, speedMs = -8f, isBehind = true) to 500L,
+        )
+        val events = drive(d, frames, bikeSpeedMs = 9f)
+        assertEquals(1, events.size)
+        val e = events[0]
+        assertEquals("must arm on the rural 2.0 m threshold", 2.0f, e.thresholdArmedM, 0.001f)
+        assertTrue("min should be ~0.6 m, got ${e.minRangeXM}", e.minRangeXM in 0.58f..0.62f)
+        assertEquals(ClosePassDetector.Severity.VERY_CLOSE, e.severity)
+    }
+
+    // ── LEFT side ────────────────────────────────────────────────────────────
+
+    // covers ClosePassDetector.kt:237
+    @Test fun `negative signed range emits a LEFT side close pass`() {
+        // A close overtake on the rider's left: lateralPos negative throughout,
+        // so minRangeXSignedM is negative and the side resolves to LEFT (today
+        // only RIGHT is covered). Arms at -0.5 → 1.5 m (urban gate, inclusive),
+        // drives to -0.15 → 0.45 m min (< 0.5 m → GRAZING, < 1.0 m → emits).
+        // Kills a mutant that flips the `>= 0f` side test or hardcodes RIGHT.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 30, lateralPos = -0.5f, speedMs = -8f) to 0L, // -1.5 m (arms)
+            veh(distanceM = 22, lateralPos = -0.35f, speedMs = -8f) to 100L, // -1.05 m
+            veh(distanceM = 14, lateralPos = -0.25f, speedMs = -8f) to 200L, // -0.75 m
+            veh(distanceM = 8, lateralPos = -0.15f, speedMs = -8f) to 300L, // -0.45 m (min)
+            veh(distanceM = 2, lateralPos = -0.2f, speedMs = -8f) to 400L,
+            veh(distanceM = 0, lateralPos = -0.25f, speedMs = -8f, isBehind = true) to 500L,
+        )
+        val events = drive(d, frames)
+        assertEquals(1, events.size)
+        val e = events[0]
+        assertEquals(ClosePassDetector.Side.LEFT, e.side)
+        assertEquals(ClosePassDetector.Severity.GRAZING, e.severity)
+        assertTrue("min should be ~0.45 m, got ${e.minRangeXM}", e.minRangeXM in 0.43f..0.47f)
     }
 }
 

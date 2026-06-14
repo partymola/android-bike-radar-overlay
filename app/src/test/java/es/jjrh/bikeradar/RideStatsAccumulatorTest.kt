@@ -422,4 +422,114 @@ class RideStatsAccumulatorTest {
         assertEquals(0.0f, s.alertsPerKm!!, 1e-4f)
         assertEquals(0.0f, s.alertsPerHourOfRide!!, 1e-4f)
     }
+
+    // ── distance: carried-speed positivity gate ───────────────────────────────
+
+    // covers RideStatsAccumulator.kt:78
+    @Test
+    fun negativeCarriedSpeedAccruesNoDistance() {
+        // A spurious negative bike speed must never subtract distance. The
+        // first frame seeds lastBikeSpeedMs = -5, so the next interval's
+        // speedForInterval is -5f and the `> 0f` gate rejects it.
+        // Catches gate-removal (no gate -> -5 m/s * dt subtracts distance) and
+        // a flip to `< 0f` (which would admit the negative speed and subtract).
+        // Note: `>= 0f` is an EQUIVALENT mutant here, not a killed one - it
+        // differs from `> 0f` only at speed == 0, where the increment is 0
+        // either way, so no input distinguishes them.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(radarState(bikeSpeedMs = -5f)) // seed carried speed = -5
+        clock.advance(1_000L)
+        a.observeFrame(radarState(bikeSpeedMs = -5f))
+        assertEquals(0.0f, a.snapshot().distanceRiddenKm, 1e-6f)
+    }
+
+    // ── exposure filters ──────────────────────────────────────────────────────
+
+    // covers RideStatsAccumulator.kt:87
+    @Test
+    fun exposureSkipsAlongsideStationaryFrames() {
+        // The interval is attributed to the current frame's traffic. A frame
+        // whose only vehicle is alongside-stationary does not count as
+        // in-traffic, so exposure stays 0. Kills a mutant that drops the
+        // `!v.isAlongsideStationary` term from anyTraffic.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(radarState(emptyList())) // seed prev
+        clock.advance(2_000L)
+        a.observeFrame(radarState(listOf(veh(1, isAlongsideStationary = true))))
+        assertEquals(0L, a.snapshot().exposureSeconds)
+    }
+
+    // covers RideStatsAccumulator.kt:88
+    @Test
+    fun exposureSkipsLateralUnknownFrames() {
+        // A lateral-unknown sentinel frame is not real traffic. Kills a mutant
+        // that drops the `!v.lateralUnknown` term from anyTraffic.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(radarState(emptyList())) // seed prev
+        clock.advance(2_000L)
+        a.observeFrame(radarState(listOf(veh(1, lateralUnknown = true))))
+        assertEquals(0L, a.snapshot().exposureSeconds)
+    }
+
+    // covers RideStatsAccumulator.kt:89
+    @Test
+    fun exposureSkipsOutOfRangeFrames() {
+        // A vehicle beyond MAX_TRACK_DISTANCE_M (40 m) does not put the rider
+        // in traffic for exposure purposes. Kills a mutant that drops or widens
+        // the `v.distanceM in 0..MAX_TRACK_DISTANCE_M` bound in anyTraffic.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(radarState(emptyList())) // seed prev
+        clock.advance(2_000L)
+        a.observeFrame(radarState(listOf(veh(1, distanceM = 50))))
+        assertEquals(0L, a.snapshot().exposureSeconds)
+    }
+
+    // ── extrema: out-of-range skip ────────────────────────────────────────────
+
+    // covers RideStatsAccumulator.kt:105
+    @Test
+    fun outOfRangeVehicleSkippedForPeakAndMinExtrema() {
+        // A vehicle beyond MAX_TRACK_DISTANCE_M is `continue`d before the
+        // peak-closing and min-lateral updates, so both extrema stay null even
+        // though this vehicle is fast-closing and very tight laterally.
+        // Kills a mutant that drops the `distanceM !in 0..MAX_TRACK_DISTANCE_M`
+        // continue (peak/min would pick up the out-of-range reading).
+        val a = acc()
+        a.observeFrame(
+            radarState(listOf(veh(1, distanceM = 50, speedMs = -20f, lateralPos = 0.05f))),
+        )
+        val s = a.snapshot()
+        assertNull("out-of-range vehicle must not set peak closing", s.peakClosingKmh)
+        assertNull("out-of-range vehicle must not set min lateral", s.minLateralClearanceM)
+    }
+
+    // ── p90: exact interpolated values ────────────────────────────────────────
+
+    // covers RideStatsAccumulator.kt:213
+    @Test
+    fun p90InterpolatesExactlyBetweenTwoSamples() {
+        // [10, 20]: rank = 0.9 * (2 - 1) = 0.9, lo = 0, hi = 1, frac = 0.9.
+        // value = (10 + 0.9 * (20 - 10)).toInt() = 19.0.toInt() = 19.
+        // Asserting the exact value (not a range) so a dropped interpolation
+        // term (e.g. returning sorted[lo] = 10) fails.
+        val a = acc()
+        a.observeClosePass(closeEvent(closingKmh = 10))
+        a.observeClosePass(closeEvent(closingKmh = 20))
+        assertEquals(19, a.snapshot().closingSpeedP90Kmh)
+    }
+
+    // covers RideStatsAccumulator.kt:213
+    @Test
+    fun p90OfSingleSampleIsThatSample() {
+        // [42]: size 1, rank = 0.9 * 0 = 0, lo = 0, hi = min(1, 0) = 0,
+        // frac = 0. value = (42 + 0 * 0).toInt() = 42. Exercises the hi-clamp
+        // (min(lo + 1, size - 1)) that prevents an index overflow on one sample.
+        val a = acc()
+        a.observeClosePass(closeEvent(closingKmh = 42))
+        assertEquals(42, a.snapshot().closingSpeedP90Kmh)
+    }
 }

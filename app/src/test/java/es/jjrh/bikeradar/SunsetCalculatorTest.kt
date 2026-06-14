@@ -3,6 +3,7 @@ package es.jjrh.bikeradar
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -171,6 +172,51 @@ class SunsetCalculatorTest {
         assertNotNull(noArg)
         assertNotNull(withDefaults)
         assertTrue("default-arg must equal explicit-default-arg", noArg == withDefaults)
+    }
+
+    // ── polar night: cosHa out of [-1, 1] returns null ───────────────────────
+
+    @Test
+    fun polarNightHasNoSunsetOrSunrise() {
+        // covers SunsetCalculator.kt:114
+        // At 78.0°N on the December solstice the sun never clears the horizon
+        // (solar noon elevation ~= 90 - 78 - 23.4 = -11.4°), so the hour-angle
+        // cosine exceeds 1.0 and the formula has no real sunrise/sunset
+        // solution. Both event accessors must return null - not a clamped or
+        // bogus time. Hand-derived: cosHa ~= 1.96 (> 1.0) -> L114 returns null.
+        // Catches a mutant that drops the cosHa range guard (which would feed
+        // an out-of-domain value to acos -> NaN times).
+        val midwinter = LocalDate.of(2026, 12, 21)
+        assertNull(
+            "polar night must have no sunset",
+            SunsetCalculator.sunsetEpochMs(midwinter, latDeg = 78.0, lonDeg = 15.0),
+        )
+        assertNull(
+            "polar night must have no sunrise",
+            SunsetCalculator.sunriseEpochMs(midwinter, latDeg = 78.0, lonDeg = 15.0),
+        )
+    }
+
+    @Test
+    fun polarNightNullPropagatesThroughZdtAndIsNight() {
+        // covers SunsetCalculator.kt:90 (sunsetZdt) and :58 (isNight)
+        // The L114 null must thread through the convenience layers: sunsetZdt
+        // hits its `?: return null` and yields null, and isNight fed both
+        // polar-null bounds contributes no night signal from either side and
+        // returns false (treat as day - the documented polar/no-fix fallback).
+        // Pins the end-to-end propagation rather than re-asserting isNight in
+        // isolation. Catches a mutant that swaps sunsetZdt's elvis default to a
+        // non-null sentinel, or that makes isNight default true on all-null.
+        val midwinter = LocalDate.of(2026, 12, 21)
+        val zdt = SunsetCalculator.sunsetZdt(midwinter, london, latDeg = 78.0, lonDeg = 15.0)
+        assertNull("sunsetZdt must propagate the polar null", zdt)
+
+        val polarSunrise = SunsetCalculator.sunriseEpochMs(midwinter, latDeg = 78.0, lonDeg = 15.0)
+        val polarSunset = SunsetCalculator.sunsetEpochMs(midwinter, latDeg = 78.0, lonDeg = 15.0)
+        assertFalse(
+            "with both polar bounds null, isNight has no signal and defaults to day",
+            SunsetCalculator.isNight(nowMs = 1_000_000L, sunriseMs = polarSunrise, sunsetMs = polarSunset),
+        )
     }
 
     // ── isNight day/night boundary (drives the connect-time light mode) ──────

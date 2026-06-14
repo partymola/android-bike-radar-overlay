@@ -109,7 +109,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun dottedQuadWithBadOctetIsMalformed() {
-        // 999.0.0.5 is shaped like an IPv4 but has an invalid octet — should
+        // 999.0.0.5 is shaped like an IPv4 but has an invalid octet - should
         // surface as Malformed, not silently fall through to WAN refusal.
         assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http://999.0.0.5"))
         assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http://192.168.300.1"))
@@ -130,7 +130,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun httpToZeroAddressRefused() {
-        // 0.0.0.0 is "this network" / unspecified — not a routable LAN destination.
+        // 0.0.0.0 is "this network" / unspecified - not a routable LAN destination.
         val r = HaUrlPolicy.validate("http://0.0.0.0")
         assertTrue(r is HaUrlPolicy.Result.CleartextWanRefused)
     }
@@ -175,7 +175,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun ipv6GlobalUnicastRefused() {
-        // 2000::/3 is global unicast — public, must be HTTPS.
+        // 2000::/3 is global unicast - public, must be HTTPS.
         val r = HaUrlPolicy.validate("http://[2001:4860:4860::8888]:8123")
         assertTrue(r is HaUrlPolicy.Result.CleartextWanRefused)
     }
@@ -208,7 +208,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun refusalMessageStripsEmbeddedQuotes() {
-        // A user pastes a URL like https://foo".bar — make sure the quote
+        // A user pastes a URL like https://foo".bar - make sure the quote
         // doesn't leak into the rendered chip text.
         val msg = HaUrlPolicy.refusalMessage("foo\".bar")
         assertFalse("embedded quotes must be stripped", msg.contains('"'))
@@ -249,5 +249,48 @@ class HaUrlPolicyTest {
         // authority). With no host to classify, the policy refuses as
         // Malformed rather than treating it as LAN or WAN.
         assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http:///lovelace"))
+    }
+
+    @Test fun threePartNumericHostIsMalformed() {
+        // covers HaUrlPolicy.kt:44 - a digit-leading toplabel makes java.net.URI
+        // return a null host. "1.2.3" is not a 4-part IPv4 literal and its final
+        // label "3" starts with a digit, so URI treats the authority as
+        // registry-based and getHost() returns null -> Malformed.
+        // NOTE: HaUrlPolicy.kt:47-49 (the DOTTED_QUAD_SHAPED bad-octet block) is
+        // DEAD CODE - unreachable via validate() because java.net.URI already
+        // nulls any out-of-range-octet dotted-quad host at L44 (verified:
+        // 999.0.0.5, 10.0.0.999, 192.168.300.1 all return host==null). Flagged
+        // for a production cleanup.
+        assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http://1.2.3"))
+    }
+
+    @Test fun fourPartHostWithNonNumericPartRefused() {
+        // covers HaUrlPolicy.kt:77-78 - "10.0.0.x" has a valid URI host (toplabel
+        // "x" is a letter), skips the dotted-quad gate, and in isLanHost the
+        // non-numeric "x" is dropped by mapNotNull so the list is size 3 != 4;
+        // ipv4 is null, no LAN range matches, so the cleartext token is refused.
+        val r = HaUrlPolicy.validate("http://10.0.0.x")
+        assertTrue(r is HaUrlPolicy.Result.CleartextWanRefused)
+        assertEquals("10.0.0.x", (r as HaUrlPolicy.Result.CleartextWanRefused).host)
+    }
+
+    @Test fun edgeOf192_168RangeRefused() {
+        // covers HaUrlPolicy.kt:88 - the `a == 192 && b == 168` boundary.
+        // 192.168.1.10 is LAN (RFC1918), but 192.169.1.10 fails the b==168
+        // arm and must be refused, pinning the second-octet check so a refactor
+        // that loosens it to all of 192/8 is caught.
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://192.168.1.10"))
+        val r = HaUrlPolicy.validate("http://192.169.1.10")
+        assertTrue("192.169 is outside 192.168/16, must be refused", r is HaUrlPolicy.Result.CleartextWanRefused)
+    }
+
+    @Test fun feHostWithNonLinkLocalNibbleRefused() {
+        // covers HaUrlPolicy.kt:103 - the link-local nibble check false arm.
+        // fe80::1 is link-local (nibble 8 -> Ok, see httpToIpv6LinkLocalOk), but
+        // fec0::1 has second nibble 'c' which is NOT in {8,9,a,b}, so it is NOT
+        // fe80::/10 link-local and must be refused (fec0::/10 is deprecated
+        // site-local, treated as WAN here).
+        val r = HaUrlPolicy.validate("http://[fec0::1]:8123")
+        assertTrue("fec0:: is not fe80::/10 link-local, must be refused", r is HaUrlPolicy.Result.CleartextWanRefused)
     }
 }

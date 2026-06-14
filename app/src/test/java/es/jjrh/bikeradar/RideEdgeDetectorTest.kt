@@ -92,6 +92,48 @@ class RideEdgeDetectorTest {
         assertEquals(empty, after)
     }
 
+    @Test fun `both signals null on a cold state short-circuits before firstSnapshot absorb`() {
+        // covers RideEdgeDetector.kt:57
+        // The both-null guard returns `prev to Edge.NONE` BEFORE the
+        // first-snapshot absorb (L78). So a cold state (firstSnapshotSeen
+        // false) fed a content-free snapshot must come back byte-identical -
+        // firstSnapshotSeen stays false, isRiding unchanged. Distinct from
+        // the warm-state both-null case: this pins that L57 wins over L78,
+        // catching a mutant that drops the early return and lets the absorb
+        // flip firstSnapshotSeen.
+        val cold = RideEdgeDetector.State(isRiding = false, firstSnapshotSeen = false)
+        val (after, edge) = RideEdgeDetector.next(cold, snap())
+        assertEquals(RideEdgeDetector.Edge.NONE, edge)
+        assertEquals(cold, after)
+        assertFalse("firstSnapshotSeen must NOT be set by a both-null snapshot", after.firstSnapshotSeen)
+    }
+
+    @Test fun `wheel-at-rest while riding with only notDriving present stays RIDING`() {
+        // covers RideEdgeDetector.kt:70
+        // Partial merge can deliver notDriving=true with locked absent. The
+        // locked==true arm (L68) must not fire, so currentIsRiding falls to
+        // the `notDriving==true && prev.isRiding` arm and stays riding - no
+        // spurious ENDED at a light. Unlike the existing traffic-light test
+        // (locked=false), this exercises the locked==null path into L70,
+        // catching a mutant that makes L70 yield false.
+        val riding = RideEdgeDetector.State(isRiding = true, firstSnapshotSeen = true)
+        val (after, edge) = RideEdgeDetector.next(riding, snap(notDriving = true))
+        assertEquals(RideEdgeDetector.Edge.NONE, edge)
+        assertTrue(after.isRiding)
+    }
+
+    @Test fun `wheel-at-rest while parked with only notDriving present stays PARKED`() {
+        // covers RideEdgeDetector.kt:71
+        // Mirror of the L70 case from the parked side: notDriving=true with
+        // locked absent while previously parked must stay parked (no STARTED).
+        // The `notDriving==true && !prev.isRiding` arm yields false; catches a
+        // mutant that makes L71 yield true and synthesise a STARTED.
+        val parked = RideEdgeDetector.State(isRiding = false, firstSnapshotSeen = true)
+        val (after, edge) = RideEdgeDetector.next(parked, snap(notDriving = true))
+        assertEquals(RideEdgeDetector.Edge.NONE, edge)
+        assertFalse(after.isRiding)
+    }
+
     @Test fun `full ride sequence - start, two light stops, end`() {
         var s = RideEdgeDetector.State()
         // Cold start (locked at the rack).

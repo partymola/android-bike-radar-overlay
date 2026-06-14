@@ -225,4 +225,72 @@ class EBikeStatusDecoderTest {
         assertEquals(999, out.speedRaw) // prior preserved, NOT 1091
         assertSame(prior, out)
     }
+
+    // ── branch coverage: short 0x30 records and varint overflow ────────────
+
+    @Test
+    fun mergeInto0x30RecordWithLenOneIsSkipped() {
+        // covers EBikeStatusDecoder.kt:68 - marker==0x30 but len<2 (len==1),
+        // so the record body is too short to hold a 2-byte objId. The decode
+        // arm is skipped and the loop advances past the record, leaving the
+        // snapshot unchanged. `30 01 ff`: marker 0x30, len 1, one stray byte.
+        val prior = LiveDataSnapshot(speedRaw = 999)
+        val out = EBikeStatusDecoder.mergeInto(prior, hex("3001ff"))
+        assertSame(prior, out) // unchanged: the len==1 record contributes nothing
+    }
+
+    @Test
+    fun extractUnknownObjectIdsSkips0x30RecordWithLenOne() {
+        // covers EBikeStatusDecoder.kt:109 - the len<2 skip arm on the
+        // unknown-id path. A `30 01 ff` record is too short for an objId, so
+        // nothing is reported even though the marker is 0x30.
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(hex("3001ff"))
+        assertEquals(0, unknowns.size)
+    }
+
+    @Test
+    fun extractUnknownObjectIdsAppendsTwoUnmappedRecords() {
+        // covers EBikeStatusDecoder.kt:114 - the second-append branch where
+        // `out` is already non-null. Two unmapped object IDs in one frame:
+        // 0x9808 (field-1 varint 0x14 = 20) and 0x9900 (field-1 varint
+        // 0x0a = 10). The first append allocates the list; the second hits
+        // the `out != null` path.
+        val bytes = hex(
+            "300498080814" + // unmapped 0x9808, value 20 (0x14)
+                "30049900080a", // unmapped 0x9900, value 10 (0x0a)
+        )
+        val unknowns = EBikeStatusDecoder.extractUnknownObjectIds(bytes)
+        assertEquals(2, unknowns.size)
+        assertEquals(0x9808, unknowns[0].first)
+        assertEquals(20L, unknowns[0].second)
+        assertEquals(0x9900, unknowns[1].first)
+        assertEquals(10L, unknowns[1].second)
+    }
+
+    @Test
+    fun scalarValueWithNoFieldBodyDefaultsToZero() {
+        // covers EBikeStatusDecoder.kt:139 - the `start < end` false arm.
+        // A 0x30 record of len==2 carries only the 2-byte objId and no field
+        // body, so scalarValue is called with start==end and returns 0.
+        // `30 02 98 2d`: speed objId, no varint -> speedRaw = 0.
+        val s = EBikeStatusDecoder.mergeInto(empty, hex("3002982d"))
+        assertEquals(0, s.speedRaw)
+    }
+
+    @Test
+    fun varintExceeding64BitsDiscardsTheNotification() {
+        // Verifies a >64-bit varint is discarded: a field-1 varint of 11
+        // continuation bytes (all 0x80) drives shift past 64 bits; readVarint
+        // throws, mergeInto's outer try/catch catches it and returns the prior
+        // snapshot. Record: marker 0x30, len 0x0e (14), objId 0x982d, tag 0x08,
+        // then 11×0x80.
+        // NOTE: this does NOT isolate the >64-bit overflow guard
+        // (EBikeStatusDecoder.kt:168). The same try/catch (mergeInto.kt:76) also
+        // catches the truncation guard (L167 `require(i < end)`), so removing
+        // L168 alone is not provably caught here in isolation - the truncation
+        // case would still throw on a varint that ran off the record end.
+        val prior = LiveDataSnapshot(speedRaw = 999)
+        val out = EBikeStatusDecoder.mergeInto(prior, hex("300e982d088080808080808080808080"))
+        assertSame(prior, out) // overflow guard trips -> prior preserved, NOT mutated
+    }
 }

@@ -17,7 +17,7 @@ class RideStatsAccumulatorTest {
         }
     }
 
-    private fun acc(clock: FakeClock = FakeClock()) = RideStatsAccumulator(clock.provider)
+    private fun acc(clock: FakeClock = FakeClock()) = RideStatsAccumulator(clock.provider, clock.provider)
 
     private fun veh(
         id: Int,

@@ -42,7 +42,7 @@ class PipelineReplayTest {
         var clock = 0L
         val decoder = RadarV2Decoder(nowMs = { clock })
         val detector = ClosePassDetector()
-        val stats = RideStatsAccumulator(nowMsProvider = { clock })
+        val stats = RideStatsAccumulator(nowMsProvider = { clock }, monoMsProvider = { clock })
 
         // Permissive config: the fixture window is 30 s of real traffic;
         // the default emitMinRangeX of 1.0 m can be too strict on a short
@@ -141,7 +141,7 @@ class PipelineReplayTest {
         var clock = 0L
         val decoder = RadarV2Decoder(nowMs = { clock })
         val detector = ClosePassDetector()
-        val stats = RideStatsAccumulator(nowMsProvider = { clock })
+        val stats = RideStatsAccumulator(nowMsProvider = { clock }, monoMsProvider = { clock })
         val disabled = ClosePassDetector.Config(enabled = false)
 
         for (frame in frames) {

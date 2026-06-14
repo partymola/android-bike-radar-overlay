@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import android.os.SystemClock
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -17,9 +18,15 @@ import kotlin.math.min
  * radar collect block in BikeRadarService).
  */
 class RideStatsAccumulator(
+    /** Wall clock (currentTimeMillis), for [rideStartedAtMs] which is exported
+     *  as an ISO instant / persisted to ride history. */
     private val nowMsProvider: () -> Long = { System.currentTimeMillis() },
+    /** Monotonic clock (elapsedRealtime), for the distance/exposure dt and ride
+     *  duration so a wall-clock jump can't inflate or drop the ride distance. */
+    private val monoMsProvider: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
     val rideStartedAtMs: Long = nowMsProvider()
+    private val rideStartedAtMono: Long = monoMsProvider()
 
     // Per-frame state. Nullable for measurement-class fields that have no
     // sensible "no data" zero value: a ride with no observed vehicles should
@@ -53,12 +60,12 @@ class RideStatsAccumulator(
 
     /**
      * Ingest a RadarState snapshot. The snapshot's `bikeSpeedMs` integrates
-     * into [distanceRiddenM] over the wall-clock interval since the previous
-     * frame. Vehicles in the snapshot update peak-closing / min-lateral
+     * into [distanceRiddenM] over the elapsed (monotonic) interval since the
+     * previous frame. Vehicles in the snapshot update peak-closing / min-lateral
      * running extrema and the unique-overtake set.
      */
     fun observeFrame(state: RadarState) {
-        val nowMs = nowMsProvider()
+        val nowMs = monoMsProvider()
         val prev = lastFrameMs
         lastFrameMs = nowMs
 
@@ -178,7 +185,7 @@ class RideStatsAccumulator(
         // misleading number when the denominator is non-positive: a ride with
         // no distance ridden yet, or a zero-length ride.
         val distanceKm = distanceRiddenM / 1000.0
-        val rideDurationMs = (nowMsProvider() - rideStartedAtMs).coerceAtLeast(0L)
+        val rideDurationMs = (monoMsProvider() - rideStartedAtMono).coerceAtLeast(0L)
         val alertsPerKm = if (distanceKm > 0.0) (alarmCueCount / distanceKm).toFloat() else null
         val alertsPerHour = if (rideDurationMs > 0L) {
             (alarmCueCount.toDouble() / (rideDurationMs / 3_600_000.0)).toFloat()
@@ -238,7 +245,7 @@ data class RideStatsSnapshot(
     /** Alarm cues (close-pass beep + urgent) per km ridden. Null when no
      *  distance has accumulated (avoids a div-by-zero / absurd rate). */
     val alertsPerKm: Float?,
-    /** Alarm cues per hour of ride wall-clock. Null for a zero-length ride. */
+    /** Alarm cues per hour of ride elapsed time. Null for a zero-length ride. */
     val alertsPerHourOfRide: Float?,
 )
 

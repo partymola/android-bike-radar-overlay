@@ -795,40 +795,42 @@ internal fun SystemCard(
     // Plus: BT off shown ONCE as a card-level banner, never per-row.
     //
     // Battery chip hides outside Live to avoid surfacing stale numbers.
+    val radarLink = deviceLinkState(linked = btEnabled && hasBond, fresh = radarFresh)
     val radarRow = SystemRow(
         icon = Icons.Default.Sensors,
         label = stringResource(R.string.main_system_rear_radar),
-        value = when {
-            !btEnabled || !hasBond -> stringResource(R.string.main_system_value_not_paired)
-            radarFresh -> stringResource(R.string.main_system_value_live)
-            else -> stringResource(R.string.main_system_value_no_signal)
+        value = when (radarLink) {
+            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_not_paired)
+            DeviceLinkState.LIVE -> stringResource(R.string.main_system_value_live)
+            DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
         },
-        muted = !hasBond || !btEnabled,
+        muted = radarLink.muted,
         battery = if (radarFresh) radarBattery?.pct else null,
-        dot = when {
-            !btEnabled || !hasBond -> br.fgDim
-            radarFresh -> br.safe
-            else -> br.caution
+        dot = when (radarLink) {
+            DeviceLinkState.NOT_PAIRED -> br.fgDim
+            DeviceLinkState.LIVE -> br.safe
+            DeviceLinkState.NO_SIGNAL -> br.caution
         },
-        hollow = !btEnabled || !hasBond,
+        hollow = radarLink.hollow,
     )
 
+    val dashcamLink = deviceLinkState(linked = dashcamOwned && dashcamPaired, fresh = dashcamFresh)
     val dashcamRow = SystemRow(
         icon = Icons.Default.Videocam,
         label = stringResource(R.string.main_system_front_dashcam),
-        value = when {
-            !dashcamOwned || !dashcamPaired -> stringResource(R.string.main_system_value_not_paired)
-            dashcamFresh -> dashcamDisplayName ?: stringResource(R.string.main_system_value_live)
-            else -> stringResource(R.string.main_system_value_no_signal)
+        value = when (dashcamLink) {
+            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_not_paired)
+            DeviceLinkState.LIVE -> dashcamDisplayName ?: stringResource(R.string.main_system_value_live)
+            DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
         },
-        muted = !dashcamOwned || !dashcamPaired,
+        muted = dashcamLink.muted,
         battery = if (dashcamFresh) dashcamBattery?.pct else null,
-        dot = when {
-            !dashcamOwned || !dashcamPaired -> br.fgDim
-            dashcamFresh -> br.safe
-            else -> br.caution
+        dot = when (dashcamLink) {
+            DeviceLinkState.NOT_PAIRED -> br.fgDim
+            DeviceLinkState.LIVE -> br.safe
+            DeviceLinkState.NO_SIGNAL -> br.caution
         },
-        hollow = !dashcamOwned || !dashcamPaired,
+        hollow = dashcamLink.hollow,
     )
 
     // eBike live-data status (read from the proprietary channel Flow uses).
@@ -843,7 +845,7 @@ internal fun SystemCard(
             stringResource(R.string.main_system_value_waiting_flow)
         },
         muted = !ebikeReceiving,
-        battery = if (ebikeReceiving) ebikeBatterySoc else null,
+        battery = ebikeBatteryChipSoc(ebikeReceiving, ebikeBatterySoc),
         dot = if (ebikeReceiving) br.safe else br.caution,
     )
 

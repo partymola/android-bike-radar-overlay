@@ -267,6 +267,15 @@ enforces them, and CONTRIBUTING.md points contributors here:
     project LINE >= 0.70, BRANCH >= 0.93 on every `*Decider` / `*Deriver`
     (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
     `app/build.gradle.kts` as coverage grows.
+  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, CI only): the
+    changed executable production lines in a PR (or a push) must be >= 85%
+    covered. The project ratchet above can't see a 200-line untested feature
+    while the average holds; this gate does. It wraps `diff-cover` over the
+    same logic-scoped `jacocoTestReport` (so new Compose UI under `ui/**` is
+    not gated - Roborazzi covers that). Diffs under 10 executable changed
+    lines are exempt (one untested line shouldn't fail CI), and an
+    unreachable base ref skips rather than fails. It fires on PRs and direct
+    pushes to `main` alike; a contributor PR is the case it most guards.
 - **detekt** is intentionally not wired: no stable release targets the
   pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
   in a public build. Revisit when a stable detekt supports the toolchain.

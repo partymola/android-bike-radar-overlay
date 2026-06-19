@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0" apply false
     // Roborazzi renders screenshot tests through Robolectric Native Graphics,
     // so they run in cold-cache CI (unlike Paparazzi's layoutlib JNI loader,
-    // which forced the old test-exclusion hack). 1.63.0 runs on this
+    // which forced the old test-exclusion hack). 1.64.0 runs on this
     // Kotlin 2.4.0 / Gradle 9 toolchain.
     id("io.github.takahirom.roborazzi") version "1.64.0" apply false
     // Static analysis. ktlint does no type resolution, so unlike detekt it

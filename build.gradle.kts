@@ -5,7 +5,7 @@ plugins {
     // so they run in cold-cache CI (unlike Paparazzi's layoutlib JNI loader,
     // which forced the old test-exclusion hack). 1.63.0 runs on this
     // Kotlin 2.4.0 / Gradle 9 toolchain.
-    id("io.github.takahirom.roborazzi") version "1.63.0" apply false
+    id("io.github.takahirom.roborazzi") version "1.64.0" apply false
     // Static analysis. ktlint does no type resolution, so unlike detekt it
     // is tolerant of the exact Kotlin compiler and safe on Kotlin 2.4.0.
     // detekt is held until a stable release targets Kotlin 2.4 (only

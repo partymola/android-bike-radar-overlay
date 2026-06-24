@@ -95,4 +95,29 @@ class EBikeCaptureFormatterTest {
             assertEquals("ebike blight=$v", line)
         }
     }
+
+    @Test fun `all boolean flags true encode as 1, with raw brightness`() {
+        val snap = LiveDataSnapshot(
+            ambientBrightnessRaw = 42,
+            systemLocked = true,
+            chargerConnected = true,
+            lightReserve = true,
+            diagnosisActive = true,
+            bikeNotDriving = true,
+        )
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        assertEquals("ebike lux_raw=42 sysl=1 chg=1 lreserve=1 diag=1 notdrv=1", line)
+    }
+
+    @Test fun `all boolean flags false encode as 0`() {
+        val snap = LiveDataSnapshot(
+            systemLocked = false,
+            chargerConnected = false,
+            lightReserve = false,
+            diagnosisActive = false,
+            bikeNotDriving = false,
+        )
+        val line = EBikeCaptureFormatter.format(snap, sessionStartOdometerM = null)
+        assertEquals("ebike sysl=0 chg=0 lreserve=0 diag=0 notdrv=0", line)
+    }
 }

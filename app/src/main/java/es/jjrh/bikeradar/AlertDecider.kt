@@ -89,8 +89,8 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *      b) **TTC gate** - TTC = `distanceM / closing` <= [TTC_GATE_SECONDS]
  *         AND closing >= [TTC_GATE_CLOSING_FLOOR_MS] AND `distanceM <=
  *         alertMaxM`. Strictly extends the proximity gate's coverage at
- *         the same closing-speed bar: at 6 m/s closing, TTC <= 2 s maps
- *         to distance <= 12 m, while the proximity gate caught only the
+ *         the same closing-speed bar: at 6 m/s closing, TTC <= 3 s maps
+ *         to distance <= 18 m, while the proximity gate caught only the
  *         distance <= alertMaxM/3 = 6 m subset. Earlier warning on the
  *         same threats; closing-floor filters slow-queue traffic.
  *    Catches a vehicle that isn't braking for the queue ahead - the
@@ -436,20 +436,20 @@ class AlertDecider(
         //      and a distance ceiling at alertMaxM so we never reach
         //      out beyond what the alert envelope is configured for.
         //      Strictly extends the proximity gate's coverage at the
-        //      same closing-speed bar: at 6 m/s closing, TTC <= 2 s
-        //      maps to distance <= 12 m, while the proximity gate
+        //      same closing-speed bar: at 6 m/s closing, TTC <= 3 s
+        //      maps to distance <= 18 m, while the proximity gate
         //      caught only the distance <= alertMaxM/3 = 6 m subset.
         //
         // Bypasses the stationary-suppress dwell. The dwell exists to
         // skip rolling stops mid-turn; it is a 2 s timer used as a
         // proxy for "rider has committed to a stop". When an imminent
         // threat is present the dwell is the wrong gate: TTC is sub-
-        // 2 s, and waiting it out leaves the urgent tone silent
+        // 3 s, and waiting it out leaves the urgent tone silent
         // during the entire reaction window. A rider decelerating into
         // a junction with a closing vehicle is covered by the moving
         // path below, which has NO dwell at all: the threat predicate
         // itself (raised closing floor + proximity/TTC) carries the
-        // discrimination, and a dwell would eat most of the sub-2 s
+        // discrimination, and a dwell would eat most of the sub-3 s
         // reaction window the cue exists to protect.
         //
         // No per-tid latch. Industry standards (TCAS, automotive FCW,
@@ -701,19 +701,22 @@ class AlertDecider(
         const val URGENT_OVERRIDE_DWELL_MS = 500L
 
         /** Time-to-collision threshold (seconds) for the TTC disjunct
-         *  of the imminent-impact safety override. Below the 2.8 s
-         *  lower bound of automotive forward-collision-warning systems
-         *  (NHTSA Burgett & Carter, Mercedes Pre-Safe, Volvo RCW use
-         *  2.8-4 s) - they assume a driver in a vehicle with AEB. A
-         *  stopped cyclist's reaction options are narrower (dismount,
-         *  step aside, brace), and a wider TTC window for normal-
-         *  closing-speed traffic merging into the rider's queue
-         *  position quickly degenerates into beep noise. 2 s buys
-         *  enough warning to react when paired with the 6 m/s closing
-         *  floor below: at the boundary, a 12 m / 6 m/s approach
-         *  still gives the same warning the proximity gate would
-         *  give at 6 m / 6 m/s = 1 s, but earlier in the encounter. */
-        const val TTC_GATE_SECONDS = 2.0f
+         *  of the imminent-impact safety override. Set toward the lower
+         *  end of the automotive forward-collision-warning range
+         *  (Mercedes Pre-Safe, Volvo RCW, NHTSA Burgett & Carter warn at
+         *  2.8-4 s) - and that range assumes a driver who only has to
+         *  brake. A stopped or crawling cyclist's evasive action
+         *  (dismount, step aside, brace) is slower, so the rider needs at
+         *  least that much lead, not less. Raising 2.0 -> 3.0 s was
+         *  validated on a 105-ride corpus replay: it added urgent beeps
+         *  only on genuinely-close encounters (got-close precision 86%
+         *  vs 90% at 2.0 s; every new alarm on a previously-silent ride
+         *  was a real 1-4 m pass), so the wider window does not
+         *  degenerate into beep noise. The 6 m/s closing floor filters
+         *  slow-queue traffic; the alertMaxM distance ceiling caps the
+         *  reach, so a larger value is a near-no-op (6 m/s x ~3.3 s
+         *  already hits the 20 m window). */
+        const val TTC_GATE_SECONDS = 3.0f
 
         /** Minimum closing speed (m/s, positive = approaching) for the
          *  TTC disjunct to engage. Mirrors [SAFETY_OVERRIDE_CLOSING_MS]

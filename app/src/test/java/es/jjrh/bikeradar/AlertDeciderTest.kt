@@ -1050,10 +1050,10 @@ class AlertDeciderTest {
 
     @Test fun `ttc gate fires at medium distance for fast-closing vehicle`() {
         // The headline win the TTC gate exists for. 12 m at 6 m/s =
-        // TTC 2 s - well outside near-third (alertMax/3 = 7), so the
-        // proximity gate would not fire (it caps at 6 m at the same
-        // closing speed = TTC 1 s). The TTC gate catches the same
-        // approach earlier, at TTC = 2 s.
+        // TTC 2 s - well within the 3 s gate and well outside near-third
+        // (alertMax/3 = 7), so the proximity gate would not fire (it caps
+        // at 6 m at the same closing speed = TTC 1 s). The TTC gate
+        // catches the same approach earlier in the encounter.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -1064,36 +1064,52 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
-    @Test fun `ttc gate boundary at exactly 2 seconds fires`() {
-        // dist 12 / closing 6 = TTC 2.0 s exactly. <= TTC_GATE_SECONDS
-        // is inclusive.
+    @Test fun `ttc gate boundary at exactly 3 seconds fires`() {
+        // dist 18 / closing 6 = TTC 3.0 s exactly. <= TTC_GATE_SECONDS
+        // is inclusive, so the boundary fires.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
-        val v = closingCar(id = 1, distanceM = 12, speedMs = -6f)
+        val v = closingCar(id = 1, distanceM = 18, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.UrgentApproach(), ev)
     }
 
-    @Test fun `ttc gate excludes ttc above 2 seconds`() {
-        // dist 14 / closing 6 = TTC 2.33 s; just past threshold. Outside
-        // near-third too (14 > 7), so the proximity gate is also off.
+    @Test fun `ttc gate excludes ttc above 3 seconds`() {
+        // dist 19 / closing 6 = TTC 3.17 s; just past threshold. Outside
+        // near-third too (19 > 7), so the proximity gate is also off.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
-        val v = closingCar(id = 1, distanceM = 14, speedMs = -6f)
+        val v = closingCar(id = 1, distanceM = 19, speedMs = -6f)
         d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertEquals(AlertDecider.Event.None, ev)
     }
 
+    @Test fun `ttc gate reach extends past the old 2 second envelope`() {
+        // Behaviour-change guard for the 2.0 -> 3.0 s raise. 16 m at 6 m/s
+        // = TTC 2.67 s: inside the 3 s gate (fires), but it was None under
+        // the old 2 s gate. Outside near-third (16 > 7), so the proximity
+        // gate is not what fires it. A revert to 2.0 s surfaces here.
+        val d = AlertDecider(stationaryDwellMs = 2000L)
+        val c = Clock()
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        val v = closingCar(id = 1, distanceM = 16, speedMs = -6f)
+        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.UrgentApproach(), ev)
+    }
+
     @Test fun `ttc gate closing floor inclusive at 6 m_per_s`() {
         // closing exactly TTC_GATE_CLOSING_FLOOR_MS (6) at TTC 2 s
-        // fires. Mirrors the SAFETY_OVERRIDE_CLOSING_MS quantum-strict
-        // bound on the proximity gate.
+        // (within the 3 s gate) fires. Mirrors the
+        // SAFETY_OVERRIDE_CLOSING_MS quantum-strict bound on the
+        // proximity gate.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -1123,7 +1139,7 @@ class AlertDeciderTest {
     @Test fun `ttc gate distance ceiling inclusive at alertMax`() {
         // distanceM == alertMaxM exactly is INSIDE the TTC envelope
         // (`v.distanceM in 0..alertMaxM`). At 21 m / 12 m/s = 1.75 s
-        // TTC, the gate fires (well within the 2 s ceiling).
+        // TTC, the gate fires (well within the 3 s ceiling).
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -1583,8 +1599,9 @@ class AlertDeciderTest {
         d.decide(listOf(closingCar(1, 21, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
         c.jump(2000)
         // Now jitter to 22 m: 22 > alertMax(21) but <= alertMax + band(23),
-        // so it stays in close via prevCloseRaw. TTC = 22/8 = 2.75 s and,
-        // crucially, 22 !in 0..21, so byTtc is false. byProximity needs
+        // so it stays in close via prevCloseRaw. TTC = 22/8 = 2.75 s (within
+        // the 3 s gate) but, crucially, 22 !in 0..21, so byTtc is false -
+        // the distance ceiling is the operative exclusion. byProximity needs
         // distance <= 7, also false. -> suppressed.
         d.decide(listOf(closingCar(1, 22, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
         val ev = d.decide(listOf(closingCar(1, 22, -8f)), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -1760,12 +1777,12 @@ class AlertDeciderTest {
         // TTC gate exists for: a target OUTSIDE near-third that byProximity
         // can never catch. dist 12 > alertMax/3 (=7) so byProximity is false
         // on L486; closingMs 6.0 >= 6 (L487 true, L488 true), 12 in 0..21
-        // (L489 true), TTC 12/6 = 2.0 <= 2.0 (L490 true) -> byTtc fires.
+        // (L489 true), TTC 12/6 = 2.0 <= 3.0 (L490 true) -> byTtc fires.
         // This isolates the byTtc disjunct from byProximity (separates the
         // two `||` operands at L491). Mutation caught: dropping the L488
-        // floor would admit slow-queue traffic (e.g. 12 m at -5 m/s, TTC 2.4
-        // s would still not fire on TTC, but 10 m at -5 m/s, TTC 2.0 s would
-        // fire spuriously) - the floor is what filters merging queue traffic.
+        // floor would admit slow-queue traffic - e.g. a 15 m / -5 m/s merge
+        // (TTC 3.0 s) would fire spuriously on TTC despite the driver
+        // clearly tracking and braking; the floor is what filters it.
         val d = AlertDecider(stationaryDwellMs = 2000L)
         val c = Clock()
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
@@ -1783,7 +1800,7 @@ class AlertDeciderTest {
         // byTtc block (see ledger). Pin the live lower bound at the extreme:
         // distanceM == 0 (a target right on the rider) must still satisfy
         // `0 in 0..21` and fire. closingMs 8.0 >= 6 (L487/L488 true), 0 in
-        // 0..21 (L489 true), TTC 0/8 = 0.0 <= 2.0 (L490 true) -> byTtc fires.
+        // 0..21 (L489 true), TTC 0/8 = 0.0 <= 3.0 (L490 true) -> byTtc fires.
         // (byProximity also fires here, 0 <= 7; firstOrNull returns the same
         // vehicle either way - the UrgentApproach is what we assert.)
         // Mutation caught: tightening the lower bound to `1..alertMaxM` would

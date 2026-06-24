@@ -317,7 +317,7 @@ enforces them, and CONTRIBUTING.md points contributors here:
   frame` in logcat before declaring the app ready to test.
 - AlertDecider's imminent-impact override has TWO disjunct gates: the
   proximity gate (`distance <= alertMaxM/3 AND closing >= 6 m/s`) and a
-  TTC gate (`TTC <= 2s AND closing >= 6 m/s AND distance <= alertMaxM`).
+  TTC gate (`TTC <= 3s AND closing >= 6 m/s AND distance <= alertMaxM`).
   It arms when the rider is stationary, and - via the low-speed extension
   (`urgentLowSpeedEnabled`, default on) - while moving at <= 15 km/h with
   both gates' closing floor raised to 10 m/s on that moving path.

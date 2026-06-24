@@ -264,8 +264,9 @@ enforces them, and CONTRIBUTING.md points contributors here:
   - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
     and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
   - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
-    project LINE >= 0.70, BRANCH >= 0.93 on every `*Decider` / `*Deriver`
-    (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
+    project floors LINE >= 0.80, INSTRUCTION >= 0.78, BRANCH >= 0.68 on the
+    whole testable layer, plus a tighter BRANCH >= 0.93 on every `*Decider` /
+    `*Deriver` (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
     `app/build.gradle.kts` as coverage grows.
   - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, CI only): the
     changed executable production lines in a PR (or a push) must be >= 85%

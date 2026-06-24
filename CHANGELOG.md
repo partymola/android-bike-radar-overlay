@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.12.0-alpha - 2026-06-24
+
+### Features
+
+- **The urgent warning now fires sooner on a fast approach.** The imminent-impact tone - the distinct one, not the ordinary close-pass beeps - used to wait until a closing vehicle was about two seconds from you while you were stopped or crawling. It now warns at about three seconds: earlier on a fast closer, with more time to react. The cue sounds exactly the same; only the timing moved. A cyclist's evasive options (stop, step aside, brace) are slower than a braking driver's, so the extra lead matters. Validated against 105 recorded rides and confirmed useful on the road.
+
+### Reliability
+
+- **Alert timing and reconnect no longer drift if the phone's clock jumps.** The walk-away alarm, the radar-drop warning, in-ride cue spacing, the ride-distance count, and the dashcam battery probe now run off a steady clock instead of wall-clock time, so an automatic time correction or a manual clock change mid-ride can't stretch, skip, or mistime any of them.
+- **Faster eBike reconnect.** The Bosch eBike live-data link now shares the same reconnect backoff as the radar and camera, re-linking sooner after a brief drop. eBike only; nothing changes without one.
+
+### Power
+
+- **The overlay stops repainting when nothing has changed.** The radar strip used to redraw on every radar frame even when the picture was identical; it now repaints only when something visible actually changes, trimming per-frame work across a whole ride.
+
+### UX
+
+- **Spanish: the front camera is now consistently "cámara delantera".** A copy pass unified the term across the app.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE protocol or the Home Assistant payloads.
+- The urgent cue fires a little sooner on a fast approach - a threshold change with the same tone. No new setting and no migration. Tested clean on Android 17 (API 37).
+
+### Internal
+
+- A large test-coverage round: the overlay's threat-colour and geometry math extracted into tested pure functions, fake-GATT driving tests for the radar, camera, and eBike links, raised coverage floors, and a per-change diff-coverage CI gate. The build now strips the dependency-info blob for F-Droid reproducible builds. Plus the usual CI, dependency, and documentation refreshes.
+
 ## v0.11.0-alpha - 2026-06-13
 
 ### Features

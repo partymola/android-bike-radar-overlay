@@ -318,8 +318,8 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     )
 }
 
-// Coverage ratchet. A coarse line floor on the whole testable layer catches
-// gross regressions (a disabled test class), and a branch floor on the
+// Coverage ratchet. Project floors on the whole testable layer catch gross
+// regressions (a disabled test class), and a tighter branch floor on the
 // safety-critical deciders holds the line where a regression is most
 // dangerous. Report-only stays the default; this gate is opt-in via CI/QC.
 tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
@@ -349,15 +349,27 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
         }
     }
     violationRules {
-        // Project line floor, ratcheted to sit a few points below the current
-        // figure (~74% as of the ride-history / link-journal round) so
-        // legitimately hard-to-test new code doesn't trip it. Raise as
+        // Project floors on the testable layer, each ratcheted a few points
+        // below the current figure (LINE ~84%, INSTRUCTION ~83%, BRANCH ~73%)
+        // so legitimately hard-to-test new code doesn't trip them while a mass
+        // regression still fails the build. The per-PR diff-coverage gate
+        // guards new code; these guard against wholesale drops. Raise as
         // coverage grows.
         rule {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.70".toBigDecimal()
+                minimum = "0.80".toBigDecimal()
+            }
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.78".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.68".toBigDecimal()
             }
         }
         // Branch coverage on the safety-critical decision classes. Wildcards

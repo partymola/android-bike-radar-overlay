@@ -54,7 +54,7 @@ class LinkEventJournalTest {
         val root = Files.createTempDirectory("linkjournal").toFile()
         val j = LinkEventJournal({ root })
         val file = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME)
-        file.parentFile.mkdirs()
+        file.parentFile?.mkdirs()
         // Pre-fill past the byte cap, then one append triggers the trim.
         val filler = "x".repeat(200)
         val lines = (LinkEventJournal.MAX_BYTES / filler.length + 10).toInt()

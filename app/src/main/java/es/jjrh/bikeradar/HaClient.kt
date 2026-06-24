@@ -166,7 +166,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     private fun drainAndReturn(conn: HttpURLConnection, code: Int) {
         try {
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            stream?.use { while (it.read() != -1) Unit }
+            stream?.use { while (it.read() != -1) {} }
         } catch (_: Throwable) {
             // Body draining is best-effort; if it fails the keep-alive
             // pool just won't reuse this socket. No correctness impact.

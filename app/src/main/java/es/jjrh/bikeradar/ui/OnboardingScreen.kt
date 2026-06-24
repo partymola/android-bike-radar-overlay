@@ -844,7 +844,7 @@ internal fun PairingStepContent(
                                 stringResource(
                                     R.string.onboarding_pair_dashcam_picked_detail,
                                     dashcamDisplayName ?: stringResource(R.string.onboarding_pair_dashcam_picked_fallback),
-                                    dashcamMac ?: "",
+                                    dashcamMac,
                                 )
                             } else {
                                 stringResource(R.string.onboarding_pair_dashcam_pick_detail)

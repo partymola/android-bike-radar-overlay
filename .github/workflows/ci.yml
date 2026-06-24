@@ -10,7 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  # Fast JVM tests - runs on every push and PR.
+  # Fast JVM tests - runs on every push and PR. Lint and ktlint live in the
+  # separate static-analysis job below so they run concurrently with this one
+  # instead of serializing inside a single Gradle invocation.
   unit-tests:
     name: JVM unit tests (Robolectric)
     runs-on: ubuntu-latest
@@ -38,17 +40,26 @@ jobs:
         with:
           gradle-version: '9.4.1'
 
-      - name: Run lint, ktlint, unit tests, and coverage gate
-        # Lint and ktlint run nowhere else on the remote; bundling them with
-        # the test task keeps it one Gradle invocation (shared config, one
-        # JVM). lintDebug fails on any lint error; ktlintCheck fails on any
-        # violation outside app/config/ktlint/baseline.xml;
+      # Robolectric downloads its android-all-instrumented SDK jars (~100 MB
+      # per API level) into ~/.m2 the first time a test runs on each level.
+      # setup-gradle persists the Gradle user home but NOT ~/.m2, so without
+      # this they re-download on every run. Keyed on the test build config so a
+      # Robolectric-version or targetSdk bump invalidates the cache.
+      - name: Cache Robolectric SDK jars
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8  # v6.0.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-m2-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
+          restore-keys: |
+            robolectric-m2-${{ runner.os }}-
+
+      - name: Run unit tests, screenshots, and coverage gate
         # jacocoCoverageVerification fails if testable-logic coverage drops
-        # below the ratchet floor. verifyRoborazziDebug renders the Compose
-        # and Canvas screenshot goldens via Robolectric Native Graphics and
-        # fails on pixel drift - it runs in cold-cache CI, which Paparazzi's
-        # layoutlib loader could not.
-        run: gradle :app:lintDebug :app:ktlintCheck :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport --console=plain --no-daemon
+        # below the ratchet floor. verifyRoborazziDebug renders the Compose and
+        # Canvas screenshot goldens via Robolectric Native Graphics and fails on
+        # pixel drift - it runs in cold-cache CI, which Paparazzi's layoutlib
+        # loader could not.
+        run: gradle :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport --console=plain --no-daemon
 
       # Diff-coverage gate: new/changed executable production lines must clear
       # the floor, so an untested feature can't land while the project average
@@ -66,9 +77,43 @@ jobs:
           fi
           python3 scripts/diff-coverage-gate.py --base "$BASE" --fail-under 85 --min-lines 10
 
+  # Lint + ktlint - split into its own job so it runs concurrently with the
+  # test job instead of serializing behind it in one Gradle invocation.
+  # lintDebug fails on any lint error; ktlintCheck fails on any violation
+  # outside app/config/ktlint/baseline.xml. Neither runs Robolectric, so this
+  # job needs no SDK-jar cache and only a shallow checkout.
+  static-analysis:
+    name: Lint and ktlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287  # v5.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+
+      - name: Install Android SDK platform 37
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Run lint and ktlint
+        run: gradle :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
+
   # Real-APK boot smoke - runs only on pushes to main (not PRs) to avoid
-  # spending 5+ minutes on an emulator for every PR iteration. Gated on
-  # unit-tests so the emulator is never spun up for a broken build.
+  # spending 5+ minutes on an emulator for every PR iteration. It runs
+  # concurrently with unit-tests rather than after it: parallelism wins ~3 min
+  # of wall-clock on the common green push, at the cost of occasionally booting
+  # an emulator for a push whose unit tests then fail (pushes to main are
+  # almost always green, so that trade favours wall-clock).
   #
   # What this catches that the JVM suite cannot: missing manifest entries,
   # ProGuard/R8 class stripping, AndroidKeyStore first-use failures,
@@ -80,7 +125,6 @@ jobs:
   # or any logic tested by the Robolectric suite.
   boot-smoke:
     name: APK boot smoke (API 34 emulator)
-    needs: unit-tests
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

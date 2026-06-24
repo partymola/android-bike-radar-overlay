@@ -64,7 +64,7 @@ class RadarOverlayView(context: Context) : View(context) {
      *  (parked car next to a crawling rider). Thinner stroke + neutral
      *  grey is the pre-attentive cue for "noted, not a threat" - the
      *  rider's eye lands on filled coloured boxes for active threats
-     *  instead. See decoder companion gate constants for trigger logic. */
+     *  instead. See [shouldEdgeDockStationary] for the trigger logic. */
     private val parkedOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(1.8f)
@@ -258,9 +258,9 @@ class RadarOverlayView(context: Context) : View(context) {
         // passes closing-speed in. Convert to km/h at the presentation
         // boundary - the speed-band thresholds are tuned in km/h.
         val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).roundToInt() }
-        val (amberKmh, redKmh) = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
+        val bands = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
 
-        if (!clear && state.vehicles.any { it.speedKmh >= redKmh }) {
+        if (!clear && state.vehicles.any { it.speedKmh >= bands.redKmh }) {
             val half = dangerBorderPaint.strokeWidth / 2f
             tmpRect.set(half, half, w - half, h - half)
             canvas.drawRoundRect(tmpRect, dp(8f), dp(8f), dangerBorderPaint)
@@ -319,32 +319,20 @@ class RadarOverlayView(context: Context) : View(context) {
             val halfH = vehicleHalfHeight(v.size)
             val centreY = distToY(rangeYm, riderBottom, bottomY)
 
-            // Renderer-side fallback for the parked-car-in-the-next-lane
-            // case the decoder gate doesn't catch (e.g. dwell-time too
-            // strict — the overlap-zone log captured a vehicle that sat
-            // on the chevron for 68 s while the decoder dwell window
-            // hadn't tripped). Strict subset of the decoder gate plus a
-            // few additional safety guards so a tailgater never gets
-            // edge-docked: requires a clearly off-centre target
-            // (|lateral| > 0.3 ≈ 0.9 m, vs decoder's 0.5 m), known
-            // longitudinal AND lateral velocity ≤ 1 m/s, close range,
-            // confirmed-slow rider, in-behind frame, and not stale
-            // carry-forward lateral. Falls back to the normal filled
-            // box if any gate is missing data.
-            val bikeMsSnap = state.bikeSpeedMs
-            val lateralMsSnap = v.speedXMs
-            val rendererStationary = !v.isAlongsideStationary &&
-                !v.isBehind &&
-                !v.lateralUnknown &&
-                kotlin.math.abs(v.speedMs) <= RadarV2Decoder.STATIONARY_SPEED_MS &&
-                v.distanceM in 0..RadarV2Decoder.ALONGSIDE_RANGE_Y_M &&
-                kotlin.math.abs(v.lateralPos) > RENDERER_STATIONARY_MIN_LATERAL &&
-                bikeMsSnap != null &&
-                bikeMsSnap <= RadarV2Decoder.ALONGSIDE_RIDER_SLOW_MS &&
-                lateralMsSnap != null &&
-                kotlin.math.abs(lateralMsSnap) <= RENDERER_STATIONARY_MAX_LATERAL_MS
-
-            if (v.isAlongsideStationary || rendererStationary) {
+            // Edge-dock decision (incl. the renderer-side parked-car
+            // fallback the decoder dwell gate can miss) is the pure,
+            // unit-tested shouldEdgeDockStationary.
+            if (shouldEdgeDockStationary(
+                    isAlongsideStationary = v.isAlongsideStationary,
+                    isBehind = v.isBehind,
+                    lateralUnknown = v.lateralUnknown,
+                    speedMs = v.speedMs,
+                    distanceM = v.distanceM,
+                    lateralPos = v.lateralPos,
+                    bikeSpeedMs = state.bikeSpeedMs,
+                    speedXMs = v.speedXMs,
+                )
+            ) {
                 // Edge-dock hollow render. X snaps to the nearest panel
                 // edge (side from sign(lateralPos)); Y stays true. No
                 // fill, no tail, no class colour - the box outline alone
@@ -360,10 +348,10 @@ class RadarOverlayView(context: Context) : View(context) {
 
             val clampedLateral = (lateralMeters / RadarV2Decoder.LATERAL_FULL_M).coerceIn(-1f, 1f)
             val centreX = trackX + clampedLateral * maxLateralPx
-            val color = speedColor(v.speedKmh, amberKmh, redKmh)
+            val color = threatColor(threatLevel(v.speedKmh, bands))
 
             val tailLen = (v.speedMs * dp(3f)).coerceIn(dp(6f), dp(40f))
-            val distFactor = distanceAlphaFactor(rangeYm)
+            val distFactor = distanceAlphaFactor(rangeYm, visualMaxM)
             val r = Color.red(color)
             val g = Color.green(color)
             val b = Color.blue(color)
@@ -544,40 +532,15 @@ class RadarOverlayView(context: Context) : View(context) {
         VehicleSize.TRUCK -> dp(18f)
     }
 
-    /** 0m -> topY (rider), visualMaxM -> bottomY (farthest). */
-    private fun distToY(dist: Float, topY: Float, bottomY: Float): Float {
-        val frac = dist.coerceIn(0f, visualMaxM.toFloat()) / visualMaxM
-        return topY + (bottomY - topY) * frac
-    }
+    /** 0m -> topY (rider), visualMaxM -> bottomY (farthest). Position
+     *  fraction is the pure, unit-tested [distToYFraction]. */
+    private fun distToY(dist: Float, topY: Float, bottomY: Float): Float = topY + (bottomY - topY) * distToYFraction(dist, visualMaxM)
 
-    /** Close targets render near-solid; far targets fade to ~30% so the
-     *  rider's eye lands on immediate threats first. Linear in distance —
-     *  cheap, predictable, easy to re-tune after a ride. */
-    private fun distanceAlphaFactor(dist: Float): Float {
-        val frac = dist.coerceIn(0f, visualMaxM.toFloat()) / visualMaxM
-        return 1f - 0.7f * frac
-    }
-
-    private fun speedColor(closingKmh: Int, amberKmh: Int, redKmh: Int): Int = when {
-        closingKmh < amberKmh -> Color.rgb(50, 200, 70)
-        closingKmh < redKmh -> Color.rgb(230, 170, 20)
-        else -> Color.rgb(220, 40, 40)
-    }
-
-    /** Scales the amber / red closing-speed bands by rider speed so that a
-     *  stopped rider (puncture at roadside, traffic-light stop) sees
-     *  alarming colours earlier, and a cruising rider doesn't get coloured
-     *  warnings for every vehicle that happens to be overtaking. At
-     *  bikeSpeed = 0 the bands collapse toward the classic "anything
-     *  approaching is worth watching" mode; at 30 km/h they stay near the
-     *  legacy static thresholds. Slightly superlinear past 30 so fast
-     *  descenders don't drown in red boxes. Null bike speed (no device-
-     *  status frame yet) falls back to the static bands. */
-    private fun adaptiveSpeedBands(bikeSpeedKmh: Int?): Pair<Int, Int> {
-        val s = bikeSpeedKmh ?: return FIXED_SPEED_BANDS
-        val amber = (15 + s / 2).coerceAtLeast(10)
-        val red = (30 + s).coerceAtLeast(20)
-        return amber to red
+    /** Maps the pure [threatLevel] to its Canvas fill colour. */
+    private fun threatColor(level: ThreatLevel): Int = when (level) {
+        ThreatLevel.SAFE -> Color.rgb(50, 200, 70)
+        ThreatLevel.WARNING -> Color.rgb(230, 170, 20)
+        ThreatLevel.DANGER -> Color.rgb(220, 40, 40)
     }
 
     // COMPLEX_UNIT_DIP is defined as value * density, so the cached-density
@@ -590,34 +553,12 @@ class RadarOverlayView(context: Context) : View(context) {
         const val MAX_VISUAL_MAX_M = 80
         const val DEFAULT_VISUAL_MAX_M = 50
 
-        // Render-time parked-car gate. Range / rider-speed / longitudinal
-        // thresholds are sourced from the decoder companion so the gate
-        // stays in lockstep if the decoder is retuned. Lateral position
-        // and lateral-velocity thresholds are deliberately tighter than
-        // the decoder so the renderer remains a strict subset.
-        /** |lateralPos| > 0.3 ≈ 0.9 m off the rider's own lane (decoder
-         *  uses 0.5 m). Anything within 0.9 m of centre stays a filled
-         *  box so a stationary tailgater never gets edge-docked. */
-        private const val RENDERER_STATIONARY_MIN_LATERAL = 0.3f
-
-        /** ≤ 1 m/s lateral drift; the decoder doesn't gate on lateral
-         *  velocity (it relies on dwell), so this is an extra
-         *  renderer-only guard against targets weaving toward the
-         *  rider being suppressed mid-swerve. Vehicle.speedXMs is in
-         *  m/s after the decoder's LSB conversion. */
-        private const val RENDERER_STATIONARY_MAX_LATERAL_MS = 1
-
         /** Lookahead horizon used when Precog rendering is enabled. One
          *  second is long enough for the swing-out of an overtaker to be
          *  visible before it happens, but short enough that the
          *  quantised 0.5 m/s velocity data doesn't make predictions
          *  jitter wildly. */
         private const val PRECOG_LOOKAHEAD_S = 1.0f
-
-        /** Fixed closing-speed bands used when adaptive alerts are off
-         *  or bikeSpeedKmh is null. Tuned for a typical urban cruising
-         *  rider (~20-25 km/h). */
-        private val FIXED_SPEED_BANDS = 25 to 50
 
         private const val RIDER_WIDTH_DP = 20f
         private const val RIDER_HEIGHT_DP = 24f

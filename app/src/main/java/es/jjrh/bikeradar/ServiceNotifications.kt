@@ -65,6 +65,21 @@ internal class ServiceNotifications(
             )
         }
 
+        // Forgot-to-lock reminder. v2 migration: only the channel VIBRATION is
+        // disabled, so the FIRE path can drive a single DND-piercing USAGE_ALARM
+        // vibration explicitly ([DndVibration.vibrate] in postForgotToLock) -
+        // channel vibration alone is silenced under DND, so a rider whose phone
+        // is in Do Not Disturb would otherwise never feel the reminder. The
+        // channel keeps its default notification SOUND (the same non-DND audible
+        // cue the v1 channel made); only the buzz moves to the explicit path, so
+        // there is no double-buzz off DND. Letting the NOTIFICATION (and its
+        // mirrored watch buzz) pierce DND is the rider's call via the channel's
+        // "Override Do Not Disturb" toggle, surfaced as a row in Settings -> eBike
+        // (same pattern as the dashcam walk-away channel). Channel properties are
+        // immutable post-creation, hence the v2 id + delete of the v1 channel.
+        if (nm.getNotificationChannel(FORGOT_LOCK_CHANNEL_ID_LEGACY) != null) {
+            nm.deleteNotificationChannel(FORGOT_LOCK_CHANNEL_ID_LEGACY)
+        }
         if (nm.getNotificationChannel(FORGOT_LOCK_CHANNEL_ID) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(
@@ -73,8 +88,7 @@ internal class ServiceNotifications(
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = context.getString(R.string.svc_main_forgot_lock_channel_desc)
-                    enableVibration(true)
-                    vibrationPattern = FORGOT_LOCK_VIBRATE_PATTERN
+                    enableVibration(false)
                 },
             )
         }
@@ -263,9 +277,12 @@ internal class ServiceNotifications(
     }
 
     /** Wrist-haptic reminder that the rider walked off with the eBike unlocked -
-     *  a high-importance notification the Pixel Watch mirrors. No actions (the
-     *  app is read-only on the bike and cannot lock it). Cancelled on radar
-     *  reconnect (the rider came back). See [ForgotToLockDecider]. */
+     *  a high-importance notification the Pixel Watch mirrors, plus an explicit
+     *  DND-piercing vibration ([DndVibration]) so the phone buzzes even in Do Not
+     *  Disturb. (The mirrored watch buzz pierces the watch's DND only once the
+     *  rider allows this channel to override DND - the Settings -> eBike row.) No
+     *  actions (the app is read-only on the bike and cannot lock it). Cancelled
+     *  on radar reconnect (the rider came back). See [ForgotToLockDecider]. */
     fun postForgotToLock() {
         ensureChannels()
         val notif = NotificationCompat.Builder(context, FORGOT_LOCK_CHANNEL_ID)
@@ -275,9 +292,14 @@ internal class ServiceNotifications(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
-            .setVibrate(FORGOT_LOCK_VIBRATE_PATTERN)
             .build()
         nm.notify(NOTIF_FORGOT_LOCK_ID, notif)
+        // Drive the haptic explicitly under USAGE_ALARM so it fires through DND;
+        // the channel vibration is disabled (v2) precisely so this is the only
+        // buzz. The phone vibrates even in DND; the mirrored watch buzz pierces
+        // the watch's DND once the rider allows this channel to override DND
+        // (the Settings -> eBike row).
+        DndVibration.vibrate(context, FORGOT_LOCK_VIBRATE_PATTERN)
     }
 
     fun cancelForgotToLock() = nm.cancel(NOTIF_FORGOT_LOCK_ID)
@@ -346,7 +368,12 @@ internal class ServiceNotifications(
         // is deleted on channel-ensure so an upgrade picks up sound.
         const val WALKAWAY_CHANNEL_ID = "bike_radar_walkaway_v3"
         const val LIGHT_FAIL_CHANNEL_ID = "bike_radar_light_fail"
-        const val FORGOT_LOCK_CHANNEL_ID = "bike_radar_forgot_lock"
+
+        // v2: channel vibration disabled so the FIRE path drives a DND-piercing
+        // USAGE_ALARM vibration explicitly (sound kept); the v1 channel is
+        // deleted on ensureChannels (see the forgot-to-lock channel block).
+        const val FORGOT_LOCK_CHANNEL_ID = "bike_radar_forgot_lock_v2"
+        private const val FORGOT_LOCK_CHANNEL_ID_LEGACY = "bike_radar_forgot_lock"
         const val RIDE_SUMMARY_CHANNEL_ID = "bike_radar_ride_summary"
         private val WALKAWAY_CHANNEL_IDS_LEGACY = listOf(
             "bike_radar_walkaway",

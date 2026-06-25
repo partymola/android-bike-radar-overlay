@@ -7,11 +7,6 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.os.Build
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -211,39 +206,12 @@ internal class WalkAwayAlarm(
     }
 
     /**
-     * Vibrate the walk-away pattern explicitly via the Vibrator
-     * service. Channel-level vibration is suppressed by DND when the
-     * channel doesn't bypass DND; explicit Vibrator calls are not.
+     * Vibrate the walk-away pattern explicitly via the Vibrator service.
+     * Channel-level vibration is suppressed by DND when the channel doesn't
+     * bypass DND; the explicit `USAGE_ALARM` Vibrator call in [DndVibration] is
+     * not.
      */
-    private fun vibrate() {
-        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-        if (vibrator == null || !vibrator.hasVibrator()) return
-        val effect = VibrationEffect.createWaveform(ServiceNotifications.WALKAWAY_VIBRATE_PATTERN, -1)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                vibrator.vibrate(
-                    effect,
-                    VibrationAttributes.Builder()
-                        .setUsage(VibrationAttributes.USAGE_ALARM)
-                        .build(),
-                )
-            } else {
-                val attrs = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(effect, attrs)
-            }
-        } catch (t: Throwable) {
-            Log.w(TAG, "vibrate failed: $t")
-        }
-    }
+    private fun vibrate() = DndVibration.vibrate(context, ServiceNotifications.WALKAWAY_VIBRATE_PATTERN)
 
     companion object {
         private const val TAG = "BikeRadar"

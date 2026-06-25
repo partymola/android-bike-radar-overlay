@@ -4,14 +4,19 @@ package es.jjrh.bikeradar
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
+import android.os.VibrationAttributes
+import android.os.VibratorManager
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 /**
  * Channel lifecycle + the foreground notification's paused/active branch.
@@ -26,11 +31,13 @@ class ServiceNotificationsTest {
 
     private fun notifications(prefs: Prefs = Prefs(app)) = ServiceNotifications(app) { prefs }
 
-    @Test fun ensureChannelsCreatesTheThreeServiceChannels() {
+    @Test fun ensureChannelsCreatesAllServiceChannels() {
         notifications().ensureChannels()
         assertNotNull(nm.getNotificationChannel(ServiceNotifications.CHANNEL_ID))
         assertNotNull(nm.getNotificationChannel(ServiceNotifications.LIGHT_FAIL_CHANNEL_ID))
         assertNotNull(nm.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID))
+        assertNotNull(nm.getNotificationChannel(ServiceNotifications.FORGOT_LOCK_CHANNEL_ID))
+        assertNotNull(nm.getNotificationChannel(ServiceNotifications.RIDE_SUMMARY_CHANNEL_ID))
     }
 
     @Test fun ensureChannelsDeletesSupersededWalkAwayChannel() {
@@ -42,6 +49,22 @@ class ServiceNotificationsTest {
         notifications().ensureChannels()
         assertNull("legacy walk-away channel must be deleted", nm.getNotificationChannel("bike_radar_walkaway"))
         assertNotNull(nm.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID))
+    }
+
+    @Test fun ensureChannelsDeletesSupersededForgotLockChannel() {
+        // A pre-v2 install left the forgot-lock channel under the old id; the
+        // migration must drop it so the v2 properties (channel vibration off,
+        // bypass-DND) take effect on the new id.
+        nm.createNotificationChannel(
+            android.app.NotificationChannel("bike_radar_forgot_lock", "old", NotificationManager.IMPORTANCE_HIGH),
+        )
+        notifications().ensureChannels()
+        assertNull("legacy forgot-lock channel must be deleted", nm.getNotificationChannel("bike_radar_forgot_lock"))
+        val v2 = nm.getNotificationChannel(ServiceNotifications.FORGOT_LOCK_CHANNEL_ID)
+        assertNotNull(v2)
+        // v2 disables channel vibration so the explicit DndVibration buzz is the
+        // only one - a regression to channel vibration would double-buzz off DND.
+        assertFalse("v2 forgot-lock channel must disable channel vibration", v2.shouldVibrate())
     }
 
     @Test fun ensureChannelsIsIdempotent() {
@@ -96,6 +119,29 @@ class ServiceNotificationsTest {
         // Dismiss + Snooze: both actions must be present for the rider to act.
         assertEquals(2, sbn.notification.actions.size)
         n.cancelWalkAway()
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test fun forgotToLockPostsToForgotLockChannelAndVibrates() {
+        // The reminder must post on the forgot-lock channel AND drive an explicit
+        // vibration: the v2 channel disables channel vibration so the buzz comes
+        // from DndVibration (USAGE_ALARM) and pierces Do Not Disturb.
+        val shadowVibrator = shadowOf(app.getSystemService(VibratorManager::class.java).defaultVibrator)
+        shadowVibrator.setHasVibrator(true)
+        val n = notifications()
+        n.postForgotToLock()
+        val sbn = nm.activeNotifications.single()
+        assertEquals(ServiceNotifications.FORGOT_LOCK_CHANNEL_ID, sbn.notification.channelId)
+        assertEquals(app.getString(R.string.svc_main_forgot_lock_title), title(sbn))
+        assertTrue("forgot-to-lock must drive an explicit DND-piercing vibration", shadowVibrator.isVibrating)
+        // The DND-piercing property IS the USAGE_ALARM attribute (channel
+        // vibration is silenced under DND; a USAGE_ALARM vibration is not). Pin
+        // it so a regression to USAGE_NOTIFICATION can't silently re-break it.
+        assertEquals(
+            VibrationAttributes.USAGE_ALARM,
+            (shadowVibrator.vibrationAttributesFromLastVibration as VibrationAttributes).usage,
+        )
+        n.cancelForgotToLock()
         assertEquals(0, nm.activeNotifications.size)
     }
 

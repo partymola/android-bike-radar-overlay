@@ -77,10 +77,13 @@ class RadarLinkVisualDeciderTest {
     @Test fun ebikeExplicitlyParkedHides() = assertEquals(live, decide(downForMs = threshold + 5_000, hasEBike = true, explicitParked = true))
 
     @Test
-    fun ebikeStaleSnapshotKeepsShowing() {
-        // A stale Flow snapshot maps to explicitParked == false in the caller, so
-        // a simultaneous Flow+radar dropout does NOT hide the banner (the visual
-        // stays on its own failure mode, uncoupled from the audio cue).
+    fun ebikeStaleSnapshotUnlockedKeepsShowing() {
+        // A stale snapshot whose last reading was UNLOCKED maps to
+        // explicitParked == false in the caller, so a simultaneous mid-ride
+        // Flow+radar dropout does NOT hide the banner (the visual stays on its own
+        // failure mode, uncoupled from the audio cue). A stale-LOCKED reading maps
+        // to explicitParked == true (locked is sticky) and hides - see
+        // RadarLinkCoordinatorTest.bannerStaleEbikeLockHidesBanner.
         assertEquals(unlocked, decide(downForMs = threshold + 5_000, hasEBike = true, explicitParked = false))
     }
 

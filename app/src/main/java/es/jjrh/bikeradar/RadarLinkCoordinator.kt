@@ -294,14 +294,20 @@ internal class RadarLinkCoordinator(
         val snap = eBikeSnapshot()
         val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
         // Dead-radar banner: cohort-aware + bounded (see RadarLinkVisualDecider).
-        // eBike riders -> "...but bike unlocked" while unlocked, hidden on an
-        // explicit fresh lock, capped by a forgot-to-lock backstop; radar-only ->
+        // eBike riders -> "...but bike unlocked" while unlocked, hidden once the
+        // bike is locked, capped by a forgot-to-lock backstop; radar-only ->
         // plain message, retires after the short cap unless the rider opted into
-        // persistence. A STALE eBike snapshot is NOT an explicit park (so a
-        // simultaneous Flow+radar dropout keeps the banner up). Must run before
-        // the isPaused early-return so a pause HIDES the banner (decide() returns
-        // LIVE when paused); the eager hide on reconnect lives in markConnected.
-        val explicitParked = ebikeAgeMs < RADAR_DROP_EBIKE_FRESH_MS && snap?.systemLocked == true
+        // persistence. Locked is STICKY regardless of snapshot freshness: locking
+        // the bike is itself what makes it sleep and drop the eBike link, so the
+        // lock reading inevitably ages out - a freshness gate here mis-reads a
+        // just-parked bike as "unlocked" for minutes (the reported bug). A riding
+        // rider is never last-known-locked (the bike doesn't sleep while moving),
+        // so this can't hide the banner mid-ride; only a last-known-UNLOCKED stale
+        // snapshot keeps the banner up, which is the ambiguous mid-ride Flow+radar
+        // dropout the banner must survive. Must run before the isPaused
+        // early-return so a pause HIDES the banner (decide() returns LIVE when
+        // paused); the eager hide on reconnect lives in markConnected.
+        val explicitParked = snap?.systemLocked == true
         val visual = RadarLinkVisualDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             everSawTrack = everSawTrack(),

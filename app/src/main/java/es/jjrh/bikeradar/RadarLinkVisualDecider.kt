@@ -26,12 +26,15 @@ package es.jjrh.bikeradar
  *   seen this session): the banner shows while the bike is NOT explicitly parked
  *   and hides the moment it is locked ([explicitParked]). It is bounded by a
  *   generous [ebikeMaxMs] (a forgot-to-lock backstop) - safe to bound because
- *   this rider also gets the repeating audio drop cue. The banner is hidden on a
- *   FRESH+locked reading only; a STALE eBike snapshot (Flow itself dropped) does
- *   NOT hide it, so a simultaneous Flow+radar dropout doesn't blind the rider -
- *   the visual stays on its own failure mode, not coupled to the audio cue's.
- *   This banner doubles as a "you walked off without locking" alert, the one
- *   case the walk-away alarm stays silent for (it never arms while unlocked).
+ *   this rider also gets the repeating audio drop cue. The banner hides whenever
+ *   the last-known reading is locked ([explicitParked]) - locked is sticky across
+ *   staleness, because locking the bike is itself what drops the eBike link, so
+ *   the lock reading inevitably ages out. A stale snapshot whose last reading was
+ *   UNLOCKED does NOT hide it, so a simultaneous mid-ride Flow+radar dropout
+ *   doesn't blind the rider - the visual stays on its own failure mode, not
+ *   coupled to the audio cue's. This banner doubles as a "you walked off without
+ *   locking" alert, the one case the walk-away alarm stays silent for (it never
+ *   arms while unlocked).
  * - **Radar-only riders** ([hasEBikeSignal] false - no eBike lock signal to
  *   consult): the banner shows from the threshold and retires after
  *   [radarOnlyMaxMs]. This is a deliberate, documented tradeoff: a radar-only
@@ -80,9 +83,10 @@ object RadarLinkVisualDecider {
      *   [LinkVisual.LIVE] so the banner never appears while the app is muted.
      * @param hasEBikeSignal whether a Bosch eBike snapshot has ever been seen
      *   this session (sticky). Selects the eBike vs radar-only path + message.
-     * @param explicitParked eBike snapshot is FRESH and reports system_locked
-     *   == true. Only an explicit, fresh lock hides the eBike banner - a stale
-     *   snapshot does not (see class KDoc).
+     * @param explicitParked the last-known eBike reading is system_locked == true
+     *   (locked is sticky across snapshot staleness - see class KDoc). Maps to
+     *   [LinkVisual.LIVE] (banner hidden); a last-known-UNLOCKED snapshot, fresh
+     *   or stale, does not.
      * @param ebikeMaxMs down-duration after which the eBike banner retires even
      *   if still unlocked (forgot-to-lock backstop; the audio cue continues).
      * @param radarOnlyMaxMs down-duration after which the radar-only banner

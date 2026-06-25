@@ -399,13 +399,16 @@ class RadarLinkCoordinatorTest {
         bannerStates.clear()
         ebikeAtMs = 4_000L + 11_000L - 1_000L // fresh lock
         coordinator.evaluateRadarDrop(4_000L + 11_000L)
-        assertEquals(listOf(live), bannerStates) // explicit fresh lock hides it
+        assertEquals(listOf(live), bannerStates) // locked hides it (fresh here; staleness covered by bannerStaleEbikeLockHidesBanner)
     }
 
     @Test
-    fun bannerStaleEbikeLockKeepsShowing() {
-        // A locked-but-STALE snapshot (Flow dropped) is not an explicit park, so
-        // a simultaneous Flow+radar dropout must not hide the banner.
+    fun bannerStaleEbikeLockHidesBanner() {
+        // Locked-then-stale repro: the bike was locked, and locking it is what
+        // dropped the eBike link, so the lock reading aged out (40 s stale).
+        // Locked is sticky - a stale-but-locked snapshot is a just-parked bike,
+        // not a mid-ride dropout, so the banner hides instead of falsely claiming
+        // the bike is unlocked.
         prefs.pausedUntilEpochMs = 0L
         hasEBike = true
         ebike = LiveDataSnapshot(systemLocked = true)
@@ -413,6 +416,22 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L)
         bannerStates.clear()
         ebikeAtMs = (4_000L + 11_000L) - 40_000L // 40 s stale
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(live), bannerStates)
+    }
+
+    @Test
+    fun bannerStaleEbikeUnlockedKeepsShowing() {
+        // The half the fix must preserve: a stale snapshot whose last reading was
+        // UNLOCKED is the ambiguous mid-ride Flow+radar dual dropout, so the banner
+        // must stay up (rider not blinded). Only the stale-LOCKED case hides.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        bannerStates.clear()
+        ebikeAtMs = (4_000L + 11_000L) - 40_000L // 40 s stale, last reading unlocked
         coordinator.evaluateRadarDrop(4_000L + 11_000L)
         assertEquals(listOf(unlocked), bannerStates)
     }

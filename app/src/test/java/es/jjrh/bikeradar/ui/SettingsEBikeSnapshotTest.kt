@@ -21,7 +21,10 @@ import org.robolectric.annotation.GraphicsMode
  *  - yesWaiting: ownership = YES, enabled, receiving = false. Status reads
  *    "Waiting for Bosch Flow"; Actions shows "Open Bosch Flow".
  *  - yesReceiving: ownership = YES, enabled, receiving = true. Status reads
- *    "Receiving live data".
+ *    "Receiving live data". The forgot-to-lock Override-DND row shows its
+ *    "tap to allow" state (canBypassDnd = false).
+ *  - forgotLockDndAllowed: as yesReceiving but canBypassDnd = true, pinning the
+ *    Override-DND row's "allowed" subtitle.
  *
  * Renders via Robolectric Native Graphics. Verify with
  * `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -43,7 +46,9 @@ class SettingsEBikeSnapshotTest {
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
                     forgotToLockEnabled = true,
+                    canBypassDnd = false,
                     onToggleForgotToLock = {},
+                    onOverrideDndClick = {},
                     onOpenFlow = {},
                 )
             }
@@ -62,7 +67,9 @@ class SettingsEBikeSnapshotTest {
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
                     forgotToLockEnabled = true,
+                    canBypassDnd = false,
                     onToggleForgotToLock = {},
+                    onOverrideDndClick = {},
                     onOpenFlow = {},
                 )
             }
@@ -81,7 +88,9 @@ class SettingsEBikeSnapshotTest {
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
                     forgotToLockEnabled = true,
+                    canBypassDnd = false,
                     onToggleForgotToLock = {},
+                    onOverrideDndClick = {},
                     onOpenFlow = {},
                 )
             }
@@ -100,7 +109,32 @@ class SettingsEBikeSnapshotTest {
                     onOwnershipYes = {},
                     onToggleEBikeData = {},
                     forgotToLockEnabled = true,
+                    canBypassDnd = false,
                     onToggleForgotToLock = {},
+                    onOverrideDndClick = {},
+                    onOpenFlow = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun forgotLockDndAllowed() {
+        // Forgot-to-lock on AND the channel already overrides DND: the
+        // Override-Do-Not-Disturb row shows its "allowed" subtitle.
+        captureRoboImage {
+            UiTheme {
+                SettingsEBikeContent(
+                    navController = rememberNavController(),
+                    ownership = EBikeOwnership.YES,
+                    eBikeDataEnabled = true,
+                    receiving = true,
+                    onOwnershipYes = {},
+                    onToggleEBikeData = {},
+                    forgotToLockEnabled = true,
+                    canBypassDnd = true,
+                    onToggleForgotToLock = {},
+                    onOverrideDndClick = {},
                     onOpenFlow = {},
                 )
             }

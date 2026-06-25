@@ -445,6 +445,9 @@
     <string name="settings_ebike_alerts_label">Avisos</string>
     <string name="settings_ebike_forgot_lock_title">Aviso de olvido de bloqueo</string>
     <string name="settings_ebike_forgot_lock_subtitle">Vibra tu reloj si te alejas con la bici aún sin bloquear.</string>
+    <string name="settings_ebike_override_dnd">Saltarse No molestar</string>
+    <string name="settings_ebike_override_dnd_subtitle_allowed">Permitido. El aviso vibra en tu reloj aunque No molestar esté activado.</string>
+    <string name="settings_ebike_override_dnd_subtitle_tap">Toca para que el aviso vibre en tu reloj con No molestar activado.</string>
     <string name="settings_ebike_actions_label">Acciones</string>
     <string name="settings_ebike_open_flow">Abrir Bosch Flow</string>
     <string name="settings_ebike_open_flow_subtitle">Los datos en vivo necesitan que Flow se ejecute en segundo plano mientras ruedas.</string>

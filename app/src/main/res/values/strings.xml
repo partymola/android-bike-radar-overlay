@@ -457,6 +457,9 @@
     <string name="settings_ebike_alerts_label">Alerts</string>
     <string name="settings_ebike_forgot_lock_title">Forgot-to-lock reminder</string>
     <string name="settings_ebike_forgot_lock_subtitle">Buzz your watch if you walk away with the bike still unlocked.</string>
+    <string name="settings_ebike_override_dnd">Override Do Not Disturb</string>
+    <string name="settings_ebike_override_dnd_subtitle_allowed">Allowed. The reminder buzzes your watch even with DND on.</string>
+    <string name="settings_ebike_override_dnd_subtitle_tap">Tap to let the reminder buzz your watch through DND.</string>
     <string name="settings_ebike_actions_label">Actions</string>
     <string name="settings_ebike_open_flow">Open Bosch Flow</string>
     <string name="settings_ebike_open_flow_subtitle">Live data needs Flow running in the background while you ride.</string>

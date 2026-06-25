@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.ServiceNotifications
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.eBikeDataIsFresh
@@ -86,6 +90,13 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
     val dataOnMsg = stringResource(R.string.settings_ebike_data_on_toast)
     val dataOffMsg = stringResource(R.string.settings_ebike_data_off_toast)
     var forgotToLock by rememberSaveable { mutableStateOf(prefs.forgotToLockAlertEnabled) }
+    // Whether the rider has allowed the reminder's channel to override DND, so
+    // the mirrored watch buzz pierces the watch's own Do Not Disturb. Read on
+    // (re)composition - it refreshes when the screen is re-entered after the
+    // system channel-settings round-trip. Mirrors SettingsDashcam's walk-away row.
+    val canBypassDnd = (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+        .getNotificationChannel(ServiceNotifications.FORGOT_LOCK_CHANNEL_ID)
+        ?.canBypassDnd() == true
 
     SettingsEBikeContent(
         navController = navController,
@@ -93,6 +104,7 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
         receiving = receiving,
         forgotToLockEnabled = forgotToLock,
+        canBypassDnd = canBypassDnd,
         onOwnershipYes = {
             prefs.eBikeOwnership = EBikeOwnership.YES
             prefs.eBikeDataEnabled = true
@@ -104,6 +116,18 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         onToggleForgotToLock = {
             forgotToLock = it
             prefs.forgotToLockAlertEnabled = it
+        },
+        onOverrideDndClick = {
+            // Deep-link to the reminder channel's system settings, where the
+            // "Override Do Not Disturb" toggle lives. App-side bypass would need
+            // notification-policy access; the user toggle needs no extra grant.
+            ctx.startActivity(
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                    putExtra(Settings.EXTRA_CHANNEL_ID, ServiceNotifications.FORGOT_LOCK_CHANNEL_ID)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
         },
         onOpenFlow = { openFlow(ctx) },
     )
@@ -120,9 +144,11 @@ internal fun SettingsEBikeContent(
     eBikeDataEnabled: Boolean,
     receiving: Boolean,
     forgotToLockEnabled: Boolean,
+    canBypassDnd: Boolean,
     onOwnershipYes: () -> Unit,
     onToggleEBikeData: (Boolean) -> Unit,
     onToggleForgotToLock: (Boolean) -> Unit,
+    onOverrideDndClick: () -> Unit,
     onOpenFlow: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -222,7 +248,24 @@ internal fun SettingsEBikeContent(
                         subtitle = stringResource(R.string.settings_ebike_forgot_lock_subtitle),
                         checked = forgotToLockEnabled,
                         onCheckedChange = onToggleForgotToLock,
+                        isLast = !forgotToLockEnabled,
                     )
+                    if (forgotToLockEnabled) {
+                        // The phone already buzzes through DND; this lets the
+                        // mirrored watch notification pierce the watch's DND too.
+                        SettingsRow(
+                            icon = Icons.Default.NotificationsActive,
+                            iconTint = br.brand,
+                            title = stringResource(R.string.settings_ebike_override_dnd),
+                            subtitle = if (canBypassDnd) {
+                                stringResource(R.string.settings_ebike_override_dnd_subtitle_allowed)
+                            } else {
+                                stringResource(R.string.settings_ebike_override_dnd_subtitle_tap)
+                            },
+                            onClick = onOverrideDndClick,
+                            isLast = true,
+                        )
+                    }
                 }
             }
 

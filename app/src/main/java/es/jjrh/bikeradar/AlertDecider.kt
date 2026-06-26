@@ -59,15 +59,18 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    strict tier raise, which bypasses the cooldown and fires the same
  *    frame ([escalationBypass]). The cooldown therefore now only
  *    gates same-tier re-statements and new lower-or-equal-tier entries.
- *  - **Clear chime.** Plays once when the close zone goes from non-empty
- *    to empty AND stays empty for [clearGraceMs] (different timbre, never
- *    overlaps a beep on the speaker; not gated by the beep cooldown). The
- *    grace defers the Clear so a single-frame radar dropout, or a target
- *    lingering at the `alertMaxM` edge whose decoded distance jitters
- *    across the boundary, can't fire a premature Clear immediately
- *    followed by a fresh re-beep on the same continuous approach. A car
- *    returning to range before the grace elapses cancels the pending Clear
- *    silently.
+ *  - **Clear chime.** Plays once when NO vehicle is physically present behind
+ *    the rider in range (the raw radar read - any non-`isBehind` target within
+ *    `alertMaxM`, INCLUDING alongside/parked-classified tracks, regardless of
+ *    tid) AND that has held for [clearGraceMs] (different timbre, never
+ *    overlaps a beep on the speaker; not gated by the beep cooldown). Gating
+ *    the all-clear on RAW presence rather than the beep-path close set is
+ *    deliberate: a matched-speed follower docked as `isAlongsideStationary`,
+ *    or one that briefly drops and returns under a new tid, is still
+ *    physically behind, so it must not produce a "road clear" chime. The grace
+ *    also absorbs a single-frame dropout or boundary flap. A car genuinely
+ *    leaving (overtake -> `isBehind`, or cornering / turning off) clears after
+ *    the grace.
  *  - **Close-set exit hysteresis (distance band).** A track enters the
  *    close set at `distanceM <= alertMaxM` but, once in, stays until
  *    `distanceM` exceeds `alertMaxM + alertMaxM/`[CLOSE_EXIT_HYSTERESIS_DIVISOR].
@@ -134,15 +137,23 @@ class AlertDecider(
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
      *  short enough to kick in at a normal traffic-light stop. */
     private val stationaryDwellMs: Long = 2_000L,
-    /** Elapsed (monotonic) milliseconds the stable-close set must stay empty before a
-     *  Clear chime fires. Defers the Clear (and the per-track latch wipe)
-     *  so a single-frame radar dropout, or a boundary flap the distance
-     *  band didn't absorb, can't fire a premature Clear immediately
-     *  followed by a fresh re-beep when the same car re-stabilises. A car
-     *  returning to range before the grace elapses cancels the pending
-     *  Clear silently. The genuine all-clear is delayed by at most this
-     *  long; no safety cost (real-threat beeps are unaffected). */
-    private val clearGraceMs: Long = 1_000L,
+    /** Elapsed (monotonic) milliseconds that NO vehicle may be physically
+     *  present behind the rider in range before a Clear chime fires. Presence
+     *  is the raw radar read - any non-`isBehind` target within `alertMaxM`
+     *  (plus the exit band), INCLUDING alongside/parked-classified tracks and
+     *  regardless of track id - decoupled from the beep-path `close` set on
+     *  purpose, so a matched-speed follower that gets docked as
+     *  `isAlongsideStationary`, or one that briefly drops and returns under a
+     *  new tid, cannot fire a false all-clear while it is still physically
+     *  behind. The grace also absorbs a single-frame radar dropout / boundary
+     *  flap. A genuine all-clear (the car overtakes -> `isBehind`, or corners /
+     *  turns off and leaves the stream) is delayed by at most this long: a
+     *  delayed or absent all-clear is deliberately preferred over a false one,
+     *  since a false all-clear tells the rider the road is clear while a car is
+     *  still there. 2000 ms is the owner-chosen dwell; in the ride-capture
+     *  replay it lowered the all-clear count (fewer false clears) with the
+     *  imminent-impact cue tally unchanged. */
+    private val clearGraceMs: Long = 2_000L,
     /** E1: which tier-raise beeps bypass the inter-beep cooldown and fire
      *  the same frame. See [EscalationCooldownBypass]. Default [ALL] - a
      *  corpus replay over 87 rides (345k frames) showed it recovers ~12
@@ -203,13 +214,29 @@ class AlertDecider(
     private var beepPending: Boolean = false
 
     /** Clear-grace state: whether a Clear is deferred pending the
-     *  [clearGraceMs] empty-dwell, and when the stable-close set emptied. */
+     *  [clearGraceMs] dwell with no vehicle physically present behind, and
+     *  when that "behind is empty" condition started. */
     private var clearPending: Boolean = false
     private var clearPendingSinceMs: Long = 0L
+
+    /** True once a stable-close track has been confirmed during the current
+     *  approach episode; reset when the Clear finally fires. Needed because a
+     *  matched-speed follower docked as `isAlongsideStationary` keeps
+     *  `stableClose` (and hence `prevStableClose`) empty for many frames while
+     *  it is still physically behind, so the "arm the Clear" edge cannot rely
+     *  on `prevStableClose` being non-empty at the moment the car finally
+     *  leaves. This latch survives the docked window so the all-clear still
+     *  fires once the car is truly gone. */
+    private var closeEpisodeActive: Boolean = false
 
     /** Raw in-front, in-range track ids from the previous frame (post
      *  distance-exit-band), used to apply the band's exit hysteresis. */
     private var prevCloseRaw: Set<Int> = emptySet()
+
+    /** Raw behind-in-range track ids from the previous frame (non-`isBehind`,
+     *  within `alertMaxM` + exit band, alongside INCLUDED), used to apply the
+     *  exit-band hysteresis to the raw-presence gate that drives the Clear. */
+    private var prevBehindRaw: Set<Int> = emptySet()
 
     /**
      * Per-track tier latch — tid -> highest urgency tier we have
@@ -326,6 +353,21 @@ class AlertDecider(
         }
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
+
+        // Raw physical-presence gate for the all-clear, decoupled from the
+        // beep-path `close` set above. A non-isBehind target within range -
+        // INCLUDING one docked as isAlongsideStationary, and regardless of tid
+        // - means a car is still physically behind, so the road is NOT clear.
+        // Mirrors close's range + exit-band test but drops only the isBehind
+        // exclusion (alongside is kept), with its own prev set so an alongside
+        // car lingering at the band edge still gets the hysteresis.
+        val behindPresentVehicles = vehicles.filter {
+            if (it.isBehind) return@filter false
+            it.distanceM in 0..alertMaxM ||
+                (it.id in prevBehindRaw && it.distanceM in 0..(alertMaxM + rangeBand))
+        }
+        val behindPresent = behindPresentVehicles.isNotEmpty()
+        val behindPresentTids = behindPresentVehicles.mapTo(HashSet()) { it.id }
 
         // Update consecutive-frame counters with grace-frame hysteresis. A tid
         // seen this frame increments its sustain counter and resets its miss
@@ -518,21 +560,27 @@ class AlertDecider(
             else -> sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
         }
 
-        // Clear-grace state machine. Defer the Clear (and the per-track
-        // latch wipe) until the stable-close set has stayed empty for
-        // clearGraceMs. Any in-front in-range track returning (pre-sustain,
-        // via currentCloseTids) cancels the pending Clear silently. The
-        // surviving firedTierPerTid latch then suppresses the same-car
-        // re-beep through the latch-aware new-entry / escalation gates.
-        val anyInRange = currentCloseTids.isNotEmpty()
-        if (anyInRange) {
+        // Clear-grace state machine. The all-clear is gated on RAW physical
+        // presence (behindPresent), not the beep-path close set: while any car
+        // is physically behind in range - even one docked as
+        // isAlongsideStationary, or returning under a new tid - the Clear is
+        // force-cancelled, so a still-present car can never fire "road clear".
+        // The Clear (and the per-track latch wipe) is deferred until behind has
+        // stayed empty for clearGraceMs. closeEpisodeActive is the arming latch:
+        // once a stable-close track existed this episode, the Clear still arms
+        // when the car finally leaves, even though the docked window kept
+        // stableClose (and prevStableClose) empty for many frames. The
+        // surviving firedTierPerTid latch suppresses any same-car re-beep
+        // through the latch-aware new-entry / escalation gates.
+        if (stableTids.isNotEmpty()) closeEpisodeActive = true
+        if (behindPresent) {
             clearPending = false
-        } else if (stableTids.isEmpty() && prevStableClose.isNotEmpty() && !clearPending) {
+        } else if (closeEpisodeActive && !clearPending) {
             clearPending = true
             clearPendingSinceMs = nowMs
         }
         val clearGraceElapsed = clearPending &&
-            stableTids.isEmpty() &&
+            !behindPresent &&
             (nowMs - clearPendingSinceMs) >= clearGraceMs
 
         val event: Event = when {
@@ -542,6 +590,7 @@ class AlertDecider(
                 firedTierPerTid.clear()
                 peakUrgencyPerTid.clear()
                 clearPending = false
+                closeEpisodeActive = false
                 Event.Clear
             }
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
@@ -590,6 +639,7 @@ class AlertDecider(
         prevStableClose = stableTids
         prevClosestUrgency = if (stableTids.isEmpty()) 0 else closestUrgency
         prevCloseRaw = currentCloseTids
+        prevBehindRaw = behindPresentTids
         return event
     }
 
@@ -604,7 +654,9 @@ class AlertDecider(
         beepPending = false
         clearPending = false
         clearPendingSinceMs = 0L
+        closeEpisodeActive = false
         prevCloseRaw = emptySet()
+        prevBehindRaw = emptySet()
         lastNotStationaryAtMs = NOT_INITIALIZED
     }
 

@@ -53,6 +53,7 @@ internal object SnapshotFixtures {
         radarLightNightMode = RadarLightMode.NIGHT_FLASH,
         radarMac = null,
         radarDisplayName = null,
+        radarLateralOffsetCm = 0,
         eBikeDataEnabled = false,
         eBikeOwnership = EBikeOwnership.UNANSWERED,
         eBikeUnknownObjectLogEnabled = false,

@@ -413,6 +413,12 @@
     <string name="settings_radardev_pair_different_title">Pair a different radar</string>
     <string name="settings_radardev_open">Open</string>
     <string name="settings_radardev_pair_different_subtitle">Opens Bluetooth settings. Forget the old radar there first.</string>
+    <string name="settings_radardev_section_position">Radar position</string>
+    <string name="settings_radardev_position_title">Mount offset</string>
+    <string name="settings_radardev_position_helper">Slide toward the side your radar is mounted.</string>
+    <string name="settings_radardev_position_centred">Centred</string>
+    <string name="settings_radardev_position_left">%1$d cm left</string>
+    <string name="settings_radardev_position_right">%1$d cm right</string>
 
     <!-- Settings → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>

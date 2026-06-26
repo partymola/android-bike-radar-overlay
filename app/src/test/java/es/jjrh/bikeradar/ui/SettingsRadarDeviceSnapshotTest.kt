@@ -40,6 +40,25 @@ class SettingsRadarDeviceSnapshotTest {
     }
 
     @Test
+    fun mountOffsetRight() {
+        // Non-zero mount offset: exercises the worded "N cm right" readout and
+        // the off-centre slider thumb (every other snapshot sits at Centred).
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA),
+                    chosenMac = null,
+                    activeName = radarA.name,
+                    connected = true,
+                    batteryPct = 78,
+                    offsetCm = 15,
+                )
+            }
+        }
+    }
+
+    @Test
     fun offline() {
         captureRoboImage {
             UiTheme {

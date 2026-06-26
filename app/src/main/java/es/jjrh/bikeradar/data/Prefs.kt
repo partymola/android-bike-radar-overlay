@@ -66,6 +66,7 @@ data class PrefsSnapshot(
     val radarLightNightMode: RadarLightMode,
     val radarMac: String?,
     val radarDisplayName: String?,
+    val radarLateralOffsetCm: Int,
     val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
     val eBikeUnknownObjectLogEnabled: Boolean,
@@ -429,6 +430,25 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_DISPLAY_NAME, v).apply()
         }
 
+    /** Lateral offset of the radar's mount from the bike centreline, in cm.
+     *  Positive = mounted right of centre, negative = left, 0 = centred (no
+     *  correction). The decoder adds this to every target's rangeX so a car
+     *  directly behind the bike reads centred even when the radar sits off to
+     *  one side - fixing both the overlay position and the alongside-vs-behind
+     *  classification. Clamped to +/-[RADAR_LATERAL_OFFSET_MAX_CM]; the Settings
+     *  slider writes 0 (centred), or a magnitude from
+     *  [RADAR_LATERAL_OFFSET_MIN_CM]..[RADAR_LATERAL_OFFSET_MAX_CM] cm on either
+     *  side (1 cm granularity above the minimum). */
+    var radarLateralOffsetCm: Int
+        get() = sp.getInt(KEY_RADAR_LATERAL_OFFSET_CM, 0)
+            .coerceIn(-RADAR_LATERAL_OFFSET_MAX_CM, RADAR_LATERAL_OFFSET_MAX_CM)
+        set(v) {
+            sp.edit().putInt(
+                KEY_RADAR_LATERAL_OFFSET_CM,
+                v.coerceIn(-RADAR_LATERAL_OFFSET_MAX_CM, RADAR_LATERAL_OFFSET_MAX_CM),
+            ).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -577,6 +597,7 @@ class Prefs(context: Context) {
         radarLightNightMode = radarLightNightMode,
         radarMac = radarMac,
         radarDisplayName = radarDisplayName,
+        radarLateralOffsetCm = radarLateralOffsetCm,
         eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
@@ -632,6 +653,7 @@ class Prefs(context: Context) {
         appendLine("radar_light_auto_mode_enabled=$radarLightAutoModeEnabled")
         appendLine("radar_light_day_mode=$radarLightDayMode")
         appendLine("radar_light_night_mode=$radarLightNightMode")
+        appendLine("radar_lateral_offset_cm=$radarLateralOffsetCm")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
@@ -682,6 +704,16 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LIGHT_NIGHT_MODE = "radar_light_night_mode"
         const val KEY_RADAR_MAC = "radar_mac"
         const val KEY_RADAR_DISPLAY_NAME = "radar_display_name"
+        const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"
+
+        /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0
+         *  (centred), then jumps to +/-[RADAR_LATERAL_OFFSET_MIN_CM] and runs in
+         *  1 cm steps out to +/-[RADAR_LATERAL_OFFSET_MAX_CM]: sub-5 cm offsets
+         *  aren't worth setting, and a mount more than 20 cm off the bike
+         *  centreline is implausible on a bicycle. */
+        const val RADAR_LATERAL_OFFSET_MIN_CM = 5
+        const val RADAR_LATERAL_OFFSET_MAX_CM = 20
+
         const val KEY_EBIKE_DATA_ENABLED = "ebike_data_enabled"
         const val KEY_EBIKE_OWNERSHIP = "ebike_ownership"
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"

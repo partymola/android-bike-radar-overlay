@@ -401,6 +401,12 @@
     <string name="settings_radardev_pair_different_title">Emparejar un radar distinto</string>
     <string name="settings_radardev_open">Abrir</string>
     <string name="settings_radardev_pair_different_subtitle">Abre los ajustes de Bluetooth. Olvida primero el radar antiguo allí.</string>
+    <string name="settings_radardev_section_position">Posición del radar</string>
+    <string name="settings_radardev_position_title">Desfase lateral</string>
+    <string name="settings_radardev_position_helper">Desliza hacia el lado donde está montado el radar.</string>
+    <string name="settings_radardev_position_centred">Centrado</string>
+    <string name="settings_radardev_position_left">%1$d cm izda.</string>
+    <string name="settings_radardev_position_right">%1$d cm dcha.</string>
 
     <!-- Ajustes → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>

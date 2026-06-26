@@ -267,6 +267,14 @@ class PrefsTest {
         assertEquals(3, prefs.closePassClosingSpeedFloorMs)
         prefs.closePassClosingSpeedFloorMs = 99 // ceiling 15
         assertEquals(15, prefs.closePassClosingSpeedFloorMs)
+
+        // Signed clamp to +/-MAX (mount offset; 0 = centred stays valid).
+        prefs.radarLateralOffsetCm = 999
+        assertEquals(Prefs.RADAR_LATERAL_OFFSET_MAX_CM, prefs.radarLateralOffsetCm)
+        prefs.radarLateralOffsetCm = -999
+        assertEquals(-Prefs.RADAR_LATERAL_OFFSET_MAX_CM, prefs.radarLateralOffsetCm)
+        prefs.radarLateralOffsetCm = 12 // in-range round-trip
+        assertEquals(12, prefs.radarLateralOffsetCm)
     }
 
     @Test

@@ -55,7 +55,24 @@ import kotlin.math.roundToInt
  */
 class RadarV2Decoder(
     private val nowMs: () -> Long = { System.currentTimeMillis() },
+    /** Lateral mount offset of the radar from the bike centreline, in cm
+     *  (positive = mounted right of centre, negative = left, 0 = centred).
+     *  Added to every decoded rangeX so a target directly behind the bike
+     *  reads centred even when the radar is mounted off to one side.
+     *
+     *  Geometry: rangeX (lateral) and rangeY (longitudinal / behind) are
+     *  independent Cartesian fields in the radar's frame. A sideways mount
+     *  offset is a pure translation, so it shifts only rangeX; rangeY - the
+     *  behind-distance the alerts use - is measured parallel to the bike axis
+     *  and is identical from the radar or the bike centre, so it needs no
+     *  correction. (A car passing on the far side reads with the wrong lateral
+     *  clearance pre-correction, not the wrong behind-distance.) Assumes the
+     *  radar points straight back; a yawed mount would also rotate rangeY and
+     *  is out of scope. */
+    lateralOffsetCm: Int = 0,
 ) {
+    private val lateralOffsetM = lateralOffsetCm / 100f
+
     private data class Track(
         val vehicle: Vehicle,
         val lastSeen: Long,
@@ -173,7 +190,7 @@ class RadarV2Decoder(
         val rangeX = if (lateralUnknown) {
             prev.vehicle.lateralPos * LATERAL_FULL_M
         } else {
-            rangeXSigned
+            rangeXSigned + lateralOffsetM
         }
 
         val speedMs = payload[off + 7].toInt() * 0.5f

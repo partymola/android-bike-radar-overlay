@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,6 +46,8 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.Prefs
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Radar device-link management. The counterpart to the alert-config "Alerts"
@@ -93,6 +96,8 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         else -> null // ambiguous (>1, none chosen) or never paired
     }
 
+    var offsetCm by rememberSaveable { mutableIntStateOf(prefs.radarLateralOffsetCm) }
+
     SettingsRadarDeviceContent(
         onBack = { navController.popBackStack() },
         bonded = bonded,
@@ -110,6 +115,9 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
             prefs.radarMac = radar.mac
             prefs.radarDisplayName = radar.name
         },
+        offsetCm = offsetCm,
+        onOffsetChange = { offsetCm = it },
+        onOffsetCommit = { prefs.radarLateralOffsetCm = offsetCm },
     )
 }
 
@@ -129,6 +137,9 @@ internal fun SettingsRadarDeviceContent(
     others: List<RadarSelection.BondedRadar> = emptyList(),
     onPairDifferent: () -> Unit = {},
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit = {},
+    offsetCm: Int = 0,
+    onOffsetChange: (Int) -> Unit = {},
+    onOffsetCommit: () -> Unit = {},
 ) {
     val br = LocalBrColors.current
     var othersExpanded by rememberSaveable { mutableStateOf(false) }
@@ -263,6 +274,26 @@ internal fun SettingsRadarDeviceContent(
                 onSelectRadar = onSelectRadar,
             )
 
+            SettingsSectionLabel(stringResource(R.string.settings_radardev_section_position))
+            val offsetDisplay = when {
+                offsetCm > 0 -> stringResource(R.string.settings_radardev_position_right, offsetCm)
+                offsetCm < 0 -> stringResource(R.string.settings_radardev_position_left, -offsetCm)
+                else -> stringResource(R.string.settings_radardev_position_centred)
+            }
+            val maxCm = Prefs.RADAR_LATERAL_OFFSET_MAX_CM
+            SettingsSliderRow(
+                title = stringResource(R.string.settings_radardev_position_title),
+                valueDisplay = offsetDisplay,
+                helper = stringResource(R.string.settings_radardev_position_helper),
+                value = offsetCm.toFloat(),
+                valueRange = -maxCm.toFloat()..maxCm.toFloat(),
+                // Continuous track (no fixed step grid), snapped in code to the
+                // valid set: 0, then +/-MIN..+/-MAX in 1 cm steps. A uniform M3
+                // step grid can't express the 0 <-> +/-5 jump-then-fine scale.
+                onValueChange = { onOffsetChange(snapOffsetCm(it)) },
+                onValueChangeFinished = onOffsetCommit,
+            )
+
             SettingsSectionLabel(stringResource(R.string.settings_radardev_section_actions))
             SettingsRowGroup {
                 SettingsActionRow(
@@ -277,6 +308,24 @@ internal fun SettingsRadarDeviceContent(
 
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+}
+
+/** Snap a raw slider position (cm) to the valid mount-offset set: 0 (centred),
+ *  then a magnitude from [Prefs.RADAR_LATERAL_OFFSET_MIN_CM] to
+ *  [Prefs.RADAR_LATERAL_OFFSET_MAX_CM] in 1 cm steps. The 0 <-> +/-min jump is
+ *  deliberate: sub-5 cm offsets aren't worth setting, but past the minimum the
+ *  rider wants fine 1 cm control. A uniform slider step grid can't express this
+ *  scale, so the track is continuous and snapping happens here. */
+internal fun snapOffsetCm(raw: Float): Int {
+    val min = Prefs.RADAR_LATERAL_OFFSET_MIN_CM
+    val cm = raw.roundToInt()
+        .coerceIn(-Prefs.RADAR_LATERAL_OFFSET_MAX_CM, Prefs.RADAR_LATERAL_OFFSET_MAX_CM)
+    val mag = abs(cm)
+    return when {
+        mag * 2 < min -> 0
+        mag < min -> if (cm > 0) min else -min
+        else -> cm
     }
 }
 

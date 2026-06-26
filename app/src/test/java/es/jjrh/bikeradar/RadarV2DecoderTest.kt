@@ -151,6 +151,77 @@ class RadarV2DecoderTest {
         assertEquals(-1f, state!!.vehicles.single().lateralPos, 0.0001f)
     }
 
+    @Test fun rightMountOffsetRecentresDirectlyBehindTarget() {
+        // Radar mounted 20 cm right of centre: a car directly behind the bike
+        // reads ~20 cm left of the radar (raw rangeX -2 -> -0.2 m). The +20 cm
+        // correction brings it back to centre (lateralPos ~0).
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -2)))
+        assertEquals(0f, state!!.vehicles.single().lateralPos, 0.001f)
+    }
+
+    @Test fun leftMountOffsetRecentresDirectlyBehindTarget() {
+        // Radar 20 cm LEFT of centre: a centred car reads ~20 cm right of the
+        // radar (raw +2 -> +0.2 m); the -20 cm correction recentres it.
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = -20)
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 2)))
+        assertEquals(0f, state!!.vehicles.single().lateralPos, 0.001f)
+    }
+
+    @Test fun mountOffsetShiftsBoresightTargetToTheMountSide() {
+        // A target on the radar's own boresight (raw rangeX 0) is physically to
+        // the mount side of the bike; a 15 cm right mount renders it +0.15 m
+        // right (lateralPos = 0.15 / 3.0 = 0.05).
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 15)
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 0)))
+        assertEquals(0.05f, state!!.vehicles.single().lateralPos, 0.001f)
+    }
+
+    @Test fun zeroOffsetLeavesLateralUnchanged() {
+        // Default (centred) mount: rangeX raw +15 -> +1.5 m -> lateral 0.5, no shift.
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 0)
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 15)))
+        assertEquals(0.5f, state!!.vehicles.single().lateralPos, 0.001f)
+    }
+
+    @Test fun mountOffsetLeavesBehindDistanceUnchanged() {
+        // A lateral mount offset is a sideways shift; the behind-distance the
+        // app alerts on is rangeY (longitudinal), measured parallel to the bike
+        // axis, so it is identical from the radar or the bike centre. Only
+        // rangeX shifts. Same target, two mounts, same distanceM.
+        val centred = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 0)
+            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .vehicles.single().distanceM
+        val rightMount = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
+            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .vehicles.single().distanceM
+        assertEquals("lateral mount offset must not change the behind distance", centred, rightMount)
+    }
+
+    @Test fun rightMountCorrectsOverstatedLeftClearance() {
+        // Right-mounted radar over-states a left-passing car's side clearance:
+        // a car reads 0.8 m left of the RADAR (raw -8). A +20 cm correction
+        // restores the bike-frame clearance: -0.8 + 0.2 = -0.6 m -> lateralPos
+        // -0.6 / 3.0 = -0.2.
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
+        val lat = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .vehicles.single().lateralPos
+        assertEquals(-0.2f, lat, 0.001f)
+    }
+
+    @Test fun mountOffsetNotReappliedOnLateralUnknownCarryForward() {
+        // The lateral-unknown carry-forward reuses the PREVIOUS (already-
+        // corrected) lateralPos, so the mount offset must not be added twice.
+        // Left mount -15 cm: frame 1 rangeX raw 24 (2.4 m) -> 2.25 m corrected
+        // -> lateralPos 0.75; frame 2 rxBits=0 at far range carries 0.75 forward
+        // unchanged (a double-apply would yield 0.7).
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = -15)
+        d.feed(packet(target(tid = 1, rangeY = 200, rangeX = 24)))
+        val v = d.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))!!.vehicles.single()
+        assertTrue("carry-forward must trigger lateral-unknown", v.lateralUnknown)
+        assertEquals(0.75f, v.lateralPos, 0.001f)
+    }
+
     @Test fun classLowClassifiesAsCar() {
         // CLASS_LOW = "low-RCS / low-confidence return", not "is a
         // bike". Trucks present as CLASS_LOW for several seconds of
@@ -537,6 +608,24 @@ class RadarV2DecoderTest {
             "centred target must not dock - it might be a follower",
             v.isAlongsideStationary,
         )
+    }
+
+    @Test fun mountOffsetMovesNearBoundaryTargetOutOfAlongside() {
+        // The mount correction feeds the alongside classification, not just the
+        // overlay: the radar reports the target 0.6 m to the side (>= the 0.5 m
+        // alongside band, so a centred mount docks it as alongside). A -20 cm
+        // correction pulls it to 0.4 m, below the band, so it is NOT docked and
+        // stays in the alert path.
+        fun docksAsAlongside(offsetCm: Int): Boolean {
+            val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = offsetCm)
+            d.feed(byteArrayOf(0x04, 0x00, 8)) // rider 2 m/s (slow)
+            d.feed(packet(target(tid = 1, rangeY = 50, rangeX = 6)))
+            now += RadarV2Decoder.ALONGSIDE_MIN_DURATION_MS + 1
+            return d.feed(packet(target(tid = 1, rangeY = 50, rangeX = 6)))!!
+                .vehicles.single().isAlongsideStationary
+        }
+        assertTrue("centred mount: 0.6 m side-track docks as alongside", docksAsAlongside(0))
+        assertFalse("-20 cm correction pulls it below the 0.5 m band", docksAsAlongside(-20))
     }
 
     @Test fun alongsideStationaryRequiresClose() {

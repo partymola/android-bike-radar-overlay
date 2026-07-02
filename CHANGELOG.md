@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.13.0-alpha - 2026-07-02
+
+### Features
+
+- **Tell the app where your radar sits, and targets line up.** A radar mounted off the bike's centreline reports every car skewed to one side - a car dead behind you rendered off-axis on the overlay. A new slider in Settings -> Radar sets how far off-centre the unit sits (up to 20 cm each side) and every target shifts back into the bike's frame. Behind-distance and alerting are unaffected; a centred radar keeps the default of 0 and nothing changes.
+- **The forgot-to-lock reminder now reaches a watch in Do Not Disturb.** The wrist buzz used to be swallowed by the watch's DND. It now fires as an alarm-class buzz, the same way the walk-away alarm already does, and a new row under the reminder toggle (Settings -> eBike) shows whether the channel is allowed through DND and jumps straight to the system setting to grant it. Bosch eBike riders only.
+- **No false "road clear" through corners (experimental).** Cornering sweeps the radar's rear cone off a car following you, so mid-turn the app used to chime "road clear" and then re-alert seconds later when the same car reappeared. With the new toggle on, the all-clear waits out the turn plus the moment a follower needs to come round after you - sized by its distance and your speed, not a fixed timer. A car that never reappears genuinely turned off, and the all-clear then arrives as normal. Warning beeps are never held back. Off by default in Settings -> Experimental while road evidence accumulates.
+
+### Fix
+
+- **The all-clear no longer sounds while a car is still behind you.** A follower pacing you at your own speed was internally classed as parked traffic and dropped from the alert set - and the all-clear chimed as if the road were empty. The all-clear now watches raw radar presence: any car physically behind and in range holds it, whatever its classification or track id, and it still fires once the car actually leaves. A delayed all-clear beats a false one.
+- **The "bike unlocked" banner no longer lingers on a just-locked bike.** Locking the bike drops its Bluetooth link, which made the lock reading go stale and the dead-radar banner claim the bike was still unlocked for minutes. A locked reading now sticks; only a genuinely stale "unlocked" keeps the warning up.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE protocol or the Home Assistant payloads. The turn-aware all-clear is opt-in; everything else applies without setup or migration.
+
+### Internal
+
+- CI now runs static analysis, unit tests, and the emulator boot-smoke in parallel and caches Robolectric's SDK jars, cutting a push's wall-clock time.
+
 ## v0.12.0-alpha - 2026-06-24
 
 ### Features

@@ -1,0 +1,2 @@
+Novedades: indica cuánto se desvía tu radar del centro y los coches se alinean en la superposición. El aviso de bici sin bloquear ahora llega al reloj incluso en No molestar. Experimental: el aviso de vía despejada puede esperar a que acabe la curva en vez de sonar a mitad de giro.
+Correcciones: el aviso de vía despejada ya no suena con un coche siguiéndote a tu ritmo, y el cartel de "bici desbloqueada" ya no se queda tras bloquearla.

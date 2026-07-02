@@ -1,0 +1,2 @@
+New: set how far off-centre your radar sits and targets line up on the overlay. The forgot-to-lock buzz now reaches a watch in Do Not Disturb. Experimental: the all-clear can wait out corners instead of calling "road clear" mid-turn.
+Fixed: the all-clear no longer sounds while a car pacing you is still behind, and the "bike unlocked" banner no longer lingers after you lock up.

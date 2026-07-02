@@ -14,6 +14,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Build
@@ -165,6 +166,11 @@ class BikeRadarService : Service() {
     // onCreate; attach() is called per radar connection.
     private lateinit var overlayPipeline: OverlayPipeline
 
+    // Turn-aware alerting (experimental): gyroscope-backed turn detector.
+    // Started/stopped by OverlayPipeline's session lifecycle so the sensor
+    // only runs while a ride is live and the Settings flag is on.
+    private lateinit var turnSensor: TurnSensorController
+
     // Service-scoped AlertBeeper. Allocated in onCreate, released in
     // onDestroy. Hoisted out of overlayJob so reconnects do not pay
     // AudioTrack cold-start every time, and so audio focus + the
@@ -266,6 +272,10 @@ class BikeRadarService : Service() {
 
         overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
         reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)
+        turnSensor = TurnSensorController(
+            sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager,
+            clog = ::clog,
+        )
         overlayPipeline = OverlayPipeline(
             prefs = prefs,
             ha = { ha },
@@ -276,6 +286,9 @@ class BikeRadarService : Service() {
             overlayPrefsSnapshot = { cachedOverlayPrefs ?: prefs.snapshot() },
             ebikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
             climbingNow = { ebikeSnapshotCoordinator.climbing() },
+            turnState = { turnSensor.state() },
+            turnSensorStart = { turnSensor.start() },
+            turnSensorStop = { turnSensor.stop() },
             currentRadarMac = { radarLink.currentRadarMac },
             macToSlug = { macToSlug },
             clog = { line -> clog(line) },

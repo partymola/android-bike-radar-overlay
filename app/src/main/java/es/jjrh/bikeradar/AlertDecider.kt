@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import kotlin.math.max
+
 /**
  * Selects which tier-raise ("escalation") beeps bypass the inter-beep
  * cooldown. A tier raise is genuinely new threat information (the closest
@@ -102,6 +104,24 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    The closing-speed floor on the TTC gate filters slow-queue
  *    traffic merging into a stopped rider, where the driver is
  *    clearly tracking and braking.
+ *  - **Turn-aware clear deferral (experimental).** Cornering sweeps the
+ *    radar's rear cone off every followed car, so mid-turn the stream
+ *    reads empty while the road is not. While [TurnStateDecider] reports
+ *    TURNING and a close episode is active, the all-clear is deferred:
+ *    the deferral spans the rider's whole transit of the corner, so
+ *    corner sharpness and length are accounted for automatically. When
+ *    the rider straightens (HOLD) with the road still reading empty, the
+ *    deferral extends once by an adaptive tail - the last-seen follower
+ *    distance divided by rider speed, i.e. the time the car needs to
+ *    traverse the same corner the rider just did, offset by its
+ *    following distance (clamped to [TURN_TAIL_MIN_MS]..
+ *    [TURN_TAIL_MAX_MS]). A car that fails to reappear within the tail
+ *    has genuinely turned off, and the deferred Clear then fires after
+ *    the normal grace. Beeps are NOT muted: when the radar re-finds the
+ *    follower after the corner, the reacquisition beep fires - the
+ *    rider wants the re-anchor. Only the false "road clear" mid-corner
+ *    is suppressed; a delayed all-clear is deliberately preferred over
+ *    a false one.
  *  - **Low-speed urgent extension.** When `urgentLowSpeedEnabled`
  *    (Settings toggle, default on), the same override is also
  *    evaluated while the rider is MOVING at or below
@@ -160,6 +180,13 @@ class AlertDecider(
      *  cooldown-dropped escalations and advances ~54 by a median 0.6 s for
      *  only +9 net beeps; [NONE]/[TOP_TIER] are retained for re-validation. */
     private val escalationBypass: EscalationCooldownBypass = EscalationCooldownBypass.ALL,
+    /** Diagnostic hook: invoked once per turn when the adaptive
+     *  clear-deferral tail is anchored, with the computed tail length.
+     *  The pipeline writes it to the capture log so every deferral is
+     *  directly auditable post-ride instead of inferred from turn-state
+     *  and alert lines. Fires at most once per corner (the anchor-once
+     *  guard), so there is no flood risk. */
+    private val onTurnDefer: (tailMs: Long) -> Unit = {},
 ) {
 
     sealed class Event {
@@ -276,6 +303,22 @@ class AlertDecider(
      */
     private val peakUrgencyPerTid = HashMap<Int, Int>()
 
+    /** Distance (m) of the closest vehicle physically behind on the most
+     *  recent frame where any was present. Sizes the post-turn clear-
+     *  deferral tail: the follower's catch-up time is its following
+     *  distance over the rider's speed. Refreshed every behind-present
+     *  frame, so at the moment the turn blacks the stream out it holds
+     *  the followed car's last-seen distance. */
+    private var lastBehindDistanceM: Int = 0
+
+    /** Monotonic deadline (ms) until which the pending all-clear stays
+     *  deferred after a turn - the adaptive tail anchored once per turn
+     *  on the first HOLD frame with the road still reading empty.
+     *  [Long.MIN_VALUE] = no tail active. Reset whenever a vehicle is
+     *  present behind (the follower reappeared; normal clear semantics
+     *  resume), when the deferred Clear finally fires, and on [reset]. */
+    private var turnDeferUntilMs: Long = Long.MIN_VALUE
+
     /** Monotonic (elapsedRealtime) ms of the most recent `decide()` call in which the rider
      *  was NOT at or below [stationaryMsThreshold]. Compared against
      *  `nowMs` each call to decide whether the stationary dwell has been
@@ -290,6 +333,7 @@ class AlertDecider(
         bikeNotDriving: Boolean? = null,
         climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
+        turnState: TurnStateDecider.State = TurnStateDecider.State.IDLE,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -572,8 +616,46 @@ class AlertDecider(
         // stableClose (and prevStableClose) empty for many frames. The
         // surviving firedTierPerTid latch suppresses any same-car re-beep
         // through the latch-aware new-entry / escalation gates.
+        // Turn-aware clear deferral: an empty behind-set mid-corner is a
+        // radar blackout, not an empty road - cornering sweeps the rear cone
+        // off every followed car. While the rider is TURNING with a live
+        // episode, keep cancelling the pending Clear; the deferral thereby
+        // spans the rider's whole transit of the corner, however sharp or
+        // long. On the first HOLD frame after straightening with the road
+        // still reading empty, anchor an adaptive tail: the follower needs
+        // lastBehindDistanceM / riderSpeed more seconds to traverse the same
+        // corner (it runs the rider's path offset by its following
+        // distance). A car that fails to reappear within the tail has
+        // genuinely turned off, and the deferred Clear fires after the
+        // normal grace. Any behind-present frame cancels the tail - the
+        // follower is back, normal clear semantics resume. Delayed all-clear
+        // over false all-clear, same asymmetry as the grace itself.
         if (stableTids.isNotEmpty()) closeEpisodeActive = true
         if (behindPresent) {
+            lastBehindDistanceM = behindPresentVehicles.minOf { it.distanceM }
+            turnDeferUntilMs = Long.MIN_VALUE
+        }
+        val turningBlackout = turnState == TurnStateDecider.State.TURNING && closeEpisodeActive
+        if (turningBlackout) {
+            turnDeferUntilMs = Long.MIN_VALUE
+        } else if (turnState == TurnStateDecider.State.HOLD &&
+            closeEpisodeActive &&
+            !behindPresent &&
+            turnDeferUntilMs == Long.MIN_VALUE
+        ) {
+            // Anchor once per turn. The speed floor keeps the tail finite
+            // for a stopped or crawling rider; the clamps bound it for
+            // degenerate distance/speed readings.
+            val tailMs =
+                (lastBehindDistanceM / max(bikeSpeedMs ?: 0f, TURN_TAIL_MIN_SPEED_MS) * 1000)
+                    .toLong()
+                    .coerceIn(TURN_TAIL_MIN_MS, TURN_TAIL_MAX_MS)
+            turnDeferUntilMs = nowMs + tailMs
+            onTurnDefer(tailMs)
+        }
+        // The tail outlives the HOLD state on purpose: a short HOLD must not
+        // cut the deferral off before the follower's catch-up time elapses.
+        if (behindPresent || turningBlackout || nowMs < turnDeferUntilMs) {
             clearPending = false
         } else if (closeEpisodeActive && !clearPending) {
             clearPending = true
@@ -589,6 +671,7 @@ class AlertDecider(
                 beepPending = false
                 firedTierPerTid.clear()
                 peakUrgencyPerTid.clear()
+                turnDeferUntilMs = Long.MIN_VALUE
                 clearPending = false
                 closeEpisodeActive = false
                 Event.Clear
@@ -648,6 +731,8 @@ class AlertDecider(
         framesSinceLastSeen.clear()
         firedTierPerTid.clear()
         peakUrgencyPerTid.clear()
+        lastBehindDistanceM = 0
+        turnDeferUntilMs = Long.MIN_VALUE
         prevStableClose = emptySet()
         prevClosestUrgency = 0
         lastBeepAtMs = Long.MIN_VALUE / 2
@@ -815,6 +900,30 @@ class AlertDecider(
          *  re-statements the cooldown still governs (tier raises bypass
          *  it since E1, so this no longer delays a genuine escalation). */
         const val SPEED_AWARE_COOLDOWN_SLOW_KMH = 15f
+
+        /** Floor (m/s) on the rider speed used to size the post-turn
+         *  clear-deferral tail. The tail is follower distance over rider
+         *  speed - the time the car behind needs to traverse the corner
+         *  the rider just did - and a stopped or crawling rider would
+         *  otherwise divide by (near) zero and defer indefinitely.
+         *  1.5 m/s (~5 km/h, walking pace) keeps the tail finite while
+         *  still stretching it for a slow rider, whose follower
+         *  genuinely takes longer to come round the corner. */
+        const val TURN_TAIL_MIN_SPEED_MS = 1.5f
+
+        /** Lower clamp (ms) on the adaptive post-turn tail. Even a
+         *  close follower takes a couple of seconds to clear the corner
+         *  and be reacquired by the rear cone; anything shorter would
+         *  let a tight, fast corner fire the all-clear while the car is
+         *  still mid-bend. */
+        const val TURN_TAIL_MIN_MS = 3_000L
+
+        /** Upper clamp (ms) on the adaptive post-turn tail. Matches
+         *  [TurnStateDecider.HOLD_MS]: a follower that has not
+         *  reappeared 10 s after the rider straightened has genuinely
+         *  turned off, and holding the all-clear longer would erode
+         *  trust in the cue on every real departure at a junction. */
+        const val TURN_TAIL_MAX_MS = 10_000L
 
         /** Bike speeds above this (km/h) halve the [minBeepGapMs]
          *  cooldown. Reaction time at 30 km/h is roughly half what it is

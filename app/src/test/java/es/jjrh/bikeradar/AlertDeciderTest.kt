@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import es.jjrh.bikeradar.TurnStateDecider.State.HOLD
+import es.jjrh.bikeradar.TurnStateDecider.State.TURNING
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -2061,4 +2063,221 @@ class AlertDeciderTest {
     // presence gate + closeEpisodeActive latch); re-derive against the current
     // source. The old L527/L528 anyInRange and L530 prevStableClose branches no
     // longer exist - their dead arms were removed by that change (12 -> 10).
+    //
+    // The turn-aware clear deferral added one more unreachable miss (10 -> 11):
+    // `behindPresentVehicles.minOf { it.distanceM }`'s empty-collection throw
+    // arm, guarded dead by the enclosing `if (behindPresent)` (behindPresent ==
+    // behindPresentVehicles.isNotEmpty()). Every decision branch the deferral
+    // itself introduced (TURNING/HOLD gates, anchor-once conjuncts, tail
+    // clamps, null-speed floor) is exercised by the tests below.
+
+    // ── turn-aware clear deferral (experimental) ─────────────────────
+    //
+    // Cornering sweeps the radar's rear cone off every followed car; the
+    // tracks drop mid-turn and reacquire seconds later under NEW tids.
+    // While TurnStateDecider reports TURNING with a close episode live,
+    // the pending Clear is cancelled (an empty frame mid-corner is a
+    // blackout, not an empty road). On the first HOLD frame with the road
+    // still reading empty an adaptive tail extends the deferral by the
+    // follower's catch-up time - last-seen distance over rider speed,
+    // clamped to TURN_TAIL_MIN_MS..TURN_TAIL_MAX_MS. Beeps are NOT gated
+    // on the turn state: a reacquired follower beeps again by design.
+
+    @Test fun `turn blackout does not fire Clear while turning`() {
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Tracks vanish mid-turn. Way past the normal grace, still no Clear.
+        repeat(3) {
+            assertEquals(
+                AlertDecider.Event.None,
+                d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING),
+            )
+            c.jump(2000)
+        }
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING),
+        )
+    }
+
+    @Test fun `follower reacquired after a turn beeps again`() {
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Turn blackout, then the same physical car returns under a fresh
+        // tid at the same tier. The re-beep is intended: it re-anchors the
+        // rider's awareness after the corner. Only the false all-clear is
+        // suppressed by the turn logic, never a beep.
+        c.jump(5000)
+        d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING)
+        d.decide(listOf(car(9, 10)), alertMax, c.tick(), turnState = HOLD)
+        assertEquals(
+            AlertDecider.Event.Beep(2),
+            d.decide(listOf(car(9, 10)), alertMax, c.tick(), turnState = HOLD),
+        )
+    }
+
+    @Test fun `adaptive tail clamps to the minimum for a close follower at speed`() {
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 8)), alertMax, c.tick(), bikeSpeedMs = 6f)
+        assertEquals(
+            AlertDecider.Event.Beep(2),
+            d.decide(listOf(car(1, 8)), alertMax, c.tick(), bikeSpeedMs = 6f),
+        )
+        // Corner blackout, then straightening with the road still empty:
+        // 8 m / 6 m/s = 1.3 s, clamped up to TURN_TAIL_MIN_MS (3 s).
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = TURNING)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD)
+        // Mid-tail (anchor + 1.7 s): still deferred. Without the clamp the
+        // 1.3 s raw tail would already have expired and armed the grace.
+        c.jump(1600)
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
+        )
+        // First frame past the 3 s clamp arms the grace - had the raw tail
+        // been used, a full grace would have elapsed and Clear fired here.
+        c.jump(2000)
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
+        )
+        c.jump(2000)
+        assertEquals(
+            AlertDecider.Event.Clear,
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
+        )
+    }
+
+    @Test fun `adaptive tail is capped for a far follower and slow rider`() {
+        val d = AlertDecider()
+        val c = Clock()
+        val alertMax30 = 30
+        d.decide(listOf(car(1, 25)), alertMax30, c.tick(), bikeSpeedMs = 2f)
+        assertEquals(
+            AlertDecider.Event.Beep(1),
+            d.decide(listOf(car(1, 25)), alertMax30, c.tick(), bikeSpeedMs = 2f),
+        )
+        d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f, turnState = TURNING)
+        // Anchor: 25 m / 2 m/s = 12.5 s, capped at TURN_TAIL_MAX_MS (10 s).
+        // Post-anchor frames drop back to IDLE: the anchored tail must run
+        // to completion even though the HOLD state ended.
+        d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f, turnState = HOLD)
+        // ~5 s after the anchor plus a full grace: still deferred.
+        c.jump(5000)
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
+        )
+        c.jump(2000)
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
+        )
+        // Past the 10 s cap the grace arms; the Clear fires once it
+        // elapses. An uncapped 12.5 s tail would still be deferring both
+        // of these frames.
+        c.jump(3000)
+        assertEquals(
+            AlertDecider.Event.None,
+            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
+        )
+        c.jump(2000)
+        assertEquals(
+            AlertDecider.Event.Clear,
+            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
+        )
+    }
+
+    @Test fun `returning follower cancels the tail and a later departure clears normally`() {
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING)
+        // Anchor with no speed signal: the TURN_TAIL_MIN_SPEED_MS floor
+        // sizes the tail, 10 m / 1.5 m/s = 6.7 s.
+        d.decide(emptyList(), alertMax, c.tick(), turnState = HOLD)
+        // The follower reappears mid-tail under a fresh tid: the tail is
+        // cancelled and the reacquisition beeps.
+        d.decide(listOf(car(9, 10)), alertMax, c.tick(), turnState = HOLD)
+        assertEquals(
+            AlertDecider.Event.Beep(2),
+            d.decide(listOf(car(9, 10)), alertMax, c.tick()),
+        )
+        // It then genuinely leaves on the straight: the Clear fires after
+        // the normal grace, well before the cancelled 6.7 s tail would
+        // have allowed.
+        d.decide(emptyList(), alertMax, c.tick())
+        c.jump(2000)
+        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+    }
+
+    @Test fun `turn states never gate beeps for a fresh episode`() {
+        val d = AlertDecider()
+        val c = Clock()
+        // Rider corners with an empty road; a new car appears while still
+        // in the post-turn window. Nothing to defer - normal beep.
+        d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), turnState = HOLD)
+        assertEquals(
+            AlertDecider.Event.Beep(2),
+            d.decide(listOf(car(1, 10)), alertMax, c.tick(), turnState = HOLD),
+        )
+    }
+
+    @Test fun `urgent approach fires during a turn`() {
+        // The turn logic touches only the clear path; the imminent-impact
+        // override must fire mid-corner exactly as it would on a straight.
+        val d = AlertDecider()
+        val c = Clock(dtMs = 300L)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(
+            AlertDecider.Event.Beep(2),
+            d.decide(listOf(car(1, 10)), alertMax, c.tick(), bikeSpeedMs = 0f),
+        )
+        c.jump(2500)
+        val ev = d.decide(
+            listOf(closingCar(9, 6, -7f)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+            turnState = TURNING,
+        )
+        val ev2 = d.decide(
+            listOf(closingCar(9, 5, -7f)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+            turnState = HOLD,
+        )
+        val sawUrgent = ev is AlertDecider.Event.UrgentApproach ||
+            ev2 is AlertDecider.Event.UrgentApproach
+        assertEquals(true, sawUrgent)
+    }
+
+    @Test fun `null-speed tail uses the speed floor and runs to the derived length`() {
+        // With no speed signal the TURN_TAIL_MIN_SPEED_MS floor (1.5 m/s)
+        // sizes the tail: 10 m / 1.5 = 6.67 s. Pins the floor constant - a
+        // silent change to it moves the Clear across the probes below.
+        val d = AlertDecider()
+        val c = Clock()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING)
+        d.decide(emptyList(), alertMax, c.tick(), turnState = HOLD) // anchor: 6.67 s
+        // 5 s in (plus a full grace): still deferred - a 3 s min-clamped
+        // tail would already have cleared here.
+        c.jump(5000)
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // Tail expires at ~6.7 s; the grace then arms and the Clear fires.
+        c.jump(2000)
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        c.jump(2000)
+        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+    }
 }

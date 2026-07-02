@@ -187,6 +187,9 @@ class OverlayPipelineDrivingTest {
         ha: () -> HaClient = { HaClient("", "") },
         currentRadarMac: () -> String? = { null },
         macToSlug: () -> Map<String, String> = { emptyMap() },
+        turnState: () -> TurnStateDecider.State = { TurnStateDecider.State.IDLE },
+        turnSensorStart: () -> Unit = {},
+        turnSensorStop: () -> Unit = {},
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
         ha = ha,
@@ -199,10 +202,80 @@ class OverlayPipelineDrivingTest {
         overlayPrefsSnapshot = { prefs.snapshot() },
         ebikeSnapshot = { null },
         climbingNow = { false },
+        turnState = turnState,
+        turnSensorStart = turnSensorStart,
+        turnSensorStop = turnSensorStop,
         currentRadarMac = currentRadarMac,
         macToSlug = macToSlug,
         clog = {},
     )
+
+    // ── turn-aware flag gating (glue) ────────────────────────────────────
+    //
+    // The KDoc on OverlayPipeline.turnState promises a mid-ride toggle-off
+    // takes effect immediately (per-frame flag read), and the sensor is
+    // only started when the flag is on at session start. Pin both gates -
+    // the decider- and UI-level tests cannot see this wiring.
+
+    @Test
+    fun turnSensorNotStartedAndStateNotConsultedWhenFlagOff() = runTest {
+        var starts = 0
+        var stateReads = 0
+        val pipeline = buildPipeline(
+            turnState = {
+                stateReads++
+                TurnStateDecider.State.TURNING
+            },
+            turnSensorStart = { starts++ },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 100L, vehicles = emptyList(), bikeSpeedMs = 5f),
+        )
+        runCurrent()
+        assertEquals(0, starts)
+        assertEquals(0, stateReads)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun turnSensorStartedAndStateConsultedWhenFlagOn() = runTest {
+        prefs.turnAwareAlertsEnabled = true
+        var starts = 0
+        var stops = 0
+        var stateReads = 0
+        val pipeline = buildPipeline(
+            turnState = {
+                stateReads++
+                TurnStateDecider.State.IDLE
+            },
+            turnSensorStart = { starts++ },
+            turnSensorStop = { stops++ },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 100L, vehicles = emptyList(), bikeSpeedMs = 5f),
+        )
+        runCurrent()
+        assertEquals(1, starts)
+        assertTrue("turnState must be consulted per frame when the flag is on", stateReads >= 1)
+        // Toggle off mid-session: the per-frame gate stops consulting the
+        // sensor immediately, before any reconnect.
+        val readsAtToggle = stateReads
+        prefs.turnAwareAlertsEnabled = false
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 200L, vehicles = emptyList(), bikeSpeedMs = 5f),
+        )
+        runCurrent()
+        assertEquals(readsAtToggle, stateReads)
+        job.cancel()
+        job.join()
+        // The session teardown always stops the sensor.
+        assertEquals(1, stops)
+    }
 
     /** Drive one arming overtake (4 closing frames then track-drop) into
      *  [RadarStateBus] and pump the test scheduler. Mirrors the geometry of

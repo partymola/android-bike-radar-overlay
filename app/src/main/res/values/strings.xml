@@ -335,6 +335,8 @@
     <string name="settings_exp_panning_subtitle">Pan beeps and urgent cues to the threat\'s side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.</string>
     <string name="settings_exp_invert_title">Invert left/right</string>
     <string name="settings_exp_invert_subtitle">Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).</string>
+    <string name="settings_exp_turn_title">No false all-clear in corners</string>
+    <string name="settings_exp_turn_subtitle">Cornering won\'t sound the all-clear while a car may still be behind you.</string>
 
     <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alerts</string>
@@ -509,7 +511,7 @@
     <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
     <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The key never leaves the secure element, so raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
     <string name="settings_privacy_on_phone_rides">A short ride history (ride times, distance, overtake and close-pass counts, and how close and how fast the closest passes were - no location, no route) is kept in app-private storage for the Ride history screen. The oldest entries are dropped after 200 rides; nothing is shared.</string>
-    <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples; no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
+    <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples, and turn-state changes from the phone\'s motion sensors (when turn-aware alerts are on); no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
     <string name="settings_privacy_on_phone_crashes">If the app crashes, a report (app version, thread, stack trace - no ride data, no location) is kept in app-private storage and shared only if you tap Share on the Debug screen.</string>
     <string name="settings_privacy_on_phone_linklog">A small connection log (when the radar, dashcam and the app\'s service connected, disconnected or failed to connect - device names and times only, no ride data, no location) is kept in app-private storage for troubleshooting on the Debug screen.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>

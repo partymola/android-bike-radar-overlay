@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,6 +46,8 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
         onLateralPanningChange = { prefs.experimentalLateralPanning = it },
         lateralPanningInvertLR = prefsSnap.experimentalLateralPanningInvertLR,
         onLateralPanningInvertLRChange = { prefs.experimentalLateralPanningInvertLR = it },
+        turnAwareEnabled = prefsSnap.turnAwareAlertsEnabled,
+        onTurnAwareChange = { prefs.turnAwareAlertsEnabled = it },
     )
 }
 
@@ -61,6 +64,8 @@ internal fun SettingsExperimentalContent(
     onLateralPanningChange: (Boolean) -> Unit,
     lateralPanningInvertLR: Boolean,
     onLateralPanningInvertLRChange: (Boolean) -> Unit,
+    turnAwareEnabled: Boolean,
+    onTurnAwareChange: (Boolean) -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -108,6 +113,18 @@ internal fun SettingsExperimentalContent(
                         onCheckedChange = onLateralPanningInvertLRChange,
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.TurnSlightRight,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_exp_turn_title),
+                    subtitle = stringResource(R.string.settings_exp_turn_subtitle),
+                    checked = turnAwareEnabled,
+                    onCheckedChange = onTurnAwareChange,
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))

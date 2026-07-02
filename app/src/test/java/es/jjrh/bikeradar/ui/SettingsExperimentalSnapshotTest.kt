@@ -35,6 +35,8 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
+                    turnAwareEnabled = false,
+                    onTurnAwareChange = {},
                 )
             }
         }
@@ -52,6 +54,8 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
+                    turnAwareEnabled = false,
+                    onTurnAwareChange = {},
                 )
             }
         }
@@ -72,6 +76,8 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
+                    turnAwareEnabled = false,
+                    onTurnAwareChange = {},
                 )
             }
         }
@@ -89,6 +95,27 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = true,
                     onLateralPanningInvertLRChange = {},
+                    turnAwareEnabled = false,
+                    onTurnAwareChange = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun turnAwareOn() {
+        captureRoboImage {
+            UiTheme {
+                SettingsExperimentalContent(
+                    navController = rememberNavController(),
+                    precogEnabled = false,
+                    onPrecogChange = {},
+                    lateralPanningEnabled = false,
+                    onLateralPanningChange = {},
+                    lateralPanningInvertLR = false,
+                    onLateralPanningInvertLRChange = {},
+                    turnAwareEnabled = true,
+                    onTurnAwareChange = {},
                 )
             }
         }

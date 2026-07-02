@@ -58,6 +58,17 @@ internal class OverlayPipeline(
     private val overlayPrefsSnapshot: () -> PrefsSnapshot,
     private val ebikeSnapshot: () -> LiveDataSnapshot?,
     private val climbingNow: () -> Boolean,
+    /** Turn-aware alerting (experimental): the rider's current turn state
+     *  ([TurnSensorController]) - TURNING defers the all-clear, HOLD
+     *  anchors the adaptive post-turn tail. Consulted per frame;
+     *  additionally gated on the Settings flag so a mid-ride toggle-off
+     *  takes effect immediately. */
+    private val turnState: () -> TurnStateDecider.State = { TurnStateDecider.State.IDLE },
+    /** Start/stop hooks for the turn sensor, tied to the overlay session
+     *  so the gyroscope only runs while a ride is live and the flag is
+     *  on. Injected as lambdas to keep the pipeline JVM-constructible. */
+    private val turnSensorStart: () -> Unit = {},
+    private val turnSensorStop: () -> Unit = {},
     private val currentRadarMac: () -> String?,
     private val macToSlug: () -> Map<String, String>,
     private val clog: (String) -> Unit,
@@ -93,8 +104,11 @@ internal class OverlayPipeline(
                 enabled = prefs.experimentalLateralPanning,
                 invertLR = prefs.experimentalLateralPanningInvertLR,
             )
-            val alerts = AlertDecider()
+            val alerts = AlertDecider(
+                onTurnDefer = { tailMs -> clog("# turn clear-defer tail_ms=$tailMs") },
+            )
             val closePassDetector = ClosePassDetector()
+            if (prefs.turnAwareAlertsEnabled) turnSensorStart()
             var closePassDiscoveryPublished = false
             var closePassDiscoveryInFlight = false
             val sessionStartMs = System.currentTimeMillis()
@@ -239,6 +253,7 @@ internal class OverlayPipeline(
                         }
                     }
             } finally {
+                turnSensorStop()
                 if (overlayAdded) {
                     overlayHost.detach(view)
                     clog("# overlay removed")
@@ -338,6 +353,11 @@ internal class OverlayPipeline(
             bikeNotDriving = snap?.bikeNotDriving,
             climbing = climbingNow(),
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
+            turnState = if (overlayPrefs.turnAwareAlertsEnabled) {
+                turnState()
+            } else {
+                TurnStateDecider.State.IDLE
+            },
         )
         if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs)
         beeper.setPanning(

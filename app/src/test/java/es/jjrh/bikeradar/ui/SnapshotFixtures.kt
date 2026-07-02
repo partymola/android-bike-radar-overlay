@@ -41,6 +41,7 @@ internal object SnapshotFixtures {
         precogEnabled = false,
         experimentalLateralPanning = false,
         experimentalLateralPanningInvertLR = false,
+        turnAwareAlertsEnabled = false,
         closePassLoggingEnabled = false,
         closePassEmitMinRangeXM = 1.0f,
         closePassRiderSpeedFloorKmh = 15,

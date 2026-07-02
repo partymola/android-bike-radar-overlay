@@ -54,6 +54,7 @@ data class PrefsSnapshot(
     val precogEnabled: Boolean,
     val experimentalLateralPanning: Boolean,
     val experimentalLateralPanningInvertLR: Boolean,
+    val turnAwareAlertsEnabled: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
     val closePassRiderSpeedFloorKmh: Int,
@@ -313,6 +314,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LATERAL_PANNING_INVERT, false)
         set(v) {
             sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply()
+        }
+
+    /** Experimental: hold the alert episode open through substantial
+     *  corners. Cornering sweeps the radar's rear cone off every followed
+     *  car, so without the hold each 90-degree turn with a follower
+     *  produces a spurious all-clear plus a fresh beep when the same car
+     *  is reacquired seconds later. Uses the gyroscope only while a ride
+     *  is live. Default off while field evidence accumulates. */
+    var turnAwareAlertsEnabled: Boolean
+        get() = sp.getBoolean(KEY_TURN_AWARE_ALERTS, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_TURN_AWARE_ALERTS, v).apply()
         }
 
     /** Master toggle for close-pass event logging to Home Assistant.
@@ -585,6 +598,7 @@ class Prefs(context: Context) {
         precogEnabled = precogEnabled,
         experimentalLateralPanning = experimentalLateralPanning,
         experimentalLateralPanningInvertLR = experimentalLateralPanningInvertLR,
+        turnAwareAlertsEnabled = turnAwareAlertsEnabled,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
         closePassRiderSpeedFloorKmh = closePassRiderSpeedFloorKmh,
@@ -643,6 +657,7 @@ class Prefs(context: Context) {
         appendLine("precog_enabled=$precogEnabled")
         appendLine("experimental_lateral_panning=$experimentalLateralPanning")
         appendLine("experimental_lateral_panning_invert_lr=$experimentalLateralPanningInvertLR")
+        appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
         appendLine("close_pass_rider_floor_kmh=$closePassRiderSpeedFloorKmh")
@@ -687,6 +702,7 @@ class Prefs(context: Context) {
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_PRECOG = "precog_enabled"
+        const val KEY_TURN_AWARE_ALERTS = "turn_aware_alerts_enabled"
         const val KEY_LATERAL_PANNING = "experimental_lateral_panning"
         const val KEY_LATERAL_PANNING_INVERT = "experimental_lateral_panning_invert_lr"
         const val KEY_CLOSE_PASS_ENABLED = "close_pass_logging_enabled"

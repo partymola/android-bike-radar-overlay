@@ -318,6 +318,26 @@ class PrefsTest {
     }
 
     @Test
+    fun radarFirmwareRevDefaultsNullAndRoundTrips() {
+        assertNull(prefs.radarFirmwareRev)
+        prefs.radarFirmwareRev = "6.70"
+        assertEquals("6.70", prefs.radarFirmwareRev)
+        assertEquals("6.70", prefs.snapshot().radarFirmwareRev)
+        // A radar swap clears it back to unknown (Settings does this when a
+        // different unit is pinned).
+        prefs.radarFirmwareRev = null
+        assertNull(prefs.radarFirmwareRev)
+    }
+
+    @Test
+    fun firmwareLateralCorrectionDefaultsOnAndRoundTrips() {
+        assertTrue(prefs.firmwareLateralCorrectionEnabled)
+        prefs.firmwareLateralCorrectionEnabled = false
+        assertFalse(prefs.firmwareLateralCorrectionEnabled)
+        assertFalse(prefs.snapshot().firmwareLateralCorrectionEnabled)
+    }
+
+    @Test
     fun isPausedTracksThePausedUntilTimestamp() {
         prefs.pausedUntilEpochMs = System.currentTimeMillis() + 60_000L
         assertTrue(prefs.isPaused)

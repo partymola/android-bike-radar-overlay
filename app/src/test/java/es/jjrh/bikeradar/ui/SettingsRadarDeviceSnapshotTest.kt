@@ -59,6 +59,28 @@ class SettingsRadarDeviceSnapshotTest {
     }
 
     @Test
+    fun firmwareWithKnownBias() {
+        // Firmware with a table entry: the device card grows the software
+        // line and the side-bias correction toggle appears below the mount
+        // slider. Every other snapshot passes firmwareRev = null, pinning
+        // that unaffected riders never see the row.
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA),
+                    chosenMac = null,
+                    activeName = radarA.name,
+                    connected = true,
+                    batteryPct = 78,
+                    firmwareRev = "6.70",
+                    fwCorrectionEnabled = true,
+                )
+            }
+        }
+    }
+
+    @Test
     fun offline() {
         captureRoboImage {
             UiTheme {

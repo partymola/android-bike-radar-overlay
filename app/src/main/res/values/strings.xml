@@ -421,6 +421,9 @@
     <string name="settings_radardev_position_centred">Centred</string>
     <string name="settings_radardev_position_left">%1$d cm left</string>
     <string name="settings_radardev_position_right">%1$d cm right</string>
+    <string name="settings_radardev_firmware">Radar software %1$s</string>
+    <string name="settings_radardev_fwfix_title">Correct side bias</string>
+    <string name="settings_radardev_fwfix_subtitle">Radar software %1$s shows cars shifted to one side. Keep on unless positions look wrong.</string>
 
     <!-- Settings → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>

@@ -62,6 +62,12 @@ object RadarUnlock {
         queue: BleOpQueue,
         notifies: Channel<Pair<UUID, ByteArray>>,
         deviceVariant: DeviceVariant = DeviceVariant.RADAR,
+        /** Invoked with the device's firmware revision string when the
+         *  RADAR-path DIS read (already part of the unlock sequence)
+         *  returns a parseable value. Fires before the handshake returns,
+         *  so the caller can key per-firmware behaviour (lateral
+         *  correction) without a second GATT round trip. */
+        onFirmwareRevision: (String) -> Unit = {},
         clog: (String) -> Unit,
     ): Boolean {
         val txUuid = if (deviceVariant == DeviceVariant.FRONT_CAMERA) Uuids.CHAR_2820 else Uuids.HANDSHAKE_TX
@@ -230,6 +236,8 @@ object RadarUnlock {
             if (!subscribeCccd(gatt, queue, Uuids.SVC_RADAR, Uuids.RADAR_V2, clog)) return false
             delay(140)
             readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_FIRMWARE_REV, clog)
+                ?.let { parseDisUtf8(it) }
+                ?.let(onFirmwareRevision)
             delay(90)
             readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_SERIAL_NUMBER, clog)
             clog("DIS-CCCD-DIS sequence complete — observing 3204")
@@ -327,13 +335,29 @@ object RadarUnlock {
         svcUuid: UUID,
         charUuid: UUID,
         clog: (String) -> Unit,
-    ) {
+    ): ByteArray? {
         val ch = gatt.getService(svcUuid)?.getCharacteristic(charUuid) ?: run {
             clog("readChar: char not found ${charUuid.toString().substring(4, 8)}")
-            return
+            return null
         }
         val result = queue.read(gatt, ch)
         clog("# read ${charUuid.toString().substring(4, 8)} -> ${result?.toHex() ?: "null"}")
+        return result
+    }
+
+    /**
+     * Decode a Device Information Service string characteristic (UTF-8 per
+     * the Bluetooth spec, in practice ASCII like "6.70"): strip NUL padding
+     * and whitespace, reject empty or non-printable results. Null means
+     * "unusable read" - callers must treat it as firmware-unknown, never
+     * as a version. Internal so the byte-level edge cases are pinned by
+     * unit tests without a GATT stack.
+     */
+    internal fun parseDisUtf8(bytes: ByteArray): String? {
+        val s = bytes.toString(Charsets.UTF_8).trim { it <= ' ' }
+        if (s.isEmpty() || s.length > 32) return null
+        if (s.any { it.code < 0x20 || it.code == 0x7F }) return null
+        return s
     }
 
     @SuppressLint("MissingPermission")

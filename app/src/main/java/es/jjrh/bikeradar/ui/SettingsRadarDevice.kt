@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.FirmwareLateralCorrection
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.Prefs
@@ -112,12 +113,21 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
             )
         },
         onSelectRadar = { radar ->
+            if (!radar.mac.equals(prefs.radarMac, ignoreCase = true)) {
+                // Different unit: the stored firmware revision described the
+                // old radar. Drop it rather than let its lateral correction
+                // apply to the new unit until the first successful read.
+                prefs.radarFirmwareRev = null
+            }
             prefs.radarMac = radar.mac
             prefs.radarDisplayName = radar.name
         },
         offsetCm = offsetCm,
         onOffsetChange = { offsetCm = it },
         onOffsetCommit = { prefs.radarLateralOffsetCm = offsetCm },
+        firmwareRev = prefsSnap.radarFirmwareRev,
+        fwCorrectionEnabled = prefsSnap.firmwareLateralCorrectionEnabled,
+        onFwCorrectionChange = { prefs.firmwareLateralCorrectionEnabled = it },
     )
 }
 
@@ -140,6 +150,9 @@ internal fun SettingsRadarDeviceContent(
     offsetCm: Int = 0,
     onOffsetChange: (Int) -> Unit = {},
     onOffsetCommit: () -> Unit = {},
+    firmwareRev: String? = null,
+    fwCorrectionEnabled: Boolean = true,
+    onFwCorrectionChange: (Boolean) -> Unit = {},
 ) {
     val br = LocalBrColors.current
     var othersExpanded by rememberSaveable { mutableStateOf(false) }
@@ -238,6 +251,14 @@ internal fun SettingsRadarDeviceContent(
                                 BatteryChip(pct = batteryPct)
                             }
                         }
+                        if (firmwareRev != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.settings_radardev_firmware, firmwareRev),
+                                color = br.fgDim,
+                                fontSize = 11.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -293,6 +314,20 @@ internal fun SettingsRadarDeviceContent(
                 onValueChange = { onOffsetChange(snapOffsetCm(it)) },
                 onValueChangeFinished = onOffsetCommit,
             )
+
+            // Firmware-keyed lateral correction. Only offered when the last
+            // read firmware version has a known sideways bias - riders on
+            // unaffected firmware never see the row.
+            if (FirmwareLateralCorrection.correctionCm(firmwareRev) != 0) {
+                SettingsRowGroup {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_radardev_fwfix_title),
+                        subtitle = stringResource(R.string.settings_radardev_fwfix_subtitle, firmwareRev.orEmpty()),
+                        checked = fwCorrectionEnabled,
+                        onCheckedChange = onFwCorrectionChange,
+                    )
+                }
+            }
 
             SettingsSectionLabel(stringResource(R.string.settings_radardev_section_actions))
             SettingsRowGroup {

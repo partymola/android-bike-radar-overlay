@@ -55,6 +55,8 @@ internal object SnapshotFixtures {
         radarMac = null,
         radarDisplayName = null,
         radarLateralOffsetCm = 0,
+        radarFirmwareRev = null,
+        firmwareLateralCorrectionEnabled = true,
         eBikeDataEnabled = false,
         eBikeOwnership = EBikeOwnership.UNANSWERED,
         eBikeUnknownObjectLogEnabled = false,

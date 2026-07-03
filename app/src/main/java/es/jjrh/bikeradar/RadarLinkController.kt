@@ -383,7 +383,21 @@ internal class RadarLinkController(
             Log.i(TAG, "connected, running handshake")
             journal("radar connected, running handshake")
 
-            val handshakeOk = RadarUnlock.runHandshake(gatt, queue, notifyChannel) { msg ->
+            // Firmware revision arrives via the DIS read inside the unlock
+            // sequence (before runHandshake returns), so the decoder below
+            // can be constructed with the firmware-keyed lateral correction
+            // already resolved. Persisted so the correction survives a
+            // session whose read fails.
+            var firmwareRev: String? = null
+            val handshakeOk = RadarUnlock.runHandshake(
+                gatt,
+                queue,
+                notifyChannel,
+                onFirmwareRevision = { rev ->
+                    firmwareRev = rev
+                    prefs.radarFirmwareRev = rev
+                },
+            ) { msg ->
                 captureLog.clog("# script: $msg")
             }
 
@@ -405,7 +419,16 @@ internal class RadarLinkController(
             overlayJob = overlayPipeline.attach(scope, name)
 
             val rearMac = gatt.device?.address
-            val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm)
+            val effectiveOffsetCm = FirmwareLateralCorrection.effectiveLateralOffsetCm(
+                mountOffsetCm = prefs.radarLateralOffsetCm,
+                firmwareRev = firmwareRev ?: prefs.radarFirmwareRev,
+                correctionEnabled = prefs.firmwareLateralCorrectionEnabled,
+            )
+            captureLog.clog(
+                "# radar_fw rev=${firmwareRev ?: prefs.radarFirmwareRev ?: "unknown"}" +
+                    " lateral_offset_cm=$effectiveOffsetCm",
+            )
+            val v2Dec = RadarV2Decoder(lateralOffsetCm = effectiveOffsetCm)
             var v2FrameCount = 0
 
             // Mark this connection as healthy so the reconnect loop resets

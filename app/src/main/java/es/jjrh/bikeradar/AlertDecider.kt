@@ -126,8 +126,9 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *         [URGENT_PASS_FIT_MIN_SPAN_M]+ of approach) and predicts
  *         `|rangeXm|` >= [URGENT_PASS_LATERAL_MIN_M] at the pass, the
  *         car is committed to a side pass, not an impact line. The
- *         threshold is deliberately loose while the post-6.70 radar
- *         lateral bias is uncorrected; see the constant's KDoc.
+ *         threshold is deliberately loose while the firmware-keyed
+ *         lateral correction's value is still provisional; see the
+ *         constant's KDoc.
  *  - **Urgent episode pacing.** The urgent cue repeats while an
  *    imminent condition is held (see the trigger-site comment for the
  *    alarm-standards rationale) - but a platoon released behind a
@@ -1126,22 +1127,22 @@ class AlertDecider(
          *  the firing frame. 6 m is just under two UK lane widths
          *  (~3.65 m each): rear-cone traffic that can reach the rider
          *  within the <= 3 s TTC window cannot be two lanes to the side,
-         *  while the post-6.70 radar lateral bias (~1.2-1.5 m left,
-         *  uncorrected) plus a genuine same-lane offset stays far inside
-         *  the veto. Ride-validated 2026-07-03: the parallel-street
-         *  artefacts fired from 7-33 m off-axis; the closest genuine
-         *  urgent candidates all read within ~3 m. */
+         *  and the margin absorbs any residual error from the
+         *  provisional [FirmwareLateralCorrection] value plus a genuine
+         *  same-lane offset. Ride-validated 2026-07-03: the
+         *  parallel-street artefacts fired from 7-33 m off-axis; the
+         *  closest genuine urgent candidates all read within ~3 m. */
         const val URGENT_LATERAL_MAX_M = 6f
 
         /** Minimum |predicted pass rangeXm| (m) at which the
          *  predicted-pass veto suppresses an urgent candidate: the fit
          *  says the car crosses distance 0 at least this far to the
-         *  side. Deliberately loose - a dead-centre threat must never be
-         *  vetoed, and the post-6.70 firmware reads followers
-         *  ~1.2-1.5 m left of truth, so the threshold must exceed
-         *  bias + fit noise with margin. Tighten toward ~1.5 m once the
-         *  firmware-keyed lateral correction lands and rangeXm is
-         *  unbiased. */
+         *  side. Deliberately loose - a dead-centre threat must never
+         *  be vetoed, so the threshold must exceed the residual error
+         *  of the provisional [FirmwareLateralCorrection] value plus
+         *  fit noise with margin. Tighten toward ~1.5 m once ride
+         *  captures confirm the correction leaves followers reading
+         *  centred. */
         const val URGENT_PASS_LATERAL_MIN_M = 2.5f
 
         /** Minimum samples in a track's lateral history before its

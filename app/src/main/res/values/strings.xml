@@ -156,11 +156,17 @@
     <string name="onboarding_skip">Skip</string>
     <string name="onboarding_skip_for_now">Skip for now</string>
     <string name="onboarding_finish">Finish</string>
-    <string name="onboarding_step_1_of_4">Step 1 of 4</string>
-    <string name="onboarding_step_2_of_4">Step 2 of 4</string>
-    <string name="onboarding_step_3_of_4">Step 3 of 4</string>
+    <string name="onboarding_step_1_of_5">Step 1 of 5</string>
+    <string name="onboarding_step_2_of_5">Step 2 of 5</string>
+    <string name="onboarding_step_3_of_5">Step 3 of 5</string>
+    <string name="onboarding_step_4_of_5">Step 4 of 5</string>
     <string name="onboarding_last_step">Last step</string>
     <string name="onboarding_privacy_full_detail">Full detail: Settings → Privacy</string>
+
+    <!-- Step 4: radar position (mount offset; slider labels reused from
+         settings_radardev_position_*) -->
+    <string name="onboarding_radarpos_title">Where\'s your radar mounted?</string>
+    <string name="onboarding_radarpos_sub">Centred is typical. If yours sits to one side, set that here so the overlay and alerts read true. You can change it any time in Settings.</string>
 
     <!-- Step 1: permissions -->
     <string name="onboarding_perm_title">Grant permissions</string>

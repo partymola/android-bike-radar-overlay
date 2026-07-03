@@ -144,11 +144,14 @@
     <string name="onboarding_skip">Omitir</string>
     <string name="onboarding_skip_for_now">Omitir por ahora</string>
     <string name="onboarding_finish">Finalizar</string>
-    <string name="onboarding_step_1_of_4">Paso 1 de 4</string>
-    <string name="onboarding_step_2_of_4">Paso 2 de 4</string>
-    <string name="onboarding_step_3_of_4">Paso 3 de 4</string>
+    <string name="onboarding_step_1_of_5">Paso 1 de 5</string>
+    <string name="onboarding_step_2_of_5">Paso 2 de 5</string>
+    <string name="onboarding_step_3_of_5">Paso 3 de 5</string>
+    <string name="onboarding_step_4_of_5">Paso 4 de 5</string>
     <string name="onboarding_last_step">Último paso</string>
     <string name="onboarding_privacy_full_detail">Más detalle: Ajustes → Privacidad</string>
+    <string name="onboarding_radarpos_title">¿Dónde va montado el radar?</string>
+    <string name="onboarding_radarpos_sub">Lo normal es centrado. Si el tuyo va a un lado, indícalo aquí para que la barra lateral y los avisos sean fieles. Puedes cambiarlo cuando quieras en Ajustes.</string>
 
     <!-- Paso 1: permisos -->
     <string name="onboarding_perm_title">Conceder permisos</string>

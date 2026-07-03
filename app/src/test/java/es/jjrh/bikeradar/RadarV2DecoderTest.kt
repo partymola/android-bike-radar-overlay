@@ -222,6 +222,39 @@ class RadarV2DecoderTest {
         assertEquals(0.75f, v.lateralPos, 0.001f)
     }
 
+    @Test fun rangeXmCarriesUnclampedMetres() {
+        // lateralPos saturates at +/-1.0 (+/-3 m); rangeXm must keep the
+        // raw magnitude - the urgent lateral gates need to tell one lane
+        // over (3 m) from a parallel street (12 m). Raw -120 = -12.0 m.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -120)))
+        val v = state!!.vehicles.single()
+        assertEquals(-1f, v.lateralPos, 0.0001f)
+        assertEquals(-12f, v.rangeXm, 0.001f)
+    }
+
+    @Test fun rangeXmGetsTheMountOffsetCorrection() {
+        // Same translation as lateralPos: raw -8 (-0.8 m) + 20 cm right
+        // mount = -0.6 m in the bike frame.
+        val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
+        val v = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .vehicles.single()
+        assertEquals(-0.6f, v.rangeXm, 0.001f)
+    }
+
+    @Test fun lateralUnknownCarryForwardKeepsUnclampedRangeXm() {
+        // A track beyond the +/-3 m saturation that hits the
+        // lateral-unknown sentinel must carry its RAW metres forward, not
+        // the clamped lateralPos re-expanded (which would teleport a
+        // 12 m-out track to the 3 m clamp boundary). lateralPos itself is
+        // unchanged (clamping is idempotent).
+        val dec = RadarV2Decoder(nowMs = { now })
+        dec.feed(packet(target(tid = 1, rangeY = 200, rangeX = -120)))
+        val v = dec.feed(packet(target(tid = 1, rangeY = 200, rangeX = 0)))!!.vehicles.single()
+        assertTrue("carry-forward must trigger lateral-unknown", v.lateralUnknown)
+        assertEquals(-1f, v.lateralPos, 0.0001f)
+        assertEquals(-12f, v.rangeXm, 0.001f)
+    }
+
     @Test fun classLowClassifiesAsCar() {
         // CLASS_LOW = "low-RCS / low-confidence return", not "is a
         // bike". Trucks present as CLASS_LOW for several seconds of

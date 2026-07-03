@@ -187,8 +187,13 @@ class RadarV2Decoder(
             prev != null &&
             abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
 
+        // On a lateral-unknown frame carry the previous RAW metres, not the
+        // clamped lateralPos re-expanded: for a track beyond the +/-3 m
+        // saturation the re-expansion would silently teleport it to the
+        // clamp boundary. lateralPos derived below is unchanged either way
+        // (clamping is idempotent); only rangeXm keeps the true magnitude.
         val rangeX = if (lateralUnknown) {
-            prev.vehicle.lateralPos * LATERAL_FULL_M
+            prev.vehicle.rangeXm
         } else {
             rangeXSigned + lateralOffsetM
         }
@@ -216,6 +221,7 @@ class RadarV2Decoder(
                 speedMs = speedMs,
                 size = debounced.committed,
                 lateralPos = lateralPos,
+                rangeXm = rangeX,
                 isBehind = isBehind,
                 speedXMs = speedXMs,
                 lateralUnknown = lateralUnknown,

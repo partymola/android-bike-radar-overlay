@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import kotlin.math.abs
 import kotlin.math.max
 
 /**
@@ -104,6 +105,42 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    The closing-speed floor on the TTC gate filters slow-queue
  *    traffic merging into a stopped rider, where the driver is
  *    clearly tracking and braking.
+ *  - **Urgent lateral-plausibility gates.** Both urgent disjuncts are
+ *    distance+closing only, which makes them blind to WHERE the car is
+ *    heading: a rider stopped beside a live lane meets a stream of
+ *    vehicles that each close fast and pass metres to the side, and a
+ *    car on a parallel street can satisfy the TTC arithmetic from 30 m
+ *    off-axis. Ride evidence (2026-07-03, stopped on a multi-lane road):
+ *    27 urgent cues in ~65 s, every firing track ending as a side pass.
+ *    Two vetoes, both failing OPEN (no/unreliable lateral data = fire):
+ *      a) **off-axis veto** - a candidate whose raw lateral offset
+ *         `|rangeXm|` exceeds [URGENT_LATERAL_MAX_M] on the firing frame
+ *         is not an imminent-impact threat: rear-cone traffic that can
+ *         reach the rider inside the <= 3 s TTC window cannot be two
+ *         lanes off-axis. Kills crossing/parallel-street artefacts.
+ *         Skipped when the frame is [Vehicle.lateralUnknown].
+ *      b) **predicted-pass veto** - a straight least-squares fit of the
+ *         track's recent (distance, rangeXm) history extrapolates its
+ *         lateral offset at distance 0 (the pass point). When the fit is
+ *         confident ([URGENT_PASS_FIT_MIN_POINTS]+ sightings spanning
+ *         [URGENT_PASS_FIT_MIN_SPAN_M]+ of approach) and predicts
+ *         `|rangeXm|` >= [URGENT_PASS_LATERAL_MIN_M] at the pass, the
+ *         car is committed to a side pass, not an impact line. The
+ *         threshold is deliberately loose while the post-6.70 radar
+ *         lateral bias is uncorrected; see the constant's KDoc.
+ *  - **Urgent episode pacing.** The urgent cue repeats while an
+ *    imminent condition is held (see the trigger-site comment for the
+ *    alarm-standards rationale) - but a platoon released behind a
+ *    stopped rider re-satisfies the gates with a NEW track every 1-3 s,
+ *    which turns "repeat while held" into a continuous alarm. Fires
+ *    within one episode (qualifying targets seen with gaps under
+ *    [URGENT_EPISODE_GAP_MS]) are paced at [URGENT_EPISODE_REPEAT_MS]
+ *    rather than the raw beep cooldown, EXCEPT when the trigger closes
+ *    at least [URGENT_NEW_THREAT_CLOSING_DELTA_MS] faster than anything
+ *    already observed this episode - genuinely new severity fires
+ *    immediately (IEC 60601-1-8 "paused with new-condition override",
+ *    the pattern the audio design already follows). The first fire of
+ *    an episode is never delayed.
  *  - **Turn-aware clear deferral (experimental).** Cornering sweeps the
  *    radar's rear cone off every followed car, so mid-turn the stream
  *    reads empty while the road is not. While [TurnStateDecider] reports
@@ -325,6 +362,42 @@ class AlertDecider(
      *  satisfied. [NOT_INITIALIZED] until the first call of this session. */
     private var lastNotStationaryAtMs: Long = NOT_INITIALIZED
 
+    /** One (monotonic ms, distanceM, rangeXm) sighting for the
+     *  predicted-pass veto's per-track fit. */
+    private data class LateralSample(val atMs: Long, val distanceM: Int, val rangeXm: Float)
+
+    /** tid -> recent lateral sightings, newest last, used by the
+     *  predicted-pass veto. Appended for every non-`isBehind`,
+     *  non-[Vehicle.lateralUnknown] sighting each frame, capped at
+     *  [URGENT_PASS_HISTORY_MAX] samples. A gap longer than
+     *  [URGENT_PASS_HISTORY_RESET_MS] clears the deque before appending:
+     *  radar tids are recycled, and a stale run bleeding into a new car's
+     *  fit would corrupt the extrapolation. Entries idle past the reset
+     *  window are dropped wholesale each frame for the same reason. */
+    private val lateralHistory = HashMap<Int, ArrayDeque<LateralSample>>()
+
+    /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
+     *  the lateral vetoes passed) was last present. Two qualifying
+     *  sightings closer together than [URGENT_EPISODE_GAP_MS] belong to
+     *  the same urgent episode; a longer quiet gap starts a fresh one. */
+    private var urgentLastQualifyingSeenMs: Long = NOT_INITIALIZED
+
+    /** Monotonic ms of the last audible [Event.UrgentApproach], paced by
+     *  [URGENT_EPISODE_REPEAT_MS] within an episode. Independent of
+     *  [lastBeepAtMs], which every beep flavour shares. */
+    private var urgentLastFireMs: Long = NOT_INITIALIZED
+
+    /** Fastest closing speed (m/s, positive) among this episode's
+     *  triggering candidates at their fire/suppress checks. A new
+     *  candidate must beat it by [URGENT_NEW_THREAT_CLOSING_DELTA_MS] to
+     *  bypass the episode pacing. */
+    private var urgentEpisodePeakClosing: Float = 0f
+
+    /** True once this episode has produced an audible urgent fire; until
+     *  then the pacing does not apply (the first warning is never
+     *  delayed). */
+    private var urgentFiredThisEpisode: Boolean = false
+
     fun decide(
         vehicles: List<Vehicle>,
         alertMaxM: Int,
@@ -509,7 +582,7 @@ class AlertDecider(
         // below the stationary speed threshold - or, with the low-speed
         // extension on, still moving at <= URGENT_MOVING_MAX_KMH - and
         // ANY vehicle in the close set looks imminent, fire
-        // UrgentApproach every cooldown.
+        // UrgentApproach, repeating at the episode pacing below.
         //
         // Two disjunct gates (a vehicle satisfying either fires):
         //   1. Proximity gate (radar-quantum strict): near-third
@@ -541,9 +614,14 @@ class AlertDecider(
         // No per-tid latch. Industry standards (TCAS, automotive FCW,
         // IEC 60601-1-8 medical, NFPA 72 smoke T3, ISO 7731 industrial)
         // all repeat-while-held for imminent-danger cues. DO NOT add a
-        // per-tid latch. Known interaction: because UrgentApproach never
-        // writes firedTierPerTid, a car that de-escalates a full tier
-        // after an urgent volley and then re-approaches can re-Beep
+        // per-tid latch: threat identity is not what re-arms the cue.
+        // The repeat CADENCE within an episode is paced instead (see the
+        // episode block below) - repeats continue while the condition
+        // holds, at a rate meaningful for a rider rather than per beep
+        // cooldown, and a genuinely-faster new closer overrides the
+        // pacing immediately. Known interaction: because UrgentApproach
+        // never writes firedTierPerTid, a car that de-escalates a full
+        // tier after an urgent volley and then re-approaches can re-Beep
         // where the stationary-only behaviour stayed latched. Corpus
         // replay measured 11 such beeps across 105 rides - accepted,
         // since the re-approach is genuinely new threat information
@@ -561,6 +639,10 @@ class AlertDecider(
         // stationary 6 m/s; a stationary rider keeps the shipped floors.
         val urgentClosingFloor =
             if (urgentViaMoving) URGENT_MOVING_CLOSING_FLOOR_MS else TTC_GATE_CLOSING_FLOOR_MS
+        // Feed the predicted-pass fit with this frame's sightings BEFORE
+        // evaluating the trigger, so the veto judges each candidate on the
+        // freshest data (including the frame that would fire).
+        updateLateralHistory(vehicles, nowMs)
         val imminentImpactTrigger = if (!riderBelowStationaryForUrgent && !urgentViaMoving) {
             null
         } else {
@@ -574,17 +656,48 @@ class AlertDecider(
                     closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
                     v.distanceM in 0..alertMaxM &&
                     v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
-                byProximity || byTtc
+                (byProximity || byTtc) && urgentLaterallyPlausible(v)
             }
         }
-        val anyImminentImpact = imminentImpactTrigger != null
+        // Urgent episode pacing. A qualifying-target gap longer than
+        // URGENT_EPISODE_GAP_MS lapses the episode; the next fire is a
+        // fresh first warning. Within an episode, fires are paced at
+        // URGENT_EPISODE_REPEAT_MS - except a candidate closing at least
+        // URGENT_NEW_THREAT_CLOSING_DELTA_MS faster than the episode's
+        // peak, which is new severity and fires immediately. The peak
+        // ratchets on EVERY qualifying check, audible or paced-out, so a
+        // silent creep of ever-slightly-faster cars cannot re-trigger -
+        // only a step change can. Peak/seen updates happen AFTER the
+        // allow decision so a candidate is always judged against the
+        // episode state before it arrived.
+        if (imminentImpactTrigger != null &&
+            urgentLastQualifyingSeenMs != NOT_INITIALIZED &&
+            nowMs - urgentLastQualifyingSeenMs > URGENT_EPISODE_GAP_MS
+        ) {
+            urgentEpisodePeakClosing = 0f
+            urgentFiredThisEpisode = false
+        }
+        val triggerClosingMs = imminentImpactTrigger?.let { -it.speedMs } ?: 0f
+        val urgentAllowedByEpisode = imminentImpactTrigger != null &&
+            (
+                !urgentFiredThisEpisode ||
+                    (urgentLastFireMs != NOT_INITIALIZED && nowMs - urgentLastFireMs >= URGENT_EPISODE_REPEAT_MS) ||
+                    triggerClosingMs >= urgentEpisodePeakClosing + URGENT_NEW_THREAT_CLOSING_DELTA_MS
+                )
+        if (imminentImpactTrigger != null) {
+            urgentLastQualifyingSeenMs = nowMs
+            if (triggerClosingMs > urgentEpisodePeakClosing) {
+                urgentEpisodePeakClosing = triggerClosingMs
+            }
+        }
+        val anyImminentImpact = urgentAllowedByEpisode
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
         if (triggered) beepPending = true
 
         // Scale the regular-Beep cooldown by rider speed. Do NOT
-        // scale the UrgentApproach repeat-while-held cadence; a slow /
-        // stationary rider in front of an imminent threat must still
-        // get the repeated warning at the base rate.
+        // scale the UrgentApproach cadence; a slow / stationary rider in
+        // front of an imminent threat gets the repeated warning at the
+        // episode pacing, never widened by the slow-speed band.
         val sinceLastBeep = nowMs - lastBeepAtMs
         // E1: a strict tier raise (escalation) on the closest tid is new
         // threat information, not same-tier chatter, so per [escalationBypass]
@@ -679,13 +792,15 @@ class AlertDecider(
             beepPending && cooldownDone && stableTids.isNotEmpty() -> {
                 when {
                     anyImminentImpact -> {
-                        // Held imminent threat: fire urgent every cooldown
-                        // until threat clears. Carry the triggering
+                        // Held imminent threat: re-fire at the episode
+                        // pacing until it clears. Carry the triggering
                         // vehicle's lateralPos so audio consumers can pan
                         // to the threat's side when the experimental
                         // directional-audio flag is on.
                         lastBeepAtMs = nowMs
                         beepPending = false
+                        urgentLastFireMs = nowMs
+                        urgentFiredThisEpisode = true
                         Event.UrgentApproach(
                             lateralPos = imminentImpactTrigger.lateralPos,
                             viaMovingPath = urgentViaMoving,
@@ -743,6 +858,81 @@ class AlertDecider(
         prevCloseRaw = emptySet()
         prevBehindRaw = emptySet()
         lastNotStationaryAtMs = NOT_INITIALIZED
+        lateralHistory.clear()
+        urgentLastQualifyingSeenMs = NOT_INITIALIZED
+        urgentLastFireMs = NOT_INITIALIZED
+        urgentEpisodePeakClosing = 0f
+        urgentFiredThisEpisode = false
+    }
+
+    /** Append this frame's usable lateral sightings to the per-track fit
+     *  history and drop stale runs. `isBehind` tracks are useless for the
+     *  pass prediction (already past the rider); `lateralUnknown` frames
+     *  carry a held-over lateral value, not a measurement, and would bias
+     *  the fit toward a stale offset. */
+    private fun updateLateralHistory(vehicles: List<Vehicle>, nowMs: Long) {
+        for (v in vehicles) {
+            if (v.isBehind || v.lateralUnknown) continue
+            val h = lateralHistory.getOrPut(v.id) { ArrayDeque() }
+            val last = h.lastOrNull()
+            if (last != null && nowMs - last.atMs > URGENT_PASS_HISTORY_RESET_MS) {
+                // Same tid after a dead gap = a recycled track id. A fit
+                // seeded with the previous car's geometry would be lying.
+                h.clear()
+            }
+            h.addLast(LateralSample(nowMs, v.distanceM, v.rangeXm))
+            while (h.size > URGENT_PASS_HISTORY_MAX) h.removeFirst()
+        }
+        // Drop whole tracks whose newest sample has gone stale, so a
+        // recycled tid that reappears only as isBehind/lateralUnknown can
+        // never be judged on another car's history.
+        lateralHistory.values.removeAll { deque ->
+            val newest = deque.lastOrNull() ?: return@removeAll true
+            nowMs - newest.atMs > URGENT_PASS_HISTORY_RESET_MS
+        }
+    }
+
+    /** Lateral-plausibility vetoes for an urgent candidate; true = the
+     *  candidate may fire. Fails OPEN: no lateral data (`rangeXm == 0f`
+     *  from lateral-free sources decodes as dead centre and passes),
+     *  unknown-sentinel frames, and unconfident fits all fire. */
+    private fun urgentLaterallyPlausible(v: Vehicle): Boolean {
+        // Unknown-sentinel frames hold a carried-forward lateral value,
+        // not a measurement: BOTH vetoes stand down. Denying a safety cue
+        // requires live lateral truth on the firing frame, however
+        // confident the track's earlier fit was.
+        if (v.lateralUnknown) return true
+        // Off-axis veto: two-plus lanes to the side on the firing frame
+        // is crossing/parallel traffic, not an impact line.
+        if (abs(v.rangeXm) > URGENT_LATERAL_MAX_M) return false
+        // Predicted-pass veto: only with a confident fit.
+        val predicted = predictedPassRangeXm(v.id) ?: return true
+        return abs(predicted) < URGENT_PASS_LATERAL_MIN_M
+    }
+
+    /** Least-squares extrapolation of the track's lateral offset at
+     *  distance 0 (the pass point) from its recent (distanceM, rangeXm)
+     *  history: fit rangeXm = a + b * distanceM, return `a`. Null when the
+     *  history is too thin to trust - fewer than
+     *  [URGENT_PASS_FIT_MIN_POINTS] samples or an approach span shorter
+     *  than [URGENT_PASS_FIT_MIN_SPAN_M] (an intercept extrapolated from a
+     *  narrow distance band amplifies radar jitter). */
+    private fun predictedPassRangeXm(tid: Int): Float? {
+        val h = lateralHistory[tid] ?: return null
+        if (h.size < URGENT_PASS_FIT_MIN_POINTS) return null
+        val minD = h.minOf { it.distanceM }
+        val maxD = h.maxOf { it.distanceM }
+        if (maxD - minD < URGENT_PASS_FIT_MIN_SPAN_M) return null
+        val n = h.size.toDouble()
+        val sumD = h.sumOf { it.distanceM.toDouble() }
+        val sumX = h.sumOf { it.rangeXm.toDouble() }
+        val sumDd = h.sumOf { it.distanceM.toDouble() * it.distanceM }
+        val sumDx = h.sumOf { it.distanceM.toDouble() * it.rangeXm }
+        val denom = n * sumDd - sumD * sumD
+        if (denom <= 0.0) return null
+        val b = (n * sumDx - sumD * sumX) / denom
+        val a = (sumX - b * sumD) / n
+        return a.toFloat()
     }
 
     /**
@@ -931,5 +1121,76 @@ class AlertDecider(
          *  proportionally faster; tier raises themselves bypass the
          *  cooldown entirely since E1. */
         const val SPEED_AWARE_COOLDOWN_FAST_KMH = 25f
+
+        /** Maximum |rangeXm| (m) an urgent candidate may sit off-axis on
+         *  the firing frame. 6 m is just under two UK lane widths
+         *  (~3.65 m each): rear-cone traffic that can reach the rider
+         *  within the <= 3 s TTC window cannot be two lanes to the side,
+         *  while the post-6.70 radar lateral bias (~1.2-1.5 m left,
+         *  uncorrected) plus a genuine same-lane offset stays far inside
+         *  the veto. Ride-validated 2026-07-03: the parallel-street
+         *  artefacts fired from 7-33 m off-axis; the closest genuine
+         *  urgent candidates all read within ~3 m. */
+        const val URGENT_LATERAL_MAX_M = 6f
+
+        /** Minimum |predicted pass rangeXm| (m) at which the
+         *  predicted-pass veto suppresses an urgent candidate: the fit
+         *  says the car crosses distance 0 at least this far to the
+         *  side. Deliberately loose - a dead-centre threat must never be
+         *  vetoed, and the post-6.70 firmware reads followers
+         *  ~1.2-1.5 m left of truth, so the threshold must exceed
+         *  bias + fit noise with margin. Tighten toward ~1.5 m once the
+         *  firmware-keyed lateral correction lands and rangeXm is
+         *  unbiased. */
+        const val URGENT_PASS_LATERAL_MIN_M = 2.5f
+
+        /** Minimum samples in a track's lateral history before its
+         *  predicted-pass intercept is trusted. */
+        const val URGENT_PASS_FIT_MIN_POINTS = 5
+
+        /** Minimum approach span (max - min distanceM, metres) the
+         *  history must cover before the intercept is trusted; an
+         *  extrapolation from a narrow distance band amplifies the
+         *  radar's ~1 m lateral jitter into metres at distance 0. */
+        const val URGENT_PASS_FIT_MIN_SPAN_M = 6
+
+        /** Cap on stored lateral samples per track. At the radar's ~5 Hz
+         *  target cadence, 12 samples is ~2.4 s of history - enough
+         *  baseline for the fit, recent enough to track a genuine
+         *  swerve toward the rider (which shrinks the predicted offset
+         *  and re-arms the cue within a couple of frames). */
+        const val URGENT_PASS_HISTORY_MAX = 12
+
+        /** Sighting gap (ms) that resets a track's lateral history. The
+         *  radar reuses track ids; a gap this long means the id came
+         *  back as a different car, and stitching the runs together
+         *  would corrupt the fit. Matches the segment-split heuristic
+         *  used in the offline capture analysis. */
+        const val URGENT_PASS_HISTORY_RESET_MS = 1_500L
+
+        /** Quiet gap (ms, no urgent-qualifying target) after which the
+         *  urgent episode lapses and the next fire is a fresh first
+         *  warning. Longer than the widest inter-car gap observed inside
+         *  the 2026-07-03 platoon storm (~4.9 s), so a light-released
+         *  stream stays one episode; far shorter than the lull between
+         *  genuinely separate encounters (38 s in the same capture). */
+        const val URGENT_EPISODE_GAP_MS = 6_000L
+
+        /** Pacing (ms) for urgent re-fires within one episode. The cue
+         *  still repeats while an imminent condition is held - the
+         *  alarm-standards pattern - but at a rate a rider can parse:
+         *  a true stationary-rider threat resolves (impact or pass)
+         *  within ~4 s of first qualifying, so 3 s yields the initial
+         *  warning plus at most one repeat per real threat, while a
+         *  platoon storm collapses from one volley per car to one cue
+         *  per pacing window. Aligned with [TTC_GATE_SECONDS]. */
+        const val URGENT_EPISODE_REPEAT_MS = 3_000L
+
+        /** Closing-speed margin (m/s) over the episode's peak that lets a
+         *  candidate bypass the episode pacing: closing this much faster
+         *  than anything already observed this episode is new severity, not a
+         *  re-statement (IEC 60601-1-8 "new condition overrides pause").
+         *  2 m/s = 4 radar quanta - real, not jitter. */
+        const val URGENT_NEW_THREAT_CLOSING_DELTA_MS = 2f
     }
 }

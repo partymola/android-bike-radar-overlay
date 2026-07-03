@@ -21,6 +21,17 @@ data class Vehicle(
     /** -1.0 = full left, 0.0 = same lane / centre, +1.0 = full right */
     val lateralPos: Float = 0f,
     /**
+     * Lateral offset in metres, signed like [lateralPos] (negative = left,
+     * positive = right), mount-offset-corrected, UNCLAMPED. [lateralPos]
+     * saturates at +/-1.0 (= +/-[RadarV2Decoder.LATERAL_FULL_M]), which is
+     * right for overlay rendering but destroys the difference between a car
+     * one lane over and one on a parallel street 30 m away - a distinction
+     * the urgent-cue lateral gates need. 0f when no lateral data exists for
+     * the source (synthetic scenarios, defaults); consumers must fail open
+     * on 0f, matching the [lateralPos] convention.
+     */
+    val rangeXm: Float = 0f,
+    /**
      * True when the target has overtaken the rider and is now ahead of the
      * bike (rangeY < 0 in the V2 packed range field). `distanceM` in this
      * case is the absolute distance ahead, not behind. These tracks are

@@ -230,6 +230,49 @@ file on disk) and otherwise fall back to the debug signing config
 so the `release` variant can still be built for inspection
 without the production key.
 
+## Troubleshooting & FAQ
+
+**The radar shows as disconnected while I'm using the manufacturer's
+app.** That's expected. The radar accepts one Bluetooth connection at a
+time, so while the vendor's own app (for firmware updates, settings, or
+registration) holds the link, this app cannot connect and shows the
+radar as dropped. Finish in the vendor app - firmware updates in
+particular should never be interrupted - then close it, and this app
+reconnects on its own within a few seconds.
+
+**I didn't ride for a few months and now the app is dead.** Android
+automatically pauses apps you haven't opened in a while and revokes
+their permissions ("app hibernation"), which silently stops the radar
+service from starting. Before a long break - or after one, if the app
+stopped working - open the app once, and if Android asks, disable
+"Pause app activity if unused" for it under **System settings → Apps →
+Bike Radar**.
+
+**The app logged a close pass at 08:14:32 - how do I get the camera
+clip?** The app never touches the camera's footage; video stays on the
+camera's own storage. Use the timestamp from the ride history (or the
+close-pass event in Home Assistant) to find the moment, then pull the
+clip the way your camera vendor supports - their app's media gallery,
+or the camera's USB/SD storage directly. Camera clocks can drift a few
+seconds from the phone's; scrub around the timestamp.
+
+**What happens to my data on a new phone?** Nothing transfers, by
+design. Settings, ride history, and Home Assistant credentials live
+only on the phone and are excluded from Android backups (so your HA
+token can never leak through a cloud backup). On a new phone: pair the
+radar, run onboarding again, and re-enter the HA details if you use
+them. Ride history starts fresh; if you want long-term stats off the
+phone, the Home Assistant integration is the supported path.
+
+## Contributing & support
+
+Bug reports, ride captures from other radar hardware, translations, and
+PRs are welcome - see [`CONTRIBUTING.md`](CONTRIBUTING.md). The project
+does not take donations; if you want to help, the most valuable
+contributions are a hardware report from a radar the app hasn't seen
+before, and protocol corrections in the companion
+[`bike-radar-docs`](https://github.com/partymola/bike-radar-docs) repo.
+
 ## En español
 
 **Bike Radar** es una app de Android que te avisa del tráfico que tienes

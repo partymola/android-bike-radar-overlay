@@ -156,7 +156,9 @@ class RideStatsAccumulator(
      * Ingest one sounded alert cue, tagged by [AlertBeeper]'s `onCue`
      * chokepoint. Only the close-pass alarm cues ([AlertBeeper] tags `beep…`
      * and `urgent`) increment the tally; the informational cues (`clear`,
-     * `critical_battery`, `radar_drop`, `radar_reconnect`) are ignored.
+     * `critical_battery`, `radar_drop`, `radar_reconnect`) are ignored - as
+     * are failed plays (`cue_failed …` prefix), which never sounded and so
+     * must not count as heard alerts.
      */
     fun observeAlertCue(tag: String) {
         if (tag.startsWith("beep") || tag == "urgent") {

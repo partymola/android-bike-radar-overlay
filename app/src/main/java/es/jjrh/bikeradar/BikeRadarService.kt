@@ -251,17 +251,22 @@ class BikeRadarService : Service() {
         alertBeeper = AlertBeeper(
             audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
             rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
-            // Record every cue that actually sounds (post-suppression) in the
-            // capture log, so a wrong-time beep can be traced after a ride, and
-            // tally the alarm cues (beep/urgent) into the ride stats for the
-            // alerts-per-km / per-hour summary metrics. onCue runs on
-            // AlertBeeper's playback thread; rideStats is otherwise written only
-            // from the radar-collect (Main) context, so marshal the tally onto
-            // Main to keep the accumulator single-writer.
+            // Record every cue outcome (post-suppression) in the capture log:
+            // bare tags for cues that sounded, `cue_failed ...` lines for play
+            // failures - so a wrong-time beep OR a silent-audio window can be
+            // traced after a ride. The ride-stats tally keys on the bare
+            // beep/urgent tags only, so failed cues never count as heard
+            // alerts. onCue runs on AlertBeeper's playback thread; rideStats
+            // is otherwise written only from the radar-collect (Main) context,
+            // so marshal the tally onto Main to keep the accumulator
+            // single-writer.
             onCue = {
                 clog("# cue $it")
                 scope.launch(Dispatchers.Main) { rideStats.observeAlertCue(it) }
             },
+            // An audioserver death-and-recovery mid-ride is worth reviewing
+            // afterwards; the journal is always on, unlike the capture log.
+            onTracksRebuilt = { gen -> linkJournal.log("audio tracks rebuilt after a play failure (gen=$gen)") },
         ).also {
             it.setVolumePct(prefs.alertVolume)
             it.setPanning(

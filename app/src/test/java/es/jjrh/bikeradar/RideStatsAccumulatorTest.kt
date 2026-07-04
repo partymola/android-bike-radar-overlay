@@ -423,6 +423,23 @@ class RideStatsAccumulatorTest {
         assertEquals(0.0f, s.alertsPerHourOfRide!!, 1e-4f)
     }
 
+    @Test
+    fun failedCuesAreExcludedFromTheAlarmTally() {
+        // A `cue_failed ` line means the speaker stayed silent; counting it
+        // would inflate alerts-per-km with alerts the rider never heard. The
+        // exclusion must hold even though the failed tag CONTAINS the bare
+        // alarm tags - a match loosened from startsWith to contains would
+        // silently count them, and only this test would notice.
+        val clock = FakeClock()
+        val a = acc(clock)
+        rideTwelveKm(a, clock)
+        a.observeAlertCue("cue_failed beep count=2")
+        a.observeAlertCue("cue_failed urgent")
+        val s = a.snapshot()
+        assertEquals(0.0f, s.alertsPerKm!!, 1e-4f)
+        assertEquals(0.0f, s.alertsPerHourOfRide!!, 1e-4f)
+    }
+
     // ── distance: carried-speed positivity gate ───────────────────────────────
 
     // covers RideStatsAccumulator.kt:78

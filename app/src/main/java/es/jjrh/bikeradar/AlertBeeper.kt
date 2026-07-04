@@ -10,6 +10,7 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Surface
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -68,17 +69,54 @@ import kotlin.math.sin
  * lateralisation. Unknown routes also fall back to mono. The pan is hard
  * (full deflection mutes the opposite channel); safe because both phone
  * speakers are on the bike. Clear chime is always centred (not directional).
+ *
+ * Failure honesty + self-healing: audio is the primary interface, so this
+ * class must never die silently. [onCue] fires only AFTER a play attempt
+ * succeeds; a cue that failed to sound is reported through the same hook with
+ * the `cue_failed ` prefix, so the capture log and the ride-stats tally never
+ * claim a silent cue was heard. When the system audio server dies (a rare but
+ * real mid-ride event), every pre-built MODE_STATIC track becomes a dead
+ * object that throws on play. The platform's server-state callback is not
+ * available to ordinary apps, so the failure itself is the recovery signal: a
+ * failed play triggers a rebuild of every track from the retained PCM
+ * (throttled to one attempt per [REBUILD_MIN_INTERVAL_MS] so a server that
+ * is still down isn't hammered) and one retry on the fresh tracks - the cue
+ * still sounds, milliseconds late, once the server is back.
+ *
+ * The pan-bucket tracks (one stereo track per pannable cue per bucket) are
+ * built lazily on the first panned play, not up front: panning is an
+ * experimental default-off flag, and the 20 bucket tracks would otherwise
+ * triple this class's permanent AudioTrack footprint - a real cost on
+ * devices with tight per-output mixer track limits.
  */
 class AlertBeeper(
     private val audioManager: AudioManager,
     private val rotationProvider: () -> Int = { Surface.ROTATION_90 },
     private val executor: Executor = Executors.newSingleThreadExecutor(),
-    // Invoked the instant a cue is about to actually sound - i.e. AFTER the
-    // in-call suppression check, on the playback thread. The service
-    // wires this to the capture log so a post-ride review shows what the
-    // rider actually HEARD (distinct from the decision logs, which record
-    // the intent even when the cue is then suppressed). Single chokepoint:
-    // every play* path goes through it, so a future cue can't ship unlogged.
+    // Monotonic clock for the rebuild throttle; injectable for tests.
+    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
+    // Test seam for the one non-mockable step: driving a MODE_STATIC
+    // AudioTrack. Robolectric's shadow can't take static PCM writes, so
+    // under test every real play "fails"; injecting an outcome lets tests
+    // pin the report / rebuild / retry orchestration deterministically.
+    // Production always leaves this null and uses the real play path.
+    // Same pattern as WalkAwayAlarm's injectable AlarmTone.
+    private val playTrackOverride: ((AudioTrack) -> Boolean)? = null,
+    // Fires once per successful failure-triggered rebuild, with the new
+    // generation. The service wires this to the always-on link journal so a
+    // mid-ride audioserver death-and-recovery is reviewable after the ride
+    // (the capture log is opt-in and closed between connections, and a cue
+    // that healed reports its bare tag - without this hook the recovery
+    // would be logcat-only).
+    private val onTracksRebuilt: (Int) -> Unit = {},
+    // Invoked AFTER the in-call suppression check and the play attempt, on
+    // the playback thread. The service wires this to the capture log so a
+    // post-ride review shows what the rider actually HEARD (distinct from
+    // the decision logs, which record the intent even when the cue is then
+    // suppressed). A play that failed reports through the same hook with
+    // the `cue_failed ` prefix - the log must never claim a silent cue
+    // sounded. Single chokepoint: every play* path goes through it, so a
+    // future cue can't ship unlogged.
     private val onCue: (String) -> Unit = {},
 ) {
 
@@ -106,21 +144,50 @@ class AlertBeeper(
     private val bucketImbalance: FloatArray =
         FloatArray(PAN_BUCKETS) { k -> bucketScales[k].second - bucketScales[k].first }
 
-    // Default (non-panned) path stays MONO - byte-identical level to the
-    // pre-bucket code, no stereo-downmix shift on the phone speaker.
-    private val beepMono: Array<AudioTrack> = Array(3) { i -> makeTrack(beepPcm[i]) }
-    private val urgentMono: AudioTrack = makeTrack(urgentPcm)
+    // Retained PCM for the non-panned cues, so a track killed by an
+    // audioserver restart can be rebuilt without regenerating tones.
+    private val clearPcm: ShortArray = buildClearPcm()
+    private val criticalBatteryPcm: ShortArray = buildCriticalBatteryPcm()
+    private val radarDroppedPcm: ShortArray = buildRadarDroppedPcm()
+    private val radarReconnectedPcm: ShortArray = buildRadarReconnectedPcm()
 
-    // Pan path: one stereo track per cue per bucket.
-    private val beepBuckets: Array<Array<AudioTrack>> = Array(3) { i ->
-        Array(PAN_BUCKETS) { b -> makeStereoTrack(beepPcm[i], bucketScales[b].first, bucketScales[b].second) }
-    }
-    private val urgentBuckets: Array<AudioTrack> =
-        Array(PAN_BUCKETS) { b -> makeStereoTrack(urgentPcm, bucketScales[b].first, bucketScales[b].second) }
-    private val clearTrack = buildClearTrack()
-    private val criticalBatteryTrack = buildCriticalBatteryTrack()
-    private val radarDroppedTrack = buildRadarDroppedTrack()
-    private val radarReconnectedTrack = buildRadarReconnectedTrack()
+    // Eager tracks (8): the mono cues every rider hears. `var` because an
+    // audioserver restart kills the underlying objects and
+    // [maybeRebuildTracks] swaps in fresh ones. Written and read on the
+    // single playback executor only (plus construction) - [setVolumePct]
+    // routes its re-apply through the executor to keep that true.
+    private var beepMono: Array<AudioTrack> = Array(3) { i -> makeTrack(beepPcm[i]) }
+    private var urgentMono: AudioTrack = makeTrack(urgentPcm)
+    private var clearTrack: AudioTrack = makeTrack(clearPcm)
+    private var criticalBatteryTrack: AudioTrack = makeTrack(criticalBatteryPcm)
+    private var radarDroppedTrack: AudioTrack = makeTrack(radarDroppedPcm)
+    private var radarReconnectedTrack: AudioTrack = makeTrack(radarReconnectedPcm)
+
+    // Pan path (lazy, up to 20 tracks): one stereo track per pannable cue per
+    // bucket, built on the first panned play that needs the row and dropped
+    // on rebuild. Executor-confined like the eager tracks.
+    private val beepBucketRows: Array<Array<AudioTrack>?> = arrayOfNulls(3)
+    private var urgentBucketRow: Array<AudioTrack>? = null
+
+    /** Monotonic time of the last rebuild attempt, successful or not; gates
+     *  the once-per-interval throttle. Null = never attempted. Executor-confined. */
+    private var lastRebuildAttemptMs: Long? = null
+
+    /** Set by [release]'s executor-marshalled teardown. Once set, cue
+     *  attempts and rebuilds are refused: a cue racing service destroy must
+     *  not resurrect fresh AudioTracks that nothing would ever release.
+     *  Executor-confined. */
+    private var released = false
+
+    /** Bumped on every successful failure-triggered rebuild; lets tests pin
+     *  that a rebuild actually replaced the track set. */
+    internal var trackGeneration: Int = 0
+        private set
+
+    /** True once any lazy pan-bucket track exists; pins the laziness
+     *  contract in tests (panning off must build zero bucket tracks). */
+    internal val panBucketsBuilt: Boolean
+        get() = urgentBucketRow != null || beepBucketRows.any { it != null }
 
     // Track-duration table for the abandon-timer. Computed at build time
     // from the same sample counts the AudioTrack contents use, so the
@@ -134,7 +201,7 @@ class AlertBeeper(
     private val radarDroppedDurationMs: Int = 3 * 130 + 2 * 90
     private val radarReconnectedDurationMs: Int = RECONNECT_TONE_MS
 
-    private var volumePct = DEFAULT_VOLUME_PCT
+    @Volatile private var volumePct = DEFAULT_VOLUME_PCT
 
     @Volatile private var panningEnabled: Boolean = false
 
@@ -189,30 +256,33 @@ class AlertBeeper(
 
     fun play(beeps: Int, lateralPos: Float = 0f) {
         val idx = beeps - 1
-        if (idx !in beepMono.indices) return
+        if (idx !in 0..2) return
         val durationMs = beepDurationMs.getOrNull(idx) ?: return
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("beep count=$beeps")
-            playPanned(beepMono[idx], beepBuckets[idx], durationMs, lateralPos)
+            report("beep count=$beeps") {
+                playPanned(beepMono[idx], { beepBucketRow(idx) }, durationMs, lateralPos)
+            }
         }
     }
 
     fun playClear() {
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("clear")
-            // Clear is non-directional. Always mono.
-            clearTrack.setVolume(currentMonoGain())
-            playWithFocus(clearTrack, clearDurationMs)
+            report("clear") {
+                // Clear is non-directional. Always mono.
+                clearTrack.setVolume(currentMonoGain())
+                playWithFocus(clearTrack, clearDurationMs)
+            }
         }
     }
 
     fun playUrgent(lateralPos: Float = 0f) {
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("urgent")
-            playPanned(urgentMono, urgentBuckets, urgentDurationMs, lateralPos)
+            report("urgent") {
+                playPanned(urgentMono, { urgentBucketRow() }, urgentDurationMs, lateralPos)
+            }
         }
     }
 
@@ -221,9 +291,10 @@ class AlertBeeper(
     fun playCriticalBattery() {
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("critical_battery")
-            criticalBatteryTrack.setVolume(currentMonoGain())
-            playWithFocus(criticalBatteryTrack, criticalBatteryDurationMs)
+            report("critical_battery") {
+                criticalBatteryTrack.setVolume(currentMonoGain())
+                playWithFocus(criticalBatteryTrack, criticalBatteryDurationMs)
+            }
         }
     }
 
@@ -234,9 +305,10 @@ class AlertBeeper(
     fun playRadarDropped() {
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("radar_drop")
-            radarDroppedTrack.setVolume(currentMonoGain())
-            playWithFocus(radarDroppedTrack, radarDroppedDurationMs)
+            report("radar_drop") {
+                radarDroppedTrack.setVolume(currentMonoGain())
+                playWithFocus(radarDroppedTrack, radarDroppedDurationMs)
+            }
         }
     }
 
@@ -249,15 +321,78 @@ class AlertBeeper(
     fun playRadarReconnected() {
         executor.execute {
             if (suppressForCall()) return@execute
-            onCue("radar_reconnect")
-            radarReconnectedTrack.setVolume(currentMonoGain())
-            playWithFocus(radarReconnectedTrack, radarReconnectedDurationMs)
+            report("radar_reconnect") {
+                radarReconnectedTrack.setVolume(currentMonoGain())
+                playWithFocus(radarReconnectedTrack, radarReconnectedDurationMs)
+            }
         }
     }
 
+    /**
+     * Run [attempt] and report the outcome through [onCue]: the bare [tag]
+     * when the cue actually made it to an AudioTrack.play() that did not
+     * throw, `cue_failed <tag>` otherwise. A first failure means the track
+     * set is probably dead (audioserver restart kills every MODE_STATIC
+     * track), so it triggers one throttled rebuild from the retained PCM and
+     * retries the cue on the fresh tracks - re-running [attempt] re-reads
+     * the track fields, so the retry picks up the rebuilt objects.
+     * Executor-only.
+     */
+    private inline fun report(tag: String, attempt: () -> Boolean) {
+        if (released) return
+        var played = attempt()
+        if (!played && maybeRebuildTracks()) played = attempt()
+        onCue(if (played) tag else CUE_FAILED_PREFIX + tag)
+    }
+
+    /**
+     * Failure-triggered self-heal: release whatever is left of the current
+     * track set and rebuild it from the retained PCM. Throttled to one
+     * attempt per [REBUILD_MIN_INTERVAL_MS] - while the audioserver is still
+     * down every attempt fails, and hammering a restarting server helps
+     * nobody. Returns true when a fresh track set is in place. Runs on the
+     * playback executor so it cannot interleave a play.
+     */
+    private fun maybeRebuildTracks(): Boolean {
+        if (released) return false
+        val now = clock()
+        val last = lastRebuildAttemptMs
+        if (last != null && now - last < REBUILD_MIN_INTERVAL_MS) return false
+        lastRebuildAttemptMs = now
+        return try {
+            releaseAllTracks()
+            beepMono = Array(3) { i -> makeTrack(beepPcm[i]) }
+            urgentMono = makeTrack(urgentPcm)
+            clearTrack = makeTrack(clearPcm)
+            criticalBatteryTrack = makeTrack(criticalBatteryPcm)
+            radarDroppedTrack = makeTrack(radarDroppedPcm)
+            radarReconnectedTrack = makeTrack(radarReconnectedPcm)
+            applyVolume()
+            trackGeneration++
+            Log.i(TAG, "audio tracks rebuilt after a play failure (gen=$trackGeneration)")
+            onTracksRebuilt(trackGeneration)
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "audio track rebuild failed: $t")
+            false
+        }
+    }
+
+    /** Lazy pan-bucket row for beep cue [idx], built on first panned use. */
+    private fun beepBucketRow(idx: Int): Array<AudioTrack> = beepBucketRows[idx] ?: Array(PAN_BUCKETS) { b ->
+        makeStereoTrack(beepPcm[idx], bucketScales[b].first, bucketScales[b].second)
+    }.also { beepBucketRows[idx] = it }
+
+    /** Lazy pan-bucket row for the urgent cue, built on first panned use. */
+    private fun urgentBucketRow(): Array<AudioTrack> = urgentBucketRow ?: Array(PAN_BUCKETS) { b ->
+        makeStereoTrack(urgentPcm, bucketScales[b].first, bucketScales[b].second)
+    }.also { urgentBucketRow = it }
+
     fun setVolumePct(pct: Int) {
         volumePct = pct.coerceIn(0, 100)
-        applyVolume()
+        // Track objects are executor-confined; apply the new gain there so
+        // a Settings change can never race a play or a rebuild.
+        executor.execute { applyVolume() }
     }
 
     fun setPanning(enabled: Boolean, invertLR: Boolean) {
@@ -274,15 +409,38 @@ class AlertBeeper(
             hasFocus = false
         }
         audioManager.unregisterAudioDeviceCallback(deviceCallback)
-        beepMono.forEach { it.release() }
-        beepBuckets.forEach { row -> row.forEach { it.release() } }
-        urgentMono.release()
-        urgentBuckets.forEach { it.release() }
-        clearTrack.release()
-        criticalBatteryTrack.release()
-        radarDroppedTrack.release()
-        radarReconnectedTrack.release()
+        // Teardown rides the playback executor, keeping the track fields
+        // executor-confined: a cue task already queued ahead of this one
+        // finds `released` set and skips, so the failure-triggered rebuild
+        // can never run after release and leak fresh tracks. shutdown()
+        // still runs everything queued before it.
+        try {
+            executor.execute {
+                released = true
+                releaseAllTracks()
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // Second release(): the executor is already shut down and the
+            // teardown task already ran.
+        }
         if (executor is java.util.concurrent.ExecutorService) executor.shutdown()
+    }
+
+    /** Release every live track, eager and lazily-built alike. Each release
+     *  is individually guarded: after an audioserver death the objects are
+     *  already invalid and may object to the farewell. */
+    private fun releaseAllTracks() {
+        val all = beepMono.asSequence() +
+            sequenceOf(urgentMono, clearTrack, criticalBatteryTrack, radarDroppedTrack, radarReconnectedTrack) +
+            beepBucketRows.filterNotNull().flatMap { it.asIterable() } +
+            (urgentBucketRow?.asSequence() ?: emptySequence())
+        all.forEach {
+            try {
+                it.release()
+            } catch (_: Throwable) {}
+        }
+        beepBucketRows.fill(null)
+        urgentBucketRow = null
     }
 
     /**
@@ -299,7 +457,7 @@ class AlertBeeper(
     private fun suppressForCall(): Boolean = audioManager.mode == AudioManager.MODE_IN_CALL ||
         audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
 
-    private fun playWithFocus(track: AudioTrack, durationMs: Int) {
+    private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
         if (!hasFocus) {
             val granted = try {
                 audioManager.requestAudioFocus(focusRequest) ==
@@ -309,30 +467,43 @@ class AlertBeeper(
             }
             hasFocus = granted
         }
-        playOnce(track)
+        val played = (playTrackOverride ?: ::playOnce)(track)
         // Re-arm the abandon timer. Back-to-back plays extend the
         // window so media stays ducked across the burst rather than
         // restoring + re-ducking between cues.
         abandonHandler.removeCallbacks(abandonRunnable)
         abandonHandler.postDelayed(abandonRunnable, (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong())
+        return played
     }
 
-    private fun playOnce(track: AudioTrack) {
+    /**
+     * One play attempt. Returns false when the track objects to play(), so
+     * the caller can report the failure through [onCue] and trigger the
+     * self-heal - a dead audio path must surface, never masquerade as a
+     * healthy one. The pre-play stop() is allowed to fail quietly: a track
+     * that was never playing throws there without saying anything about
+     * whether it can play.
+     */
+    private fun playOnce(track: AudioTrack): Boolean {
         try {
             track.stop()
         } catch (_: IllegalStateException) {}
-        try {
+        return try {
             track.setPlaybackHeadPosition(0)
             track.play()
-        } catch (_: IllegalStateException) {}
+            true
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "cue play failed: $e")
+            false
+        }
     }
 
     private fun applyVolume() {
         val g = currentMonoGain()
         beepMono.forEach { it.setVolume(g) }
-        beepBuckets.forEach { row -> row.forEach { it.setVolume(g) } }
+        beepBucketRows.filterNotNull().forEach { row -> row.forEach { it.setVolume(g) } }
         urgentMono.setVolume(g)
-        urgentBuckets.forEach { it.setVolume(g) }
+        urgentBucketRow?.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
         criticalBatteryTrack.setVolume(g)
         radarDroppedTrack.setVolume(g)
@@ -366,17 +537,19 @@ class AlertBeeper(
      * Play the cue with stereo panning. [resolvePan] stays the decision
      * authority (route / rotation / invert / volume); a [PanResult.Mono]
      * plays the plain mono track, a [PanResult.Stereo] maps to the nearest
-     * pre-built pan bucket. The absolute level is applied with the non-
-     * deprecated [AudioTrack.setVolume] (uniform). Because each bucket's
-     * peak channel is normalised to 1.0, playing the chosen bucket at
+     * pan bucket - built lazily via [buckets] on the first stereo play, so
+     * riders who never enable panning never pay for 20 extra AudioTracks.
+     * The absolute level is applied with the non-deprecated
+     * [AudioTrack.setVolume] (uniform). Because each bucket's peak channel
+     * is normalised to 1.0, playing the chosen bucket at
      * `setVolume(max(left, right))` reproduces resolvePan's gains.
      */
     private fun playPanned(
         monoTrack: AudioTrack,
-        buckets: Array<AudioTrack>,
+        buckets: () -> Array<AudioTrack>,
         durationMs: Int,
         lateralPos: Float,
-    ) {
+    ): Boolean {
         val track: AudioTrack
         val level: Float
         when (
@@ -399,12 +572,12 @@ class AlertBeeper(
                 level = result.gain
             }
             is PanResult.Stereo -> {
-                track = buckets[nearestPanBucket(result.left, result.right)]
+                track = buckets()[nearestPanBucket(result.left, result.right)]
                 level = maxOf(result.left, result.right)
             }
         }
         track.setVolume(level)
-        playWithFocus(track, durationMs)
+        return playWithFocus(track, durationMs)
     }
 
     /**
@@ -519,7 +692,7 @@ class AlertBeeper(
         return buf
     }
 
-    private fun buildClearTrack(): AudioTrack {
+    internal fun buildClearPcm(): ShortArray {
         val toneSamples = sampleRate * 110 / 1000
         val gapSamples = sampleRate * 60 / 1000
         val hi = generateTone(toneSamples, 1100f)
@@ -532,7 +705,7 @@ class AlertBeeper(
         gap.copyInto(buf, pos)
         pos += gap.size
         lo.copyInto(buf, pos)
-        return makeTrack(buf)
+        return buf
     }
 
     internal fun buildUrgentPcm(): ShortArray {
@@ -558,8 +731,6 @@ class AlertBeeper(
         return buf
     }
 
-    private fun buildCriticalBatteryTrack(): AudioTrack = makeTrack(buildCriticalBatteryPcm())
-
     internal fun buildCriticalBatteryPcm(): ShortArray {
         // Low (520 Hz) soft, slow two-tone. Low pitch + slow cadence put it
         // in a different timbre-class from the sharp 3200/3800 Hz threat
@@ -579,8 +750,6 @@ class AlertBeeper(
         tone.copyInto(buf, pos)
         return buf
     }
-
-    private fun buildRadarDroppedTrack(): AudioTrack = makeTrack(buildRadarDroppedPcm())
 
     internal fun buildRadarDroppedPcm(): ShortArray {
         // Low (440 Hz) 3-pulse. Low pitch keeps it in the status timbre-class
@@ -604,8 +773,6 @@ class AlertBeeper(
         }
         return buf
     }
-
-    private fun buildRadarReconnectedTrack(): AudioTrack = makeTrack(buildRadarReconnectedPcm())
 
     internal fun buildRadarReconnectedPcm(): ShortArray {
         // A SINGLE soft 660 Hz pulse. The count of ONE is the discriminator -
@@ -710,6 +877,22 @@ class AlertBeeper(
 
     companion object {
         const val DEFAULT_VOLUME_PCT = 50
+
+        private const val TAG = "BikeRadar"
+
+        /** Prepended to a cue's [onCue] tag when the play attempt failed even
+         *  after the rebuild-and-retry. Consumers key off the bare tags
+         *  ("beep…", "urgent") for the sounded-alert tally, so failed cues
+         *  are excluded from it by construction; the capture log keeps the
+         *  full line for post-ride diagnosis. */
+        const val CUE_FAILED_PREFIX = "cue_failed "
+
+        /** Floor between failure-triggered track rebuilds. Long enough not
+         *  to hammer an audioserver that is still restarting (recovery is
+         *  typically 1-5 s), short enough that the primary alert channel is
+         *  not left visual-only for long after the server returns - a
+         *  rebuild is cheap (8 small tracks from retained PCM). */
+        internal const val REBUILD_MIN_INTERVAL_MS = 3_000L
 
         /** Single-pulse duration of the radar-reconnect cue, in ms. Doubles as
          *  the cue's total length for the abandon-timer (one tone, no gaps). */

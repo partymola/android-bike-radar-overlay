@@ -51,15 +51,21 @@ class AlertBeeperFocusTest {
 
     private val directExecutor: Executor = Executor { it.run() }
 
+    // Robolectric cannot drive MODE_STATIC AudioTracks (no shadow
+    // static-write), so plays are forced to report success: these tests pin
+    // focus and suppression, not playback. The failure/rebuild orchestration
+    // is pinned by AlertBeeperResilienceTest through the same seam.
     private fun newBeeper(): AlertBeeper = AlertBeeper(
         audioManager = audioManager,
         executor = directExecutor,
+        playTrackOverride = { true },
     )
 
     private fun beeperRecordingCues(into: MutableList<String>): AlertBeeper = AlertBeeper(
         audioManager = audioManager,
         executor = directExecutor,
         onCue = { into.add(it) },
+        playTrackOverride = { true },
     )
 
     private fun lastFocusRequest(): AudioFocusRequest? = shadowAm.lastAudioFocusRequest?.audioFocusRequest

@@ -31,8 +31,9 @@ object EBikeStateBus {
         _lastUpdatedElapsedMs.value = SystemClock.elapsedRealtime()
     }
 
-    /** Restore default state. Called on service destroy so UI surfaces see a
-     *  clean empty state after the rider stops the service. */
+    /** Restore default state. Called on service destroy - and when the
+     *  Bluetooth adapter dies mid-session - so UI surfaces see a clean empty
+     *  state instead of a frozen last snapshot. */
     fun reset() {
         _snapshot.value = LiveDataSnapshot()
         _lastUpdatedElapsedMs.value = 0L

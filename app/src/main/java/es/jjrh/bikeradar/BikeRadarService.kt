@@ -74,6 +74,11 @@ class BikeRadarService : Service() {
 
     @Volatile private var scanRegistered = false
 
+    // Adapter on/off watch: a Bluetooth stack restart mid-ride orphans the
+    // GATT clients and silently kills the PendingIntent scan, so the links
+    // would claim "reconnecting" forever. See BluetoothStateMonitor.
+    private lateinit var bluetoothStateMonitor: BluetoothStateMonitor
+
     // Per-ride statistics. Reset on onCreate AND when the radar reconnects
     // after the long-offline gap (the bike was parked - a new ride starts
     // with fresh numbers; see maybePostRideSummary). Published to HA via
@@ -382,6 +387,30 @@ class BikeRadarService : Service() {
         schedulePauseExpiry()
         registerEventScan()
         radarLink.registerBondReceiver()
+        bluetoothStateMonitor = BluetoothStateMonitor(
+            context = this,
+            onAdapterOff = {
+                linkJournal.log("bluetooth adapter off: links torn down, event scan dead")
+                // Cancelling the link coroutines runs their cleanup paths
+                // (close the orphaned GATT, mark disconnected); the links
+                // restart scan-driven once the adapter is back. The scan
+                // died with the adapter - only the flag needs clearing so
+                // the ON path can re-register.
+                radarLink.forceReconnect()
+                cameraLink.stop()
+                ebikeStatusReader?.shutdown()
+                ebikeStatusReader = null
+                EBikeStateBus.reset()
+                scanRegistered = false
+            },
+            onAdapterOn = {
+                linkJournal.log("bluetooth adapter on: scan re-registered, links kickstarted")
+                registerEventScan()
+                maybeStartEBikeReader()
+                scope.launch { kickstartFromCache() }
+            },
+        )
+        bluetoothStateMonitor.register()
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
         launchDashcamRefresh()
@@ -404,6 +433,7 @@ class BikeRadarService : Service() {
      */
     @SuppressLint("MissingPermission")
     private fun maybeStartEBikeReader() {
+        if (ebikeStatusReader != null) return
         if (!prefs.eBikeDataEnabled) return
         if (!hasBlePermissions()) {
             Log.i(TAG_RADAR, "ebike: feature on but BLE permissions not granted; skipping")
@@ -474,7 +504,7 @@ class BikeRadarService : Service() {
                 // Onboarding eBike step just enabled the feature; bring up the
                 // read-only status reader now. Idempotent: maybeStartEBikeReader
                 // bails when the reader is already running.
-                if (ebikeStatusReader == null) maybeStartEBikeReader()
+                maybeStartEBikeReader()
             }
             ACTION_RESTART_EBIKE_READER -> {
                 // Tear the status reader down and rebuild it (e.g. the rider
@@ -520,6 +550,7 @@ class BikeRadarService : Service() {
         if (::prefs.isInitialized) prefs.serviceRunningMarker = false
         pauseExpiryJob?.cancel()
         if (::cameraLink.isInitialized) cameraLink.stop()
+        if (::bluetoothStateMonitor.isInitialized) bluetoothStateMonitor.unregister()
         unregisterEventScan()
         if (::radarLink.isInitialized) radarLink.shutdown()
         closeCaptureLog()

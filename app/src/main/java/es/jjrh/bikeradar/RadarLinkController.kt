@@ -195,7 +195,10 @@ internal class RadarLinkController(
     /** True while the connection coroutine is live. */
     fun isActive(): Boolean = radarJob?.isActive == true
 
-    /** Drop the current connection; the reconnect loop opens a fresh one. */
+    /** Cancel the whole connection coroutine (current attempt AND its
+     *  reconnect loop); the cleanup path closes the GATT and marks the link
+     *  disconnected. The next [start] - driven by a scan sighting or the
+     *  known-device kickstart - opens a fresh loop. */
     fun forceReconnect() {
         radarJob?.cancel()
     }

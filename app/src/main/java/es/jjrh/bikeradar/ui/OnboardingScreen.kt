@@ -1593,7 +1593,7 @@ internal fun HaStepPrivacyNote() {
         bullets = listOf(
             stringResource(R.string.onboarding_ha_bullet_sends),
             stringResource(R.string.onboarding_ha_bullet_only_ha),
-            stringResource(R.string.onboarding_ha_bullet_encrypted),
+            stringResource(R.string.onboarding_ha_bullet_private),
         ),
     )
 }

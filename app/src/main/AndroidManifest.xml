@@ -49,9 +49,16 @@
         <package android:name="com.bosch.ebike.onebikeapp" />
     </queries>
 
+    <!-- Backups are ON so settings and the Home Assistant credentials move
+         to a new phone (cloud backup, lockscreen-secret-encrypted, plus the
+         direct device-to-device transfer). Ride history, capture logs, crash
+         reports and the link journal live in app-specific EXTERNAL storage,
+         which @xml/data_extraction_rules explicitly EXCLUDES from both -
+         Auto Backup would include it by default. -->
     <application
         android:name=".BikeRadarApp"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

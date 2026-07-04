@@ -5,8 +5,9 @@
 #   1. every outbound MQTT flow registered in the DataDisclosure anchor
 #      (HaClient.kt) is disclosed in the Settings -> Privacy copy;
 #   2. every user-facing manifest permission is named in that copy;
-#   3. the core posture claims (AES-256/Keystore, HTTPS, "Not affiliated")
-#      still appear in the user-facing copy.
+#   3. the core posture claims (backup transfer, HTTPS, "Not affiliated")
+#      still appear in the user-facing copy and match the manifest's
+#      backup configuration.
 #
 # The disclosure copy is externalised for i18n: the Settings -> Privacy and
 # About strings live in res/values/strings.xml (the .kt screens only hold
@@ -26,6 +27,7 @@ HACLIENT="app/src/main/java/es/jjrh/bikeradar/HaClient.kt"
 # User-facing privacy + about copy, externalised to the default string resources.
 STRINGS="app/src/main/res/values/strings.xml"
 MANIFEST="app/src/main/AndroidManifest.xml"
+RULES="app/src/main/res/xml/data_extraction_rules.xml"
 
 # Install-time / capability permissions that carry no data and need no
 # user-facing disclosure. Everything else must be named in the Privacy copy.
@@ -36,7 +38,7 @@ FOREGROUND_SERVICE_MEDIA_PROJECTION"
 fail=0
 blocker() { echo "BLOCKER: $*"; fail=1; }
 
-for f in "$HACLIENT" "$STRINGS" "$MANIFEST"; do
+for f in "$HACLIENT" "$STRINGS" "$MANIFEST" "$RULES"; do
     [ -f "$f" ] || { echo "BLOCKER: missing file $f"; exit 2; }
 done
 
@@ -73,9 +75,26 @@ for p in "${perm_arr[@]}"; do
         || blocker "manifest permission '$p' is not named in the Privacy copy (strings.xml)"
 done
 
-# 3. Posture claims must still appear in the user-facing copy.
-grep -qF "AES-256" "$STRINGS" || blocker "encryption claim 'AES-256' missing from the Privacy copy (strings.xml)"
-grep -qF "Keystore" "$STRINGS" || blocker "encryption claim 'Keystore' missing from the Privacy copy (strings.xml)"
+# 3. Posture claims must still appear in the user-facing copy, and the
+#    backup claim must match the manifest: credentials-in-backup is a
+#    deliberate, disclosed posture (settings + HA creds transfer to a new
+#    phone), so the copy and allowBackup must flip together, never alone.
+grep -qF "backup" "$STRINGS" || blocker "backup-transfer disclosure missing from the Privacy copy (strings.xml)"
+if grep -qF "backup" "$STRINGS" && ! grep -qF 'android:allowBackup="true"' "$MANIFEST"; then
+    blocker "Privacy copy discloses backup transfer but the manifest disables backup"
+fi
+if grep -qF 'android:allowBackup="true"' "$MANIFEST" && ! grep -qF 'android:dataExtractionRules=' "$MANIFEST"; then
+    blocker "allowBackup is on without dataExtractionRules - backup scope must be explicit"
+fi
+# The "stays on your phone" claims for ride history / capture logs / crash
+# reports / link journal depend on the external-storage excludes (Auto Backup
+# includes getExternalFilesDir() by DEFAULT), and the "encrypted with your
+# screen lock" claim depends on refusing un-encryptable cloud backups.
+if [ "$(grep -cF '<exclude' "$RULES")" -ne 2 ] || ! grep -qF 'domain="external"' "$RULES"; then
+    blocker "external storage must be excluded from BOTH cloud backup and device transfer (data_extraction_rules.xml)"
+fi
+grep -qF 'disableIfNoEncryptionCapabilities="true"' "$RULES" \
+    || blocker "cloud backup must refuse devices without a lock-screen secret (the screen-lock encryption claim depends on it)"
 grep -qF "HTTPS" "$STRINGS" || blocker "network claim 'HTTPS' missing from the Privacy copy (strings.xml)"
 grep -qF "Not affiliated" "$STRINGS" || blocker "'Not affiliated' disclaimer missing from the About copy (strings.xml)"
 

@@ -2,12 +2,13 @@
 package es.jjrh.bikeradar.data
 
 import android.app.Application
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -15,11 +16,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Verifies [HaCredentials] honours the [Cryptor] contract: stored values
- * are not the plaintext, round-trip restores plaintext, and `isConfigured`
- * tracks save/clear correctly. The seam is what makes the rest of the
- * Activity / Service smoke tests possible - a regression here breaks
- * everything downstream.
+ * Verifies [HaCredentials]' backup-transferable storage contract: values
+ * round-trip through app-private SharedPreferences (deliberately unencrypted
+ * so an Android backup restores usable credentials on a new phone - see the
+ * class KDoc), `isConfigured` tracks save/clear, and the migration from the
+ * legacy Keystore-encrypted format converts an in-place upgrade's blobs
+ * while leaving undecryptable ones (restored onto a device that never had
+ * the key, or a transient Keystore failure) in place for retry.
  */
 @RunWith(RobolectricTestRunner::class)
 class HaCredentialsTest {
@@ -39,36 +42,37 @@ class HaCredentialsTest {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
     }
 
+    private fun rawPrefs() = app.applicationContext.getSharedPreferences(
+        "ha_credentials_v2",
+        Context.MODE_PRIVATE,
+    )
+
     @Test
     fun isConfiguredFalseOnFreshInstall() {
         assertFalse(HaCredentials(app).isConfigured())
     }
 
     @Test
-    fun saveRoundTripsThroughCryptor() {
+    fun saveRoundTripsAcrossInstances() {
         val creds = HaCredentials(app)
         creds.save("https://h.example", "tok-123")
         assertTrue(creds.isConfigured())
-        // New instance simulates app restart: the encrypted blob in
-        // SharedPreferences must be decrypted via the same cryptor and
-        // yield the original plaintext.
+        // New instance simulates app restart.
         val reread = HaCredentials(app)
         assertEquals("https://h.example", reread.baseUrl)
         assertEquals("tok-123", reread.token)
     }
 
     @Test
-    fun storedBlobIsNotPlaintext() {
+    fun storedValuesAreBackupTransferable() {
+        // The whole point of the storage format: what SharedPreferences
+        // holds IS the value, so a platform backup restores working
+        // credentials on a new phone. A regression that reintroduced a
+        // device-bound cipher would restore undecryptable blobs.
         val creds = HaCredentials(app)
         creds.save("https://h.example", "tok-123")
-        // Probe SharedPreferences directly: a regression that bypassed the
-        // cryptor would leave plaintext on disk, defeating the threat model.
-        val sp = app.applicationContext.getSharedPreferences(
-            "ha_credentials_v2",
-            android.content.Context.MODE_PRIVATE,
-        )
-        val storedUrl = sp.getString("ha_base_url", null)
-        assertNotEquals("https://h.example", storedUrl)
+        assertEquals("https://h.example", rawPrefs().getString("ha_base_url_v3", null))
+        assertEquals("tok-123", rawPrefs().getString("ha_token_v3", null))
     }
 
     @Test
@@ -82,7 +86,7 @@ class HaCredentialsTest {
     }
 
     @Test
-    fun individualPropertySettersRoundTripThroughCryptor() {
+    fun individualPropertySettersRoundTrip() {
         // save() is the common path; the baseUrl/token property setters are a
         // separate entry point (Settings edits one field at a time).
         val creds = HaCredentials(app)
@@ -123,5 +127,104 @@ class HaCredentialsTest {
         // whether BuildConfig carries seed values.
         assertEquals("https://existing.example", creds.baseUrl)
         assertEquals("existing-token", creds.token)
+    }
+
+    // ── legacy-format migration ──────────────────────────────────────────
+
+    @Test
+    fun legacyCiphertextMigratesOnceOnTheSameDevice() {
+        // An in-place upgrade: the legacy blobs decrypt with the device's
+        // own cryptor and must be rewritten in the transferable format,
+        // with the legacy keys removed.
+        val cryptor = InMemoryCryptor()
+        HaCredentials.cryptorFactory = { cryptor }
+        rawPrefs().edit()
+            .putString("ha_base_url", cryptor.encrypt("https://legacy.example"))
+            .putString("ha_token", cryptor.encrypt("tok-legacy"))
+            .apply()
+
+        val creds = HaCredentials(app)
+
+        assertEquals("https://legacy.example", creds.baseUrl)
+        assertEquals("tok-legacy", creds.token)
+        assertTrue(creds.isConfigured())
+        assertNull("legacy blob must be removed", rawPrefs().getString("ha_base_url", null))
+        assertNull("legacy blob must be removed", rawPrefs().getString("ha_token", null))
+        assertEquals(
+            "migrated value must be stored transferably",
+            "https://legacy.example",
+            rawPrefs().getString("ha_base_url_v3", null),
+        )
+    }
+
+    @Test
+    fun undecryptableLegacyBlobsAreKeptForRetryAndAppStaysUnconfigured() {
+        // Nothing decrypts: either the restored-new-phone case (the blobs
+        // arrived via backup without their device-bound key) or a transient
+        // Keystore failure at this launch. The blobs must be KEPT - deleting
+        // possibly-good ciphertext on a transient failure would silently
+        // cost the rider their HA setup - and the app runs unconfigured.
+        rawPrefs().edit()
+            .putString("ha_base_url", "not-decryptable-on-this-device")
+            .putString("ha_token", "also-not-decryptable")
+            .apply()
+
+        val creds = HaCredentials(app)
+
+        assertFalse(creds.isConfigured())
+        assertEquals("", creds.baseUrl)
+        assertEquals(
+            "undecryptable legacy blobs must be kept for retry",
+            "not-decryptable-on-this-device",
+            rawPrefs().getString("ha_base_url", null),
+        )
+    }
+
+    @Test
+    fun transientDecryptFailureRecoversOnALaterConstruction() {
+        // First launch after the upgrade hits a Keystore hiccup (decrypt
+        // yields nothing); the next construction decrypts fine and the
+        // migration completes with nothing lost.
+        val working = InMemoryCryptor()
+        rawPrefs().edit()
+            .putString("ha_base_url", working.encrypt("https://recovered.example"))
+            .putString("ha_token", working.encrypt("tok-recovered"))
+            .apply()
+
+        HaCredentials.cryptorFactory = {
+            object : Cryptor {
+                override fun encrypt(plain: String) = plain
+                override fun decrypt(blob: String?) = "" // hiccup: nothing decrypts
+            }
+        }
+        assertFalse(HaCredentials(app).isConfigured())
+
+        HaCredentials.cryptorFactory = { working }
+        val creds = HaCredentials(app)
+
+        assertEquals("https://recovered.example", creds.baseUrl)
+        assertEquals("tok-recovered", creds.token)
+        assertNull("migrated blobs must be removed", rawPrefs().getString("ha_base_url", null))
+    }
+
+    @Test
+    fun migrationNeverOverwritesExistingTransferableValues() {
+        // A restore can carry BOTH formats (v3 written on the old phone
+        // after its own migration, plus a stale legacy blob from an even
+        // older backup layer). The v3 pair is authoritative.
+        val cryptor = InMemoryCryptor()
+        HaCredentials.cryptorFactory = { cryptor }
+        rawPrefs().edit()
+            .putString("ha_base_url_v3", "https://current.example")
+            .putString("ha_token_v3", "tok-current")
+            .putString("ha_base_url", cryptor.encrypt("https://stale.example"))
+            .putString("ha_token", cryptor.encrypt("tok-stale"))
+            .apply()
+
+        val creds = HaCredentials(app)
+
+        assertEquals("https://current.example", creds.baseUrl)
+        assertEquals("tok-current", creds.token)
+        assertNull(rawPrefs().getString("ha_base_url", null))
     }
 }

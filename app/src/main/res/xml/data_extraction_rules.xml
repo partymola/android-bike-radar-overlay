@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Internal storage (the SharedPreferences files: settings, Home Assistant
+     credentials, known-device cache) is included in both cloud backup and
+     device-to-device transfer, so a new phone starts with the rider's full
+     setup. The transient diagnostic prefs riding along (restart markers,
+     counters) are self-healing after a restore.
+
+     App-specific EXTERNAL storage is explicitly excluded from both: it holds
+     the ride history, capture logs, crash reports, and the link journal -
+     diagnostic data that belongs to the device it was recorded on, carries
+     BLE payloads (capture logs), and at up to 50 gzipped logs would blow the
+     25 MB cloud-backup quota that the settings backup depends on. Auto
+     Backup includes getExternalFilesDir() by DEFAULT, so these exclude rules
+     are load-bearing: the Privacy screen's "stays on your phone" claims for
+     that data are true because of them (scripts/privacy-disclosure-check.sh
+     pins their presence).
+
+     disableIfNoEncryptionCapabilities keeps the Privacy screen's "encrypted
+     with your screen lock" claim strictly true for the CLOUD copy: a device
+     with no lock-screen secret takes no cloud backup at all. Device-to-device
+     transfer is a direct phone-to-phone copy that never touches a server and
+     runs regardless of lock state. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <exclude
+            domain="external"
+            path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude
+            domain="external"
+            path="." />
+    </device-transfer>
+</data-extraction-rules>

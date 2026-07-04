@@ -203,7 +203,7 @@
     <string name="onboarding_ha_privacy_heading">What\'s sent</string>
     <string name="onboarding_ha_bullet_sends">Sends battery, light mode, ride times and ride stats (incl. close passes) to your HA</string>
     <string name="onboarding_ha_bullet_only_ha">Goes only to your Home Assistant - never to the developer</string>
-    <string name="onboarding_ha_bullet_encrypted">Your HA address and token are encrypted on your phone</string>
+    <string name="onboarding_ha_bullet_private">Your HA address and token stay in the app\'s private storage and your encrypted Android backup</string>
 
     <!-- Step 3: pairing -->
     <string name="onboarding_pair_title">Pair your devices</string>
@@ -517,15 +517,15 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_intro">Bike Radar collects no telemetry and runs no analytics. Your data goes only to the Home Assistant you set up - nowhere else.</string>
     <string name="settings_privacy_on_phone_label">What stays on your phone</string>
-    <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage and never leave the device.</string>
-    <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token are encrypted at rest with a hardware-backed AES-256/GCM key from the Android Keystore. The key never leaves the secure element, so raw filesystem access (e.g. `adb pull`) recovers only ciphertext.</string>
+    <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage, which no other app can read. They are included in your Android backup, so they move with you to a new phone.</string>
+    <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token live in the same app-private storage and move to a new phone with your Android backup (encrypted by Android with your screen lock) and the direct phone-to-phone transfer, which never touches a server. They go nowhere else.</string>
     <string name="settings_privacy_on_phone_rides">A short ride history (ride times, distance, overtake and close-pass counts, and how close and how fast the closest passes were - no location, no route) is kept in app-private storage for the Ride history screen. The oldest entries are dropped after 200 rides; nothing is shared.</string>
     <string name="settings_privacy_on_phone_capture">Capture logging is off by default. Turn it on (Debug screen) and the app records each ride - radar packets, BLE notifications, eBike data from Bosch Flow, phone-battery samples, and turn-state changes from the phone\'s motion sensors (when turn-aware alerts are on); no location. Logs stay on your phone (gzipped to save space) and are shared only if you tap Share.</string>
     <string name="settings_privacy_on_phone_crashes">If the app crashes, a report (app version, thread, stack trace - no ride data, no location) is kept in app-private storage and shared only if you tap Share on the Debug screen.</string>
     <string name="settings_privacy_on_phone_linklog">A small connection log (when the radar, dashcam and the app\'s service connected, disconnected or failed to connect - device names and times only, no ride data, no location) is kept in app-private storage for troubleshooting on the Debug screen.</string>
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">If you set up HA, the app publishes over MQTT, straight to your HA URL - nothing routed through the developer or any third party:\n• radar and dashcam battery\n• front-light mode\n• ride start/end events\n• an end-of-ride summary (distance, close-pass counts, closing speeds, clearances)\n• a per-event close-pass log, if you turn it on</string>
-    <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the encrypted store immediately.</string>
+    <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the phone immediately.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">Pairing happens in Android\'s system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.</string>
     <string name="settings_privacy_networking_label">Networking</string>

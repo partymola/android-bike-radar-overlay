@@ -201,9 +201,9 @@ enforces them, and CONTRIBUTING.md points contributors here:
   Roborazzi golden (or on-device) for clipping/wrapping before committing.
 - **The Privacy screen is the deliberate exception.** It is the "verify by
   reading the code" disclosure; it keeps full substance (and the literal tokens
-  `scripts/privacy-disclosure-check.sh` pins: permission names, AES-256,
-  Keystore, HTTPS, the DataDisclosure keywords). Trim it to bullets, never gut
-  it.
+  `scripts/privacy-disclosure-check.sh` pins: permission names, the backup
+  disclosure + manifest/backup-rules pairing, HTTPS, the DataDisclosure
+  keywords). Trim it to bullets, never gut it.
 - **Review with screen context, not a flat string list.** Verbosity and
   gender-in-context bugs only show on the screen: use the English Roborazzi
   goldens or map each string to its Composable referent before judging it.

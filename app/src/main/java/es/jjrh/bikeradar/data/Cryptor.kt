@@ -12,8 +12,12 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Two-method seam between [HaCredentials] and the underlying cipher.
- * Production wires [AndroidKeyStoreCryptor]; JVM tests inject an
- * in-memory implementation via [HaCredentials.cryptorFactory].
+ * LEGACY-migration only since credentials became backup-transferable:
+ * [HaCredentials] no longer encrypts at rest (see its threat-model KDoc),
+ * and the only remaining caller is its one-shot migration of the old
+ * Keystore-encrypted blobs. Production wires [AndroidKeyStoreCryptor];
+ * JVM tests inject an in-memory implementation via
+ * [HaCredentials.cryptorFactory].
  *
  * The encrypted blob format is treated as opaque by the caller: the
  * implementation is free to add IVs, version tags, or wrappers as long

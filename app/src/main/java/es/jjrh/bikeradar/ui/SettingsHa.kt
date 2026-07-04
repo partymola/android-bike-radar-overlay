@@ -298,7 +298,7 @@ internal fun SettingsHaContent(
                 )
             }
 
-            // Clear button: removes encrypted creds + resets the connected
+            // Clear button: removes the stored creds + resets the connected
             // pill. The privacy screen documents this as the off-switch
             // for HA publishing; without it, the only way to disconnect
             // would be uninstalling.

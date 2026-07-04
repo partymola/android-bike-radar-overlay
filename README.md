@@ -256,13 +256,16 @@ clip the way your camera vendor supports - their app's media gallery,
 or the camera's USB/SD storage directly. Camera clocks can drift a few
 seconds from the phone's; scrub around the timestamp.
 
-**What happens to my data on a new phone?** Nothing transfers, by
-design. Settings, ride history, and Home Assistant credentials live
-only on the phone and are excluded from Android backups (so your HA
-token can never leak through a cloud backup). On a new phone: pair the
-radar, run onboarding again, and re-enter the HA details if you use
-them. Ride history starts fresh; if you want long-term stats off the
-phone, the Home Assistant integration is the supported path.
+**What happens to my data on a new phone?** Your settings - including
+the Home Assistant URL and token - are part of your Android backup
+(encrypted by Android with your screen lock) and the new-phone transfer
+wizard (a direct phone-to-phone copy that never touches a server), so
+the app comes up configured on the new phone. Two things don't
+transfer: the radar pairing (Bluetooth bonds belong to the system;
+re-pair once in Android's Bluetooth settings) and the ride history and
+capture logs (diagnostic data the app deliberately excludes from
+backups - if you want long-term ride stats off the phone, the Home
+Assistant integration is the supported path).
 
 ## Contributing & support
 

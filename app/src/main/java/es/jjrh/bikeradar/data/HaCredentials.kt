@@ -9,48 +9,60 @@ import es.jjrh.bikeradar.BuildConfig
 /**
  * Stores the Home Assistant base URL and long-lived bearer token at rest.
  *
- * Confidentiality is delegated to a [Cryptor]: [AndroidKeyStoreCryptor]
- * in production (AES-256/GCM with a hardware-bound key that cannot leave
- * the secure element); [es.jjrh.bikeradar.testutil.InMemoryCryptor] in
- * JVM tests via [cryptorFactory]. SharedPreferences only ever sees
- * ciphertext.
+ * Values live in the app's private SharedPreferences, readable by no other
+ * app, and are deliberately included in Android's device backup and
+ * phone-to-phone transfer so the rider's setup moves to a new phone without
+ * re-entering the token. Backups are encrypted by the platform with a key
+ * derived from the lockscreen secret, so the cloud copy is not readable by
+ * the backup provider.
  *
- * Threat model: a passive `adb pull` of the prefs file recovers nothing
- * useful in production, because the AES key sits inside the Keystore and
- * cannot be exfiltrated. The key is not gated on user authentication,
- * so an attacker with code execution as the app user can still invoke
- * the Keystore to decrypt; lock-screen state is not in the trust path.
+ * Earlier versions encrypted these values with a device-bound Android
+ * Keystore key. That key can never leave the device, which made every
+ * backup of the ciphertext useless on a new phone - the transferability
+ * the backup exists for. The Keystore layer was therefore dropped in
+ * favour of the platform's backup encryption; [migrateLegacyCiphertext]
+ * converts an in-place upgrade's ciphertext, while ciphertext restored
+ * onto a NEW device (whose Keystore never had the key) never decrypts and
+ * the user simply re-enters credentials, exactly as before.
+ *
+ * Threat model: the app sandbox is the at-rest boundary - an attacker with
+ * code execution as the app user could always decrypt (the old Keystore key
+ * was not auth-gated), so the practical protection is unchanged; what moved
+ * is that a backup now carries usable credentials, by explicit choice, under
+ * the platform's end-to-end backup encryption.
  */
 class HaCredentials(context: Context) {
 
     private val sp: SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    private val cryptor: Cryptor = cryptorFactory()
+    init {
+        migrateLegacyCiphertext()
+    }
 
     var baseUrl: String
-        get() = cryptor.decrypt(sp.getString(KEY_BASE_URL, null))
+        get() = sp.getString(KEY_BASE_URL_V3, "") ?: ""
         set(v) {
-            sp.edit().putString(KEY_BASE_URL, cryptor.encrypt(v)).apply()
+            sp.edit().putString(KEY_BASE_URL_V3, v).apply()
         }
 
     var token: String
-        get() = cryptor.decrypt(sp.getString(KEY_TOKEN, null))
+        get() = sp.getString(KEY_TOKEN_V3, "") ?: ""
         set(v) {
-            sp.edit().putString(KEY_TOKEN, cryptor.encrypt(v)).apply()
+            sp.edit().putString(KEY_TOKEN_V3, v).apply()
         }
 
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
     fun save(url: String, token: String) {
         sp.edit()
-            .putString(KEY_BASE_URL, cryptor.encrypt(url))
-            .putString(KEY_TOKEN, cryptor.encrypt(token))
+            .putString(KEY_BASE_URL_V3, url)
+            .putString(KEY_TOKEN_V3, token)
             .apply()
     }
 
     fun clear() {
-        sp.edit().remove(KEY_BASE_URL).remove(KEY_TOKEN).apply()
+        sp.edit().remove(KEY_BASE_URL_V3).remove(KEY_TOKEN_V3).apply()
     }
 
     /** Notify [listener] when the stored credentials change (any writer:
@@ -81,16 +93,56 @@ class HaCredentials(context: Context) {
         }
     }
 
+    /**
+     * Upgrade of the pre-backup storage format. Legacy installs hold
+     * Keystore-encrypted blobs under the old keys: decrypt them with the
+     * device's own key and rewrite as backup-transferable values.
+     *
+     * The legacy blobs are removed only once SOMETHING decrypted. When
+     * nothing does, they are kept and the next construction retries: a
+     * transient Keystore failure at the first post-upgrade launch must not
+     * permanently destroy still-decryptable credentials, and the retry is
+     * nearly free. Blobs restored onto a NEW phone (whose Keystore never
+     * had the key) therefore just idle here undecryptable - the app runs
+     * unconfigured and the user re-enters credentials, exactly as they
+     * always had to before this change. Existing v3 values are never
+     * overwritten (a restore that carries both formats keeps the
+     * authoritative v3 pair).
+     */
+    private fun migrateLegacyCiphertext() {
+        val legacyUrl = sp.getString(LEGACY_KEY_BASE_URL, null)
+        val legacyToken = sp.getString(LEGACY_KEY_TOKEN, null)
+        if (legacyUrl == null && legacyToken == null) return
+        val cryptor = cryptorFactory()
+        val url = cryptor.decrypt(legacyUrl)
+        val tok = cryptor.decrypt(legacyToken)
+        if (url.isBlank() && tok.isBlank()) return
+        val e = sp.edit().remove(LEGACY_KEY_BASE_URL).remove(LEGACY_KEY_TOKEN)
+        if (url.isNotBlank() && sp.getString(KEY_BASE_URL_V3, null).isNullOrBlank()) {
+            e.putString(KEY_BASE_URL_V3, url)
+        }
+        if (tok.isNotBlank() && sp.getString(KEY_TOKEN_V3, null).isNullOrBlank()) {
+            e.putString(KEY_TOKEN_V3, tok)
+        }
+        e.apply()
+    }
+
     companion object {
         private const val FILE = "ha_credentials_v2"
-        private const val KEY_BASE_URL = "ha_base_url"
-        private const val KEY_TOKEN = "ha_token"
+        private const val KEY_BASE_URL_V3 = "ha_base_url_v3"
+        private const val KEY_TOKEN_V3 = "ha_token_v3"
+
+        // Pre-backup format: Keystore-encrypted blobs. Read once by the
+        // migration, never written.
+        private const val LEGACY_KEY_BASE_URL = "ha_base_url"
+        private const val LEGACY_KEY_TOKEN = "ha_token"
 
         /**
-         * Indirection for swapping cipher in JVM tests. Production never
-         * mutates this. Tests assign an in-memory implementation in
-         * `@Before` so [HaCredentials] can be exercised without
-         * AndroidKeyStore (which Robolectric does not provide).
+         * Indirection for the LEGACY-migration cipher in JVM tests.
+         * Production never mutates this. Tests assign an in-memory
+         * implementation in `@Before` so the migration path can be
+         * exercised without AndroidKeyStore (which Robolectric does not
+         * provide).
          */
         @VisibleForTesting
         var cryptorFactory: () -> Cryptor = { AndroidKeyStoreCryptor() }

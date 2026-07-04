@@ -174,7 +174,7 @@ class BikeRadarService : Service() {
     // Service-scoped AlertBeeper. Allocated in onCreate, released in
     // onDestroy. Hoisted out of overlayJob so reconnects do not pay
     // AudioTrack cold-start every time, and so audio focus + the
-    // MODE_IN_CALL guard survive across radar drops.
+    // in-call guard survive across radar drops.
     @Volatile private var alertBeeper: AlertBeeper? = null
 
     // Capture log: owns the per-ride file lifecycle, buffered append, prune/gzip.

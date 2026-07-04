@@ -74,7 +74,7 @@ class AlertBeeper(
     private val rotationProvider: () -> Int = { Surface.ROTATION_90 },
     private val executor: Executor = Executors.newSingleThreadExecutor(),
     // Invoked the instant a cue is about to actually sound - i.e. AFTER the
-    // MODE_IN_CALL suppression check, on the playback thread. The service
+    // in-call suppression check, on the playback thread. The service
     // wires this to the capture log so a post-ride review shows what the
     // rider actually HEARD (distinct from the decision logs, which record
     // the intent even when the cue is then suppressed). Single chokepoint:
@@ -286,13 +286,18 @@ class AlertBeeper(
     }
 
     /**
-     * MODE_IN_CALL guard. When a phone call holds audio focus
-     * EXCLUSIVE, USAGE_ALARM plays can be silenced at the speaker
-     * mid-call without indication. Skipping the audio path entirely
-     * preserves call audio integrity; the visual overlay and (future)
-     * wrist haptic still fire.
+     * In-call guard, covering both call classes. When a call holds audio
+     * focus EXCLUSIVE, USAGE_ALARM plays can be silenced at the speaker
+     * mid-call without indication - and on some OEMs alarm-usage audio
+     * behaves unpredictably while a call routes the output. Skipping the
+     * audio path entirely preserves call audio integrity; the visual
+     * overlay and (future) wrist haptic still fire.
+     *
+     * MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP (WhatsApp,
+     * Meet, Telegram, SIP) - the same rider situation, so both suppress.
      */
-    private fun suppressForCall(): Boolean = audioManager.mode == AudioManager.MODE_IN_CALL
+    private fun suppressForCall(): Boolean = audioManager.mode == AudioManager.MODE_IN_CALL ||
+        audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
 
     private fun playWithFocus(track: AudioTrack, durationMs: Int) {
         if (!hasFocus) {

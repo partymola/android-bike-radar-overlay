@@ -25,7 +25,8 @@ import java.util.concurrent.Executor
  * AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE silences USAGE_ALARM at the
  * speaker, and on some vendor BT routes media-volume ducking is
  * missed. These tests pin the focus request shape, the back-to-back
- * extension, the MODE_IN_CALL suppression, and the release path.
+ * extension, the in-call suppression (MODE_IN_CALL telephony and
+ * MODE_IN_COMMUNICATION VoIP), and the release path.
  *
  * Uses a same-thread `Executor` so each `play*()` call runs inline;
  * Robolectric's `ShadowLooper.idleMainLooper()` then drains the
@@ -126,6 +127,50 @@ class AlertBeeperFocusTest {
             "no focus request expected on playCriticalBattery while MODE_IN_CALL",
             shadowAm.lastAudioFocusRequest == null,
         )
+        beeper.release()
+    }
+
+    @Test
+    fun play_skipsAudioPathInVoipCall() {
+        // VoIP (WhatsApp / Meet / Telegram / SIP) runs the audio stack in
+        // MODE_IN_COMMUNICATION, not MODE_IN_CALL. Same rider situation -
+        // an active call - so the suppression contract covers both modes.
+        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION)
+        val beeper = newBeeper()
+        beeper.play(2)
+        assertTrue(
+            "no focus request expected while MODE_IN_COMMUNICATION is active",
+            shadowAm.lastAudioFocusRequest == null,
+        )
+        beeper.release()
+    }
+
+    @Test
+    fun playUrgent_skipsAudioPathInVoipCall() {
+        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION)
+        val beeper = newBeeper()
+        beeper.playUrgent()
+        assertTrue(
+            "no focus request expected on playUrgent while MODE_IN_COMMUNICATION",
+            shadowAm.lastAudioFocusRequest == null,
+        )
+        beeper.release()
+    }
+
+    @Test
+    fun onCue_notFiredForAnyPathInVoipCall() {
+        // Mirror of the MODE_IN_CALL ordering pin: VoIP suppression must also
+        // keep the capture log truthful - nothing sounded, nothing recorded.
+        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION)
+        val cues = mutableListOf<String>()
+        val beeper = beeperRecordingCues(cues)
+        beeper.play(2)
+        beeper.playClear()
+        beeper.playUrgent()
+        beeper.playCriticalBattery()
+        beeper.playRadarDropped()
+        beeper.playRadarReconnected()
+        assertTrue("no cue should be recorded while MODE_IN_COMMUNICATION suppresses audio", cues.isEmpty())
         beeper.release()
     }
 

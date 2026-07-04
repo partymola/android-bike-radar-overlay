@@ -330,9 +330,10 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
   a re-arming abandon timer. The walk-away alarm path uses the stronger
   `_EXCLUSIVE` flavour and is separate from the close-pass path.
-- When `audioManager.mode == MODE_IN_CALL` the close-pass beeper skips the
-  audio path entirely (visual overlay still fires). Non-negotiable, no
-  Settings toggle.
+- While a call is active (`audioManager.mode` is `MODE_IN_CALL` for telephony
+  or `MODE_IN_COMMUNICATION` for VoIP) the close-pass beeper skips the audio
+  path entirely (visual overlay still fires). Non-negotiable, no Settings
+  toggle.
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
   in Settings -> Permissions, and via a contextual re-grant card in Settings ->
   Light auto-mode (shown when either light's auto-mode is on and location is
@@ -343,7 +344,7 @@ enforces them, and CONTRIBUTING.md points contributors here:
 
 The alert-audio model - close-pass tier beeps, the urgent impact cue, the
 all-clear chime, the radar critical-battery cue, and the inactivation states
-(audio-focus ducking + `MODE_IN_CALL` suppression) - is an informal
+(audio-focus ducking + in-call suppression) - is an informal
 implementation of the IEC 60601-1-8 alarm-system pattern: distinct alarm
 *classes* (by timbre, not fine pitch), alarm parsimony, and "paused with
 new-condition override". Design inspiration only; the app is not a medical

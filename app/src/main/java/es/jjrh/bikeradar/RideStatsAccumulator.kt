@@ -174,7 +174,10 @@ class RideStatsAccumulator(
         lastPublishedGeneration = generation
     }
 
-    /** Snapshot the current values. Safe to call any time. */
+    /** Snapshot the current values. Reads off the Main writer context (the
+     *  HA publish loop, the ride checkpoint) can race an in-flight ingest;
+     *  those callers treat a torn read as best-effort and must not let it
+     *  propagate. */
     fun snapshot(): RideStatsSnapshot {
         val totalOvertakes = seenTrackIds.size
         val conversionRatePct = if (totalOvertakes > 0) {

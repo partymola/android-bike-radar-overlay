@@ -126,6 +126,48 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun onCreateFlushesALeftoverRideCheckpointIntoHistory() {
+        // A checkpoint slot found at service start means the previous process
+        // died before the post-ride summary could append the ride - onCreate
+        // must flush it into history and clear the slot. Deleting the
+        // recovery block ships as "every crash-recovered ride silently lost";
+        // this is the wiring pin for that block.
+        val root = app.getExternalFilesDir(null)!!
+        File(root, RideHistoryStore.HISTORY_DIR).deleteRecursively()
+        val leftover = RideHistoryRecord(
+            startedAtMs = 1_000L,
+            endedAtMs = 2_000L,
+            overtakes = 4,
+            closePasses = 1,
+            grazingPasses = 0,
+            hgvClosePasses = 0,
+            peakClosingKmh = 38,
+            closingSpeedP90Kmh = null,
+            minLateralClearanceM = 0.9f,
+            distanceKm = 5.5f,
+            exposureSeconds = 900L,
+            alertsPerKm = 0.4f,
+            tightestPassClearanceM = 0.9f,
+            tightestPassClosingKmh = 38,
+            partial = true,
+        )
+        RideCheckpointStore({ root }).write(leftover)
+
+        Robolectric.buildService(BikeRadarService::class.java).create().destroy()
+
+        assertEquals(
+            "the leftover checkpoint must land in ride history on start",
+            listOf(leftover),
+            RideHistoryStore({ root }).readAll(),
+        )
+        assertEquals(
+            "the flushed slot must be cleared so it cannot double-append",
+            null,
+            RideCheckpointStore({ root }).take(),
+        )
+    }
+
+    @Test
     fun retentionCapConstantIsFifty() {
         // Pins the M9 retention reduction (was 500). A revert trips this.
         assertEquals(50, CaptureLogManager.MAX_CAPTURE_LOGS)

@@ -105,6 +105,11 @@ internal data class RideHistoryRecord(
     val alertsPerKm: Float?,
     val tightestPassClearanceM: Float?,
     val tightestPassClosingKmh: Int?,
+    /** True when the app died mid-ride and this record was recovered from
+     *  the crash checkpoint: the numbers cover only the ride up to the last
+     *  checkpoint write, not the whole ride. Absent (false) on every record
+     *  written by the normal post-ride path. */
+    val partial: Boolean = false,
 ) {
     fun toJsonLine(): String = JSONObject()
         .put("v", SCHEMA_VERSION)
@@ -122,6 +127,7 @@ internal data class RideHistoryRecord(
         .putOpt("alerts_per_km", alertsPerKm)
         .putOpt("tightest_m", tightestPassClearanceM)
         .putOpt("tightest_kmh", tightestPassClosingKmh)
+        .apply { if (partial) put("partial", true) }
         .toString()
 
     companion object {
@@ -166,6 +172,7 @@ internal data class RideHistoryRecord(
                     alertsPerKm = o.optFloatOrNull("alerts_per_km"),
                     tightestPassClearanceM = o.optFloatOrNull("tightest_m"),
                     tightestPassClosingKmh = o.optIntOrNull("tightest_kmh"),
+                    partial = o.optBoolean("partial", false),
                 )
             } catch (_: Throwable) {
                 null

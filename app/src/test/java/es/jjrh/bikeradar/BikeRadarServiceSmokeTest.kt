@@ -204,6 +204,86 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun radarStateWithRidingSpeedStampsTheActivityInstant() {
+        // Wiring pin for the RadarStateBus collector: a decoded frame with the
+        // rider above walking pace must stamp lastRidingActivityMs, the signal
+        // the coordinator samples at a disconnect to confirm a radar-only rider
+        // was mid-ride (drop cue) and to hold the ride wakelock. Dropping the
+        // stamp ships as "radar-only riders never get the dead-radar cue".
+        // The collector runs on the service's IO scope, so poll with a deadline.
+        RadarStateBus.clear()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertEquals(null, service.lastRidingActivityMs)
+
+        RadarStateBus.publish(RadarState(bikeSpeedMs = 5f))
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (service.lastRidingActivityMs == null && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+        }
+        assertTrue(
+            "a frame above walking pace must stamp the riding-activity instant",
+            service.lastRidingActivityMs != null,
+        )
+        controller.destroy()
+    }
+
+    @Test
+    fun postSummaryPathReleasesTheRideWakeLock() {
+        // Wiring pin for the live-ride off-episode wakelock: a disconnect with
+        // fresh riding activity acquires it (through the coordinator lambda),
+        // and the PostSummary branch of maybePostRideSummary - ride declared
+        // over - releases it. A dropped release ships as "the CPU is held for
+        // the full timeout cap after every ride".
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+
+        service.lastRidingActivityMs = android.os.SystemClock.elapsedRealtime()
+        service.radarLinkCoordinator.markConnected()
+        service.radarLinkCoordinator.markDisconnected()
+        assertTrue(
+            "a drop with fresh riding activity must hold the ride wakelock",
+            service.rideWakeLock.isHeld(),
+        )
+
+        // Reconnect resolves the episode through the coordinator's release
+        // lambda; a fresh drop then re-acquires for the summary round below.
+        service.radarLinkCoordinator.markConnected()
+        assertTrue(
+            "a reconnect must release the ride wakelock",
+            !service.rideWakeLock.isHeld(),
+        )
+        service.radarLinkCoordinator.markDisconnected()
+        assertTrue(service.rideWakeLock.isHeld())
+
+        // A close pass makes the ride "meaningful", so the summary decider posts
+        // once the dwell has elapsed past the radar-off instant.
+        service.rideStats.observeClosePass(
+            ClosePassDetector.Event(
+                timestampMs = 1_000L,
+                minRangeXM = 0.8f,
+                side = ClosePassDetector.Side.RIGHT,
+                rangeYAtMinM = 2f,
+                closingSpeedKmh = 30,
+                riderSpeedKmh = 20,
+                vehicleSize = VehicleSize.CAR,
+                thresholdArmedM = 1.0f,
+                severity = ClosePassDetector.Severity.VERY_CLOSE,
+            ),
+        )
+        service.maybePostRideSummary(
+            android.os.SystemClock.elapsedRealtime() + RideSummaryNotificationDecider.POST_DWELL_MS + 1_000L,
+        )
+        assertTrue(
+            "the PostSummary branch must release the ride wakelock",
+            !service.rideWakeLock.isHeld(),
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun retentionCapConstantIsFifty() {
         // Pins the M9 retention reduction (was 500). A revert trips this.
         assertEquals(50, CaptureLogManager.MAX_CAPTURE_LOGS)

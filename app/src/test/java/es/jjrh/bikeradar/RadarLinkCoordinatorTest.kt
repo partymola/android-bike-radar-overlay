@@ -42,6 +42,11 @@ class RadarLinkCoordinatorTest {
     private var hasEBike = false
     private var sawTrack = true // default: a real ride where the radar saw traffic
 
+    // Last riding-activity instant. Default null: no fresh radar-activity, so the
+    // radar-activity confirmation path is OFF unless a test sets it. This keeps
+    // the eBike-only tests below asserting their original behaviour.
+    private var lastRidingMs: Long? = null
+
     private val live = RadarLinkVisualDecider.LinkVisual.LIVE
     private val plain = RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN
     private val unlocked = RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
@@ -54,6 +59,9 @@ class RadarLinkCoordinatorTest {
     private var dashcamBackoffClearCount = 0
     private var forgotToLockPostCount = 0
     private var forgotToLockCancelCount = 0
+    private var wakeTickCount = 0
+    private var wakeLockAcquireCount = 0
+    private var wakeLockReleaseCount = 0
     private val bannerStates = mutableListOf<RadarLinkVisualDecider.LinkVisual>()
     private val clogLines = mutableListOf<String>()
 
@@ -83,6 +91,10 @@ class RadarLinkCoordinatorTest {
             cancelForgotToLock = { forgotToLockCancelCount++ },
             cancelWalkAwaySnooze = { snoozeCancelCount++ },
             clearDashcamBackoff = { dashcamBackoffClearCount++ },
+            lastRidingActivityMs = { lastRidingMs },
+            wakeTick = { wakeTickCount++ },
+            acquireRideWakeLock = { wakeLockAcquireCount++ },
+            releaseRideWakeLock = { wakeLockReleaseCount++ },
         )
     }
 
@@ -616,14 +628,124 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
-    fun noRadarDropCueForRadarOnlyRider() {
+    fun noRadarDropCueForRadarOnlyRiderWithoutFreshActivity() {
+        // No eBike AND no fresh riding activity at the drop (lastRidingMs null):
+        // neither confirmation path opens, so no cue - and no suppress-log,
+        // because that near-miss line is reserved for the tunable eBike case.
         prefs.pausedUntilEpochMs = 0L
-        ebike = null // no eBike: no cue, nothing to suppress-log
+        ebike = null
+        lastRidingMs = null
         connectAt(1_000L)
         disconnectAt(4_000L)
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
         assertEquals(0, clogged("radar_drop_cue"))
         assertEquals(0, clogged("radar_drop_suppressed"))
+    }
+
+    @Test
+    fun radarDropCueFiresForRadarOnlyRiderWhenMovingJustBeforeDrop() {
+        // The F-Droid path: no eBike, but the rider was moving above walking pace
+        // seconds before the radar dropped, so the activity latch (sampled at the
+        // disconnect) confirms riding and the cue fires past the threshold.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L // moving right up to the disconnect
+        connectAt(1_000L)
+        disconnectAt(4_000L) // activity age at drop = 1 s < 30 s -> fresh
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun noRadarDropCueForRadarOnlyDismount() {
+        // Dismount: the rider rolled to a stop well before powering the radar
+        // off, so the last moving frame is older than the freshness window at
+        // the drop instant -> latch stale -> silence (the hard constraint).
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 4_000L - (RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS + 1_000L)
+        connectAt(1_000L)
+        disconnectAt(4_000L) // activity age at drop = 31 s >= 30 s -> stale
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun radarActivityLatchSampledAtDropNotReReadEachTick() {
+        // The latch is fixed at the disconnect instant. Even if riding activity
+        // goes stale later in the down-episode (it always does - the radar is
+        // dead), a cue that qualified at the drop keeps qualifying on cadence.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L) // fresh at drop -> latched true
+        lastRidingMs = null // would be "stale" if re-read, but the latch is fixed
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun radarActivityLatchResetsOnReconnect() {
+        // A fresh-at-drop latch must not carry into the NEXT off-episode: after a
+        // reconnect, a later drop with no fresh activity gets no cue.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L) // latched true
+        connectAt(5_000L) // radar back: latch reset
+        lastRidingMs = null // no fresh activity for the second episode
+        disconnectAt(6_000L)
+        coordinator.evaluateRadarDrop(6_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    // ── first-tick kick + ride wakelock wiring ───────────────────────────────
+
+    @Test
+    fun disconnectWakesTickLoopOnceOnFreshOffEpisode() {
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        assertEquals(1, wakeTickCount) // flip the loop to fast cadence immediately
+        disconnectAt(9_000L) // stutter mid-off-episode: not a fresh episode
+        assertEquals(1, wakeTickCount)
+    }
+
+    @Test
+    fun rideWakeLockHeldForLiveRideOffEpisodeAndReleasedOnReconnect() {
+        lastRidingMs = 3_000L // moving right before the drop
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        assertEquals(1, wakeLockAcquireCount)
+        assertEquals(0, wakeLockReleaseCount)
+        connectAt(9_000L) // radar back: episode over
+        assertEquals(1, wakeLockReleaseCount)
+    }
+
+    @Test
+    fun rideWakeLockNotAcquiredWhenRadarDropsLongAfterParking() {
+        // Rider parked well before the radar finally dropped: activity older than
+        // the wakelock window -> no acquire (the manifest's parked-phone concern).
+        now = 4_000L
+        lastRidingMs = 4_000L - (RadarLinkCoordinator.RIDE_WAKELOCK_ACTIVITY_FRESH_MS + 1_000L)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        assertEquals(0, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun rideWakeLockReleasedWhenOffEpisodeGoesBlank() {
+        lastRidingMs = 3_000L
+        ebike = null
+        dashcamSlug = "cam" // no BatteryStateBus entry -> anchor = offAt
+        connectAt(1_000L)
+        disconnectAt(4_000L) // armed, wakelock held
+        assertEquals(1, wakeLockAcquireCount)
+        coordinator.tickWalkAwayState(nowMs = 4_000L + tickFreshMs + 1, elapsedMs = 2_000L)
+        assertFalse(snap().walkAwayArmed)
+        assertEquals(1, wakeLockReleaseCount) // BLANK resolves the episode
     }
 
     @Test

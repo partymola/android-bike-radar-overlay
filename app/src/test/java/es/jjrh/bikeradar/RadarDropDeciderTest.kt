@@ -295,8 +295,65 @@ class RadarDropDeciderTest {
         // Locked (dismounting), null systemLocked, null snapshot (caller passes
         // null), and a stale snapshot (eBike link dropped) must ALL fail closed -
         // this is what stops a ride-end false fire and the walk-away collision.
+        // (radarActivityFreshAtDrop defaults false: eBike-only, as the callers
+        // that omit it behave.)
         assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = true, snapshotAgeMs = 1_000L, freshMs = fresh))
         assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = null, snapshotAgeMs = 1_000L, freshMs = fresh))
         assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = false, snapshotAgeMs = 5L * fresh, freshMs = fresh))
+    }
+
+    @Test
+    fun ridingConfirmedTrueViaRadarActivityWhenEBikeGateClosed() {
+        // The radar-only path: the eBike gate is closed (no snapshot / locked /
+        // stale) but the radar-activity latch is true -> riding confirmed. This
+        // is the OR that reaches the F-Droid, no-eBike rider.
+        assertTrue(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = null, // no eBike
+                snapshotAgeMs = 5L * fresh, // irrelevant
+                freshMs = fresh,
+                radarActivityFreshAtDrop = true,
+            ),
+        )
+        assertTrue(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = true, // locked
+                snapshotAgeMs = 1_000L,
+                freshMs = fresh,
+                radarActivityFreshAtDrop = true,
+            ),
+        )
+        // Both gates closed -> false.
+        assertFalse(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = null,
+                snapshotAgeMs = 5L * fresh,
+                freshMs = fresh,
+                radarActivityFreshAtDrop = false,
+            ),
+        )
+    }
+
+    @Test
+    fun isRidingActivityTrueOnlyAboveWalkingPace() {
+        val pace = 2.0f
+        assertTrue(RadarDropDecider.isRidingActivity(bikeSpeedMs = 2.5f, walkingPaceMs = pace))
+        // Boundary: exactly at the pace is NOT riding (strict >).
+        assertFalse(RadarDropDecider.isRidingActivity(bikeSpeedMs = pace, walkingPaceMs = pace))
+        assertFalse(RadarDropDecider.isRidingActivity(bikeSpeedMs = 1.9f, walkingPaceMs = pace))
+        // Null speed (no device-status frame / speed-less radar) is not riding.
+        assertFalse(RadarDropDecider.isRidingActivity(bikeSpeedMs = null, walkingPaceMs = pace))
+    }
+
+    @Test
+    fun activityFreshAtDropRespectsWindowAndFailsClosedOnNull() {
+        val window = 30_000L
+        val drop = 1_000_000L
+        assertTrue(RadarDropDecider.activityFreshAtDrop(drop, lastActivityMs = drop - 1_000L, windowMs = window))
+        // Boundary: age == window is NOT fresh (strict <).
+        assertTrue(RadarDropDecider.activityFreshAtDrop(drop, lastActivityMs = drop - (window - 1), windowMs = window))
+        assertFalse(RadarDropDecider.activityFreshAtDrop(drop, lastActivityMs = drop - window, windowMs = window))
+        // No riding activity this session -> fail closed.
+        assertFalse(RadarDropDecider.activityFreshAtDrop(drop, lastActivityMs = null, windowMs = window))
     }
 }

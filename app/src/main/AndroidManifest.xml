@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- WAKE_LOCK: held ONLY during a live-ride off-episode (the radar dropped
+         while the rider is still moving), bounded by a hard timeout cap and
+         released the moment the episode resolves. See the wakelock-posture
+         rationale on the service below, RideWakeLock, and the Privacy screen. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Approximate location is used solely to compute sunrise/sunset for the
          front- and radar-light day/night auto-modes. Read once per ride session via
          getLastKnownLocation (no continuous tracking, no background
@@ -81,17 +87,18 @@
             </intent-filter>
         </activity>
 
-        <!-- No WAKE_LOCK permission and no PowerManager wakelock: the FGS's
-             implicit wakelock is sufficient while the device is awake or
-             actively dozing-light. In Doze (deep), `delay()` ticks driving
-             the V2 watchdog and walk-away timer are deferred until the next
-             maintenance window, so walk-away alerts fire late when the
-             phone has been idle for several minutes. Acceptable trade-off:
-             a wakelock would keep the radio class active in Doze and erase
-             much of the battery budget on parked-phone idle. If this
-             becomes user-visible, request REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-             (intent-based, user must approve in Settings) rather than
-             holding a wakelock from the service. -->
+        <!-- Wakelock posture: the FGS's implicit wakelock is sufficient while
+             the device is awake or dozing-light. In deep Doze, `delay()` ticks
+             driving the V2 watchdog and walk-away timer are deferred until the
+             next maintenance window - fine for a parked phone, but a rider whose
+             radar drops MID-RIDE with no other BLE accessory (no dashcam probe
+             loop, no eBike) then gets the dead-radar cue and walk-away alarm
+             minutes late. So a bounded PARTIAL_WAKE_LOCK (RideWakeLock) is held
+             ONLY during a live-ride off-episode: acquired when the radar drops
+             while the rider was recently moving, released on reconnect / walk-
+             away BLANK / ride summary, and hard-capped so it can never persist.
+             The old blanket "no wakelock" concern was the parked-phone idle
+             case, which the recent-activity acquire gate deliberately excludes. -->
         <service
             android:name=".BikeRadarService"
             android:exported="false"

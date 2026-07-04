@@ -34,8 +34,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -85,7 +87,8 @@ class BikeRadarService : Service() {
     // the periodic loop started below and summarised in the post-ride
     // notification. @Volatile: the tick coroutine replaces the instance;
     // the overlay loop and beeper-cue closure read it from other threads.
-    @Volatile private var rideStats = RideStatsAccumulator()
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var rideStats = RideStatsAccumulator()
 
     // Ride-summary notification state: one post per radar-off episode.
     // Tick-coroutine-confined; see maybePostRideSummary. The transitions live in
@@ -104,7 +107,8 @@ class BikeRadarService : Service() {
     // [RadarLinkStateGateway] the radar GATT loop reports connect/disconnect to.
     // The snooze-job AtomicReference (below) stays service-owned: it's a
     // cancellable side effect, not state.
-    private lateinit var radarLinkCoordinator: RadarLinkCoordinator
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var radarLinkCoordinator: RadarLinkCoordinator
 
     // Thin read accessors for the two remaining service-side read sites
     // (scheduleRead light-flip guard, walk-away tick cadence). All other reads
@@ -124,6 +128,26 @@ class BikeRadarService : Service() {
     // dead-radar banner - no traffic ever seen means a bench test, not a ride.
     // Set by a RadarStateBus collector in onCreate; read by RadarLinkCoordinator.
     @Volatile private var sawTrack = false
+
+    // Monotonic instant of the last decoded frame that showed real riding
+    // activity (rider speed above walking pace); null until the first such
+    // frame. Set by the same RadarStateBus collector; read by the coordinator
+    // at the disconnect instant to confirm a radar-only rider was mid-ride and
+    // to decide whether to hold the ride wakelock. See RadarDropDecider.
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var lastRidingActivityMs: Long? = null
+
+    // Bounded PARTIAL_WAKE_LOCK held only during a live-ride off-episode so the
+    // walk-away tick's delay() timers do not sleep past their deadlines in deep
+    // Doze for a rider with no BLE wakeups. Allocated in onCreate. See RideWakeLock.
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var rideWakeLock: RideWakeLock
+
+    // Wakes launchWalkAwayTick out of its idle delay the instant the radar
+    // drops, so the loop flips to its 2 s cadence and the first dead-radar
+    // evaluation lands on time (not up to 30 s late). CONFLATED: a queued kick
+    // during the tick body coalesces to one early wake, never a backlog.
+    private val walkAwayKick = Channel<Unit>(Channel.CONFLATED)
 
     // Cached overlay settings so the per-frame overlay loop does not re-read
     // SharedPreferences ~6-10x a frame for values the user changes a handful
@@ -236,7 +260,15 @@ class BikeRadarService : Service() {
         knownDevices = KnownDevices(getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE))
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
-        scope.launch { RadarStateBus.state.collect { if (it.vehicles.isNotEmpty()) sawTrack = true } }
+        rideWakeLock = RideWakeLock(this)
+        scope.launch {
+            RadarStateBus.state.collect {
+                if (it.vehicles.isNotEmpty()) sawTrack = true
+                if (RadarDropDecider.isRidingActivity(it.bikeSpeedMs, RadarLinkCoordinator.RADAR_DROP_WALKING_PACE_MS)) {
+                    lastRidingActivityMs = SystemClock.elapsedRealtime()
+                }
+            }
+        }
         creds = HaCredentials(this)
         creds.seedFromBuildConfigIfEmpty()
         ha = HaClient(creds.baseUrl, creds.token)
@@ -355,6 +387,10 @@ class BikeRadarService : Service() {
                     lastDashcamProbeMs.remove(it)
                 }
             },
+            lastRidingActivityMs = { lastRidingActivityMs },
+            wakeTick = { walkAwayKick.trySend(Unit) },
+            acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
+            releaseRideWakeLock = { rideWakeLock.release() },
         )
         radarLink = RadarLinkController(
             context = this,
@@ -571,6 +607,7 @@ class BikeRadarService : Service() {
             reconnectBannerView = null
         }
         if (::walkAwayAlarm.isInitialized) walkAwayAlarm.stop()
+        if (::rideWakeLock.isInitialized) rideWakeLock.release()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -849,7 +886,13 @@ class BikeRadarService : Service() {
                 // and the never-paired-in-session path needs nothing at all.
                 // Slow ticks 15× when idle to drop background CPU wake-ups.
                 val activeTracking = radarOffSinceMs != null
-                delay(if (activeTracking) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS)
+                // Sleep for the cadence, but a radar drop (markDisconnected ->
+                // walkAwayKick) short-circuits the wait so the loop re-reads
+                // activeTracking immediately and flips to the 2 s cadence,
+                // instead of finishing out up to 30 s of the idle delay.
+                withTimeoutOrNull(if (activeTracking) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS) {
+                    walkAwayKick.receive()
+                }
                 val now = SystemClock.elapsedRealtime()
                 val elapsed = now - prevTickMs
                 prevTickMs = now
@@ -868,7 +911,8 @@ class BikeRadarService : Service() {
      *  summary once, and a reconnect after the long-offline gap (the same
      *  Settings boundary the reconnect loop treats as "parked") starts a new
      *  ride with fresh stats. */
-    private fun maybePostRideSummary(nowMs: Long) {
+    @androidx.annotation.VisibleForTesting
+    internal fun maybePostRideSummary(nowMs: Long) {
         val off = radarOffSinceMs
         val outcome = RideSummaryEdgeTracker.onTick(
             prev = rideSummaryEdge,
@@ -894,6 +938,9 @@ class BikeRadarService : Service() {
                     rideCheckpoint.onNewRide()
                 }
                 is RideSummaryEdgeTracker.Action.PostSummary -> {
+                    // Ride declared over (sustained radar-off): the off-episode
+                    // is resolved, so free the ride wakelock.
+                    rideWakeLock.release()
                     notifications.postRideSummary(action.snapshot)
                     // Ride end = the moment the radar went off, not "now" (the
                     // dwell is detection latency, not riding time). The off-instant

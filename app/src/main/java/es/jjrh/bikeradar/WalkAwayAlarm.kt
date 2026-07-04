@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.util.Log
+import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,7 +45,10 @@ internal interface AlarmTone {
  *    point is to keep alerting until the rider acts;
  *  - it forces `STREAM_ALARM` to max for the duration and restores the saved
  *    level in [stop], so a low bedside-alarm slider can't swallow a
- *    forgotten-dashcam alert;
+ *    forgotten-dashcam alert; the saved level is also persisted
+ *    ([Prefs.walkAwaySavedAlarmVolume]) before the force, so a process death
+ *    mid-alarm cannot strand the phone's alarm stream at max - the next
+ *    instance repairs the leaked override at construction;
  *  - it vibrates explicitly via the `Vibrator` service, because channel-level
  *    vibration is DND-suppressed when the channel doesn't bypass DND.
  *
@@ -65,6 +69,7 @@ internal class WalkAwayAlarm(
     private val context: Context,
     private val scope: CoroutineScope,
     private val toneFactory: (AudioAttributes) -> AlarmTone = { attrs -> systemAlarmTone(context, attrs) },
+    private val prefs: Prefs = Prefs(context),
 ) {
     /** Looping alarm-stream tone played alongside the walk-away
      *  notification; null when not playing. The notification channel's
@@ -89,6 +94,27 @@ internal class WalkAwayAlarm(
      *  would loop forever; the decider's rate limit then re-fires the
      *  notification, re-starting the tone for another bounded window. */
     private var ringtoneCapJob: Job? = null
+
+    init {
+        // Repair a leaked alarm-stream override. The persisted slot is only
+        // ever non-null between "force to max" and the matching restore, so
+        // finding a value here means the previous process died mid-alarm and
+        // the rider's alarm stream is still pinned at max. No alarm can be
+        // active at construction time (the tone dies with its process), so
+        // restoring unconditionally is safe. Best-effort, like every other
+        // volume write in this class.
+        prefs.walkAwaySavedAlarmVolume?.let { leaked ->
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            try {
+                val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, leaked.coerceIn(0, max), 0)
+                Log.i(TAG, "restored alarm volume leaked by a mid-alarm process death")
+            } catch (t: Throwable) {
+                Log.w(TAG, "leaked alarm-volume restore failed: $t")
+            }
+            prefs.walkAwaySavedAlarmVolume = null
+        }
+    }
 
     @Synchronized
     fun start() {
@@ -127,12 +153,30 @@ internal class WalkAwayAlarm(
         // their bedside-tone preference. Saved level is restored in
         // stop(). Best-effort; some OEMs reject volume writes from
         // background services and that's fine.
-        val saved = try {
-            am.getStreamVolume(AudioManager.STREAM_ALARM)
-        } catch (_: Throwable) {
+        //
+        // Capture the pre-alert level only when no override is already in
+        // effect. A stale episode - the tone died without stop(), e.g. an
+        // audioserver restart mid-alarm - leaves savedAlarmVolume non-null
+        // and the stream still forced; capturing "current" then would save
+        // the forced maximum as the rider's level and restore max forever.
+        val alreadyOverridden = savedAlarmVolume != null
+        val saved = if (alreadyOverridden) {
             null
+        } else {
+            try {
+                am.getStreamVolume(AudioManager.STREAM_ALARM)
+            } catch (_: Throwable) {
+                null
+            }
         }
         if (saved != null) {
+            // Persist BEFORE forcing: if the process dies between the two
+            // writes, the repair-on-construction path restores a level equal
+            // to the current one - harmless - whereas persisting after the
+            // force would leave a death window with no record to repair from.
+            prefs.walkAwaySavedAlarmVolume = saved
+        }
+        if (saved != null || alreadyOverridden) {
             try {
                 am.setStreamVolume(
                     AudioManager.STREAM_ALARM,
@@ -157,15 +201,24 @@ internal class WalkAwayAlarm(
                 try {
                     am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
                 } catch (_: Throwable) {}
+                prefs.walkAwaySavedAlarmVolume = null
             }
             return
         }
 
         // Commit the new state only after play() succeeds, so a partial
-        // setup never leaks a focus token or a half-initialised tone.
+        // setup never leaks a focus token or a half-initialised tone. A
+        // stale episode's focus token is abandoned before the new one
+        // replaces it, and its saved volume is kept - it still holds the
+        // rider's true pre-alert level.
+        audioFocusRequest?.let { stale ->
+            try {
+                am.abandonAudioFocusRequest(stale)
+            } catch (_: Throwable) {}
+        }
         audioFocusRequest = focusReq
         tone = newTone
-        savedAlarmVolume = saved
+        savedAlarmVolume = saved ?: savedAlarmVolume
         ringtoneCapJob?.cancel()
         ringtoneCapJob = scope.launch {
             delay(WALKAWAY_RINGTONE_CAP_MS)
@@ -201,6 +254,7 @@ internal class WalkAwayAlarm(
             } catch (t: Throwable) {
                 Log.w(TAG, "alarm-stream restore failed: $t")
             }
+            prefs.walkAwaySavedAlarmVolume = null
         }
         savedAlarmVolume = null
     }

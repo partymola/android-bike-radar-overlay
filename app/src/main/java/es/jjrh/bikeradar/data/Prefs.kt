@@ -581,6 +581,28 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_CAPTURE_LOGGING, v).apply()
         }
 
+    /** The rider's own STREAM_ALARM level, persisted by the walk-away alarm
+     *  just before it forces the stream to max, and cleared when the override
+     *  is undone (clean stop or play-failure rollback). Null when no override
+     *  is in effect. A non-null value at the NEXT service start means the
+     *  process died mid-alarm and skipped the restore, leaving the phone's
+     *  alarm stream pinned at max - the walk-away alarm repairs it from this
+     *  slot on construction. Runtime state like [serviceRunningMarker], so
+     *  deliberately not part of [snapshot] / [flow] / [dumpAll]. */
+    var walkAwaySavedAlarmVolume: Int?
+        get() = if (sp.contains(KEY_WALKAWAY_SAVED_ALARM_VOLUME)) {
+            sp.getInt(KEY_WALKAWAY_SAVED_ALARM_VOLUME, 0)
+        } else {
+            null
+        }
+        set(v) {
+            if (v == null) {
+                sp.edit().remove(KEY_WALKAWAY_SAVED_ALARM_VOLUME).apply()
+            } else {
+                sp.edit().putInt(KEY_WALKAWAY_SAVED_ALARM_VOLUME, v).apply()
+            }
+        }
+
     /** Diagnostic: set while [es.jjrh.bikeradar.BikeRadarService] is running,
      *  cleared by its onDestroy. A set marker at the NEXT onCreate means the
      *  previous service instance never shut down cleanly - a crash, a system
@@ -774,6 +796,7 @@ class Prefs(context: Context) {
         const val KEY_CAPTURE_LOGGING = "capture_logging_enabled"
         const val KEY_SERVICE_RUNNING_MARKER = "service_running_marker"
         const val KEY_DIRTY_RESTART_COUNT = "dirty_restart_count"
+        const val KEY_WALKAWAY_SAVED_ALARM_VOLUME = "walk_away_saved_alarm_volume"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

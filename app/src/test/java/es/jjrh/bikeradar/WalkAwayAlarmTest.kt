@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.os.Build
 import android.os.VibratorManager
+import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -94,6 +95,12 @@ class WalkAwayAlarmTest {
         override fun stop() {
             playing = false
             stops++
+        }
+
+        /** Simulate the tone dying WITHOUT stop() running - the audioserver
+         *  restarting mid-alarm kills the Ringtone exactly like this. */
+        fun die() {
+            playing = false
         }
     }
 
@@ -220,6 +227,117 @@ class WalkAwayAlarmTest {
         assertFalse("the self-capping job must stop a forgotten alert", fake.isPlaying)
         assertEquals(1, fake.stops)
         assertEquals(LOW_ALARM_VOLUME, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
+    }
+
+    @Test
+    fun start_persistsSavedVolume_stopClearsIt() {
+        // The saved level must hit disk while the override is live: a process
+        // death between force-max and restore is the one window stop() cannot
+        // cover, and the persisted slot is what the next instance repairs from.
+        val prefs = Prefs(context)
+        val a = alarm { FakeTone() }
+        a.start()
+        assertEquals(
+            "the pre-force level must be persisted while the override is live",
+            LOW_ALARM_VOLUME,
+            prefs.walkAwaySavedAlarmVolume,
+        )
+
+        a.stop()
+        assertNull(
+            "a clean stop must clear the persisted slot - nothing left to repair",
+            prefs.walkAwaySavedAlarmVolume,
+        )
+    }
+
+    @Test
+    fun start_playFailure_clearsPersistedSavedVolume() {
+        val prefs = Prefs(context)
+        alarm { FakeTone(failOnPlay = true) }.start()
+        assertNull(
+            "the play-failure rollback restores the volume, so the slot must clear too",
+            prefs.walkAwaySavedAlarmVolume,
+        )
+    }
+
+    @Test
+    fun capJob_clearsPersistedSavedVolume() {
+        val prefs = Prefs(context)
+        alarm { FakeTone() }.start()
+        scheduler.advanceUntilIdle()
+        assertNull(
+            "the self-cap stops via stop(), which must clear the persisted slot",
+            prefs.walkAwaySavedAlarmVolume,
+        )
+    }
+
+    @Test
+    fun construction_restoresVolumeLeakedByProcessDeath() {
+        // Simulate a death mid-alarm: the persisted slot holds the rider's
+        // level, the stream is still pinned at max, and no stop() ever ran.
+        val prefs = Prefs(context)
+        prefs.walkAwaySavedAlarmVolume = LOW_ALARM_VOLUME
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
+
+        alarm { FakeTone() }
+
+        assertEquals(
+            "a new instance must repair the leaked max-volume override",
+            LOW_ALARM_VOLUME,
+            audioManager.getStreamVolume(AudioManager.STREAM_ALARM),
+        )
+        assertNull("the repaired slot must be cleared", prefs.walkAwaySavedAlarmVolume)
+    }
+
+    @Test
+    fun construction_withNoLeakedOverride_leavesVolumeUntouched() {
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, LOW_ALARM_VOLUME, 0)
+        alarm { FakeTone() }
+        assertEquals(
+            "no persisted slot means no repair - the rider's level stays put",
+            LOW_ALARM_VOLUME,
+            audioManager.getStreamVolume(AudioManager.STREAM_ALARM),
+        )
+    }
+
+    @Test
+    fun restartAfterStaleTone_keepsTheOriginalSavedVolume() {
+        // The tone died without stop() (audioserver restart mid-alarm), so
+        // the stream is still forced to max when the decider re-fires. The
+        // restart must NOT capture "current" - that would save the forced
+        // maximum as the rider's level and restore max forever.
+        val prefs = Prefs(context)
+        var current = FakeTone()
+        val a = alarm { current }
+        a.start()
+        assertEquals(maxAlarm, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
+
+        current.die()
+        current = FakeTone()
+        a.start()
+
+        assertEquals(
+            "the pre-alert level must survive a stale-tone restart",
+            LOW_ALARM_VOLUME,
+            prefs.walkAwaySavedAlarmVolume,
+        )
+        a.stop()
+        assertEquals(
+            "stop() must restore the rider's true level, not the forced max",
+            LOW_ALARM_VOLUME,
+            audioManager.getStreamVolume(AudioManager.STREAM_ALARM),
+        )
+    }
+
+    @Test
+    fun construction_coercesCorruptLeakedValueIntoStreamRange() {
+        // A corrupt or cross-device value must not crash construction or set
+        // an out-of-range volume; it clamps into the stream's valid range.
+        val prefs = Prefs(context)
+        prefs.walkAwaySavedAlarmVolume = 999
+        alarm { FakeTone() }
+        assertEquals(maxAlarm, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
+        assertNull(prefs.walkAwaySavedAlarmVolume)
     }
 
     @Test

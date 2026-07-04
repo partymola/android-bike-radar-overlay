@@ -197,6 +197,87 @@ class RideCheckpointTest {
         assertNull(store().take())
     }
 
+    // ── coordinator lifecycle ────────────────────────────────────────────
+
+    private class CoordinatorHarness(root: java.io.File) {
+        val store = RideCheckpointStore({ root })
+        val history = mutableListOf<RideHistoryRecord>()
+        val journal = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+        val coordinator = RideCheckpointCoordinator(
+            store = store,
+            appendToHistory = { history.add(it) },
+            journal = { journal.add(it) },
+            logWarn = { warnings.add(it) },
+        )
+    }
+
+    @Test
+    fun coordinator_recoverOnStart_flushesAndJournals() {
+        val h = CoordinatorHarness(tmp.root)
+        val leftover = RideCheckpointDecider.plan(null, meaningfulSnap(), null, 1L, 10L)!!
+        h.store.write(leftover)
+
+        h.coordinator.recoverOnStart()
+
+        assertEquals(listOf(leftover), h.history)
+        assertEquals(1, h.journal.size)
+        assertTrue("journal line must carry the partial flag", h.journal[0].contains("partial=true"))
+        assertNull("the flushed slot must be cleared", h.store.take())
+    }
+
+    @Test
+    fun coordinator_recoverOnStart_noCheckpoint_isSilent() {
+        val h = CoordinatorHarness(tmp.root)
+        h.coordinator.recoverOnStart()
+        assertTrue(h.history.isEmpty())
+        assertTrue(h.journal.isEmpty())
+    }
+
+    @Test
+    fun coordinator_tick_writesThenStaysQuiet() {
+        val h = CoordinatorHarness(tmp.root)
+        val snap = meaningfulSnap()
+        h.coordinator.tick({ snap }, null, 1L, 10L)
+        h.coordinator.tick({ snap.copy(alertsPerHourOfRide = 9f) }, null, 2L, 20L)
+
+        // One write happened; the drift-only second tick must not replace it.
+        val stored = h.store.take()
+        assertEquals(10L, stored!!.endedAtMs)
+    }
+
+    @Test
+    fun coordinator_summaryPosted_thenIdenticalTick_neverRecreatesTheSlot() {
+        val h = CoordinatorHarness(tmp.root)
+        val snap = meaningfulSnap()
+        h.coordinator.tick({ snap }, 90_000L, 100_000L, 2_000_000L) // off-edge write
+        val posted = RideHistoryRecord.fromSnapshot(snap, endedAtMs = 1_990_000L)
+        h.coordinator.onSummaryPosted(posted)
+
+        h.coordinator.tick({ snap }, 90_000L, 102_000L, 2_002_000L)
+
+        assertNull("a posted ride must not re-create the slot", h.store.take())
+    }
+
+    @Test
+    fun coordinator_onNewRide_dropsTheSlot() {
+        val h = CoordinatorHarness(tmp.root)
+        h.coordinator.tick({ meaningfulSnap() }, null, 1L, 10L)
+        h.coordinator.onNewRide()
+        assertNull(h.store.take())
+    }
+
+    @Test
+    fun coordinator_tick_swallowsSnapshotRaces() {
+        // The snapshot read can race the Main-thread stats writer; the tick
+        // must log and survive - a throw would kill the walk-away tick loop
+        // that also drives the alarm, summary, and radar-drop cue.
+        val h = CoordinatorHarness(tmp.root)
+        h.coordinator.tick({ throw ConcurrentModificationException("torn read") }, null, 1L, 10L)
+        assertEquals(1, h.warnings.size)
+        assertNull(h.store.take())
+    }
+
     // ── record partial flag ──────────────────────────────────────────────
 
     @Test

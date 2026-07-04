@@ -168,6 +168,42 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun bluetoothAdapterOffAndOn_runsBothRecoveryPaths_andJournalsThem() {
+        // A mid-ride Bluetooth stack restart must tear the links down (OFF)
+        // and re-arm discovery (ON) - the wiring lives in service lambdas,
+        // so this drives it end-to-end through the real broadcast. The
+        // always-on link journal is the observable: both edges must leave a
+        // line, and the service must survive the full cycle (the BLE-touching
+        // re-registration paths bail gracefully under Robolectric's null
+        // scanner, which is exactly the no-crash contract for a dead adapter).
+        val root = app.getExternalFilesDir(null)!!
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+
+        fun broadcast(state: Int) {
+            app.sendBroadcast(
+                Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                    .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, state),
+            )
+            shadowOf(app.mainLooper).idle()
+        }
+        broadcast(android.bluetooth.BluetoothAdapter.STATE_OFF)
+        broadcast(android.bluetooth.BluetoothAdapter.STATE_ON)
+        controller.destroy()
+
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertTrue(
+            "the adapter-off teardown must be journaled",
+            journal.contains("bluetooth adapter off"),
+        )
+        assertTrue(
+            "the adapter-on recovery must be journaled",
+            journal.contains("bluetooth adapter on"),
+        )
+    }
+
+    @Test
     fun retentionCapConstantIsFifty() {
         // Pins the M9 retention reduction (was 500). A revert trips this.
         assertEquals(50, CaptureLogManager.MAX_CAPTURE_LOGS)

@@ -198,17 +198,15 @@ class BikeRadarService : Service() {
     // meaningful-ride gate); read back by the Ride history screen.
     private val rideHistory = RideHistoryStore({ getExternalFilesDir(null) })
 
-    // Crash checkpoint for the in-flight ride (see RideCheckpoint.kt):
-    // written from the walk-away tick, flushed to history on the next start
-    // if the process died before the summary posted, cleared on the normal
-    // post path and on a new-ride reset. lastCheckpointRecord is the settled
-    // state the decider's change gate compares against: after a normal post
-    // it is set to the just-appended record (NOT nulled), so the following
-    // ticks - same stats, radar still off - see no change and cannot
-    // re-create a checkpoint for a ride history already holds.
-    // Tick-coroutine-confined.
-    private val rideCheckpoint = RideCheckpointStore({ getExternalFilesDir(null) })
-    private var lastCheckpointRecord: RideHistoryRecord? = null
+    // Crash checkpoint for the in-flight ride: all lifecycle logic lives in
+    // RideCheckpointCoordinator (see RideCheckpoint.kt); the service only
+    // wires its four one-line calls into onCreate and the walk-away tick.
+    private val rideCheckpoint = RideCheckpointCoordinator(
+        store = RideCheckpointStore({ getExternalFilesDir(null) }),
+        appendToHistory = { rideHistory.append(it) },
+        journal = { linkJournal.log(it) },
+        logWarn = { Log.w(TAG, it) },
+    )
 
     // Always-on BLE link-event journal. The capture log is opt-in and only
     // open during a live radar connection, so connection FAILURES used to
@@ -231,14 +229,7 @@ class BikeRadarService : Service() {
         // Service edges bracket the link events so a journal gap reads as
         // "service wasn't running", not "links were silent".
         linkJournal.log("service started (unclean restarts=${prefs.dirtyRestartCount})")
-        // Flush a ride the previous process death left behind: the normal
-        // summary path clears the checkpoint, so finding one here means the
-        // ride never made it into history. Meaningfulness was gated at write
-        // time; no notification is posted (the ride may be hours old).
-        rideCheckpoint.take()?.let { leftover ->
-            rideHistory.append(leftover)
-            linkJournal.log("recovered a ride from the crash checkpoint (partial=${leftover.partial})")
-        }
+        rideCheckpoint.recoverOnStart()
         // Crash-path capture flush: the seconds before a crash are the ride
         // data worth keeping, and the writer buffers up to a flush window.
         CrashLogger.emergencyFlush = { captureLog.flushNow() }
@@ -900,12 +891,7 @@ class BikeRadarService : Service() {
             when (action) {
                 RideSummaryEdgeTracker.Action.ResetRideStats -> {
                     rideStats = RideStatsAccumulator()
-                    // New ride: the old ride's checkpoint is either already in
-                    // history (summary posted) or superseded; never flush it.
-                    // Null marker is safe here - the fresh stats fail the
-                    // meaningful gate, so nothing rewrites until real riding.
-                    rideCheckpoint.clear()
-                    lastCheckpointRecord = null
+                    rideCheckpoint.onNewRide()
                 }
                 is RideSummaryEdgeTracker.Action.PostSummary -> {
                     notifications.postRideSummary(action.snapshot)
@@ -920,43 +906,16 @@ class BikeRadarService : Service() {
                     )
                     val posted = RideHistoryRecord.fromSnapshot(action.snapshot, endedAtMs = endedAtWallMs)
                     rideHistory.append(posted)
-                    // The ride is safely in history; a leftover checkpoint
-                    // would duplicate it on the next start. Marking the posted
-                    // record as the settled state (rather than nulling) keeps
-                    // the very next ticks - same stats, radar still off - from
-                    // re-creating the checkpoint just cleared.
-                    rideCheckpoint.clear()
-                    lastCheckpointRecord = posted
+                    rideCheckpoint.onSummaryPosted(posted)
                 }
             }
         }
-        // Best-effort by contract: the snapshot read can race the Main-thread
-        // stats writer mid-ride (same accepted class as the HA publish loop),
-        // and a throw here would otherwise kill the walk-away/summary/drop
-        // tick loop for the rest of the session - the checkpoint is a safety
-        // net, never a crash source.
-        try {
-            maybeCheckpointRide(nowMs)
-        } catch (t: Throwable) {
-            Log.w(TAG, "ride checkpoint skipped: $t")
-        }
-    }
-
-    /** Crash-checkpoint the in-flight ride when its record-relevant state
-     *  changed (see [RideCheckpointDecider.plan]). Rides the walk-away tick:
-     *  ~30 s cadence while riding (idle tick); the 2 s off-episode ticks and
-     *  the post-summary parked period are write-free because the record the
-     *  gate compares stops changing. */
-    private fun maybeCheckpointRide(nowMonoMs: Long) {
-        val record = RideCheckpointDecider.plan(
-            prevRecord = lastCheckpointRecord,
-            snap = rideStats.snapshot(),
+        rideCheckpoint.tick(
+            snapshot = { rideStats.snapshot() },
             radarOffSinceMs = radarOffSinceMs,
-            nowMonoMs = nowMonoMs,
+            nowMonoMs = nowMs,
             nowWallMs = System.currentTimeMillis(),
-        ) ?: return
-        rideCheckpoint.write(record)
-        lastCheckpointRecord = record
+        )
     }
 
     /** Show/hide/retitle the service-owned dead-radar banner per the

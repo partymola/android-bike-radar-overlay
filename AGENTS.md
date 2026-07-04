@@ -270,7 +270,8 @@ enforces them, and CONTRIBUTING.md points contributors here:
     whole testable layer, plus a tighter BRANCH >= 0.93 on every `*Decider` /
     `*Deriver` (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
     `app/build.gradle.kts` as coverage grows.
-  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, CI only): the
+  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, runs in CI and
+    as a mandatory pre-push `/qc` gate - never leave it to CI alone): the
     changed executable production lines in a PR (or a push) must be >= 85%
     covered. The project ratchet above can't see a 200-line untested feature
     while the average holds; this gate does. It wraps `diff-cover` over the

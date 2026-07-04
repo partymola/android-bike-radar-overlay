@@ -73,6 +73,85 @@ internal object RideCheckpointDecider {
     }
 }
 
+/**
+ * Owns the checkpoint lifecycle so the service keeps only one-line calls:
+ * recover-and-flush at start, settle on a posted summary, drop on a new
+ * ride, and the per-tick write gate. Confined to the walk-away tick
+ * coroutine (plus the synchronous onCreate recovery, which happens-before
+ * the tick launch), like the state it replaces.
+ *
+ * [tick] is best-effort by contract: the snapshot read can race the
+ * Main-thread stats writer mid-ride (the same accepted class as the HA
+ * publish loop), and a throw must not escape into the tick loop that also
+ * drives the walk-away alarm, ride summary, and radar-drop cue - the
+ * checkpoint is a safety net, never a crash source.
+ */
+internal class RideCheckpointCoordinator(
+    private val store: RideCheckpointStore,
+    private val appendToHistory: (RideHistoryRecord) -> Unit,
+    private val journal: (String) -> Unit,
+    private val logWarn: (String) -> Unit,
+) {
+    /** The settled state the write gate compares against: the last record
+     *  written to the slot, or - after a normal post - the record history
+     *  already holds, so the following ticks cannot re-create a checkpoint
+     *  for a ride already persisted. */
+    private var lastRecord: RideHistoryRecord? = null
+
+    /** Flush a ride a previous process death left behind: the normal
+     *  summary path clears the slot, so finding one here means the ride
+     *  never made it into history. Meaningfulness was gated at write time;
+     *  no notification is posted (the ride may be hours old). */
+    fun recoverOnStart() {
+        store.take()?.let { leftover ->
+            appendToHistory(leftover)
+            journal("recovered a ride from the crash checkpoint (partial=${leftover.partial})")
+        }
+    }
+
+    /** The ride is safely in history; a leftover checkpoint would duplicate
+     *  it on the next start. Marking the posted record as the settled state
+     *  (rather than nulling) keeps the very next ticks - same stats, radar
+     *  still off - from re-creating the checkpoint just cleared. */
+    fun onSummaryPosted(posted: RideHistoryRecord) {
+        store.clear()
+        lastRecord = posted
+    }
+
+    /** New ride: the old ride's checkpoint is either already in history
+     *  (summary posted) or superseded; never flush it. The null marker is
+     *  safe - fresh stats fail the meaningful gate, so nothing rewrites
+     *  until real riding. */
+    fun onNewRide() {
+        store.clear()
+        lastRecord = null
+    }
+
+    /** Checkpoint the in-flight ride when its record-relevant state changed
+     *  (see [RideCheckpointDecider.plan]). [snapshot] is invoked inside the
+     *  guard - it is the racy read. */
+    fun tick(
+        snapshot: () -> RideStatsSnapshot,
+        radarOffSinceMs: Long?,
+        nowMonoMs: Long,
+        nowWallMs: Long,
+    ) {
+        try {
+            val record = RideCheckpointDecider.plan(
+                prevRecord = lastRecord,
+                snap = snapshot(),
+                radarOffSinceMs = radarOffSinceMs,
+                nowMonoMs = nowMonoMs,
+                nowWallMs = nowWallMs,
+            ) ?: return
+            store.write(record)
+            lastRecord = record
+        } catch (t: Throwable) {
+            logWarn("ride checkpoint skipped: $t")
+        }
+    }
+}
+
 /** Single-slot persisted checkpoint. All methods are best-effort and
  *  corruption-tolerant; the checkpoint is a safety net, never a crash source. */
 internal class RideCheckpointStore(

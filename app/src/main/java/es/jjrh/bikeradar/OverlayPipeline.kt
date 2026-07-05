@@ -330,9 +330,15 @@ internal class OverlayPipeline(
         // (low-speed moving extension vs stationary path) so post-ride
         // threshold tuning can count moving fires directly. gate_speed_mps
         // is the speed decide() actually gated on (eBike wheel speed when
-        // bonded), which can differ from the radar's bike_speed_mps.
+        // bonded), which can differ from the radar's bike_speed_mps. The
+        // trigger_* fields are the vehicle that opened the urgent gate -
+        // frame_closest_* below is just the nearest car, often a different,
+        // slower one, so without these an urgent cannot be audited from the
+        // capture log.
         val urgentPath = (ev as? AlertDecider.Event.UrgentApproach)?.let {
-            " urgent_path=${if (it.viaMovingPath) "moving" else "stationary"}"
+            " urgent_path=${if (it.viaMovingPath) "moving" else "stationary"}" +
+                " trigger_tid=${it.triggerTid} trigger_d=${it.triggerDistanceM}" +
+                " trigger_closing_mps=${it.triggerClosingMs} trigger_rx=${it.triggerRangeXm}"
         } ?: ""
         val alertMax = prefs.alertMaxDistanceM
         val closest = state.vehicles

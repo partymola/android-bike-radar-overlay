@@ -251,10 +251,18 @@ class AlertDecider(
          *  available. `viaMovingPath` records which gate opened - the
          *  low-speed moving extension vs the stationary path - so the
          *  capture log can attribute each fire for threshold tuning;
-         *  the audio cue is identical either way. */
+         *  the audio cue is identical either way. The `trigger*` fields
+         *  carry the vehicle that actually opened the gate: the closest
+         *  frame vehicle a capture log records is often a different,
+         *  slower car, which made field urgents unauditable - a hidden
+         *  fast closer and a false positive looked identical. */
         data class UrgentApproach(
             val lateralPos: Float = 0f,
             val viaMovingPath: Boolean = false,
+            val triggerTid: Int = -1,
+            val triggerDistanceM: Int = -1,
+            val triggerClosingMs: Float = 0f,
+            val triggerRangeXm: Float = 0f,
         ) : Event()
         object None : Event()
     }
@@ -805,6 +813,10 @@ class AlertDecider(
                         Event.UrgentApproach(
                             lateralPos = imminentImpactTrigger.lateralPos,
                             viaMovingPath = urgentViaMoving,
+                            triggerTid = imminentImpactTrigger.id,
+                            triggerDistanceM = imminentImpactTrigger.distanceM,
+                            triggerClosingMs = -imminentImpactTrigger.speedMs,
+                            triggerRangeXm = imminentImpactTrigger.rangeXm,
                         )
                     }
                     riderStationary -> {
@@ -894,18 +906,28 @@ class AlertDecider(
     }
 
     /** Lateral-plausibility vetoes for an urgent candidate; true = the
-     *  candidate may fire. Fails OPEN: no lateral data (`rangeXm == 0f`
-     *  from lateral-free sources decodes as dead centre and passes),
-     *  unknown-sentinel frames, and unconfident fits all fire. */
+     *  candidate may fire. Fails OPEN where no lateral truth exists: no
+     *  lateral data (`rangeXm == 0f` from lateral-free sources decodes as
+     *  dead centre and passes) and unconfident fits fire; an
+     *  unknown-sentinel firing frame stands down only the instantaneous
+     *  off-axis veto, never the history-derived pass prediction. */
     private fun urgentLaterallyPlausible(v: Vehicle): Boolean {
-        // Unknown-sentinel frames hold a carried-forward lateral value,
-        // not a measurement: BOTH vetoes stand down. Denying a safety cue
-        // requires live lateral truth on the firing frame, however
-        // confident the track's earlier fit was.
-        if (v.lateralUnknown) return true
-        // Off-axis veto: two-plus lanes to the side on the firing frame
-        // is crossing/parallel traffic, not an impact line.
-        if (abs(v.rangeXm) > URGENT_LATERAL_MAX_M) return false
+        // Unknown-sentinel frames hold a carried-forward lateral value, not
+        // a measurement, so the OFF-AXIS veto (an instantaneous read of the
+        // firing frame) stands down. The PREDICTED-PASS veto does NOT: its
+        // fit is built exclusively from the track's prior MEASURED frames
+        // ([updateLateralHistory] skips unknown frames), so it needs nothing
+        // from the firing frame. Standing it down too was a field false
+        // positive: the radar drops lateral measurement exactly when a car
+        // rides the cone edge - far off-axis - so "lateral unknown" arrives
+        // correlated with the very geometry the veto exists to reject, and a
+        // wide parallel-lane pass (12 measured samples predicting ~5.5 m)
+        // fired the urgent cue on the one frame whose lateral went unknown.
+        if (!v.lateralUnknown) {
+            // Off-axis veto: two-plus lanes to the side on the firing frame
+            // is crossing/parallel traffic, not an impact line.
+            if (abs(v.rangeXm) > URGENT_LATERAL_MAX_M) return false
+        }
         // Predicted-pass veto: only with a confident fit.
         val predicted = predictedPassRangeXm(v.id) ?: return true
         return abs(predicted) < URGENT_PASS_LATERAL_MIN_M

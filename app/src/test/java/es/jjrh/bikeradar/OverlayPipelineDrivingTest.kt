@@ -3,6 +3,7 @@ package es.jjrh.bikeradar
 
 import android.content.Context
 import android.media.AudioManager
+import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
@@ -190,6 +191,8 @@ class OverlayPipelineDrivingTest {
         turnState: () -> TurnStateDecider.State = { TurnStateDecider.State.IDLE },
         turnSensorStart: () -> Unit = {},
         turnSensorStop: () -> Unit = {},
+        clog: (String) -> Unit = {},
+        clockMono: (() -> Long)? = null,
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
         ha = ha,
@@ -207,8 +210,52 @@ class OverlayPipelineDrivingTest {
         turnSensorStop = turnSensorStop,
         currentRadarMac = currentRadarMac,
         macToSlug = macToSlug,
-        clog = {},
+        clog = clog,
+        clockMono = clockMono ?: { SystemClock.elapsedRealtime() },
     )
+
+    @Test
+    fun urgentAlertLogCarriesTheTriggerVehicle() = runTest {
+        // The capture-log audit contract: an UrgentApproach line must name
+        // the vehicle that opened the gate (trigger_*), because
+        // frame_closest_* records the nearest car - in the field often a
+        // different, slower one, which made urgents unauditable.
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        // Confirm the stationary dwell with an empty frame, then age it out.
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 1_000L, vehicles = emptyList(), bikeSpeedMs = 0f),
+        )
+        runCurrent()
+        mono = 3_500L
+        // A slow near car plus the fast far trigger; two frames build the
+        // sustain, the second fires the urgent.
+        val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 3_500L, vehicles = listOf(slowNear, fastFar), bikeSpeedMs = 0f),
+        )
+        runCurrent()
+        mono = 3_600L
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 3_600L, vehicles = listOf(slowNear, fastFar), bikeSpeedMs = 0f),
+        )
+        runCurrent()
+        val urgentLine = clogLines.firstOrNull { it.contains("event=UrgentApproach") }
+        assertTrue("expected an UrgentApproach alert line, got $clogLines", urgentLine != null)
+        assertTrue(
+            "urgent line must carry the trigger vehicle, got $urgentLine",
+            urgentLine!!.contains("trigger_tid=9") &&
+                urgentLine.contains("trigger_d=15") &&
+                urgentLine.contains("trigger_closing_mps=8.0") &&
+                urgentLine.contains("trigger_rx=-1.0"),
+        )
+        job.cancel()
+        job.join()
+    }
 
     // ── turn-aware flag gating (glue) ────────────────────────────────────
     //

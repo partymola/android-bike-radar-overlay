@@ -85,7 +85,7 @@ package es.jjrh.bikeradar
  * disconnect reason could in principle separate a deliberate power-off
  * (peer-terminated) from a genuine link loss (supervision timeout), which would
  * suppress the dismount false-positive class directly. It is not used because
- * (a) the disconnect is reported from several call sites and only the GATT
+ * (a) the disconnect arrives via several call sites and only the GATT
  * state-change callback carries a status, so gating on it would couple this
  * safety decision to which path fired; (b) Android GATT status codes are
  * stack- and OEM-dependent; and (c) suppressing on peer-terminate trades a

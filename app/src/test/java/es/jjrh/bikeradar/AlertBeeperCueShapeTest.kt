@@ -70,12 +70,11 @@ class AlertBeeperCueShapeTest {
     }
 
     @Test fun statusCuesAreSeparableByPulseCount() {
-        // The three rear-radar status cues are discriminated by COUNT, not fine
-        // pitch (the noisy-London rule). Reconnect=1, battery=2, drop=3 - a
-        // distinct count each, so collapsing any two together fails here.
+        // The two rear-radar status cues are discriminated by COUNT, not fine
+        // pitch (the noisy-London rule). Reconnect=1, drop=3 - a distinct count
+        // each, so collapsing the two together fails here.
         val b = beeper()
         assertEquals(1, countPulses(b.buildRadarReconnectedPcm()))
-        assertEquals(2, countPulses(b.buildCriticalBatteryPcm()))
         assertEquals(3, countPulses(b.buildRadarDroppedPcm()))
     }
 
@@ -136,16 +135,15 @@ class AlertBeeperCueShapeTest {
     }
 
     @Test fun statusCuesShareOneCarrier_wellBelowTheThreatBeeps() {
-        // The status class (drop / battery / reconnect) sits on one ~900 Hz
-        // carrier - raised out of the traffic-masked low band but a full class
-        // below the sharp threat beeps (3200 Hz) and urgent (3800 Hz). Cues are
-        // told apart by COUNT, never a step off this carrier; the threat band
-        // stays untouched.
+        // The status class (drop / reconnect) sits on one ~900 Hz carrier -
+        // raised out of the traffic-masked low band but a full class below the
+        // sharp threat beeps (3200 Hz) and urgent (3800 Hz). Cues are told apart
+        // by COUNT, never a step off this carrier; the threat band stays
+        // untouched.
         val b = beeper()
         val drop = estimateCarrierHz(b.buildRadarDroppedPcm(), totalToneMs = 3 * 130)
-        val battery = estimateCarrierHz(b.buildCriticalBatteryPcm(), totalToneMs = 2 * 160)
         val reconnect = estimateCarrierHz(b.buildRadarReconnectedPcm(), totalToneMs = 150)
-        for (f in listOf(drop, battery, reconnect)) {
+        for (f in listOf(drop, reconnect)) {
             assertTrue("status carrier $f Hz should be ~900 Hz", abs(f - 900.0) < 80.0)
         }
         // Threat carriers unchanged and a clear class apart.

@@ -90,6 +90,24 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     @Volatile internal var rideStats = RideStatsAccumulator()
 
+    // Single-slot persistence for the end-of-trip needs-attention feed
+    // (bucket 3): written once per ride end below, read back by the home
+    // screen so the attention card survives a process death. Built in onCreate.
+    private lateinit var attentionStore: AttentionStore
+
+    // True when THIS service instance came up from an unclean shutdown (crash /
+    // kill / force-stop) - see dirtyRestartCount below. Process-scoped: it
+    // stays raised for every ride segment in this process so the end-of-trip
+    // attention feed can flag "the app restarted unexpectedly, some stats may
+    // be incomplete". Set once in onCreate.
+    @Volatile private var startedFromDirtyRestart = false
+
+    // Alert-sound play failures observed this ride (the `cue_failed ` onCue
+    // tag). Feeds the end-of-trip attention feed ("alert sounds failed - check
+    // media volume"); reset when a new ride's stats reset. Written from the
+    // AlertBeeper playback thread via onCue.
+    @Volatile private var cueFailedThisRide = 0
+
     // Ride-summary notification state: one post per radar-off episode.
     // Tick-coroutine-confined; see maybePostRideSummary. The transitions live in
     // the pure RideSummaryEdgeTracker; this holds only its rolling state.
@@ -248,7 +266,10 @@ class BikeRadarService : Service() {
         // Dirty-restart detection: the marker survives a crash / system kill /
         // force-stop (only onDestroy clears it), so finding it set here means
         // the previous instance died without a clean shutdown.
-        if (prefs.serviceRunningMarker) prefs.dirtyRestartCount += 1
+        if (prefs.serviceRunningMarker) {
+            prefs.dirtyRestartCount += 1
+            startedFromDirtyRestart = true
+        }
         prefs.serviceRunningMarker = true
         // Service edges bracket the link events so a journal gap reads as
         // "service wasn't running", not "links were silent".
@@ -258,6 +279,7 @@ class BikeRadarService : Service() {
         // data worth keeping, and the writer buffers up to a flush window.
         CrashLogger.emergencyFlush = { captureLog.flushNow() }
         knownDevices = KnownDevices(getSharedPreferences(PREFS_THROTTLE, MODE_PRIVATE))
+        attentionStore = AttentionStore(getSharedPreferences(AttentionStore.PREFS_NAME, MODE_PRIVATE))
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
         rideWakeLock = RideWakeLock(this)
@@ -310,6 +332,7 @@ class BikeRadarService : Service() {
             // single-writer.
             onCue = {
                 clog("# cue $it")
+                if (it.startsWith(AlertBeeper.CUE_FAILED_PREFIX)) cueFailedThisRide += 1
                 scope.launch(Dispatchers.Main) { rideStats.observeAlertCue(it) }
             },
             // An audioserver death-and-recovery mid-ride is worth reviewing
@@ -952,13 +975,19 @@ class BikeRadarService : Service() {
             when (action) {
                 RideSummaryEdgeTracker.Action.ResetRideStats -> {
                     rideStats = RideStatsAccumulator()
+                    cueFailedThisRide = 0
                     rideCheckpoint.onNewRide()
                 }
                 is RideSummaryEdgeTracker.Action.PostSummary -> {
                     // Ride declared over (sustained radar-off): the off-episode
                     // is resolved, so free the ride wakelock.
                     rideWakeLock.release()
-                    notifications.postRideSummary(action.snapshot)
+                    // End-of-trip needs-attention feed (bucket 3): derive from
+                    // the state captured at ride end, persist for the home card,
+                    // and lead the (quiet) summary notification with it.
+                    val attention = deriveAttentionItems()
+                    attentionStore.save(attention)
+                    notifications.postRideSummary(action.snapshot, attention)
                     // Ride end = the moment the radar went off, not "now" (the
                     // dwell is detection latency, not riding time). The off-instant
                     // is monotonic (elapsedRealtime); ride history persists a wall
@@ -1017,6 +1046,31 @@ class BikeRadarService : Service() {
         return macToSlug[mac]
             ?: macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefs.dashcamDisplayName?.let { slug(it) }
+    }
+
+    /** Build the end-of-trip needs-attention feed from the state captured at
+     *  ride end: last-known battery levels (radar, dashcam if configured),
+     *  eBike charge (only if a snapshot was seen this session), alert-sound
+     *  failures this ride, and whether this instance came up from an unclean
+     *  restart. Pure decision in [AttentionItemsDeriver]; this only gathers the
+     *  inputs. */
+    private fun deriveAttentionItems(): List<AttentionItem> {
+        val batteries = BatteryStateBus.entries.value
+        val radarSlug = radarLink.currentRadarMac?.let { mac ->
+            macToSlug[mac] ?: macToSlug[mac.uppercase(Locale.ROOT)]
+        }
+        val dashcamSlug = resolveDashcamSlug()
+        return AttentionItemsDeriver.derive(
+            AttentionItemsDeriver.Inputs(
+                radarBatteryPct = radarSlug?.let { batteries[it]?.pct },
+                dashcamConfigured = prefs.dashcamMac != null,
+                dashcamBatteryPct = dashcamSlug?.let { batteries[it]?.pct },
+                ebikeSeen = ebikeSnapshotCoordinator.hasEverSeenSnapshot(),
+                ebikeSoc = ebikeSnapshotCoordinator.snapshot()?.batterySoc,
+                audioFailureCount = cueFailedThisRide,
+                uncleanRestart = startedFromDirtyRestart,
+            ),
+        )
     }
 
     // ── pause expiry + capture prune ──────────────────────────────────────────
@@ -1113,23 +1167,6 @@ class BikeRadarService : Service() {
         }
 
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
-
-        /** Rear-radar battery percentage below which the in-ride audible
-         *  critical-battery cue fires. The general `batteryLowThresholdPct`
-         *  still drives only the silent visual glyph; this stricter level is
-         *  what adds the sound. */
-        const val CRITICAL_BATTERY_PCT = 10
-
-        /** Minimum gap between repeats of the critical-battery cue while the
-         *  radar battery stays below [CRITICAL_BATTERY_PCT]. Sparing by
-         *  design: a critical battery the rider cannot fix mid-ride must not
-         *  nag. */
-        const val CRITICAL_BATTERY_CUE_INTERVAL_MS = 120_000L
-
-        /** Re-fire gap for the pre-flight LOW-battery cue (L8). 30 min is
-         *  long enough that a sub-30-min commute gets exactly one heads-up
-         *  per device at connect, and it re-arms for the next ride. */
-        const val PREFLIGHT_BATTERY_CUE_INTERVAL_MS = 30 * 60 * 1000L
 
         // Dashcam presence-by-advert timing. Fresh threshold accommodates
         // SCAN_MODE_LOW_POWER batching; cold-start grace covers the window

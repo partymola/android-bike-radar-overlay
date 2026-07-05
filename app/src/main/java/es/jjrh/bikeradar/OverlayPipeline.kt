@@ -14,15 +14,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Extracted overlay/alert pipeline. Owns the per-frame loop that consumes
  * [RadarStateBus] + [BatteryStateBus] + a tick flow and drives:
  *  - the on-screen [RadarOverlayView] (attach / detach / setState / battery-
  *    low badging / dashcam-status badging),
- *  - the [AlertBeeper] audio cues (proximity, urgent, clear, critical battery,
- *    preflight low battery),
+ *  - the [AlertBeeper] audio cues (proximity, urgent, clear),
  *  - close-pass detection (state-machine emission + HA event publish +
  *    [ClosePassStateBus] count + [RideStatsAccumulator] tally),
  *  - the per-ride dashcam status derivation,
@@ -33,8 +31,8 @@ import java.util.concurrent.ConcurrentHashMap
  * pass production wrappers, tests pass stubs.
  *
  * The class is service-scoped (allocated in [BikeRadarService.onCreate]) so
- * its cross-connection state (phone-battery sample throttle, critical /
- * preflight battery cue cadence) survives a radar reconnect. Per-connection
+ * its cross-connection state (the phone-battery sample throttle) survives a
+ * radar reconnect. Per-connection
  * state (overlay attach flag, decider instances, session-start timestamp,
  * dashcam-seen flag, close-pass discovery flags) is allocated fresh inside
  * each [attach] call and torn down when the returned [Job] cancels.
@@ -72,9 +70,9 @@ internal class OverlayPipeline(
     private val currentRadarMac: () -> String?,
     private val macToSlug: () -> Map<String, String>,
     private val clog: (String) -> Unit,
-    /** Monotonic clock (elapsedRealtime) for the in-ride cue cadences -
-     *  AlertDecider's urgent-repeat gap and the critical/preflight battery
-     *  cadence - so a wall-clock jump can't stall or early-fire a safety cue.
+    /** Monotonic clock (elapsedRealtime) for the in-ride cue cadence -
+     *  AlertDecider's urgent-repeat gap - so a wall-clock jump can't stall or
+     *  early-fire a safety cue.
      *  Wall time (the per-frame `now`) is kept for the cosmetic battery /
      *  dashcam freshness gates, the capture-log lines, and the close-pass emit
      *  cooldown (whose `now` is also the emitted unix-epoch event timestamp). */
@@ -84,9 +82,6 @@ internal class OverlayPipeline(
     // Cross-connection state. Sampling cadences must NOT reset on every
     // reconnect or a flaky link would replay the cues each time.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
-
-    @Volatile private var lastCriticalBatteryCueMs: Long? = null
-    private val preflightBatteryCueMs = ConcurrentHashMap<String, Long>()
 
     /**
      * Start the pipeline. Returns the [Job] driving the collect loop; the
@@ -193,7 +188,6 @@ internal class OverlayPipeline(
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            maybeFireBatteryCues(batteries, now, nowMono, threshold)
                             fireAlertCue(state, alerts, overlayPrefs, nowMono, now)
                         } else {
                             alerts.reset()
@@ -282,58 +276,6 @@ internal class OverlayPipeline(
         table[mac]
             ?: table[mac.uppercase(Locale.ROOT)]
             ?: prefs.dashcamDisplayName?.let { BikeRadarService.slug(it) }
-    }
-
-    private fun maybeFireBatteryCues(
-        batteries: Map<String, BatteryEntry>,
-        nowMs: Long,
-        nowMonoMs: Long,
-        lowThresholdPct: Int,
-    ) {
-        val table = macToSlug()
-        val critMac = currentRadarMac()
-        val critSlug = critMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }
-        val critBatt = critSlug?.let { batteries[it] }
-        val critFresh = critBatt != null && nowMs - critBatt.readAtMs < BikeRadarService.BATTERY_STALE_MS
-        val critDecision = CriticalBatteryDecider.decide(
-            pct = critBatt?.pct,
-            fresh = critFresh,
-            nowMs = nowMonoMs,
-            criticalPct = BikeRadarService.CRITICAL_BATTERY_PCT,
-            cadenceMs = BikeRadarService.CRITICAL_BATTERY_CUE_INTERVAL_MS,
-            lastCueMs = lastCriticalBatteryCueMs,
-        )
-        lastCriticalBatteryCueMs = critDecision.lastCueMs
-        if (critDecision.fire) {
-            beeper.playCriticalBattery()
-            clog("# critical_battery radar=$critSlug pct=${critBatt?.pct}")
-        }
-        for (batt in batteries.values) {
-            if (!CriticalBatteryDecider.preflightEligible(
-                    batt.slug,
-                    batt.pct,
-                    critSlug,
-                    BikeRadarService.CRITICAL_BATTERY_PCT,
-                )
-            ) {
-                continue
-            }
-            val pfFresh = nowMs - batt.readAtMs < BikeRadarService.BATTERY_STALE_MS
-            val pfDecision = CriticalBatteryDecider.decide(
-                pct = batt.pct,
-                fresh = pfFresh,
-                nowMs = nowMonoMs,
-                criticalPct = lowThresholdPct,
-                cadenceMs = BikeRadarService.PREFLIGHT_BATTERY_CUE_INTERVAL_MS,
-                lastCueMs = preflightBatteryCueMs[batt.slug],
-            )
-            val pfLast = pfDecision.lastCueMs
-            if (pfLast == null) preflightBatteryCueMs.remove(batt.slug) else preflightBatteryCueMs[batt.slug] = pfLast
-            if (pfDecision.fire) {
-                beeper.playCriticalBattery()
-                clog("# preflight_battery ${batt.slug} pct=${batt.pct}")
-            }
-        }
     }
 
     private fun fireAlertCue(

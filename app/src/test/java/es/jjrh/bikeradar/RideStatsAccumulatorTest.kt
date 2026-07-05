@@ -414,7 +414,6 @@ class RideStatsAccumulatorTest {
         val a = acc(clock)
         rideTwelveKm(a, clock)
         a.observeAlertCue("clear")
-        a.observeAlertCue("critical_battery")
         a.observeAlertCue("radar_drop")
         a.observeAlertCue("radar_reconnect")
         val s = a.snapshot()

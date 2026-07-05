@@ -48,15 +48,12 @@ import kotlin.math.sin
  *                   ([URGENT_LOOM_GAP_MS]), so the burst perceptually rushes at
  *                   the rider and shaves brake reaction time (Gray 2011) without
  *                   any pitch motif. Distinct from play(3) by count + cadence.
- *   playCriticalBattery() -> mid ([STATUS_CARRIER_HZ] Hz) soft slow two-tone
- *                   for "rear radar battery critical". Status timbre-class, not
- *                   a threat, and must never read as one.
  *   playRadarDropped() -> [STATUS_CARRIER_HZ] Hz 3-pulse for "rear radar link
- *                   lost mid-ride". Same status carrier as the battery cue but
- *                   THREE pulses vs its two - told apart by count, not pitch.
+ *                   lost mid-ride". Status timbre-class, not a threat, and must
+ *                   never read as one.
  *   playRadarReconnected() -> a SINGLE [STATUS_CARRIER_HZ] Hz pulse for "rear
- *                   radar link restored". One pulse vs the drop's three and the
- *                   battery's two keeps the status cues separable by count.
+ *                   radar link restored". One pulse vs the drop's three keeps
+ *                   the two status cues separable by count, not pitch.
  *
  * The status carrier sits at ~[STATUS_CARRIER_HZ] Hz (up from an earlier
  * 440-660 Hz spread): the old band was masked by traffic/wind low-frequency
@@ -208,11 +205,10 @@ class AlertBeeper(
     // Retained PCM for the non-panned cues, so a track killed by an
     // audioserver restart can be rebuilt without regenerating tones.
     private val clearPcm: ShortArray = buildClearPcm()
-    private val criticalBatteryPcm: ShortArray = buildCriticalBatteryPcm()
     private val radarDroppedPcm: ShortArray = buildRadarDroppedPcm()
     private val radarReconnectedPcm: ShortArray = buildRadarReconnectedPcm()
 
-    // Eager tracks (8): the mono cues every rider hears. `var` because an
+    // Eager tracks (7): the mono cues every rider hears. `var` because an
     // audioserver restart kills the underlying objects and
     // [maybeRebuildTracks] swaps in fresh ones. Written and read on the
     // single playback executor only (plus construction) - [setVolumePct]
@@ -220,7 +216,6 @@ class AlertBeeper(
     private var beepMono: Array<AudioTrack> = Array(3) { i -> makeTrack(beepPcm[i]) }
     private var urgentMono: AudioTrack = makeTrack(urgentPcm)
     private var clearTrack: AudioTrack = makeTrack(clearPcm)
-    private var criticalBatteryTrack: AudioTrack = makeTrack(criticalBatteryPcm)
     private var radarDroppedTrack: AudioTrack = makeTrack(radarDroppedPcm)
     private var radarReconnectedTrack: AudioTrack = makeTrack(radarReconnectedPcm)
 
@@ -259,7 +254,6 @@ class AlertBeeper(
     }
     private val clearDurationMs: Int = 110 + 60 + 110
     private val urgentDurationMs: Int = URGENT_PULSES * URGENT_TONE_MS + URGENT_LOOM_GAP_MS.sum()
-    private val criticalBatteryDurationMs: Int = 2 * 160 + 1 * 140
     private val radarDroppedDurationMs: Int = 3 * 130 + 2 * 90
     private val radarReconnectedDurationMs: Int = RECONNECT_TONE_MS
 
@@ -359,22 +353,10 @@ class AlertBeeper(
         }
     }
 
-    /** Rear-radar critical-battery status cue. Non-directional (mono), like
-     *  the clear chime - it is not about a threat's location. */
-    fun playCriticalBattery() {
-        executor.execute {
-            if (suppressForCall()) return@execute
-            report("critical_battery") {
-                criticalBatteryTrack.setVolume(currentMonoGain())
-                playWithFocus(criticalBatteryTrack, criticalBatteryDurationMs)
-            }
-        }
-    }
-
     /** Rear-radar dropped status cue: the radar link went down mid-ride, so
      *  rear awareness is lost. Non-directional (mono). A low 3-pulse, a
-     *  distinct count + timbre-class from the critical-battery two-tone and
-     *  from the sharp/high threat beeps - a status cue, never a threat. */
+     *  distinct count + timbre-class from the sharp/high threat beeps - a
+     *  status cue, never a threat. */
     fun playRadarDropped() {
         executor.execute {
             if (suppressForCall()) return@execute
@@ -387,8 +369,8 @@ class AlertBeeper(
 
     /** Rear-radar reconnected status cue: the dropped link is back, so rear
      *  awareness is restored. A SINGLE soft pulse - the count of one separates
-     *  it from the drop cue's three and the battery cue's two, so the rider
-     *  reads it by count, not fine pitch. Non-directional (mono). Fired once
+     *  it from the drop cue's three, so the rider reads it by count, not fine
+     *  pitch. Non-directional (mono). Fired once
      *  per down-episode, and only after a drop cue was raised (the caller gates
      *  this via [RadarDropDecider]); a cold-start connect stays silent. */
     fun playRadarReconnected() {
@@ -437,7 +419,6 @@ class AlertBeeper(
             beepMono = Array(3) { i -> makeTrack(beepPcm[i]) }
             urgentMono = makeTrack(urgentPcm)
             clearTrack = makeTrack(clearPcm)
-            criticalBatteryTrack = makeTrack(criticalBatteryPcm)
             radarDroppedTrack = makeTrack(radarDroppedPcm)
             radarReconnectedTrack = makeTrack(radarReconnectedPcm)
             applyVolume()
@@ -508,7 +489,7 @@ class AlertBeeper(
      *  already invalid and may object to the farewell. */
     private fun releaseAllTracks() {
         val all = beepMono.asSequence() +
-            sequenceOf(urgentMono, clearTrack, criticalBatteryTrack, radarDroppedTrack, radarReconnectedTrack) +
+            sequenceOf(urgentMono, clearTrack, radarDroppedTrack, radarReconnectedTrack) +
             beepBucketRows.filterNotNull().flatMap { it.asIterable() } +
             (urgentBucketRow?.asSequence() ?: emptySequence())
         all.forEach {
@@ -709,7 +690,6 @@ class AlertBeeper(
         urgentMono.setVolume(g)
         urgentBucketRow?.forEach { it.setVolume(g) }
         clearTrack.setVolume(g)
-        criticalBatteryTrack.setVolume(g)
         radarDroppedTrack.setVolume(g)
         radarReconnectedTrack.setVolume(g)
     }
@@ -938,34 +918,13 @@ class AlertBeeper(
         return buf
     }
 
-    internal fun buildCriticalBatteryPcm(): ShortArray {
-        // Status-carrier ([STATUS_CARRIER_HZ]) soft, slow two-tone. The mid
-        // carrier + slow cadence put it in a different timbre-class from the
-        // sharp 3200/3800 Hz threat beeps and from the 1100->700 Hz "all clear"
-        // descent, so the rider reads it as a status cue, not a threat. Equal
-        // tones (no descent) also separate it from the clear chime; the slow
-        // cadence + TWO pulses separate it from the other status cues.
-        val toneSamples = sampleRate * 160 / 1000
-        val gapSamples = sampleRate * 140 / 1000
-        val tone = generateTone(toneSamples, STATUS_CARRIER_HZ)
-        val gap = ShortArray(gapSamples)
-        val buf = ShortArray(2 * toneSamples + gapSamples)
-        var pos = 0
-        tone.copyInto(buf, pos)
-        pos += toneSamples
-        gap.copyInto(buf, pos)
-        pos += gapSamples
-        tone.copyInto(buf, pos)
-        return buf
-    }
-
     internal fun buildRadarDroppedPcm(): ShortArray {
         // Status-carrier ([STATUS_CARRIER_HZ]) 3-pulse. The mid carrier keeps it
         // in the status timbre-class (not a sharp/high threat beep) yet high
         // enough to carry over traffic/wind, so a dead radar is heard at speed,
         // not just at a red light; the count of THREE separates it from the
-        // critical-battery TWO-tone (the rider discriminates by count, not fine
-        // pitch, per the noisy-London rule).
+        // reconnect cue's single pulse (the rider discriminates by count, not
+        // fine pitch, per the noisy-London rule).
         val toneSamples = sampleRate * 130 / 1000
         val gapSamples = sampleRate * 90 / 1000
         val tone = generateTone(toneSamples, STATUS_CARRIER_HZ)
@@ -986,12 +945,12 @@ class AlertBeeper(
 
     internal fun buildRadarReconnectedPcm(): ShortArray {
         // A SINGLE status-carrier ([STATUS_CARRIER_HZ]) pulse. The count of ONE
-        // is the discriminator - the radar-drop cue is THREE pulses and the
-        // critical-battery cue is TWO on the same carrier, so a single
-        // status-class pulse reads as "rear radar link restored" by count, not
-        // fine pitch (the noisy-London rule). Shares the drop cue's carrier
-        // deliberately: the two are the same event's down/back pair, told apart
-        // by count, and there is no motif to mishear (it is one tone).
+        // is the discriminator - the radar-drop cue is THREE pulses on the same
+        // carrier, so a single status-class pulse reads as "rear radar link
+        // restored" by count, not fine pitch (the noisy-London rule). Shares the
+        // drop cue's carrier deliberately: the two are the same event's
+        // down/back pair, told apart by count, and there is no motif to mishear
+        // (it is one tone).
         val toneSamples = sampleRate * RECONNECT_TONE_MS / 1000
         return generateTone(toneSamples, STATUS_CARRIER_HZ)
     }
@@ -1096,8 +1055,8 @@ class AlertBeeper(
 
         private const val TAG = "BikeRadar"
 
-        /** Carrier for the whole status timbre-class (radar-drop, reconnect,
-         *  critical-battery). Chosen in the ~800-1000 Hz window: the earlier
+        /** Carrier for the whole status timbre-class (radar-drop, reconnect).
+         *  Chosen in the ~800-1000 Hz window: the earlier
          *  440-660 Hz status band sat in the traffic/wind low-frequency mask,
          *  so a dead-radar cue was inaudible above ~25 km/h; ~900 Hz carries at
          *  speed while staying a full timbre-class below the sharp threat beeps

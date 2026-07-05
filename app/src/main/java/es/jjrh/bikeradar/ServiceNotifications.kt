@@ -310,34 +310,50 @@ internal class ServiceNotifications(
      * notification ID means each ride's summary replaces the previous
      * one rather than stacking. Opt-out is the channel itself in the
      * system notification settings.
+     *
+     * When any [attention] items exist the notification LEADS with them -
+     * a "Needs attention" title over the benefit-framed lines ("Charge
+     * radar - 12%") - since a thing the rider should act on beats the stats.
+     * The channel stays the same quiet LOW-importance one: these are
+     * end-of-trip items, never a heads-up. With no items it keeps the
+     * plain ride-stats recap unchanged.
      */
-    fun postRideSummary(snap: RideStatsSnapshot) {
+    fun postRideSummary(snap: RideStatsSnapshot, attention: List<AttentionItem> = emptyList()) {
         ensureChannels()
-        val distance = String.format(Locale.getDefault(), "%.1f", snap.distanceRiddenKm)
-        val text = context.getString(
-            R.string.notif_ride_summary_text,
-            snap.overtakesTotal,
-            snap.closePassCount,
-            distance,
-        )
-        val detailLines = buildList {
-            add(text)
-            snap.alertsPerKm?.let {
-                add(
-                    context.getString(
-                        R.string.notif_ride_summary_alerts,
-                        String.format(Locale.getDefault(), "%.1f", it),
-                    ),
-                )
-            }
-            snap.tightestPass?.let {
-                add(
-                    context.getString(
-                        R.string.notif_ride_summary_tightest,
-                        String.format(Locale.getDefault(), "%.1f", it.clearanceM),
-                        it.closingKmh,
-                    ),
-                )
+        val title: String
+        val contentText: String
+        val detailLines: List<String>
+        if (attention.isNotEmpty()) {
+            title = context.getString(R.string.attention_title)
+            detailLines = attention.map { attentionLine(it) }
+            contentText = detailLines.first()
+        } else {
+            title = context.getString(R.string.notif_ride_summary_title)
+            contentText = context.getString(
+                R.string.notif_ride_summary_text,
+                snap.overtakesTotal,
+                snap.closePassCount,
+                String.format(Locale.getDefault(), "%.1f", snap.distanceRiddenKm),
+            )
+            detailLines = buildList {
+                add(contentText)
+                snap.alertsPerKm?.let {
+                    add(
+                        context.getString(
+                            R.string.notif_ride_summary_alerts,
+                            String.format(Locale.getDefault(), "%.1f", it),
+                        ),
+                    )
+                }
+                snap.tightestPass?.let {
+                    add(
+                        context.getString(
+                            R.string.notif_ride_summary_tightest,
+                            String.format(Locale.getDefault(), "%.1f", it.clearanceM),
+                            it.closingKmh,
+                        ),
+                    )
+                }
             }
         }
         val piFlags = if (Build.VERSION.SDK_INT >= 23) {
@@ -349,8 +365,8 @@ internal class ServiceNotifications(
             PendingIntent.getActivity(context, NOTIF_RIDE_SUMMARY_REQ, it, piFlags)
         }
         val notif = NotificationCompat.Builder(context, RIDE_SUMMARY_CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_ride_summary_title))
-            .setContentText(text)
+            .setContentTitle(title)
+            .setContentText(contentText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(detailLines.joinToString("\n")))
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -359,6 +375,15 @@ internal class ServiceNotifications(
             .apply { openApp?.let { setContentIntent(it) } }
             .build()
         nm.notify(NOTIF_RIDE_SUMMARY_ID, notif)
+    }
+
+    /** Resolve one attention item to its display line via the shared
+     *  [AttentionCopy] map, using the notification's [Resources]. */
+    private fun attentionLine(item: AttentionItem): String = when (val line = AttentionCopy.lineFor(item)) {
+        is AttentionCopy.Line.Simple ->
+            if (line.arg != null) context.getString(line.res, line.arg) else context.getString(line.res)
+        is AttentionCopy.Line.Plural ->
+            context.resources.getQuantityString(line.res, line.count, line.count)
     }
 
     companion object {

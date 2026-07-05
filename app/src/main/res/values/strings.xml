@@ -673,6 +673,16 @@
     <string name="notif_ride_summary_text">Overtakes: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Close passes: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km</string>
     <string name="notif_ride_summary_alerts">Alerts per km: <xliff:g id="rate" example="1.4">%1$s</xliff:g></string>
     <string name="notif_ride_summary_tightest">Tightest pass: <xliff:g id="m" example="0.8">%1$s</xliff:g> m at <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
+    <!-- Needs-attention feed (end-of-trip): shared by the summary notification and the home-screen card. -->
+    <string name="attention_title">Needs attention</string>
+    <string name="attention_radar_battery">Charge radar - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_dashcam_battery">Charge dashcam - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_ebike_battery">Charge eBike - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_unclean_restart">App restarted mid-ride - some stats may be incomplete</string>
+    <plurals name="attention_audio_failures">
+        <item quantity="one">Alert sound failed - check media volume</item>
+        <item quantity="other">Alert sounds failed <xliff:g id="count" example="3">%1$d</xliff:g> times - check media volume</item>
+    </plurals>
     <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
     <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam left on bike</string>

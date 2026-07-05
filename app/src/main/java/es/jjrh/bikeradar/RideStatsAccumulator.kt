@@ -47,9 +47,9 @@ class RideStatsAccumulator(
     private var tightestPass: TightestPass? = null
 
     // Alarm-cue tally. Counts only the close-pass ALARM cues that actually
-    // sounded (beep + urgent); informational cues (clear, critical_battery,
-    // radar_drop, radar_reconnect) are excluded so the derived per-km /
-    // per-hour rates measure alarm burden.
+    // sounded (beep + urgent); informational cues (clear, radar_drop,
+    // radar_reconnect) are excluded so the derived per-km / per-hour rates
+    // measure alarm burden.
     private var alarmCueCount: Int = 0
 
     // Generation counter for change detection. Incremented whenever any
@@ -156,9 +156,9 @@ class RideStatsAccumulator(
      * Ingest one sounded alert cue, tagged by [AlertBeeper]'s `onCue`
      * chokepoint. Only the close-pass alarm cues ([AlertBeeper] tags `beep…`
      * and `urgent`) increment the tally; the informational cues (`clear`,
-     * `critical_battery`, `radar_drop`, `radar_reconnect`) are ignored - as
-     * are failed plays (`cue_failed …` prefix), which never sounded and so
-     * must not count as heard alerts.
+     * `radar_drop`, `radar_reconnect`) are ignored - as are failed plays
+     * (`cue_failed …` prefix), which never sounded and so must not count as
+     * heard alerts.
      */
     fun observeAlertCue(tag: String) {
         if (tag.startsWith("beep") || tag == "urgent") {

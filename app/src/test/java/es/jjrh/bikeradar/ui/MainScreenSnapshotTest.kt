@@ -141,6 +141,23 @@ class MainScreenSnapshotTest {
     }
 
     @Test
+    fun attentionCard() {
+        captureRoboImage {
+            UiTheme {
+                MainShell {
+                    AttentionCard(
+                        lines = listOf(
+                            "Charge radar - 12%",
+                            "Charge dashcam - 8%",
+                            "Alert sounds failed 2 times - check media volume",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun systemEbikeWaiting() {
         captureRoboImage {
             UiTheme {

@@ -160,4 +160,47 @@ class ServiceNotificationsTest {
             nm.activeNotifications.map { title(it) }.toSet(),
         )
     }
+
+    private fun blankSnapshot() = RideStatsSnapshot(
+        overtakesTotal = 6,
+        closePassCount = 1,
+        grazingCount = 0,
+        hgvClosePassCount = 0,
+        peakClosingKmh = null,
+        closingSpeedP90Kmh = null,
+        minLateralClearanceM = null,
+        distanceRiddenKm = 4.2f,
+        exposureSeconds = 600L,
+        closePassConversionRatePct = 0f,
+        tightestPass = null,
+        rideStartedAtMs = 0L,
+        alertsPerKm = null,
+        alertsPerHourOfRide = null,
+    )
+
+    private fun bigText(sbn: android.service.notification.StatusBarNotification) = sbn.notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+
+    @Test fun rideSummaryWithNoAttentionKeepsTheStatsRecap() {
+        notifications().postRideSummary(blankSnapshot(), emptyList())
+        val sbn = nm.activeNotifications.single()
+        assertEquals(app.getString(R.string.notif_ride_summary_title), title(sbn))
+        // The stats body still leads with the overtakes/close-passes/km line.
+        assertTrue(bigText(sbn)!!.contains("Close passes"))
+    }
+
+    @Test fun rideSummaryLeadsWithAttentionWhenItemsExist() {
+        notifications().postRideSummary(
+            blankSnapshot(),
+            listOf(
+                AttentionItem(AttentionKind.RADAR_BATTERY, 12),
+                AttentionItem(AttentionKind.AUDIO_FAILURES, 2),
+            ),
+        )
+        val sbn = nm.activeNotifications.single()
+        assertEquals(app.getString(R.string.attention_title), title(sbn))
+        val body = bigText(sbn)!!
+        assertTrue("attention body should charge the radar at 12%", body.contains("12"))
+        // The stats recap must NOT appear when attention items lead.
+        assertFalse(body.contains("Close passes"))
+    }
 }

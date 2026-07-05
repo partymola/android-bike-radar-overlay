@@ -125,12 +125,12 @@ class AlertBeeperFocusTest {
     }
 
     @Test
-    fun playCriticalBattery_skipsAudioPathInCall() {
+    fun playRadarDropped_skipsAudioPathInCall() {
         audioManager.setMode(AudioManager.MODE_IN_CALL)
         val beeper = newBeeper()
-        beeper.playCriticalBattery()
+        beeper.playRadarDropped()
         assertTrue(
-            "no focus request expected on playCriticalBattery while MODE_IN_CALL",
+            "no focus request expected on playRadarDropped while MODE_IN_CALL",
             shadowAm.lastAudioFocusRequest == null,
         )
         beeper.release()
@@ -173,7 +173,6 @@ class AlertBeeperFocusTest {
         beeper.play(2)
         beeper.playClear()
         beeper.playUrgent()
-        beeper.playCriticalBattery()
         beeper.playRadarDropped()
         beeper.playRadarReconnected()
         assertTrue("no cue should be recorded while MODE_IN_COMMUNICATION suppresses audio", cues.isEmpty())
@@ -266,11 +265,10 @@ class AlertBeeperFocusTest {
         beeper.play(2)
         beeper.playClear()
         beeper.playUrgent()
-        beeper.playCriticalBattery()
         beeper.playRadarDropped()
         beeper.playRadarReconnected()
         assertEquals(
-            listOf("beep count=2", "clear", "urgent", "critical_battery", "radar_drop", "radar_reconnect"),
+            listOf("beep count=2", "clear", "urgent", "radar_drop", "radar_reconnect"),
             cues,
         )
         beeper.release()
@@ -289,7 +287,6 @@ class AlertBeeperFocusTest {
         beeper.play(2)
         beeper.playClear()
         beeper.playUrgent()
-        beeper.playCriticalBattery()
         beeper.playRadarDropped()
         beeper.playRadarReconnected()
         assertTrue("no cue should be recorded while MODE_IN_CALL suppresses audio", cues.isEmpty())

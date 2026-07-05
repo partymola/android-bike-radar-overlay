@@ -658,6 +658,16 @@
     <string name="notif_ride_summary_text">Adelantamientos: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Pases cercanos: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12,4">%3$s</xliff:g> km</string>
     <string name="notif_ride_summary_alerts">Alertas por km: <xliff:g id="rate" example="1,4">%1$s</xliff:g></string>
     <string name="notif_ride_summary_tightest">Pase más ajustado: <xliff:g id="m" example="0,8">%1$s</xliff:g> m a <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
+    <!-- Aviso de fin de ruta (bucket 3): compartido por la notificación de resumen y la tarjeta de inicio. -->
+    <string name="attention_title">Requiere atención</string>
+    <string name="attention_radar_battery">Carga el radar - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
+    <string name="attention_dashcam_battery">Carga la cámara - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
+    <string name="attention_ebike_battery">Carga el eBike - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
+    <string name="attention_unclean_restart">La app se reinició en ruta - algunos datos pueden faltar</string>
+    <plurals name="attention_audio_failures">
+        <item quantity="one">Un aviso no sonó - revisa el volumen</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no sonaron - revisa el volumen</item>
+    </plurals>
     <string name="svc_main_walkaway_channel_name">Cámara dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la cámara delantera sigue emitiendo desde la bici.</string>
     <string name="svc_main_walkaway_notif_title">Cámara dejada en la bici</string>

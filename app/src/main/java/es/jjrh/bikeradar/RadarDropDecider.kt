@@ -4,7 +4,7 @@ package es.jjrh.bikeradar
 /**
  * Decides when to fire the radar-drop audible cue. Pure function; the caller
  * (the BikeRadarService walk-away tick) owns [Decision.lastCueMs] and threads
- * it back on the next tick. Mirrors [CriticalBatteryDecider].
+ * it back on the next tick.
  *
  * Why it exists: when the rear-radar BLE link drops mid-ride the overlay
  * freezes on its last frame, so a dead radar looks identical to a clear road.

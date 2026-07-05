@@ -346,7 +346,7 @@ enforces them, and CONTRIBUTING.md points contributors here:
 ## Audio design
 
 The alert-audio model - close-pass tier beeps, the urgent impact cue, the
-all-clear chime, the radar critical-battery cue, and the inactivation states
+all-clear chime, the radar drop/reconnect cues, and the inactivation states
 (audio-focus ducking + in-call suppression) - is an informal
 implementation of the IEC 60601-1-8 alarm-system pattern: distinct alarm
 *classes* (by timbre, not fine pitch), alarm parsimony, and "paused with

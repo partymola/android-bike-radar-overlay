@@ -315,6 +315,16 @@ class BikeRadarService : Service() {
             // An audioserver death-and-recovery mid-ride is worth reviewing
             // afterwards; the journal is always on, unlike the capture log.
             onTracksRebuilt = { gen -> linkJournal.log("audio tracks rebuilt after a play failure (gen=$gen)") },
+            // Media-volume floor crash-repair: persist the rider's alarm
+            // level while a cue burst lifts it, so a process death in that
+            // sub-second window doesn't strand the alarm slider raised.
+            saveAlarmFloor = { level -> prefs.alertBeeperSavedAlarmVolume = level },
+            loadAlarmFloor = { prefs.alertBeeperSavedAlarmVolume },
+            // WalkAwayAlarm interlock: while the walk-away alarm's force-max
+            // override holds STREAM_ALARM, the floor stays off the stream and
+            // hands any pending restore to walkAwayAlarm.stop(). Guarded:
+            // walkAwayAlarm is constructed later in onCreate.
+            walkAwayOverrideActive = { ::walkAwayAlarm.isInitialized && walkAwayAlarm.overrideActive },
         ).also {
             it.setVolumePct(prefs.alertVolume)
             it.setPanning(
@@ -362,7 +372,14 @@ class BikeRadarService : Service() {
             publishRideEdge = { edge, iso -> haPublisher.publishRideEdgeIfHa(edge, iso) },
             nowIso = { java.time.Instant.now().toString() },
         )
-        walkAwayAlarm = WalkAwayAlarm(this, scope)
+        walkAwayAlarm = WalkAwayAlarm(
+            this,
+            scope,
+            // The other half of the beeper interlock: if the walk-away alarm
+            // starts while a cue burst has the alarm stream lifted, capture
+            // the rider's TRUE pre-lift level, not the lifted one.
+            beeperAlarmBaseline = { alertBeeper?.alarmFloorBaseline() },
+        )
         radarLinkCoordinator = RadarLinkCoordinator(
             clock = { SystemClock.elapsedRealtime() },
             prefs = prefs,

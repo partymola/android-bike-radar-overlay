@@ -70,6 +70,16 @@ internal class WalkAwayAlarm(
     private val scope: CoroutineScope,
     private val toneFactory: (AudioAttributes) -> AlarmTone = { attrs -> systemAlarmTone(context, attrs) },
     private val prefs: Prefs = Prefs(context),
+    // AlertBeeper interlock: the rider's TRUE pre-lift alarm level while the
+    // beeper's media-volume floor holds a lift on STREAM_ALARM, else null.
+    // Both paths override the same stream; if this alarm starts while a cue
+    // burst has it lifted, reading the CURRENT volume would capture the
+    // lifted level as "the rider's original" and [stop] would strand the
+    // slider there. [start] consults this first and saves the true baseline;
+    // the beeper's side then skips its own restore while [overrideActive]
+    // and hands ownership here. Wired to [AlertBeeper.alarmFloorBaseline] by
+    // the service; defaults to "no lift" for tests and beeper-less hosts.
+    private val beeperAlarmBaseline: () -> Int? = { null },
 ) {
     /** Looping alarm-stream tone played alongside the walk-away
      *  notification; null when not playing. The notification channel's
@@ -88,6 +98,11 @@ internal class WalkAwayAlarm(
      *  forgotten-dashcam alert just because their alarm slider was low.
      *  Restored in [stop]. Null when no override is in effect. */
     @Volatile private var savedAlarmVolume: Int? = null
+
+    /** True while this alarm's force-max override holds STREAM_ALARM. The
+     *  beeper's side of the interlock reads this (via a service-wired lambda)
+     *  to keep its media-volume floor off the stream during an episode. */
+    internal val overrideActive: Boolean get() = savedAlarmVolume != null
 
     /** Single-slot job that stops the alarm tone after
      *  [WALKAWAY_RINGTONE_CAP_MS]. Without this cap a forgotten alert
@@ -159,11 +174,18 @@ internal class WalkAwayAlarm(
         // audioserver restart mid-alarm - leaves savedAlarmVolume non-null
         // and the stream still forced; capturing "current" then would save
         // the forced maximum as the rider's level and restore max forever.
+        //
+        // AlertBeeper interlock: if the beeper's media-volume floor holds a
+        // lift right now, the CURRENT stream volume is the lifted level, not
+        // the rider's - capturing it would restore the lift as "original" in
+        // stop() and strand the slider high (the beeper's own restore skips
+        // the stream while this override is active, handing ownership here).
+        // [beeperAlarmBaseline] supplies the true pre-lift level instead.
         val alreadyOverridden = savedAlarmVolume != null
         val saved = if (alreadyOverridden) {
             null
         } else {
-            try {
+            beeperAlarmBaseline() ?: try {
                 am.getStreamVolume(AudioManager.STREAM_ALARM)
             } catch (_: Throwable) {
                 null

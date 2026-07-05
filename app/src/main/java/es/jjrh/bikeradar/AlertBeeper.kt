@@ -16,34 +16,61 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Generates radar alert tones.
- *   play(1..3) -> 1/2/3 sharp 3200 Hz beeps separated by short gaps.
+ * Generates radar alert tones. The vocabulary is organised into three
+ * timbre-CLASSES - threat (sharp/high), status (mid ~[STATUS_CARRIER_HZ]),
+ * and the descending all-clear - kept apart by carrier band, and WITHIN a
+ * class every cue is discriminated by pulse COUNT and TIMING only, never by
+ * fine pitch (the noisy-London rule: a rider under helmet + wind + traffic
+ * cannot resolve a rising-vs-falling motif or a few-Hz carrier step).
+ *
+ *   play(1..3) -> 1/2/3 sharp [beepFreqHz] Hz beeps. This is the AWARENESS
+ *                   channel: the tier is the vehicle's DISTANCE band (set by
+ *                   AlertDecider, untouched here) and demands no action - it
+ *                   tells the rider what is around, not what to do. Each tier
+ *                   carries its own distinct RHYTHM as a redundant fingerprint
+ *                   of that same distance band: tier 2 a slow pair
+ *                   ([BEEP_GAP_TIER2_MS] ms gap), tier 3 a tight triplet
+ *                   ([BEEP_GAP_TIER3_MS] ms gap), so a rider under load tells 2
+ *                   from 3 by rhythm as well as count. The rate is a second
+ *                   read on the SAME distance, never a speed/urgency code (that
+ *                   is the action channel's job); the carrier and the
+ *                   count<->distance mapping are constant across tiers.
  *   playClear() -> softer two-tone descent (1100 -> 700 Hz) for "all clear".
- *   playUrgent() -> rapid 4-pulse 3800 Hz pattern with tight 50 ms gaps,
- *                   intentionally distinct from play(3) so the rider
- *                   recognises the imminent-impact override case.
- *   playCriticalBattery() -> low (520 Hz) soft slow two-tone for "rear
- *                   radar battery critical". Deliberately a different
- *                   timbre-CLASS from the sharp/high threat beeps and from
- *                   the mid descending "all clear" - it is a status cue,
- *                   not a threat, and must never read as one. First cut;
- *                   tune the pitch/cadence on ride evidence.
- *   playRadarDropped() -> low (440 Hz) 3-pulse for "rear radar link lost
- *                   mid-ride". Status-class like the battery cue, but THREE
- *                   pulses vs the battery's two so the rider tells them
- *                   apart by count, not pitch. First cut; tune on rides.
- *   playRadarReconnected() -> a SINGLE soft (660 Hz) pulse for "rear radar
- *                   link restored". The completing half of the drop cue;
- *                   one pulse vs the drop's three and the battery's two keeps
- *                   the status cues separable by count. First cut; tune on rides.
+ *                   Its own class (a falling glide), never a status carrier.
+ *   playUrgent() -> [URGENT_PULSES]-pulse [URGENT_CARRIER_HZ] Hz imminent-impact
+ *                   override, LOOMING: each pulse is louder than the last
+ *                   ([URGENT_LOOM_START_AMP]..1.0) and the gaps ACCELERATE
+ *                   ([URGENT_LOOM_GAP_MS]), so the burst perceptually rushes at
+ *                   the rider and shaves brake reaction time (Gray 2011) without
+ *                   any pitch motif. Distinct from play(3) by count + cadence.
+ *   playCriticalBattery() -> mid ([STATUS_CARRIER_HZ] Hz) soft slow two-tone
+ *                   for "rear radar battery critical". Status timbre-class, not
+ *                   a threat, and must never read as one.
+ *   playRadarDropped() -> [STATUS_CARRIER_HZ] Hz 3-pulse for "rear radar link
+ *                   lost mid-ride". Same status carrier as the battery cue but
+ *                   THREE pulses vs its two - told apart by count, not pitch.
+ *   playRadarReconnected() -> a SINGLE [STATUS_CARRIER_HZ] Hz pulse for "rear
+ *                   radar link restored". One pulse vs the drop's three and the
+ *                   battery's two keeps the status cues separable by count.
+ *
+ * The status carrier sits at ~[STATUS_CARRIER_HZ] Hz (up from an earlier
+ * 440-660 Hz spread): the old band was masked by traffic/wind low-frequency
+ * energy, so "your radar dropped" was inaudible above ~25 km/h and only landed
+ * at a red light. Raising the whole class into the ~800-1000 Hz window (still
+ * well clear of the sharp threat beeps) makes the status cues carry at speed;
+ * it is a timbre-CLASS move, not a fine-pitch distinction.
  *
  * Volume is user-controlled via [setVolumePct] (0..100, default 50). Values
  * map through a perceptual curve so sliding below ~50 actually reduces
- * loudness noticeably.
+ * loudness noticeably. Independently of that app-level gain, every cue also
+ * lifts the system alarm stream to a floor above the rider's media level for
+ * the duration of the burst (see [applyAlarmFloor]) so a loud podcast can't
+ * leave a safety alert at a quiet alarm preset.
  *
  * Stereo panning (experimental, default off via prefs): when [setPanning]
  * is on, [play] and [playUrgent] bias the cue toward the threat's side by
@@ -118,12 +145,46 @@ class AlertBeeper(
     // sounded. Single chokepoint: every play* path goes through it, so a
     // future cue can't ship unlogged.
     private val onCue: (String) -> Unit = {},
+    // Media-volume floor crash-repair seam. [applyAlarmFloor] lifts the
+    // system alarm stream for the duration of a cue burst and restores it
+    // after; if the process dies inside that sub-second window the rider's
+    // alarm slider is left raised. These two lambdas let the service persist
+    // the pre-lift level (mirroring WalkAwayAlarm's [Prefs.walkAwaySavedAlarmVolume]
+    // pattern, but a SEPARATE slot) so the next start repairs a leaked lift.
+    // Both default to no-ops: under test and on the standalone audio path the
+    // floor still works, it just isn't crash-persisted. Context-free by design,
+    // keeping this class injectable like its other seams.
+    private val saveAlarmFloor: (Int?) -> Unit = {},
+    private val loadAlarmFloor: () -> Int? = { null },
+    // One half of the WalkAwayAlarm interlock (the other half is
+    // [alarmFloorBaseline], which the walk-away alarm reads): true while the
+    // walk-away alarm holds its own STREAM_ALARM override (forced max). While
+    // it does, the walk-away path owns the stream - the floor must neither
+    // lift (the stream is already at max) nor write its restore (that would
+    // yank the blaring walk-away alarm down mid-episode); [restoreAlarmFloor]
+    // instead hands the pending restore off to the walk-away's own stop().
+    // Defaults to "never active" for tests and beeper-only hosts.
+    private val walkAwayOverrideActive: () -> Boolean = { false },
 ) {
 
     private val sampleRate = 44100
     private val beepFreqHz = 3200f
     private val toneDurMs = 80
-    private val gapMs = 110
+
+    /**
+     * Inter-pulse gap for a [count]-pulse close-pass beep, in ms. Each tier
+     * (= a DISTANCE band, the awareness channel) gets its own rhythm so the
+     * tiers are easier to tell apart under load: tier 2 a calm slow pair, tier 3
+     * a tight triplet. This is a redundant read on the same distance the count
+     * already carries - NOT a speed/urgency code (no beep tier demands action).
+     * A single beep has no gap. Both gaps stay above the
+     * [AlertBeeperCueShapeTest] silence threshold so pulse-counting stays
+     * unambiguous.
+     */
+    private fun beepGapMs(count: Int): Int = when (count) {
+        3 -> BEEP_GAP_TIER3_MS
+        else -> BEEP_GAP_TIER2_MS
+    }
 
     // Mono cue PCM, built once. Reused to make both the mono default-path
     // track and the stereo pan-bucket tracks.
@@ -192,11 +253,12 @@ class AlertBeeper(
     // Track-duration table for the abandon-timer. Computed at build time
     // from the same sample counts the AudioTrack contents use, so the
     // timer never under-shoots the actual playback.
-    private val beepDurationMs: IntArray = IntArray(3) { count ->
-        (count + 1) * toneDurMs + count * gapMs
+    private val beepDurationMs: IntArray = IntArray(3) { i ->
+        val count = i + 1
+        count * toneDurMs + (count - 1) * beepGapMs(count)
     }
     private val clearDurationMs: Int = 110 + 60 + 110
-    private val urgentDurationMs: Int = 4 * 70 + 3 * 50
+    private val urgentDurationMs: Int = URGENT_PULSES * URGENT_TONE_MS + URGENT_LOOM_GAP_MS.sum()
     private val criticalBatteryDurationMs: Int = 2 * 160 + 1 * 140
     private val radarDroppedDurationMs: Int = 3 * 130 + 2 * 90
     private val radarReconnectedDurationMs: Int = RECONNECT_TONE_MS
@@ -238,6 +300,15 @@ class AlertBeeper(
             .build()
 
     @Volatile private var hasFocus: Boolean = false
+
+    /** The rider's own STREAM_ALARM index, captured once when [applyAlarmFloor]
+     *  first lifts the alarm stream for a cue burst; null when no lift is in
+     *  effect. Restored when the abandon timer fires (end of the burst) and in
+     *  [release]. @Volatile because it is written on the playback executor
+     *  ([applyAlarmFloor]) and read/cleared on the main looper (the abandon
+     *  runnable) - the same cross-thread shape as [hasFocus]. */
+    @Volatile private var savedAlarmFloor: Int? = null
+
     private val abandonHandler = Handler(Looper.getMainLooper())
     private val abandonRunnable = Runnable {
         if (hasFocus) {
@@ -246,12 +317,14 @@ class AlertBeeper(
             } catch (_: Throwable) {}
             hasFocus = false
         }
+        restoreAlarmFloor()
     }
 
     init {
         applyVolume()
         audioManager.registerAudioDeviceCallback(deviceCallback, null)
         refreshRoute()
+        repairLeakedAlarmFloor()
     }
 
     fun play(beeps: Int, lateralPos: Float = 0f) {
@@ -408,6 +481,10 @@ class AlertBeeper(
             } catch (_: Throwable) {}
             hasFocus = false
         }
+        // The abandon timer that would normally restore the alarm floor was
+        // just cancelled; do it here so service destroy never leaves the
+        // rider's alarm slider raised.
+        restoreAlarmFloor()
         audioManager.unregisterAudioDeviceCallback(deviceCallback)
         // Teardown rides the playback executor, keeping the track fields
         // executor-confined: a cue task already queued ahead of this one
@@ -467,6 +544,7 @@ class AlertBeeper(
             }
             hasFocus = granted
         }
+        applyAlarmFloor()
         val played = (playTrackOverride ?: ::playOnce)(track)
         // Re-arm the abandon timer. Back-to-back plays extend the
         // window so media stays ducked across the burst rather than
@@ -474,6 +552,132 @@ class AlertBeeper(
         abandonHandler.removeCallbacks(abandonRunnable)
         abandonHandler.postDelayed(abandonRunnable, (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong())
         return played
+    }
+
+    /**
+     * Media-volume floor. Before a cue sounds, lift the system alarm stream so
+     * the alert sits ~[ALARM_MARGIN_STEPS] steps (~6 dB) above whatever the
+     * rider set their MEDIA volume to, without ever turning the alarm DOWN
+     * below their own preset. USAGE_ALARM cues play on STREAM_ALARM, so a rider
+     * with a loud podcast (STREAM_MUSIC) but a quiet alarm slider would
+     * otherwise hear a safety alert too faintly. No microphone, no privacy
+     * cost: STREAM_MUSIC is the rider's own chosen listening level, used as a
+     * proxy for ambient loudness. Best-effort - some OEMs reject volume writes
+     * from background services, which is fine; the app-level track gain still
+     * plays.
+     *
+     * Burst-scoped: the pre-lift level is saved ONCE (guarded by
+     * [savedAlarmFloor] being null) and restored when the burst's abandon timer
+     * fires, so a rapid multi-beep burst lifts and restores once, not per
+     * pulse. The saved level is persisted via [saveAlarmFloor] so a process
+     * death inside the sub-second lift window is repaired at the next start
+     * ([repairLeakedAlarmFloor]) - the walk-away alarm's pattern, on a separate
+     * slot. Executor-confined (called from [playWithFocus]).
+     *
+     * Interlock: while the walk-away alarm holds its own override
+     * ([walkAwayOverrideActive]) the floor does nothing - the stream is
+     * already forced to max, and writing floor state during someone else's
+     * override would corrupt whose "original" gets restored.
+     */
+    private fun applyAlarmFloor() {
+        if (walkAwayOverrideActive()) return
+        try {
+            val musicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val musicMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val alarmMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            // Baseline = the rider's true level: the already-saved original
+            // during a burst, else the current (un-lifted) alarm index.
+            val baseline = savedAlarmFloor
+                ?: audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+            val target = computeAlarmFloorIndex(musicVol, musicMax, baseline, alarmMax)
+            if (target <= baseline) return
+            if (savedAlarmFloor == null) {
+                savedAlarmFloor = baseline
+                saveAlarmFloor(baseline)
+            }
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
+        } catch (t: Throwable) {
+            Log.w(TAG, "alarm-floor lift failed: $t")
+        }
+    }
+
+    /** Restore the alarm stream to the rider's pre-lift level. No-op when no
+     *  lift is in effect. Runs on the main looper (abandon timer) and on the
+     *  caller thread ([release]); the null-guard makes the second call inert,
+     *  and [savedAlarmFloor] is @Volatile, so the cross-thread overlap with an
+     *  executor-side [applyAlarmFloor] is benign - worst case a lift is
+     *  restored a burst early and re-applied by the next cue, and a leak is
+     *  still caught by the crash-repair slot.
+     *
+     *  Interlock: if the walk-away alarm took the stream over mid-lift
+     *  (ordering: floor lifts -> walk-away forces max -> this timer fires),
+     *  the stream write is SKIPPED and only the slot is cleared - the
+     *  walk-away captured the rider's true baseline through
+     *  [alarmFloorBaseline] at its start() and now owns the restore. Writing
+     *  here would yank the blaring walk-away alarm down mid-episode. */
+    private fun restoreAlarmFloor() {
+        val saved = savedAlarmFloor ?: return
+        if (!walkAwayOverrideActive()) {
+            try {
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+            } catch (t: Throwable) {
+                Log.w(TAG, "alarm-floor restore failed: $t")
+            }
+        }
+        savedAlarmFloor = null
+        saveAlarmFloor(null)
+    }
+
+    /**
+     * The rider's true pre-lift STREAM_ALARM level while the media-volume
+     * floor holds a lift, else null. The WalkAwayAlarm interlock: when the
+     * walk-away alarm starts while a cue burst has the alarm stream lifted,
+     * reading the CURRENT stream volume would capture the lifted level as
+     * "the rider's original" and strand the slider there after both restores.
+     * WalkAwayAlarm.start() consults this first and saves the true baseline
+     * instead; [restoreAlarmFloor] then hands the restore off to walk-away's
+     * stop(). @Volatile-backed, safe from any thread.
+     */
+    internal fun alarmFloorBaseline(): Int? = savedAlarmFloor
+
+    /** Repair an alarm-floor lift leaked by a process death mid-burst: a
+     *  persisted level ([loadAlarmFloor]) means the previous process raised the
+     *  alarm stream and died before restoring. No cue can be active at
+     *  construction, so restoring unconditionally is safe. */
+    private fun repairLeakedAlarmFloor() {
+        val leaked = loadAlarmFloor() ?: return
+        try {
+            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, leaked.coerceIn(0, max), 0)
+            Log.i(TAG, "restored alarm volume leaked by a mid-cue process death")
+        } catch (t: Throwable) {
+            Log.w(TAG, "leaked alarm-floor restore failed: $t")
+        }
+        saveAlarmFloor(null)
+    }
+
+    /**
+     * Pure target-index computation for the media-volume floor. STREAM_MUSIC
+     * and STREAM_ALARM have independent step counts, so the music index is
+     * scaled into the alarm range, then [ALARM_MARGIN_STEPS] (~6 dB headroom) is
+     * added. The result is FLOORED at [alarmVol] (never turn the rider's alarm
+     * down) and capped at [alarmMax]. When no media is playing ([musicVol] == 0)
+     * the rider's own alarm level stands - the floor lifts above MEDIA, nothing
+     * else.
+     * Volume steps are not perfectly uniform in dB, so the margin is an honest
+     * approximation, not a calibrated +6 dB.
+     */
+    internal fun computeAlarmFloorIndex(
+        musicVol: Int,
+        musicMax: Int,
+        alarmVol: Int,
+        alarmMax: Int,
+    ): Int {
+        if (alarmMax <= 0 || musicMax <= 0) return alarmVol
+        if (musicVol <= 0) return alarmVol
+        val musicScaledToAlarm = ceil(musicVol.toDouble() / musicMax * alarmMax).toInt()
+        val target = musicScaledToAlarm + ALARM_MARGIN_STEPS
+        return target.coerceIn(alarmVol, alarmMax)
     }
 
     /**
@@ -675,7 +879,7 @@ class AlertBeeper(
 
     internal fun buildBeepPcm(count: Int): ShortArray {
         val toneSamples = sampleRate * toneDurMs / 1000
-        val gapSamples = sampleRate * gapMs / 1000
+        val gapSamples = sampleRate * beepGapMs(count) / 1000
         val tone = generateTone(toneSamples, beepFreqHz)
         val gap = ShortArray(gapSamples)
 
@@ -709,37 +913,41 @@ class AlertBeeper(
     }
 
     internal fun buildUrgentPcm(): ShortArray {
-        // 4 beeps at 3800 Hz, 70 ms tone, 50 ms gap. Faster cadence and
-        // higher pitch than play(3) so the rider recognises this as the
-        // stationary-safety-override pattern, not a normal close-approach
-        // beep.
-        val toneSamples = sampleRate * 70 / 1000
-        val gapSamples = sampleRate * 50 / 1000
-        val tone = generateTone(toneSamples, 3800f)
-        val gap = ShortArray(gapSamples)
-        val count = 4
-        val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
+        // [URGENT_PULSES] pulses at [URGENT_CARRIER_HZ], LOOMING: each pulse is
+        // louder than the last ([URGENT_LOOM_START_AMP] -> 1.0, linear) and the
+        // gaps ACCELERATE ([URGENT_LOOM_GAP_MS], monotonically shrinking), so
+        // the burst perceptually rushes at the rider - a loudness+tempo loom
+        // that saves brake reaction time (Gray 2011) without a pitch motif. The
+        // higher carrier + count + rising rate keep it unmistakably NOT a normal
+        // close-approach beep. The loom is baked into the mono PCM, so the
+        // stereo pan buckets inherit it unchanged.
+        val toneSamples = sampleRate * URGENT_TONE_MS / 1000
+        val gapSampleCounts = URGENT_LOOM_GAP_MS.map { sampleRate * it / 1000 }
+        val totalSamples = URGENT_PULSES * toneSamples + gapSampleCounts.sum()
+        val buf = ShortArray(totalSamples)
         var pos = 0
-        repeat(count) { i ->
-            tone.copyInto(buf, pos)
+        repeat(URGENT_PULSES) { i ->
+            val ampScale = URGENT_LOOM_START_AMP +
+                (1f - URGENT_LOOM_START_AMP) * i / (URGENT_PULSES - 1)
+            generateTone(toneSamples, URGENT_CARRIER_HZ, ampScale).copyInto(buf, pos)
             pos += toneSamples
-            if (i < count - 1) {
-                gap.copyInto(buf, pos)
-                pos += gapSamples
+            if (i < URGENT_PULSES - 1) {
+                pos += gapSampleCounts[i] // gap left as silence (zeros)
             }
         }
         return buf
     }
 
     internal fun buildCriticalBatteryPcm(): ShortArray {
-        // Low (520 Hz) soft, slow two-tone. Low pitch + slow cadence put it
-        // in a different timbre-class from the sharp 3200/3800 Hz threat
-        // beeps and from the 1100->700 Hz "all clear" descent, so the rider
-        // reads it as a status cue, not a threat. Equal tones (no descent)
-        // also separate it from the clear chime. First cut - tune on rides.
+        // Status-carrier ([STATUS_CARRIER_HZ]) soft, slow two-tone. The mid
+        // carrier + slow cadence put it in a different timbre-class from the
+        // sharp 3200/3800 Hz threat beeps and from the 1100->700 Hz "all clear"
+        // descent, so the rider reads it as a status cue, not a threat. Equal
+        // tones (no descent) also separate it from the clear chime; the slow
+        // cadence + TWO pulses separate it from the other status cues.
         val toneSamples = sampleRate * 160 / 1000
         val gapSamples = sampleRate * 140 / 1000
-        val tone = generateTone(toneSamples, 520f)
+        val tone = generateTone(toneSamples, STATUS_CARRIER_HZ)
         val gap = ShortArray(gapSamples)
         val buf = ShortArray(2 * toneSamples + gapSamples)
         var pos = 0
@@ -752,13 +960,15 @@ class AlertBeeper(
     }
 
     internal fun buildRadarDroppedPcm(): ShortArray {
-        // Low (440 Hz) 3-pulse. Low pitch keeps it in the status timbre-class
-        // (not a sharp/high threat beep); the count of THREE separates it from
-        // the critical-battery TWO-tone (the rider discriminates by count, not
-        // fine pitch, per the noisy-London rule). First cut - tune on rides.
+        // Status-carrier ([STATUS_CARRIER_HZ]) 3-pulse. The mid carrier keeps it
+        // in the status timbre-class (not a sharp/high threat beep) yet high
+        // enough to carry over traffic/wind, so a dead radar is heard at speed,
+        // not just at a red light; the count of THREE separates it from the
+        // critical-battery TWO-tone (the rider discriminates by count, not fine
+        // pitch, per the noisy-London rule).
         val toneSamples = sampleRate * 130 / 1000
         val gapSamples = sampleRate * 90 / 1000
-        val tone = generateTone(toneSamples, 440f)
+        val tone = generateTone(toneSamples, STATUS_CARRIER_HZ)
         val gap = ShortArray(gapSamples)
         val count = 3
         val buf = ShortArray(count * toneSamples + (count - 1) * gapSamples)
@@ -775,18 +985,24 @@ class AlertBeeper(
     }
 
     internal fun buildRadarReconnectedPcm(): ShortArray {
-        // A SINGLE soft 660 Hz pulse. The count of ONE is the discriminator -
-        // the radar-drop cue is THREE low pulses and the critical-battery cue
-        // is TWO, so a single status-class pulse reads as "rear radar link
-        // restored" by count, not fine pitch (the noisy-London rule). Pitched
-        // a touch above the 440 Hz drop cue so the down/back pair is loosely
-        // recognisable without relying on a rising motif (it is one tone, so
-        // there is no motif to mishear). First cut - tune on rides.
+        // A SINGLE status-carrier ([STATUS_CARRIER_HZ]) pulse. The count of ONE
+        // is the discriminator - the radar-drop cue is THREE pulses and the
+        // critical-battery cue is TWO on the same carrier, so a single
+        // status-class pulse reads as "rear radar link restored" by count, not
+        // fine pitch (the noisy-London rule). Shares the drop cue's carrier
+        // deliberately: the two are the same event's down/back pair, told apart
+        // by count, and there is no motif to mishear (it is one tone).
         val toneSamples = sampleRate * RECONNECT_TONE_MS / 1000
-        return generateTone(toneSamples, 660f)
+        return generateTone(toneSamples, STATUS_CARRIER_HZ)
     }
 
-    private fun generateTone(numSamples: Int, freqHz: Float): ShortArray {
+    /**
+     * One sine burst. [ampScale] (<= 1.0) scales the whole pulse's peak; the
+     * looming urgent cue rides this to make each successive pulse louder
+     * without touching pitch. A short raised-cosine-ish fade at both ends
+     * avoids the click of a hard start/stop.
+     */
+    private fun generateTone(numSamples: Int, freqHz: Float, ampScale: Float = 1f): ShortArray {
         val buf = ShortArray(numSamples)
         val twoPiF = 2.0 * PI * freqHz / sampleRate
         val fade = (numSamples * 0.08).toInt().coerceAtLeast(1)
@@ -795,7 +1011,7 @@ class AlertBeeper(
                 min(i.toDouble() / fade, (numSamples - 1 - i).toDouble() / fade),
                 1.0,
             )
-            buf[i] = (Short.MAX_VALUE * 0.75 * env * sin(twoPiF * i)).toInt().toShort()
+            buf[i] = (Short.MAX_VALUE * 0.75 * ampScale * env * sin(twoPiF * i)).toInt().toShort()
         }
         return buf
     }
@@ -879,6 +1095,60 @@ class AlertBeeper(
         const val DEFAULT_VOLUME_PCT = 50
 
         private const val TAG = "BikeRadar"
+
+        /** Carrier for the whole status timbre-class (radar-drop, reconnect,
+         *  critical-battery). Chosen in the ~800-1000 Hz window: the earlier
+         *  440-660 Hz status band sat in the traffic/wind low-frequency mask,
+         *  so a dead-radar cue was inaudible above ~25 km/h; ~900 Hz carries at
+         *  speed while staying a full timbre-class below the sharp threat beeps
+         *  (3200/3800 Hz). This is a timbre-CLASS move (a whole band shift),
+         *  not a fine-pitch distinction; the wind/traffic mask peaks in the low
+         *  band, so lifting the class clear of it is what buys audibility at
+         *  speed. Status cues stay discriminated by COUNT (1/2/3), never by a
+         *  step off this carrier. */
+        internal const val STATUS_CARRIER_HZ = 900f
+
+        /** Inter-pulse gap for a 2-pulse close-pass beep (slow, calm pair). */
+        internal const val BEEP_GAP_TIER2_MS = 150
+
+        /** Inter-pulse gap for a 3-pulse close-pass beep (tight triplet).
+         *  Shorter than [BEEP_GAP_TIER2_MS] purely to give the tiers distinct
+         *  rhythms so they are easier to tell apart under load - a redundant
+         *  fingerprint of the DISTANCE band the count already carries, NOT a
+         *  speed/urgency code (no beep tier demands action; that is the urgent
+         *  action channel's job) and NOT a change to what distance maps to which
+         *  tier. Both gaps stay well above the [AlertBeeperCueShapeTest]
+         *  pulse-silence threshold. Values chosen here (no decision-doc figure);
+         *  tune on ride evidence. */
+        internal const val BEEP_GAP_TIER3_MS = 70
+
+        /** Pulse count of the imminent-impact urgent cue (unchanged; pinned by
+         *  [AlertBeeperCueShapeTest]). */
+        internal const val URGENT_PULSES = 4
+
+        /** Per-pulse tone length of the urgent cue, ms. */
+        internal const val URGENT_TONE_MS = 70
+
+        /** Urgent-cue carrier (unchanged; above the close-pass 3200 Hz). */
+        internal const val URGENT_CARRIER_HZ = 3800f
+
+        /** Amplitude of the FIRST urgent pulse relative to peak; the loom ramps
+         *  linearly from here to 1.0 across the burst so each pulse is louder
+         *  than the last. A looming-intensity envelope shortens brake reaction
+         *  time (Gray, "Looming Auditory Collision Warnings for Driving", Human
+         *  Factors 2011) - loudness + tempo, no pitch motif. Value chosen here;
+         *  tune on rides. */
+        internal const val URGENT_LOOM_START_AMP = 0.55f
+
+        /** The 3 inter-pulse gaps of the 4-pulse urgent burst, ms, in order.
+         *  Monotonically SHRINKING so the burst accelerates (the tempo half of
+         *  the loom). Values chosen here; tune on rides. */
+        internal val URGENT_LOOM_GAP_MS = intArrayOf(70, 50, 30)
+
+        /** Approx headroom the media-volume floor adds above the scaled media
+         *  level, in alarm-stream steps (~6 dB; steps are not uniform in dB, so
+         *  this is an honest approximation, not a calibrated figure). */
+        internal const val ALARM_MARGIN_STEPS = 2
 
         /** Prepended to a cue's [onCue] tag when the play attempt failed even
          *  after the rebuild-and-retry. Consumers key off the bare tags

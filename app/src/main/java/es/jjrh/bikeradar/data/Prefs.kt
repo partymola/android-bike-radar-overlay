@@ -603,6 +603,33 @@ class Prefs(context: Context) {
             }
         }
 
+    /** The rider's own STREAM_ALARM level, persisted by [AlertBeeper]'s
+     *  media-volume floor just before it lifts the alarm stream above the
+     *  rider's media level for a cue burst, and cleared when the lift is undone.
+     *  A SEPARATE slot from [walkAwaySavedAlarmVolume]: the two paths lift the
+     *  same stream and CAN overlap (a cue burst's restore timer can straddle a
+     *  walk-away start), so they coordinate through an explicit interlock -
+     *  the walk-away captures the beeper's saved baseline instead of the
+     *  lifted stream value, and the beeper hands its restore off while the
+     *  walk-away override is active (see [AlertBeeper.alarmFloorBaseline]). A
+     *  non-null value at the next start means a process death inside the
+     *  sub-second lift window left the alarm raised; [AlertBeeper] repairs it
+     *  from this slot on construction. Runtime state, not part of [snapshot] /
+     *  [flow] / [dumpAll]. */
+    var alertBeeperSavedAlarmVolume: Int?
+        get() = if (sp.contains(KEY_BEEPER_SAVED_ALARM_VOLUME)) {
+            sp.getInt(KEY_BEEPER_SAVED_ALARM_VOLUME, 0)
+        } else {
+            null
+        }
+        set(v) {
+            if (v == null) {
+                sp.edit().remove(KEY_BEEPER_SAVED_ALARM_VOLUME).apply()
+            } else {
+                sp.edit().putInt(KEY_BEEPER_SAVED_ALARM_VOLUME, v).apply()
+            }
+        }
+
     /** Diagnostic: set while [es.jjrh.bikeradar.BikeRadarService] is running,
      *  cleared by its onDestroy. A set marker at the NEXT onCreate means the
      *  previous service instance never shut down cleanly - a crash, a system
@@ -797,6 +824,7 @@ class Prefs(context: Context) {
         const val KEY_SERVICE_RUNNING_MARKER = "service_running_marker"
         const val KEY_DIRTY_RESTART_COUNT = "dirty_restart_count"
         const val KEY_WALKAWAY_SAVED_ALARM_VOLUME = "walk_away_saved_alarm_volume"
+        const val KEY_BEEPER_SAVED_ALARM_VOLUME = "beeper_saved_alarm_volume"
 
         // Legacy storage keys from when the feature was named after the
         // official Bosch LDI protocol. Read-only; cleared on first use of the

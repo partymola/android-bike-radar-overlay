@@ -101,12 +101,18 @@ internal class RideCheckpointCoordinator(
     /** Flush a ride a previous process death left behind: the normal
      *  summary path clears the slot, so finding one here means the ride
      *  never made it into history. Meaningfulness was gated at write time;
-     *  no notification is posted (the ride may be hours old). */
-    fun recoverOnStart() {
-        store.take()?.let { leftover ->
-            appendToHistory(leftover)
-            journal("recovered a ride from the crash checkpoint (partial=${leftover.partial})")
-        }
+     *  no notification is posted (the ride may be hours old).
+     *
+     *  Returns whether a checkpoint was recovered - i.e. the previous
+     *  process died with a ride in flight. The service scopes the
+     *  "app restarted mid-ride" attention item to this, because the
+     *  dirty-restart marker alone cannot tell a mid-ride crash from a
+     *  between-rides reinstall or force-stop (both skip onDestroy). */
+    fun recoverOnStart(): Boolean {
+        val leftover = store.take() ?: return false
+        appendToHistory(leftover)
+        journal("recovered a ride from the crash checkpoint (partial=${leftover.partial})")
+        return true
     }
 
     /** The ride is safely in history; a leftover checkpoint would duplicate

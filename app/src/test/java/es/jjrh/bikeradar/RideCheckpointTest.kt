@@ -218,7 +218,10 @@ class RideCheckpointTest {
         val leftover = RideCheckpointDecider.plan(null, meaningfulSnap(), null, 1L, 10L)!!
         h.store.write(leftover)
 
-        h.coordinator.recoverOnStart()
+        assertTrue(
+            "a recovered checkpoint must report true (feeds the restarted-mid-ride flag)",
+            h.coordinator.recoverOnStart(),
+        )
 
         assertEquals(listOf(leftover), h.history)
         assertEquals(1, h.journal.size)
@@ -229,7 +232,10 @@ class RideCheckpointTest {
     @Test
     fun coordinator_recoverOnStart_noCheckpoint_isSilent() {
         val h = CoordinatorHarness(tmp.root)
-        h.coordinator.recoverOnStart()
+        assertFalse(
+            "no checkpoint means no mid-ride death - must report false",
+            h.coordinator.recoverOnStart(),
+        )
         assertTrue(h.history.isEmpty())
         assertTrue(h.journal.isEmpty())
     }

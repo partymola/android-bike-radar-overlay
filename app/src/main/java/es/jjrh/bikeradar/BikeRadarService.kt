@@ -95,12 +95,15 @@ class BikeRadarService : Service() {
     // screen so the attention card survives a process death. Built in onCreate.
     private lateinit var attentionStore: AttentionStore
 
-    // True when THIS service instance came up from an unclean shutdown (crash /
-    // kill / force-stop) - see dirtyRestartCount below. Process-scoped: it
-    // stays raised for every ride segment in this process so the end-of-trip
-    // attention feed can flag "the app restarted unexpectedly, some stats may
-    // be incomplete". Set once in onCreate.
-    @Volatile private var startedFromDirtyRestart = false
+    // True when THIS service instance came up from an unclean shutdown WITH a
+    // ride in flight (the crash checkpoint had a leftover ride). The bare
+    // dirty-restart marker is not enough: a dev reinstall or force-stop
+    // between rides also skips onDestroy, and flagging those as "restarted
+    // mid-ride" is a false alarm. Set once in onCreate; cleared after the
+    // first ride summary reports it (report once, not on every subsequent
+    // ride this process serves).
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var startedFromDirtyRestart = false
 
     // Alert-sound play failures observed this ride (the `cue_failed ` onCue
     // tag). Feeds the end-of-trip attention feed ("alert sounds failed - check
@@ -266,15 +269,18 @@ class BikeRadarService : Service() {
         // Dirty-restart detection: the marker survives a crash / system kill /
         // force-stop (only onDestroy clears it), so finding it set here means
         // the previous instance died without a clean shutdown.
-        if (prefs.serviceRunningMarker) {
-            prefs.dirtyRestartCount += 1
-            startedFromDirtyRestart = true
-        }
+        val diedUnclean = prefs.serviceRunningMarker
+        if (diedUnclean) prefs.dirtyRestartCount += 1
         prefs.serviceRunningMarker = true
         // Service edges bracket the link events so a journal gap reads as
         // "service wasn't running", not "links were silent".
         linkJournal.log("service started (unclean restarts=${prefs.dirtyRestartCount})")
-        rideCheckpoint.recoverOnStart()
+        // The rider-facing "restarted mid-ride" flag needs BOTH signals: the
+        // unclean death AND a ride left in flight (checkpoint recovered). The
+        // debug counter above keeps counting every unclean death. Recovery
+        // must run unconditionally - it is what flushes the ride to history.
+        val recoveredMidRide = rideCheckpoint.recoverOnStart()
+        startedFromDirtyRestart = diedUnclean && recoveredMidRide
         // Crash-path capture flush: the seconds before a crash are the ride
         // data worth keeping, and the writer buffers up to a flush window.
         CrashLogger.emergencyFlush = { captureLog.flushNow() }
@@ -986,6 +992,11 @@ class BikeRadarService : Service() {
                     // the state captured at ride end, persist for the home card,
                     // and lead the (quiet) summary notification with it.
                     val attention = deriveAttentionItems()
+                    // The restart item is report-once: this summary just told
+                    // the rider about it, and the process-scoped flag would
+                    // otherwise repeat it on every later ride this process
+                    // serves.
+                    startedFromDirtyRestart = false
                     attentionStore.save(attention)
                     notifications.postRideSummary(action.snapshot, attention)
                     // Ride end = the moment the radar went off, not "now" (the

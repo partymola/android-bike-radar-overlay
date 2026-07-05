@@ -283,6 +283,101 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    // ── "restarted mid-ride" attention flag ──────────────────────────────────
+
+    private fun midRideCheckpoint(): RideHistoryRecord = RideHistoryRecord(
+        startedAtMs = 1_000L,
+        endedAtMs = 2_000L,
+        overtakes = 5,
+        closePasses = 1,
+        grazingPasses = 0,
+        hgvClosePasses = 0,
+        peakClosingKmh = 30,
+        closingSpeedP90Kmh = 25,
+        minLateralClearanceM = 1.2f,
+        distanceKm = 3f,
+        exposureSeconds = 600L,
+        alertsPerKm = 0.5f,
+        tightestPassClearanceM = 1.2f,
+        tightestPassClosingKmh = 30,
+        partial = true,
+    )
+
+    @Test
+    fun dirtyMarkerAloneDoesNotRaiseTheRestartFlag() {
+        // A reinstall / force-stop between rides skips onDestroy (marker still
+        // set) but leaves no ride checkpoint. Flagging that as "restarted
+        // mid-ride" was a false alarm: the rider got the attention item on
+        // the first ride after every reinstall.
+        Prefs(app).serviceRunningMarker = true
+        File(app.getExternalFilesDir(null), RideHistoryStore.HISTORY_DIR).deleteRecursively()
+
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        assertTrue(
+            "an unclean death with no ride in flight must not raise the restart flag",
+            !controller.get().startedFromDirtyRestart,
+        )
+        controller.destroy()
+    }
+
+    @Test
+    fun dirtyMarkerPlusCheckpointRaisesTheFlag_thenFirstSummaryClearsIt() {
+        Prefs(app).serviceRunningMarker = true
+        RideCheckpointStore({ app.getExternalFilesDir(null) }).write(midRideCheckpoint())
+
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertTrue(
+            "unclean death + recovered checkpoint = restarted mid-ride",
+            service.startedFromDirtyRestart,
+        )
+
+        // Drive one ride to its posted summary (same recipe as the wakelock
+        // test): a close pass makes it meaningful, the dwell declares it over.
+        service.radarLinkCoordinator.markConnected()
+        service.radarLinkCoordinator.markDisconnected()
+        service.rideStats.observeClosePass(
+            ClosePassDetector.Event(
+                timestampMs = 1_000L,
+                minRangeXM = 0.8f,
+                side = ClosePassDetector.Side.RIGHT,
+                rangeYAtMinM = 2f,
+                closingSpeedKmh = 30,
+                riderSpeedKmh = 20,
+                vehicleSize = VehicleSize.CAR,
+                thresholdArmedM = 1.0f,
+                severity = ClosePassDetector.Severity.VERY_CLOSE,
+            ),
+        )
+        service.maybePostRideSummary(
+            android.os.SystemClock.elapsedRealtime() + RideSummaryNotificationDecider.POST_DWELL_MS + 1_000L,
+        )
+        assertTrue(
+            "the first posted summary must clear the flag (report once)",
+            !service.startedFromDirtyRestart,
+        )
+        controller.destroy()
+    }
+
+    @Test
+    fun cleanShutdownWithLeftoverCheckpointDoesNotRaiseTheFlag() {
+        // A clean stop mid-dwell can leave a checkpoint behind with the
+        // marker properly cleared: the ride is recovered into history, but
+        // nothing "restarted" - no attention item.
+        Prefs(app).serviceRunningMarker = false
+        RideCheckpointStore({ app.getExternalFilesDir(null) }).write(midRideCheckpoint())
+
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        assertTrue(
+            "a clean shutdown must not raise the restart flag even with a checkpoint",
+            !controller.get().startedFromDirtyRestart,
+        )
+        controller.destroy()
+    }
+
     @Test
     fun retentionCapConstantIsFifty() {
         // Pins the M9 retention reduction (was 500). A revert trips this.

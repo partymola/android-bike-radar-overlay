@@ -422,6 +422,65 @@ class BleOpQueueHarnessTest {
         assertFalse("cancel must complete the pending CCCD write as false", deferred.await())
     }
 
+    // ── enqueue after cancel ──────────────────────────────────────────────────
+    // The field crash this pins: the disconnect callback cancels the queue
+    // while a handshake coroutine is still between ops; its next enqueue used
+    // to hit Channel.send on a closed channel, whose
+    // ClosedSendChannelException killed the process. Every enqueuer must
+    // instead report its ordinary failure value.
+
+    @Test fun writeAfterCancelFailsSoftInsteadOfThrowing() = runTest {
+        val queue = BleOpQueue()
+        val gatt = connectedGatt()
+        val char = serviceWithChar(
+            gatt,
+            Uuids.SVC_CONFIG,
+            charWith(Uuids.HANDSHAKE_TX, BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE),
+        )
+        backgroundScope.launch { queue.run() }
+        queue.cancel()
+
+        val result = queue.write(gatt, char, byteArrayOf(0x01), noResponse = true)
+        assertFalse("a write enqueued after cancel must return false, not throw", result)
+    }
+
+    @Test fun readAfterCancelFailsSoftInsteadOfThrowing() = runTest {
+        val queue = BleOpQueue()
+        val gatt = connectedGatt()
+        val char = serviceWithChar(
+            gatt,
+            Uuids.SVC_BATTERY,
+            charWith(Uuids.CHAR_BATTERY, BluetoothGattCharacteristic.PROPERTY_READ),
+        )
+        backgroundScope.launch { queue.run() }
+        queue.cancel()
+
+        assertNull("a read enqueued after cancel must return null, not throw", queue.read(gatt, char))
+    }
+
+    @Test fun writeCccdAfterCancelFailsSoftInsteadOfThrowing() = runTest {
+        val queue = BleOpQueue()
+        val gatt = connectedGatt()
+        val char = serviceWithChar(
+            gatt,
+            Uuids.SVC_CONFIG,
+            charWith(Uuids.HANDSHAKE_RX, BluetoothGattCharacteristic.PROPERTY_NOTIFY, withCccd = true),
+        )
+        backgroundScope.launch { queue.run() }
+        queue.cancel()
+
+        assertFalse("a CCCD write enqueued after cancel must return false, not throw", queue.writeCccd(gatt, char))
+    }
+
+    @Test fun requestMtuAfterCancelFailsSoftInsteadOfThrowing() = runTest {
+        val queue = BleOpQueue()
+        val gatt = connectedGatt()
+        backgroundScope.launch { queue.run() }
+        queue.cancel()
+
+        assertEquals("an MTU request enqueued after cancel must return -1, not throw", -1, queue.requestMtu(gatt, 247))
+    }
+
     private fun assertArrayEqualsByteArray(expected: ByteArray, actual: ByteArray?) {
         assertTrue(
             "expected ${expected.toHex()} got ${actual?.toHex()}",

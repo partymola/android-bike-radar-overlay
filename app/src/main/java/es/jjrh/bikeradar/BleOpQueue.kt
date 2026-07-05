@@ -98,6 +98,20 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
 
     // ── enqueuers (called from coroutines that need the result) ───────────────
 
+    /**
+     * Enqueue fail-soft. [cancel] (the disconnect callback) races the
+     * enqueuers: a handshake coroutine can reach its next op after the
+     * channel is already closed, and `Channel.send` on a closed channel
+     * THROWS [kotlinx.coroutines.channels.ClosedSendChannelException] -
+     * uncaught, that kills the process (seen in the field: a camera link
+     * that disconnected two seconds after connecting, mid-handshake). The
+     * channel is UNLIMITED, so `trySend` only ever fails when closed;
+     * failure here means "link torn down", and the op reports its ordinary
+     * failure value so the caller aborts the same way it would on any
+     * failed GATT op.
+     */
+    private fun enqueue(op: Op): Boolean = channel.trySend(op).isSuccess
+
     // GATT ops require BLUETOOTH_CONNECT; the queue only runs against a live
     // connection the service opened after the permission was granted.
     @SuppressLint("MissingPermission")
@@ -110,14 +124,14 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
             BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
         }
         val op = Op.CccdWrite(gatt, desc, value)
-        channel.send(op)
+        if (!enqueue(op)) return false
         return op.result.await()
     }
 
     @SuppressLint("MissingPermission")
     suspend fun read(gatt: BluetoothGatt, char: BluetoothGattCharacteristic): ByteArray? {
         val op = Op.Read(gatt, char)
-        channel.send(op)
+        if (!enqueue(op)) return null
         return op.result.await()
     }
 
@@ -129,14 +143,14 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         noResponse: Boolean = false,
     ): Boolean {
         val op = Op.Write(gatt, char, bytes, noResponse)
-        channel.send(op)
+        if (!enqueue(op)) return false
         return op.result.await()
     }
 
     @SuppressLint("MissingPermission")
     suspend fun requestMtu(gatt: BluetoothGatt, mtu: Int): Int {
         val op = Op.Mtu(gatt, mtu)
-        channel.send(op)
+        if (!enqueue(op)) return -1
         return op.result.await()
     }
 

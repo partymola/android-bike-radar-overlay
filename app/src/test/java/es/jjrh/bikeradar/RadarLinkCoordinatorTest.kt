@@ -664,6 +664,61 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
+    fun radarOnlyDropCueStopsAtTheLatchOnlyCap() {
+        // The coordinator seam of the endless-repeat fix: with no eBike, the
+        // activity latch is the only confirmation, so the cue must stop at
+        // MAX_LATCH_ONLY_CUES per off-episode. A wiring regression (dropping
+        // the cueCount write-back, or hardcoding latchOnlyConfirmation) brings
+        // back the beep-every-cadence-forever field bug and must fail here.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L) // latch sampled fresh at the drop
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(RadarDropDecider.MAX_LATCH_ONLY_CUES + 3) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals(RadarDropDecider.MAX_LATCH_ONLY_CUES, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun liveEBikeDropCueKeepsRepeatingPastTheCap() {
+        // The cap applies ONLY to latch-only confirmation. A live unlocked
+        // eBike re-confirms riding every tick, so the cue keeps repeating on
+        // cadence past the cap - a rider genuinely still on the bike with a
+        // dead radar must not go silent.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        val rounds = RadarDropDecider.MAX_LATCH_ONLY_CUES + 2
+        repeat(rounds) {
+            ebikeAtMs = t - 1_000L // fresh live signal on every tick
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals(rounds, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun lockedBikeVetoesTheDropCueEvenWithAFreshActivityLatch() {
+        // The parked-and-locked field case: the rider stops and locks within
+        // the latch's freshness window of still moving. The latch alone must
+        // not keep the cue alive against a last-known-locked bike.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = true)
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L) // latch fresh at the drop
+        ebikeAtMs = 3_500L
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
     fun radarDropCueReachesTheBeeperNotJustTheLog() {
         // The coordinator->beeper edge: same drive as the radar-only moving-drop
         // test, but with a real AlertBeeper wired in. A regression that emits

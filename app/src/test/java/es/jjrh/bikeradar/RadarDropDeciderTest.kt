@@ -304,9 +304,9 @@ class RadarDropDeciderTest {
 
     @Test
     fun ridingConfirmedTrueViaRadarActivityWhenEBikeGateClosed() {
-        // The radar-only path: the eBike gate is closed (no snapshot / locked /
-        // stale) but the radar-activity latch is true -> riding confirmed. This
-        // is the OR that reaches the F-Droid, no-eBike rider.
+        // The radar-only path: the eBike gate is closed (no snapshot / stale)
+        // but the radar-activity latch is true -> riding confirmed. This is
+        // the OR that reaches the F-Droid, no-eBike rider.
         assertTrue(
             RadarDropDecider.ridingConfirmed(
                 systemLocked = null, // no eBike
@@ -315,10 +315,12 @@ class RadarDropDeciderTest {
                 radarActivityFreshAtDrop = true,
             ),
         )
+        // A stale-unlocked snapshot doesn't confirm on its own, but the
+        // latch still does (a mid-ride Flow dropout must not mute the cue).
         assertTrue(
             RadarDropDecider.ridingConfirmed(
-                systemLocked = true, // locked
-                snapshotAgeMs = 1_000L,
+                systemLocked = false,
+                snapshotAgeMs = 5L * fresh,
                 freshMs = fresh,
                 radarActivityFreshAtDrop = true,
             ),
@@ -332,6 +334,110 @@ class RadarDropDeciderTest {
                 radarActivityFreshAtDrop = false,
             ),
         )
+    }
+
+    @Test
+    fun ridingConfirmedLockedVetoOverridesTheRadarActivityLatch() {
+        // The observed field bug: rider parks and locks within the latch's
+        // freshness window of still moving; the latch stays true for the whole
+        // off-episode and the cue repeated against a parked, locked bike. A
+        // last-known locked bike means the rider explicitly parked, so it must
+        // veto BOTH confirmation paths - and it is sticky (a riding rider is
+        // never last-known-locked, so staleness cannot mute a genuine drop).
+        assertFalse(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = true,
+                snapshotAgeMs = 1_000L,
+                freshMs = fresh,
+                radarActivityFreshAtDrop = true,
+            ),
+        )
+        // Sticky: still vetoes when the locked reading has aged out.
+        assertFalse(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = true,
+                snapshotAgeMs = 5L * fresh,
+                freshMs = fresh,
+                radarActivityFreshAtDrop = true,
+            ),
+        )
+    }
+
+    @Test
+    fun latchOnlyConfirmationStopsAfterTheCueCap() {
+        // Latch-only confirmation (no live eBike signal) can never be
+        // un-confirmed, so it is capped: after MAX_LATCH_ONLY_CUES cues in one
+        // off-episode the decider goes silent even though riding still reads
+        // as confirmed. Without the cap a quick park beeps forever.
+        var lastCue: Long? = null
+        var count = 0
+        var t = now
+        repeat(RadarDropDecider.MAX_LATCH_ONLY_CUES) {
+            val d = RadarDropDecider.decide(
+                radarEverLive = true,
+                radarDownForMs = threshold + (t - now),
+                ridingConfirmed = true,
+                nowMs = t,
+                thresholdMs = threshold,
+                cadenceMs = cadence,
+                lastCueMs = lastCue,
+                latchOnlyConfirmation = true,
+                cueCount = count,
+            )
+            assertTrue("cue ${it + 1} of the cap must still fire", d.fire)
+            lastCue = d.lastCueMs
+            count = d.cueCount
+            t += cadence
+        }
+        assertEquals(RadarDropDecider.MAX_LATCH_ONLY_CUES, count)
+        val after = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold + (t - now),
+            ridingConfirmed = true,
+            nowMs = t,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = lastCue,
+            latchOnlyConfirmation = true,
+            cueCount = count,
+        )
+        assertFalse("cue past the latch-only cap must stay silent", after.fire)
+        assertEquals("count must not grow past the cap", count, after.cueCount)
+    }
+
+    @Test
+    fun liveEBikeConfirmationIsNotCapped() {
+        // A live eBike "unlocked" genuinely re-confirms riding every tick, so
+        // it keeps repeating past the latch-only cap.
+        val d = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = threshold + 10 * cadence,
+            ridingConfirmed = true,
+            nowMs = now + 10 * cadence,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = now,
+            latchOnlyConfirmation = false,
+            cueCount = RadarDropDecider.MAX_LATCH_ONLY_CUES + 5,
+        )
+        assertTrue("live-confirmed repeats must not be capped", d.fire)
+    }
+
+    @Test
+    fun reconnectResetsTheCueCount() {
+        val d = RadarDropDecider.decide(
+            radarEverLive = true,
+            radarDownForMs = null, // back up
+            ridingConfirmed = true,
+            nowMs = now,
+            thresholdMs = threshold,
+            cadenceMs = cadence,
+            lastCueMs = now - 5_000L,
+            latchOnlyConfirmation = true,
+            cueCount = RadarDropDecider.MAX_LATCH_ONLY_CUES,
+        )
+        assertEquals("a reconnect must reset the per-episode cue count", 0, d.cueCount)
+        assertTrue(d.fireReconnect)
     }
 
     @Test

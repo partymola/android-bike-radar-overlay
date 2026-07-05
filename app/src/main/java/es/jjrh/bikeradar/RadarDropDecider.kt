@@ -51,7 +51,13 @@ package es.jjrh.bikeradar
  *    park-then-fiddle spell; on the corpus it false-fires on 1 of 29 genuine
  *    ride-ends, where 45 s hit 2 (including a real 42 s fiddle-then-power-off).
  *    The residual quick-dismount beep is tolerable, because a MISSED cue
- *    leaves the rider blind, which is the worse error.
+ *    leaves the rider blind, which is the worse error. Residual means A FEW
+ *    CUES, not an endless loop: the latch can never be un-confirmed once
+ *    sampled, so without a bound a quick park repeats the cue at the cadence
+ *    until the radar reconnects - which after a park is never. Two guards
+ *    bound it: an eBike last-known-locked vetoes the cue outright (see
+ *    [ridingConfirmed]), and the latch-only path stops after
+ *    [MAX_LATCH_ONLY_CUES] cues per off-episode (see [decide]).
  *  - **Long red light** (rider stopped 1-2 min, radar dies while stopped): if
  *    the radar dies within N of the rider stopping, the cue fires (generous,
  *    per the error-cost asymmetry); if the stop already exceeds N, it is
@@ -109,7 +115,25 @@ package es.jjrh.bikeradar
  */
 object RadarDropDecider {
 
-    data class Decision(val fire: Boolean, val lastCueMs: Long?, val fireReconnect: Boolean = false)
+    /** Cue count carried across ticks so the latch-only path can be capped;
+     *  reset (with the [lastCueMs] latch) when the radar comes back up. */
+    data class Decision(
+        val fire: Boolean,
+        val lastCueMs: Long?,
+        val cueCount: Int = 0,
+        val fireReconnect: Boolean = false,
+    )
+
+    /** Repeat cap when riding is confirmed ONLY by the latched radar-activity
+     *  signal (no live eBike confirmation). The latch is sampled once at the
+     *  drop and can never be un-confirmed, so a quick park - radar powered off
+     *  within the freshness window of the last moving frame - would otherwise
+     *  repeat the cue at [decide]'s cadence FOREVER (observed in the field: a
+     *  3-beep cue every 3 minutes for the rest of the evening). Three cues
+     *  (threshold + two cadences, ~7 minutes) still cover a genuine mid-ride
+     *  drop the rider missed once; a live eBike "unlocked" keeps repeating
+     *  uncapped because it genuinely re-confirms riding every tick. */
+    const val MAX_LATCH_ONLY_CUES = 3
 
     fun decide(
         radarEverLive: Boolean,
@@ -119,11 +143,14 @@ object RadarDropDecider {
         thresholdMs: Long,
         cadenceMs: Long,
         lastCueMs: Long?,
+        latchOnlyConfirmation: Boolean = false,
+        cueCount: Int = 0,
     ): Decision {
         val eligible = radarEverLive &&
             radarDownForMs != null &&
             radarDownForMs >= thresholdMs &&
-            ridingConfirmed
+            ridingConfirmed &&
+            !(latchOnlyConfirmation && cueCount >= MAX_LATCH_ONLY_CUES)
         if (!eligible) {
             // Reset the latch only when the radar is back up, so the next
             // drop fires promptly at the threshold. While still down but not
@@ -140,14 +167,15 @@ object RadarDropDecider {
             return Decision(
                 fire = false,
                 lastCueMs = if (backUp) null else lastCueMs,
+                cueCount = if (backUp) 0 else cueCount,
                 fireReconnect = backUp && lastCueMs != null,
             )
         }
         val due = lastCueMs == null || nowMs - lastCueMs >= cadenceMs
         return if (due) {
-            Decision(fire = true, lastCueMs = nowMs)
+            Decision(fire = true, lastCueMs = nowMs, cueCount = cueCount + 1)
         } else {
-            Decision(fire = false, lastCueMs = lastCueMs)
+            Decision(fire = false, lastCueMs = lastCueMs, cueCount = cueCount)
         }
     }
 
@@ -164,6 +192,19 @@ object RadarDropDecider {
      *    boolean latched at the disconnect instant from [activityFreshAtDrop].
      *    Defaults to false so the eBike-only call sites and their existing tests
      *    are unaffected.
+     *
+     * LOCKED VETO (overrides BOTH paths): a last-known `system_locked == true`
+     * means the rider explicitly parked, so no drop cue - even when the
+     * radar-activity latch is true. Without it, a rider who locks up within
+     * the latch's freshness window of still moving keeps "riding confirmed"
+     * for the whole off-episode and the cue repeats against a parked, locked
+     * bike (observed in the field). Sticky regardless of snapshot freshness,
+     * for the same reason the reconnect banner treats locked as sticky:
+     * locking is what makes the bike sleep and drop the eBike link, so the
+     * lock reading inevitably ages out - and a riding rider is never
+     * last-known-locked (the bike doesn't sleep while moving), so the veto
+     * cannot silence a genuine mid-ride drop.
+     *
      * Extracted as a pure function (like `WalkAwayArmingGate.shouldArm`) so this
      * safety gate is unit-tested rather than buried inline in the service.
      */
@@ -172,7 +213,10 @@ object RadarDropDecider {
         snapshotAgeMs: Long,
         freshMs: Long,
         radarActivityFreshAtDrop: Boolean = false,
-    ): Boolean = (systemLocked == false && snapshotAgeMs < freshMs) || radarActivityFreshAtDrop
+    ): Boolean {
+        if (systemLocked == true) return false
+        return (systemLocked == false && snapshotAgeMs < freshMs) || radarActivityFreshAtDrop
+    }
 
     /**
      * Whether a single decoded radar frame counts as "riding activity" for the

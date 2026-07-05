@@ -67,6 +67,11 @@ internal class RadarLinkCoordinator(
     // ([evaluateRadarDrop]); reset lazily there on radar return.
     @Volatile private var radarDropLastCueMs: Long? = null
 
+    // Cues fired this off-episode; caps the latch-only confirmation path
+    // (RadarDropDecider.MAX_LATCH_ONLY_CUES) so a quick park cannot repeat
+    // the cue forever. Reset with the lastCue latch on radar return.
+    @Volatile private var radarDropCueCount = 0
+
     @Volatile private var radarDropSuppressLogged = false
 
     // Radar-activity riding confirmation, LATCHED at the disconnect instant for
@@ -335,8 +340,11 @@ internal class RadarLinkCoordinator(
      * Radar-drop audio cue: a dropped radar link looks identical to a clear
      * road on the overlay, and the rider's eyes are on the road, so the
      * warning must be audible. Fires when the radar has been down for
-     * [RADAR_DROP_THRESHOLD_MS] while eBike confirms the rider is still on the
-     * bike, then repeats every [RADAR_DROP_CUE_INTERVAL_MS] until reconnect.
+     * [RADAR_DROP_THRESHOLD_MS] while riding is confirmed, then repeats every
+     * [RADAR_DROP_CUE_INTERVAL_MS] - until reconnect on the live-eBike path,
+     * capped at [RadarDropDecider.MAX_LATCH_ONLY_CUES] per off-episode on the
+     * latch-only path, and vetoed outright by a last-known-locked bike (see
+     * [RadarDropDecider.ridingConfirmed]).
      *
      * Riding-confirmed via EITHER a fresh eBike `system_locked == false` OR the
      * radar-activity latch ([radarActivityFreshAtDrop], sampled at the drop):
@@ -388,6 +396,14 @@ internal class RadarLinkCoordinator(
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
             radarActivityFreshAtDrop = radarActivityFreshAtDrop,
         )
+        // Latch-only = riding is confirmed, but not by a live eBike signal:
+        // only that path gets the per-episode repeat cap (a live "unlocked"
+        // genuinely re-confirms riding every tick and stays uncapped).
+        val liveEBikeConfirmed = RadarDropDecider.ridingConfirmed(
+            systemLocked = snap?.systemLocked,
+            snapshotAgeMs = ebikeAgeMs,
+            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+        )
         val decision = RadarDropDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
@@ -396,17 +412,21 @@ internal class RadarLinkCoordinator(
             thresholdMs = RADAR_DROP_THRESHOLD_MS,
             cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
             lastCueMs = radarDropLastCueMs,
+            latchOnlyConfirmation = ridingConfirmed && !liveEBikeConfirmed,
+            cueCount = radarDropCueCount,
         )
         // The latch resets lazily here on the next tick that sees the radar
         // back up (downForMs == null), NOT eagerly in markConnected like
         // the walk-away state. Safe because a fresh drop re-stamps
         // radarOffSinceMs and restarts below the threshold.
         radarDropLastCueMs = decision.lastCueMs
+        radarDropCueCount = decision.cueCount
         if (decision.fire) {
             alertBeeper()?.playRadarDropped()
             clog(
                 "# radar_drop_cue down_ms=${downForMs ?: -1L} " +
-                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+                    "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs " +
+                    "cue_count=${decision.cueCount}",
             )
         }
         // Near-miss diagnostics: an eBike IS present but the radar-down cue is

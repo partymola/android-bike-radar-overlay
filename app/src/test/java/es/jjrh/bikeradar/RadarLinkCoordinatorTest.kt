@@ -14,6 +14,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import java.util.concurrent.Executor
 
 /**
  * Invokes the real [RadarLinkCoordinator] - the safety-critical walk-away /
@@ -62,6 +64,11 @@ class RadarLinkCoordinatorTest {
     private var wakeTickCount = 0
     private var wakeLockAcquireCount = 0
     private var wakeLockReleaseCount = 0
+
+    // Null for most tests (the clog line is the assertion surface); the
+    // coordinator->beeper edge test swaps in a real AlertBeeper so a
+    // regression that logs the cue but drops the play call is caught.
+    private var beeper: AlertBeeper? = null
     private val bannerStates = mutableListOf<RadarLinkVisualDecider.LinkVisual>()
     private val clogLines = mutableListOf<String>()
 
@@ -79,7 +86,7 @@ class RadarLinkCoordinatorTest {
             cancelWalkAwayNotification = { cancelWalkAwayCount++ },
             startWalkAwayAlarm = { alarmStartCount++ },
             stopWalkAwayAlarm = { alarmStopCount++ },
-            alertBeeper = { null },
+            alertBeeper = { beeper },
             clog = { clogLines += it },
             setReconnectBanner = { bannerStates += it },
             resolveDashcamSlug = { dashcamSlug },
@@ -654,6 +661,45 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L) // activity age at drop = 1 s < 30 s -> fresh
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
         assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun radarDropCueReachesTheBeeperNotJustTheLog() {
+        // The coordinator->beeper edge: same drive as the radar-only moving-drop
+        // test, but with a real AlertBeeper wired in. A regression that emits
+        // the clog line while dropping the playRadarDropped() call must fail
+        // here - the cue's own onCue chokepoint (which fires only after a
+        // successful play) is the assertion surface.
+        val cueTags = mutableListOf<String>()
+        beeper = AlertBeeper(
+            audioManager = RuntimeEnvironment.getApplication()
+                .getSystemService(android.media.AudioManager::class.java),
+            executor = Executor { it.run() },
+            playTrackOverride = { true },
+            onCue = { cueTags += it },
+        )
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(listOf("radar_drop"), cueTags)
+    }
+
+    @Test
+    fun rideWakeLockCapOutlastsTheFirstCueAndItsFirstRepeat() {
+        // The cap is the wakelock's only backstop when every release path is
+        // missed. It must keep the CPU up past the 60 s drop cue AND its first
+        // 180 s repeat, or a wedged off-episode goes silent exactly when the
+        // insurance matters. Pins the constant relationship the service wiring
+        // relies on (acquire(RIDE_WAKELOCK_CAP_MS)).
+        assertTrue(
+            RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS >=
+                RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS +
+                RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS,
+        )
     }
 
     @Test

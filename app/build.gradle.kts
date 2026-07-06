@@ -222,6 +222,15 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
+            all { test ->
+                // Split test classes across forked JVMs; without this the
+                // whole suite (incl. every Robolectric sandbox) runs in ONE
+                // JVM regardless of host cores. Capped: each Robolectric
+                // fork costs ~1 GB heap and its own sandbox warm-up, so
+                // more forks than this wastes memory for no wall-clock win.
+                test.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 3).coerceIn(1, 8)
+                test.maxHeapSize = "1g"
+            }
         }
     }
 }

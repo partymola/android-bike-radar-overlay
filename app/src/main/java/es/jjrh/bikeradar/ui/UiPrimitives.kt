@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -102,7 +103,12 @@ fun StatusDot(
     size: Dp = 8.dp,
 ) {
     Box(modifier = Modifier.size(size + 8.dp), contentAlignment = Alignment.Center) {
-        if (pulse) {
+        // The halo is an infinite animation, so any single-frame render
+        // (preview or screenshot test) captures it at an arbitrary phase -
+        // which made snapshot goldens nondeterministic across test-JVM
+        // scheduling. Inspection-mode renders draw the plain dot instead;
+        // the pulse is a live-screen affordance only.
+        if (pulse && !LocalInspectionMode.current) {
             val transition = rememberInfiniteTransition(label = "br-pulse")
             val pulseScale by transition.animateFloat(
                 initialValue = 1f,

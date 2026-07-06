@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalInspectionMode
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.RadarLightMode
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -64,4 +67,17 @@ internal object SnapshotFixtures {
         radarSettingsProbeEnabled = false,
         captureLoggingEnabled = false,
     )
+}
+
+/**
+ * Theme wrapper for screenshot tests: identical to [UiTheme] but renders
+ * in inspection mode, so infinite animations (e.g. the status-dot pulse
+ * halo) draw a stable single-frame state instead of an arbitrary
+ * animation phase that varies with test-JVM scheduling.
+ */
+@Composable
+fun SnapshotTheme(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalInspectionMode provides true) {
+        UiTheme(content)
+    }
 }

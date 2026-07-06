@@ -66,7 +66,7 @@ class MainScreenContentSnapshotTest {
     @Test
     fun idle() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -107,7 +107,7 @@ class MainScreenContentSnapshotTest {
         // the fully-configured rider used for the README main-screen shot.
         // idle() stays the radar-only (no-eBike) baseline.
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -153,7 +153,7 @@ class MainScreenContentSnapshotTest {
         // the layout. Hero text comes from string resources so it translates;
         // the rest of MainScreenContent already resolves res IDs.
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -194,7 +194,7 @@ class MainScreenContentSnapshotTest {
     @Test
     fun withTraffic() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -232,7 +232,7 @@ class MainScreenContentSnapshotTest {
     @Test
     fun paused() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -270,7 +270,7 @@ class MainScreenContentSnapshotTest {
     @Test
     fun dashcamWarning() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
@@ -308,7 +308,7 @@ class MainScreenContentSnapshotTest {
     @Test
     fun bluetoothOff() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(

@@ -50,7 +50,7 @@ class MainScreenSnapshotTest {
     @Test
     fun heroLive() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     HeroStatusCard(
                         status = MainStatus(
@@ -69,7 +69,7 @@ class MainScreenSnapshotTest {
     @Test
     fun heroNotPaired() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     HeroStatusCard(
                         status = MainStatus(
@@ -88,7 +88,7 @@ class MainScreenSnapshotTest {
     @Test
     fun systemEmpty() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     SystemCard(
                         radarFresh = false,
@@ -110,7 +110,7 @@ class MainScreenSnapshotTest {
     @Test
     fun systemPopulated() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     SystemCard(
                         radarFresh = true,
@@ -145,7 +145,7 @@ class MainScreenSnapshotTest {
     @Test
     fun attentionCard() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     AttentionCard(
                         items = listOf(
@@ -163,7 +163,7 @@ class MainScreenSnapshotTest {
     @Test
     fun systemEbikeWaiting() {
         captureRoboImage {
-            UiTheme {
+            SnapshotTheme {
                 MainShell {
                     SystemCard(
                         radarFresh = true,

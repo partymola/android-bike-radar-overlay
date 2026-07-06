@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayCircle
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,7 +76,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.AttentionCopy
+import es.jjrh.bikeradar.AttentionItem
 import es.jjrh.bikeradar.AttentionItemsDeriver
+import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.AttentionStore
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
@@ -264,21 +268,22 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // while the app is open still surfaces. Live-cleared here so an item drops
     // the moment a FRESH reading shows the rider topped the device up; only a
     // fresh reading clears it (a stale/absent reading leaves it standing).
+    // The rider can also dismiss any item by hand - the manual escape hatch
+    // for the historical kinds, which have no live signal to clear them.
     val attentionStore = remember { AttentionStore(ctx.getSharedPreferences(AttentionStore.PREFS_NAME, Context.MODE_PRIVATE)) }
-    val persistedAttention = remember(tickNowMs) { attentionStore.load() }
-    val attentionLines = AttentionItemsDeriver.filterUnresolved(
+    var attentionRev by remember { mutableIntStateOf(0) }
+    val persistedAttention = remember(tickNowMs, attentionRev) { attentionStore.load() }
+    val attentionItems = AttentionItemsDeriver.filterUnresolved(
         persistedAttention,
         AttentionItemsDeriver.LiveState(
             radarBatteryPct = if (radarFresh) radarBattery?.pct else null,
             dashcamBatteryPct = if (dashcamFresh) dashcamBattery?.pct else null,
             ebikeSoc = if (ebikeReceiving) ebikeBatterySoc else null,
         ),
-    ).map { item ->
-        when (val line = AttentionCopy.lineFor(item)) {
-            is AttentionCopy.Line.Simple ->
-                if (line.arg != null) stringResource(line.res, line.arg) else stringResource(line.res)
-            is AttentionCopy.Line.Plural -> pluralStringResource(line.res, line.count, line.count)
-        }
+    )
+    val onAttentionDismiss: (AttentionKind) -> Unit = { kind ->
+        attentionStore.remove(kind)
+        attentionRev++
     }
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -288,7 +293,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             btEnabled = btEnabled,
             showBtOffBanner = showBtOffBanner,
             showDashcamPrompt = showDashcamPrompt,
-            attentionLines = attentionLines,
+            attentionItems = attentionItems,
+            onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
@@ -329,7 +335,8 @@ internal fun MainScreenContent(
     btEnabled: Boolean,
     showBtOffBanner: Boolean,
     showDashcamPrompt: Boolean,
-    attentionLines: List<String> = emptyList(),
+    attentionItems: List<AttentionItem> = emptyList(),
+    onAttentionDismiss: (AttentionKind) -> Unit = {},
     radarFresh: Boolean,
     hasBond: Boolean,
     dashcamOwned: Boolean,
@@ -358,7 +365,8 @@ internal fun MainScreenContent(
             btEnabled = btEnabled,
             showBtOffBanner = showBtOffBanner,
             showDashcamPrompt = showDashcamPrompt,
-            attentionLines = attentionLines,
+            attentionItems = attentionItems,
+            onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
@@ -386,7 +394,8 @@ internal fun MainScreenContent(
             btEnabled = btEnabled,
             showBtOffBanner = showBtOffBanner,
             showDashcamPrompt = showDashcamPrompt,
-            attentionLines = attentionLines,
+            attentionItems = attentionItems,
+            onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
@@ -449,7 +458,8 @@ private fun MainScreenPortrait(
     btEnabled: Boolean,
     showBtOffBanner: Boolean,
     showDashcamPrompt: Boolean,
-    attentionLines: List<String>,
+    attentionItems: List<AttentionItem>,
+    onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
     hasBond: Boolean,
     dashcamOwned: Boolean,
@@ -481,8 +491,8 @@ private fun MainScreenPortrait(
                 .verticalScroll(rememberScrollState()),
         ) {
             TopBar(onWordmarkLongPress = onWordmarkLongPress)
-            if (attentionLines.isNotEmpty()) {
-                AttentionCard(lines = attentionLines)
+            if (attentionItems.isNotEmpty()) {
+                AttentionCard(items = attentionItems, onDismiss = onAttentionDismiss)
                 Spacer(modifier = Modifier.height(12.dp))
             }
             HeroStatusCard(status = status, cta = cta)
@@ -537,7 +547,8 @@ private fun MainScreenLandscape(
     btEnabled: Boolean,
     showBtOffBanner: Boolean,
     showDashcamPrompt: Boolean,
-    attentionLines: List<String>,
+    attentionItems: List<AttentionItem>,
+    onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
     hasBond: Boolean,
     dashcamOwned: Boolean,
@@ -575,8 +586,8 @@ private fun MainScreenLandscape(
                     .fillMaxHeight()
                     .verticalScroll(rememberScrollState()),
             ) {
-                if (attentionLines.isNotEmpty()) {
-                    AttentionCard(lines = attentionLines)
+                if (attentionItems.isNotEmpty()) {
+                    AttentionCard(items = attentionItems, onDismiss = onAttentionDismiss)
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 HeroStatusCard(status = status, cta = cta)
@@ -814,15 +825,21 @@ private fun BluetoothOffBanner(onTap: () -> Unit) {
 /**
  * Home-screen needs-attention card (bucket 3). Shows the same end-of-trip
  * items as the post-ride notification - the rider's recovery path when the
- * notification is dismissed by mistake. Rendered only when [lines] is
- * non-empty; the caller (the screen body) loads the persisted feed, live-
- * clears resolved items, and resolves each item to a benefit-framed line.
+ * notification is dismissed by mistake. Rendered only when [items] is
+ * non-empty; the caller (the screen body) loads the persisted feed and
+ * live-clears resolved items; the copy is resolved here so the card and the
+ * notification share [AttentionCopy].
+ *
+ * Each row carries a dismiss X - the only exit for the historical kinds
+ * (restart, audio failures), which no live reading ever clears. Dismiss
+ * mutes the persisted item; a condition that still holds re-derives at the
+ * next ride end.
  *
  * A calm amber (caution) accent, never a red alarm: these are things to do
  * tonight, not a live threat.
  */
 @Composable
-internal fun AttentionCard(lines: List<String>) {
+internal fun AttentionCard(items: List<AttentionItem>, onDismiss: (AttentionKind) -> Unit) {
     val br = LocalBrColors.current
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -843,16 +860,38 @@ internal fun AttentionCard(lines: List<String>) {
                     fontWeight = FontWeight.Medium,
                 )
             }
-            lines.forEach { line ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items.forEach { item ->
+                val line = when (val copy = AttentionCopy.lineFor(item)) {
+                    is AttentionCopy.Line.Simple ->
+                        if (copy.arg != null) stringResource(copy.res, copy.arg) else stringResource(copy.res)
+                    is AttentionCopy.Line.Plural -> pluralStringResource(copy.res, copy.count, copy.count)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(text = "•", color = br.caution, fontSize = 13.sp)
                     Text(
                         text = line,
                         color = br.fgMuted,
                         fontSize = 13.sp,
                         lineHeight = 17.sp,
+                        modifier = Modifier.weight(1f),
                     )
+                    // Compact target on purpose: a rare, parked-phone tap on a
+                    // calm card - full 48 dp boxes would double the row height.
+                    IconButton(
+                        onClick = { onDismiss(item.kind) },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.attention_dismiss_cd, line),
+                            tint = br.fgMuted,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
         }

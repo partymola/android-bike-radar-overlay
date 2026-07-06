@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.AttentionItem
+import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.BatteryEntry
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -146,11 +148,12 @@ class MainScreenSnapshotTest {
             UiTheme {
                 MainShell {
                     AttentionCard(
-                        lines = listOf(
-                            "Charge radar - 12%",
-                            "Charge dashcam - 8%",
-                            "Alert sounds failed 2 times - check media volume",
+                        items = listOf(
+                            AttentionItem(AttentionKind.RADAR_BATTERY, 12),
+                            AttentionItem(AttentionKind.DASHCAM_BATTERY, 8),
+                            AttentionItem(AttentionKind.AUDIO_FAILURES, 2),
                         ),
+                        onDismiss = {},
                     )
                 }
             }

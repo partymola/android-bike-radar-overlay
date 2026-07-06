@@ -103,7 +103,8 @@ object AttentionItemsDeriver {
      * signal - a battery item clears when a fresh reading is at/above its
      * threshold. The historical items ([AttentionKind.AUDIO_FAILURES],
      * [AttentionKind.UNCLEAN_RESTART]) have no live signal, so they stand
-     * until the next ride re-derives the set.
+     * until the next ride re-derives the set - or the rider dismisses them
+     * from the card (`AttentionStore.remove`).
      */
     fun filterUnresolved(persisted: List<AttentionItem>, live: LiveState): List<AttentionItem> = persisted.filter { item ->
         when (item.kind) {

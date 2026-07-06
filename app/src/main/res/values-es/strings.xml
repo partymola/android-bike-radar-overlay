@@ -668,6 +668,7 @@
         <item quantity="one">Un aviso no sonó - revisa el volumen</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no sonaron - revisa el volumen</item>
     </plurals>
+    <string name="attention_dismiss_cd">Descartar: <xliff:g id="item" example="Carga el radar - 12 %">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Cámara dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la cámara delantera sigue emitiendo desde la bici.</string>
     <string name="svc_main_walkaway_notif_title">Cámara dejada en la bici</string>

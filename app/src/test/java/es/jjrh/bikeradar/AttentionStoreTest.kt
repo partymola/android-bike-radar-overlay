@@ -45,6 +45,25 @@ class AttentionStoreTest {
         assertEquals(listOf(AttentionItem(AttentionKind.EBIKE_BATTERY, 8)), s.load())
     }
 
+    @Test fun removeDropsOnlyThatKind() {
+        val s = store("remove")
+        s.save(
+            listOf(
+                AttentionItem(AttentionKind.RADAR_BATTERY, 12),
+                AttentionItem(AttentionKind.UNCLEAN_RESTART),
+            ),
+        )
+        s.remove(AttentionKind.UNCLEAN_RESTART)
+        assertEquals(listOf(AttentionItem(AttentionKind.RADAR_BATTERY, 12)), s.load())
+    }
+
+    @Test fun removeAbsentKindLeavesTheSetUntouched() {
+        val s = store("removeAbsent")
+        s.save(listOf(AttentionItem(AttentionKind.RADAR_BATTERY, 12)))
+        s.remove(AttentionKind.UNCLEAN_RESTART)
+        assertEquals(listOf(AttentionItem(AttentionKind.RADAR_BATTERY, 12)), s.load())
+    }
+
     @Test fun loadReturnsEmptyOnCorruptJson() {
         app.getSharedPreferences("corrupt", Context.MODE_PRIVATE).edit()
             .putString("items", "{not valid json").apply()

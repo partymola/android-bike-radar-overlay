@@ -683,6 +683,7 @@
         <item quantity="one">Alert sound failed - check media volume</item>
         <item quantity="other">Alert sounds failed <xliff:g id="count" example="3">%1$d</xliff:g> times - check media volume</item>
     </plurals>
+    <string name="attention_dismiss_cd">Dismiss: <xliff:g id="item" example="Charge radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
     <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam left on bike</string>

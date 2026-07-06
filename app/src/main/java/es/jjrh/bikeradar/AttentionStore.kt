@@ -31,6 +31,14 @@ internal class AttentionStore(private val prefs: SharedPreferences) {
         prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()
     }
 
+    /** Rider dismissed an item from the home card: drop that kind from the
+     *  persisted set. The next ride summary re-derives the whole set, so a
+     *  condition that still holds (a battery still low) comes back then -
+     *  dismiss mutes the current feed, it is not an ack that survives rides. */
+    fun remove(kind: AttentionKind) {
+        save(load().filterNot { it.kind == kind })
+    }
+
     fun load(): List<AttentionItem> {
         val raw = prefs.getString(KEY_ITEMS, null) ?: return emptyList()
         return try {

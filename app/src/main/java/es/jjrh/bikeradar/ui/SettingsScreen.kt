@@ -385,6 +385,7 @@ private fun experimentalSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.Pref
     val on = buildList {
         if (snap.precogEnabled) add(ctx.getString(R.string.settings_home_exp_precog))
         if (snap.experimentalLateralPanning) add(ctx.getString(R.string.settings_home_exp_panning))
+        if (snap.ghostBeepFilterEnabled) add(ctx.getString(R.string.settings_home_exp_ghost))
     }
     return if (on.isEmpty()) {
         ctx.getString(R.string.settings_home_exp_all_off)

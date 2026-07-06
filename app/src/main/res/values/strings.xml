@@ -310,6 +310,7 @@
     <string name="settings_home_ha_connected">Connected</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_panning">Directional</string>
+    <string name="settings_home_exp_ghost">Ghost filter</string>
     <string name="settings_home_exp_all_off">All off</string>
     <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> on</string>
 
@@ -341,6 +342,8 @@
     <string name="settings_exp_panning_subtitle">Pan beeps and urgent cues to the threat\'s side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.</string>
     <string name="settings_exp_invert_title">Invert left/right</string>
     <string name="settings_exp_invert_subtitle">Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).</string>
+    <string name="settings_exp_ghost_title">Skip ghost beeps</string>
+    <string name="settings_exp_ghost_subtitle">Silence close-car beeps from radar ghosts - objects first seen right behind you that never approach. Urgent alerts are never affected.</string>
     <string name="settings_exp_turn_title">No false all-clear in corners</string>
     <string name="settings_exp_turn_subtitle">Cornering won\'t sound the all-clear while a car may still be behind you.</string>
 

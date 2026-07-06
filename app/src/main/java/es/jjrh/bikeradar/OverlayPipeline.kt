@@ -101,6 +101,7 @@ internal class OverlayPipeline(
             )
             val alerts = AlertDecider(
                 onTurnDefer = { tailMs -> clog("# turn clear-defer tail_ms=$tailMs") },
+                onGateEvent = clog,
             )
             val closePassDetector = ClosePassDetector()
             if (prefs.turnAwareAlertsEnabled) turnSensorStart()
@@ -300,6 +301,7 @@ internal class OverlayPipeline(
             } else {
                 TurnStateDecider.State.IDLE
             },
+            ghostGateEnabled = overlayPrefs.ghostBeepFilterEnabled,
         )
         if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs)
         beeper.setPanning(

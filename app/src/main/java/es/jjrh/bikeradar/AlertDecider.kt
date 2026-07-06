@@ -225,6 +225,16 @@ class AlertDecider(
      *  and alert lines. Fires at most once per corner (the anchor-once
      *  guard), so there is no flood risk. */
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
+    /** Diagnostic hook for the experimental ghost-beep filter: one line per
+     *  gate decision (suppress / re-fire / off-axis veto), written to the
+     *  capture log so every silenced or re-armed cue is auditable
+     *  post-ride. Fires only on would-have-beeped frames, so volume is
+     *  bounded by the beep rate, not the frame rate. */
+    private val onGateEvent: (String) -> Unit = {},
+    /** Closing-evidence admission for born-close tracks (the ghost-beep
+     *  filter's state machine); injectable for tests. Consulted only when
+     *  `decide(ghostGateEnabled = true)`. */
+    private val bornCloseGate: BornCloseGate = BornCloseGate(),
 ) {
 
     sealed class Event {
@@ -416,6 +426,16 @@ class AlertDecider(
         climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
         turnState: TurnStateDecider.State = TurnStateDecider.State.IDLE,
+        /** Experimental ghost-beep filter (Settings -> Experimental).
+         *  When true, tier Beeps whose trigger track was BORN inside
+         *  [BornCloseGate.BORN_CLOSE_MAX_M] stay silent until the track
+         *  shows closing evidence ([BornCloseGate] admission paths), and
+         *  Beeps whose trigger sits beyond [RX_ABSURD_M] of raw lateral
+         *  are vetoed outright. Beep-path ONLY by construction: the
+         *  all-clear presence gate, urgent evaluation, sustain counters,
+         *  and the overlay never see this flag. Default false = shipped
+         *  behaviour, byte-identical. */
+        ghostGateEnabled: Boolean = false,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -540,6 +560,20 @@ class AlertDecider(
             val u = urgencyFor(v.distanceM, alertMaxM)
             val prevPeak = peakUrgencyPerTid[v.id] ?: 0
             if (u > prevPeak) peakUrgencyPerTid[v.id] = u
+        }
+
+        // Ghost-beep filter: accrue closing evidence for born-close tracks
+        // and re-arm the beep path for any track admitted this frame whose
+        // cue was previously silenced - the "car finally started closing"
+        // beep, delivered at the track's CURRENT tier through the normal
+        // emission machinery (cooldown and stationary gates still apply).
+        if (ghostGateEnabled) {
+            for (tid in bornCloseGate.update(vehicles, turnState, nowMs)) {
+                if (tid !in stableTids) continue
+                firedTierPerTid.remove(tid)
+                beepPending = true
+                onGateEvent("# gate refire tid=$tid")
+            }
         }
 
         val newEntries = stableTids - prevStableClose
@@ -793,6 +827,7 @@ class AlertDecider(
                 beepPending = false
                 firedTierPerTid.clear()
                 peakUrgencyPerTid.clear()
+                bornCloseGate.onClear()
                 turnDeferUntilMs = Long.MIN_VALUE
                 clearPending = false
                 closeEpisodeActive = false
@@ -827,19 +862,54 @@ class AlertDecider(
                         Event.None
                     }
                     else -> {
-                        lastBeepAtMs = nowMs
-                        beepPending = false
-                        // closestVehicle's lateralPos feeds directional
-                        // audio when the experimental flag is on; defaults
-                        // to 0f when no closest is tracked (defensive -
-                        // beepPending shouldn't normally reach here in
-                        // that state).
                         val v = closestVehicle
-                        if (v != null) {
-                            firedTierPerTid[v.id] = closestUrgency
-                            Event.Beep(count = closestUrgency, lateralPos = v.lateralPos)
-                        } else {
-                            Event.Beep(count = closestUrgency, lateralPos = 0f)
+                        // Ghost-beep filter vetoes. Consume the pending
+                        // beep WITHOUT touching lastBeepAtMs or the
+                        // per-tid latch: no audio happened, so the
+                        // cooldown must not advance and a later
+                        // admission re-fire must see a clean latch.
+                        val gateVeto = ghostGateEnabled &&
+                            v != null &&
+                            bornCloseGate.isGated(v)
+                        val rxVeto = ghostGateEnabled &&
+                            v != null &&
+                            !v.lateralUnknown &&
+                            abs(v.rangeXmRaw) > RX_ABSURD_M
+                        when {
+                            gateVeto -> {
+                                beepPending = false
+                                bornCloseGate.noteSuppressed(v)
+                                onGateEvent(
+                                    "# gate suppress tid=${v.id} tier=$closestUrgency" +
+                                        " d=${v.distanceM} closing=${-v.speedMs}" +
+                                        " birth_d=${v.bornDistanceM} turn=$turnState",
+                                )
+                                Event.None
+                            }
+                            rxVeto -> {
+                                beepPending = false
+                                onGateEvent(
+                                    "# gate rx-veto tid=${v.id} tier=$closestUrgency" +
+                                        " d=${v.distanceM} raw_rx=${v.rangeXmRaw}",
+                                )
+                                Event.None
+                            }
+                            else -> {
+                                lastBeepAtMs = nowMs
+                                beepPending = false
+                                // closestVehicle's lateralPos feeds
+                                // directional audio when the experimental
+                                // flag is on; defaults to 0f when no
+                                // closest is tracked (defensive -
+                                // beepPending shouldn't normally reach
+                                // here in that state).
+                                if (v != null) {
+                                    firedTierPerTid[v.id] = closestUrgency
+                                    Event.Beep(count = closestUrgency, lateralPos = v.lateralPos)
+                                } else {
+                                    Event.Beep(count = closestUrgency, lateralPos = 0f)
+                                }
+                            }
                         }
                     }
                 }
@@ -855,6 +925,7 @@ class AlertDecider(
     }
 
     fun reset() {
+        bornCloseGate.reset()
         consecutiveClose.clear()
         framesSinceLastSeen.clear()
         firedTierPerTid.clear()
@@ -998,6 +1069,16 @@ class AlertDecider(
     }
 
     companion object {
+        /** Ghost-beep filter: a tier-beep trigger with RAW lateral offset
+         *  beyond this is physically not on the rider's road (a full
+         *  carriageway is ~7 m) - vehicles on parallel streets have fired
+         *  tier beeps at raw rx 13-22 m in ride captures. Raw (pre-
+         *  correction) because the fw-6.70 constant correction is fitted
+         *  to follower distance and over-corrects close range. An order
+         *  looser than any lane-discrimination gate on purpose: this only
+         *  rejects the physically impossible, never judges lane position. */
+        const val RX_ABSURD_M = 10f
+
         /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`
          *  call has yet been processed this session". The first call
          *  replaces it with `nowMs` so dwell starts counting from there.

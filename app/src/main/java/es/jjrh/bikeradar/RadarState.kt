@@ -70,6 +70,42 @@ data class Vehicle(
      * with this flag because the lateral data is unreliable.
      */
     val lateralUnknown: Boolean = false,
+    /**
+     * Lateral offset in metres BEFORE the mount-offset / firmware
+     * correction ([rangeXm] is the corrected value). Close-range gates
+     * must use this: the fw-6.70 correction is a constant fitted to
+     * follower distance (~25-40 m) while the underlying bias is mostly
+     * angular, so at 0-10 m the corrected value is off by up to ~1.4 m.
+     * 0f when no lateral data exists for the source; consumers fail
+     * open on 0f, matching the [rangeXm] convention.
+     */
+    val rangeXmRaw: Float = 0f,
+    /**
+     * When this track was first seen by the decoder (monotonic ms),
+     * i.e. the decoder's own track birth - survives frame-to-frame
+     * updates, resets when the track is pruned and re-acquired.
+     * 0L for synthetic sources.
+     */
+    val bornAtMs: Long = 0L,
+    /**
+     * [distanceM] on the track's first frame. A real vehicle is
+     * normally acquired far out (30-80 m); a track BORN at close range
+     * is either radar clutter (turn-sweep ghosts, roadside objects) or
+     * a reacquisition - see [bornInformative]. Int.MAX_VALUE for
+     * synthetic sources, so born-close logic never engages on them.
+     */
+    val bornDistanceM: Int = Int.MAX_VALUE,
+    /**
+     * False when this track's birth says nothing about the physical
+     * world: within the decoder's warm-up window after connect/reset,
+     * or right after another track died at similar range (the same
+     * physical vehicle reacquired under a new tid after a coverage
+     * gap - the decoder prunes unseen moving tracks after only
+     * ~800 ms, so this is common). Born-close gating must skip
+     * uninformative births or it silences real reacquired followers
+     * and kills the re-anchor beep. Default false = fail open.
+     */
+    val bornInformative: Boolean = false,
 ) {
     val speedKmh: Int get() = (speedMs * 3.6f).toInt()
 }

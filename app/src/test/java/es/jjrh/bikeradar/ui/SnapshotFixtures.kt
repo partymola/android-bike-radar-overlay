@@ -40,6 +40,7 @@ internal object SnapshotFixtures {
         urgentLowSpeedEnabled = true,
         precogEnabled = false,
         experimentalLateralPanning = false,
+        ghostBeepFilterEnabled = false,
         experimentalLateralPanningInvertLR = false,
         turnAwareAlertsEnabled = false,
         closePassLoggingEnabled = false,

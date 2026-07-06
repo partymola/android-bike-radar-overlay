@@ -77,8 +77,14 @@ class RadarV2Decoder(
         val vehicle: Vehicle,
         val lastSeen: Long,
         /** Monotonic millis the first time this tid appeared. Used by the
-         *  alongside-stationary dwell-time gate; never updated. */
+         *  alongside-stationary dwell-time gate and carried onto
+         *  [Vehicle.bornAtMs]; never updated. */
         val firstSeen: Long,
+        /** [Vehicle.distanceM] on the track's first frame; never updated. */
+        val birthDistanceM: Int,
+        /** Whether the birth carries physical information - see
+         *  [Vehicle.bornInformative]; computed once at birth. */
+        val birthInformative: Boolean,
         val staleMs: Long,
         /** VehicleSize currently committed to the overlay. Upgrades apply
          *  immediately; downgrades require [DOWNGRADE_FRAMES] consecutive
@@ -90,6 +96,17 @@ class RadarV2Decoder(
     )
 
     private val tracks = HashMap<Int, Track>()
+
+    /** Recent track deaths as (prunedAtMs, lastDistanceM), kept for
+     *  [DEATH_MEMORY_MS]. A birth at similar range shortly after a death is
+     *  treated as a reacquisition of the same physical vehicle (coverage
+     *  gap), not an informative birth - see [Vehicle.bornInformative]. */
+    private val recentDeaths = ArrayDeque<Pair<Long, Int>>()
+
+    /** First feed() after construction or [reset], monotonic ms. Births in
+     *  the first [BIRTH_WARMUP_MS] after this are uninformative: the world
+     *  was already populated before the decoder started watching. */
+    private var firstFeedAtMs = Long.MIN_VALUE
 
     /** Rider's own bike speed in m/s, last reported by a device-status
      *  frame (byte[len-1] x 0.25 m/s per LSB - native protocol resolution).
@@ -104,6 +121,7 @@ class RadarV2Decoder(
      */
     fun feed(payload: ByteArray): RadarState? {
         val now = nowMs()
+        if (firstFeedAtMs == Long.MIN_VALUE) firstFeedAtMs = now
         if (payload.size < HEADER_SIZE) return if (pruneStale(now)) snapshot(now) else null
         val header = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
         val isStatus = header and STATUS_FRAME_BIT != 0
@@ -197,6 +215,7 @@ class RadarV2Decoder(
         } else {
             rangeXSigned + lateralOffsetM
         }
+        val rangeXRaw = if (lateralUnknown) prev.vehicle.rangeXmRaw else rangeXSigned
 
         val speedMs = payload[off + 7].toInt() * 0.5f
 
@@ -214,6 +233,21 @@ class RadarV2Decoder(
 
         val debounced = debounceSize(prev, rawSize)
 
+        // Birth facts are fixed on the track's first frame. A birth is
+        // uninformative during the warm-up window (the road was already
+        // populated before we started watching) or right after a track
+        // died at similar range (coverage-gap reacquisition of the same
+        // physical vehicle under a new tid).
+        val birthDistanceM = prev?.birthDistanceM ?: effectiveDistance
+        val birthInformative = prev?.birthInformative ?: run {
+            val warmingUp = now - firstFeedAtMs < BIRTH_WARMUP_MS
+            val reacquired = recentDeaths.any {
+                now - it.first <= DEATH_MEMORY_MS &&
+                    abs(it.second - effectiveDistance) <= REACQUIRE_RANGE_TOLERANCE_M
+            }
+            !warmingUp && !reacquired
+        }
+
         return Track(
             vehicle = Vehicle(
                 id = tid,
@@ -225,9 +259,15 @@ class RadarV2Decoder(
                 isBehind = isBehind,
                 speedXMs = speedXMs,
                 lateralUnknown = lateralUnknown,
+                rangeXmRaw = rangeXRaw,
+                bornAtMs = prev?.firstSeen ?: now,
+                bornDistanceM = birthDistanceM,
+                bornInformative = birthInformative,
             ),
             lastSeen = now,
             firstSeen = prev?.firstSeen ?: now,
+            birthDistanceM = birthDistanceM,
+            birthInformative = birthInformative,
             staleMs = stale,
             committedSize = debounced.committed,
             downgradeCandidate = debounced.candidate,
@@ -267,7 +307,14 @@ class RadarV2Decoder(
 
     private fun pruneStale(now: Long): Boolean {
         val before = tracks.size
-        tracks.values.removeAll { now - it.lastSeen > it.staleMs }
+        tracks.values.removeAll { t ->
+            val dead = now - t.lastSeen > t.staleMs
+            if (dead) recentDeaths.addLast(t.lastSeen to t.vehicle.distanceM)
+            dead
+        }
+        while (recentDeaths.isNotEmpty() && now - recentDeaths.first().first > DEATH_MEMORY_MS) {
+            recentDeaths.removeFirst()
+        }
         return tracks.size != before
     }
 
@@ -303,6 +350,8 @@ class RadarV2Decoder(
     fun reset() {
         tracks.clear()
         lastBikeSpeedMs = null
+        recentDeaths.clear()
+        firstFeedAtMs = Long.MIN_VALUE
     }
 
     /**
@@ -346,6 +395,24 @@ class RadarV2Decoder(
         /** Raw byte[8] value the radar emits when no lateral velocity is
          *  available for that target. Decoded as a null [Vehicle.speedXMs]. */
         const val LATERAL_VELOCITY_SENTINEL = 0x80
+
+        // ── Birth informativeness (born-close alert gate support) ───────
+        /** Births within this window after the first feed (or after
+         *  [reset]) are uninformative: tracks appearing then describe a
+         *  world that predates the decoder, not objects that just came
+         *  into range. */
+        const val BIRTH_WARMUP_MS = 2000L
+
+        /** How long a track death stays relevant for reacquisition
+         *  matching. The moving-track prune fires after only
+         *  [STALE_MOVING_MS], so a follower briefly occluded (van
+         *  between, corner blackout, notification gap) routinely dies
+         *  and is reborn seconds later. */
+        const val DEATH_MEMORY_MS = 3000L
+
+        /** A birth within this range of a recent death is treated as the
+         *  same physical vehicle reacquired. */
+        const val REACQUIRE_RANGE_TOLERANCE_M = 5
 
         // ── Alongside-stationary gate ────────────────────────────────────
         // Parked / queued vehicles in the next lane while the rider crawls

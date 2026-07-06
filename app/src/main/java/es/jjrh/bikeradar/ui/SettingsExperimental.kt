@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material3.Text
@@ -48,6 +49,8 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
         onLateralPanningInvertLRChange = { prefs.experimentalLateralPanningInvertLR = it },
         turnAwareEnabled = prefsSnap.turnAwareAlertsEnabled,
         onTurnAwareChange = { prefs.turnAwareAlertsEnabled = it },
+        ghostFilterEnabled = prefsSnap.ghostBeepFilterEnabled,
+        onGhostFilterChange = { prefs.ghostBeepFilterEnabled = it },
     )
 }
 
@@ -66,6 +69,8 @@ internal fun SettingsExperimentalContent(
     onLateralPanningInvertLRChange: (Boolean) -> Unit,
     turnAwareEnabled: Boolean,
     onTurnAwareChange: (Boolean) -> Unit,
+    ghostFilterEnabled: Boolean,
+    onGhostFilterChange: (Boolean) -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -124,6 +129,18 @@ internal fun SettingsExperimentalContent(
                     subtitle = stringResource(R.string.settings_exp_turn_subtitle),
                     checked = turnAwareEnabled,
                     onCheckedChange = onTurnAwareChange,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.NotificationsOff,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_exp_ghost_title),
+                    subtitle = stringResource(R.string.settings_exp_ghost_subtitle),
+                    checked = ghostFilterEnabled,
+                    onCheckedChange = onGhostFilterChange,
                 )
             }
 

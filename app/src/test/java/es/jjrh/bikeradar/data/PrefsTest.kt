@@ -330,14 +330,6 @@ class PrefsTest {
     }
 
     @Test
-    fun firmwareLateralCorrectionDefaultsOnAndRoundTrips() {
-        assertTrue(prefs.firmwareLateralCorrectionEnabled)
-        prefs.firmwareLateralCorrectionEnabled = false
-        assertFalse(prefs.firmwareLateralCorrectionEnabled)
-        assertFalse(prefs.snapshot().firmwareLateralCorrectionEnabled)
-    }
-
-    @Test
     fun isPausedTracksThePausedUntilTimestamp() {
         prefs.pausedUntilEpochMs = System.currentTimeMillis() + 60_000L
         assertTrue(prefs.isPaused)

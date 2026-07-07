@@ -422,16 +422,11 @@ internal class RadarLinkController(
             overlayJob = overlayPipeline.attach(scope, name)
 
             val rearMac = gatt.device?.address
-            val effectiveOffsetCm = FirmwareLateralCorrection.effectiveLateralOffsetCm(
-                mountOffsetCm = prefs.radarLateralOffsetCm,
-                firmwareRev = firmwareRev ?: prefs.radarFirmwareRev,
-                correctionEnabled = prefs.firmwareLateralCorrectionEnabled,
-            )
             captureLog.clog(
                 "# radar_fw rev=${firmwareRev ?: prefs.radarFirmwareRev ?: "unknown"}" +
-                    " lateral_offset_cm=$effectiveOffsetCm",
+                    " lateral_offset_cm=${prefs.radarLateralOffsetCm}",
             )
-            val v2Dec = RadarV2Decoder(lateralOffsetCm = effectiveOffsetCm)
+            val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm)
             var v2FrameCount = 0
 
             // Mark this connection as healthy so the reconnect loop resets

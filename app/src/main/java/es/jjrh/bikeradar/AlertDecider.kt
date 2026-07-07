@@ -1231,7 +1231,7 @@ class AlertDecider(
          *  (~3.65 m each): rear-cone traffic that can reach the rider
          *  within the <= 3 s TTC window cannot be two lanes to the side,
          *  and the margin absorbs any residual error from the
-         *  provisional [FirmwareLateralCorrection] value plus a genuine
+         *  mount-offset setting plus a genuine
          *  same-lane offset. Ride-validated 2026-07-03: the
          *  parallel-street artefacts fired from 7-33 m off-axis; the
          *  closest genuine urgent candidates all read within ~3 m. */
@@ -1242,10 +1242,7 @@ class AlertDecider(
          *  says the car crosses distance 0 at least this far to the
          *  side. Deliberately loose - a dead-centre threat must never
          *  be vetoed, so the threshold must exceed the residual error
-         *  of the provisional [FirmwareLateralCorrection] value plus
-         *  fit noise with margin. Tighten toward ~1.5 m once ride
-         *  captures confirm the correction leaves followers reading
-         *  centred. */
+         *  of the mount-offset setting plus fit noise with margin. */
         const val URGENT_PASS_LATERAL_MIN_M = 2.5f
 
         /** Minimum samples in a track's lateral history before its

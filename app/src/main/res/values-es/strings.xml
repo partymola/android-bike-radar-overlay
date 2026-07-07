@@ -416,8 +416,6 @@
     <string name="settings_radardev_position_left">%1$d cm izda.</string>
     <string name="settings_radardev_position_right">%1$d cm dcha.</string>
     <string name="settings_radardev_firmware">Software del radar %1$s</string>
-    <string name="settings_radardev_fwfix_title">Corregir desvío lateral</string>
-    <string name="settings_radardev_fwfix_subtitle">El software %1$s del radar muestra los coches desplazados a un lado. Déjalo activado salvo que las posiciones se vean mal.</string>
 
     <!-- Ajustes → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>

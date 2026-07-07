@@ -70,7 +70,6 @@ data class PrefsSnapshot(
     val radarDisplayName: String?,
     val radarLateralOffsetCm: Int,
     val radarFirmwareRev: String?,
-    val firmwareLateralCorrectionEnabled: Boolean,
     val eBikeDataEnabled: Boolean,
     val eBikeOwnership: EBikeOwnership,
     val eBikeUnknownObjectLogEnabled: Boolean,
@@ -479,9 +478,8 @@ class Prefs(context: Context) {
     /** Firmware revision string last read from the connected radar's standard
      *  Device Information Service (the unlock sequence reads it on every
      *  connection). Null until the first successful read; kept across
-     *  sessions so the firmware-keyed lateral correction still applies when
-     *  a later read fails. Keys [es.jjrh.bikeradar.FirmwareLateralCorrection]
-     *  and shows on the Settings radar card.
+     *  sessions and shows on the Settings radar card and in capture-log
+     *  lines.
      *
      *  Describes the LAST-CONNECTED radar, not a specific unit: pinning a
      *  different radar in Settings clears it, and every successful
@@ -491,18 +489,6 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_RADAR_FIRMWARE_REV, null)
         set(v) {
             sp.edit().putString(KEY_RADAR_FIRMWARE_REV, v).apply()
-        }
-
-    /** Apply the built-in lateral correction for radar firmware versions with
-     *  a known sideways reporting bias (see
-     *  [es.jjrh.bikeradar.FirmwareLateralCorrection]). On by default - the
-     *  correction only engages when the connected firmware matches a known
-     *  entry; the toggle is the rider's way to rule it out when chasing an
-     *  overlay-position question. Composes with [radarLateralOffsetCm]. */
-    var firmwareLateralCorrectionEnabled: Boolean
-        get() = sp.getBoolean(KEY_FW_LATERAL_CORRECTION_ENABLED, true)
-        set(v) {
-            sp.edit().putBoolean(KEY_FW_LATERAL_CORRECTION_ENABLED, v).apply()
         }
 
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
@@ -706,7 +692,6 @@ class Prefs(context: Context) {
         radarDisplayName = radarDisplayName,
         radarLateralOffsetCm = radarLateralOffsetCm,
         radarFirmwareRev = radarFirmwareRev,
-        firmwareLateralCorrectionEnabled = firmwareLateralCorrectionEnabled,
         eBikeDataEnabled = eBikeDataEnabled,
         eBikeOwnership = eBikeOwnership,
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
@@ -766,7 +751,6 @@ class Prefs(context: Context) {
         appendLine("radar_light_night_mode=$radarLightNightMode")
         appendLine("radar_lateral_offset_cm=$radarLateralOffsetCm")
         appendLine("radar_firmware_rev=${radarFirmwareRev ?: "<unset>"}")
-        appendLine("fw_lateral_correction_enabled=$firmwareLateralCorrectionEnabled")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
@@ -821,7 +805,6 @@ class Prefs(context: Context) {
         const val KEY_RADAR_DISPLAY_NAME = "radar_display_name"
         const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"
         const val KEY_RADAR_FIRMWARE_REV = "radar_firmware_rev"
-        const val KEY_FW_LATERAL_CORRECTION_ENABLED = "fw_lateral_correction_enabled"
 
         /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0
          *  (centred), then jumps to +/-[RADAR_LATERAL_OFFSET_MIN_CM] and runs in

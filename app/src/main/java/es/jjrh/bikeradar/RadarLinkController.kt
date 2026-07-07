@@ -387,10 +387,9 @@ internal class RadarLinkController(
             journal("radar connected, running handshake")
 
             // Firmware revision arrives via the DIS read inside the unlock
-            // sequence (before runHandshake returns), so the decoder below
-            // can be constructed with the firmware-keyed lateral correction
-            // already resolved. Persisted so the correction survives a
-            // session whose read fails.
+            // sequence (before runHandshake returns). Persisted so the
+            // Settings display and the capture-log line survive a session
+            // whose read fails.
             var firmwareRev: String? = null
             val handshakeOk = RadarUnlock.runHandshake(
                 gatt,

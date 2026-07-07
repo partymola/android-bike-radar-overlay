@@ -110,8 +110,8 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    heading: a rider stopped beside a live lane meets a stream of
  *    vehicles that each close fast and pass metres to the side, and a
  *    car on a parallel street can satisfy the TTC arithmetic from 30 m
- *    off-axis. Ride evidence (2026-07-03, stopped on a multi-lane road):
- *    27 urgent cues in ~65 s, every firing track ending as a side pass.
+ *    off-axis. Ride evidence (stopped on a multi-lane road): 27 urgent
+ *    cues in ~65 s, every firing track ending as a side pass.
  *    Two vetoes, both failing OPEN (no/unreliable lateral data = fire):
  *      a) **off-axis veto** - a candidate whose raw lateral offset
  *         `|rangeXm|` exceeds [URGENT_LATERAL_MAX_M] on the firing frame
@@ -126,9 +126,8 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *         [URGENT_PASS_FIT_MIN_SPAN_M]+ of approach) and predicts
  *         `|rangeXm|` >= [URGENT_PASS_LATERAL_MIN_M] at the pass, the
  *         car is committed to a side pass, not an impact line. The
- *         threshold is deliberately loose while the firmware-keyed
- *         lateral correction's value is still provisional; see the
- *         constant's KDoc.
+ *         threshold is deliberately loose - a dead-centre threat must
+ *         never be vetoed; see the constant's KDoc.
  *  - **Urgent episode pacing.** The urgent cue repeats while an
  *    imminent condition is held (see the trigger-site comment for the
  *    alarm-standards rationale) - but a platoon released behind a
@@ -1072,9 +1071,10 @@ class AlertDecider(
         /** Ghost-beep filter: a tier-beep trigger with RAW lateral offset
          *  beyond this is physically not on the rider's road (a full
          *  carriageway is ~7 m) - vehicles on parallel streets have fired
-         *  tier beeps at raw rx 13-22 m in ride captures. Raw (pre-
-         *  correction) because the fw-6.70 constant correction is fitted
-         *  to follower distance and over-corrects close range. An order
+         *  tier beeps at raw rx 13-22 m in ride captures. Raw (the
+         *  sensor's own reading) because a physical-plausibility veto
+         *  must not depend on rider configuration: the mount-offset
+         *  translation is centimetres against a 10 m bar. An order
          *  looser than any lane-discrimination gate on purpose: this only
          *  rejects the physically impossible, never judges lane position. */
         const val RX_ABSURD_M = 10f
@@ -1231,10 +1231,10 @@ class AlertDecider(
          *  (~3.65 m each): rear-cone traffic that can reach the rider
          *  within the <= 3 s TTC window cannot be two lanes to the side,
          *  and the margin absorbs any residual error from the
-         *  mount-offset setting plus a genuine
-         *  same-lane offset. Ride-validated 2026-07-03: the
-         *  parallel-street artefacts fired from 7-33 m off-axis; the
-         *  closest genuine urgent candidates all read within ~3 m. */
+         *  mount-offset setting plus a genuine same-lane offset. Ride
+         *  evidence: parallel-street artefacts fired from 7-33 m
+         *  off-axis while the closest genuine urgent candidates all
+         *  read within ~3 m. */
         const val URGENT_LATERAL_MAX_M = 6f
 
         /** Minimum |predicted pass rangeXm| (m) at which the
@@ -1272,7 +1272,7 @@ class AlertDecider(
         /** Quiet gap (ms, no urgent-qualifying target) after which the
          *  urgent episode lapses and the next fire is a fresh first
          *  warning. Longer than the widest inter-car gap observed inside
-         *  the 2026-07-03 platoon storm (~4.9 s), so a light-released
+         *  a captured platoon storm (~4.9 s), so a light-released
          *  stream stays one episode; far shorter than the lull between
          *  genuinely separate encounters (38 s in the same capture). */
         const val URGENT_EPISODE_GAP_MS = 6_000L

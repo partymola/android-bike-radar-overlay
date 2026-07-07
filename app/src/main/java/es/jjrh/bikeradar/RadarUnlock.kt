@@ -65,8 +65,8 @@ object RadarUnlock {
         /** Invoked with the device's firmware revision string when the
          *  RADAR-path DIS read (already part of the unlock sequence)
          *  returns a parseable value. Fires before the handshake returns,
-         *  so the caller can key per-firmware behaviour (lateral
-         *  correction) without a second GATT round trip. */
+         *  so the caller can persist and log the revision without a
+         *  second GATT round trip. */
         onFirmwareRevision: (String) -> Unit = {},
         clog: (String) -> Unit,
     ): Boolean {
@@ -179,9 +179,9 @@ object RadarUnlock {
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxCmd}0119000000")
         delay(15)
 
-        // Capability exchange — minimal common-denominator across 4 captured sessions
-        // (2026-04-17 multi-session HCI diff). Single-byte probes inconsistent across
-        // sessions, removed to match the common denominator.
+        // Capability exchange - minimal common-denominator across 4 captured
+        // sessions (multi-session HCI diff). Single-byte probes inconsistent
+        // across sessions, removed to match the common denominator.
         writeNoResp(
             gatt,
             queue,

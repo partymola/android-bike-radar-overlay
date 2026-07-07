@@ -71,11 +71,10 @@ data class Vehicle(
      */
     val lateralUnknown: Boolean = false,
     /**
-     * Lateral offset in metres BEFORE the mount-offset / firmware
-     * correction ([rangeXm] is the corrected value). Close-range gates
-     * must use this: the fw-6.70 correction is a constant fitted to
-     * follower distance (~25-40 m) while the underlying bias is mostly
-     * angular, so at 0-10 m the corrected value is off by up to ~1.4 m.
+     * Lateral offset in metres as the sensor reported it, before the
+     * rider's mount-offset translation ([rangeXm] applies it).
+     * Physical-plausibility gates use this so a configuration error can
+     * never move a target on or off the road.
      * 0f when no lateral data exists for the source; consumers fail
      * open on 0f, matching the [rangeXm] convention.
      */

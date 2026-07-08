@@ -344,8 +344,6 @@
     <string name="settings_exp_invert_subtitle">Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).</string>
     <string name="settings_exp_ghost_title">Skip ghost beeps</string>
     <string name="settings_exp_ghost_subtitle">Silence close-car beeps from radar ghosts - objects first seen right behind you that never approach. Urgent alerts are never affected.</string>
-    <string name="settings_exp_turn_title">No false all-clear in corners</string>
-    <string name="settings_exp_turn_subtitle">Cornering won\'t sound the all-clear while a car may still be behind you.</string>
 
     <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alerts</string>
@@ -369,6 +367,8 @@
     <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
     <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
+    <string name="settings_radar_turn_title">No false all-clear in corners</string>
+    <string name="settings_radar_turn_subtitle">Cornering won\'t sound the all-clear while a car may still be behind you.</string>
     <string name="settings_radar_visual_distance_title">Visual distance</string>
     <string name="settings_radar_visual_distance_helper">Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.</string>
     <string name="settings_radar_overlay_dimmer_title">Overlay dimmer</string>

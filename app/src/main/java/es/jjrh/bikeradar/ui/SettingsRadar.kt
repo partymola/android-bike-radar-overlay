@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +74,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
     var urgentLowSpeed by rememberSaveable { mutableStateOf(prefs.urgentLowSpeedEnabled) }
+    var turnAware by rememberSaveable { mutableStateOf(prefs.turnAwareAlertsEnabled) }
     var batteryThreshold by rememberSaveable { mutableIntStateOf(prefs.batteryLowThresholdPct) }
     var batteryShowLabels by rememberSaveable { mutableStateOf(prefs.batteryShowLabels) }
     var closePassLogging by rememberSaveable { mutableStateOf(prefs.closePassLoggingEnabled) }
@@ -115,6 +117,11 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         onUrgentLowSpeedChange = {
             urgentLowSpeed = it
             prefs.urgentLowSpeedEnabled = it
+        },
+        turnAware = turnAware,
+        onTurnAwareChange = {
+            turnAware = it
+            prefs.turnAwareAlertsEnabled = it
         },
         batteryThreshold = batteryThreshold,
         onBatteryThresholdChange = { batteryThreshold = it },
@@ -226,6 +233,8 @@ internal fun SettingsRadarContent(
     onAdaptiveChange: (Boolean) -> Unit,
     urgentLowSpeed: Boolean,
     onUrgentLowSpeedChange: (Boolean) -> Unit,
+    turnAware: Boolean,
+    onTurnAwareChange: (Boolean) -> Unit,
     batteryThreshold: Int,
     onBatteryThresholdChange: (Int) -> Unit,
     onBatteryThresholdFinished: () -> Unit,
@@ -289,6 +298,14 @@ internal fun SettingsRadarContent(
                     subtitle = stringResource(R.string.settings_radar_urgent_low_speed_subtitle),
                     checked = urgentLowSpeed,
                     onCheckedChange = onUrgentLowSpeedChange,
+                )
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.TurnSlightRight,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_radar_turn_title),
+                    subtitle = stringResource(R.string.settings_radar_turn_subtitle),
+                    checked = turnAware,
+                    onCheckedChange = onTurnAwareChange,
                 )
             }
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_overlay))

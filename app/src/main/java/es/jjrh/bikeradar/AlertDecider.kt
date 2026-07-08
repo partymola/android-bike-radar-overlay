@@ -141,7 +141,7 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *    immediately (IEC 60601-1-8 "paused with new-condition override",
  *    the pattern the audio design already follows). The first fire of
  *    an episode is never delayed.
- *  - **Turn-aware clear deferral (experimental).** Cornering sweeps the
+ *  - **Turn-aware clear deferral.** Cornering sweeps the
  *    radar's rear cone off every followed car, so mid-turn the stream
  *    reads empty while the road is not. While [TurnStateDecider] reports
  *    TURNING and a close episode is active, the all-clear is deferred:

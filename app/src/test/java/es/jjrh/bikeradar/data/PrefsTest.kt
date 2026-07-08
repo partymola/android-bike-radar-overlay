@@ -71,6 +71,7 @@ class PrefsTest {
         assertTrue(s.walkAwayAlarmEnabled)
         assertEquals(30, s.walkAwayAlarmThresholdSec)
         assertTrue(s.adaptiveAlertsEnabled)
+        assertTrue(s.turnAwareAlertsEnabled)
         assertFalse(s.precogEnabled)
         assertFalse(s.experimentalLateralPanning)
         assertFalse(s.experimentalLateralPanningInvertLR)

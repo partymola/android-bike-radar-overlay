@@ -266,6 +266,9 @@ class OverlayPipelineDrivingTest {
 
     @Test
     fun turnSensorNotStartedAndStateNotConsultedWhenFlagOff() = runTest {
+        // Turn-aware defaults to on; disable explicitly to exercise the
+        // flag-off path.
+        prefs.turnAwareAlertsEnabled = false
         var starts = 0
         var stateReads = 0
         val pipeline = buildPipeline(

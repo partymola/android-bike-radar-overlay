@@ -56,7 +56,7 @@ internal class OverlayPipeline(
     private val overlayPrefsSnapshot: () -> PrefsSnapshot,
     private val ebikeSnapshot: () -> LiveDataSnapshot?,
     private val climbingNow: () -> Boolean,
-    /** Turn-aware alerting (experimental): the rider's current turn state
+    /** Turn-aware alerting: the rider's current turn state
      *  ([TurnSensorController]) - TURNING defers the all-clear, HOLD
      *  anchors the adaptive post-turn tail. Consulted per frame;
      *  additionally gated on the Settings flag so a mid-ride toggle-off

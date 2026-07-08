@@ -2408,7 +2408,7 @@ class AlertDeciderTest {
     // itself introduced (TURNING/HOLD gates, anchor-once conjuncts, tail
     // clamps, null-speed floor) is exercised by the tests below.
 
-    // ── turn-aware clear deferral (experimental) ─────────────────────
+    // ── turn-aware clear deferral ────────────────────────────────────
     //
     // Cornering sweeps the radar's rear cone off every followed car; the
     // tracks drop mid-turn and reacquire seconds later under NEW tids.

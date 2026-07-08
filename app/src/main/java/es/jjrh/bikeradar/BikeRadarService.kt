@@ -216,7 +216,7 @@ class BikeRadarService : Service() {
     // onCreate; attach() is called per radar connection.
     private lateinit var overlayPipeline: OverlayPipeline
 
-    // Turn-aware alerting (experimental): gyroscope-backed turn detector.
+    // Turn-aware alerting: gyroscope-backed turn detector.
     // Started/stopped by OverlayPipeline's session lifecycle so the sensor
     // only runs while a ride is live and the Settings flag is on.
     private lateinit var turnSensor: TurnSensorController

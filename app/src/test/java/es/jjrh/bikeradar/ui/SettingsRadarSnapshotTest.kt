@@ -75,6 +75,8 @@ class SettingsRadarSnapshotTest {
             onAdaptiveChange = {},
             urgentLowSpeed = true,
             onUrgentLowSpeedChange = {},
+            turnAware = true,
+            onTurnAwareChange = {},
             batteryThreshold = 20,
             onBatteryThresholdChange = {},
             onBatteryThresholdFinished = {},

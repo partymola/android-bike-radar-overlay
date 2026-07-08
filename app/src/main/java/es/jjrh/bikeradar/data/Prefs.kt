@@ -329,14 +329,13 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply()
         }
 
-    /** Experimental: hold the alert episode open through substantial
-     *  corners. Cornering sweeps the radar's rear cone off every followed
-     *  car, so without the hold each 90-degree turn with a follower
-     *  produces a spurious all-clear plus a fresh beep when the same car
-     *  is reacquired seconds later. Uses the gyroscope only while a ride
-     *  is live. Default off while field evidence accumulates. */
+    /** Hold the alert episode open through substantial corners. Cornering
+     *  sweeps the radar's rear cone off every followed car, so without the
+     *  hold each 90-degree turn with a follower produces a spurious all-clear
+     *  plus a fresh beep when the same car is reacquired seconds later. Uses
+     *  the gyroscope only while a ride is live. Default on. */
     var turnAwareAlertsEnabled: Boolean
-        get() = sp.getBoolean(KEY_TURN_AWARE_ALERTS, false)
+        get() = sp.getBoolean(KEY_TURN_AWARE_ALERTS, true)
         set(v) {
             sp.edit().putBoolean(KEY_TURN_AWARE_ALERTS, v).apply()
         }

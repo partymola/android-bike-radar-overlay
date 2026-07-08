@@ -35,8 +35,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = false,
-                    onTurnAwareChange = {},
                     ghostFilterEnabled = false,
                     onGhostFilterChange = {},
                 )
@@ -56,8 +54,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = false,
-                    onTurnAwareChange = {},
                     ghostFilterEnabled = false,
                     onGhostFilterChange = {},
                 )
@@ -80,8 +76,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = false,
-                    onTurnAwareChange = {},
                     ghostFilterEnabled = false,
                     onGhostFilterChange = {},
                 )
@@ -101,29 +95,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = true,
                     onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = false,
-                    onTurnAwareChange = {},
-                    ghostFilterEnabled = false,
-                    onGhostFilterChange = {},
-                )
-            }
-        }
-    }
-
-    @Test
-    fun turnAwareOn() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    lateralPanningEnabled = false,
-                    onLateralPanningChange = {},
-                    lateralPanningInvertLR = false,
-                    onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = true,
-                    onTurnAwareChange = {},
                     ghostFilterEnabled = false,
                     onGhostFilterChange = {},
                 )
@@ -143,8 +114,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    turnAwareEnabled = false,
-                    onTurnAwareChange = {},
                     ghostFilterEnabled = true,
                     onGhostFilterChange = {},
                 )

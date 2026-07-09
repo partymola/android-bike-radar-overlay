@@ -49,12 +49,15 @@ object RadarUnlock {
     // Phone-side device-ID payload. Three length-prefixed strings:
     // client-name, vendor, model. Length and structure must match what
     // the head unit expects; the client-name itself is not validated by
-    // the device, so we send the project's own name.
-    // TODO: read vendor/model from android.os.Build at runtime instead
-    // of hardcoding.
-    private const val DEVICE_ID_SUFFIX =
-        "1162696b657261646172206f7665726c617906476f6f676c650f506978656c2031302050726f20584c" +
-            "01148400"
+    // the device, so we send the project's own name. Vendor and model are
+    // read from android.os.Build at runtime (see buildDeviceIdSuffix).
+    private const val DEVICE_ID_CLIENT_NAME = "bikeradar overlay"
+    private const val DEVICE_ID_TRAILER = "01148400"
+
+    // Single-byte length prefix per field; keep each field short so the
+    // capability frame stays well under the negotiated MTU. The device does
+    // not validate field contents.
+    private const val DEVICE_ID_FIELD_CAP = 32
 
     @SuppressLint("MissingPermission")
     suspend fun runHandshake(
@@ -187,7 +190,7 @@ object RadarUnlock {
             queue,
             Uuids.SVC_CONFIG,
             txUuid,
-            "${e0}4000023f058813a013029608ffffffffffff9b2fffff$DEVICE_ID_SUFFIX",
+            "${e0}4000023f058813a013029608ffffffffffff9b2fffff${buildDeviceIdSuffix()}",
         )
         delay(180)
         writeNoResp(
@@ -296,6 +299,32 @@ object RadarUnlock {
     }
 
     // ── private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Builds the phone-side device-ID payload sent during the capability
+     * exchange: three length-prefixed ASCII fields (client-name, vendor,
+     * model) followed by a fixed trailer. Vendor and model default to the
+     * running device's `android.os.Build` values. Internal + pure so tests
+     * can pin the exact bytes without a `Build` shadow.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun buildDeviceIdSuffix(
+        clientName: String = DEVICE_ID_CLIENT_NAME,
+        vendor: String = android.os.Build.MANUFACTURER.orEmpty(),
+        model: String = android.os.Build.MODEL.orEmpty(),
+    ): String = lenPrefixedAscii(clientName) +
+        lenPrefixedAscii(vendor) +
+        lenPrefixedAscii(model) +
+        DEVICE_ID_TRAILER
+
+    // Strip to printable ASCII (0x20..0x7E), cap length, then emit a
+    // one-byte length prefix followed by the field's hex bytes.
+    private fun lenPrefixedAscii(s: String): String {
+        val bytes = s.filter { it.code in 0x20..0x7E }
+            .take(DEVICE_ID_FIELD_CAP)
+            .toByteArray(Charsets.US_ASCII)
+        return "%02x".format(bytes.size) + bytes.toHex()
+    }
 
     /**
      * Pin for AMV `0x18` reply frames observed on firmware 5.80:

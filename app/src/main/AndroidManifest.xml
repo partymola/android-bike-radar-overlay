@@ -73,8 +73,14 @@
         android:theme="@style/Theme.BikeRadar"
         android:usesCleartextTraffic="true">
         <!-- HA URL: cleartext HTTP is allowed at OS level so LAN setups
-             keep working. App-level refusal (HaUrlPolicy) blocks the
-             bearer token from leaving over HTTP to non-LAN hosts. -->
+             keep working. A network-security-config is deliberately NOT
+             used: NSC matches cleartext exemptions by hostname/domain,
+             but the policy we need is "cleartext only to RFC1918 /
+             loopback / ULA / link-local addresses" and the HA host is an
+             arbitrary user-configured LAN IP that no domain-config can
+             enumerate. Enforcement is therefore app-level: HaUrlPolicy
+             requires HTTPS for any non-LAN host, so the bearer token
+             never leaves over HTTP to the WAN. -->
 
 
         <activity

@@ -26,10 +26,24 @@ ships as a GitHub pre-release; older tags are not patched.
 
 ## Scope notes
 
-The app stores Home Assistant credentials on-device (encrypted via the
-Android Keystore) and speaks BLE to nearby radar/eBike/camera hardware.
-Findings in those areas - credential handling, the BLE trust model, or
-data written to the on-device capture log - are especially welcome.
+The app stores Home Assistant credentials on-device in its private
+SharedPreferences (readable by no other app); device backups of them are
+protected by the platform's lockscreen-derived backup encryption. It
+also speaks BLE to nearby radar/eBike/camera hardware. Findings in those
+areas - credential handling, the BLE trust model, or data written to the
+on-device capture log - are especially welcome.
+
+## Cleartext HTTP to Home Assistant
+
+The manifest sets `usesCleartextTraffic="true"`, and there is deliberately no
+`network_security_config.xml`. This is not a blanket allowance: a
+network-security-config exempts cleartext by hostname or domain, but the policy
+the app actually needs is "cleartext only to LAN addresses" - RFC1918, loopback,
+IPv6 unique-local and link-local - and the HA host is an arbitrary
+user-configured LAN IP that no static domain-config can enumerate. Enforcement
+is therefore at the application layer: `HaUrlPolicy` requires HTTPS for any
+non-LAN host and the settings UI refuses to save a cleartext WAN URL, so the
+long-lived bearer token never leaves the phone over plain HTTP to the internet.
 
 The dependency graph is scoped to the app's **release runtime** classpath -
 what actually ships in `app-release.apk` (AndroidX, Compose, kotlinx) - so

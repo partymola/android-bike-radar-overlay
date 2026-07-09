@@ -23,9 +23,9 @@ import es.jjrh.bikeradar.R
 /**
  * Privacy summary. Bike Radar is a self-hosted companion: the app does
  * not collect anything for itself. Anything sensitive (HA URL, HA
- * token) is stored locally with hardware-backed encryption; anything
- * published over the network goes to the user's own Home Assistant
- * instance, configured by the user, and nowhere else.
+ * token) is stored locally in the app's private storage, readable by no
+ * other app; anything published over the network goes to the user's own
+ * Home Assistant instance, configured by the user, and nowhere else.
  */
 @Composable
 fun SettingsPrivacy(navController: NavController) {

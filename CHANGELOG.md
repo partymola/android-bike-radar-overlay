@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.14.0-alpha - 2026-07-09
+
+### Features
+
+- **Move to a new phone without redoing your setup.** Backups are now on: your settings and Home Assistant login travel to a new phone through Android's encrypted cloud backup and the transfer wizard, both protected by your screen lock (cloud backup is refused on a phone with no lock, so that promise is never false). The radar re-pairs once on the new phone, as Bluetooth bonds belong to the system.
+- **The end-of-ride summary now tells you what needs attention.** After a ride the notification leads with anything worth acting on - radar, dashcam, or eBike batteries due for a charge, alert sounds that failed to play, an unclean mid-ride restart - and the same list appears as a card at the top of the main screen, so a notification swiped away by mistake is still there in the app. Each item has an X to dismiss it; anything still true next ride comes back. Low-battery warnings no longer interrupt you mid-ride - they wait for the summary.
+- **The dead-radar warning now protects radar-only riders too.** The audio cue for a radar that drops mid-ride used to need a Bosch eBike link to confirm you were still riding, so a rider without one got silence at the exact moment an empty overlay looks like a clear road. It now also confirms from the radar's own recent motion, and works with the screen off. A deliberate power-off at the end of a ride stays silent.
+- **Every alert cue is easier to hear at speed and over music.** Equipment cues (radar drop, battery, reconnect) moved to a pitch that cuts through wind and tyre noise, the close-pass beeps gained distinct rhythms, the urgent warning now looms as it fires, and every cue briefly lifts its own volume above whatever media is playing, then restores it.
+- **The corner all-clear hold is now on by default.** The turn-aware hold that stops a false "road clear" mid-corner - shipped experimental last release - is on for everyone after a week of commutes confirmed it, and now lives in Settings -> Alerts. Warning beeps are never held back.
+- **Quieter close-pass beeps from radar ghosts (experimental).** A new Settings -> Experimental toggle silences the close-range triple that roadside clutter and turn-swept objects sometimes trigger, until a track shows real closing speed. Beep audio only; the all-clear, urgent cue, and overlay are untouched.
+- **Set your radar's mount offset during onboarding.** The off-centre-radar slider added last release now also appears as a setup step, so new riders line their targets up from the start.
+
+### Reliability
+
+- **Rides survive a crash or a system kill.** Ride records used to live in memory until the post-ride summary, so a mid-ride crash restarted from zero and a kill during the post-ride wait erased the finished ride. A crash-safe checkpoint now keeps the latest ride state and flushes it into history on the next start.
+- **The app recovers after a Bluetooth stack restart.** A mid-ride Bluetooth crash or toggle used to leave "reconnecting" on screen forever with rear awareness gone until you restarted the app. It now watches the adapter and re-registers the scan and both links automatically when Bluetooth returns.
+- **Alert audio heals itself.** An audio-server restart mid-ride used to silently kill every cue for the rest of the session, and the log wrongly recorded them as heard. Failed cues now rebuild the audio path and retry, and the ride log records a cue only if it actually sounded.
+- **Your alarm volume is restored after a crash during the walk-away alarm.** The alarm forces full volume for its tone; a crash mid-tone used to leave the phone's next wake-up alarm at maximum. The saved level is now restored on the next start.
+- **A Bluetooth drop during connect no longer crashes the app.** A disconnect that raced the handshake could kill the process; it now aborts cleanly like any other failed operation.
+
+### Fix
+
+- **Fewer false urgent warnings.** The imminent-impact cue no longer fires for cars passing in a parallel lane or strung out in a platoon, and it holds its veto even on a frame where the radar briefly loses the car's sideways position.
+- **The dead-radar cue stops repeating on a parked bike.** Parking inside the cue's activity window used to leave it sounding forever, since a parked radar never reconnects. A locked bike now silences it, and it caps its repeats.
+- **Alerts stay silent during internet calls.** Cue suppression during a call now covers VoIP and app calls, not just the phone network.
+- **"Restarted mid-ride" only shows for a real mid-ride crash.** It no longer fires after a reinstall or force-stop between rides, and it clears once reported.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE protocol or the Home Assistant payloads.
+- Backups are now enabled so setup can move to a new phone; this needed the stored Home Assistant credentials to move from a device-bound key into the app's private storage (same practical protection). An in-place upgrade migrates automatically; ride history and capture logs are never backed up, and the radar re-pairs once on a new phone.
+- One new permission (a bounded wake lock) lets the dead-radar cue fire promptly with the screen off; it is disclosed on the Privacy screen.
+
+### Internal
+
+- Recovery wiring (the crash checkpoint and Bluetooth-adapter recovery) extracted into tested coordinators and driven end-to-end in the service smoke test, with the diff-coverage gate now a mandatory pre-push step. Unit tests run across parallel JVMs, cutting the full run from about three minutes to twenty seconds. Snapshot goldens render with the status-dot pulse frozen for determinism. Plus a Troubleshooting/FAQ section, an audio-design doc, and the usual CI and provenance-scan refreshes.
+
 ## v0.13.0-alpha - 2026-07-02
 
 ### Features

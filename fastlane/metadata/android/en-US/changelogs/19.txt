@@ -1,0 +1,3 @@
+New: move your settings and Home Assistant login to a new phone with backup. The end-of-ride summary now leads with what needs attention - low batteries, alert sounds that failed to play - on the notification and a main-screen card. The dead-radar warning now works for radar-only riders and with the screen off, and every cue is easier to hear at speed and over music. The corner all-clear hold is on by default.
+Fixed: fewer false urgent warnings from parallel-lane and platoon traffic, the dead-radar cue no longer repeats on a parked bike, and alerts stay silent during internet calls.
+More reliable: rides survive a crash, the app recovers after a Bluetooth restart, and alert audio heals itself.

@@ -13,6 +13,7 @@ Funciones:
 - Telemetría de eBike Bosch Smart System, estrictamente de solo lectura
 - Recordatorios de alejamiento y de bici sin bloquear
 - Publicación opcional en Home Assistant: baterías, pases cercanos, resúmenes de ruta
+- Registro de diagnóstico opcional en el teléfono, desactivado por defecto y sin subirse nunca
 - En español e inglés
 
 Necesita un radar trasero que hable el protocolo BLE V2 (emparéjalo una vez en los Ajustes del sistema) y Android 12 o posterior. Las integraciones de radar, cámara y eBike son independientes: cada una funciona sin las demás.

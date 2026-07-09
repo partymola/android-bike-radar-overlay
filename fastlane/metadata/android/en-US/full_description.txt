@@ -13,6 +13,7 @@ Features:
 - Bosch Smart System eBike telemetry, strictly read-only
 - Walk-away and forgot-to-lock reminders
 - Optional Home Assistant publishing: batteries, close passes, ride summaries
+- Optional on-device capture log for diagnostics, off by default and never uploaded
 - English and Spanish
 
 Requires a rear radar that speaks the V2 BLE protocol (pair it once in system Settings) and Android 12 or newer. The radar, camera and eBike integrations degrade gracefully: each works without the others.

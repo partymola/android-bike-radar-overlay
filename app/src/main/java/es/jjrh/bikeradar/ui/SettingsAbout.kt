@@ -58,9 +58,9 @@ private fun SettingsAboutBody(navController: NavController) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // BR icon tile — same launcher foreground used in the
-                // top bar BrMark, scaled up. Renders the white-background
-                // blue-letters logo.
+                // BR mark - same launcher foreground used in the top bar
+                // BrMark, scaled up. Blue letters render directly on the
+                // screen surface (the asset background is transparent).
                 BrMark(size = 88.dp)
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(

@@ -412,30 +412,24 @@ fun Sparkline(
 
 // ── BrMark — mockup top-bar logo ──────────────────────────────────────
 //
-// Renders the project's existing launcher foreground PNG, which is the
-// authoritative BR mark (blue letters, white background, radar swoosh
-// on the R). The mipmap launcher is an adaptive-icon XML which
-// painterResource refuses to load; the per-density PNGs under
+// Renders the project's launcher foreground PNG, which is the
+// authoritative BR mark (blue letters on a transparent background,
+// radar swoosh on the R), directly on whatever surface it lands on.
+// The mipmap launcher is an adaptive-icon XML which painterResource
+// refuses to load; the per-density PNGs under
 // `drawable-*dpi/ic_launcher_foreground.png` are real raster assets
-// and work directly.
+// and work directly. (The launcher itself still composites this
+// foreground over its own white background layer.)
 
 @Composable
 fun BrMark(size: Dp = 28.dp, modifier: Modifier = Modifier) {
-    // Render the launcher's adaptive-icon layers manually: a white
-    // background tile (rounded), with the foreground PNG (the cyan-
-    // blue BR letters) on top. The mipmap adaptive XML can't be
-    // loaded by painterResource, so we compose the layers ourselves.
-    //
     // The foreground PNG follows Android's adaptive-icon convention
     // (108 dp canvas, 72 dp visible safe zone) so its drawn content
-    // only occupies ~66 % of the bitmap. To make the letters fill the
-    // tile we render the PNG at 1.5× the tile and let the rounded clip
-    // absorb the transparent overflow.
+    // only occupies ~66 % of the bitmap. Render the PNG at 1.5× the
+    // requested size so the letters fill it; the overflow is fully
+    // transparent padding and paints nothing.
     Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(size * 0.22f))
-            .background(Color.White),
+        modifier = modifier.size(size),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.Image(

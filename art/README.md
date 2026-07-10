@@ -37,6 +37,25 @@ python3 art/regen/build-svg.py     # rewrites br-mark.svg, no raster needed
 | `b-eraser.path` | potrace of the B as a connected component; dilated in the mask to carve the clear channel between the B and the sweep fan |
 | `gradient.txt` | the single blue->cyan fill gradient: `x1 y1 x2 y2 c0 c1` (userSpace coords + two hex stops) |
 
+### Design construction (for a redraw from scratch)
+
+The mark is one integrated monogram path, not separate glyphs:
+
+- a uniform-width vertical **spine** on the far left (the B stem);
+- a geometric **upper loop** (semi-circle) of the same thickness, closing back
+  to the spine;
+- a **lower loop** with the same outer boundary, carrying a constant-width
+  **sweep cutout**: it starts inside the lower-right loop, angles down-right to
+  form the R's leg (ending in a point at the lower-right corner), then arcs back
+  up concurrent with the loop's outer curve - the abstract radar scan. That one
+  cutout is what resolves the R (leg + loop) out of the B's lower loop.
+
+The fill is a blue-to-cyan gradient (deep blue at the lower-left of the B,
+brightening to cyan at the R). The current vector traces the rendered shapes
+rather than reconstructing the sweep as a mathematically constant-width stroke;
+a from-scratch redraw should keep the sweep width uniform and the arc concurrent
+with the loop.
+
 ### How the intermediates were derived (needs the original raster)
 
 The `.path` files came from `potrace -s --flat` over the alpha channel of the

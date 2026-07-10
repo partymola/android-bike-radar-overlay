@@ -1,4 +1,22 @@
-# android-bike-radar-overlay
+# Bike Radar
+
+**Use any cycling app. Add radar on top.** Bike Radar is a free, open-source
+Android app that turns your rear bike radar into an overlay and audio alerts
+drawn over whatever app you're already using - your map, Bosch Flow, music,
+anything. No account, no cloud, no tracking.
+
+[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/partymola/android-bike-radar-overlay?include_prereleases&label=release)](../../releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](./LICENSE)
+[![Android 12+](https://img.shields.io/badge/android-12%2B-brightgreen)](#requirements)
+
+**[⬇ Download the latest APK](../../releases/latest)** - or add the repo to
+[Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
+
+Works with the Garmin Varia radar family over Bluetooth LE - see
+[device compatibility](COMPATIBILITY.md). It also reads data the official
+apps don't surface: the RearVue 820's per-vehicle lateral position and
+speed stream feeds the overlay and the close-pass detection.
 
 <p align="left">
   <img src="screenshots/overlay-live.png" width="700" alt="Live overlay during a ride" />
@@ -89,12 +107,28 @@ repository for the wire protocol, reference decoder, and unit tests.
 
 Debug screen is hidden behind a three-tap long-press unlock on the app title.
 
+## Compatibility
+
+Tested daily by the author on a Garmin Varia RearVue 820 (plus a Varia
+Vue front camera and a Bosch Smart System eBike). The rest of the
+current Varia BLE family - RTL515/516, RVR315, RCT715, eRTL615 - speaks
+the same protocol and is expected to work (a manual device pick covers
+any that auto-detection misses), but all are unconfirmed: if you ride
+one, a works/doesn't-work report is one of the most valuable
+contributions you can make. Non-Garmin
+radars are not supported (no standard BLE radar profile exists; the
+cross-vendor story on bike computers is ANT+, which phones lack).
+
+Full matrix, reasons, and the manual-selection escape hatch:
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
+
 ## Status
 
-Alpha. Personal project. Tested only against the author's own hardware
-(Garmin Varia RearVue 820 + Pixel 10 Pro XL on Android 16). No
-guarantee it works on any other device, any other Android version, or
-any future firmware.
+Early release, under active development, ridden daily by the author on
+the hardware above. Version numbers still carry an `-alpha` tag while
+device coverage beyond that hardware is unconfirmed - behaviour on
+other phones, radars, and future firmware may differ. Bug reports
+welcome; please include device, Android version, and radar firmware.
 
 ## Use at your own risk
 
@@ -110,18 +144,18 @@ connected, and never sends any command to the bike.
 
 The GPL-3.0 licence (see `LICENSE`) disclaims warranty to the extent
 permitted by applicable law. Not affiliated with or endorsed by
-Garmin or Bosch. Bug reports welcome; please include device + Android
-version + firmware.
+Garmin or Bosch.
 
 ## Requirements
 
 - Android phone (tested on Pixel 10 Pro XL / Android 16). `minSdk = 31`,
   `targetSdk = 36`.
-- A rear-radar BLE head unit that speaks the V2 (bonded) protocol. V2
-  requires a one-time LE Secure Connections pair via Android's own
-  Bluetooth settings; the app does not attempt `createBond()` itself.
-  (Legacy V1 (cleartext) frames the radar emits unsolicited are
-  ignored; the app never subscribes the V1 channel.)
+- A rear radar from the Garmin Varia BLE family (see
+  [`COMPATIBILITY.md`](COMPATIBILITY.md)) speaking the V2 (bonded)
+  protocol. V2 requires a one-time LE Secure Connections pair via
+  Android's own Bluetooth settings; the app does not attempt
+  `createBond()` itself. (Legacy V1 (cleartext) frames the radar emits
+  unsolicited are ignored; the app never subscribes the V1 channel.)
 - Optional: Home Assistant for battery reporting and pushing close-pass
   and ride-summary events off the phone. See below for the bare-minimum
   HA-side set-up; the overlay, close-pass counting and ride history all

@@ -53,7 +53,7 @@ jobs:
           # Pinned to the minimum Gradle required by AGP 9.2 per
           # https://developer.android.com/build/releases/gradle-plugin .
           # Bump in lockstep with any AGP upgrade.
-          gradle-version: '9.4.1'
+          gradle-version: '9.6.1'
 
       - name: Decode release keystore into runner temp
         env:

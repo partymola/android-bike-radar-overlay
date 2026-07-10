@@ -38,7 +38,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
         with:
-          gradle-version: '9.4.1'
+          gradle-version: '9.6.1'
 
       # Robolectric downloads its android-all-instrumented SDK jars (~100 MB
       # per API level) into ~/.m2 the first time a test runs on each level.
@@ -103,7 +103,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
         with:
-          gradle-version: '9.4.1'
+          gradle-version: '9.6.1'
 
       - name: Run lint and ktlint
         run: gradle :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
@@ -145,7 +145,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
         with:
-          gradle-version: '9.4.1'
+          gradle-version: '9.6.1'
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --console=plain --no-daemon

@@ -34,7 +34,7 @@ jobs:
         with:
           # No Gradle wrapper in the repo (builds run via Docker / setup-gradle),
           # so the action needs an explicit version - matches ci.yml.
-          gradle-version: '9.4.1'
+          gradle-version: '9.6.1'
         env:
           # Only the app's shipped release runtime closure goes into the graph;
           # the plugin/build classpath (a separate, non-Runtime configuration)

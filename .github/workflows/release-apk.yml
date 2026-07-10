@@ -104,10 +104,10 @@ jobs:
           body_path: release-notes.md
           # Appends "Full Changelog" compare link below body_path.
           generate_release_notes: true
-          # All releases default to pre-release until the app exits
-          # alpha. Flip to false (or back to dash-based detection) when
-          # there's a deliberate stable cut.
-          prerelease: true
+          # Stable from 1.0.0 on. If a future tag is a pre-release
+          # (e.g. a -rc / -beta suffix), set this true for that cut or
+          # switch to dash-based detection on the tag name.
+          prerelease: false
 
       - name: Wipe keystore from runner
         if: always()

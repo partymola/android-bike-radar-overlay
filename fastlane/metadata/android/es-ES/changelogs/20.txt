@@ -1,0 +1,1 @@
+Versión 1.0. Tras diecinueve versiones alfa, la app está completa y se usa a diario: esta es la primera versión estable. Probada en un Garmin Varia RearVue 820; se espera que el resto de la familia Varia funcione, así que un aviso ayuda si el tuyo va o no. Además: nuevo logo y texto más legible a plena luz del sol.

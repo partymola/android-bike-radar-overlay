@@ -1,0 +1,1 @@
+Version 1.0. After nineteen alpha builds the app is feature-complete and daily-ridden - this is the first stable release. Tested on a Garmin Varia RearVue 820; the rest of the Varia family is expected to work, so a report helps if yours does or doesn't. Also: refreshed app logo and clearer text in bright sunlight.

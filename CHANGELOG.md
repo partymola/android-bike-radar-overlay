@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.0 - 2026-07-10
+
+### Compatibility
+
+- **First stable release.** After nineteen alpha builds the app is feature-complete and has ridden every commute for months, so it moves to 1.0. It is tested on a Garmin Varia RearVue 820; the rest of the Varia radar family is expected to work but unconfirmed, and a works-or-doesn't report on the issue tracker is genuinely useful.
+
+### UX
+
+- Redrew the app icon as a crisp vector with a transparent background, and lightened dim caption text so it stays readable in direct sunlight.
+
+### Internal
+
+- The radar handshake now identifies the phone by its real make and model instead of a fixed value. Added an architecture map and a device-compatibility matrix, split the onboarding and main screens into per-topic files, and refreshed the Gradle and CI toolchain.
+
 ## v0.14.0-alpha - 2026-07-09
 
 ### Features

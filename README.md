@@ -7,16 +7,16 @@ Flow, your music. As far as we know it's the only radar app that draws over
 other apps, and the only open-source one. No account, no ads, no tracking.
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/partymola/android-bike-radar-overlay?include_prereleases&label=release)](../../releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/partymola/android-bike-radar-overlay?label=release)](../../releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](./LICENSE)
 [![Android 12+](https://img.shields.io/badge/android-12%2B-brightgreen)](#requirements)
 
 **[⬇ Download the latest APK](../../releases/latest)** - or add the repo to
 [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
 
-Built and ridden daily by the author on a Garmin Varia RearVue 820 - this is
-a commute tool, not a demo. Works with the Garmin Varia radar family over
-Bluetooth LE (see [device compatibility](#compatibility)); not affiliated
+Built and ridden daily by the author for months on a Garmin Varia RearVue
+820 - a commute tool, not a demo. Works with the Garmin Varia radar family
+over Bluetooth LE (see [device compatibility](#compatibility)); not affiliated
 with or endorsed by Garmin. It also shows more than the official apps do:
 the RearVue 820's per-vehicle lateral position and speed stream feeds the
 overlay and the close-pass detection.
@@ -124,8 +124,7 @@ Signed APKs are attached to every [GitHub Release](../../releases).
 Download the latest APK and install it, or - to get updates
 automatically - add this repository to
 [Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL
-into *Add App* and enable "Include prereleases" while the app is in
-alpha. Each install is signed with the same key, so updates apply over
+into *Add App*. Each install is signed with the same key, so updates apply over
 the top without uninstalling.
 
 Store-listing metadata lives under `fastlane/metadata/android/`
@@ -217,11 +216,13 @@ Assistant integration is the supported path).
 
 ## Status
 
-Early release, under active development, ridden daily by the author on
-the hardware above. Version numbers still carry an `-alpha` tag while
-device coverage beyond that hardware is unconfirmed - behaviour on
-other phones, radars, and future firmware may differ. Bug reports
-welcome; please include device, Android version, and radar firmware.
+Stable. Feature-complete and ridden daily by the author for months,
+tested on a Garmin Varia RearVue 820 and a Pixel 10 Pro XL. The wider Garmin Varia
+radar family is expected to work but is unconfirmed - if yours works, or
+doesn't, a quick [report](../../issues) is genuinely useful, and
+behaviour on other phones, radars, and future firmware may still differ.
+Bug reports welcome; please include device, Android version, and radar
+firmware.
 
 ## Use at your own risk
 
@@ -306,9 +307,8 @@ and reuses it across rebuilds so `adb install -r` keeps working.
 Signed APKs are published as GitHub Releases when a tag matching
 `v*` is pushed. The release workflow builds from a clean checkout,
 signs with a release keystore held as repo secrets, and attaches
-the APK to the Release. While the app is in alpha every release is
-published as a prerelease; the flag is hardcoded in the workflow and
-will be removed when the app ships a stable tag.
+the APK to the Release. Releases are published as stable from 1.0.0;
+a pre-release cut would flip the `prerelease` flag in the workflow.
 
 To cut a release:
 

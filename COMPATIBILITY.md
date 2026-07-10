@@ -1,5 +1,8 @@
 # Device compatibility
 
+*Not affiliated with or endorsed by Garmin, Bosch, or any vendor named below;
+device names are used descriptively to state compatibility.*
+
 The app implements the Garmin Varia V2 (bonded) BLE radar protocol, documented
 in the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
 repository. Compatibility follows from that protocol, so the matrix below is
@@ -28,8 +31,8 @@ for bike radars. The cross-vendor compatibility you see on bike computers is
 the open **ANT+** Bike Radar profile - and phones don't have ANT+ radios. Over
 Bluetooth every vendor speaks its own proprietary protocol (some, like the
 Wahoo Trackr and Trek CarBack, send live radar data over ANT+ only). Supporting
-another brand would mean reverse-engineering that vendor's BLE protocol from
-scratch with the physical device in hand.
+another brand would mean independently working out that vendor's BLE protocol
+with the physical device in hand.
 
 **Radar not detected automatically?** If your Garmin radar is bonded but the
 app doesn't recognise it by name, pick it manually under **Settings → Radar**

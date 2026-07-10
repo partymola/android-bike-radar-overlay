@@ -1,9 +1,10 @@
 # Bike Radar
 
 **Use any cycling app. Add radar on top.** Bike Radar is a free, open-source
-Android app that turns your rear bike radar into an overlay and audio alerts
-drawn over whatever app you're already using - your map, Bosch Flow, music,
-anything. No account, no cloud, no tracking.
+Android app that draws your rear bike radar as a live overlay and audio alerts
+over whatever you're already running - Strava, Komoot, Google Maps, Bosch
+Flow, your music. As far as we know it's the only radar app that draws over
+other apps, and the only open-source one. No account, no ads, no tracking.
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/partymola/android-bike-radar-overlay?include_prereleases&label=release)](../../releases/latest)
@@ -13,10 +14,12 @@ anything. No account, no cloud, no tracking.
 **[⬇ Download the latest APK](../../releases/latest)** - or add the repo to
 [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
 
-Works with the Garmin Varia radar family over Bluetooth LE - see
-[device compatibility](COMPATIBILITY.md). It also reads data the official
-apps don't surface: the RearVue 820's per-vehicle lateral position and
-speed stream feeds the overlay and the close-pass detection.
+Built and ridden daily by the author on a Garmin Varia RearVue 820 - this is
+a commute tool, not a demo. Works with the Garmin Varia radar family over
+Bluetooth LE (see [device compatibility](#compatibility)); not affiliated
+with or endorsed by Garmin. It also shows more than the official apps do:
+the RearVue 820's per-vehicle lateral position and speed stream feeds the
+overlay and the close-pass detection.
 
 <p align="left">
   <img src="screenshots/overlay-live.png" width="700" alt="Live overlay during a ride" />
@@ -24,43 +27,34 @@ speed stream feeds the overlay and the close-pass detection.
 
 The app is the faint strip down the right edge of the screenshot above
 - the radar threat ladder, plus small battery indicators for the radar
-itself and the front camera. It draws on top of whatever you're already
-running (a map, Bosch Flow, etc.) and beeps when a car closes in behind
-you. The beep tier rises as the closest vehicle gets nearer; a distinct
-urgent tone fires if an impact looks imminent.
+itself and the front camera. It beeps when a car closes in behind you;
+the beep tier rises as the closest vehicle gets nearer, and a distinct
+urgent tone fires if an impact looks imminent. Everything else in the
+screenshot - the navigation panel, the assist-mode and battery row - is
+other apps showing through. The overlay only ever draws the right-edge
+strip; the rest of your screen stays yours. (*Image credits
+[below](#credits).*)
 
-Everything else in the screenshot - the navigation panel on the left,
-the assist-mode and battery row along the bottom - is other apps
-showing through. The overlay only ever draws the right-edge strip; the
-rest of your screen stays yours.
+*¿Hablas español? Hay un resumen [en español](#en-español) más abajo.*
 
-Map tiles in the screenshot are rendered by a separate navigation app
-underneath the overlay. Map tiles &copy; Mapbox, map data &copy;
-OpenStreetMap contributors. The visible eBike assist-mode indicator
-("TURBO") is part of the Bosch eBike Flow UI; Bosch and eBike Flow are
-trademarks of Robert Bosch GmbH and their incidental appearance here
-does not imply any endorsement.
+## What it does
 
-The app speaks the V2 (bonded) BLE rear-radar protocol. See
-[`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
-and the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
-repository for the wire protocol, reference decoder, and unit tests.
+- **Radar overlay on any app.** A thin strip shows each vehicle behind
+  you - distance, closing speed, and which side it's on - over your
+  map, Bosch Flow, music, anything.
+- **Alerts you don't have to look at.** Beeps rise in tiers as the
+  closest car nears, a distinct urgent tone fires if an impact looks
+  imminent, and a clear chime sounds when the road behind is empty.
+  Optional left/right panning puts the beep on the threat's side, on
+  speakers or any stereo headphone route.
+- **Close-pass counting and ride history, all on your phone.** Counts
+  the overtakes that pass close, notifies a post-ride summary, and
+  keeps per-ride stats - distance, overtakes, close passes, how close
+  and how fast the closest came - in app-private storage. No account,
+  no location, no route.
 
-*¿Hablas español? Hay un resumen [en español](#en-español) al final.*
+<details><summary><b>More features</b></summary>
 
-## Features
-
-- Live radar overlay with per-vehicle distance, closing speed and
-  lateral position; per-tier audio cues plus a separate urgent-impact
-  tone.
-- Optional directional alert audio: in landscape, beeps pan to the
-  threat's lateral side on the phone's built-in speakers, and on stereo
-  headphone-class routes (BT, BLE, wired, USB, hearing aid).
-- Close-pass counting and a local ride history, no Home Assistant
-  needed: counts the overtakes that pass close on the home screen, and
-  keeps a per-ride history - distance, overtakes, close passes, and how
-  close and how fast the closest passes came - in app-private storage,
-  with no location and no route.
 - Home Assistant integration via MQTT discovery: radar and dashcam
   batteries, front-light mode, close-pass event entity, end-of-ride
   summary (distance, close-pass count, closing speeds, lateral
@@ -74,18 +68,35 @@ repository for the wire protocol, reference decoder, and unit tests.
   Flash) after, from the same device location. Sets the mode by type, so
   it leaves your radar's button-cycle configuration untouched; a manual
   button press wins for the rest of the ride. Off by default.
-- Bosch eBike live data (read-only): subscribes to the Smart System
-  proprietary status-notify characteristic while Bosch Flow is
-  active and decodes the scalar datapoints it carries (speed,
-  cadence, rider and motor power, battery state of charge,
-  odometer, assist mode, etc.). Never writes the bike's command
-  channel.
+- Bosch eBike live data (read-only): shows your eBike's live speed,
+  cadence, rider and motor power, battery state of charge, odometer and
+  assist mode while Bosch Flow is connected. Never writes to the bike.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
 - Optional per-ride capture log (off by default; enable on the Debug
   screen) written to app-private storage: radar packets, BLE
   characteristic notifications, phone-battery trace, and decoder
   events; useful for post-ride replay and bug reports.
+
+</details>
+
+## Compatibility
+
+| Your radar | Works? |
+|------------|--------|
+| Garmin Varia RearVue 820 | ✅ Yes - tested daily |
+| Garmin Varia RTL515 / RTL516 | ⚠️ Should work (unconfirmed) |
+| Garmin Varia RVR315 | ⚠️ Should work (unconfirmed) |
+| Garmin Varia RCT715 | ⚠️ Should work (unconfirmed) |
+| Garmin Varia eRTL615 | ⚠️ Should work (unconfirmed) |
+| Garmin Varia RTL510 and older | ❌ No - pre-BLE (ANT+ / V1 only) |
+| Non-Garmin radars (Wahoo, Bryton, Magene, Trek, ...) | ❌ No - [why](COMPATIBILITY.md) |
+
+Riding an "unconfirmed" one? A quick works / doesn't-work
+[report](../../issues) is the most valuable thing you can send. A manual
+device pick in **Settings → Radar** covers anything auto-detection
+misses. Front camera, eBike, Android versions, and the reasons behind
+each row: [`COMPATIBILITY.md`](COMPATIBILITY.md).
 
 ## App screens
 
@@ -107,44 +118,29 @@ repository for the wire protocol, reference decoder, and unit tests.
 
 Debug screen is hidden behind a three-tap long-press unlock on the app title.
 
-## Compatibility
+## Install
 
-Tested daily by the author on a Garmin Varia RearVue 820 (plus a Varia
-Vue front camera and a Bosch Smart System eBike). The rest of the
-current Varia BLE family - RTL515/516, RVR315, RCT715, eRTL615 - speaks
-the same protocol and is expected to work (a manual device pick covers
-any that auto-detection misses), but all are unconfirmed: if you ride
-one, a works/doesn't-work report is one of the most valuable
-contributions you can make. Non-Garmin
-radars are not supported (no standard BLE radar profile exists; the
-cross-vendor story on bike computers is ANT+, which phones lack).
+Signed APKs are attached to every [GitHub Release](../../releases).
+Download the latest APK and install it, or - to get updates
+automatically - add this repository to
+[Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL
+into *Add App* and enable "Include prereleases" while the app is in
+alpha. Each install is signed with the same key, so updates apply over
+the top without uninstalling.
 
-Full matrix, reasons, and the manual-selection escape hatch:
-[`COMPATIBILITY.md`](COMPATIBILITY.md).
+Store-listing metadata lives under `fastlane/metadata/android/`
+(en-US + es-ES) in the standard fastlane structure that catalogues read.
 
-## Status
+## First run
 
-Early release, under active development, ridden daily by the author on
-the hardware above. Version numbers still carry an `-alpha` tag while
-device coverage beyond that hardware is unconfirmed - behaviour on
-other phones, radars, and future firmware may differ. Bug reports
-welcome; please include device, Android version, and radar firmware.
-
-## Use at your own risk
-
-This app displays rear-radar information intended to supplement, not
-replace, rear observation. It is not a replacement for a rear-view
-mirror, direct observation, or safe riding practice. Treat anything
-shown on the overlay as advisory only, and never rely on it alone for
-safety-critical decisions. Always shoulder-check before manoeuvring.
-
-The optional eBike status feature is read-only: it passively listens to
-data your Bosch eBike already broadcasts while the Bosch Flow app is
-connected, and never sends any command to the bike.
-
-The GPL-3.0 licence (see `LICENSE`) disclaims warranty to the extent
-permitted by applicable law. Not affiliated with or endorsed by
-Garmin or Bosch.
+1. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
+   notifications, overlay).
+2. Enter your Home Assistant base URL and long-lived token (or skip).
+3. Pair your rear radar via Android's **Settings -> Connected devices ->
+   Pair new device** while the radar is in pair mode. The app detects
+   the bond automatically and starts tracking. If it doesn't recognise
+   your radar by name, pick it from your paired devices in **Settings ->
+   Radar**.
 
 ## Requirements
 
@@ -181,88 +177,6 @@ Grafana/InfluxDB are up to you.
 
 If the MQTT broker or the MQTT integration is missing, HA pushes
 silently no-op. The in-app "Test and save" button surfaces this.
-
-## Build
-
-Builds run in Docker so the host only needs `adb`:
-
-```bash
-docker build -t bike-radar-builder .
-docker run --rm \
-  -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
-  -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
-  -e GRADLE_USER_HOME=/gradle-cache \
-  -w /workspace bike-radar-builder \
-  gradle assembleDebug --console=plain --no-daemon
-
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-The first build generates `debug.keystore` at the repo root (gitignored)
-and reuses it across rebuilds so `adb install -r` keeps working.
-
-## First run
-
-1. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
-   notifications, overlay).
-2. Enter your Home Assistant base URL and long-lived token (or skip).
-3. Pair your rear radar via Android's **Settings -> Connected devices ->
-   Pair new device** while the radar is in pair mode. The app detects
-   the bond automatically and starts tracking. If it doesn't recognise
-   your radar by name, pick it from your paired devices in **Settings ->
-   Radar**.
-
-## Translating
-
-The UI is fully externalised into Android string resources, so it can be
-translated without touching code - Spanish ships in
-[`values-es`](app/src/main/res/values-es/strings.xml). To add a language,
-fork, create `app/src/main/res/values-<code>/strings.xml`, translate the
-text between the tags, and open a PR. Full instructions (placeholders,
-plurals, what CI checks) are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Install
-
-Signed APKs are attached to every [GitHub Release](../../releases).
-Download the latest APK and install it, or - to get updates
-automatically - add this repository to
-[Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL
-into *Add App* and enable "Include prereleases" while the app is in
-alpha. Each install is signed with the same key, so updates apply over
-the top without uninstalling.
-
-Store-listing metadata lives under `fastlane/metadata/android/`
-(en-US + es-ES) in the standard fastlane structure that catalogues read.
-
-## Releases
-
-Signed APKs are published as GitHub Releases when a tag matching
-`v*` is pushed. The release workflow builds from a clean checkout,
-signs with a release keystore held as repo secrets, and attaches
-the APK to the Release. While the app is in alpha every release is
-published as a prerelease; the flag is hardcoded in the workflow and
-will be removed when the app ships a stable tag.
-
-To cut a release:
-
-```bash
-# Bump versionCode / versionName in app/build.gradle.kts, commit.
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-The workflow needs these GitHub repo secrets to exist:
-
-- `ANDROID_KEYSTORE_BASE64` - the release keystore, base64-encoded
-- `ANDROID_KEYSTORE_PASSWORD` - keystore password
-- `ANDROID_KEY_ALIAS` - key alias inside the keystore
-- `ANDROID_KEY_PASSWORD` - key password
-
-Local release builds pick the same env variables up from the
-shell (with `ANDROID_KEYSTORE_PATH` pointing at the keystore
-file on disk) and otherwise fall back to the debug signing config
-so the `release` variant can still be built for inspection
-without the production key.
 
 ## Troubleshooting & FAQ
 
@@ -301,14 +215,29 @@ capture logs (diagnostic data the app deliberately excludes from
 backups - if you want long-term ride stats off the phone, the Home
 Assistant integration is the supported path).
 
-## Contributing & support
+## Status
 
-Bug reports, ride captures from other radar hardware, translations, and
-PRs are welcome - see [`CONTRIBUTING.md`](CONTRIBUTING.md). The project
-does not take donations; if you want to help, the most valuable
-contributions are a hardware report from a radar the app hasn't seen
-before, and protocol corrections in the companion
-[`bike-radar-docs`](https://github.com/partymola/bike-radar-docs) repo.
+Early release, under active development, ridden daily by the author on
+the hardware above. Version numbers still carry an `-alpha` tag while
+device coverage beyond that hardware is unconfirmed - behaviour on
+other phones, radars, and future firmware may differ. Bug reports
+welcome; please include device, Android version, and radar firmware.
+
+## Use at your own risk
+
+This app displays rear-radar information intended to supplement, not
+replace, rear observation. It is not a replacement for a rear-view
+mirror, direct observation, or safe riding practice. Treat anything
+shown on the overlay as advisory only, and never rely on it alone for
+safety-critical decisions. Always shoulder-check before manoeuvring.
+
+The optional eBike status feature is read-only: it passively listens to
+data your Bosch eBike already broadcasts while the Bosch Flow app is
+connected, and never sends any command to the bike.
+
+The GPL-3.0 licence (see `LICENSE`) disclaims warranty to the extent
+permitted by applicable law. Not affiliated with or endorsed by
+Garmin or Bosch.
 
 ## En español
 
@@ -352,6 +281,87 @@ Funciones principales:
 
 El radar funciona por sí solo; Home Assistant, la cámara delantera y la eBike
 son opcionales.
+
+## Build
+
+Builds run in Docker so the host only needs `adb`:
+
+```bash
+docker build -t bike-radar-builder .
+docker run --rm \
+  -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
+  -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
+  -e GRADLE_USER_HOME=/gradle-cache \
+  -w /workspace bike-radar-builder \
+  gradle assembleDebug --console=plain --no-daemon
+
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The first build generates `debug.keystore` at the repo root (gitignored)
+and reuses it across rebuilds so `adb install -r` keeps working.
+
+## Releases
+
+Signed APKs are published as GitHub Releases when a tag matching
+`v*` is pushed. The release workflow builds from a clean checkout,
+signs with a release keystore held as repo secrets, and attaches
+the APK to the Release. While the app is in alpha every release is
+published as a prerelease; the flag is hardcoded in the workflow and
+will be removed when the app ships a stable tag.
+
+To cut a release:
+
+```bash
+# Bump versionCode / versionName in app/build.gradle.kts, commit.
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The workflow needs these GitHub repo secrets to exist:
+
+- `ANDROID_KEYSTORE_BASE64` - the release keystore, base64-encoded
+- `ANDROID_KEYSTORE_PASSWORD` - keystore password
+- `ANDROID_KEY_ALIAS` - key alias inside the keystore
+- `ANDROID_KEY_PASSWORD` - key password
+
+Local release builds pick the same env variables up from the
+shell (with `ANDROID_KEYSTORE_PATH` pointing at the keystore
+file on disk) and otherwise fall back to the debug signing config
+so the `release` variant can still be built for inspection
+without the production key.
+
+## Translating
+
+The UI is fully externalised into Android string resources, so it can be
+translated without touching code - Spanish ships in
+[`values-es`](app/src/main/res/values-es/strings.xml). To add a language,
+fork, create `app/src/main/res/values-<code>/strings.xml`, translate the
+text between the tags, and open a PR. Full instructions (placeholders,
+plurals, what CI checks) are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Contributing & support
+
+Bug reports, ride captures from other radar hardware, translations, and
+PRs are welcome - see [`CONTRIBUTING.md`](CONTRIBUTING.md). The project
+does not take donations; if you want to help, the most valuable
+contributions are a hardware report from a radar the app hasn't seen
+before, and protocol corrections in the companion
+[`bike-radar-docs`](https://github.com/partymola/bike-radar-docs) repo.
+
+The app speaks the V2 (bonded) BLE rear-radar protocol. See
+[`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
+in the companion repository for the wire protocol, reference decoder,
+and unit tests.
+
+## Credits
+
+Map tiles in the hero screenshot are rendered by a separate navigation
+app underneath the overlay. Map tiles &copy; Mapbox, map data &copy;
+OpenStreetMap contributors. The visible eBike assist-mode indicator
+("TURBO") is part of the Bosch eBike Flow UI; Bosch and eBike Flow are
+trademarks of Robert Bosch GmbH and their incidental appearance here
+does not imply any endorsement.
 
 ## License
 

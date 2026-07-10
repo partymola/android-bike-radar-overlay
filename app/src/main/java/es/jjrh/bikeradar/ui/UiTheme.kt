@@ -62,7 +62,10 @@ data class BrColors(
             hairline2 = Color(0x24FFFFFF),
             fg = Color(0xFFE8ECF2),
             fgMuted = Color(0xFF9CA6B4),
-            fgDim = Color(0xFF6B7585),
+            // 4.7:1+ contrast on bg/bgElev1/bgElev2 (was #6B7585 at ~4.1 max):
+            // dim captions stay readable in direct sunlight while remaining a
+            // clear tier below fgMuted.
+            fgDim = Color(0xFF828C9D),
             fgFaint = Color(0xFF424B59),
             brand = Color(0xFF1FA6FF),
             brandDim = Color(0xFF1476C4),

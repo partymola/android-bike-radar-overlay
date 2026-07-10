@@ -127,6 +127,17 @@ battery, ride-edge, and ride-summary data to the rider's own Home Assistant over
 MQTT, and nowhere else. See `SettingsPrivacy` for the full disclosure of what is
 sent.
 
+## Accessibility scope
+
+Bike Radar is a riding aid built around sight and sound: audio cues are the
+primary channel (they work with the phone in a pocket or mounted in sunlight),
+and the overlay is deliberately non-interactive - its window passes every touch
+through so the app underneath stays usable, which also means screen readers
+cannot land on it. Screen-reader support for the in-ride overlay is therefore
+out of scope by design; the in-app screens (settings, onboarding) follow
+platform conventions, keep icon-only controls labelled, and aim for WCAG AA
+text contrast.
+
 ## Where to look
 
 The `Key files` table in `AGENTS.md` maps each responsibility above to its file.

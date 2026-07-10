@@ -63,6 +63,11 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 ## Architecture
 
+For a narrative map of the whole system (service shell, coordinators, state
+buses, the overlay/alert pipeline, the pure decider core, and the BLE lifecycle),
+see [`ARCHITECTURE.md`](ARCHITECTURE.md). The notes below are the working
+summary; the Key files table maps each part to its file.
+
 - Single foreground service (`BikeRadarService`), Compose-only UI, no
   fragments. The two BLE links now live in their own coordinators -
   `RadarLinkController` (rear radar) and `CameraLightLinkController` (front

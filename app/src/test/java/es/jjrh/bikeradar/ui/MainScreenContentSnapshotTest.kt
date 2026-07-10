@@ -11,7 +11,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
+import es.jjrh.bikeradar.ClosePassStateBus
 import es.jjrh.bikeradar.R
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -52,6 +54,14 @@ class MainScreenContentSnapshotTest {
         pct = 64,
         readAtMs = 0L,
     )
+
+    /** [ClosePassStateBus] is a process-wide singleton; reset it before every
+     *  test so a variant that seeds a session count (fullShowcase) can't bleed
+     *  into another variant's golden. */
+    @Before
+    fun resetClosePassBus() {
+        ClosePassStateBus.reset()
+    }
 
     /** Mirrors the production body's outer Box so the systemBars-padded
      *  background fills the whole snapshot, matching what the user sees. */
@@ -179,6 +189,96 @@ class MainScreenContentSnapshotTest {
                         ebikeReceiving = true,
                         ebikeBatterySoc = 80,
                         closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun fullShowcase() {
+        // The README main-screen shot: every accessory connected (radar,
+        // dashcam, eBike, Home Assistant) with battery levels, AND close-pass
+        // counting live with a few passes logged this ride - the full feature
+        // set in one frame. fullyConfigured stays the counting-off variant.
+        ClosePassStateBus.increment(3)
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Radar live",
+                            subtitle = "Dashcam on",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haHealthy = true,
+                        eBikeDataEnabled = true,
+                        ebikeReceiving = true,
+                        ebikeBatterySoc = 80,
+                        closePassLoggingEnabled = true,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun fullShowcaseEs() {
+        // Spanish twin of fullShowcase - the "En español" README shot.
+        ClosePassStateBus.increment(3)
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = stringResource(R.string.main_status_live_title),
+                            subtitle = stringResource(R.string.main_status_live_dashcam_on_sub),
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Cámara delantera",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haHealthy = true,
+                        eBikeDataEnabled = true,
+                        ebikeReceiving = true,
+                        ebikeBatterySoc = 80,
+                        closePassLoggingEnabled = true,
                         isLandscape = false,
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},

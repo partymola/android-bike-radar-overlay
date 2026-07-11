@@ -19,6 +19,17 @@ Writes the five densities (108/162/216/324/432 px = mdpi/hdpi/xhdpi/xxhdpi/xxxhd
 After rendering, re-record the Roborazzi goldens (the mark appears in the top bar
 and About screen): `scripts/dev gradle :app:recordRoborazziDebug`.
 
+## Rendering the store listing icon
+
+```bash
+art/regen/render-store-icon.sh     # needs rsvg-convert and ImageMagick
+```
+
+Writes `fastlane/metadata/android/en-US/images/icon.png` (512 px): the mark on
+a white field, cropped to the inner 2/3 of the adaptive-icon canvas so the
+store listing matches what launchers show. Output is deterministic (metadata
+stripped), so re-running it on an unchanged SVG is a no-op for git.
+
 ## Editing / regenerating
 
 For a small tweak (a colour stop, the sweep shape), edit `br-mark.svg` directly.

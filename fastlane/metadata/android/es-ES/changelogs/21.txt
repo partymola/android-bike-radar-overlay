@@ -1,0 +1,1 @@
+Añade el icono de la ficha para F-Droid. La app no cambia.

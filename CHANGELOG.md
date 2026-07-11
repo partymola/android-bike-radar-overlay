@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.1 - 2026-07-11
+
+### Compatibility
+
+- **F-Droid-ready listing.** Added the 512 px listing icon that F-Droid and other fastlane-based stores read straight from the repository. No changes to the app itself.
+
 ## v1.0.0 - 2026-07-10
 
 ### Compatibility

@@ -4,6 +4,7 @@ package es.jjrh.bikeradar
 import es.jjrh.bikeradar.TurnStateDecider.State.HOLD
 import es.jjrh.bikeradar.TurnStateDecider.State.TURNING
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -863,6 +864,52 @@ class AlertDeciderTest {
         return d
     }
 
+    @Test fun `radar with no lateral data never has an urgent vetoed`() {
+        // Graceful degradation. A lateral-free source decodes every frame
+        // as dead centre (rangeXm == 0f), so the fit predicts a 0 m pass
+        // on a confident window and the newest sample reads 0 m off-axis
+        // on an unconfident one. Neither may veto: with no lateral truth
+        // the gate must fail OPEN, or a rider whose radar reports no
+        // lateral position would lose the imminent-impact cue entirely.
+        // The dwell starves the recent window, so the asserted frame is
+        // decided on the fallback/corroboration path; the approach before
+        // it is setup, not a second assertion.
+        val c = Clock()
+        val d = stationaryDecider(c)
+        for (dist in 30 downTo 12) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 0f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        // Bunched dwell: starves the recent window, forcing the fallback.
+        for (dist in intArrayOf(11, 10, 11, 10, 11, 10, 11, 10, 11, 10, 11, 10)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -0.5f, rangeXm = 0f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val ev = d.decide(listOf(sideCar(id = 1, distanceM = 10, speedMs = -8f, rangeXm = 0f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertUrgent(ev)
+    }
+
+    @Test fun `no bike-speed signal never arms the urgent override`() {
+        // Graceful degradation, and the boundary of the pass veto's reach.
+        // With no eBike bonded AND no radar device-status frame yet, the
+        // caller has no speed to give (bikeSpeedMs = null). Neither urgent
+        // path can arm: the stationary path needs a confirmed-stopped
+        // rider, the low-speed path needs a speed to compare. So the cue
+        // stays silent and the lateral veto is never consulted at all -
+        // pinned here because a future change that made "unknown speed"
+        // read as "stopped" would arm the imminent-impact cue for a rider
+        // who might be moving at any speed. Ordinary tier beeps are
+        // unaffected; only the urgent override is gated on speed.
+        val c = Clock()
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = null)
+        c.jump(2000)
+        var urgentSeen = false
+        for (dist in intArrayOf(24, 20, 16, 14, 12, 10)) {
+            val ev = d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -8f, rangeXm = -1f)), alertMax, c.tick(), bikeSpeedMs = null)
+            if (ev is AlertDecider.Event.UrgentApproach) urgentSeen = true
+        }
+        assertFalse("urgent override must not arm without a speed signal", urgentSeen)
+    }
+
     @Test fun `urgent candidate far off-axis is vetoed`() {
         // Crossing / parallel-street traffic: satisfies the TTC arithmetic
         // from 8 m off-axis (observed at 7-33 m in the 2026-07-03
@@ -947,13 +994,284 @@ class AlertDeciderTest {
     @Test fun `narrow distance span fails open and fires`() {
         // Five samples but barely 2 m of approach: an intercept
         // extrapolated from that band is jitter-amplified noise, so the
-        // veto stands down and the qualifying frame fires.
+        // veto stands down and the qualifying frame fires. The rangeXm
+        // jitter keeps each sample distinct (identical repeats collapse
+        // into one), so this exercises the span floor, not the point
+        // floor.
         val c = Clock()
         val d = stationaryDecider(c)
-        for (dist in intArrayOf(17, 17, 16, 16)) {
-            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val laterals = floatArrayOf(3f, 3.1f, 3f, 3.1f)
+        for ((i, dist) in intArrayOf(17, 17, 16, 16).withIndex()) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = laterals[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
         }
         val ev = d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertUrgent(ev)
+    }
+
+    @Test fun `held-frame repeats do not flood the fit window`() {
+        // The decoder snapshot repeats a track's HELD values on every
+        // notify that didn't re-measure it, so a track that lingers
+        // between measurements emits long runs of identical copies. Left
+        // to accumulate, those copies fill the window and evict the older,
+        // spread-out samples, collapsing the fit's distance span below its
+        // confidence floor - the veto then fails open on a car plainly
+        // committed to a 3 m side pass. Deduping repeats keeps the window
+        // holding DISTINCT measurements, so the 8 m approach span survives
+        // and the veto holds. Corpus evidence: without the dedupe, the
+        // captured multi-lane urgent storm regains 2 urgents.
+        val c = Clock()
+        val d = stationaryDecider(c)
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            val v = sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)
+            repeat(20) { d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f) }
+        }
+        val ev = d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `pass-point bunched window falls back to the full history and stays vetoed`() {
+        // A car walks the last metres in on a stopped rider: the newest
+        // samples bunch inside a 4 m band (too span-poor for the recent
+        // window - it returns null), but the wider retained history has
+        // it holding a steady 3 m offset all the way in. The fallback fit
+        // must keep the veto engaged at the exact range where the
+        // stationary proximity gate fires. Distances stay inside
+        // URGENT_PASS_FIT_MIN_SPAN_M for the last window's worth of
+        // samples, so this genuinely exercises the fallback branch and
+        // not the recent fit.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        for (dist in intArrayOf(15, 14, 13, 12, 11, 10)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        // Bunched crawl: 12 distinct samples confined to d 9..7 (span 2).
+        val crawlD = intArrayOf(9, 9, 8, 8, 9, 8, 7, 8, 7, 7, 8, 7)
+        val crawlX = floatArrayOf(3f, 3.1f, 3f, 3.1f, 3f, 3.2f, 3f, 3.1f, 3f, 3.2f, 3.1f, 3f)
+        for (i in crawlD.indices) {
+            d.decide(listOf(sideCar(id = 1, distanceM = crawlD[i], speedMs = -2f, rangeXm = crawlX[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val ev = d.decide(listOf(sideCar(id = 1, distanceM = 7, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `swerve toward the rider re-arms the cue after a long side-pass approach`() {
+        // Reactivity regression guard: the deeper history must not blunt
+        // the veto's response to a car that abandons the next lane and
+        // swerves at the rider. History is grown well past
+        // URGENT_PASS_RECENT_FIT_WINDOW so the fit has plenty of stale
+        // wide-offset approach to chew on; the cue must still re-arm as
+        // the swerve develops.
+        // Scope, so the next reader does not over-credit this fixture: the
+        // swerve here is wide enough that a fit over the WHOLE run also
+        // lands inside the threshold, so this test alone does not prove
+        // the recent-window-first ordering or the corroboration guard.
+        // `stale side-pass history cannot veto a car swinging into the
+        // rider` is the one that pins those - it is built so the
+        // full-history fit genuinely would veto.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        for (dist in 27 downTo 10) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val swerveD = intArrayOf(9, 9, 8, 8, 7, 6)
+        val swerveX = floatArrayOf(2.5f, 2f, 1.5f, 1f, 0.6f, 0.3f)
+        var urgentSeen = false
+        for (i in swerveD.indices) {
+            val ev = d.decide(listOf(sideCar(id = 1, distanceM = swerveD[i], speedMs = -8f, rangeXm = swerveX[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
+            if (ev is AlertDecider.Event.UrgentApproach) urgentSeen = true
+        }
+        assertTrue("swerving car must re-arm the urgent cue", urgentSeen)
+    }
+
+    /** Drives a long next-lane approach and then a span-starved dwell, so
+     *  the recent window cannot judge and the pass fit must fall back to
+     *  the wider history. Leaves the track ready for one final firing
+     *  frame supplied by the caller. */
+    private fun fallbackForcingApproach(c: Clock, d: AlertDecider) {
+        for (dist in 30 downTo 12) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val dwellD = intArrayOf(11, 10, 11, 10, 11, 10, 11, 10, 11, 10, 11, 10)
+        val dwellX = floatArrayOf(3f, 3.1f, 3f, 3.2f, 3f, 3.1f, 3.2f, 3f, 3.1f, 3f, 3.2f, 3.1f)
+        for (i in dwellD.indices) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dwellD[i], speedMs = -0.5f, rangeXm = dwellX[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+    }
+
+    @Test fun `corroboration boundary - newest sample exactly at the threshold lets the stale fit veto`() {
+        // Boundary of the corroboration guard, which is a strict `<`:
+        // a newest reading of exactly URGENT_PASS_LATERAL_MIN_M does NOT
+        // count as "inside the rider's line", so it corroborates the stale
+        // side-pass fit and the veto stands.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        fallbackForcingApproach(c, d)
+        val ev = d.decide(
+            listOf(sideCar(id = 1, distanceM = 10, speedMs = -8f, rangeXm = AlertDecider.URGENT_PASS_LATERAL_MIN_M)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+        )
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `corroboration boundary - newest sample just inside the threshold fails open`() {
+        // One jitter step closer to the rider than the test above, and the
+        // verdict must flip: the freshest measurement now places the car
+        // inside the threshold, refuses to corroborate the stale fit, and
+        // the cue fires.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        fallbackForcingApproach(c, d)
+        val ev = d.decide(
+            listOf(sideCar(id = 1, distanceM = 10, speedMs = -8f, rangeXm = AlertDecider.URGENT_PASS_LATERAL_MIN_M - 0.1f)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+        )
+        assertUrgent(ev)
+    }
+
+    @Test fun `lateral-unknown firing frame on a fallback-judged track still honours the side-pass fit`() {
+        // The gap between the two guards. A track's history is span-starved
+        // (so the verdict comes from the fallback fit) AND its firing frame
+        // arrives with the unknown sentinel - a combination the radar
+        // produces exactly when a car rides the cone edge, i.e. the very
+        // geometry the veto exists to reject. The off-axis veto stands down
+        // on an unknown frame, but the fit is built only from MEASURED
+        // frames, so the wide-pass verdict must survive. The carried-forward
+        // lateral value is off-axis here, so it corroborates.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        fallbackForcingApproach(c, d)
+        val ev = d.decide(
+            listOf(sideCar(id = 1, distanceM = 10, speedMs = -8f, rangeXm = 3f, lateralUnknown = true)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+        )
+        assertEquals(AlertDecider.Event.None, ev)
+    }
+
+    @Test fun `pass-gate decisions reach the capture log, one line per verdict`() {
+        // The gate's whole point is that a rider-reported bad cue can be
+        // diagnosed from a capture log afterwards, so each decision has to
+        // be recorded - and recorded ONCE. The candidate search re-judges a
+        // dwelling car every frame, so keying the dedupe on the formatted
+        // line (which carries a ticking distance and a jittering intercept)
+        // would emit a fresh line per frame and bury the log.
+        val lines = mutableListOf<String>()
+        val c = Clock(dtMs = 100L)
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // A committed side pass, judged on the recent fit, held for many
+        // frames while its distance and lateral reading both move.
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val vetoD = intArrayOf(15, 14, 13, 12, 11, 10, 9, 8)
+        val vetoX = floatArrayOf(3f, 3.1f, 3f, 3.2f, 3.1f, 3f, 3.2f, 3.1f)
+        for (i in vetoD.indices) {
+            d.decide(listOf(sideCar(id = 1, distanceM = vetoD[i], speedMs = -8f, rangeXm = vetoX[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val vetoLines = lines.filter { it.startsWith("# gate urgent-pass-veto tid=1") }
+        assertEquals("the veto must be recorded exactly once, not once a frame", 1, vetoLines.size)
+        assertTrue("the line must name the window that decided", vetoLines.single().contains("fit=recent"))
+    }
+
+    @Test fun `a recycled tid does not inherit the previous car's logged verdict`() {
+        // Radar tids are reused. The old car's verdict memo must die with
+        // its history, or the new car's first gate decision is deduped into
+        // silence and the capture log quietly misattributes the encounter.
+        // The trap: the frame that revives a dead tid re-stamps the deque to
+        // now, so by the time the stale sweep runs the track no longer looks
+        // stale - the memo has to be dropped on the recycle itself.
+        val lines = mutableListOf<String>()
+        val c = Clock(dtMs = 100L)
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // Car A: a committed side pass under tid 1, vetoed on the recent fit.
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue("car A must have been vetoed", lines.any { it.startsWith("# gate urgent-pass-veto tid=1") })
+        lines.clear()
+        // The track dies; tid 1 is later handed to a different car, on the
+        // same geometry class. Its verdict is news again, not a repeat.
+        c.jump(AlertDecider.URGENT_PASS_HISTORY_RESET_MS + 500L)
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue(
+            "the recycled tid's own verdict must be logged, got $lines",
+            lines.any { it.startsWith("# gate urgent-pass-veto tid=1") },
+        )
+    }
+
+    @Test fun `the fail-open corroboration branch is recorded in the capture log`() {
+        // The branch that lets an urgent SOUND where the wide fit alone
+        // would have silenced it. It is the newest decision surface and the
+        // least visible, so it gets its own line - without it a field report
+        // of a surprising cue would be undiagnosable.
+        val lines = mutableListOf<String>()
+        val c = Clock(dtMs = 100L)
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        fallbackForcingApproach(c, d)
+        d.decide(
+            listOf(sideCar(id = 1, distanceM = 10, speedMs = -8f, rangeXm = 0.3f)),
+            alertMax,
+            c.tick(),
+            bikeSpeedMs = 0f,
+        )
+        assertTrue(
+            "expected a urgent-pass-open line, got $lines",
+            lines.any { it.startsWith("# gate urgent-pass-open tid=1") && it.contains("newest_rx=") },
+        )
+    }
+
+    @Test fun `stale side-pass history cannot veto a car swinging into the rider`() {
+        // The safety case this veto must never break, and its hardest
+        // geometry. A car approaches in the next lane (steady 3 m offset),
+        // then swings ACROSS into the rider's line while holding station in
+        // range - the doppler still reads a hard closing speed, because the
+        // radar reports range and range-rate separately (seen in ride
+        // captures: a track sitting at 7-10 m while reading ~6 m/s).
+        // Distance barely moves through the swing, so the recent window is
+        // span-starved and the fit falls back to the wider history - which
+        // is dominated by the long wide-offset approach and, left
+        // unguarded, would veto a car crossing into the rider AT closing
+        // speed. The newest measured sample (0.1 m off-axis, inside
+        // URGENT_PASS_LATERAL_MIN_M) refuses to corroborate the stale fit,
+        // so the veto stands down and the cue fires.
+        val c = Clock(dtMs = 100L)
+        val d = stationaryDecider(c)
+        for (dist in 30 downTo 12) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        // Bunched dwell beside the rider: distinct samples (the lateral
+        // reading jitters), all inside a 2 m band, so they crowd the
+        // recent window and starve it of the span it needs to judge.
+        val dwellD = intArrayOf(11, 10, 11, 10, 11, 10, 11, 10, 11, 10, 11, 10)
+        val dwellX = floatArrayOf(3f, 3.1f, 3f, 3.2f, 3f, 3.1f, 3.2f, 3f, 3.1f, 3f, 3.2f, 3.1f)
+        for (i in dwellD.indices) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dwellD[i], speedMs = -0.5f, rangeXm = dwellX[i])), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        // Swings across the rider's line at a near-constant range. The cue
+        // must fire on the FIRST such frame: the corroboration guard sees
+        // a newest reading already inside the threshold and stands the
+        // stale fit down at once. Asserting merely that an urgent fires
+        // SOMEWHERE in the swing is too weak to catch the bug - the fresh
+        // samples drag the stale fit under the threshold within a few
+        // frames on their own, so an unguarded fallback still fires
+        // eventually, having silently withheld the warning for ~400 ms
+        // while the car crossed ~3 m at closing speed.
+        val ev = d.decide(listOf(sideCar(id = 1, distanceM = 11, speedMs = -8f, rangeXm = 2.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
         assertUrgent(ev)
     }
 

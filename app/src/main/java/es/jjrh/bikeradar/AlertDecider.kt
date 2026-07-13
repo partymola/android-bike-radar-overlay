@@ -120,14 +120,22 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *         lanes off-axis. Kills crossing/parallel-street artefacts.
  *         Skipped when the frame is [Vehicle.lateralUnknown].
  *      b) **predicted-pass veto** - a straight least-squares fit of the
- *         track's recent (distance, rangeXm) history extrapolates its
+ *         track's measured (distance, rangeXm) history extrapolates its
  *         lateral offset at distance 0 (the pass point). When the fit is
  *         confident ([URGENT_PASS_FIT_MIN_POINTS]+ sightings spanning
  *         [URGENT_PASS_FIT_MIN_SPAN_M]+ of approach) and predicts
  *         `|rangeXm|` >= [URGENT_PASS_LATERAL_MIN_M] at the pass, the
  *         car is committed to a side pass, not an impact line. The
  *         threshold is deliberately loose - a dead-centre threat must
- *         never be vetoed; see the constant's KDoc.
+ *         never be vetoed; see the constant's KDoc. The newest
+ *         [URGENT_PASS_RECENT_FIT_WINDOW] samples are judged first
+ *         (swerve-reactive); the full retained history is the fallback
+ *         when that window bunches at one distance, which is the normal
+ *         geometry at the pass point. Because that wider window holds
+ *         stale approach geometry, the fallback may veto ONLY where the
+ *         newest measured sample is itself off-axis - otherwise a long
+ *         next-lane approach would outvote the few fresh samples of a car
+ *         swinging into the rider (see [predictedPassFit]).
  *  - **Urgent episode pacing.** The urgent cue repeats while an
  *    imminent condition is held (see the trigger-site comment for the
  *    alarm-standards rationale) - but a platoon released behind a
@@ -393,6 +401,14 @@ class AlertDecider(
      *  fit would corrupt the extrapolation. Entries idle past the reset
      *  window are dropped wholesale each frame for the same reason. */
     private val lateralHistory = HashMap<Int, ArrayDeque<LateralSample>>()
+
+    /** tid -> the last pass-gate VERDICT recorded for that track (a coarse
+     *  tag, never the formatted line: see [logPassGate]). The gate is
+     *  evaluated inside the urgent-candidate search on every frame, so only
+     *  a CHANGE in its verdict is worth writing to the capture log. Bounded
+     *  by the radar's single-byte tid space, cleared in [reset], and pruned
+     *  with [lateralHistory], whose lifetime it shadows. */
+    private val passGateLogged = HashMap<Int, String>()
 
     /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
      *  the lateral vetoes passed) was last present. Two qualifying
@@ -942,6 +958,7 @@ class AlertDecider(
         prevBehindRaw = emptySet()
         lastNotStationaryAtMs = NOT_INITIALIZED
         lateralHistory.clear()
+        passGateLogged.clear()
         urgentLastQualifyingSeenMs = NOT_INITIALIZED
         urgentLastFireMs = NOT_INITIALIZED
         urgentEpisodePeakClosing = 0f
@@ -952,7 +969,21 @@ class AlertDecider(
      *  history and drop stale runs. `isBehind` tracks are useless for the
      *  pass prediction (already past the rider); `lateralUnknown` frames
      *  carry a held-over lateral value, not a measurement, and would bias
-     *  the fit toward a stale offset. */
+     *  the fit toward a stale offset.
+     *
+     *  A sighting identical to the deque tail refreshes the tail's
+     *  timestamp instead of appending. The decoder snapshot repeats a
+     *  track's HELD values on every notify that didn't re-measure it, so
+     *  in traffic each real measurement arrives followed by duplicates;
+     *  appending them evicted the older, spread-out samples from the
+     *  window and collapsed the fit's distance span below its confidence
+     *  floor - the predicted-pass veto then failed open on exactly the
+     *  adjacent-lane passes it exists to reject (ride evidence: a rider
+     *  stopped at a light, every urgent cue of the ride an adjacent-lane
+     *  pass, none of them with a usable fit). A
+     *  duplicated measurement carries no new fit information, so
+     *  collapsing genuine repeats too costs nothing; refreshing the
+     *  timestamp keeps the gap-reset semantics for hovering tracks. */
     private fun updateLateralHistory(vehicles: List<Vehicle>, nowMs: Long) {
         for (v in vehicles) {
             if (v.isBehind || v.lateralUnknown) continue
@@ -962,6 +993,16 @@ class AlertDecider(
                 // Same tid after a dead gap = a recycled track id. A fit
                 // seeded with the previous car's geometry would be lying.
                 h.clear()
+                // Drop the logged-verdict memo HERE, not in the stale sweep
+                // below: this frame re-stamps the deque to nowMs, so by the
+                // time the sweep runs the track no longer looks stale and
+                // the new car would inherit the old one's verdict - and its
+                // own first decision would be deduped into silence.
+                passGateLogged.remove(v.id)
+            }
+            val tail = h.lastOrNull()
+            if (tail != null && tail.distanceM == v.distanceM && tail.rangeXm == v.rangeXm) {
+                h.removeLast()
             }
             h.addLast(LateralSample(nowMs, v.distanceM, v.rangeXm))
             while (h.size > URGENT_PASS_HISTORY_MAX) h.removeFirst()
@@ -969,9 +1010,13 @@ class AlertDecider(
         // Drop whole tracks whose newest sample has gone stale, so a
         // recycled tid that reappears only as isBehind/lateralUnknown can
         // never be judged on another car's history.
-        lateralHistory.values.removeAll { deque ->
-            val newest = deque.lastOrNull() ?: return@removeAll true
-            nowMs - newest.atMs > URGENT_PASS_HISTORY_RESET_MS
+        lateralHistory.entries.removeAll { (tid, deque) ->
+            val newest = deque.lastOrNull()
+            val stale = newest == null || nowMs - newest.atMs > URGENT_PASS_HISTORY_RESET_MS
+            // The logged-verdict memo shadows the history: a recycled tid
+            // must not inherit the previous car's line and so go unlogged.
+            if (stale) passGateLogged.remove(tid)
+            stale
         }
     }
 
@@ -996,31 +1041,123 @@ class AlertDecider(
         if (!v.lateralUnknown) {
             // Off-axis veto: two-plus lanes to the side on the firing frame
             // is crossing/parallel traffic, not an impact line.
-            if (abs(v.rangeXm) > URGENT_LATERAL_MAX_M) return false
+            if (abs(v.rangeXm) > URGENT_LATERAL_MAX_M) {
+                logPassGate(v.id, "offaxis") {
+                    "# gate urgent-offaxis tid=${v.id} d=${v.distanceM} rx=${v.rangeXm}"
+                }
+                return false
+            }
         }
         // Predicted-pass veto: only with a confident fit.
-        val predicted = predictedPassRangeXm(v.id) ?: return true
-        return abs(predicted) < URGENT_PASS_LATERAL_MIN_M
+        return when (val fit = predictedPassFit(v.id)) {
+            is PassFit.Unconfident -> true
+            is PassFit.FreshOverride -> {
+                // The fail-open path: a stale fit wanted to judge this
+                // candidate and the freshest measurement refused to back
+                // it. Logged because it is the branch that lets an urgent
+                // SOUND where the wide fit alone would have silenced it.
+                logPassGate(v.id, "open") {
+                    "# gate urgent-pass-open tid=${v.id} newest_rx=${fit.newestRangeXm} d=${v.distanceM}"
+                }
+                true
+            }
+            is PassFit.Confident -> {
+                val veto = abs(fit.predictedRangeXm) >= URGENT_PASS_LATERAL_MIN_M
+                if (veto) {
+                    logPassGate(v.id, "veto:${fit.source}") {
+                        "# gate urgent-pass-veto tid=${v.id} fit=${fit.source}" +
+                            " predicted=${fit.predictedRangeXm} d=${v.distanceM}"
+                    }
+                }
+                !veto
+            }
+        }
+    }
+
+    /** Emit a pass-gate decision to the capture log once per verdict per
+     *  track. This gate is evaluated inside the urgent-candidate search on
+     *  every frame, so a car lingering as a candidate beside the rider is
+     *  judged many times a second; only a CHANGE in what the gate DECIDED
+     *  is news.
+     *
+     *  [verdict] is the dedupe key and must carry no per-frame numbers.
+     *  Keying on the formatted line instead would defeat the whole purpose:
+     *  distance ticks down and the fitted intercept jitters every frame, so
+     *  a dwelling car would emit a fresh "identical" verdict at frame rate.
+     *  The numbers still reach the log - they ride in [message], recorded on
+     *  the transition that is worth reading later. */
+    private fun logPassGate(tid: Int, verdict: String, message: () -> String) {
+        if (passGateLogged[tid] == verdict) return
+        passGateLogged[tid] = verdict
+        onGateEvent(message())
+    }
+
+    /** Outcome of the pass prediction for one track: either a trusted
+     *  intercept (with the window that produced it, for the capture log),
+     *  no usable fit at all, or a stale fit the freshest measurement
+     *  refused to corroborate. The last two both fail OPEN; they are
+     *  distinct only so the capture log can tell them apart after a ride. */
+    private sealed interface PassFit {
+        data class Confident(val predictedRangeXm: Float, val source: String) : PassFit
+        data object Unconfident : PassFit
+        data class FreshOverride(val newestRangeXm: Float) : PassFit
     }
 
     /** Least-squares extrapolation of the track's lateral offset at
-     *  distance 0 (the pass point) from its recent (distanceM, rangeXm)
-     *  history: fit rangeXm = a + b * distanceM, return `a`. Null when the
-     *  history is too thin to trust - fewer than
-     *  [URGENT_PASS_FIT_MIN_POINTS] samples or an approach span shorter
-     *  than [URGENT_PASS_FIT_MIN_SPAN_M] (an intercept extrapolated from a
-     *  narrow distance band amplifies radar jitter). */
-    private fun predictedPassRangeXm(tid: Int): Float? {
-        val h = lateralHistory[tid] ?: return null
-        if (h.size < URGENT_PASS_FIT_MIN_POINTS) return null
-        val minD = h.minOf { it.distanceM }
-        val maxD = h.maxOf { it.distanceM }
+     *  distance 0 (the pass point). Fits the newest
+     *  [URGENT_PASS_RECENT_FIT_WINDOW] samples first - the short window
+     *  reacts to a genuine swerve toward the rider within a couple of
+     *  frames. When that window is unconfident (thin, or covering too
+     *  narrow a distance band), falls back to the full retained history:
+     *  near the pass point the recent samples bunch at nearly one
+     *  distance (a stopped rider watching a car walk the last metres in,
+     *  or a track that hovered before committing), and judging only that
+     *  band left the veto blind exactly where the stationary urgent
+     *  gates fire (ride evidence: the false urgents all fired inside
+     *  10 m with a span-starved recent window, while the full approach
+     *  showed a committed 2.5-3.5 m side pass).
+     *
+     *  The fallback may only veto where the newest MEASURED sample
+     *  corroborates it. That window necessarily holds stale approach
+     *  geometry, and a least-squares fit lets dozens of old wide-offset
+     *  points outvote the handful showing a car swinging INTO the rider's
+     *  line. A car whose latest measured offset is already inside
+     *  [URGENT_PASS_LATERAL_MIN_M] is, by this gate's own threshold, not
+     *  committed to a side pass - whatever lane it held on the approach -
+     *  so the stale fit does not get to veto it.
+     *
+     *  Everything here fails OPEN: an unconfident fit, a refused
+     *  corroboration, and a track never measured across enough approach
+     *  all let the cue fire. First warnings are never delayed for lack of
+     *  history. */
+    private fun predictedPassFit(tid: Int): PassFit {
+        val all = lateralHistory[tid]?.toList().orEmpty()
+        val recent = all.takeLast(URGENT_PASS_RECENT_FIT_WINDOW)
+        fitInterceptAtZero(recent)?.let { return PassFit.Confident(it, "recent") }
+        val newest = all.lastOrNull() ?: return PassFit.Unconfident
+        if (abs(newest.rangeXm) < URGENT_PASS_LATERAL_MIN_M) {
+            return PassFit.FreshOverride(newest.rangeXm)
+        }
+        val fallback = fitInterceptAtZero(all) ?: return PassFit.Unconfident
+        return PassFit.Confident(fallback, "fallback")
+    }
+
+    /** Least-squares fit of rangeXm = a + b * distanceM over [samples],
+     *  returning the intercept `a` (the lateral offset where the track
+     *  crosses distance 0). Null when the samples are too thin to trust -
+     *  fewer than [URGENT_PASS_FIT_MIN_POINTS] points or an approach span
+     *  shorter than [URGENT_PASS_FIT_MIN_SPAN_M] (an intercept
+     *  extrapolated from a narrow distance band amplifies radar jitter). */
+    private fun fitInterceptAtZero(samples: List<LateralSample>): Float? {
+        if (samples.size < URGENT_PASS_FIT_MIN_POINTS) return null
+        val minD = samples.minOf { it.distanceM }
+        val maxD = samples.maxOf { it.distanceM }
         if (maxD - minD < URGENT_PASS_FIT_MIN_SPAN_M) return null
-        val n = h.size.toDouble()
-        val sumD = h.sumOf { it.distanceM.toDouble() }
-        val sumX = h.sumOf { it.rangeXm.toDouble() }
-        val sumDd = h.sumOf { it.distanceM.toDouble() * it.distanceM }
-        val sumDx = h.sumOf { it.distanceM.toDouble() * it.rangeXm }
+        val n = samples.size.toDouble()
+        val sumD = samples.sumOf { it.distanceM.toDouble() }
+        val sumX = samples.sumOf { it.rangeXm.toDouble() }
+        val sumDd = samples.sumOf { it.distanceM.toDouble() * it.distanceM }
+        val sumDx = samples.sumOf { it.distanceM.toDouble() * it.rangeXm }
         val denom = n * sumDd - sumD * sumD
         if (denom <= 0.0) return null
         val b = (n * sumDx - sumD * sumX) / denom
@@ -1255,12 +1392,23 @@ class AlertDecider(
          *  radar's ~1 m lateral jitter into metres at distance 0. */
         const val URGENT_PASS_FIT_MIN_SPAN_M = 6
 
-        /** Cap on stored lateral samples per track. At the radar's ~5 Hz
-         *  target cadence, 12 samples is ~2.4 s of history - enough
-         *  baseline for the fit, recent enough to track a genuine
-         *  swerve toward the rider (which shrinks the predicted offset
-         *  and re-arms the cue within a couple of frames). */
-        const val URGENT_PASS_HISTORY_MAX = 12
+        /** Cap on stored lateral samples per track. Samples are deduped (a
+         *  repeat of the tail refreshes its timestamp), so this counts
+         *  DISTINCT measurements - several seconds of approach at the
+         *  radar's target cadence, deep enough that the fallback fit still
+         *  sees the run's spread after the track bunches near the pass
+         *  point. Staleness inside this window is handled where it can do
+         *  harm: the fallback fit may only veto with corroboration from the
+         *  newest sample (see [predictedPassFit]). Swerve reactivity is not
+         *  governed by this cap but by [URGENT_PASS_RECENT_FIT_WINDOW]. */
+        const val URGENT_PASS_HISTORY_MAX = 48
+
+        /** Newest samples the primary pass-prediction fit uses. Kept
+         *  short so a genuine swerve toward the rider shrinks the
+         *  predicted offset and re-arms the cue within a couple of
+         *  frames; the full retained history is consulted only when
+         *  this window is too span-poor to judge. */
+        const val URGENT_PASS_RECENT_FIT_WINDOW = 12
 
         /** Sighting gap (ms) that resets a track's lateral history. The
          *  radar reuses track ids; a gap this long means the id came

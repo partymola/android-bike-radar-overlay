@@ -296,8 +296,11 @@ enforces them, and CONTRIBUTING.md points contributors here:
   `runRadarConnection`'s ABORT path closes and reconnects automatically
   (~1.5 s). If the reconnect doesn't happen, see live-testing recovery
   below.
-- Never subscribe the CCCD of `6a4e3203` (V1 radar char). Subscribing locks
-  the radar into V1-only mode and suppresses V2.
+- Never subscribe the CCCD of `6a4e3203` (V1 radar char). Written before the
+  unlock (fw 6.70), the radar unlocks into V1: handshake succeeds, V1 heartbeats
+  arrive on `6a4e3203`, `6a4e3204` never emits - and later connections that never
+  touch the CCCD get no V2 either, until the radar is power-cycled. See
+  `Uuids.RADAR_V1`.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

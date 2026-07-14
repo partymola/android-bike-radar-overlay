@@ -40,6 +40,12 @@ internal class EBikeSnapshotCoordinator(
 
     @Volatile private var climbingFlag: Boolean = false
 
+    // Speed-based riding confirmation (see RidingSpeedGate). An unlocked bike is
+    // merely awake - a garage power-on looks identical to a mid-ride bike on the
+    // lock bit alone - so the radar-drop cue asks this instead. Mutated only on
+    // the BLE callback thread inside onSnapshot, like rideEdgeState/climbState.
+    @Volatile private var ridingState: RidingSpeedGate.State = RidingSpeedGate.State()
+
     // Sticky: true once any snapshot has arrived this session, i.e. the rider
     // has a Bosch eBike streaming. Stays true through a Flow dropout so a
     // momentarily-null snapshot doesn't reclassify an eBike rider as radar-only.
@@ -65,6 +71,12 @@ internal class EBikeSnapshotCoordinator(
      *  firing on a slow climb the stationary-suppress gate would otherwise mute). */
     fun climbing(): Boolean = climbingFlag
 
+    /** Whether the bike has recently been ridden - a sustained above-walking-pace
+     *  spell within the freshness window (see [RidingSpeedGate]). The radar-drop
+     *  cue's eBike confirmation, in place of the bare unlock bit: a bike powered
+     *  on in a garage is unlocked but not moving, and must stay silent. */
+    fun ridingFresh(nowMs: Long): Boolean = RidingSpeedGate.ridingFresh(ridingState, nowMs)
+
     /**
      * Handle a fresh live-data snapshot: cache it for the AlertDecider
      * stationary override and the walk-away arming gate, append a delta-only
@@ -81,6 +93,13 @@ internal class EBikeSnapshotCoordinator(
             sessionStartOdometerM = snap.odometerM
         }
         EBikeCaptureFormatter.format(snap, sessionStartOdometerM)?.let(clog)
+        // Speed-based riding confirmation for the radar-drop cue. Folded here so
+        // it sees every frame (the cue's tick only samples the cached result).
+        ridingState = RidingSpeedGate.next(
+            prev = ridingState,
+            nowMs = lastSnapshotMs,
+            speedMs = RidingSpeedGate.speedMs(snap.speedRaw),
+        )
         // Feed the edge detector; on STARTED / ENDED publish to HA so
         // dashboards and automations have bike-truth ride boundaries
         // (independent of GPS drift on the office side).

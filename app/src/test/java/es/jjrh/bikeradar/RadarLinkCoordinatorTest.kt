@@ -49,6 +49,11 @@ class RadarLinkCoordinatorTest {
     // the eBike-only tests below asserting their original behaviour.
     private var lastRidingMs: Long? = null
 
+    // eBike speed-based riding confirmation (RidingSpeedGate). Default true so the
+    // pre-existing eBike tests keep asserting their original behaviour; the garage
+    // tests below set it false, which is what a powered-on but unridden bike gives.
+    private var ebikeRiding = true
+
     private val live = RadarLinkVisualDecider.LinkVisual.LIVE
     private val plain = RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN
     private val unlocked = RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
@@ -92,6 +97,7 @@ class RadarLinkCoordinatorTest {
             resolveDashcamSlug = { dashcamSlug },
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs },
+            eBikeRidingFresh = { ebikeRiding },
             hasEBikeSignal = { hasEBike },
             everSawTrack = { sawTrack },
             postForgotToLock = { forgotToLockPostCount++ },
@@ -701,6 +707,86 @@ class RadarLinkCoordinatorTest {
             t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
         }
         assertEquals(rounds, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun poweringTheBikeOnIndoorsDoesNotCueADeadRadar() {
+        // The garage/office bug. The service survives across rides, so the radar
+        // counts as "ever live" and the off-episode has been running since the END
+        // of the previous ride - hours past the threshold. Switching the bike on
+        // then publishes a fresh `unlocked` snapshot, which used to be the whole
+        // riding confirmation: the cue fired immediately, indoors, and repeated on
+        // cadence until the radar connected. Speed is what says the rider is
+        // actually riding, and a bike being wheeled out or fitted with kit has
+        // none.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        ebikeRiding = false // powered on, not ridden
+        connectAt(1_000L) // yesterday's ride
+        disconnectAt(4_000L) // ...and its end
+        var t = 4_000L + 8L * 60L * 60L * 1_000L // next morning, radar still down
+        repeat(4) {
+            ebikeAtMs = t - 1_000L // bike awake, snapshot fresh
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals(0, clogged("radar_drop_cue"))
+        // ...and once the rider is genuinely riding with the radar still dead,
+        // the cue is NOT suppressed - the safety case the gate must never break.
+        ebikeRiding = true
+        ebikeAtMs = t - 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aDropWhileStoppedMidRideStillCuesOnceTheRiderSetsOffAgain() {
+        // The coverage the speed gate must not cost: the radar dies while the
+        // rider is stopped in traffic, and the stop outlasts the riding-freshness
+        // window. Nothing sounds at the standstill - the rider is not exposed
+        // there - but the moment they are riding again with a dead radar behind
+        // them, the cue must fire. A silent resumed ride is the failure this
+        // whole feature exists to prevent.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L) // radar dies as the rider sits at a light
+        ebikeRiding = false // stopped for longer than the freshness window
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(2) {
+            ebikeAtMs = t - 1_000L
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals(0, clogged("radar_drop_cue"))
+        ebikeRiding = true // rolling again
+        ebikeAtMs = t - 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun lockingTheBikeClosesOutTheCueLatchSoNoStaleReconnectPulse() {
+        // A genuine mid-ride drop cues, the radar never comes back, and the rider
+        // parks and locks up. The reconnect acknowledgement is armed by that cue
+        // latch - so without closing it out, TOMORROW's radar connect would fire a
+        // lone pulse acknowledging a drop the rider heard yesterday.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val dropTick = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        ebikeAtMs = dropTick - 1_000L
+        coordinator.evaluateRadarDrop(dropTick)
+        assertEquals(1, clogged("radar_drop_cue"))
+        // Rider parks and locks.
+        ebike = LiveDataSnapshot(systemLocked = true)
+        ebikeAtMs = dropTick + 60_000L
+        coordinator.evaluateRadarDrop(dropTick + 60_000L)
+        // Next morning the radar reconnects.
+        connectAt(dropTick + 8L * 60L * 60L * 1_000L)
+        coordinator.evaluateRadarDrop(dropTick + 8L * 60L * 60L * 1_000L + 2_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
     }
 
     @Test

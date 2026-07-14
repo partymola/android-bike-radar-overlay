@@ -163,4 +163,42 @@ class EBikeSnapshotCoordinatorTest {
         feed(LiveDataSnapshot(riderPower = 300), atMs = 61_000L) // 30 s into new run
         assertTrue(coord.climbing())
     }
+
+    // ── speed-based riding confirmation (RidingSpeedGate wiring) ─────────────
+
+    /** Speed raw is 1/100 km/h; 1800 = 18 km/h = 5 m/s, well above walking pace. */
+    private val riding = 1800
+
+    @Test
+    fun ridingFreshOnlyAfterASustainedSpellAboveWalkingPace() {
+        // The real wiring the radar-drop cue depends on: decoded frame -> speed
+        // field -> gate. A single above-pace frame is not a ride...
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = 0L)
+        assertFalse(coord.ridingFresh(0L))
+        // ...a sustained spell is.
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = RidingSpeedGate.SUSTAIN_MS)
+        assertTrue(coord.ridingFresh(RidingSpeedGate.SUSTAIN_MS))
+    }
+
+    @Test
+    fun anAwakeButUnriddenBikeIsNeverRidingFresh() {
+        // The garage/office case end to end: the bike streams snapshots (it is
+        // switched on) but never moves, so the drop cue's confirmation stays shut.
+        feed(LiveDataSnapshot(speedRaw = 0), atMs = 0L)
+        feed(LiveDataSnapshot(speedRaw = 0), atMs = 60_000L)
+        feed(LiveDataSnapshot(speedRaw = 300), atMs = 120_000L) // 3 km/h - wheeled
+        assertFalse(coord.ridingFresh(120_000L))
+    }
+
+    @Test
+    fun ridingConfirmationSurvivesAStopThenExpires() {
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = 0L)
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = RidingSpeedGate.SUSTAIN_MS)
+        val stopped = RidingSpeedGate.SUSTAIN_MS
+        // A long light must not un-confirm the ride (a radar dying at a red light
+        // still has to cue)...
+        assertTrue(coord.ridingFresh(stopped + RidingSpeedGate.FRESH_MS - 1))
+        // ...but a bike left standing does stop counting as ridden.
+        assertFalse(coord.ridingFresh(stopped + RidingSpeedGate.FRESH_MS))
+    }
 }

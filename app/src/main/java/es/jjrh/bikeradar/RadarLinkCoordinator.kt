@@ -39,6 +39,10 @@ internal class RadarLinkCoordinator(
     private val resolveDashcamSlug: () -> String?,
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
     private val eBikeSnapshotAtMs: () -> Long,
+    // Whether the eBike's own speed shows a recent sustained ride (RidingSpeedGate).
+    // The radar-drop cue's eBike confirmation: an unlocked bike is merely awake,
+    // and a garage power-on must not read as a mid-ride radar failure.
+    private val eBikeRidingFresh: (Long) -> Boolean,
     private val hasEBikeSignal: () -> Boolean,
     private val everSawTrack: () -> Boolean,
     private val postForgotToLock: () -> Unit,
@@ -376,6 +380,16 @@ internal class RadarLinkCoordinator(
         // early-return so a pause HIDES the banner (decide() returns LIVE when
         // paused); the eager hide on reconnect lives in markConnected.
         val explicitParked = snap?.systemLocked == true
+        // Ride-over reset. An explicit lock ends the ride, so this off-episode's
+        // cue latch must not survive into the next power-on: the latch is what
+        // arms the reconnect acknowledgement pulse, and a stale one would fire it
+        // when TOMORROW's radar link comes up - a lone beep acknowledging a drop
+        // the rider heard yesterday. The off-episode itself (radarOffSinceMs)
+        // deliberately survives; only the cue bookkeeping is closed out.
+        if (explicitParked) {
+            radarDropLastCueMs = null
+            radarDropCueCount = 0
+        }
         val visual = RadarLinkVisualDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             everSawTrack = everSawTrack(),
@@ -390,10 +404,12 @@ internal class RadarLinkCoordinator(
         )
         setReconnectBanner(visual)
         if (prefs.isPaused) return
+        val ridingFresh = eBikeRidingFresh(nowMs)
         val ridingConfirmed = RadarDropDecider.ridingConfirmed(
             systemLocked = snap?.systemLocked,
             snapshotAgeMs = ebikeAgeMs,
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+            eBikeRidingFresh = ridingFresh,
             radarActivityFreshAtDrop = radarActivityFreshAtDrop,
         )
         // Latch-only = riding is confirmed, but not by a live eBike signal:
@@ -403,6 +419,7 @@ internal class RadarLinkCoordinator(
             systemLocked = snap?.systemLocked,
             snapshotAgeMs = ebikeAgeMs,
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+            eBikeRidingFresh = ridingFresh,
         )
         val decision = RadarDropDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
@@ -530,8 +547,10 @@ internal class RadarLinkCoordinator(
         /** Bike speed (m/s) above which a radar frame counts as riding activity
          *  for the radar-only drop-cue confirmation. 2.0 m/s (7.2 km/h) sits
          *  clearly above a walk - a rider pushing a dismounted bike (~1.3 m/s)
-         *  does NOT count, so the signal falls to ~0 at a dismount. */
-        const val RADAR_DROP_WALKING_PACE_MS = 2.0f
+         *  does NOT count, so the signal falls to ~0 at a dismount. One
+         *  definition, shared with the eBike cohort's [RidingSpeedGate]: the two
+         *  paths must not drift to different ideas of walking pace. */
+        const val RADAR_DROP_WALKING_PACE_MS = RidingSpeedGate.WALKING_PACE_MS
 
         /** Radar-activity freshness window for the drop cue: how recently before
          *  the drop the rider must have been moving above walking pace for the

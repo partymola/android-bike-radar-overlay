@@ -16,9 +16,14 @@ package es.jjrh.bikeradar
  * Two independent signals, OR'd, can confirm the rider is mid-ride, so the cue
  * reaches both cohorts:
  *
- *  1. **eBike path** (unchanged): a FRESH eBike snapshot reporting
- *     `system_locked == false` - the Bosch eBike is actively telling us the
- *     rider is on the bike right now.
+ *  1. **eBike path**: a FRESH eBike snapshot reporting `system_locked == false`
+ *     AND the bike's own speed showing a recent sustained ride (see
+ *     [RidingSpeedGate]). Unlock alone only means the bike is AWAKE - it goes
+ *     unlocked the instant it is switched on, in a garage or a bike store, with
+ *     the radar still in a pannier - so speed is what actually says the rider is
+ *     on the bike. The rider also handles a powered-on bike well before setting
+ *     off (wheeling it out of a rack, fitting kit), which is why the speed gate
+ *     needs a sustained spell rather than any movement at all.
  *  2. **Radar-activity path** (for the radar-only / no-eBike rider, the
  *     F-Droid audience): the radar was streaming real riding activity - the
  *     rider's own bike speed above walking pace - within a short window BEFORE
@@ -182,12 +187,19 @@ object RadarDropDecider {
     /**
      * The riding-confirmed gate the cue depends on: is the rider actively on the
      * bike RIGHT NOW? True when EITHER path confirms it (see the class KDoc):
-     *  - **eBike path**: a FRESH snapshot reporting `system_locked == false`.
-     *    Every way of having no live "unlocked" signal FAILS CLOSED:
+     *  - **eBike path**: a FRESH snapshot reporting `system_locked == false`
+     *    AND [eBikeRidingFresh] - the bike's own speed says it has recently been
+     *    RIDDEN (see [RidingSpeedGate]). The speed term is load-bearing: an eBike
+     *    reports itself unlocked the moment it is switched on, so on the lock bit
+     *    alone a rider powering up in a garage with the radar still in a pannier
+     *    was indistinguishable from a rider mid-ride whose radar had just died -
+     *    and the cue fired indoors, on cadence, on every power-on. Every way of
+     *    having no live "unlocked" signal FAILS CLOSED:
      *     - [systemLocked] null (no eBike field) -> false,
      *     - caller passes null systemLocked for a null snapshot (no eBike) -> false,
      *     - `system_locked == true` (locked / dismounting) -> false,
-     *     - [snapshotAgeMs] >= [freshMs] (eBike link dropped, e.g. rider left) -> false.
+     *     - [snapshotAgeMs] >= [freshMs] (eBike link dropped, e.g. rider left) -> false,
+     *     - bike awake but not recently ridden (garage, rack, bike store) -> false.
      *  - **Radar-activity path**: [radarActivityFreshAtDrop], the caller's
      *    boolean latched at the disconnect instant from [activityFreshAtDrop].
      *    Defaults to false so the eBike-only call sites and their existing tests
@@ -212,10 +224,12 @@ object RadarDropDecider {
         systemLocked: Boolean?,
         snapshotAgeMs: Long,
         freshMs: Long,
+        eBikeRidingFresh: Boolean,
         radarActivityFreshAtDrop: Boolean = false,
     ): Boolean {
         if (systemLocked == true) return false
-        return (systemLocked == false && snapshotAgeMs < freshMs) || radarActivityFreshAtDrop
+        val eBikePath = systemLocked == false && snapshotAgeMs < freshMs && eBikeRidingFresh
+        return eBikePath || radarActivityFreshAtDrop
     }
 
     /**

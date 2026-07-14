@@ -422,6 +422,7 @@ class BikeRadarService : Service() {
             resolveDashcamSlug = ::resolveDashcamSlug,
             eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
+            eBikeRidingFresh = { nowMs -> ebikeSnapshotCoordinator.ridingFresh(nowMs) },
             hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
             everSawTrack = { sawTrack },
             postForgotToLock = notifications::postForgotToLock,

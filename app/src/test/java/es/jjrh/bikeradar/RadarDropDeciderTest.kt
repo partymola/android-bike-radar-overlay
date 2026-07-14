@@ -284,10 +284,10 @@ class RadarDropDeciderTest {
 
     @Test
     fun ridingConfirmedTrueOnlyForAFreshUnlockedSnapshot() {
-        assertTrue(RadarDropDecider.ridingConfirmed(systemLocked = false, snapshotAgeMs = 1_000L, freshMs = fresh))
+        assertTrue(riding(systemLocked = false, snapshotAgeMs = 1_000L))
         // Boundary: age == freshMs is NOT fresh (strict <).
-        assertTrue(RadarDropDecider.ridingConfirmed(systemLocked = false, snapshotAgeMs = fresh - 1, freshMs = fresh))
-        assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = false, snapshotAgeMs = fresh, freshMs = fresh))
+        assertTrue(riding(systemLocked = false, snapshotAgeMs = fresh - 1))
+        assertFalse(riding(systemLocked = false, snapshotAgeMs = fresh))
     }
 
     @Test
@@ -297,9 +297,9 @@ class RadarDropDeciderTest {
         // this is what stops a ride-end false fire and the walk-away collision.
         // (radarActivityFreshAtDrop defaults false: eBike-only, as the callers
         // that omit it behave.)
-        assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = true, snapshotAgeMs = 1_000L, freshMs = fresh))
-        assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = null, snapshotAgeMs = 1_000L, freshMs = fresh))
-        assertFalse(RadarDropDecider.ridingConfirmed(systemLocked = false, snapshotAgeMs = 5L * fresh, freshMs = fresh))
+        assertFalse(riding(systemLocked = true, snapshotAgeMs = 1_000L))
+        assertFalse(riding(systemLocked = null, snapshotAgeMs = 1_000L))
+        assertFalse(riding(systemLocked = false, snapshotAgeMs = 5L * fresh))
     }
 
     @Test
@@ -312,6 +312,7 @@ class RadarDropDeciderTest {
                 systemLocked = null, // no eBike
                 snapshotAgeMs = 5L * fresh, // irrelevant
                 freshMs = fresh,
+                eBikeRidingFresh = true,
                 radarActivityFreshAtDrop = true,
             ),
         )
@@ -322,6 +323,7 @@ class RadarDropDeciderTest {
                 systemLocked = false,
                 snapshotAgeMs = 5L * fresh,
                 freshMs = fresh,
+                eBikeRidingFresh = true,
                 radarActivityFreshAtDrop = true,
             ),
         )
@@ -331,6 +333,7 @@ class RadarDropDeciderTest {
                 systemLocked = null,
                 snapshotAgeMs = 5L * fresh,
                 freshMs = fresh,
+                eBikeRidingFresh = true,
                 radarActivityFreshAtDrop = false,
             ),
         )
@@ -349,6 +352,7 @@ class RadarDropDeciderTest {
                 systemLocked = true,
                 snapshotAgeMs = 1_000L,
                 freshMs = fresh,
+                eBikeRidingFresh = true,
                 radarActivityFreshAtDrop = true,
             ),
         )
@@ -358,6 +362,46 @@ class RadarDropDeciderTest {
                 systemLocked = true,
                 snapshotAgeMs = 5L * fresh,
                 freshMs = fresh,
+                eBikeRidingFresh = true,
+                radarActivityFreshAtDrop = true,
+            ),
+        )
+    }
+
+    /** The eBike confirmation path with the speed gate SATISFIED - i.e. what the
+     *  old two-argument gate meant. Keeps the pre-existing cases readable while
+     *  the garage cases below vary the speed term explicitly. */
+    private fun riding(systemLocked: Boolean?, snapshotAgeMs: Long, eBikeRidingFresh: Boolean = true) = RadarDropDecider.ridingConfirmed(
+        systemLocked = systemLocked,
+        snapshotAgeMs = snapshotAgeMs,
+        freshMs = fresh,
+        eBikeRidingFresh = eBikeRidingFresh,
+    )
+
+    @Test
+    fun eBikePathNeedsSpeedNotJustAnUnlockedBike() {
+        // The garage/office bug: an eBike reports itself unlocked the moment it
+        // is switched on, so the unlock bit alone confirmed "riding" while the
+        // rider stood indoors with the radar still in a pannier - and the cue
+        // fired on cadence until the radar came up. A fresh, unlocked snapshot
+        // with no recent sustained ride must NOT confirm.
+        assertFalse(riding(systemLocked = false, snapshotAgeMs = 1_000L, eBikeRidingFresh = false))
+        // ...and the same snapshot WITH a recent ride still does (a genuine
+        // mid-ride drop must never be silenced by this gate).
+        assertTrue(riding(systemLocked = false, snapshotAgeMs = 1_000L, eBikeRidingFresh = true))
+    }
+
+    @Test
+    fun radarOnlyPathIsUnaffectedByTheEBikeSpeedTerm() {
+        // The no-eBike (F-Droid) rider's latch is an independent OR: it must
+        // still confirm when the eBike speed term is false, because there is no
+        // eBike to report speed in the first place.
+        assertTrue(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = null,
+                snapshotAgeMs = 5L * fresh,
+                freshMs = fresh,
+                eBikeRidingFresh = false,
                 radarActivityFreshAtDrop = true,
             ),
         )

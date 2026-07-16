@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0 - 2026-07-17
+
+### Features
+
+- **Ghost beeps are gone for everyone.** The filter that silences close-car beeps from radar ghosts - objects first seen right behind you that never actually approach - has finished its road trial and is now always on, so its Experimental toggle is gone. Real cars keep their beeps: anything that starts closing gets its cue at the current tier, and the urgent warning and all-clear are never affected.
+
+### Fix
+
+- **No more urgent warnings from cars in the next lane while you wait at a light.** At close range the pass prediction could run out of usable data exactly when it mattered; the urgent warning now also checks where the vehicle sits laterally at fire time, so a car clearly off to your side no longer triggers it. A car genuinely bearing down on you from behind still does.
+- **Powering the bike on indoors no longer sets off the radar-loss beeps.** The mid-ride radar-drop warning now requires the bike to have actually been moving recently, not merely unlocked, so switching the bike on in the garage before fitting the radar stays silent - and a genuine mid-ride drop still sounds.
+
 ## v1.0.1 - 2026-07-11
 
 ### Compatibility

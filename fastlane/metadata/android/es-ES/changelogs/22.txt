@@ -1,0 +1,1 @@
+El filtro de pitidos fantasma ya está siempre activo: menos pitidos falsos de coches pegados, los coches reales no cambian. Corregidos los avisos urgentes falsos de coches del carril de al lado estando parado y los pitidos falsos de pérdida de radar al encender la bici dentro de casa.

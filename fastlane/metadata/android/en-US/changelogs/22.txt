@@ -1,0 +1,1 @@
+The ghost-beep filter is now always on: fewer false close-car beeps, real cars unaffected. Fixed false urgent warnings from next-lane cars while stopped at lights, and false radar-loss beeps when powering the bike on indoors.

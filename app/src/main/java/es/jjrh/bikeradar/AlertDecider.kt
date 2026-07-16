@@ -232,15 +232,14 @@ class AlertDecider(
      *  and alert lines. Fires at most once per corner (the anchor-once
      *  guard), so there is no flood risk. */
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
-    /** Diagnostic hook for the experimental ghost-beep filter: one line per
+    /** Diagnostic hook for the ghost-beep filter: one line per
      *  gate decision (suppress / re-fire / off-axis veto), written to the
      *  capture log so every silenced or re-armed cue is auditable
      *  post-ride. Fires only on would-have-beeped frames, so volume is
      *  bounded by the beep rate, not the frame rate. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
-     *  filter's state machine); injectable for tests. Consulted only when
-     *  `decide(ghostGateEnabled = true)`. */
+     *  filter's state machine); injectable for tests. */
     private val bornCloseGate: BornCloseGate = BornCloseGate(),
 ) {
 
@@ -441,16 +440,6 @@ class AlertDecider(
         climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
         turnState: TurnStateDecider.State = TurnStateDecider.State.IDLE,
-        /** Experimental ghost-beep filter (Settings -> Experimental).
-         *  When true, tier Beeps whose trigger track was BORN inside
-         *  [BornCloseGate.BORN_CLOSE_MAX_M] stay silent until the track
-         *  shows closing evidence ([BornCloseGate] admission paths), and
-         *  Beeps whose trigger sits beyond [RX_ABSURD_M] of raw lateral
-         *  are vetoed outright. Beep-path ONLY by construction: the
-         *  all-clear presence gate, urgent evaluation, sustain counters,
-         *  and the overlay never see this flag. Default false = shipped
-         *  behaviour, byte-identical. */
-        ghostGateEnabled: Boolean = false,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -577,18 +566,24 @@ class AlertDecider(
             if (u > prevPeak) peakUrgencyPerTid[v.id] = u
         }
 
-        // Ghost-beep filter: accrue closing evidence for born-close tracks
-        // and re-arm the beep path for any track admitted this frame whose
-        // cue was previously silenced - the "car finally started closing"
-        // beep, delivered at the track's CURRENT tier through the normal
-        // emission machinery (cooldown and stationary gates still apply).
-        if (ghostGateEnabled) {
-            for (tid in bornCloseGate.update(vehicles, turnState, nowMs)) {
-                if (tid !in stableTids) continue
-                firedTierPerTid.remove(tid)
-                beepPending = true
-                onGateEvent("# gate refire tid=$tid")
-            }
+        // Ghost-beep filter: tier Beeps whose trigger track was BORN inside
+        // [BornCloseGate.BORN_CLOSE_MAX_M] stay silent until the track shows
+        // closing evidence ([BornCloseGate] admission paths), and Beeps whose
+        // trigger sits beyond [RX_ABSURD_M] of raw lateral are vetoed
+        // outright (the veto sites below). Beep-path ONLY by construction:
+        // the all-clear presence gate, urgent evaluation, sustain counters,
+        // and the overlay never see the gate.
+        //
+        // This block accrues closing evidence for born-close tracks and
+        // re-arms the beep path for any track admitted this frame whose cue
+        // was previously silenced - the "car finally started closing" beep,
+        // delivered at the track's CURRENT tier through the normal emission
+        // machinery (cooldown and stationary gates still apply).
+        for (tid in bornCloseGate.update(vehicles, turnState, nowMs)) {
+            if (tid !in stableTids) continue
+            firedTierPerTid.remove(tid)
+            beepPending = true
+            onGateEvent("# gate refire tid=$tid")
         }
 
         val newEntries = stableTids - prevStableClose
@@ -883,11 +878,9 @@ class AlertDecider(
                         // per-tid latch: no audio happened, so the
                         // cooldown must not advance and a later
                         // admission re-fire must see a clean latch.
-                        val gateVeto = ghostGateEnabled &&
-                            v != null &&
+                        val gateVeto = v != null &&
                             bornCloseGate.isGated(v)
-                        val rxVeto = ghostGateEnabled &&
-                            v != null &&
+                        val rxVeto = v != null &&
                             !v.lateralUnknown &&
                             abs(v.rangeXmRaw) > RX_ABSURD_M
                         when {

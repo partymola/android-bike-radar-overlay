@@ -3,7 +3,7 @@ package es.jjrh.bikeradar
 
 /**
  * Closing-evidence admission for born-close radar tracks - the audio-side
- * half of the ghost-beep filter (Settings -> Experimental).
+ * half of the ghost-beep filter.
  *
  * Problem: the radar sometimes births a track already inside the tier-3
  * band - a stationary roadside object swept through the beam during a

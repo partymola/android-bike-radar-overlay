@@ -6,9 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * End-to-end decide() semantics of the experimental ghost-beep filter
- * (`ghostGateEnabled`). The safety contract pinned here:
- *  - flag off = shipped behaviour, byte-identical;
+ * End-to-end decide() semantics of the ghost-beep filter (always on since
+ * the 2026-07 promotion). The safety contract pinned here:
  *  - suppression is BEEP-ONLY: the all-clear presence gate and the
  *    urgent path never change;
  *  - admission re-delivers the cue at the track's current tier.
@@ -40,26 +39,17 @@ class AlertDeciderGhostGateTest {
     )
 
     @Test
-    fun `flag off - born-close ghost beeps exactly as shipped`() {
-        val d = AlertDecider()
-        val c = Clock()
-        d.decide(listOf(ghost()), alertMax, c.tick())
-        val ev = d.decide(listOf(ghost()), alertMax, c.tick())
-        assertEquals(AlertDecider.Event.Beep(3), ev)
-    }
-
-    @Test
-    fun `flag on - born-close ghost is silenced`() {
+    fun `born-close ghost is silenced`() {
         val d = AlertDecider()
         val c = Clock()
         repeat(20) {
-            val ev = d.decide(listOf(ghost()), alertMax, c.tick(), ghostGateEnabled = true)
+            val ev = d.decide(listOf(ghost()), alertMax, c.tick())
             assertEquals(AlertDecider.Event.None, ev)
         }
     }
 
     @Test
-    fun `flag on - born-far car beeps exactly as shipped`() {
+    fun `born-far car beeps exactly as shipped`() {
         val d = AlertDecider()
         val c = Clock()
         val car = Vehicle(
@@ -70,13 +60,13 @@ class AlertDeciderGhostGateTest {
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(car), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(car), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(car), alertMax, c.tick())
+        val ev = d.decide(listOf(car), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
     @Test
-    fun `flag on - uninformative birth passes through - reacquired follower keeps its re-anchor beep`() {
+    fun `uninformative birth passes through - reacquired follower keeps its re-anchor beep`() {
         val d = AlertDecider()
         val c = Clock()
         val reborn = Vehicle(
@@ -87,8 +77,8 @@ class AlertDeciderGhostGateTest {
             bornInformative = false,
             bornAtMs = 1L,
         )
-        d.decide(listOf(reborn), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(reborn), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(reborn), alertMax, c.tick())
+        val ev = d.decide(listOf(reborn), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), ev)
     }
 
@@ -100,12 +90,12 @@ class AlertDeciderGhostGateTest {
         repeat(5) {
             assertEquals(
                 AlertDecider.Event.None,
-                d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick(), ghostGateEnabled = true),
+                d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick()),
             )
         }
         // ...then it genuinely starts closing (2 clean frames at >= 2.5 m/s):
-        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
+        val ev = d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
     }
 
@@ -122,21 +112,21 @@ class AlertDeciderGhostGateTest {
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(car), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(car), alertMax, c.tick())
         assertTrue(
-            d.decide(listOf(car), alertMax, c.tick(), ghostGateEnabled = true)
+            d.decide(listOf(car), alertMax, c.tick())
                 is AlertDecider.Event.Beep,
         )
         // Real car gone; a suppressed ghost remains physically behind.
         // Clear must NOT fire while it is present, however long we wait.
         repeat(60) {
-            val ev = d.decide(listOf(ghost()), alertMax, c.tick(), ghostGateEnabled = true)
+            val ev = d.decide(listOf(ghost()), alertMax, c.tick())
             assertEquals(AlertDecider.Event.None, ev)
         }
         // Ghost vanishes -> the deferred Clear fires after the grace.
         var cleared = false
         repeat(40) {
-            if (d.decide(emptyList(), alertMax, c.tick(), ghostGateEnabled = true)
+            if (d.decide(emptyList(), alertMax, c.tick())
                 == AlertDecider.Event.Clear
             ) {
                 cleared = true
@@ -166,7 +156,6 @@ class AlertDeciderGhostGateTest {
                 alertMax,
                 c.tick(),
                 bikeSpeedMs = 0f,
-                ghostGateEnabled = true,
             )
             if (ev is AlertDecider.Event.UrgentApproach) urgent = true
         }
@@ -188,7 +177,7 @@ class AlertDeciderGhostGateTest {
             bornAtMs = 1L,
         )
         repeat(10) {
-            val ev = d.decide(listOf(parallelStreet), alertMax, c.tick(), ghostGateEnabled = true)
+            val ev = d.decide(listOf(parallelStreet), alertMax, c.tick())
             assertEquals(AlertDecider.Event.None, ev)
         }
     }
@@ -202,27 +191,8 @@ class AlertDeciderGhostGateTest {
             rangeXm = 18.4f, rangeXmRaw = 17f, lateralUnknown = true,
             bornDistanceM = 60, bornInformative = true, bornAtMs = 1L,
         )
-        d.decide(listOf(unknownLateral), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(unknownLateral), alertMax, c.tick(), ghostGateEnabled = true)
-        assertEquals(AlertDecider.Event.Beep(1), ev)
-    }
-
-    @Test
-    fun `flag off - off-axis trigger beeps as shipped`() {
-        val d = AlertDecider()
-        val c = Clock()
-        val parallelStreet = Vehicle(
-            id = 6,
-            distanceM = 18,
-            speedMs = -8f,
-            rangeXm = 18.4f,
-            rangeXmRaw = 17f,
-            bornDistanceM = 60,
-            bornInformative = true,
-            bornAtMs = 1L,
-        )
-        d.decide(listOf(parallelStreet), alertMax, c.tick())
-        val ev = d.decide(listOf(parallelStreet), alertMax, c.tick())
+        d.decide(listOf(unknownLateral), alertMax, c.tick())
+        val ev = d.decide(listOf(unknownLateral), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 
@@ -238,7 +208,6 @@ class AlertDeciderGhostGateTest {
                 alertMax,
                 c.tick(),
                 turnState = TurnStateDecider.State.TURNING,
-                ghostGateEnabled = true,
             )
             assertEquals(AlertDecider.Event.None, ev)
         }
@@ -249,9 +218,9 @@ class AlertDeciderGhostGateTest {
         val lines = mutableListOf<String>()
         val d = AlertDecider(onGateEvent = { lines.add(it) })
         val c = Clock()
-        repeat(3) { d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick(), ghostGateEnabled = true) }
-        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), ghostGateEnabled = true)
-        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), ghostGateEnabled = true)
+        repeat(3) { d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick()) }
+        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
+        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
         assertTrue(lines.any { it.startsWith("# gate suppress tid=9") })
         assertTrue(lines.any { it.startsWith("# gate refire tid=9") })
     }
@@ -270,10 +239,10 @@ class AlertDeciderGhostGateTest {
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(parallelStreet), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(parallelStreet), alertMax, c.tick())
         assertEquals(
             AlertDecider.Event.None,
-            d.decide(listOf(parallelStreet), alertMax, c.tick(), ghostGateEnabled = true),
+            d.decide(listOf(parallelStreet), alertMax, c.tick()),
         )
         // A different, in-lane car right after the veto: the veto must not
         // have advanced the beep cooldown, so this cue lands the moment
@@ -286,8 +255,8 @@ class AlertDeciderGhostGateTest {
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(realCar), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(realCar), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(realCar), alertMax, c.tick())
+        val ev = d.decide(listOf(realCar), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), ev)
     }
 
@@ -308,15 +277,15 @@ class AlertDeciderGhostGateTest {
         // everything stays silent - the admitted track's cue is delayed,
         // never misattributed to the ghost.
         repeat(10) {
-            val ev = d.decide(listOf(farther, closerGhost), alertMax, c.tick(), ghostGateEnabled = true)
+            val ev = d.decide(listOf(farther, closerGhost), alertMax, c.tick())
             assertEquals(AlertDecider.Event.None, ev)
         }
         // Ghost dies; the admitted track speaks on its next tier edge
         // (de-escalate to its own tier, then raise into the top band).
-        repeat(2) { d.decide(listOf(farther), alertMax, c.tick(), ghostGateEnabled = true) }
+        repeat(2) { d.decide(listOf(farther), alertMax, c.tick()) }
         val closeNow = farther.copy(distanceM = 6)
         // Escalation bypasses the cooldown, so the edge fires same-frame.
-        val ev = d.decide(listOf(closeNow), alertMax, c.tick(), ghostGateEnabled = true)
+        val ev = d.decide(listOf(closeNow), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
     }
 
@@ -334,8 +303,8 @@ class AlertDeciderGhostGateTest {
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(edge), alertMax, c.tick(), ghostGateEnabled = true)
-        val ev = d.decide(listOf(edge), alertMax, c.tick(), ghostGateEnabled = true)
+        d.decide(listOf(edge), alertMax, c.tick())
+        val ev = d.decide(listOf(edge), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(1), ev)
     }
 }

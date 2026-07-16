@@ -35,8 +35,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    ghostFilterEnabled = false,
-                    onGhostFilterChange = {},
                 )
             }
         }
@@ -54,8 +52,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    ghostFilterEnabled = false,
-                    onGhostFilterChange = {},
                 )
             }
         }
@@ -76,8 +72,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = false,
                     onLateralPanningInvertLRChange = {},
-                    ghostFilterEnabled = false,
-                    onGhostFilterChange = {},
                 )
             }
         }
@@ -95,27 +89,6 @@ class SettingsExperimentalSnapshotTest {
                     onLateralPanningChange = {},
                     lateralPanningInvertLR = true,
                     onLateralPanningInvertLRChange = {},
-                    ghostFilterEnabled = false,
-                    onGhostFilterChange = {},
-                )
-            }
-        }
-    }
-
-    @Test
-    fun ghostFilterOn() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    lateralPanningEnabled = false,
-                    onLateralPanningChange = {},
-                    lateralPanningInvertLR = false,
-                    onLateralPanningInvertLRChange = {},
-                    ghostFilterEnabled = true,
-                    onGhostFilterChange = {},
                 )
             }
         }

@@ -301,7 +301,6 @@ internal class OverlayPipeline(
             } else {
                 TurnStateDecider.State.IDLE
             },
-            ghostGateEnabled = overlayPrefs.ghostBeepFilterEnabled,
         )
         if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs)
         beeper.setPanning(

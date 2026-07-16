@@ -295,7 +295,6 @@
     <string name="settings_home_ha_connected">Conectado</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_panning">Direccional</string>
-    <string name="settings_home_exp_ghost">Filtro fantasma</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
     <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> activado</string>
 
@@ -327,8 +326,6 @@
     <string name="settings_exp_panning_subtitle">Los pitidos y avisos urgentes suenan por el altavoz del lado de la amenaza, para hacerlo más fácil de identificar. Funciona con los altavoces del teléfono en horizontal (gira con el soporte) y con auriculares estéreo (BT, BLE, cable, USB, audífono). En vertical suena en mono.</string>
     <string name="settings_exp_invert_title">Invertir izquierda/derecha</string>
     <string name="settings_exp_invert_subtitle">Invierte los canales si los avisos direccionales suenan en el oído equivocado (rareza poco frecuente del dispositivo o auriculares puestos al revés).</string>
-    <string name="settings_exp_ghost_title">Filtrar pitidos fantasma</string>
-    <string name="settings_exp_ghost_subtitle">Silencia pitidos de objetos que aparecen pegados detrás y nunca se acercan. Los avisos urgentes no cambian.</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>

@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * Birth annotations on decoded vehicles ([Vehicle.bornAtMs] /
  * [Vehicle.bornDistanceM] / [Vehicle.bornInformative] / raw lateral),
- * the inputs of the experimental ghost-beep filter. The decoder is the
+ * the inputs of the ghost-beep filter. The decoder is the
  * birth authority: its own track creation and prune events define
  * "born", so the gate's premise ("a real threat first seen close must
  * be closing") is evaluated against real coverage, not a downstream

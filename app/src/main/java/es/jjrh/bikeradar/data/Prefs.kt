@@ -54,7 +54,6 @@ data class PrefsSnapshot(
     val precogEnabled: Boolean,
     val experimentalLateralPanning: Boolean,
     val experimentalLateralPanningInvertLR: Boolean,
-    val ghostBeepFilterEnabled: Boolean,
     val turnAwareAlertsEnabled: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
@@ -304,17 +303,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LATERAL_PANNING, false)
         set(v) {
             sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply()
-        }
-
-    /** Experimental: silence tier beeps from radar ghosts - tracks born
-     *  at close range that never show real closing speed (stationary
-     *  roadside objects swept through the beam during turns, clutter
-     *  alongside). Beep-path only: overlay, all-clear and the urgent cue
-     *  are never affected. Default off. */
-    var ghostBeepFilterEnabled: Boolean
-        get() = sp.getBoolean(KEY_GHOST_BEEP_FILTER, false)
-        set(v) {
-            sp.edit().putBoolean(KEY_GHOST_BEEP_FILTER, v).apply()
         }
 
     /** Safety valve for [experimentalLateralPanning]: swap left/right at
@@ -675,7 +663,6 @@ class Prefs(context: Context) {
         precogEnabled = precogEnabled,
         experimentalLateralPanning = experimentalLateralPanning,
         experimentalLateralPanningInvertLR = experimentalLateralPanningInvertLR,
-        ghostBeepFilterEnabled = ghostBeepFilterEnabled,
         turnAwareAlertsEnabled = turnAwareAlertsEnabled,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
@@ -736,7 +723,6 @@ class Prefs(context: Context) {
         appendLine("precog_enabled=$precogEnabled")
         appendLine("experimental_lateral_panning=$experimentalLateralPanning")
         appendLine("experimental_lateral_panning_invert_lr=$experimentalLateralPanningInvertLR")
-        appendLine("ghost_beep_filter_enabled=$ghostBeepFilterEnabled")
         appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
@@ -785,7 +771,6 @@ class Prefs(context: Context) {
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_TURN_AWARE_ALERTS = "turn_aware_alerts_enabled"
         const val KEY_LATERAL_PANNING = "experimental_lateral_panning"
-        const val KEY_GHOST_BEEP_FILTER = "ghost_beep_filter_enabled"
         const val KEY_LATERAL_PANNING_INVERT = "experimental_lateral_panning_invert_lr"
         const val KEY_CLOSE_PASS_ENABLED = "close_pass_logging_enabled"
         const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"

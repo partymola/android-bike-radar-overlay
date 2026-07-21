@@ -75,4 +75,38 @@ class LinkEventJournalTest {
         val root = Files.createTempDirectory("linkjournal").toFile()
         assertTrue(LinkEventJournal({ root }).readTail().isEmpty())
     }
+
+    // -- log-injection defence -------------------------------------------------
+    // A device name is untrusted BLE input and is interpolated into event lines
+    // (`journal("radar link start $name")`). A name with an embedded newline
+    // must not be able to forge or split a line in the journal the Debug screen
+    // renders as an audit trail.
+
+    @Test fun newlineInEventCannotForgeAnExtraLine() {
+        val root = Files.createTempDirectory("linkjournal").toFile()
+        val j = LinkEventJournal({ root })
+        j.log("radar link start rear\nFORGED radar bond removed; reconnect stopped")
+        val tail = j.readTail()
+        assertEquals("one event must stay one line", 1, tail.size)
+        assertTrue(tail[0].contains("radar link start rear"))
+        assertTrue("forged text folds into the same line", tail[0].contains("radar bond removed"))
+    }
+
+    @Test fun controlCharsInEventAreNeutralised() {
+        val root = Files.createTempDirectory("linkjournal").toFile()
+        val j = LinkEventJournal({ root })
+        j.log("camera link start rear\r\n\t\u0000\u001Bevil")
+        val tail = j.readTail()
+        assertEquals(1, tail.size)
+        assertTrue("no control char survives", tail[0].none { it.isISOControl() })
+    }
+
+    @Test fun multipleForgedNewlinesDoNotInflateLineCount() {
+        val root = Files.createTempDirectory("linkjournal").toFile()
+        val j = LinkEventJournal({ root })
+        j.log("a")
+        j.log("b\nforged1\nforged2")
+        j.log("c")
+        assertEquals(3, LinkEventJournal({ root }).readTail().size)
+    }
 }

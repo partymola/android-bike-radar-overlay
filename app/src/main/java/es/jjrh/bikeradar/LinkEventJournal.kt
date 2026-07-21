@@ -41,7 +41,7 @@ internal class LinkEventJournal(
             try {
                 file.parentFile?.mkdirs()
                 val stamp = SimpleDateFormat(STAMP_FORMAT, Locale.ROOT).format(Date(nowMs()))
-                file.appendText("$stamp $event\n")
+                file.appendText("$stamp ${sanitizeEvent(event)}\n")
                 if (file.length() > MAX_BYTES) {
                     val kept = file.readLines().takeLast(KEEP_LINES)
                     file.writeText(kept.joinToString("\n", postfix = "\n"))
@@ -84,5 +84,19 @@ internal class LinkEventJournal(
         /** Process-global: the service's writer and the Debug screen's
          *  reader are separate instances contending on one file. */
         private val lock = Any()
+
+        /**
+         * Neutralise control characters before an event is written. Event
+         * strings interpolate untrusted BLE device names
+         * (`journal("radar link start $name")`), and a name containing a
+         * newline would otherwise forge or split lines in the one-line-per-event
+         * journal the Debug screen renders as an audit trail. Each ISO control
+         * char (CR, LF, tab, NUL, C0/C1, DEL) becomes a single space, keeping
+         * every event on exactly one line. Applied here at the boundary so every
+         * current and future caller is covered, not just the name sites.
+         */
+        internal fun sanitizeEvent(event: String): String = buildString(event.length) {
+            for (c in event) append(if (c.isISOControl()) ' ' else c)
+        }
     }
 }

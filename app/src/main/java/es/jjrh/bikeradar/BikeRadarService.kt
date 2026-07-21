@@ -5,6 +5,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
@@ -850,7 +851,13 @@ class BikeRadarService : Service() {
             override fun onScanResult(cbType: Int, result: android.bluetooth.le.ScanResult) {
                 val name = result.scanRecord?.deviceName ?: result.device?.name ?: return
                 val mac = result.device?.address ?: return
-                if (BatteryScanReceiver.matchesVariaName(name)) found.putIfAbsent(mac, name to mac)
+                val bondState = result.device?.bondState ?: BluetoothDevice.BOND_NONE
+                // Bond gate: a matching advertised name is NOT authority to act on
+                // - the name is attacker-controlled. Only a paired device is real,
+                // matching the passive BatteryScanReceiver path.
+                if (ScanGate.shouldActOnScanResult(BatteryScanReceiver.matchesVariaName(name), bondState)) {
+                    found.putIfAbsent(mac, name to mac)
+                }
             }
         }
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()

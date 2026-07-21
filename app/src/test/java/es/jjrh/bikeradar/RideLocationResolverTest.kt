@@ -164,6 +164,13 @@ class RideLocationResolverTest {
         assertEquals("90", RideLocationResolver.formatCoordinate(90.0))
     }
 
+    @Test fun summaryFormatsValidPairOnly() {
+        assertEquals("51.5074, -0.1278", RideLocationResolver.summary(51.5074, -0.1278))
+        assertNull(RideLocationResolver.summary(51.5, null))
+        assertNull(RideLocationResolver.summary(null, null))
+        assertNull(RideLocationResolver.summary(91.0, 0.0))
+    }
+
     // --- resolve: precedence + defensive re-validation ---
 
     @Test fun resolveManualWinsOverGps() {

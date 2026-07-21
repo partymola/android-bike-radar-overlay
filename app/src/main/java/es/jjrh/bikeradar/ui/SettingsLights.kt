@@ -19,10 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditLocationAlt
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
@@ -40,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,9 +107,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
     var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
     var showCoordDialog by rememberSaveable { mutableStateOf(false) }
     val manualSummary = remember(manualLat, manualLon) {
-        RideLocationResolver.validManualLocation(manualLat, manualLon)?.let {
-            String.format(java.util.Locale.US, "%.4f, %.4f", it.first, it.second)
-        }
+        RideLocationResolver.summary(manualLat, manualLon)
     }
 
     SettingsLightsContent(
@@ -137,14 +134,23 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
         onDashcamNightClick = { openPicker = LightPicker.DASHCAM_NIGHT },
         onSetUpDashcam = { navController.navigate("settings/dashcam") },
         manualLocationSummary = manualSummary,
-        onEnterCoordinates = { showCoordDialog = true },
-        onClearCoordinates = {
-            manualLat = null
-            manualLon = null
-            prefs.setManualLocation(null, null)
-        },
         locationCard = {
-            PermissionCard(locSpec, locGranted, onChanged = { locPermTick++ })
+            PermissionCard(
+                spec = locSpec,
+                granted = locGranted,
+                onChanged = { locPermTick++ },
+                alternative = PermissionAlternative(
+                    actionLabelRes = R.string.settings_lights_loc_enter_coords,
+                    setTitleRes = R.string.settings_lights_loc_manual_set_title,
+                    summary = manualSummary,
+                    onEnter = { showCoordDialog = true },
+                    onClear = {
+                        manualLat = null
+                        manualLon = null
+                        prefs.setManualLocation(null, null)
+                    },
+                ),
+            )
         },
     )
 
@@ -232,8 +238,6 @@ internal fun SettingsLightsContent(
     onDashcamNightClick: () -> Unit = {},
     onSetUpDashcam: () -> Unit = {},
     manualLocationSummary: String? = null,
-    onEnterCoordinates: () -> Unit = {},
-    onClearCoordinates: () -> Unit = {},
     locationCard: @Composable () -> Unit = {},
 ) {
     val br = LocalBrColors.current
@@ -343,79 +347,21 @@ internal fun SettingsLightsContent(
                 }
             }
 
-            if (rearAuto || frontAuto) {
-                LocationForSunsetSection(
-                    locGranted = locGranted,
-                    manualLocationSummary = manualLocationSummary,
-                    onEnterCoordinates = onEnterCoordinates,
-                    onClearCoordinates = onClearCoordinates,
-                    locationCard = locationCard,
-                )
+            // Location for the sunrise/sunset calc: shown while a light auto-mode
+            // is on and either location is not granted or manual coordinates are
+            // set. The permission card itself carries the "grant or enter
+            // coordinates" choice and the manual-set value row; London is the
+            // silent last resort if the rider configures neither. Hidden once GPS
+            // is granted with no manual override (nothing to configure).
+            if ((rearAuto || frontAuto) && (manualLocationSummary != null || !locGranted)) {
+                SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    locationCard()
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
         }
-    }
-}
-
-/**
- * Location source for the sunrise/sunset light auto-switch. Shown only while
- * at least one light's auto-mode is on. Three states:
- *  - manual coordinates set -> summary row (tap to edit) + a clear row;
- *  - GPS not granted, no manual -> the grant-permission card AND a "set
- *    coordinates" row, so the rider can pick either precise path;
- *  - GPS granted, no manual -> nothing (device location already works).
- * London is only the silent last resort when the rider configures neither.
- */
-@Composable
-private fun LocationForSunsetSection(
-    locGranted: Boolean,
-    manualLocationSummary: String?,
-    onEnterCoordinates: () -> Unit,
-    onClearCoordinates: () -> Unit,
-    locationCard: @Composable () -> Unit,
-) {
-    val br = LocalBrColors.current
-    when {
-        manualLocationSummary != null -> {
-            SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
-            SettingsRowGroup {
-                SettingsRow(
-                    icon = Icons.Default.Place,
-                    iconTint = br.brand,
-                    title = stringResource(R.string.settings_lights_loc_manual_set_title),
-                    subtitle = manualLocationSummary,
-                    onClick = onEnterCoordinates,
-                    isLast = false,
-                )
-                SettingsRow(
-                    icon = Icons.Default.Delete,
-                    iconTint = br.fgMuted,
-                    title = stringResource(R.string.settings_lights_loc_manual_clear),
-                    subtitle = null,
-                    onClick = onClearCoordinates,
-                    chevron = false,
-                    isLast = true,
-                )
-            }
-        }
-        !locGranted -> {
-            SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                locationCard()
-            }
-            SettingsRowGroup {
-                SettingsRow(
-                    icon = Icons.Default.EditLocationAlt,
-                    iconTint = br.brand,
-                    title = stringResource(R.string.settings_lights_loc_manual_row_title),
-                    subtitle = stringResource(R.string.settings_lights_loc_manual_row_sub),
-                    onClick = onEnterCoordinates,
-                    isLast = true,
-                )
-            }
-        }
-        // GPS granted, no manual override: device location works; show nothing.
     }
 }
 
@@ -425,11 +371,13 @@ private fun LocationForSunsetSection(
  *  equator. */
 @Composable
 private fun SignToggle(onToggle: () -> Unit) {
+    val desc = stringResource(R.string.settings_coord_sign_toggle)
     Text(
         text = "±",
         fontSize = 20.sp,
         modifier = Modifier
             .clickable(onClick = onToggle)
+            .semantics { contentDescription = desc }
             .padding(horizontal = 12.dp),
     )
 }
@@ -443,7 +391,7 @@ private fun SignToggle(onToggle: () -> Unit) {
  * never constructs a coordinate itself.
  */
 @Composable
-private fun CoordinateEntryDialog(
+internal fun CoordinateEntryDialog(
     initialLat: Double?,
     initialLon: Double?,
     onSave: (Double, Double) -> Unit,

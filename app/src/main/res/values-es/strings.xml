@@ -16,6 +16,9 @@
     <string name="common_continue">Continuar</string>
     <string name="common_optional">Opcional</string>
     <string name="common_cancel">Cancelar</string>
+    <string name="common_or">o</string>
+    <string name="common_change">Cambiar</string>
+    <string name="common_clear">Borrar</string>
     <string name="common_back">Atrás</string>
 
     <!-- Primitivas de UI (UiPrimitives.kt) -->
@@ -501,6 +504,7 @@
     <string name="settings_privacy_intro">Bike Radar no recopila telemetría ni ejecuta analíticas. Tus datos van solo al Home Assistant que configures - a ningún otro sitio.</string>
     <string name="settings_privacy_on_phone_label">Qué se queda en tu teléfono</string>
     <string name="settings_privacy_on_phone_settings">Tus ajustes (volumen de alerta, distancia de alerta, estado del radar emparejado, preferencias de la cámara delantera y similares) residen en el almacenamiento privado de la app, que ninguna otra app puede leer. Se incluyen en tu copia de seguridad de Android, así que te acompañan al cambiar de teléfono.</string>
+    <string name="settings_privacy_on_phone_location">Si introduces una ubicación manual para el cambio automático de luz (en vez de conceder acceso a la ubicación), esas coordenadas se guardan solo en este teléfono, en el almacenamiento privado de la app. Sirven para calcular tu amanecer y atardecer locales, no se envían a ningún sitio y no aparecen en ningún registro.</string>
     <string name="settings_privacy_on_phone_creds">La URL de tu Home Assistant y el token residen en ese mismo almacenamiento privado y pasan al teléfono nuevo con tu copia de seguridad de Android (cifrada por Android con tu bloqueo de pantalla) y con la transferencia directa entre teléfonos, que no pasa por ningún servidor. No van a ningún otro sitio.</string>
     <string name="settings_privacy_on_phone_rides">Se guarda un breve historial de rutas (horas, distancia, recuentos de adelantamientos y pases cercanos, y a qué distancia y velocidad pasaron los vehículos más cercanos - sin ubicación, sin recorrido) en el almacenamiento privado de la app para la pantalla Historial de rutas. Las entradas más antiguas se descartan a partir de 200 rutas; no se comparte nada.</string>
     <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono y cambios de estado de giro de los sensores de movimiento (si activas los avisos en curvas); sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
@@ -520,7 +524,7 @@
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
 
     <!-- Ajustes → Modo automático de luces (SettingsLights.kt) -->
-    <string name="settings_lights_loc_rationale">Calcula con precisión el amanecer y el atardecer para los modos automáticos de luz. Concédelo, o configura tu ubicación manualmente abajo.</string>
+    <string name="settings_lights_loc_rationale">Pone tus luces en modo día o noche automáticamente.</string>
     <string name="settings_lights_title">Modo automático de luces</string>
     <string name="settings_lights_radar_section">Luz trasera del radar</string>
     <string name="settings_lights_auto_switch">Cambio automático día/noche</string>
@@ -535,16 +539,15 @@
     <string name="settings_lights_dashcam_no">No tienes</string>
     <string name="settings_lights_dashcam_setup">Configura tu cámara delantera</string>
     <string name="settings_lights_loc_section">Ubicación para amanecer/atardecer</string>
-    <string name="settings_lights_loc_manual_row_title">Configurar ubicación</string>
-    <string name="settings_lights_loc_manual_row_sub">Introduce coordenadas en vez de usar la ubicación</string>
+    <string name="settings_lights_loc_enter_coords">Introducir coordenadas</string>
     <string name="settings_lights_loc_manual_set_title">Ubicación manual</string>
-    <string name="settings_lights_loc_manual_clear">Quitar ubicación manual</string>
     <string name="settings_coord_title">Introducir coordenadas</string>
     <string name="settings_coord_lat_label">Latitud</string>
     <string name="settings_coord_lon_label">Longitud</string>
     <string name="settings_coord_lat_error">La latitud debe estar entre -90 y 90</string>
     <string name="settings_coord_lon_error">La longitud debe estar entre -180 y 180</string>
     <string name="settings_coord_hint">Pulsa ± para el sur o el oeste. Mantén pulsada tu ubicación en una app de mapas para copiar las coordenadas.</string>
+    <string name="settings_coord_sign_toggle">Cambiar a negativo, para el sur o el oeste</string>
     <string name="settings_coord_save">Guardar</string>
 
     <!-- Ajustes → Licencias de código abierto (SettingsLicenses.kt). Los nombres

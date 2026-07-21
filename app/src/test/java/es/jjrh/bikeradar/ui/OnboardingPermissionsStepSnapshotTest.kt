@@ -74,6 +74,16 @@ class OnboardingPermissionsStepSnapshotTest {
         markLabelRes = R.string.permission_mark_recommended,
     )
 
+    private val location = PermissionSpec(
+        permissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+        titleRes = R.string.permission_location_title,
+        // Production onboarding uses the base permission rationale (PermissionSpec),
+        // not the Settings-screen override; mirror it so the golden is truthful.
+        rationaleRes = R.string.permission_location_rationale,
+        required = false,
+        markLabelRes = R.string.common_optional,
+    )
+
     @Test
     fun allGranted() {
         val states = listOf(nearby to true, notifications to true, overlay to true)
@@ -119,6 +129,44 @@ class OnboardingPermissionsStepSnapshotTest {
                         requiredGranted = false,
                         onContinue = {},
                         onPermissionChanged = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun locationDeniedShowsManualEntry() {
+        // Location card denied -> "Enter coordinates" peer button appears under the "or".
+        val states = listOf(nearby to true, notifications to true, location to false)
+        captureRoboImage {
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides fakeRegistryOwner) {
+                UiTheme {
+                    PermissionsStepContent(
+                        states = states,
+                        requiredGranted = true,
+                        onContinue = {},
+                        onPermissionChanged = {},
+                        manualLocationSummary = null,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun locationManualSet() {
+        // Coordinates entered -> summary + clear under the location card.
+        val states = listOf(nearby to true, notifications to true, location to false)
+        captureRoboImage {
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides fakeRegistryOwner) {
+                UiTheme {
+                    PermissionsStepContent(
+                        states = states,
+                        requiredGranted = true,
+                        onContinue = {},
+                        onPermissionChanged = {},
+                        manualLocationSummary = "51.5074, -0.1278",
                     )
                 }
             }

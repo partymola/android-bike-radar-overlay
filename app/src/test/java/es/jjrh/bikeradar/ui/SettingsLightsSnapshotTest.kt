@@ -38,6 +38,14 @@ class SettingsLightsSnapshotTest {
         markLabelRes = R.string.common_optional,
     )
 
+    private fun locationAlternative(summary: String?) = PermissionAlternative(
+        actionLabelRes = R.string.settings_lights_loc_enter_coords,
+        setTitleRes = R.string.settings_lights_loc_manual_set_title,
+        summary = summary,
+        onEnter = {},
+        onClear = {},
+    )
+
     @Test
     fun bothOnLocationDenied() {
         captureRoboImage {
@@ -58,6 +66,7 @@ class SettingsLightsSnapshotTest {
                             granted = false,
                             permanentlyDenied = false,
                             onAction = {},
+                            alternative = locationAlternative(summary = null),
                         )
                     },
                 )
@@ -67,8 +76,8 @@ class SettingsLightsSnapshotTest {
 
     @Test
     fun manualLocationSet() {
-        // GPS-decliner path: manual coordinates set -> summary row + clear row,
-        // no permission card. Synthetic coordinates (not a real location).
+        // GPS-decliner path: manual coordinates set -> the card's green value row
+        // in place of the "or / Enter coordinates" choice. Synthetic coordinates.
         captureRoboImage {
             UiTheme {
                 SettingsLightsContent(
@@ -82,6 +91,46 @@ class SettingsLightsSnapshotTest {
                     dashcamNight = CameraLightMode.NIGHT_FLASH,
                     locGranted = false,
                     manualLocationSummary = "51.5074, -0.1278",
+                    locationCard = {
+                        PermissionCardContent(
+                            spec = location,
+                            granted = false,
+                            permanentlyDenied = false,
+                            onAction = {},
+                            alternative = locationAlternative(summary = "51.5074, -0.1278"),
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun manualLocationSetAndGranted() {
+        // Rider granted GPS but also has a manual override set (manual wins in
+        // the resolver): granted card + green value row, no Enable / choice.
+        captureRoboImage {
+            UiTheme {
+                SettingsLightsContent(
+                    onBack = {},
+                    rearAuto = true,
+                    radarDay = RadarLightMode.DAY_FLASH,
+                    radarNight = RadarLightMode.NIGHT_FLASH,
+                    dashcamOwnership = DashcamOwnership.YES,
+                    frontAuto = true,
+                    dashcamDay = CameraLightMode.DAY_FLASH,
+                    dashcamNight = CameraLightMode.NIGHT_FLASH,
+                    locGranted = true,
+                    manualLocationSummary = "51.5074, -0.1278",
+                    locationCard = {
+                        PermissionCardContent(
+                            spec = location,
+                            granted = true,
+                            permanentlyDenied = false,
+                            onAction = {},
+                            alternative = locationAlternative(summary = "51.5074, -0.1278"),
+                        )
+                    },
                 )
             }
         }

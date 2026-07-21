@@ -94,9 +94,10 @@ summary; the Key files table maps each part to its file.
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by
-  `LocationCache` (one `getLastKnownLocation` read per ride via
-  `ACCESS_COARSE_LOCATION`; falls back to London-hardcoded if the
-  permission is denied). A one-shot dawn/dusk flip is scheduled for
+  `RideLocationResolver`: rider-entered manual coordinates if set, else
+  `LocationCache`'s one `getLastKnownLocation` read per ride via
+  `ACCESS_COARSE_LOCATION`, else a London fallback. A one-shot dawn/dusk
+  flip is scheduled for
   the rest of the session. Skipped when `cameraLightUserOverride` is
   set (manual side-button press during the session). See
   `BikeRadarService.kt` connect path.
@@ -135,6 +136,8 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
 | `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
+| `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
+| `app/src/main/java/es/jjrh/bikeradar/ScanGate.kt` | Pure accept/reject gate for an active BLE scan result (name-match AND bonded), used by the service's device discovery |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge + climb detection); fed by the status reader's callback |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusDecoder.kt` | TLV decoder for the proprietary status stream (add new object IDs here) |
@@ -349,8 +352,11 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
   in Settings -> Permissions, and via a contextual re-grant card in Settings ->
   Light auto-mode (shown when either light's auto-mode is on and location is
-  not yet granted).
-  If never granted, the day/night auto-mode silently falls back to London times.
+  not yet granted). Both surfaces also offer manual coordinate entry as an
+  alternative to the grant (the onboarding location card and the Light
+  auto-mode card share one integrated "grant or enter coordinates" component).
+  If neither is granted nor set, the day/night auto-mode falls back to London
+  times.
 
 ## Audio design
 

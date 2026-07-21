@@ -80,6 +80,7 @@ private fun OnboardingScreenBody(
         ) { page ->
             when (page) {
                 0 -> PermissionsStep(
+                    prefs = prefs,
                     onContinue = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
                 1 -> HaStep(

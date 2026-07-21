@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -146,8 +149,30 @@ internal fun SettingsPermissionsContent(
     }
 }
 
+/**
+ * Optional "or do it another way" action folded into a [PermissionCard]. The
+ * card then presents granting the permission and this alternative as equal
+ * peers - two full-width buttons separated by an "or" divider - and, once the
+ * alternative is set, a satisfied value row in its place. Used for the location
+ * permission, whose sunrise/sunset need can equally be met by manual
+ * coordinates. Kept generic (string ids + lambdas) so no feature knowledge
+ * leaks into the shared card.
+ */
+internal data class PermissionAlternative(
+    @StringRes val actionLabelRes: Int,
+    @StringRes val setTitleRes: Int,
+    val summary: String?,
+    val onEnter: () -> Unit,
+    val onClear: () -> Unit,
+)
+
 @Composable
-internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: () -> Unit) {
+internal fun PermissionCard(
+    spec: PermissionSpec,
+    granted: Boolean,
+    onChanged: () -> Unit,
+    alternative: PermissionAlternative? = null,
+) {
     val ctx = LocalContext.current
     val activity = ctx as? Activity
     // Track whether we've ever asked for this spec in this card's
@@ -192,6 +217,7 @@ internal fun PermissionCard(spec: PermissionSpec, granted: Boolean, onChanged: (
                 }
             }
         },
+        alternative = alternative,
     )
 }
 
@@ -207,6 +233,7 @@ internal fun PermissionCardContent(
     granted: Boolean,
     permanentlyDenied: Boolean,
     onAction: () -> Unit,
+    alternative: PermissionAlternative? = null,
 ) {
     val br = LocalBrColors.current
     val accentColor = when {
@@ -304,5 +331,114 @@ internal fun PermissionCardContent(
                 )
             }
         }
+        // Optional alternative (e.g. manual coordinates for the location perm):
+        // once set -> a satisfied value row; otherwise, when not granted, an
+        // "or" divider and a peer outline button beneath the primary action.
+        alternative?.let { alt ->
+            if (alt.summary != null) {
+                // When the permission is still ungranted, the "or" divider keeps
+                // the (above) Enable button and this value row reading as the two
+                // alternatives they are, rather than two unrelated stacked items.
+                if (!granted) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    PermissionOrDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                PermissionAlternativeValueRow(alt)
+            } else if (!granted) {
+                Spacer(modifier = Modifier.height(8.dp))
+                PermissionOrDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+                PermissionOutlineButton(
+                    label = stringResource(alt.actionLabelRes),
+                    onClick = alt.onEnter,
+                )
+            }
+        }
+    }
+}
+
+/** Full-width "or" separator (a hairline on each side of the OR caption),
+ *  using the same uppercase-mono caption voice as the OPTIONAL mark so it
+ *  reads as chrome, not content. */
+@Composable
+private fun PermissionOrDivider() {
+    val br = LocalBrColors.current
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.weight(1f).height(1.dp).background(br.hairline))
+        Mark(text = stringResource(R.string.common_or), modifier = Modifier.padding(horizontal = 10.dp))
+        Box(modifier = Modifier.weight(1f).height(1.dp).background(br.hairline))
+    }
+}
+
+/** Peer of the optional-spec action button (transparent, hairline border). */
+@Composable
+private fun PermissionOutlineButton(label: String, onClick: () -> Unit) {
+    val br = LocalBrColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(androidx.compose.ui.graphics.Color.Transparent)
+            .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, color = br.fg, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Satisfied state for an alternative that is set: a green-tinted row echoing
+ *  the card's own "granted" vocabulary, with change/clear actions. */
+@Composable
+private fun PermissionAlternativeValueRow(alt: PermissionAlternative) {
+    val br = LocalBrColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(br.safe.copy(alpha = 0.08f))
+            .border(1.dp, br.safe.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Place,
+            contentDescription = null,
+            tint = br.safe,
+            modifier = Modifier.size(14.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(alt.setTitleRes),
+                color = br.fg,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = alt.summary ?: "",
+                color = br.fgMuted,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        Text(
+            text = stringResource(R.string.common_change),
+            color = br.brand,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable(onClick = alt.onEnter).padding(8.dp),
+        )
+        Text(
+            text = stringResource(R.string.common_clear),
+            color = br.fgMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable(onClick = alt.onClear).padding(8.dp),
+        )
     }
 }

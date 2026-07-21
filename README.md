@@ -60,9 +60,10 @@ strip; the rest of your screen stays yours. (*Image credits
   summary (distance, close-pass count, closing speeds, lateral
   clearances).
 - Front-camera light auto-mode: picks Day Flash before sunset, Night
-  Flash after, computed from the device location (London fallback if
-  the location permission is denied). A manual button press during the
-  session wins for the rest of the ride.
+  Flash after, computed from your location. Grant approximate location, or
+  enter coordinates manually if you'd rather not (London fallback if you do
+  neither). A manual button press during the session wins for the rest of
+  the ride.
 - Radar tail-light auto-mode: sets the rear radar's tail light to a day
   mode (default Day Flash) before sunset and a night mode (default Night
   Flash) after, from the same device location. Sets the mode by type, so

@@ -142,6 +142,16 @@ object RideLocationResolver {
     }
 
     /**
+     * Human-readable summary of a valid manual location for a settings/onboarding
+     * row (e.g. `"51.5074, -0.1278"`), or null when unset or invalid. Fixed
+     * `Locale.US` so the decimal mark is always a dot, matching the coordinate
+     * format the field accepts.
+     */
+    fun summary(lat: Double?, lon: Double?): String? = validManualLocation(lat, lon)?.let {
+        String.format(java.util.Locale.US, "%.4f, %.4f", it.first, it.second)
+    }
+
+    /**
      * Resolve the coordinate to use, applying the precedence chain and
      * re-validating every input (nothing here trusts stored/injected values).
      * Always returns a usable location; [Resolved.source] lets callers log

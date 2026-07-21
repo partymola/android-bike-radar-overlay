@@ -535,7 +535,7 @@
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 
     <!-- Settings → Light auto-mode (SettingsLights.kt) -->
-    <string name="settings_lights_loc_rationale">Used once per ride to compute accurate sunrise/sunset for the light auto-modes. Skip it and sunset is estimated for London.</string>
+    <string name="settings_lights_loc_rationale">Computes accurate sunrise/sunset for the light auto-modes. Grant it, or set your location manually below.</string>
     <string name="settings_lights_title">Light auto-mode</string>
     <string name="settings_lights_radar_section">Radar tail light</string>
     <string name="settings_lights_auto_switch">Auto-switch day/night</string>
@@ -549,6 +549,18 @@
     <string name="settings_lights_dashcam_row_title">Dashcam light</string>
     <string name="settings_lights_dashcam_no">You don\'t have one</string>
     <string name="settings_lights_dashcam_setup">Set up your dashcam</string>
+    <string name="settings_lights_loc_section">Location for sunrise/sunset</string>
+    <string name="settings_lights_loc_manual_row_title">Set location manually</string>
+    <string name="settings_lights_loc_manual_row_sub">Enter coordinates instead of using location</string>
+    <string name="settings_lights_loc_manual_set_title">Manual location</string>
+    <string name="settings_lights_loc_manual_clear">Clear manual location</string>
+    <string name="settings_coord_title">Enter coordinates</string>
+    <string name="settings_coord_lat_label">Latitude</string>
+    <string name="settings_coord_lon_label">Longitude</string>
+    <string name="settings_coord_lat_error">Latitude must be between -90 and 90</string>
+    <string name="settings_coord_lon_error">Longitude must be between -180 and 180</string>
+    <string name="settings_coord_hint">Tap ± for south or west. Long-press your spot in a maps app to copy its coordinates.</string>
+    <string name="settings_coord_save">Save</string>
 
     <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
          authors and SPDX licence names stay hardcoded as legal attribution. -->

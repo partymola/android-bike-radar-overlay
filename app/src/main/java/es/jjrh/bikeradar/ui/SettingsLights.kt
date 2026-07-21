@@ -15,13 +15,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditLocationAlt
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLightMode
+import es.jjrh.bikeradar.RideLocationResolver
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 
@@ -97,6 +104,15 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
     var locPermTick by rememberSaveable { mutableStateOf(0) }
     val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
 
+    var manualLat by rememberSaveable { mutableStateOf(prefs.manualLocationLat) }
+    var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
+    var showCoordDialog by rememberSaveable { mutableStateOf(false) }
+    val manualSummary = remember(manualLat, manualLon) {
+        RideLocationResolver.validManualLocation(manualLat, manualLon)?.let {
+            String.format(java.util.Locale.US, "%.4f, %.4f", it.first, it.second)
+        }
+    }
+
     SettingsLightsContent(
         onBack = { navController.popBackStack() },
         rearAuto = rearAuto,
@@ -120,10 +136,31 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
         onDashcamDayClick = { openPicker = LightPicker.DASHCAM_DAY },
         onDashcamNightClick = { openPicker = LightPicker.DASHCAM_NIGHT },
         onSetUpDashcam = { navController.navigate("settings/dashcam") },
+        manualLocationSummary = manualSummary,
+        onEnterCoordinates = { showCoordDialog = true },
+        onClearCoordinates = {
+            manualLat = null
+            manualLon = null
+            prefs.setManualLocation(null, null)
+        },
         locationCard = {
             PermissionCard(locSpec, locGranted, onChanged = { locPermTick++ })
         },
     )
+
+    if (showCoordDialog) {
+        CoordinateEntryDialog(
+            initialLat = manualLat,
+            initialLon = manualLon,
+            onSave = { lat, lon ->
+                manualLat = lat
+                manualLon = lon
+                prefs.setManualLocation(lat, lon)
+                showCoordDialog = false
+            },
+            onDismiss = { showCoordDialog = false },
+        )
+    }
 
     when (openPicker) {
         LightPicker.RADAR_DAY -> RadarModePickerDialog(
@@ -194,6 +231,9 @@ internal fun SettingsLightsContent(
     onDashcamDayClick: () -> Unit = {},
     onDashcamNightClick: () -> Unit = {},
     onSetUpDashcam: () -> Unit = {},
+    manualLocationSummary: String? = null,
+    onEnterCoordinates: () -> Unit = {},
+    onClearCoordinates: () -> Unit = {},
     locationCard: @Composable () -> Unit = {},
 ) {
     val br = LocalBrColors.current
@@ -303,15 +343,173 @@ internal fun SettingsLightsContent(
                 }
             }
 
-            if ((rearAuto || frontAuto) && !locGranted) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    locationCard()
-                }
+            if (rearAuto || frontAuto) {
+                LocationForSunsetSection(
+                    locGranted = locGranted,
+                    manualLocationSummary = manualLocationSummary,
+                    onEnterCoordinates = onEnterCoordinates,
+                    onClearCoordinates = onClearCoordinates,
+                    locationCard = locationCard,
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
+}
+
+/**
+ * Location source for the sunrise/sunset light auto-switch. Shown only while
+ * at least one light's auto-mode is on. Three states:
+ *  - manual coordinates set -> summary row (tap to edit) + a clear row;
+ *  - GPS not granted, no manual -> the grant-permission card AND a "set
+ *    coordinates" row, so the rider can pick either precise path;
+ *  - GPS granted, no manual -> nothing (device location already works).
+ * London is only the silent last resort when the rider configures neither.
+ */
+@Composable
+private fun LocationForSunsetSection(
+    locGranted: Boolean,
+    manualLocationSummary: String?,
+    onEnterCoordinates: () -> Unit,
+    onClearCoordinates: () -> Unit,
+    locationCard: @Composable () -> Unit,
+) {
+    val br = LocalBrColors.current
+    when {
+        manualLocationSummary != null -> {
+            SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
+            SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.Default.Place,
+                    iconTint = br.brand,
+                    title = stringResource(R.string.settings_lights_loc_manual_set_title),
+                    subtitle = manualLocationSummary,
+                    onClick = onEnterCoordinates,
+                    isLast = false,
+                )
+                SettingsRow(
+                    icon = Icons.Default.Delete,
+                    iconTint = br.fgMuted,
+                    title = stringResource(R.string.settings_lights_loc_manual_clear),
+                    subtitle = null,
+                    onClick = onClearCoordinates,
+                    chevron = false,
+                    isLast = true,
+                )
+            }
+        }
+        !locGranted -> {
+            SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                locationCard()
+            }
+            SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.Default.EditLocationAlt,
+                    iconTint = br.brand,
+                    title = stringResource(R.string.settings_lights_loc_manual_row_title),
+                    subtitle = stringResource(R.string.settings_lights_loc_manual_row_sub),
+                    onClick = onEnterCoordinates,
+                    isLast = true,
+                )
+            }
+        }
+        // GPS granted, no manual override: device location works; show nothing.
+    }
+}
+
+/** Tappable ± that flips a coordinate field's sign, so a minus is always
+ *  reachable - many soft keyboards' decimal pads omit the minus key, which
+ *  would otherwise lock out every rider west of Greenwich or south of the
+ *  equator. */
+@Composable
+private fun SignToggle(onToggle: () -> Unit) {
+    Text(
+        text = "±",
+        fontSize = 20.sp,
+        modifier = Modifier
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp),
+    )
+}
+
+/**
+ * Coordinate-entry dialog for a GPS-decliner. Every keystroke and paste flows
+ * through [RideLocationResolver.sanitizeCoordinateInput] (single leading `-`,
+ * digits, one `.`; comma and Unicode-minus normalised; length-capped), the
+ * fields are `singleLine` (no newlines), and Save is gated on
+ * [RideLocationResolver] validating both as finite and in range. The Composable
+ * never constructs a coordinate itself.
+ */
+@Composable
+private fun CoordinateEntryDialog(
+    initialLat: Double?,
+    initialLon: Double?,
+    onSave: (Double, Double) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val br = LocalBrColors.current
+    var latText by rememberSaveable { mutableStateOf(initialLat?.let { RideLocationResolver.formatCoordinate(it) } ?: "") }
+    var lonText by rememberSaveable { mutableStateOf(initialLon?.let { RideLocationResolver.formatCoordinate(it) } ?: "") }
+
+    val latVal = RideLocationResolver.parseCoordinate(latText)
+    val lonVal = RideLocationResolver.parseCoordinate(lonText)
+    val latOk = RideLocationResolver.isValidLat(latVal)
+    val lonOk = RideLocationResolver.isValidLon(lonVal)
+    val latError = latText.isNotBlank() && !latOk
+    val lonError = lonText.isNotBlank() && !lonOk
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_coord_title), fontSize = 16.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = latText,
+                    onValueChange = { latText = RideLocationResolver.sanitizeCoordinateInput(it) },
+                    label = { Text(stringResource(R.string.settings_coord_lat_label)) },
+                    singleLine = true,
+                    isError = latError,
+                    supportingText = if (latError) {
+                        { Text(stringResource(R.string.settings_coord_lat_error)) }
+                    } else {
+                        null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    trailingIcon = { SignToggle { latText = RideLocationResolver.toggleSign(latText) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = lonText,
+                    onValueChange = { lonText = RideLocationResolver.sanitizeCoordinateInput(it) },
+                    label = { Text(stringResource(R.string.settings_coord_lon_label)) },
+                    singleLine = true,
+                    isError = lonError,
+                    supportingText = if (lonError) {
+                        { Text(stringResource(R.string.settings_coord_lon_error)) }
+                    } else {
+                        null
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    trailingIcon = { SignToggle { lonText = RideLocationResolver.toggleSign(lonText) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.settings_coord_hint),
+                    color = br.fgMuted,
+                    fontSize = 12.sp,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (latVal != null && lonVal != null) onSave(latVal, lonVal) },
+                enabled = latOk && lonOk,
+            ) { Text(stringResource(R.string.settings_coord_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+    )
 }
 
 @Composable

@@ -66,6 +66,28 @@ class SettingsLightsSnapshotTest {
     }
 
     @Test
+    fun manualLocationSet() {
+        // GPS-decliner path: manual coordinates set -> summary row + clear row,
+        // no permission card. Synthetic coordinates (not a real location).
+        captureRoboImage {
+            UiTheme {
+                SettingsLightsContent(
+                    onBack = {},
+                    rearAuto = true,
+                    radarDay = RadarLightMode.DAY_FLASH,
+                    radarNight = RadarLightMode.NIGHT_FLASH,
+                    dashcamOwnership = DashcamOwnership.YES,
+                    frontAuto = true,
+                    dashcamDay = CameraLightMode.DAY_FLASH,
+                    dashcamNight = CameraLightMode.NIGHT_FLASH,
+                    locGranted = false,
+                    manualLocationSummary = "51.5074, -0.1278",
+                )
+            }
+        }
+    }
+
+    @Test
     fun bothOnLocationGranted() {
         captureRoboImage {
             UiTheme {

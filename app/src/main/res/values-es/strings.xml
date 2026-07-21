@@ -520,7 +520,7 @@
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
 
     <!-- Ajustes → Modo automático de luces (SettingsLights.kt) -->
-    <string name="settings_lights_loc_rationale">Se usa una vez por ruta para calcular con precisión el amanecer y el atardecer y ajustar los modos automáticos de luz. Si la omites, el atardecer se estima para Londres.</string>
+    <string name="settings_lights_loc_rationale">Calcula con precisión el amanecer y el atardecer para los modos automáticos de luz. Concédelo, o configura tu ubicación manualmente abajo.</string>
     <string name="settings_lights_title">Modo automático de luces</string>
     <string name="settings_lights_radar_section">Luz trasera del radar</string>
     <string name="settings_lights_auto_switch">Cambio automático día/noche</string>
@@ -534,6 +534,18 @@
     <string name="settings_lights_dashcam_row_title">Luz de la cámara</string>
     <string name="settings_lights_dashcam_no">No tienes</string>
     <string name="settings_lights_dashcam_setup">Configura tu cámara delantera</string>
+    <string name="settings_lights_loc_section">Ubicación para amanecer/atardecer</string>
+    <string name="settings_lights_loc_manual_row_title">Configurar ubicación</string>
+    <string name="settings_lights_loc_manual_row_sub">Introduce coordenadas en vez de usar la ubicación</string>
+    <string name="settings_lights_loc_manual_set_title">Ubicación manual</string>
+    <string name="settings_lights_loc_manual_clear">Quitar ubicación manual</string>
+    <string name="settings_coord_title">Introducir coordenadas</string>
+    <string name="settings_coord_lat_label">Latitud</string>
+    <string name="settings_coord_lon_label">Longitud</string>
+    <string name="settings_coord_lat_error">La latitud debe estar entre -90 y 90</string>
+    <string name="settings_coord_lon_error">La longitud debe estar entre -180 y 180</string>
+    <string name="settings_coord_hint">Pulsa ± para el sur o el oeste. Mantén pulsada tu ubicación en una app de mapas para copiar las coordenadas.</string>
+    <string name="settings_coord_save">Guardar</string>
 
     <!-- Ajustes → Licencias de código abierto (SettingsLicenses.kt). Los nombres
          de bibliotecas, autores y nombres de licencia SPDX quedan sin traducir como atribución legal. -->

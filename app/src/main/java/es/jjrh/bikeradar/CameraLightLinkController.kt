@@ -266,20 +266,21 @@ internal class CameraLightLinkController(
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
             val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-            val loc = LocationCache.current()
-            val (sunriseMs, sunsetMs) = if (loc != null) {
-                SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
-                    SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
-            } else {
-                // No location available (permission denied, or no last-known
-                // fix yet). Fall back to SunsetCalculator's London defaults.
-                SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
-            }
+            // Manual coordinates (if set) -> GPS last-known -> London. The
+            // resolver re-validates every input, so a corrupt pref can't reach
+            // the solar calc.
+            val resolved = RideLocationResolver.resolve(
+                prefs.manualLocationLat,
+                prefs.manualLocationLon,
+                LocationCache.current(),
+            )
+            val sunriseMs = SunsetCalculator.sunriseEpochMs(today, resolved.lat, resolved.lon)
+            val sunsetMs = SunsetCalculator.sunsetEpochMs(today, resolved.lat, resolved.lon)
             val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
             // Provenance only - never the coordinates. This line goes to release
-            // logcat via Log.i; 2-decimal lat/lon would localise the rider's
-            // ride-start to a ~1 km cell for anything with READ_LOGS.
-            val locLog = if (loc != null) "gps" else "London-fallback"
+            // logcat via Log.i; a lat/lon would localise the rider's ride-start
+            // to a ~1 km cell for anything with READ_LOGS.
+            val locLog = resolved.source
             val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
 
             // Same time-of-day scheduling as the radar tail light, via the shared

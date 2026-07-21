@@ -428,6 +428,51 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_LIGHT_NIGHT_MODE, v.name).apply()
         }
 
+    /** Rider-entered manual location (latitude) for the sunrise/sunset light
+     *  auto-mode, stored as exact [Double] bits. Null (key absent) = unset.
+     *  Feeds the GPS-decliner path only: [es.jjrh.bikeradar.RideLocationResolver]
+     *  prefers valid manual coordinates over a GPS fix over the London fallback,
+     *  so a rider who declines location can still get accurate light-switch
+     *  times without an approximate region guess. Raw Double bits so a boundary
+     *  value round-trips exactly; the resolver re-validates finiteness + range
+     *  on read, so a corrupt pref can never reach the solar calc. Set both or
+     *  neither - a single coordinate is not a point
+     *  ([es.jjrh.bikeradar.RideLocationResolver.validManualLocation] enforces
+     *  it). Deliberately NOT in [snapshot] / [flow]: it is read on demand by the
+     *  light controllers and the Settings screen, and a home coordinate should
+     *  not ride the app-wide reactive snapshot. */
+    val manualLocationLat: Double?
+        get() = if (sp.contains(KEY_MANUAL_LOCATION_LAT)) {
+            Double.fromBits(sp.getLong(KEY_MANUAL_LOCATION_LAT, 0L))
+        } else {
+            null
+        }
+
+    /** Longitude partner of [manualLocationLat]; see its KDoc for the storage,
+     *  precedence, and both-or-neither contract. */
+    val manualLocationLon: Double?
+        get() = if (sp.contains(KEY_MANUAL_LOCATION_LON)) {
+            Double.fromBits(sp.getLong(KEY_MANUAL_LOCATION_LON, 0L))
+        } else {
+            null
+        }
+
+    /** Write or clear BOTH manual coordinates in a SINGLE edit transaction.
+     *  Atomic on purpose: two separate `apply()`s could be interrupted by a
+     *  process death between them, leaving a hybrid pair (new latitude + stale
+     *  longitude) that the both-present check passes and the solar calc would
+     *  silently use. Pass a null for either to clear both. */
+    fun setManualLocation(lat: Double?, lon: Double?) {
+        val e = sp.edit()
+        if (lat == null || lon == null) {
+            e.remove(KEY_MANUAL_LOCATION_LAT).remove(KEY_MANUAL_LOCATION_LON)
+        } else {
+            e.putLong(KEY_MANUAL_LOCATION_LAT, lat.toRawBits())
+                .putLong(KEY_MANUAL_LOCATION_LON, lon.toRawBits())
+        }
+        e.apply()
+    }
+
     /** MAC of the radar the rider explicitly pinned for this bike, or null to
      *  use name-match. See [es.jjrh.bikeradar.RadarSelection]. */
     var radarMac: String?
@@ -734,6 +779,8 @@ class Prefs(context: Context) {
         appendLine("radar_light_auto_mode_enabled=$radarLightAutoModeEnabled")
         appendLine("radar_light_day_mode=$radarLightDayMode")
         appendLine("radar_light_night_mode=$radarLightNightMode")
+        // Presence only, never the coordinates - a manual location is the rider's home.
+        appendLine("manual_location_set=${manualLocationLat != null && manualLocationLon != null}")
         appendLine("radar_lateral_offset_cm=$radarLateralOffsetCm")
         appendLine("radar_firmware_rev=${radarFirmwareRev ?: "<unset>"}")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
@@ -785,6 +832,8 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LIGHT_AUTO_MODE = "radar_light_auto_mode_enabled"
         const val KEY_RADAR_LIGHT_DAY_MODE = "radar_light_day_mode"
         const val KEY_RADAR_LIGHT_NIGHT_MODE = "radar_light_night_mode"
+        const val KEY_MANUAL_LOCATION_LAT = "manual_location_lat"
+        const val KEY_MANUAL_LOCATION_LON = "manual_location_lon"
         const val KEY_RADAR_MAC = "radar_mac"
         const val KEY_RADAR_DISPLAY_NAME = "radar_display_name"
         const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"

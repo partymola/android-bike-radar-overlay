@@ -507,13 +507,17 @@ internal class RadarLinkController(
                 val controller = RadarLightController(gatt, queue)
                 val nowMs = System.currentTimeMillis()
                 val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-                val loc = LocationCache.current()
-                val (sunriseMs, sunsetMs) = if (loc != null) {
-                    SunsetCalculator.sunriseEpochMs(today, loc.first, loc.second) to
-                        SunsetCalculator.sunsetEpochMs(today, loc.first, loc.second)
-                } else {
-                    SunsetCalculator.sunriseEpochMs(today) to SunsetCalculator.sunsetEpochMs(today)
-                }
+                // Manual coordinates (if set) -> GPS last-known -> London. Log the
+                // source only, never the coordinates (a manual location is the
+                // rider's home).
+                val resolved = RideLocationResolver.resolve(
+                    prefs.manualLocationLat,
+                    prefs.manualLocationLon,
+                    LocationCache.current(),
+                )
+                val sunriseMs = SunsetCalculator.sunriseEpochMs(today, resolved.lat, resolved.lon)
+                val sunsetMs = SunsetCalculator.sunsetEpochMs(today, resolved.lat, resolved.lon)
+                Log.i(TAG, "radar light location source=${resolved.source}")
                 val night = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
                 val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, night, radarLightUserOverride)
                 suspend fun applyPhase(phase: LightAutoModeDecider.Phase) {

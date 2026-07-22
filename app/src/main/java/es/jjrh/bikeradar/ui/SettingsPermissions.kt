@@ -335,26 +335,40 @@ internal fun PermissionCardContent(
         // once set -> a satisfied value row; otherwise, when not granted, an
         // "or" divider and a peer outline button beneath the primary action.
         alternative?.let { alt ->
-            if (alt.summary != null) {
-                // When the permission is still ungranted, the "or" divider keeps
-                // the (above) Enable button and this value row reading as the two
-                // alternatives they are, rather than two unrelated stacked items.
-                if (!granted) {
+            when {
+                alt.summary != null -> {
+                    // When the permission is still ungranted, the "or" divider keeps
+                    // the (above) Enable button and this value row reading as the two
+                    // alternatives they are, rather than two unrelated stacked items.
+                    if (!granted) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PermissionOrDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                    } else {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    PermissionAlternativeValueRow(alt)
+                }
+                !granted -> {
+                    // Two peer ways to supply location: Enable (above) or coordinates.
                     Spacer(modifier = Modifier.height(8.dp))
                     PermissionOrDivider()
                     Spacer(modifier = Modifier.height(8.dp))
-                } else {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    PermissionOutlineButton(
+                        label = stringResource(alt.actionLabelRes),
+                        onClick = alt.onEnter,
+                    )
                 }
-                PermissionAlternativeValueRow(alt)
-            } else if (!granted) {
-                Spacer(modifier = Modifier.height(8.dp))
-                PermissionOrDivider()
-                Spacer(modifier = Modifier.height(8.dp))
-                PermissionOutlineButton(
-                    label = stringResource(alt.actionLabelRes),
-                    onClick = alt.onEnter,
-                )
+                else -> {
+                    // Permission granted, no manual override yet: still offer to
+                    // enter coordinates (manual coordinates win over GPS in the
+                    // resolver, so this is a usable override).
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PermissionOutlineButton(
+                        label = stringResource(alt.actionLabelRes),
+                        onClick = alt.onEnter,
+                    )
+                }
             }
         }
     }

@@ -90,7 +90,6 @@ class SettingsLightsSnapshotTest {
                     dashcamDay = CameraLightMode.DAY_FLASH,
                     dashcamNight = CameraLightMode.NIGHT_FLASH,
                     locGranted = false,
-                    manualLocationSummary = "51.5074, -0.1278",
                     locationCard = {
                         PermissionCardContent(
                             spec = location,
@@ -121,7 +120,6 @@ class SettingsLightsSnapshotTest {
                     dashcamDay = CameraLightMode.DAY_FLASH,
                     dashcamNight = CameraLightMode.NIGHT_FLASH,
                     locGranted = true,
-                    manualLocationSummary = "51.5074, -0.1278",
                     locationCard = {
                         PermissionCardContent(
                             spec = location,
@@ -150,6 +148,15 @@ class SettingsLightsSnapshotTest {
                     dashcamDay = CameraLightMode.DAY_FLASH,
                     dashcamNight = CameraLightMode.LOW,
                     locGranted = true,
+                    locationCard = {
+                        PermissionCardContent(
+                            spec = location,
+                            granted = true,
+                            permanentlyDenied = false,
+                            onAction = {},
+                            alternative = locationAlternative(summary = null),
+                        )
+                    },
                 )
             }
         }
@@ -191,6 +198,15 @@ class SettingsLightsSnapshotTest {
                     dashcamDay = CameraLightMode.DAY_FLASH,
                     dashcamNight = CameraLightMode.NIGHT_FLASH,
                     locGranted = true,
+                    locationCard = {
+                        PermissionCardContent(
+                            spec = location,
+                            granted = true,
+                            permanentlyDenied = false,
+                            onAction = {},
+                            alternative = locationAlternative(summary = null),
+                        )
+                    },
                 )
             }
         }
@@ -210,6 +226,15 @@ class SettingsLightsSnapshotTest {
                     dashcamDay = CameraLightMode.DAY_FLASH,
                     dashcamNight = CameraLightMode.NIGHT_FLASH,
                     locGranted = true,
+                    locationCard = {
+                        PermissionCardContent(
+                            spec = location,
+                            granted = true,
+                            permanentlyDenied = false,
+                            onAction = {},
+                            alternative = locationAlternative(summary = null),
+                        )
+                    },
                 )
             }
         }

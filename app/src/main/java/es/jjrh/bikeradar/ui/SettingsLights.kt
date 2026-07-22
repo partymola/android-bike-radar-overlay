@@ -133,7 +133,6 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
         onDashcamDayClick = { openPicker = LightPicker.DASHCAM_DAY },
         onDashcamNightClick = { openPicker = LightPicker.DASHCAM_NIGHT },
         onSetUpDashcam = { navController.navigate("settings/dashcam") },
-        manualLocationSummary = manualSummary,
         locationCard = {
             PermissionCard(
                 spec = locSpec,
@@ -237,7 +236,6 @@ internal fun SettingsLightsContent(
     onDashcamDayClick: () -> Unit = {},
     onDashcamNightClick: () -> Unit = {},
     onSetUpDashcam: () -> Unit = {},
-    manualLocationSummary: String? = null,
     locationCard: @Composable () -> Unit = {},
 ) {
     val br = LocalBrColors.current
@@ -347,13 +345,12 @@ internal fun SettingsLightsContent(
                 }
             }
 
-            // Location for the sunrise/sunset calc: shown while a light auto-mode
-            // is on and either location is not granted or manual coordinates are
-            // set. The permission card itself carries the "grant or enter
-            // coordinates" choice and the manual-set value row; London is the
-            // silent last resort if the rider configures neither. Hidden once GPS
-            // is granted with no manual override (nothing to configure).
-            if ((rearAuto || frontAuto) && (manualLocationSummary != null || !locGranted)) {
+            // Location for the sunrise/sunset calc, shown whenever a light
+            // auto-mode is on. The permission card carries the whole "grant or
+            // enter coordinates" choice, a manual-override entry even when
+            // granted, and the manual-set value row; London is the silent last
+            // resort if the rider configures neither.
+            if (rearAuto || frontAuto) {
                 SettingsSectionLabel(stringResource(R.string.settings_lights_loc_section))
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     locationCard()

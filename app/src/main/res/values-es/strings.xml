@@ -547,7 +547,7 @@
     <string name="settings_coord_lat_error">La latitud debe estar entre -90 y 90</string>
     <string name="settings_coord_lon_error">La longitud debe estar entre -180 y 180</string>
     <string name="settings_coord_hint">Pulsa ± para el sur o el oeste. Mantén pulsada tu ubicación en una app de mapas para copiar las coordenadas.</string>
-    <string name="settings_coord_sign_toggle">Cambiar a negativo, para el sur o el oeste</string>
+    <string name="settings_coord_sign_toggle">Signo negativo (sur u oeste)</string>
     <string name="settings_coord_save">Guardar</string>
 
     <!-- Ajustes → Licencias de código abierto (SettingsLicenses.kt). Los nombres

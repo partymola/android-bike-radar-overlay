@@ -599,6 +599,15 @@
     <string name="debug_stop_synthetic">Detener sintético</string>
     <string name="debug_section_service_control">Control del servicio</string>
     <string name="debug_force_radar_reconnect">Forzar reconexión del radar</string>
+    <string name="debug_section_cue_preview">Previsualizar avisos</string>
+    <string name="debug_cue_beep1">Paso cercano (1 pitido)</string>
+    <string name="debug_cue_beep2">Paso cercano (2 pitidos)</string>
+    <string name="debug_cue_beep3">Paso cercano (3 pitidos)</string>
+    <string name="debug_cue_clear">Vía libre</string>
+    <string name="debug_cue_urgent">Impacto inminente</string>
+    <string name="debug_cue_dropped">Radar perdido</string>
+    <string name="debug_cue_reconnected">Radar reconectado</string>
+    <string name="debug_cue_preview_hint">Se reproduce a través del servicio activo. Si no suena, inícialo primero.</string>
     <string name="debug_section_capture_logging">Registro de capturas</string>
     <string name="debug_write_capture_logs_title">Escribir registros de capturas</string>
     <string name="debug_write_capture_logs_subtitle">Desactivado por defecto. Registra cada paquete del radar, notificación BLE e instantánea de la eBike con tiempos exactos - útil para informes de errores, pero son datos de nivel de seguimiento de rutas que se guardan en el teléfono. Surte efecto en la siguiente conexión del radar (el registro de la ruta actual termina igualmente).</string>

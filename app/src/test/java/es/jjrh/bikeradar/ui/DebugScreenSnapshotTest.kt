@@ -67,6 +67,17 @@ class DebugScreenSnapshotTest {
     }
 
     @Test
+    fun cuePreview() {
+        captureRoboImage {
+            UiTheme {
+                Column(Modifier.background(LocalBrColors.current.bg)) {
+                    DebugCuePreview(onPreview = {})
+                }
+            }
+        }
+    }
+
+    @Test
     fun replayRunning() {
         captureRoboImage {
             UiTheme {

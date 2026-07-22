@@ -162,7 +162,7 @@ class AlertBeeper(
     // instead hands the pending restore off to the walk-away's own stop().
     // Defaults to "never active" for tests and beeper-only hosts.
     private val walkAwayOverrideActive: () -> Boolean = { false },
-) {
+) : CuePlayer {
 
     private val sampleRate = 44100
     private val beepFreqHz = 3200f
@@ -321,7 +321,7 @@ class AlertBeeper(
         repairLeakedAlarmFloor()
     }
 
-    fun play(beeps: Int, lateralPos: Float = 0f) {
+    override fun play(beeps: Int, lateralPos: Float) {
         val idx = beeps - 1
         if (idx !in 0..2) return
         val durationMs = beepDurationMs.getOrNull(idx) ?: return
@@ -333,7 +333,7 @@ class AlertBeeper(
         }
     }
 
-    fun playClear() {
+    override fun playClear() {
         executor.execute {
             if (suppressForCall()) return@execute
             report("clear") {
@@ -344,7 +344,7 @@ class AlertBeeper(
         }
     }
 
-    fun playUrgent(lateralPos: Float = 0f) {
+    override fun playUrgent(lateralPos: Float) {
         executor.execute {
             if (suppressForCall()) return@execute
             report("urgent") {
@@ -357,7 +357,7 @@ class AlertBeeper(
      *  rear awareness is lost. Non-directional (mono). A low 3-pulse, a
      *  distinct count + timbre-class from the sharp/high threat beeps - a
      *  status cue, never a threat. */
-    fun playRadarDropped() {
+    override fun playRadarDropped() {
         executor.execute {
             if (suppressForCall()) return@execute
             report("radar_drop") {
@@ -373,7 +373,7 @@ class AlertBeeper(
      *  pitch. Non-directional (mono). Fired once
      *  per down-episode, and only after a drop cue was raised (the caller gates
      *  this via [RadarDropDecider]); a cold-start connect stays silent. */
-    fun playRadarReconnected() {
+    override fun playRadarReconnected() {
         executor.execute {
             if (suppressForCall()) return@execute
             report("radar_reconnect") {

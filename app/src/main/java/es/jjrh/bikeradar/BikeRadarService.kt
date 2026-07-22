@@ -633,6 +633,7 @@ class BikeRadarService : Service() {
                     radarLink.probeWriteRadarLight(intent.getIntExtra(EXTRA_RADAR_LIGHT_NN, -1))
                 }
             }
+            ACTION_PREVIEW_CUE -> playPreviewCue(intent.getStringExtra(EXTRA_CUE), alertBeeper)
         }
         return START_STICKY
     }
@@ -1138,6 +1139,17 @@ class BikeRadarService : Service() {
         const val ACTION_READ_DEVICE = "es.jjrh.bikeradar.READ_DEVICE"
         const val ACTION_UPDATE_NOTIF = "es.jjrh.bikeradar.UPDATE_NOTIF"
         const val ACTION_FORCE_RECONNECT = "es.jjrh.bikeradar.FORCE_RECONNECT"
+
+        // Dev-only cue audition (Debug screen -> warm beeper). Cue-name extras.
+        const val ACTION_PREVIEW_CUE = "es.jjrh.bikeradar.PREVIEW_CUE"
+        const val EXTRA_CUE = "cue"
+        const val CUE_BEEP_1 = "beep1"
+        const val CUE_BEEP_2 = "beep2"
+        const val CUE_BEEP_3 = "beep3"
+        const val CUE_CLEAR = "clear"
+        const val CUE_URGENT = "urgent"
+        const val CUE_DROPPED = "dropped"
+        const val CUE_RECONNECTED = "reconnected"
         const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
 

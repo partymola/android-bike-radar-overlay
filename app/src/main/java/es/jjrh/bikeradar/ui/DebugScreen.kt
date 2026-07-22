@@ -233,6 +233,17 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                 )
             }
 
+            DebugCuePreview(
+                onPreview = { cue ->
+                    ctx.startService(
+                        Intent(ctx, BikeRadarService::class.java).apply {
+                            action = BikeRadarService.ACTION_PREVIEW_CUE
+                            putExtra(BikeRadarService.EXTRA_CUE, cue)
+                        },
+                    )
+                },
+            )
+
             // Capture logging master switch (opt-in, off by default). Placed
             // high - above the niche dev tools below - because it (and the logs
             // it produces) is the most-used Debug surface.
@@ -808,6 +819,43 @@ private fun DbgPrimaryButton(
             color = if (active) br.bg else br.fg,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/** Dev cue-audition section (stateless leaf): a button per alert cue that calls
+ *  [onPreview] with the cue-name constant. The caller routes it to the running
+ *  service's warm beeper. Lets the rider compare the radar-reconnect pulse to
+ *  the drop and close-pass cues without staging a real mid-ride drop. */
+@Composable
+internal fun DebugCuePreview(onPreview: (String) -> Unit) {
+    val br = LocalBrColors.current
+    SettingsSectionLabel(stringResource(R.string.debug_section_cue_preview))
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val cues = listOf(
+            R.string.debug_cue_beep1 to BikeRadarService.CUE_BEEP_1,
+            R.string.debug_cue_beep2 to BikeRadarService.CUE_BEEP_2,
+            R.string.debug_cue_beep3 to BikeRadarService.CUE_BEEP_3,
+            R.string.debug_cue_clear to BikeRadarService.CUE_CLEAR,
+            R.string.debug_cue_urgent to BikeRadarService.CUE_URGENT,
+            R.string.debug_cue_dropped to BikeRadarService.CUE_DROPPED,
+            R.string.debug_cue_reconnected to BikeRadarService.CUE_RECONNECTED,
+        )
+        for ((labelRes, cue) in cues) {
+            DbgGhostButton(
+                text = stringResource(labelRes),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onPreview(cue) },
+            )
+        }
+        Text(
+            text = stringResource(R.string.debug_cue_preview_hint),
+            color = br.fgMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
 }

@@ -614,6 +614,15 @@
     <string name="debug_stop_synthetic">Stop Synthetic</string>
     <string name="debug_section_service_control">Service control</string>
     <string name="debug_force_radar_reconnect">Force radar reconnect</string>
+    <string name="debug_section_cue_preview">Preview cues</string>
+    <string name="debug_cue_beep1">Close pass (1 beep)</string>
+    <string name="debug_cue_beep2">Close pass (2 beeps)</string>
+    <string name="debug_cue_beep3">Close pass (3 beeps)</string>
+    <string name="debug_cue_clear">All-clear</string>
+    <string name="debug_cue_urgent">Urgent impact</string>
+    <string name="debug_cue_dropped">Radar dropped</string>
+    <string name="debug_cue_reconnected">Radar reconnected</string>
+    <string name="debug_cue_preview_hint">Plays through the running service. If silent, start the service first.</string>
     <string name="debug_section_capture_logging">Capture logging</string>
     <string name="debug_write_capture_logs_title">Write capture logs</string>
     <string name="debug_write_capture_logs_subtitle">Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride\'s log finishes either way).</string>

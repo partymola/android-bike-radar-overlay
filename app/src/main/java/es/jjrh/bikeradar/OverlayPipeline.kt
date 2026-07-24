@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.data.PrefsSnapshot
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,6 +78,16 @@ internal class OverlayPipeline(
      *  dashcam freshness gates, the capture-log lines, and the close-pass emit
      *  cooldown (whose `now` is also the emitted unix-epoch event timestamp). */
     private val clockMono: () -> Long = { SystemClock.elapsedRealtime() },
+    /** Dispatcher for the HA publish calls, which do blocking network I/O
+     *  off the collect loop. Injectable so a test can put them on its own
+     *  scheduler: under `runTest` a real dispatcher runs on wall-clock
+     *  threads while the test's `delay` advances virtual time instantly, so
+     *  a test waiting on a publish can time out before the publish has had
+     *  any real time to run. Typed as a dispatcher, not a bare
+     *  [kotlin.coroutines.CoroutineContext]: a context carrying no dispatcher
+     *  would inherit `Dispatchers.Main` from the enclosing collect loop and
+     *  put blocking network I/O on the main thread with nothing to catch it. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     // Cross-connection state. Sampling cadences must NOT reset on every
@@ -213,7 +224,7 @@ internal class OverlayPipeline(
                         val radarSlug = radarMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }
                         if (cpCfg.enabled && ha().isConfigured() && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {
                             closePassDiscoveryInFlight = true
-                            launch(Dispatchers.IO) {
+                            launch(ioDispatcher) {
                                 val ok = ha().publishClosePassDiscovery(radarSlug, deviceName)
                                 if (ok) {
                                     closePassDiscoveryPublished = true
@@ -238,7 +249,7 @@ internal class OverlayPipeline(
                             ClosePassStateBus.increment(cpEvents.size)
                             for (ev in cpEvents) rideStats().observeClosePass(ev)
                             if (radarSlug != null && ha().isConfigured()) {
-                                launch(Dispatchers.IO) {
+                                launch(ioDispatcher) {
                                     for (ev in cpEvents) {
                                         val ok = ha().publishClosePassEvent(radarSlug, closePassJson(ev))
                                         if (!ok) Log.w(TAG, "close-pass publish failed")

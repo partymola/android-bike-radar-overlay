@@ -13,6 +13,7 @@ import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -87,6 +88,10 @@ class RadarLinkControllerHarnessTest {
 
     private fun overlayPipeline(prefs: Prefs): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
+        // Inline, like the other pipeline tests: this harness never reaches the
+        // publish path, but leaving a real IO dispatcher here is the shape that
+        // made the close-pass test flaky.
+        ioDispatcher = Dispatchers.Unconfined,
         ha = { HaClient("", "") },
         beeper = beeper,
         overlayHost = FakeOverlayHost(app),

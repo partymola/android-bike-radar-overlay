@@ -193,6 +193,7 @@ class OverlayPipelineDrivingTest {
         turnSensorStop: () -> Unit = {},
         clog: (String) -> Unit = {},
         clockMono: (() -> Long)? = null,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined,
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
         ha = ha,
@@ -212,6 +213,11 @@ class OverlayPipelineDrivingTest {
         macToSlug = macToSlug,
         clog = clog,
         clockMono = clockMono ?: { SystemClock.elapsedRealtime() },
+        // Publishes run inline on the test's own thread. On a real dispatcher
+        // they run on wall-clock threads while runTest's virtual clock races
+        // ahead, so a test that waits for one can time out before it has had
+        // any real time to execute.
+        ioDispatcher = ioDispatcher,
     )
 
     @Test
@@ -424,14 +430,12 @@ class OverlayPipelineDrivingTest {
             val job = pipeline.attach(this, "TestRadar")
             runCurrent()
             driveOneOvertake()
-            val published = withTimeoutOrNull(2_000) {
-                while (ha.eventCalls.get() == 0) {
-                    runCurrent()
-                    kotlinx.coroutines.delay(10)
-                }
-                true
-            }
-            assertEquals("configured HA must get the close-pass event publish", true, published)
+            runCurrent()
+            assertEquals(
+                "configured HA must get the close-pass event publish",
+                1,
+                ha.eventCalls.get(),
+            )
             assertTrue("discovery must publish once HA is configured", ha.discoveryCalls.get() >= 1)
             job.cancel()
             job.join()

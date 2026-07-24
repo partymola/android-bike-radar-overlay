@@ -433,7 +433,11 @@ class RadarDropDeciderTest {
             count = d.cueCount
             t += cadence
         }
-        assertEquals(RadarDropDecider.MAX_LATCH_ONLY_CUES, count)
+        // Literal, not the constant: reading MAX_LATCH_ONLY_CUES here would let
+        // it drop to 0 (cue suppressed from the first firing - a dead radar
+        // reading as all-clear) with this test still green. The literal makes a
+        // change to the cap break the test deliberately.
+        assertEquals(3, count)
         val after = RadarDropDecider.decide(
             radarEverLive = true,
             radarDownForMs = threshold + (t - now),

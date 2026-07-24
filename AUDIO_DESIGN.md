@@ -194,15 +194,23 @@ so the cue still sounds once the server is back.
 ## Stereo panning (experimental, off by default)
 
 When enabled, the close-pass beep and the urgent cue bias toward the threat's
-side to give a pre-attentive "which side" cue that saves a head-check. The pan is
-hard (full deflection mutes the opposite channel), which is safe because the
-sound always comes from the phone's two built-in speakers, both mounted on the
-bike, so there is no silent-ear risk. On headphone-class routes the channel
-labels travel intact; on the built-in speaker it only helps in landscape (the two
-speakers are far enough apart there) and the app compensates for phone rotation
-so the cue reaches the correct ear. Portrait and unknown routes fall back to
-mono. It is default-off because its value depends on assumptions about
-localisation that need on-road validation before it becomes a default.
+side to give a pre-attentive "which side" cue that saves a head-check. The
+deflection is strong - a ~3 dB bias was tried first and could not be localised -
+but the far channel is floored rather than silenced. Headphone-class routes are a
+supported pan path, and a rider wearing a single earbud cannot be detected from
+an app: a wireless pair presents as one output, and wear state lives in the bud's
+own firmware. Muting a channel outright would leave that rider with no cue at all
+for threats on the missing side while still hearing every centred all-clear,
+which is a worse picture than no panning at all. What the floor gives up is the
+rest of the channel difference: the two ears differ by about 12 dB rather than
+by everything, still four times the 3 dB that proved too subtle.
+
+On headphone-class routes the channel labels travel intact; on the built-in
+speaker panning only helps in landscape (the two speakers are far enough apart
+there) and the app compensates for phone rotation so the cue reaches the correct
+ear. Portrait and unknown routes fall back to mono. It is default-off because its
+value depends on assumptions about localisation that need on-road validation
+before it becomes a default.
 
 ## The alarm-system frame, and the non-claim
 

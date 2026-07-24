@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import androidx.annotation.VisibleForTesting
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.math.PI
@@ -91,9 +92,13 @@ import kotlin.math.sin
  *
  * Portrait orientation (ROTATION_0 / ROTATION_180) plays mono - the two
  * speakers are physically close together in portrait, no usable
- * lateralisation. Unknown routes also fall back to mono. The pan is hard
- * (full deflection mutes the opposite channel); safe because both phone
- * speakers are on the bike. Clear chime is always centred (not directional).
+ * lateralisation. Unknown routes also fall back to mono. The pan is strong
+ * but the far channel is floored at [FAR_CHANNEL_FLOOR] rather than muted,
+ * so the pan itself never zeroes a channel (see [computePan]; the rider's
+ * volume still scales both, and whether the floored channel is loud enough
+ * to notice is a separate, unmeasured question - see the constant). Clear
+ * chime is always
+ * centred (not directional).
  *
  * Failure honesty + self-healing: audio is the primary interface, so this
  * class must never die silently. [onCue] fires only AFTER a play attempt
@@ -111,7 +116,7 @@ import kotlin.math.sin
  * The pan-bucket tracks (one stereo track per pannable cue per bucket) are
  * built lazily on the first panned play, not up front: panning is an
  * experimental default-off flag, and the 20 bucket tracks would otherwise
- * triple this class's permanent AudioTrack footprint - a real cost on
+ * near-quadruple this class's permanent AudioTrack footprint - a real cost on
  * devices with tight per-output mixer track limits.
  */
 class AlertBeeper(
@@ -168,6 +173,12 @@ class AlertBeeper(
     // instead hands the pending restore off to the walk-away's own stop().
     // Defaults to "never active" for tests and beeper-only hosts.
     private val walkAwayOverrideActive: () -> Boolean = { false },
+    // Builds one pan-bucket track from already-interleaved stereo PCM. The
+    // only seam that makes [buildBucketRow]'s slot-to-bucket mapping
+    // observable: Robolectric cannot read an AudioTrack's samples back, so a
+    // test substitutes this to capture what PCM each row slot was filled
+    // with. Production always leaves this null and uses the real builder.
+    private val stereoTrackFactory: ((ShortArray) -> AudioTrack)? = null,
 ) : CuePlayer {
 
     private val sampleRate = 44100
@@ -475,15 +486,60 @@ class AlertBeeper(
         }
     }
 
-    /** Lazy pan-bucket row for beep cue [idx], built on first panned use. */
-    private fun beepBucketRow(idx: Int): Array<AudioTrack> = beepBucketRows[idx] ?: Array(PAN_BUCKETS) { b ->
-        makeStereoTrack(beepPcm[idx], bucketScales[b].first, bucketScales[b].second)
-    }.also { beepBucketRows[idx] = it }
+    /** Lazy pan-bucket row for beep cue [idx], built on first panned use.
+     *  Executor-confined; call only from the playback executor, or the lazy
+     *  build races [releaseAllTracks] and orphans a row. Internal so a test
+     *  can hold the row and compare track identity against what a cue plays -
+     *  Robolectric cannot read an [AudioTrack]'s samples, and identity plus
+     *  [buildBucketRow]'s ordering is what catches a cue sent to the wrong ear. */
+    @VisibleForTesting
+    internal fun beepBucketRow(idx: Int): Array<AudioTrack> {
+        beepBucketRows[idx]?.let { return it }
+        return buildBucketRow(beepPcm[idx]).also { beepBucketRows[idx] = it }
+    }
 
-    /** Lazy pan-bucket row for the urgent cue, built on first panned use. */
-    private fun urgentBucketRow(): Array<AudioTrack> = urgentBucketRow ?: Array(PAN_BUCKETS) { b ->
-        makeStereoTrack(urgentPcm, bucketScales[b].first, bucketScales[b].second)
-    }.also { urgentBucketRow = it }
+    /** Lazy pan-bucket row for the urgent cue, built on first panned use.
+     *  Internal AND executor-confined on the same terms as [beepBucketRow]:
+     *  wiring the urgent cue to the beep row would ship the urgent warning
+     *  with the awareness timbre - an alarm-class swap - and nothing in the
+     *  suite reaches it without this. */
+    @VisibleForTesting
+    internal fun urgentBucketRow(): Array<AudioTrack> {
+        urgentBucketRow?.let { return it }
+        return buildBucketRow(urgentPcm).also { urgentBucketRow = it }
+    }
+
+    /**
+     * One cue's row of pre-panned tracks, bucket 0 first.
+     *
+     * The row's index mapping lives here and nowhere else: slot `b` carries
+     * bucket `b`'s PCM, and [playPanned] indexes the row with
+     * [nearestPanBucket], so bucket order is the contract between them. A
+     * reversed or offset subscript here puts every panned cue on the wrong
+     * ear, which is the hazard the whole pan path exists to avoid, so the
+     * build goes through an injectable factory - production uses
+     * [makeStereoTrack]; a test substitutes one to read back the PCM each
+     * slot was filled with, otherwise unobservable under Robolectric.
+     */
+    private fun buildBucketRow(mono: ShortArray): Array<AudioTrack> {
+        val make = stereoTrackFactory ?: ::makeStereoTrack
+        return Array(PAN_BUCKETS) { b -> make(bucketRowPcm(mono, b)) }
+    }
+
+    /**
+     * The stereo PCM a pre-built bucket track is filled with: [mono] scaled by
+     * bucket [bucket]'s baked L/R pair.
+     *
+     * Every pannable cue routes its whole row through here, so the mapping of
+     * bucket scale to channel exists in exactly one place - and it is the last
+     * point before the track where that mapping is still readable, since
+     * Robolectric cannot read back an [AudioTrack]'s samples.
+     */
+    @VisibleForTesting
+    internal fun bucketRowPcm(mono: ShortArray, bucket: Int): ShortArray {
+        val (left, right) = bucketScales[bucket]
+        return interleaveStereo(mono, left, right)
+    }
 
     fun setVolumePct(pct: Int) {
         volumePct = pct.coerceIn(0, 100)
@@ -743,20 +799,34 @@ class AlertBeeper(
     }
 
     /**
-     * Hard pan formula on [lateralPos] in [-1, +1]: full deflection mutes
-     * the opposite channel.
-     *  -1 -> (1.0, 0.0) full left
-     *   0 -> (1.0, 1.0) centred (both channels full)
-     *  +1 -> (0.0, 1.0) full right
-     * Hard rather than capped because the audio always comes from the
-     * phone's two built-in speakers (never headphones), so there is no
-     * silent-ear risk - both speakers are on the bike. The previous ~3 dB
-     * bias was too subtle to localise.
+     * Pan formula on [lateralPos] in [-1, +1]. The far channel falls
+     * linearly and then holds at [FAR_CHANNEL_FLOOR] - it is never silenced.
+     *  -1 -> (1.0, FLOOR) full left
+     *   0 -> (1.0, 1.0)    centred (both channels full)
+     *  +1 -> (FLOOR, 1.0)  full right
+     *
+     * A ~3 dB bias was tried first and was too subtle to localise on the
+     * built-in speakers, so the deflection is deliberately strong. It is not
+     * total, because [HEADPHONE_TYPES] routes are a supported pan path and a
+     * rider wearing a single earbud cannot be detected: a TWS pair presents
+     * as one sink, and wear state lives in the bud's own firmware. Muting a
+     * channel outright would mean that rider hears nothing at all for
+     * threats on the missing side, while still hearing every centred
+     * all-clear - a worse picture than no panning. `resolvePan` never returns
+     * a stereo channel below [FAR_CHANNEL_FLOOR] scaled by the rider's volume
+     * gain (`noResolvedPanChannelIsEverSilent` sweeps it).
+     *
+     * The floor holds on the built-in-speaker path too. There it trades the
+     * whole channel difference for ~12 dB, which is still four times the
+     * 3 dB bias that proved too subtle to localise.
+     *
+     * [lateralPos] saturates at [RadarV2Decoder.LATERAL_FULL_M], so full
+     * deflection is every target a lane or more over, not a rare extreme.
      */
     internal fun computePan(lateralPos: Float): Pair<Float, Float> {
         val clamped = lateralPos.coerceIn(-1f, 1f)
-        val left = (1f - clamped).coerceAtMost(1f)
-        val right = (1f + clamped).coerceAtMost(1f)
+        val left = (1f - clamped).coerceIn(FAR_CHANNEL_FLOOR, 1f)
+        val right = (1f + clamped).coerceIn(FAR_CHANNEL_FLOOR, 1f)
         return left to right
     }
 
@@ -777,34 +847,44 @@ class AlertBeeper(
         durationMs: Int,
         lateralPos: Float,
     ): Boolean {
-        val track: AudioTrack
-        val level: Float
-        when (
-            val result = resolvePan(
-                lateralPos = lateralPos,
-                monoGain = currentMonoGain(),
-                panningEnabled = panningEnabled,
-                invertLR = invertLR,
-                hasHeadphoneRoute = hasHeadphoneRoute,
-                // No headphone present implies the built-in speaker is the
-                // active route (always present in `getDevices(GET_OUTPUTS)`
-                // on any phone). The pan logic only fires for it in
-                // landscape; portrait falls through to mono inside resolvePan.
-                builtinSpeakerActive = !hasHeadphoneRoute,
-                rotation = rotationProvider(),
-            )
-        ) {
-            is PanResult.Mono -> {
-                track = monoTrack
-                level = result.gain
-            }
-            is PanResult.Stereo -> {
-                track = buckets()[nearestPanBucket(result.left, result.right)]
-                level = maxOf(result.left, result.right)
-            }
-        }
+        val result = resolvePan(
+            lateralPos = lateralPos,
+            monoGain = currentMonoGain(),
+            panningEnabled = panningEnabled,
+            invertLR = invertLR,
+            hasHeadphoneRoute = hasHeadphoneRoute,
+            // No headphone present implies the built-in speaker is the
+            // active route (always present in `getDevices(GET_OUTPUTS)`
+            // on any phone). The pan logic only fires for it in
+            // landscape; portrait falls through to mono inside resolvePan.
+            builtinSpeakerActive = !hasHeadphoneRoute,
+            rotation = rotationProvider(),
+        )
+        val (track, level) = resolvePlayback(result, monoTrack, buckets)
         track.setVolume(level)
         return playWithFocus(track, durationMs)
+    }
+
+    /**
+     * The track and volume a resolved pan plays as: the plain mono track at
+     * its gain, or the nearest pre-built bucket at the louder resolved
+     * channel. Each bucket's peak channel is normalised to 1.0, so playing the
+     * chosen bucket at that level reproduces the balance [resolvePan] decided.
+     *
+     * This is the only path by which the rider's volume reaches a panned cue -
+     * [applyVolume]'s pre-set is overwritten on every play - and the only place
+     * the chosen track and its level are bound together, so it is pulled out
+     * where a test can read both back (`panPlaybackBindsTrackToItsLevel`).
+     */
+    @VisibleForTesting
+    internal fun resolvePlayback(
+        result: PanResult,
+        monoTrack: AudioTrack,
+        buckets: () -> Array<AudioTrack>,
+    ): Pair<AudioTrack, Float> = when (result) {
+        is PanResult.Mono -> monoTrack to result.gain
+        is PanResult.Stereo ->
+            buckets()[nearestPanBucket(result.left, result.right)] to maxOf(result.left, result.right)
     }
 
     /**
@@ -1036,12 +1116,12 @@ class AlertBeeper(
     }
 
     /**
-     * Stereo STATIC track from a mono cue buffer, panned by [interleaveStereo].
-     * Each pan bucket is a separate pre-built track - this is how panning is
-     * applied without the deprecated per-channel setStereoVolume.
+     * Stereo STATIC track from an already-interleaved buffer ([bucketRowPcm]
+     * bakes the pan). Each pan bucket is a separate pre-built track - this is
+     * how panning is applied without the deprecated per-channel
+     * setStereoVolume.
      */
-    private fun makeStereoTrack(mono: ShortArray, leftScale: Float, rightScale: Float): AudioTrack {
-        val stereo = interleaveStereo(mono, leftScale, rightScale)
+    private fun makeStereoTrack(stereo: ShortArray): AudioTrack {
         val minBuf = AudioTrack.getMinBufferSize(
             sampleRate,
             AudioFormat.CHANNEL_OUT_STEREO,
@@ -1163,7 +1243,7 @@ class AlertBeeper(
          *  to hammer an audioserver that is still restarting (recovery is
          *  typically 1-5 s), short enough that the primary alert channel is
          *  not left visual-only for long after the server returns - a
-         *  rebuild is cheap (8 small tracks from retained PCM). */
+         *  rebuild is cheap (7 small tracks from retained PCM). */
         internal const val REBUILD_MIN_INTERVAL_MS = 3_000L
 
         /** Single-pulse duration of the radar-reconnect cue, in ms. Doubles as
@@ -1174,6 +1254,24 @@ class AlertBeeper(
          *  abandoned. Covers AudioTrack finish latency and gives media
          *  apps a clean restore window. */
         private const val ABANDON_SAFETY_MARGIN_MS = 50
+
+        /** Quietest the far channel may be driven, as a linear gain scale
+         *  (~-12 dB). Keeps most of the deflection while keeping the cue
+         *  present in both ears, because a single worn earbud is not
+         *  detectable from an app (see [computePan]).
+         *
+         *  Strictly positive is the invariant, pinned by
+         *  `farChannelFloorIsAboveZeroAndNotVanishing` - zero here silently
+         *  restores the muting this floor exists to remove, and every other
+         *  assertion in the pan suite reads this constant as its own oracle.
+         *  The exact magnitude is a tuning choice, not a contract.
+         *
+         *  It compounds with the rider's volume setting: at the default 50%
+         *  the app gain is 0.25, so the far channel bottoms out near 0.06 of
+         *  full scale - a quarter of the near channel. Whether that is loud
+         *  enough to notice in an in-ear bud on the road is unmeasured, and is
+         *  part of why the panning flag stays experimental. */
+        internal const val FAR_CHANNEL_FLOOR = 0.25f
 
         /** Number of discrete pan positions pre-built per pannable cue. Five
          *  is fine enough to track the (capped) pan range, and the rider

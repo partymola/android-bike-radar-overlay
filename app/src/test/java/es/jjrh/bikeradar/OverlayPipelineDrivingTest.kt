@@ -257,6 +257,44 @@ class OverlayPipelineDrivingTest {
         job.join()
     }
 
+    @Test
+    fun beepAlertLogCarriesTheTierTrigger() = runTest {
+        // Same audit contract for the awareness beeps. Tiers score on true
+        // range while frame_closest_* stays the nearest car by along-axis
+        // distance, so the two name different vehicles exactly in the
+        // off-axis case worth reviewing after a ride. Here the ghost 9 m to
+        // the side is nearer along the axis; the tier comes from the car
+        // behind it.
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val ghost = Vehicle(id = 4, distanceM = 5, speedMs = -3f, rangeXm = 9f)
+        val real = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 1_000L, vehicles = listOf(ghost, real), bikeSpeedMs = 5f),
+        )
+        runCurrent()
+        mono = 1_100L
+        RadarStateBus.publish(
+            RadarState(source = DataSource.V2, timestamp = 1_100L, vehicles = listOf(ghost, real), bikeSpeedMs = 5f),
+        )
+        runCurrent()
+        val beepLine = clogLines.firstOrNull { it.contains("event=Beep") }
+        assertTrue("expected a Beep alert line, got $clogLines", beepLine != null)
+        assertTrue(
+            "beep line must name the track the tier came from, got $beepLine",
+            beepLine!!.contains("tier_tid=7") && beepLine.contains("tier_d=6"),
+        )
+        assertTrue(
+            "and the nearest car must still be reported separately, got $beepLine",
+            beepLine.contains("frame_closest_tid=4"),
+        )
+        job.cancel()
+        job.join()
+    }
+
     // ── turn-aware flag gating (glue) ────────────────────────────────────
     //
     // The KDoc on OverlayPipeline.turnState promises a mid-ride toggle-off

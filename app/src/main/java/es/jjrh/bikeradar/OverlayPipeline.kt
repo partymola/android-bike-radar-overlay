@@ -302,7 +302,9 @@ internal class OverlayPipeline(
                 TurnStateDecider.State.IDLE
             },
         )
-        if (ev !is AlertDecider.Event.None) logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs)
+        if (ev !is AlertDecider.Event.None) {
+            logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs, alerts)
+        }
         beeper.setPanning(
             enabled = overlayPrefs.experimentalLateralPanning,
             invertLR = overlayPrefs.experimentalLateralPanningInvertLR,
@@ -320,6 +322,7 @@ internal class OverlayPipeline(
         state: RadarState,
         nowMs: Long,
         gateBikeSpeedMs: Float?,
+        alerts: AlertDecider,
     ) {
         val evStr = when (ev) {
             is AlertDecider.Event.Beep -> "Beep(${ev.count})"
@@ -341,6 +344,17 @@ internal class OverlayPipeline(
                 " trigger_tid=${it.triggerTid} trigger_d=${it.triggerDistanceM}" +
                 " trigger_closing_mps=${it.triggerClosingMs} trigger_rx=${it.triggerRangeXm}"
         } ?: ""
+        // A beep's tier comes from the closest track by TRUE range, which is
+        // not always the nearest by along-axis distance - and where the two
+        // disagree is exactly the off-axis case worth reviewing. frame_closest_*
+        // below stays as it is (nearest car, whatever the tier said), so
+        // without these a tier decision cannot be audited from the log.
+        val tierTrigger = (ev as? AlertDecider.Event.Beep)?.let {
+            alerts.lastTierTrigger?.let { v ->
+                " tier_tid=${v.id} tier_d=${v.distanceM} tier_rx=${v.rangeXm}" +
+                    " tier_true_d=${alerts.lastTierDistanceM}"
+            }
+        } ?: ""
         val alertMax = prefs.alertMaxDistanceM
         val closest = state.vehicles
             .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMax }
@@ -351,7 +365,7 @@ internal class OverlayPipeline(
                 "frame_closest_d=${closest?.distanceM ?: -1} " +
                 "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +
                 "bike_speed_mps=${state.bikeSpeedMs ?: -1f} " +
-                "gate_speed_mps=${gateBikeSpeedMs ?: -1f}$urgentPath",
+                "gate_speed_mps=${gateBikeSpeedMs ?: -1f}$urgentPath$tierTrigger",
         )
     }
 

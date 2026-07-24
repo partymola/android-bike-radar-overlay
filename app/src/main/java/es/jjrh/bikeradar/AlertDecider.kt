@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar
 
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 
 /**
@@ -22,6 +23,19 @@ import kotlin.math.max
 enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
 
 /**
+ * Which distance the awareness tiers are scored on.
+ *
+ *  - [TRUE_RANGE]: the hypotenuse of the target's along-axis distance and its
+ *    lateral offset - how far the vehicle actually is from the rider.
+ *  - [ALONG_AXIS]: the radar's rangeY alone, discarding lateral offset. A
+ *    vehicle drawing abeam climbs the tiers under this as though it were
+ *    closing.
+ *
+ * See [AlertDecider.alertDistanceM].
+ */
+enum class TierDistance { TRUE_RANGE, ALONG_AXIS }
+
+/**
  * Pure-JVM alert decision engine. Fed one frame at a time, returns either a
  * `Beep(urgency)` to acknowledge a new threat or a closer-distance escalation,
  * a `Clear` chime when the road empties, or `None`.
@@ -30,6 +44,13 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
  *   - urgency 1  : far third of the alert window (d > 2/3 alertMaxM)
  *   - urgency 2  : middle third
  *   - urgency 3  : near third (d <= 1/3 alertMaxM)
+ *
+ * `d` here is [alertDistanceM] - the target's TRUE range, not the
+ * along-axis `distanceM` - so a vehicle drawing abeam no longer climbs
+ * the tiers as though it were closing. Both the tier and the choice of
+ * which vehicle the audio describes use it; everything else (close-set
+ * entry, the all-clear, the urgent-impact gates) still reads
+ * `distanceM`.
  *
  * Triggers (closest-only audio model: a beep tells the rider about
  * the *closest* threat only; piling on a beep for a track that
@@ -225,6 +246,11 @@ class AlertDecider(
      *  cooldown-dropped escalations and advances ~54 by a median 0.6 s for
      *  only +9 net beeps; [NONE]/[TOP_TIER] are retained for re-validation. */
     private val escalationBypass: EscalationCooldownBypass = EscalationCooldownBypass.ALL,
+    /** Which distance the awareness tiers are scored on. Default
+     *  [TierDistance.TRUE_RANGE]; [TierDistance.ALONG_AXIS] is the shipped
+     *  pre-change behaviour, retained so a corpus replay can diff the two
+     *  event streams directly rather than by rebuilding an old tree. */
+    private val tierDistance: TierDistance = TierDistance.TRUE_RANGE,
     /** Diagnostic hook: invoked once per turn when the adaptive
      *  clear-deferral tail is anchored, with the computed tail length.
      *  The pipeline writes it to the capture log so every deferral is
@@ -328,23 +354,46 @@ class AlertDecider(
     private var prevBehindRaw: Set<Int> = emptySet()
 
     /**
-     * Per-track tier latch — tid -> highest urgency tier we have
-     * *audibly* fired for during this approach episode.
+     * The vehicle the last [decide] call scored the awareness tier on, and its
+     * [alertDistanceM].
+     *
+     * Exposed so the capture log can attribute a fired cue to the track that
+     * actually set it. The log's `frame_closest_*` fields are the nearest car
+     * by along-axis distance, which since tiers moved to true range is no
+     * longer necessarily the same vehicle - and the case where they diverge is
+     * exactly the off-axis one worth reviewing after a ride. Without this a
+     * tier decision is unauditable precisely when it matters.
+     *
+     * Read contract: valid only for the event returned by the [decide] call
+     * that set them, read on the same thread before another [decide] runs.
+     * Every path through [decide] assigns both, so they cannot carry a
+     * previous frame's values, but they are not live state and nothing else
+     * should treat them as such.
+     */
+    internal var lastTierTrigger: Vehicle? = null
+        private set
+
+    internal var lastTierDistanceM: Float = -1f
+        private set
+
+    /**
+     * Per-track tier latch - tid -> urgency tier we have *audibly*
+     * fired for during this approach episode.
      *
      * Used by both the new-entry gate and the escalation gate to
      * suppress same-tier re-fires. Once we've played a Beep(N)
      * attributable to tid T, subsequent frames where T is still the
      * closest at tier N (or lower) are silent. A re-fire on T
      * requires either:
-     *   - a true tier raise (N -> N+1) for that tid;
-     *   - the close set fully empties (Clear), which clears this
-     *     map; or
-     *   - the tid de-escalates a full tier away from N then comes
-     *     back to N (rearm event), via [peakUrgencyPerTid] rearm
-     *     logic.
+     *   - a true tier raise above the latched tier for that tid, or
+     *   - the all-clear (Clear), which clears this map.
      *
-     * Cleared on Clear (when the close set transitions from non-
-     * empty to empty).
+     * De-escalation does not rearm the latch: a tid that drops a full
+     * tier and climbs back to N stays silent. `a spike after the top
+     * tier has fired stays silent on recovery` pins it. (The born-close
+     * gate's admission refire also removes a tid's entry, but a gated
+     * track never fired audibly, so that path cannot unlatch a beep
+     * the rider actually heard.)
      */
     private val firedTierPerTid = HashMap<Int, Int>()
 
@@ -352,14 +401,10 @@ class AlertDecider(
      * Per-track peak-urgency tracker — tid -> highest urgency tier
      * observed for that tid since it entered the close set.
      *
-     * Two roles:
-     *   1. Drives the filtered-overtake-reack gate: when a tid flips
-     *      isBehind, the remaining closest's urgency must be strictly
-     *      greater than `peakUrgencyPerTid[overtakenTid]` to fire.
-     *   2. Drives the rearm leg of per-track hysteresis: if a tid
-     *      drops a full tier below its `firedTierPerTid` entry, the
-     *      latch is cleared so a subsequent re-escalation can fire
-     *      again.
+     * Drives the filtered-overtake-reack gate: when a tid flips
+     * isBehind, the remaining closest's urgency must be strictly
+     * greater than `peakUrgencyPerTid[overtakenTid]` to fire. That is
+     * its only consumer.
      *
      * Cleared on Clear, same as [firedTierPerTid].
      */
@@ -551,17 +596,24 @@ class AlertDecider(
 
         val stableClose = close.filter { (consecutiveClose[it.id] ?: 0) >= sustainFrames }
         val stableTids = stableClose.mapTo(HashSet()) { it.id }
-        val closestVehicle = stableClose.minByOrNull { it.distanceM }
+        // Selection and scoring must use the SAME distance. Picking the
+        // closest by rangeY while tiering on true range lets an off-axis
+        // track mask a real one: a ghost at ry 8 / rx 9 wins `minByOrNull`
+        // over a car dead behind at ry 9.5, then scores tier 2 on its 12.0 m
+        // true range - and because audio voices the closest vehicle only, the
+        // real car's tier-3 escalation never sounds.
+        val closestVehicle = stableClose.minByOrNull { alertDistanceM(it) }
         val closestUrgency = closestVehicle
-            ?.let { urgencyFor(it.distanceM, alertMaxM) }
+            ?.let { urgencyFor(alertDistanceM(it), alertMaxM) }
             ?: 0
+        lastTierTrigger = closestVehicle
+        lastTierDistanceM = closestVehicle?.let { alertDistanceM(it) } ?: -1f
 
         // Update peak urgency per tid for every stable-close track. Used by
-        // both the D2b filtered overtake re-ack gate and the per-track
-        // hysteresis re-arm path. Must be updated BEFORE the trigger gate
-        // since D2b reads `peakUrgencyPerTid[overtakenTid]`.
+        // the D2b filtered overtake re-ack gate. Must be updated BEFORE the
+        // trigger gate since D2b reads `peakUrgencyPerTid[overtakenTid]`.
         for (v in stableClose) {
-            val u = urgencyFor(v.distanceM, alertMaxM)
+            val u = urgencyFor(alertDistanceM(v), alertMaxM)
             val prevPeak = peakUrgencyPerTid[v.id] ?: 0
             if (u > prevPeak) peakUrgencyPerTid[v.id] = u
         }
@@ -605,9 +657,10 @@ class AlertDecider(
         //   Per-track tier latch: once we have audibly fired at
         //     urgency N for tid T, no re-fire for the same tid at the
         //     same tier. Re-fire requires a true tier raise N->N+1, a
-        //     Clear (which resets all latches), or a full-tier
-        //     de-escalation followed by re-escalation (handled via
-        //     the peakUrgencyPerTid rearm path).
+        //     Clear (which resets all latches), or the born-close
+        //     gate admitting a track it had been silencing (above),
+        //     which drops that tid's latch. A full-tier de-escalation
+        //     does NOT rearm it.
         // Latch-aware: a new entry whose closest tid has already been
         // audibly fired at this tier (its latch survived a deferred or
         // cancelled clear-grace) must not re-fire. Genuinely new tids have
@@ -889,7 +942,8 @@ class AlertDecider(
                                 bornCloseGate.noteSuppressed(v)
                                 onGateEvent(
                                     "# gate suppress tid=${v.id} tier=$closestUrgency" +
-                                        " d=${v.distanceM} closing=${-v.speedMs}" +
+                                        " d=${v.distanceM} eff=${alertDistanceM(v)}" +
+                                        " closing=${-v.speedMs}" +
                                         " birth_d=${v.bornDistanceM} turn=$turnState",
                                 )
                                 Event.None
@@ -898,7 +952,8 @@ class AlertDecider(
                                 beepPending = false
                                 onGateEvent(
                                     "# gate rx-veto tid=${v.id} tier=$closestUrgency" +
-                                        " d=${v.distanceM} raw_rx=${v.rangeXmRaw}",
+                                        " d=${v.distanceM} eff=${alertDistanceM(v)}" +
+                                        " raw_rx=${v.rangeXmRaw}",
                                 )
                                 Event.None
                             }
@@ -1188,7 +1243,52 @@ class AlertDecider(
         }
     }
 
-    private fun urgencyFor(distM: Int, alertMaxM: Int): Int {
+    /**
+     * Distance the awareness tiers are scored on: the target's TRUE range,
+     * not its along-axis [Vehicle.distanceM].
+     *
+     * `distanceM` is the radar's rangeY - how far back a target is along the
+     * bike's axis, with its lateral offset thrown away. That collapses as a
+     * vehicle draws abeam, so a car leaving the road to the side climbs the
+     * tiers exactly like one closing in. Observed on the road: a car turning
+     * off at a junction held ~8.7 m of lateral offset while its rangeY fell
+     * 13.9 -> 7.4 m, earning the top-tier cue, though its true range never
+     * came inside 10.8 m. Tiering on the hypotenuse makes departure sound
+     * like departure.
+     *
+     * One-sided by construction: `hypot >= rangeY` on every frame, so a tier
+     * scored on true range crosses its boundary on the same frame as the
+     * rangeY scoring or a later one, never an earlier one. For a
+     * genuinely-behind car the two agree closely (a dead-behind car with 2 m
+     * of lateral offset crosses the tier-3 boundary at 9.80 m of rangeY
+     * instead of 10.0). For an off-axis car the escalation arrives later or
+     * not at all: a departing car whose true range never comes inside a
+     * boundary keeps its lower tier, which is the intended behaviour, not a
+     * cost - `a car drawing abeam does not reach the top tier` pins it, and
+     * the missing top-tier cue there is not a regression to be fixed.
+     *
+     * Scope is the tier score and which vehicle the audio describes, nothing
+     * else. Close-set entry, the all-clear presence gate and the
+     * urgent-impact gates do not call this helper and keep reading
+     * `distanceM`, deliberately: rangeY is the smaller of the two, so each of
+     * those keeps the broader trigger - a track is admitted, a "road clear"
+     * is withheld, and the act-now cue is armed on the along-axis distance.
+     *
+     * Uses the mount-offset-corrected [Vehicle.rangeXm], since the question
+     * is the range to the RIDER. Fails open on [Vehicle.lateralUnknown]: with
+     * no lateral measurement this returns `distanceM` unchanged, i.e. exactly
+     * today's behaviour, so an unmeasured frame can never hold a cue back.
+     * The decoder carries a stale lateral value across the whole sentinel run
+     * and honouring it would delay a real car's escalation on data the
+     * decoder itself flags as not a measurement.
+     */
+    private fun alertDistanceM(v: Vehicle): Float = if (tierDistance == TierDistance.ALONG_AXIS || v.lateralUnknown) {
+        v.distanceM.toFloat()
+    } else {
+        hypot(v.distanceM.toFloat(), v.rangeXm)
+    }
+
+    private fun urgencyFor(distM: Float, alertMaxM: Int): Int {
         val third = alertMaxM / 3f
         return when {
             distM <= third -> 3

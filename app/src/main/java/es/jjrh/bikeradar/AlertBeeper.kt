@@ -29,8 +29,9 @@ import kotlin.math.sin
  * cannot resolve a rising-vs-falling motif or a few-Hz carrier step).
  *
  *   play(1..3) -> 1/2/3 sharp [beepFreqHz] Hz beeps. This is the AWARENESS
- *                   channel: the tier is the vehicle's DISTANCE band (set by
- *                   AlertDecider, untouched here) and demands no action - it
+ *                   channel: the tier is the vehicle's DISTANCE band - its
+ *                   TRUE range, lateral offset included (set by
+ *                   AlertDecider, untouched here) - and demands no action; it
  *                   tells the rider what is around, not what to do. Each tier
  *                   carries its own distinct RHYTHM as a redundant fingerprint
  *                   of that same distance band: tier 2 a slow pair

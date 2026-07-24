@@ -219,6 +219,12 @@ enforces them, and CONTRIBUTING.md points contributors here:
 
 ## Testing
 
+- Tests hard-code literal expected values. Never assert a production constant
+  against itself (`assertEquals(SOME_CONSTANT, actual)` stays green when the
+  constant is wrong - a *tautological test*; see "DAMP vs DRY" and "don't share
+  constants between test and production"). Mutation testing is the detector: if
+  unsure a test pins a value, mutate the constant to a degenerate value and
+  confirm a test goes red.
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
   (Robolectric). CI runs this alongside `:app:lintDebug`,
   `:app:ktlintCheck`, `:app:verifyRoborazziDebug`, and

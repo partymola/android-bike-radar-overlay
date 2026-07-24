@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -28,7 +31,7 @@ import java.util.concurrent.Executor
  *
  * Also pins the lazy pan-bucket contract: with panning off (the default),
  * no bucket track is ever built, keeping the permanent AudioTrack footprint
- * to the eight mono cues.
+ * to the seven mono cues.
  */
 @RunWith(RobolectricTestRunner::class)
 class AlertBeeperResilienceTest {
@@ -226,6 +229,7 @@ class AlertBeeperResilienceTest {
         b.setPanning(enabled = true, invertLR = false)
         b.play(2, lateralPos = 1f)
         assertTrue(b.panBucketsBuilt)
+        val rowBeforeRebuild = b.beepBucketRow(1)
 
         playScript.add(false) // next play fails once -> rebuild -> retry sounds
         b.playUrgent(lateralPos = -1f)
@@ -235,7 +239,92 @@ class AlertBeeperResilienceTest {
             "the retry's panned play must have rebuilt a bucket row",
             b.panBucketsBuilt,
         )
+        // The DROP half of the name: the rebuild nulled the beep row too, so a
+        // fresh lookup rebuilds a new array rather than handing back the dead
+        // one. Without this, deleting the null-out in releaseAllTracks would
+        // leave every panned cue after a blip playing a released track, and
+        // panBucketsBuilt alone cannot see it.
+        assertNotSame(
+            "the rebuild must have dropped the stale beep row",
+            rowBeforeRebuild,
+            b.beepBucketRow(1),
+        )
         assertEquals(listOf("beep count=2", "urgent"), cues)
+        b.release()
+    }
+
+    @Test
+    fun aThrowingTrackBuildStillReportsTheCueAsFailed() {
+        // Building a pan row allocates AudioTracks at cue time, and the builder
+        // throws exactly when the audioserver is down or the device is at its
+        // mixer-track limit. If that escapes, the cue leaves the report path
+        // entirely: the capture log shows NO cue rather than a silent one, and
+        // the rider's tally quietly under-counts. A lost cue must still be a
+        // reported lost cue.
+        val cues = mutableListOf<String>()
+        val b = AlertBeeper(
+            audioManager = audioManager,
+            executor = directExecutor,
+            clock = { nowMs },
+            onCue = { cues.add(it) },
+            playTrackOverride = { true },
+            stereoTrackFactory = { throw IllegalStateException("no tracks left") },
+        )
+        b.setPanning(enabled = true, invertLR = false)
+
+        b.play(2, lateralPos = -1f)
+
+        assertEquals(
+            "a cue whose track build threw must report as failed, not vanish",
+            listOf("cue_failed beep count=2"),
+            cues,
+        )
+        b.release()
+    }
+
+    /** Throwaway stereo track for the factory seam. */
+    private fun silentStereoTrack(): AudioTrack = AudioTrack.Builder()
+        .setAudioFormat(
+            AudioFormat.Builder()
+                .setSampleRate(44100)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                .build(),
+        )
+        .setBufferSizeInBytes(4)
+        .build()
+
+    @Test
+    fun aPartBuiltPanRowIsReleasedWhenTheBuildThrows() {
+        // Failing partway is the realistic shape at a mixer-track limit: the
+        // first few tracks allocate, then one does not. A part-built row is
+        // stored nowhere, so nothing else will ever free it.
+        val made = mutableListOf<AudioTrack>()
+        val cues = mutableListOf<String>()
+        val b = AlertBeeper(
+            audioManager = audioManager,
+            executor = directExecutor,
+            clock = { nowMs },
+            onCue = { cues.add(it) },
+            playTrackOverride = { true },
+            stereoTrackFactory = {
+                if (made.size == 2) throw IllegalStateException("no tracks left")
+                silentStereoTrack().also { made += it }
+            },
+        )
+        b.setPanning(enabled = true, invertLR = false)
+
+        b.play(2, lateralPos = -1f)
+
+        assertEquals(listOf("cue_failed beep count=2"), cues)
+        assertEquals("the build must have got partway before failing", 2, made.size)
+        made.forEachIndexed { i, track ->
+            assertEquals(
+                "part-built track $i must be released, not stranded",
+                AudioTrack.STATE_UNINITIALIZED,
+                track.state,
+            )
+        }
         b.release()
     }
 }

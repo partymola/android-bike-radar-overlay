@@ -449,9 +449,29 @@ class AlertBeeper(
      */
     private inline fun report(tag: String, attempt: () -> Boolean) {
         if (released) return
-        var played = attempt()
-        if (!played && maybeRebuildTracks()) played = attempt()
+        var played = attemptOrFailed(attempt)
+        if (!played && maybeRebuildTracks()) played = attemptOrFailed(attempt)
         onCue(if (played) tag else CUE_FAILED_PREFIX + tag)
+    }
+
+    /**
+     * Run [attempt], turning a throw into an ordinary failed cue.
+     *
+     * Building a pan-bucket row allocates AudioTracks at cue time, and
+     * `AudioTrack.Builder` throws when the audioserver is down or the device is
+     * at its mixer-track limit - the very conditions the rebuild path exists
+     * for. Letting that escape would take the cue out of [report] entirely: no
+     * `cue_failed` line, so the capture log would show no cue at all rather
+     * than a silent one, and no rebuild attempt. Audio is the primary
+     * interface; a lost cue must still be a REPORTED lost cue.
+     */
+    private inline fun attemptOrFailed(attempt: () -> Boolean): Boolean = try {
+        attempt()
+    } catch (t: Throwable) {
+        // Pass the throwable, not its string: this is the one path that has
+        // just stopped producing a crash report, so keep the stack trace.
+        Log.w(TAG, "cue attempt threw", t)
+        false
     }
 
     /**
@@ -523,7 +543,21 @@ class AlertBeeper(
      */
     private fun buildBucketRow(mono: ShortArray): Array<AudioTrack> {
         val make = stereoTrackFactory ?: ::makeStereoTrack
-        return Array(PAN_BUCKETS) { b -> make(bucketRowPcm(mono, b)) }
+        val built = ArrayList<AudioTrack>(PAN_BUCKETS)
+        try {
+            for (b in 0 until PAN_BUCKETS) built += make(bucketRowPcm(mono, b))
+        } catch (t: Throwable) {
+            // A partial row is stored nowhere, so releaseAllTracks will never
+            // see it: free it here or the slots built before the failure leak
+            // for the life of the process.
+            built.forEach {
+                try {
+                    it.release()
+                } catch (_: Throwable) {}
+            }
+            throw t
+        }
+        return built.toTypedArray()
     }
 
     /**

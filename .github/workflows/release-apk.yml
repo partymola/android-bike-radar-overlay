@@ -16,9 +16,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan tag commit message
+        env:
+          SCAN_REGEX: ${{ secrets.RELEASE_SCAN_PATTERN }}
         run: |
-          regex='decompil|jadx|varia-apk|compliance[- ]checklist|legal[- ]review|DMCA|counter[- ]notice|fair[- ]use|section[- ]512|s\. ?50B|CDPA|hci[- ]snoop|btsnoop|evidence of|gratuitously|hostile surface|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|\bported from|from the official app|matches the firmware|reverse[- ]engineer|clean[- ]room|black[- ]box'
-          hits=$(git log -1 --format='%B' HEAD | grep -nEi "$regex" || true)
+          if [ -z "$SCAN_REGEX" ]; then
+            echo "::error::RELEASE_SCAN_PATTERN secret is not set"
+            exit 1
+          fi
+          hits=$(git log -1 --format='%B' HEAD | grep -nEi "$SCAN_REGEX" || true)
           if [ -n "$hits" ]; then
             echo "::error::Dangerous keywords in the tag's commit message"
             printf '%s\n' "$hits"

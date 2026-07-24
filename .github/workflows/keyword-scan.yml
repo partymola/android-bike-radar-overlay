@@ -39,26 +39,44 @@ jobs:
         env:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
+          SCAN_REGEX: ${{ secrets.KEYWORD_SCAN_PATTERN }}
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          regex='decompil|reverse[- ]engineer|jadx|varia-apk|hci[- ]snoop|btsnoop|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|\bported from|from the official app|matches the firmware'
-          hits=$(git log --format='%H%n%B%n---%n' "$BASE..$HEAD" 2>/dev/null | grep -nEi "$regex" || true)
+          if [ -z "$SCAN_REGEX" ]; then
+            if [ "$FORK_PR" = "true" ]; then
+              # Fork PRs don't receive repository secrets; the same commits
+              # are re-scanned by the push run when they land on main.
+              echo "::notice::Scan pattern unavailable on fork PRs - skipping; the push to main re-runs this scan."
+              exit 0
+            fi
+            echo "::error::KEYWORD_SCAN_PATTERN secret is not set"
+            exit 1
+          fi
+          hits=$(git log --format='%H%n%B%n---%n' "$BASE..$HEAD" 2>/dev/null | grep -nEi "$SCAN_REGEX" || true)
           if [ -n "$hits" ]; then
             echo "::error::Dangerous keywords in commit message(s) in push range:"
             printf '%s\n' "$hits"
             exit 1
           fi
 
-      - name: Scan added lines (excluding this workflow's regex)
+      - name: Scan added lines
         env:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
+          SCAN_REGEX: ${{ secrets.KEYWORD_SCAN_PATTERN }}
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          regex='decompil|reverse[- ]engineer|jadx|varia-apk|hci[- ]snoop|btsnoop|C3497K|C3496J|RadarMeasurementV2CharacteristicHandler|\bported from|from the official app|matches the firmware'
-          # Exclude this workflow file itself — the regex string would otherwise
-          # self-trigger on its own introduction / edits.
-          hits=$(git log -p "$BASE..$HEAD" -- . ':(exclude).github/workflows/' 2>/dev/null \
+          if [ -z "$SCAN_REGEX" ]; then
+            if [ "$FORK_PR" = "true" ]; then
+              echo "::notice::Scan pattern unavailable on fork PRs - skipping; the push to main re-runs this scan."
+              exit 0
+            fi
+            echo "::error::KEYWORD_SCAN_PATTERN secret is not set"
+            exit 1
+          fi
+          hits=$(git log -p "$BASE..$HEAD" 2>/dev/null \
             | awk '/^\+\+\+/{next} /^\+/{print}' \
-            | grep -nEi "$regex" || true)
+            | grep -nEi "$SCAN_REGEX" || true)
           if [ -n "$hits" ]; then
             echo "::error::Dangerous keywords in newly-added lines in push range:"
             printf '%s\n' "$hits"

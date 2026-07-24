@@ -36,6 +36,19 @@ enum class EscalationCooldownBypass { NONE, ALL, TOP_TIER }
 enum class TierDistance { TRUE_RANGE, ALONG_AXIS }
 
 /**
+ * Whether the imminent-impact cue has to wait out the awareness-beep cooldown.
+ *
+ *  - [SHARED_WITH_BEEPS]: an urgent fire needs `minBeepGapMs` since the last
+ *    audible cue of any kind, so an awareness beep can swallow it.
+ *  - [EPISODE_ONLY]: the urgent fires on its own episode pacing alone.
+ *
+ * The two channels are meant to be separate: the awareness beeps say what is
+ * around, the urgent cue says act now. Letting the first mute the second
+ * inverts their priority.
+ */
+enum class UrgentCooldown { SHARED_WITH_BEEPS, EPISODE_ONLY }
+
+/**
  * Pure-JVM alert decision engine. Fed one frame at a time, returns either a
  * `Beep(urgency)` to acknowledge a new threat or a closer-distance escalation,
  * a `Clear` chime when the road empties, or `None`.
@@ -251,6 +264,10 @@ class AlertDecider(
      *  pre-change behaviour, retained so a corpus replay can diff the two
      *  event streams directly rather than by rebuilding an old tree. */
     private val tierDistance: TierDistance = TierDistance.TRUE_RANGE,
+    /** Whether the imminent-impact cue waits out the awareness-beep cooldown.
+     *  See [UrgentCooldown]. [UrgentCooldown.SHARED_WITH_BEEPS] is the shipped
+     *  pre-change behaviour, retained for re-validation. */
+    private val urgentCooldown: UrgentCooldown = UrgentCooldown.EPISODE_ONLY,
     /** Diagnostic hook: invoked once per turn when the adaptive
      *  clear-deferral tail is anchored, with the computed tail length.
      *  The pipeline writes it to the capture log so every deferral is
@@ -818,7 +835,13 @@ class AlertDecider(
             EscalationCooldownBypass.TOP_TIER -> escalation && closestUrgency >= 3
         }
         val cooldownDone = when {
-            anyImminentImpact -> sinceLastBeep >= minBeepGapMs
+            // The urgent cue is the action channel; an awareness beep must not
+            // be able to mute it. Its own episode pacing
+            // ([URGENT_EPISODE_REPEAT_MS] plus the new-severity override) is
+            // what limits repeats.
+            anyImminentImpact ->
+                urgentCooldown == UrgentCooldown.EPISODE_ONLY ||
+                    sinceLastBeep >= minBeepGapMs
             escalationBypassesCooldown -> true
             else -> sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs)
         }

@@ -127,6 +127,11 @@ class AlertBeeper(
     // Production always leaves this null and uses the real play path.
     // Same pattern as WalkAwayAlarm's injectable AlarmTone.
     private val playTrackOverride: ((AudioTrack) -> Boolean)? = null,
+    // Sibling seam for the stop side, so a test can assert WHICH tracks the
+    // urgent cue silences on its way in. Robolectric's shadow does not model
+    // playback state, so the stop is otherwise unobservable. Production
+    // always leaves this null and calls the real stop path.
+    private val stopTrackOverride: ((AudioTrack) -> Unit)? = null,
     // Fires once per successful failure-triggered rebuild, with the new
     // generation. The service wires this to the always-on link journal so a
     // mid-ride audioserver death-and-recovery is reviewable after the ride
@@ -348,10 +353,47 @@ class AlertBeeper(
     override fun playUrgent(lateralPos: Float) {
         executor.execute {
             if (suppressForCall()) return@execute
+            silenceBeeps()
             report("urgent") {
                 playPanned(urgentMono, { urgentBucketRow() }, urgentDurationMs, lateralPos)
             }
         }
+    }
+
+    /**
+     * Silence any still-sounding awareness beep before the urgent cue starts.
+     *
+     * Every cue owns its own [AudioTrack] and [playOnce] stops only the track
+     * it is about to play, so the cues mix rather than pre-empt. An urgent
+     * landing inside a beep's pattern (tier 2 spans ~310 ms, tier 3 ~380 ms)
+     * would otherwise sound smeared into it. The action channel outranks the
+     * awareness channel, so the urgent is the cue that has to arrive intact.
+     *
+     * The truncated beep is not re-stated. It had already fired, so it set its
+     * per-track tier latch in AlertDecider, and a same-tier re-fire on that
+     * track stays silent until the tier rises or the all-clear clears the
+     * latch. The trade is deliberate: the rider gets the act-now cue in place
+     * of part of a distance-band cue that demands no action.
+     *
+     * Executor-confined like every other cue path. `stop()` on a track that
+     * was never playing throws and says nothing useful, so it is ignored -
+     * same contract as the pre-play stop in [playOnce].
+     */
+    private fun silenceBeeps() {
+        // Teardown runs on this same executor, so a cue submitted around
+        // release() can land behind it. Every other track access checks this
+        // first; stopping a released track only survives because release()
+        // leaves it throwing the exception below.
+        if (released) return
+        val live = beepMono.asSequence() +
+            beepBucketRows.filterNotNull().flatMap { it.asIterable() }
+        val stop: (AudioTrack) -> Unit = stopTrackOverride ?: {
+            try {
+                it.stop()
+            } catch (_: IllegalStateException) {
+            }
+        }
+        live.forEach(stop)
     }
 
     /** Rear-radar dropped status cue: the radar link went down mid-ride, so

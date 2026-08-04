@@ -23,6 +23,71 @@ val localProps = Properties().apply {
 val debugKeystoreFile = rootProject.file("debug.keystore")
 
 /**
+ * Read a git value at configuration time, or null if git could not answer.
+ *
+ * Null and "" are deliberately distinct: "" means git ran and returned nothing
+ * (a clean tree), null means it could not run at all - no binary, no .git as in
+ * a source tarball, a non-zero exit, or a rejected mount. Collapsing the two
+ * would let a failed dirty-check read as "clean" and stamp an edited tree with
+ * a bare commit, the exact misattribution the marker exists to prevent.
+ *
+ * `-C` pins the repo so git cannot walk up into a parent repository, and
+ * `--no-optional-locks` stops a build from writing the developer's git index as
+ * a side effect. providers.exec keeps the result a configuration-cache input
+ * rather than a cache-breaking side effect.
+ */
+fun gitValue(vararg args: String): String? = try {
+    val out = providers.exec {
+        commandLine("git", "--no-optional-locks", "-C", rootProject.projectDir.absolutePath, *args)
+        isIgnoreExitValue = true
+    }
+    if (out.result.get().exitValue != 0) null else out.standardOutput.asText.get().trim()
+} catch (_: Exception) {
+    null
+}
+
+// Stamped into non-release capture logs only. Every debug APK reports the same
+// versionName/versionCode between releases, so the commit is the only field
+// that says which code produced a given ride log. Release builds deliberately
+// omit it - see BuildStamp's KDoc and the dependenciesInfo strip below.
+val gitCommitOrNull = gitValue("rev-parse", "--short", "HEAD")
+
+// Scoped to the paths that actually build the APK, NOT the whole worktree.
+// A bare `status --porcelain` reports anything untracked, and this tree carries
+// per-developer directories excluded only via .git/info/exclude - which is
+// per-clone and not synced, while the working tree is. On any other clone those
+// show up as untracked, pinning the flag to dirty forever and destroying the
+// only field that discriminates one debug build from another.
+// Untracked files inside these paths still count: an untracked .kt under
+// app/src is compiled into the APK, so the tree is genuinely not the named
+// commit. Build output and .gradle are gitignored and never appear.
+val buildInputPaths = listOf(
+    "app",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle",
+    "gradle.properties",
+)
+val gitStatusOrNull = gitValue("status", "--porcelain", "--", *buildInputPaths.toTypedArray())
+// ifBlank as well as the elvis: an exit-0-with-empty-stdout would otherwise
+// leave GIT_COMMIT empty, which the boundary reads as "release" and omits the
+// field entirely - making a debug build indistinguishable from a released one.
+val gitCommit = gitCommitOrNull?.ifBlank { null } ?: "unknown"
+
+// A status that failed outright also counts as dirty - erring toward "cannot
+// vouch for this tree" is the safe direction.
+val gitDirty = gitStatusOrNull == null || gitStatusOrNull.isNotBlank()
+
+// Both failures are warned separately: a failed status alone would otherwise
+// stamp a clean tree -dirty forever with nothing said.
+if (gitCommitOrNull.isNullOrBlank()) {
+    logger.warn("bike-radar: no git commit resolved - non-release logs stamp commit=unknown")
+}
+if (gitStatusOrNull == null) {
+    logger.warn("bike-radar: git status failed - non-release logs stamp -dirty regardless of tree")
+}
+
+/**
  * Generate a debug.keystore via `keytool` when one is not already
  * present at the root. Implemented as a typed task class so the
  * @TaskAction body does not close over the build script's Project
@@ -86,6 +151,14 @@ android {
         // re-seeds from local.properties for local dev convenience only.
         buildConfigField("String", "HA_BASE_URL", "\"\"")
         buildConfigField("String", "HA_TOKEN", "\"\"")
+
+        // Empty by default so a release APK embeds no SHA: it would be a
+        // non-reproducible byte in the DEX, working against the F-Droid
+        // build-from-source check that dependenciesInfo below exists to pass.
+        // A released build is already pinned by its tag. The debug buildType
+        // fills these in, and onbtest inherits them via initWith(debug).
+        buildConfigField("String", "GIT_COMMIT", "\"\"")
+        buildConfigField("boolean", "GIT_DIRTY", "false")
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -157,6 +230,8 @@ android {
             // initWith(debug) inherits these, then re-zeroes them below.
             buildConfigField("String", "HA_BASE_URL", "\"${localProps.getProperty("ha.base.url", "")}\"")
             buildConfigField("String", "HA_TOKEN", "\"${localProps.getProperty("ha.token", "")}\"")
+            buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+            buildConfigField("boolean", "GIT_DIRTY", "$gitDirty")
             // Pseudolocales (en-XA / en-XB) ship only in debug builds: switch
             // the device to "English (XA)" to eyeball string overflow and spot
             // any still-hardcoded text (it renders un-accented while everything

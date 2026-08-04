@@ -27,12 +27,18 @@ import java.util.UUID
  * [externalFilesDir] supplies the app-private external root, [mirror] is the
  * debug-only logcat echo (kept out of release builds by the caller), and
  * [onActiveName] mirrors the active file name to wherever the UI reads it.
+ *
+ * [buildStamp] is written into every file's header rather than once per
+ * process: a mid-ride radar drop starts a new file, so a per-process stamp
+ * would leave the second half of a ride unattributable to the code that
+ * produced it. See [BuildStamp] for why it names a commit.
  */
 internal class CaptureLogManager(
     private val externalFilesDir: () -> File?,
     private val captureLoggingEnabled: () -> Boolean,
     private val mirror: (String) -> Unit = {},
     private val onActiveName: (String?) -> Unit = {},
+    private val buildStamp: () -> String = { BuildConfigStamp.line() },
 ) {
     private val lock = Any()
 
@@ -51,6 +57,13 @@ internal class CaptureLogManager(
         val dir = File(root, CAPTURE_DIR).apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
         val file = File(dir, "bike-radar-capture-$stamp.log")
+        // Resolved before the writer exists: a throwing injected stamp would
+        // otherwise land in the catch below, which would log "failed to open"
+        // while the writer was live and skip the retention pass. runCatching
+        // because open() is called from the BLE connect path, which has no
+        // catch of its own - a throw there would abort the connection before
+        // the overlay/alert pipeline attaches.
+        val stampLine = runCatching { buildStamp() }.getOrElse { "# app stamp unavailable" }
         try {
             // No autoFlush: it write()s on every println, defeating the
             // BufferedWriter and adding a syscall per BLE notify (~11 Hz).
@@ -66,6 +79,12 @@ internal class CaptureLogManager(
             onActiveName(file.name)
             clog("# bike-radar capture started ${java.time.Instant.now()}")
             clog("# format: unix_ms char_tail_4hex hex_bytes_no_spaces")
+            clog(stampLine)
+            // Flush the whole header now. lastFlushMs above only forces the
+            // FIRST line out; without this the format line and the stamp sit
+            // in the buffer for up to FLUSH_INTERVAL_MS, so a hard kill early
+            // in a ride would leave a log that cannot be attributed to a build.
+            flushNow()
             Log.i(TAG, "capture log: ${file.absolutePath}")
             // Prune after the new file exists so steady-state count is
             // MAX_CAPTURE_LOGS, not MAX_CAPTURE_LOGS+1 (the active file is

@@ -38,6 +38,64 @@ class CaptureLogManagerTest {
         assertEquals("active name untouched when disabled", "sentinel", name)
     }
 
+    @Test fun everyFileHeaderCarriesTheBuildStamp() {
+        // Per-file, not per-process: a mid-ride radar drop opens a second file
+        // and it must be attributable to the same build as the first.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val m = CaptureLogManager(
+            externalFilesDir = { root },
+            captureLoggingEnabled = { true },
+            buildStamp = { "# app version=9.9.9 code=99 build=debug commit=deadbee" },
+        )
+        val dir = File(root, CaptureLogManager.CAPTURE_DIR)
+
+        m.open()
+        m.clog("first-ride-line")
+        m.close()
+        // Names carry second resolution, so a same-second reopen would reuse
+        // the filename and overwrite the first archive. Move it aside so this
+        // asserts the per-file invariant rather than the wall clock.
+        val kept = File(root, "kept-first.log.gz")
+        assertTrue("first archive moved aside", dir.listFiles()!!.single().renameTo(kept))
+        m.open()
+        m.clog("after-the-drop")
+        m.close()
+
+        val second = dir.listFiles { f -> f.name.endsWith(".log.gz") }!!.single()
+        val expected = "# app version=9.9.9 code=99 build=debug commit=deadbee"
+        val counts = listOf(kept, second).map { gz -> readLines(gz).count { it == expected } }
+        assertEquals("both sides of the drop stamped exactly once", listOf(1, 1), counts)
+        // In the HEADER, not merely somewhere in the file: moving the write to
+        // close() would keep the counts above at 1 while a crash-truncated log
+        // - the case this feature exists to diagnose - carried no stamp.
+        val inHeader = listOf(kept, second).map { gz -> readLines(gz).take(3).count { it == expected } }
+        assertEquals("stamped within the header of both files", listOf(1, 1), inHeader)
+    }
+
+    @Test fun theDefaultStampWiringWritesARealBuildLine() {
+        // This constructs CaptureLogManager WITHOUT buildStamp, so it exercises
+        // the production default that BikeRadarService actually ships with.
+        // Executing that line is not the same as pinning it: mutating the
+        // default to { "" } leaves every other test green.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val m = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        m.open()
+        m.clog("a-line")
+        m.close()
+
+        val gz = File(root, CaptureLogManager.CAPTURE_DIR)
+            .listFiles { f -> f.name.endsWith(".log.gz") }!!.single()
+        val stamp = readLines(gz).take(3).single { it.startsWith("# app version=") }
+        assertTrue("default wiring must name the build type: $stamp", stamp.contains(" build=debug"))
+        assertTrue(
+            "default wiring must carry a resolved commit, not a shaped placeholder: $stamp",
+            Regex(" commit=[0-9a-f]{7,}(-dirty)?$").containsMatchIn(stamp),
+        )
+    }
+
+    private fun readLines(gz: File): List<String> = GZIPInputStream(gz.inputStream())
+        .bufferedReader().use { it.readLines() }
+
     @Test fun openWritesAFileAndCloseGzipsIt() {
         val root = Files.createTempDirectory("caplog").toFile()
         var name: String? = null

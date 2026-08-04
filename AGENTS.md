@@ -112,6 +112,13 @@ summary; the Key files table maps each part to its file.
   A fresh capture file is opened per radar connection (after handshake) and
   closed on disconnect, so a mid-ride radar drop splits one ride across
   multiple files and the dead-radar window between them is uncaptured.
+  Every file's header carries a build stamp (`# app version=... code=...
+  build=...`), plus `commit=` on non-release builds only - so don't infer a
+  build from the APK's install time. **A release-variant capture is NOT
+  attributable to a tree**: two release APKs built from different code stamp
+  identically, including the minified release that `app/build.gradle.kts`
+  requires be ride-tested before a `v*` tag. Why, and the `commit=unknown`
+  fallback: `BuildStamp` KDoc.
 
 ## Key files
 
@@ -123,6 +130,7 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
 | `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
+| `app/src/main/java/es/jjrh/bikeradar/BuildStamp.kt` | Pure formatter for the capture header's build-provenance line, plus the BuildConfig binding; release builds carry no commit |
 | `app/src/main/java/es/jjrh/bikeradar/RideSummaryNotificationDecider.kt` | Pure decider for the post-ride summary notification (ride end = sustained radar-off; new-ride stats reset on long-gap reconnect) |
 | `app/src/main/java/es/jjrh/bikeradar/CrashLogger.kt` | Process-wide uncaught-exception recorder (reports to `crashes/`, capture-log emergency flush hook); surfaced on the Debug screen with the unclean-restart counter |
 | `app/src/main/java/es/jjrh/bikeradar/BluetoothStateMonitor.kt` | Adapter on/off watch: tears the links down when Bluetooth dies mid-ride, re-registers the scan + kickstarts them when it returns |

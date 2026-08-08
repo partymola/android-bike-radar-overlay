@@ -16,6 +16,9 @@ scripts/dev gradle :app:assembleDebug --console=plain       # full APK
 scripts/dev gradle :app:verifyRoborazziDebug --console=plain
 scripts/dev down                                            # when finished
 
+# If `docker run` fails before Gradle starts, the docker bridge cannot create
+# veth pairs on this host: export DEV_DOCKER_NETWORK=host.
+
 # Or the one-shot pattern (no daemon, slower; safe to use without `dev up`):
 docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
@@ -254,13 +257,29 @@ enforces them, and CONTRIBUTING.md points contributors here:
   tallies against a baseline stored alongside the corpus. Run before pushing
   any alert-behaviour change:
   `scripts/dev gradle :app:testDebugUnitTest --tests es.jjrh.bikeradar.CorpusReplayGate
-  -Pbikeradar.corpusDir=<your capture directory>`. Without the property the
-  test assume-skips (CI and corpus-less checkouts are unaffected). On an
-  intentional change, re-record with `-Pbikeradar.corpusRecord=true` and cite
-  the failure diff as the before/after evidence in review. Add
-  `--no-configuration-cache` to corpus runs: the property is captured into
-  the configuration cache, so a cached entry can leak a previous run's
-  corpus path into an invocation that omitted the flag.
+  -Pbikeradar.corpusDir=/workspace/<your capture directory>`. Without the
+  property the test assume-skips (CI and corpus-less checkouts are
+  unaffected). On an intentional change, re-record with
+  `-Pbikeradar.corpusRecord=true` and cite the failure diff as the
+  before/after evidence in review. Add `--no-configuration-cache` to corpus
+  runs: the property is captured into the configuration cache, so a cached
+  entry can leak a previous run's corpus path into an invocation that omitted
+  the flag.
+  - **The path must be the one Gradle sees, not the one your shell sees.**
+    Gradle runs inside the build container with the repo mounted at
+    `/workspace`, so a host path resolves to nothing there. A missing
+    directory is indistinguishable from an absent property: the test
+    assume-skips and the build reports SUCCESS, so a corpus run that checked
+    nothing looks exactly like one that passed.
+  - **Confirm it ran rather than trusting the exit code.** Check
+    `skipped="0"` in
+    `app/build/test-results/testDebugUnitTest/TEST-es.jjrh.bikeradar.CorpusReplayGate.xml`,
+    or compare the case time: a real replay takes seconds, a skip takes
+    milliseconds.
+  - A capture with no baseline entry is not compared, so dropping new rides
+    into the corpus does not extend coverage until the baseline is
+    re-recorded. Count the baseline entries against the corpus before reading
+    a pass as "the new rides are clean".
 - **Cue-ledger gate** (`CueLedgerReplayTest`): the in-repo, CI-run companion
   to the corpus gate. Replays the committed `replay-fixture.txt` through the
   real decoder -> decider -> cue and asserts the *ordered* cue ledger against

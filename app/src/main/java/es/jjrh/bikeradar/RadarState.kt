@@ -106,7 +106,24 @@ data class Vehicle(
      */
     val bornInformative: Boolean = false,
 ) {
-    val speedKmh: Int get() = (speedMs * 3.6f).toInt()
+    /**
+     * Closing speed in km/h: positive when the target is approaching, which is
+     * the opposite sign to [speedMs] and the convention every threshold in the
+     * app is expressed in.
+     *
+     * This deliberately replaces a `speedKmh` that carried the wire sign
+     * through unchanged. The overlay's threat bands are positive closing
+     * speeds, so passing the wire value straight in painted every approaching
+     * vehicle green and reserved the red danger border for traffic pulling
+     * away. Both call sites read correctly and neither was wrong on its own
+     * terms - the sign only became visible where the two conventions met.
+     * Removing the signed accessor removes the accessor-shaped version of the
+     * mistake; it cannot stop a caller hand-rolling `speedMs * 3.6f`, which
+     * ClosePassDetector and RideStatsAccumulator already do. The conversion is
+     * pinned by RadarThreatRenderTest; the two overlay call sites are pinned
+     * only by the Roborazzi goldens.
+     */
+    val closingKmh: Int get() = (-speedMs * 3.6f).toInt()
 }
 
 data class RadarState(

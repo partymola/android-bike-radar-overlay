@@ -264,7 +264,16 @@ class RadarOverlayView(context: Context) : View(context) {
         val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).roundToInt() }
         val bands = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
 
-        if (!clear && state.vehicles.any { it.speedKmh >= bands.redKmh }) {
+        // Same filters as the draw loop below. Before the sign fix this
+        // predicate needed a fast RECEDER, so it effectively never fired and
+        // the mismatch was invisible; now it fires on real traffic, and an
+        // unfiltered version would paint a full-screen red border for a target
+        // beyond visualMaxM that the strip does not draw at all.
+        if (!clear &&
+            state.vehicles.any {
+                !it.isBehind && it.distanceM <= visualMaxM && it.closingKmh >= bands.redKmh
+            }
+        ) {
             val half = dangerBorderPaint.strokeWidth / 2f
             tmpRect.set(half, half, w - half, h - half)
             canvas.drawRoundRect(tmpRect, dp(8f), dp(8f), dangerBorderPaint)
@@ -352,9 +361,12 @@ class RadarOverlayView(context: Context) : View(context) {
 
             val clampedLateral = (lateralMeters / RadarV2Decoder.LATERAL_FULL_M).coerceIn(-1f, 1f)
             val centreX = trackX + clampedLateral * maxLateralPx
-            val color = threatColor(threatLevel(v.speedKmh, bands))
+            val color = threatColor(threatLevel(v.closingKmh, bands))
 
-            val tailLen = (v.speedMs * dp(3f)).coerceIn(dp(6f), dp(40f))
+            // Tail length grows with CLOSING speed, so it is driven by the
+            // negated wire value like the colour above; a receding target
+            // pins to the floor.
+            val tailLen = (-v.speedMs * dp(3f)).coerceIn(dp(6f), dp(40f))
             val distFactor = distanceAlphaFactor(rangeYm, visualMaxM)
             val r = Color.red(color)
             val g = Color.green(color)

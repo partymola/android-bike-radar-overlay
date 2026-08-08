@@ -65,7 +65,7 @@ class RadarOverlayViewTest {
         overlay().apply {
             setState(
                 RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 12f)),
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = -12f)),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
                 ),
@@ -79,7 +79,7 @@ class RadarOverlayViewTest {
         overlay().apply {
             setState(
                 RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 5, speedMs = 14f, lateralPos = 0.1f)),
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 5, speedMs = -14f, lateralPos = 0.1f)),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
                 ),
@@ -89,14 +89,48 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun fastRecederDrawsNoDangerBorder() {
+        // A car pulling AWAY at 14 m/s. Nothing in the overlay may treat it as
+        // a threat: no red border, no amber box. Before the sign fix this was
+        // the only shape that COULD raise the border, and no fixture contained
+        // one, which is why the inversion survived every golden.
+        overlay().apply {
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 15, speedMs = 14f)),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun fastCloserBeyondTheVisualWindowDrawsNoBorder() {
+        // Closing hard, but past visualMaxM, so the strip paints no box for it.
+        // The border must agree with the strip: a full-screen red alarm over an
+        // empty panel is worse than no alarm.
+        overlay().apply {
+            setVisualMaxM(20)
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 60, speedMs = -16f)),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
     fun multipleVehicles() {
         overlay().apply {
             setState(
                 RadarState(
                     vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 35, speedMs = 8f, lateralPos = -0.3f),
-                        Vehicle(id = 2, distanceM = 18, speedMs = 11f, lateralPos = 0.2f),
-                        Vehicle(id = 3, distanceM = 8, speedMs = 15f, lateralPos = 0.5f),
+                        Vehicle(id = 1, distanceM = 35, speedMs = -8f, lateralPos = -0.3f),
+                        Vehicle(id = 2, distanceM = 18, speedMs = -11f, lateralPos = 0.2f),
+                        Vehicle(id = 3, distanceM = 8, speedMs = -15f, lateralPos = 0.5f),
                     ),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
@@ -112,9 +146,9 @@ class RadarOverlayViewTest {
             setState(
                 RadarState(
                     vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 40, speedMs = 6f, size = VehicleSize.CAR),
-                        Vehicle(id = 2, distanceM = 22, speedMs = 10f, size = VehicleSize.CAR),
-                        Vehicle(id = 3, distanceM = 12, speedMs = 14f, size = VehicleSize.TRUCK),
+                        Vehicle(id = 1, distanceM = 40, speedMs = -6f, size = VehicleSize.CAR),
+                        Vehicle(id = 2, distanceM = 22, speedMs = -10f, size = VehicleSize.CAR),
+                        Vehicle(id = 3, distanceM = 12, speedMs = -14f, size = VehicleSize.TRUCK),
                     ),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
@@ -190,7 +224,7 @@ class RadarOverlayViewTest {
         overlay().apply {
             setState(
                 RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 25, speedMs = 10f)),
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 25, speedMs = -10f)),
                     source = DataSource.V2,
                     scenarioTimeMs = 12_500L,
                     bikeSpeedMs = 5f,
@@ -205,7 +239,7 @@ class RadarOverlayViewTest {
         overlay().apply {
             setState(
                 RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 30, speedMs = 9f)),
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 30, speedMs = -9f)),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
                 ),

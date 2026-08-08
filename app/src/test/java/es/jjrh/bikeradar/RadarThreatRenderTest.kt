@@ -61,6 +61,34 @@ class RadarThreatRenderTest {
         assertEquals(ThreatLevel.DANGER, threatLevel(80, bands))
     }
 
+    // --- wire sign convention at the render call site ----------------------
+
+    /**
+     * The bands above are positive closing speeds; [Vehicle.speedMs] is
+     * NEGATIVE for approaching (its own KDoc, and the four consumers that
+     * negate it). Every threatLevel test above passes a positive literal, so
+     * the seam is correct and nothing asserted what the overlay actually hands
+     * it. These build the vehicle the way the decoder builds one off the wire.
+     */
+    @Test
+    fun approachingVehicleIsBandedByClosingSpeedNotWireSign() {
+        // -13.9 m/s = 50.0 km/h closing: the red band, inclusive.
+        val fastCloser = Vehicle(id = 1, distanceM = 20, speedMs = -13.9f)
+        assertEquals(ThreatLevel.DANGER, threatLevel(fastCloser.closingKmh, FIXED_SPEED_BANDS))
+
+        // -7.0 m/s = 25.2 km/h closing: just over the amber line.
+        val amberCloser = Vehicle(id = 2, distanceM = 30, speedMs = -7.0f)
+        assertEquals(ThreatLevel.WARNING, threatLevel(amberCloser.closingKmh, FIXED_SPEED_BANDS))
+    }
+
+    @Test
+    fun recedingVehicleIsNeverADanger() {
+        // A car pulling away at 50 km/h is the safest thing on the road, and
+        // must not inherit the red band by sign alone.
+        val receding = Vehicle(id = 3, distanceM = 20, speedMs = 13.9f)
+        assertEquals(ThreatLevel.SAFE, threatLevel(receding.closingKmh, FIXED_SPEED_BANDS))
+    }
+
     // --- distToYFraction ---------------------------------------------------
 
     @Test

@@ -54,8 +54,10 @@ jobs:
           fi
           hits=$(git log --format='%H%n%B%n---%n' "$BASE..$HEAD" 2>/dev/null | grep -nEi "$SCAN_REGEX" || true)
           if [ -n "$hits" ]; then
-            echo "::error::Dangerous keywords in commit message(s) in push range:"
-            printf '%s\n' "$hits"
+            # Count only. GitHub masks the PATTERN because it is a secret, but
+            # it does not mask the matched TEXT, so printing hits publishes the
+            # very string the scan exists to keep out of a public log.
+            echo "::error::Dangerous keywords in commit message(s) in push range: $(printf '%s\n' "$hits" | wc -l) match(es). Re-run the scan locally to see them."
             exit 1
           fi
 
@@ -78,7 +80,8 @@ jobs:
             | awk '/^\+\+\+/{next} /^\+/{print}' \
             | grep -nEi "$SCAN_REGEX" || true)
           if [ -n "$hits" ]; then
-            echo "::error::Dangerous keywords in newly-added lines in push range:"
-            printf '%s\n' "$hits"
+            # Count only - see the note above; the matched diff line must not
+            # reach a public Actions log.
+            echo "::error::Dangerous keywords in newly-added lines in push range: $(printf '%s\n' "$hits" | wc -l) match(es). Re-run the scan locally to see them."
             exit 1
           fi

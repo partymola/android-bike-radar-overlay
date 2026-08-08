@@ -41,7 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import es.jjrh.bikeradar.BatteryChipLevel
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.batteryChipLevel
 import kotlin.math.max
 
 /**
@@ -165,6 +167,9 @@ fun StatusDot(
     }
 }
 
+/** Matches Prefs' own default, so an untouched install renders as before. */
+const val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = 20
+
 // ── BatteryChip ───────────────────────────────────────────────────────
 //
 // JSX `BatteryChip` (ui.jsx): tiny battery icon shape (rounded rect with
@@ -177,12 +182,14 @@ fun BatteryChip(
     pct: Int,
     label: String? = null,
     modifier: Modifier = Modifier,
+    /** The rider's low-battery threshold, so the chip agrees with the cue. */
+    lowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
 ) {
     val br = LocalBrColors.current
-    val color = when {
-        pct <= 10 -> br.danger
-        pct <= 20 -> br.caution
-        else -> br.fg
+    val color = when (batteryChipLevel(pct, lowThresholdPct)) {
+        BatteryChipLevel.CRITICAL -> br.danger
+        BatteryChipLevel.LOW -> br.caution
+        BatteryChipLevel.NORMAL -> br.fg
     }
     Row(
         modifier = modifier,

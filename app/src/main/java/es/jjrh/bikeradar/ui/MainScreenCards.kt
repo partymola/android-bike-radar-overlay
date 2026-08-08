@@ -279,6 +279,8 @@ internal fun SystemCard(
     ebikeEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
     ebikeBatterySoc: Int? = null,
+    /** The rider's low-battery threshold, so the chips band where the cue fires. */
+    batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
 ) {
     val br = LocalBrColors.current
 
@@ -370,10 +372,10 @@ internal fun SystemCard(
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             SectionLabel(stringResource(R.string.main_section_system))
             Spacer(modifier = Modifier.height(10.dp))
-            SystemRowRender(radarRow, isFirst = true)
-            SystemRowRender(dashcamRow, isFirst = false)
-            if (ebikeEnabled) SystemRowRender(ebikeRow, isFirst = false)
-            SystemRowRender(haRow, isFirst = false)
+            SystemRowRender(radarRow, isFirst = true, batteryLowThresholdPct = batteryLowThresholdPct)
+            SystemRowRender(dashcamRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
+            if (ebikeEnabled) SystemRowRender(ebikeRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
+            SystemRowRender(haRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
         }
     }
 }
@@ -389,7 +391,11 @@ private data class SystemRow(
 )
 
 @Composable
-private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
+private fun SystemRowRender(
+    row: SystemRow,
+    isFirst: Boolean,
+    batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
+) {
     val br = LocalBrColors.current
     if (!isFirst) {
         Box(
@@ -431,7 +437,9 @@ private fun SystemRowRender(row: SystemRow, isFirst: Boolean) {
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
                 )
-                if (row.battery != null) BatteryChip(pct = row.battery)
+                if (row.battery != null) {
+                    BatteryChip(pct = row.battery, lowThresholdPct = batteryLowThresholdPct)
+                }
             }
         }
         StatusDot(color = row.dot, hollow = row.hollow, size = 7.dp)

@@ -303,6 +303,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
+            batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
             isLandscape = isLandscape,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
@@ -345,6 +346,7 @@ internal fun MainScreenContent(
     eBikeDataEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
     ebikeBatterySoc: Int? = null,
+    batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     isLandscape: Boolean,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
@@ -375,6 +377,7 @@ internal fun MainScreenContent(
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
+            batteryLowThresholdPct = batteryLowThresholdPct,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
@@ -404,6 +407,7 @@ internal fun MainScreenContent(
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
+            batteryLowThresholdPct = batteryLowThresholdPct,
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
@@ -468,6 +472,7 @@ private fun MainScreenPortrait(
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
     ebikeBatterySoc: Int?,
+    batteryLowThresholdPct: Int,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -510,6 +515,7 @@ private fun MainScreenPortrait(
                 ebikeEnabled = eBikeDataEnabled,
                 ebikeReceiving = ebikeReceiving,
                 ebikeBatterySoc = ebikeBatterySoc,
+                batteryLowThresholdPct = batteryLowThresholdPct,
             )
             Spacer(modifier = Modifier.height(12.dp))
             ClosePassStatsCard(
@@ -557,6 +563,7 @@ private fun MainScreenLandscape(
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
     ebikeBatterySoc: Int?,
+    batteryLowThresholdPct: Int,
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -624,6 +631,7 @@ private fun MainScreenLandscape(
                     ebikeEnabled = eBikeDataEnabled,
                     ebikeReceiving = ebikeReceiving,
                     ebikeBatterySoc = ebikeBatterySoc,
+                    batteryLowThresholdPct = batteryLowThresholdPct,
                 )
                 // Push Settings to the bottom of the right column.
                 Spacer(modifier = Modifier.weight(1f))

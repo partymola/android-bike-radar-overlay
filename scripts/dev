@@ -15,6 +15,9 @@
 #                                        container if available, else
 #                                        spawns a one-shot container
 #                                        with --no-daemon.
+#
+# If `docker run` fails before Gradle starts, your docker bridge cannot
+# create veth pairs: export DEV_DOCKER_NETWORK=host.
 
 set -euo pipefail
 
@@ -27,6 +30,20 @@ is_running() {
     docker ps --filter "name=^/${CONTAINER_NAME}$" \
         --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"
 }
+
+# Docker network for the build container. Set DEV_DOCKER_NETWORK=host where
+# docker's bridge cannot create veth pairs, which makes `docker run` fail
+# before Gradle even starts. Left unset, the daemon's default is used and
+# nothing about container isolation changes.
+#
+# Never set it to `none`: Gradle resolves Robolectric's
+# android-all-instrumented artifacts on demand, and without a network every
+# Robolectric class fails as "classMethod FAILED", which reads like a code
+# defect and is not one.
+NETWORK_ARGS=()
+if [ -n "${DEV_DOCKER_NETWORK:-}" ]; then
+    NETWORK_ARGS=(--network "${DEV_DOCKER_NETWORK}")
+fi
 
 ensure_image() {
     if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
@@ -46,6 +63,7 @@ up() {
     docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
     docker run -d \
         --name "${CONTAINER_NAME}" \
+        ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
         -v "${WORKSPACE}:/workspace" \
         -u "$(id -u):$(id -g)" \
         -v "${GRADLE_CACHE}:/gradle-cache" \
@@ -87,6 +105,7 @@ gradle_cmd() {
             gradle "$@"
     else
         exec docker run --rm \
+            ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
             -v "${WORKSPACE}:/workspace" \
             -u "$(id -u):$(id -g)" \
             -v "${GRADLE_CACHE}:/gradle-cache" \

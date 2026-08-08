@@ -94,6 +94,20 @@ internal class RadarLinkController(
     // loop bails out instead of looping forever; cleared on re-pair / restart.
     @Volatile private var bondLost = false
 
+    /**
+     * The radar whose bond state we are watching, which is NOT the same
+     * question as [currentRadarMac] ("which radar are we linked to right
+     * now", read by the HA and overlay paths to attribute battery and MQTT).
+     *
+     * They were one field, and that deadlocked re-pairing: losing the bond
+     * cleared the MAC, the receiver matches on the MAC, so the BOND_BONDED
+     * branch that clears [bondLost] could never run, and [start] refuses
+     * while [bondLost]. The rider re-paired, exactly as the notification
+     * told them to, and the link stayed dead for the rest of the process.
+     * This one survives disconnect so the re-pair is still recognised.
+     */
+    @Volatile private var bondWatchMac: String? = null
+
     // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
     @Volatile private var lastV2FrameMs: Long = 0L
 
@@ -127,7 +141,7 @@ internal class RadarLinkController(
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
             val mac = device?.address ?: return
-            val expected = currentRadarMac ?: return
+            val expected = bondWatchMac ?: return
             if (!mac.equals(expected, ignoreCase = true)) return
             val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
             when (state) {
@@ -183,6 +197,9 @@ internal class RadarLinkController(
     @Synchronized
     fun start(name: String, mac: String) {
         if (radarJob?.isActive == true) return
+        // Set before the bond-lost gate: the watch must outlive the refusal,
+        // or nothing is left to notice the re-pair that lifts it.
+        bondWatchMac = mac
         if (bondLost) {
             Log.d(TAG, "skip radar link start: bond lost, waiting for re-pair")
             return

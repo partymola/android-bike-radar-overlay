@@ -474,6 +474,44 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    /**
+     * Losing the bond and re-pairing must leave the link startable again.
+     *
+     * The deadlock this pins: bond loss cleared the MAC the receiver matches
+     * on, so the BOND_BONDED branch that lifts the bond-lost flag could never
+     * run, and start() refuses while that flag is set. The rider re-paired,
+     * which is what the app's own notification tells them to do, and the link
+     * stayed dead until the service was destroyed - no radar, no alerts.
+     */
+    @Test
+    fun rePairingAfterBondLossIsRecognised() = runTest {
+        val controller = controller(Link())
+        controller.registerBondReceiver()
+        // Arms the bond watch. The connection attempt itself is irrelevant.
+        controller.start("RearVue8", mac)
+
+        sendBondState(android.bluetooth.BluetoothDevice.BOND_NONE)
+        assertTrue(
+            "bond loss should stop the reconnect loop",
+            journal.any { it.contains("bond removed") },
+        )
+
+        sendBondState(android.bluetooth.BluetoothDevice.BOND_BONDED)
+        assertTrue(
+            "re-pairing must lift the bond-lost gate",
+            journal.any { it.contains("re-paired") },
+        )
+    }
+
+    private fun sendBondState(state: Int) {
+        val device = android.bluetooth.BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mac)
+        val intent = android.content.Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, device)
+            .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, state)
+        app.sendBroadcast(intent)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+    }
+
     /** Test double that owns view-creation + tracks attach/detach calls. */
     private class FakeOverlayHost(private val ctx: android.content.Context) : OverlayHost {
         override fun createView(): RadarOverlayView = RadarOverlayView(ctx)

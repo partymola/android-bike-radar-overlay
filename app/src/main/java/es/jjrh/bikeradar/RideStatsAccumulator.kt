@@ -69,7 +69,16 @@ class RideStatsAccumulator(
         val prev = lastFrameMs
         lastFrameMs = nowMs
 
-        if (prev != null) {
+        // A gap wider than the link's own stall threshold means frames stopped
+        // arriving: a mid-ride radar drop, a tunnel, a dead radar battery.
+        // Nothing was observed across it, so nothing is integrated. Carrying
+        // the last known speed over the gap instead would invent distance -
+        // ten minutes at 5.5 m/s is 3.3 km of ride history and Home Assistant
+        // data that no sensor ever saw, and it deflates alerts-per-km by the
+        // same factor. Under-reporting an unobserved stretch is the honest
+        // failure; the ride stats never claim to measure what the radar could
+        // not see.
+        if (prev != null && (nowMs - prev) <= MAX_FRAME_GAP_MS) {
             val dtMs = (nowMs - prev).coerceAtLeast(0L)
             // Use the bike speed that applied DURING the just-ended interval —
             // i.e. the value carried from the previous frame, before this
@@ -227,6 +236,11 @@ class RideStatsAccumulator(
 
     companion object {
         private const val MAX_TRACK_DISTANCE_M = 40
+
+        /** Widest frame interval still treated as continuous observation.
+         *  Matches the radar link's V2 data-flow stall threshold, which is
+         *  what tears the GATT down when frames stop. */
+        private const val MAX_FRAME_GAP_MS = 5_000L
         private const val MS_TO_KMH = 3.6f
     }
 }

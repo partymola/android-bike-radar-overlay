@@ -63,6 +63,36 @@ class RideStatsAccumulatorTest {
         severity = severity,
     )
 
+    // ── distance integration across a radar gap ──────────────────────────────
+
+    @Test
+    fun aRadarGapContributesNoDistance() {
+        // The radar drops for ten minutes mid-ride. Nothing was observed in
+        // that window, so nothing may be integrated: at the last known 5.5 m/s
+        // an uncapped dt silently adds 3.3 km to ride history and the Home
+        // Assistant sensor, and deflates alerts-per-km by the same factor.
+        val clock = FakeClock()
+        val a = acc(clock)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+        clock.advance(600_000L)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+
+        assertEquals(0.0f, a.snapshot().distanceRiddenKm, 0.001f)
+    }
+
+    @Test
+    fun anOrdinaryFrameIntervalStillIntegrates() {
+        // The guard must not swallow normal multi-Hz frames: 5.5 m/s for one
+        // second is 5.5 m.
+        val clock = FakeClock()
+        val a = acc(clock)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+        clock.advance(1_000L)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+
+        assertEquals(0.0055f, a.snapshot().distanceRiddenKm, 0.0002f)
+    }
+
     // ── overtakes_total ──────────────────────────────────────────────────────
 
     @Test
@@ -351,10 +381,18 @@ class RideStatsAccumulatorTest {
     // ── alarm-fatigue rates ───────────────────────────────────────────────────
 
     /** Accrue 12 km of distance: 10 m/s integrated over a 1200 s interval. */
+    /**
+     * 12 km at 10 m/s, integrated the way a ride actually arrives: a frame a
+     * second for 1200 s. Two frames 20 minutes apart would be quicker but
+     * would only accumulate because of the very gap the accumulator now
+     * refuses to integrate, so the helper would be testing the bug.
+     */
     private fun rideTwelveKm(a: RideStatsAccumulator, clock: FakeClock) {
         a.observeFrame(radarState(bikeSpeedMs = 10f)) // seed speed, no integration yet
-        clock.advance(1_200_000L) // 1200 s
-        a.observeFrame(radarState(bikeSpeedMs = 10f)) // 10 m/s * 1200 s = 12 000 m
+        repeat(1_200) {
+            clock.advance(1_000L)
+            a.observeFrame(radarState(bikeSpeedMs = 10f))
+        }
     }
 
     @Test

@@ -162,7 +162,11 @@ internal fun SettingsMenuBody(
             SettingsHeader(title = stringResource(R.string.common_settings), onBack = { navController.popBackStack() })
 
             // System health card (the small one at the top of Settings)
-            SystemHealthBar(radarBattery = radarBattery, dashcamBattery = dashcamBattery)
+            SystemHealthBar(
+                radarBattery = radarBattery,
+                dashcamBattery = dashcamBattery,
+                batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
+            )
 
             SettingsSectionLabel(stringResource(R.string.settings_home_section_ride))
             SettingsRowGroup {
@@ -286,7 +290,11 @@ internal fun SettingsMenuBody(
 }
 
 @Composable
-private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: BatteryEntry?) {
+private fun SystemHealthBar(
+    radarBattery: BatteryEntry?,
+    dashcamBattery: BatteryEntry?,
+    batteryLowThresholdPct: Int,
+) {
     val br = LocalBrColors.current
     Column(
         modifier = Modifier
@@ -308,6 +316,7 @@ private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: Battery
                 label = stringResource(R.string.settings_home_chip_radar),
                 notSeen = stringResource(R.string.settings_home_chip_radar_not_seen),
                 battery = radarBattery,
+                batteryLowThresholdPct = batteryLowThresholdPct,
                 color = if (radarBattery != null) br.safe else br.fgDim,
                 modifier = Modifier.weight(1f),
             )
@@ -315,6 +324,7 @@ private fun SystemHealthBar(radarBattery: BatteryEntry?, dashcamBattery: Battery
                 label = stringResource(R.string.settings_home_chip_cam),
                 notSeen = stringResource(R.string.settings_home_chip_cam_not_seen),
                 battery = dashcamBattery,
+                batteryLowThresholdPct = batteryLowThresholdPct,
                 color = if (dashcamBattery != null) br.safe else br.fgDim,
                 modifier = Modifier.weight(1f),
             )
@@ -327,6 +337,7 @@ private fun SystemHealthChip(
     label: String,
     notSeen: String,
     battery: BatteryEntry?,
+    batteryLowThresholdPct: Int,
     color: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
 ) {
@@ -339,7 +350,7 @@ private fun SystemHealthChip(
         StatusDot(color = color, size = 6.dp)
         Text(text = label, color = br.fgMuted, fontSize = 12.sp)
         if (battery != null) {
-            BatteryChip(pct = battery.pct)
+            BatteryChip(pct = battery.pct, lowThresholdPct = batteryLowThresholdPct)
         } else {
             Text(
                 text = notSeen,

@@ -88,6 +88,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
         dashcamConnected = dashcamConnected,
         dashcamBatteryPct = if (dashcamConnected) dashcamBattery.pct else null,
+        batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
         walkAwayThreshold = walkAwayThreshold,
         canBypassDnd = canBypassDnd,
@@ -130,6 +131,7 @@ internal fun SettingsDashcamContent(
     dashcamWarnWhenOff: Boolean,
     dashcamConnected: Boolean,
     dashcamBatteryPct: Int?,
+    batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     walkAwayAlarmEnabled: Boolean,
     walkAwayThreshold: Int,
     canBypassDnd: Boolean,
@@ -217,7 +219,7 @@ internal fun SettingsDashcamContent(
                                     size = 6.dp,
                                 )
                                 if (dashcamConnected && dashcamBatteryPct != null) {
-                                    BatteryChip(pct = dashcamBatteryPct)
+                                    BatteryChip(pct = dashcamBatteryPct, lowThresholdPct = batteryLowThresholdPct)
                                 }
                             }
                         }

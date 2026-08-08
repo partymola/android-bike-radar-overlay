@@ -106,6 +106,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         activeName = activeName,
         connected = connected,
         batteryPct = if (connected) radarBattery.pct else null,
+        batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
             ctx.startActivity(
                 Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -141,6 +142,7 @@ internal fun SettingsRadarDeviceContent(
     activeName: String?,
     connected: Boolean,
     batteryPct: Int?,
+    batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     others: List<RadarSelection.BondedRadar> = emptyList(),
     onPairDifferent: () -> Unit = {},
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit = {},
@@ -243,7 +245,7 @@ internal fun SettingsRadarDeviceContent(
                                 fontSize = 12.sp,
                             )
                             if (connected && batteryPct != null) {
-                                BatteryChip(pct = batteryPct)
+                                BatteryChip(pct = batteryPct, lowThresholdPct = batteryLowThresholdPct)
                             }
                         }
                         if (firmwareRev != null) {

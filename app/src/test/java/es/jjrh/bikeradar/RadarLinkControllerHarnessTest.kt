@@ -504,7 +504,10 @@ class RadarLinkControllerHarnessTest {
     }
 
     private fun sendBondState(state: Int) {
-        val device = android.bluetooth.BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mac)
+        val device = (
+            app.getSystemService(android.content.Context.BLUETOOTH_SERVICE)
+                as android.bluetooth.BluetoothManager
+            ).adapter.getRemoteDevice(mac)
         val intent = android.content.Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
             .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, device)
             .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, state)

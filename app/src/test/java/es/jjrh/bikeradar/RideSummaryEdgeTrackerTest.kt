@@ -34,11 +34,23 @@ class RideSummaryEdgeTrackerTest {
         assertTrue(out.actions.isEmpty())
     }
 
-    @Test fun `radar returns after a short off continues the ride and clears the posted flag`() {
-        val prev = RideSummaryEdgeTracker.State(lastRadarOffSinceMs = 1_000L, rideSummaryPosted = true)
+    @Test fun `radar returns after a short off with nothing posted continues the ride`() {
+        val prev = RideSummaryEdgeTracker.State(lastRadarOffSinceMs = 1_000L, rideSummaryPosted = false)
         // off duration 5 s, well under the 10 min new-ride threshold.
         val out = onTick(prev, radarOffSinceMs = null, nowMs = 6_000L) { snap }
         assertTrue("short gap must not start a new ride", out.actions.isEmpty())
+        assertEquals(RideSummaryEdgeTracker.State(lastRadarOffSinceMs = null, rideSummaryPosted = false), out.state)
+    }
+
+    @Test fun `radar returns after a short off having posted starts a new ride anyway`() {
+        // Posting closes the ride out: its totals are already appended to ride
+        // history and the checkpoint is cleared. Clearing the posted flag while
+        // keeping the accumulator means the NEXT off-episode appends a second
+        // row carrying this segment's overtakes, close passes and distance all
+        // over again, with no way for a reader to see the overlap.
+        val prev = RideSummaryEdgeTracker.State(lastRadarOffSinceMs = 1_000L, rideSummaryPosted = true)
+        val out = onTick(prev, radarOffSinceMs = null, nowMs = 6_000L) { snap }
+        assertEquals(listOf(RideSummaryEdgeTracker.Action.ResetRideStats), out.actions)
         assertEquals(RideSummaryEdgeTracker.State(lastRadarOffSinceMs = null, rideSummaryPosted = false), out.state)
     }
 

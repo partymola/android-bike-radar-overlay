@@ -57,7 +57,16 @@ internal object RideSummaryEdgeTracker {
             val actions = mutableListOf<Action>()
             var posted = prev.rideSummaryPosted
             prev.lastRadarOffSinceMs?.let { wasOffSince ->
-                if (RideSummaryNotificationDecider.shouldStartNewRide(nowMs - wasOffSince, longOffMs)) {
+                // Reset on a long gap (a genuinely new ride), and ALSO whenever
+                // a summary was posted for the previous segment: posting has
+                // already written those totals to ride history and cleared the
+                // checkpoint, so carrying the same accumulator forward makes
+                // the next off-episode append a second row that counts this
+                // segment's overtakes, passes and distance twice. The posted
+                // flag must never be cleared without resetting the accumulator
+                // that earned it.
+                val newRide = RideSummaryNotificationDecider.shouldStartNewRide(nowMs - wasOffSince, longOffMs)
+                if (newRide || prev.rideSummaryPosted) {
                     actions += Action.ResetRideStats
                 }
                 posted = false

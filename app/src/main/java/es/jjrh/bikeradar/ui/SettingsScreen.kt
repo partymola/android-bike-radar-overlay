@@ -51,6 +51,8 @@ import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.PermissionsSummary
+import es.jjrh.bikeradar.PermissionsSummaryDeriver
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -222,14 +224,24 @@ internal fun SettingsMenuBody(
                     icon = Icons.Default.Shield,
                     iconTint = if (permissionsRequiredMissing > 0) br.danger else br.caution,
                     title = stringResource(R.string.settings_home_permissions_title),
-                    subtitle = if (permissionsRequiredMissing > 0) {
-                        stringResource(
+                    subtitle = when (
+                        PermissionsSummaryDeriver.derive(
+                            grantedCount = permissionsGrantedCount,
+                            requiredMissing = permissionsRequiredMissing,
+                            total = permissionsTotal,
+                        )
+                    ) {
+                        PermissionsSummary.ACTION_NEEDED -> stringResource(
                             R.string.settings_home_permissions_subtitle_action,
                             permissionsRequiredMissing,
                             permissionsTotal,
                         )
-                    } else {
-                        stringResource(
+                        PermissionsSummary.PARTIALLY_GRANTED -> stringResource(
+                            R.string.settings_home_permissions_subtitle_partial,
+                            permissionsGrantedCount,
+                            permissionsTotal,
+                        )
+                        PermissionsSummary.ALL_GRANTED -> stringResource(
                             R.string.settings_home_permissions_subtitle_granted,
                             permissionsGrantedCount,
                             permissionsTotal,

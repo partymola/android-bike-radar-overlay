@@ -288,6 +288,7 @@
     <string name="settings_home_permissions_title">Permissions</string>
     <string name="settings_home_permissions_subtitle_action"><xliff:g id="missing" example="2">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g> need action</string>
     <string name="settings_home_permissions_subtitle_granted">All granted (<xliff:g id="granted" example="7">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g>)</string>
+    <string name="settings_home_permissions_subtitle_partial"><xliff:g id="granted" example="2">%1$d</xliff:g> of <xliff:g id="total" example="4">%2$d</xliff:g> granted</string>
     <string name="settings_home_experimental_title">Experimental</string>
     <string name="settings_home_debug_title">Debug</string>
     <string name="settings_home_debug_subtitle">Developer mode unlocked</string>

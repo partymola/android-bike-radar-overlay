@@ -84,12 +84,12 @@ object LocationCache {
         cachedLat = loc.latitude
         cachedLon = loc.longitude
         cachedAtMs = now
-        Log.i(
-            TAG,
-            "refreshed lat=${"%.3f".format(loc.latitude)} " +
-                "lon=${"%.3f".format(loc.longitude)} provider=${loc.provider} " +
-                "ageMs=${now - loc.time}",
-        )
+        // Provider and age only, never the coordinate. This runs in release
+        // builds, and logcat is read by bugreports and anyone with adb; a
+        // three-decimal fix is roughly a city block, and the rider's ride
+        // starts at home. The fields below are what the log is actually for:
+        // whether a fix arrived, from where, and how old it was.
+        Log.i(TAG, "refreshed provider=${loc.provider} ageMs=${now - loc.time}")
         return true
     }
 

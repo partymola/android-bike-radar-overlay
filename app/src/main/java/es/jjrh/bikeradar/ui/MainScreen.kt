@@ -68,10 +68,13 @@ import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.HaStatus
+import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.data.DashcamOwnership
+import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.eBikeDataIsFresh
 import kotlinx.coroutines.delay
@@ -158,9 +161,19 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val now = tickNowMs.coerceAtLeast(radarState.timestamp)
     val radarFresh = radarState.source == DataSource.V2 &&
         now - radarState.timestamp < 10_000L
-    val haErrorRecent = (haHealth as? HaHealth.Error)?.let {
-        now - it.atMs < 5 * 60_000L
-    } ?: false
+    // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
+    // migration (AndroidKeyStore work on installs that still hold undecryptable
+    // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to
+    // the tick - the getters go to storage each call, so this stays live when
+    // credentials are saved while the screen is open.
+    val haCreds = remember { HaCredentials(ctx) }
+    val haConfigured = remember(tickNowMs) { haCreds.isConfigured() }
+    // Gated on configured: HaHealthBus is process-global and is never reset when
+    // the rider clears their credentials, so an ungated check leaves the hero
+    // saying "Home Assistant unreachable" for five minutes after HA is removed,
+    // while the System row correctly reads "Not configured".
+    val haErrorRecent = haConfigured &&
+        ((haHealth as? HaHealth.Error)?.let { now - it.atMs < 5 * 60_000L } ?: false)
     val dashcamSlug = prefsSnap.dashcamMac?.let { mac ->
         BikeRadarService.macToSlug[mac]
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
@@ -235,7 +248,10 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         DeviceNameMatcher.isRadarName(entry.name)
     }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
-    val haHealthy = !haErrorRecent && (haHealth is HaHealth.Ok || haHealth is HaHealth.Unknown)
+    // Credentials are re-read on the 5 s tick rather than in a remember{}:
+    // they can be saved from Settings while this screen is open, and a
+    // composition-time snapshot would leave the row asserting the old state.
+    val haStatus = HaStatusDeriver.derive(haConfigured, haHealth)
     // eBike freshness samples elapsedRealtime() fresh on every recompose;
     // the 5 s tickNowMs above is the recompose driver, so the dot drops to
     // amber a few seconds after Flow stops streaming.
@@ -282,7 +298,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             dashcamDisplayName = prefsSnap.dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
-            haHealthy = haHealthy,
+            haStatus = haStatus,
             closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
             eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -324,7 +340,7 @@ internal fun MainScreenContent(
     dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
-    haHealthy: Boolean,
+    haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
     eBikeDataEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
@@ -354,7 +370,7 @@ internal fun MainScreenContent(
             dashcamDisplayName = dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
-            haHealthy = haHealthy,
+            haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -383,7 +399,7 @@ internal fun MainScreenContent(
             dashcamDisplayName = dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
-            haHealthy = haHealthy,
+            haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -447,7 +463,7 @@ private fun MainScreenPortrait(
     dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
-    haHealthy: Boolean,
+    haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
@@ -490,7 +506,7 @@ private fun MainScreenPortrait(
                 dashcamDisplayName = dashcamDisplayName,
                 radarBattery = radarBattery,
                 dashcamBattery = dashcamBattery,
-                haHealthy = haHealthy,
+                haStatus = haStatus,
                 ebikeEnabled = eBikeDataEnabled,
                 ebikeReceiving = ebikeReceiving,
                 ebikeBatterySoc = ebikeBatterySoc,
@@ -536,7 +552,7 @@ private fun MainScreenLandscape(
     dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
-    haHealthy: Boolean,
+    haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
@@ -604,7 +620,7 @@ private fun MainScreenLandscape(
                     dashcamDisplayName = dashcamDisplayName,
                     radarBattery = radarBattery,
                     dashcamBattery = dashcamBattery,
-                    haHealthy = haHealthy,
+                    haStatus = haStatus,
                     ebikeEnabled = eBikeDataEnabled,
                     ebikeReceiving = ebikeReceiving,
                     ebikeBatterySoc = ebikeBatterySoc,

@@ -12,6 +12,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.AttentionItem
 import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.BatteryEntry
+import es.jjrh.bikeradar.HaStatus
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -25,9 +26,10 @@ import org.robolectric.annotation.GraphicsMode
  *
  * Variants picked to exercise the visually distinct states:
  *  - Hero: live-good (CheckCircle / Good) and not-paired-bt-on (Error)
- *  - System: empty (no devices live), populated (radar + dashcam + eBike +
- *    HA all green with battery chips), and eBike-waiting (the eBike row in
- *    its amber "Waiting for Flow" state with no stale battery chip)
+ *  - System: empty (nothing paired, HA not configured), populated (radar +
+ *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
+ *    eBike row in its amber "Waiting for Flow" state with no stale battery
+ *    chip), and the HA row's four states including both es variants
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -100,7 +102,109 @@ class MainScreenSnapshotTest {
                         dashcamDisplayName = null,
                         radarBattery = null,
                         dashcamBattery = null,
-                        haHealthy = false,
+                        // A fresh install has never configured Home Assistant,
+                        // so this is the state the reported defect rendered as
+                        // a green "MQTT ready". It is the whole point of this
+                        // golden: nothing paired, nothing set up, nothing
+                        // claiming to work.
+                        haStatus = HaStatus.NOT_CONFIGURED,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun systemHaConfiguredNotYetPublished() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    SystemCard(
+                        radarFresh = true,
+                        hasBond = true,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        dashcamDisplayName = null,
+                        radarBattery = null,
+                        dashcamBattery = null,
+                        // Credentials saved, nothing published yet: the resting
+                        // state of a correct setup between app start and its
+                        // first ride-edge publish. Must read as set up, never as
+                        // a working connection and never as a failure.
+                        haStatus = HaStatus.CONFIGURED,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun systemHaNotConfiguredEs() {
+        // The es strings for the two NEW states, verified as rendered rather
+        // than as translations: short labels expand worst in Spanish and this
+        // is a tight mono value slot.
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    SystemCard(
+                        radarFresh = false,
+                        hasBond = false,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        dashcamDisplayName = null,
+                        radarBattery = null,
+                        dashcamBattery = null,
+                        haStatus = HaStatus.NOT_CONFIGURED,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun systemHaConfiguredEs() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    SystemCard(
+                        radarFresh = true,
+                        hasBond = true,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        dashcamDisplayName = null,
+                        radarBattery = null,
+                        dashcamBattery = null,
+                        haStatus = HaStatus.CONFIGURED,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun systemHaUnreachable() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    SystemCard(
+                        radarFresh = true,
+                        hasBond = true,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        dashcamDisplayName = null,
+                        radarBattery = null,
+                        dashcamBattery = null,
+                        haStatus = HaStatus.UNREACHABLE,
                     )
                 }
             }
@@ -132,7 +236,7 @@ class MainScreenSnapshotTest {
                             pct = 64,
                             readAtMs = 0L,
                         ),
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         ebikeEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 82,
@@ -180,7 +284,7 @@ class MainScreenSnapshotTest {
                             readAtMs = 0L,
                         ),
                         dashcamBattery = null,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         // Feature on but Flow not running: amber dot, "Waiting
                         // for Flow", and no battery chip (a stale SoC here would
                         // be a regression).

@@ -49,7 +49,10 @@ import es.jjrh.bikeradar.AttentionItem
 import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.ClosePassStateBus
+import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.isHollow
+import es.jjrh.bikeradar.isMuted
 
 // ── Hero status card ─────────────────────────────────────────────────
 
@@ -272,7 +275,7 @@ internal fun SystemCard(
     dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
-    haHealthy: Boolean,
+    haStatus: HaStatus,
     ebikeEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
     ebikeBatterySoc: Int? = null,
@@ -340,18 +343,27 @@ internal fun SystemCard(
         dot = if (ebikeReceiving) br.safe else br.caution,
     )
 
+    // Four states, same vocabulary as Settings: never claim a working
+    // connection from stored credentials alone. Grey solid (not amber) for
+    // CONFIGURED - nothing has been observed, but nothing has failed either.
     val haRow = SystemRow(
         icon = Icons.Default.Home,
         label = stringResource(R.string.main_system_home_assistant),
-        value =
-        if (haHealthy) {
-            stringResource(R.string.main_system_value_mqtt_ready)
-        } else {
-            stringResource(R.string.main_system_value_unreachable)
+        value = when (haStatus) {
+            HaStatus.NOT_CONFIGURED -> stringResource(R.string.main_system_value_not_configured)
+            HaStatus.CONFIGURED -> stringResource(R.string.main_system_value_configured)
+            HaStatus.READY -> stringResource(R.string.main_system_value_mqtt_ready)
+            HaStatus.UNREACHABLE -> stringResource(R.string.main_system_value_unreachable)
         },
-        muted = !haHealthy,
+        muted = haStatus.isMuted,
         battery = null,
-        dot = if (haHealthy) br.safe else br.caution,
+        dot = when (haStatus) {
+            HaStatus.NOT_CONFIGURED -> br.fgDim
+            HaStatus.CONFIGURED -> br.fgDim
+            HaStatus.READY -> br.safe
+            HaStatus.UNREACHABLE -> br.caution
+        },
+        hollow = haStatus.isHollow,
     )
 
     BrCard(modifier = Modifier.fillMaxWidth()) {

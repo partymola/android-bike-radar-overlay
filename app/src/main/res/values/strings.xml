@@ -136,6 +136,8 @@
     <string name="main_system_value_waiting_flow">Waiting for Flow</string>
     <string name="main_system_value_mqtt_ready">MQTT ready</string>
     <string name="main_system_value_unreachable">Unreachable</string>
+    <string name="main_system_value_not_configured">Not configured</string>
+    <string name="main_system_value_configured">Configured</string>
 
     <!-- CLOSE PASSES stats card. -->
     <string name="main_section_close_passes">Close passes</string>

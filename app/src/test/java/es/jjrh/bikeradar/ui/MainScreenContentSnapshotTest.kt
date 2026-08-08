@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.ClosePassStateBus
+import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.R
 import org.junit.Before
 import org.junit.Test
@@ -97,7 +98,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         closePassLoggingEnabled = false,
                         isLandscape = false,
                         onWordmarkLongPress = {},
@@ -138,7 +139,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         eBikeDataEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 80,
@@ -184,7 +185,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Cámara delantera",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         eBikeDataEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 80,
@@ -230,7 +231,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         eBikeDataEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 80,
@@ -274,7 +275,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Cámara delantera",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         eBikeDataEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 80,
@@ -315,7 +316,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         closePassLoggingEnabled = true,
                         isLandscape = false,
                         onWordmarkLongPress = {},
@@ -353,7 +354,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = null,
                         dashcamBattery = null,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         closePassLoggingEnabled = false,
                         isLandscape = false,
                         onWordmarkLongPress = {},
@@ -391,7 +392,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = null,
-                        haHealthy = true,
+                        haStatus = HaStatus.READY,
                         closePassLoggingEnabled = false,
                         isLandscape = false,
                         onWordmarkLongPress = {},
@@ -429,7 +430,7 @@ class MainScreenContentSnapshotTest {
                         dashcamDisplayName = "Front cam",
                         radarBattery = null,
                         dashcamBattery = null,
-                        haHealthy = false,
+                        haStatus = HaStatus.UNREACHABLE,
                         closePassLoggingEnabled = false,
                         isLandscape = false,
                         onWordmarkLongPress = {},

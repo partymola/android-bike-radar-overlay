@@ -124,6 +124,8 @@
     <string name="main_system_value_waiting_flow">Esperando a Flow</string>
     <string name="main_system_value_mqtt_ready">MQTT listo</string>
     <string name="main_system_value_unreachable">Inaccesible</string>
+    <string name="main_system_value_not_configured">Sin configurar</string>
+    <string name="main_system_value_configured">Configurado</string>
 
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
     <string name="main_section_close_passes">Pases cercanos</string>

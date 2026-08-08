@@ -4,11 +4,11 @@ package es.jjrh.bikeradar
 /**
  * What every Home Assistant status surface is allowed to claim.
  *
- * Used by the home screen's System row. The Settings rows still mirror these
- * branches by hand and have NOT been migrated, so this is not yet the single
- * source of truth its shape suggests - wiring them is outstanding work, and
- * until then Settings keeps its own over-claim for the configured-but-nothing-
- * published state.
+ * The single derivation behind every Home Assistant status surface: the home
+ * screen's System row, the Settings menu subtitle, and the Home Assistant
+ * screen's connection pill and published-entity dots. They disagreeing is the
+ * defect this exists to prevent, so a new surface reads its state from here
+ * rather than re-deriving one.
  *
  * The defect this replaces: the System row counted [HaHealth.Unknown] as
  * healthy and had no not-configured state at all, so a rider who had never

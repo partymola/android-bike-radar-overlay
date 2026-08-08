@@ -298,7 +298,7 @@
     <string name="settings_home_ha_not_configured">Sin configurar</string>
     <string name="settings_home_ha_issue">Problema de conexión</string>
     <string name="settings_home_ha_mqtt_ready">Conectado · MQTT listo</string>
-    <string name="settings_home_ha_connected">Conectado</string>
+    <string name="settings_home_ha_configured">Configurado</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_panning">Direccional</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
@@ -438,6 +438,8 @@
     <string name="settings_ha_published_entities">Entidades publicadas</string>
     <string name="settings_ha_connected">Conectado</string>
     <string name="settings_ha_not_configured">Sin configurar</string>
+    <string name="settings_ha_configured">Configurado</string>
+    <string name="settings_ha_nothing_published_yet">Guardado. Aún no se ha publicado nada.</string>
     <string name="settings_ha_add_url_token">Añade tu URL + token abajo.</string>
     <string name="settings_ha_last_error">Último error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_mqtt_discovery_active">Publicando en tu HA por MQTT</string>

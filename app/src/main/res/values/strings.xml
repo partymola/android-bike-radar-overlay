@@ -313,7 +313,7 @@
     <string name="settings_home_ha_not_configured">Not configured</string>
     <string name="settings_home_ha_issue">Connection issue</string>
     <string name="settings_home_ha_mqtt_ready">Connected · MQTT ready</string>
-    <string name="settings_home_ha_connected">Connected</string>
+    <string name="settings_home_ha_configured">Configured</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_panning">Directional</string>
     <string name="settings_home_exp_all_off">All off</string>
@@ -453,6 +453,8 @@
     <string name="settings_ha_published_entities">Published entities</string>
     <string name="settings_ha_connected">Connected</string>
     <string name="settings_ha_not_configured">Not configured</string>
+    <string name="settings_ha_configured">Configured</string>
+    <string name="settings_ha_nothing_published_yet">Saved. Nothing has been published yet.</string>
     <string name="settings_ha_add_url_token">Add your URL + token below.</string>
     <string name="settings_ha_last_error">Last error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_mqtt_discovery_active">Publishing to Home Assistant via MQTT</string>

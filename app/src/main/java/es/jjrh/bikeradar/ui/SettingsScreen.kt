@@ -51,6 +51,8 @@ import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.HaStatus
+import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.PermissionsSummary
 import es.jjrh.bikeradar.PermissionsSummaryDeriver
 import es.jjrh.bikeradar.R
@@ -406,11 +408,15 @@ private fun dashcamSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnap
     }
 }
 
-private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): String = when {
-    !configured -> ctx.getString(R.string.settings_home_ha_not_configured)
-    health is HaHealth.Error -> ctx.getString(R.string.settings_home_ha_issue)
-    health is HaHealth.Ok -> ctx.getString(R.string.settings_home_ha_mqtt_ready)
-    else -> ctx.getString(R.string.settings_home_ha_connected)
+// Same derivation as the home screen's System row, so the two screens cannot
+// drift again. The old `else` branch said "Connected" for stored credentials
+// that had never published anything, which is the over-claim the deriver
+// exists to refuse.
+private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): String = when (HaStatusDeriver.derive(configured, health)) {
+    HaStatus.NOT_CONFIGURED -> ctx.getString(R.string.settings_home_ha_not_configured)
+    HaStatus.UNREACHABLE -> ctx.getString(R.string.settings_home_ha_issue)
+    HaStatus.READY -> ctx.getString(R.string.settings_home_ha_mqtt_ready)
+    HaStatus.CONFIGURED -> ctx.getString(R.string.settings_home_ha_configured)
 }
 
 private fun experimentalSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {

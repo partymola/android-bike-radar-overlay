@@ -53,6 +53,8 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
+import es.jjrh.bikeradar.HaStatus
+import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.HaUrlPolicy
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
@@ -225,9 +227,11 @@ internal fun SettingsHaContent(
         ) {
             SettingsHeader(stringResource(R.string.settings_ha_title), onBack = onBack)
 
-            // Connection state pill
-            val connected = haConfigured && haHealth !is HaHealth.Error
-            ConnectionStateCard(connected = connected, health = haHealth)
+            // Connection state pill. Same derivation as the home screen's
+            // System row and the Settings menu subtitle: stored credentials
+            // are setup, not a connection, so they no longer read as one.
+            val haStatus = HaStatusDeriver.derive(haConfigured, haHealth)
+            ConnectionStateCard(status = haStatus, health = haHealth)
 
             Spacer(modifier = Modifier.height(14.dp))
             HaField(
@@ -351,12 +355,16 @@ internal fun SettingsHaContent(
             // entries the app is known to publish; live count would
             // require a query we don't run yet). The status dot reflects
             // whether HA is currently reachable, not the entity value.
+            // Dots reflect whether anything has actually published, not
+            // whether credentials are stored: these rows previously showed
+            // green with a literal "on" for entities that need not exist.
+            val published = haStatus == HaStatus.READY
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
             SettingsRowGroup {
-                EntityRow(name = "sensor.bike_radar_battery", value = "—", connected = connected, isLast = false)
-                EntityRow(name = "sensor.bike_dashcam_battery", value = "—", connected = connected, isLast = false)
-                EntityRow(name = "event.bike_close_pass", value = "events", connected = connected, isLast = false)
-                EntityRow(name = "binary_sensor.bike_radar_online", value = if (connected) "on" else "off", connected = connected, isLast = true)
+                EntityRow(name = "sensor.bike_radar_battery", value = "\u2014", connected = published, isLast = false)
+                EntityRow(name = "sensor.bike_dashcam_battery", value = "\u2014", connected = published, isLast = false)
+                EntityRow(name = "event.bike_close_pass", value = "events", connected = published, isLast = false)
+                EntityRow(name = "binary_sensor.bike_radar_online", value = if (published) "on" else "off", connected = published, isLast = true)
             }
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -375,9 +383,13 @@ private fun urlRefusalMessage(url: String): String? = when (val r = HaUrlPolicy.
 }
 
 @Composable
-private fun ConnectionStateCard(connected: Boolean, health: HaHealth) {
+private fun ConnectionStateCard(status: HaStatus, health: HaHealth) {
     val br = LocalBrColors.current
-    val accent = if (connected) br.safe else br.fgDim
+    val accent = when (status) {
+        HaStatus.READY -> br.safe
+        HaStatus.UNREACHABLE -> br.caution
+        HaStatus.CONFIGURED, HaStatus.NOT_CONFIGURED -> br.fgDim
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -392,19 +404,27 @@ private fun ConnectionStateCard(connected: Boolean, health: HaHealth) {
         StatusDot(color = accent, size = 8.dp)
         Column {
             Text(
-                text = if (connected) {
-                    stringResource(R.string.settings_ha_connected)
-                } else {
-                    stringResource(R.string.settings_ha_not_configured)
+                text = when (status) {
+                    HaStatus.READY -> stringResource(R.string.settings_ha_connected)
+                    HaStatus.NOT_CONFIGURED -> stringResource(R.string.settings_ha_not_configured)
+                    HaStatus.CONFIGURED, HaStatus.UNREACHABLE ->
+                        stringResource(R.string.settings_ha_configured)
                 },
                 color = accent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
-            val subtitle = when {
-                !connected -> stringResource(R.string.settings_ha_add_url_token)
-                health is HaHealth.Error -> stringResource(R.string.settings_ha_last_error, health.message)
-                else -> stringResource(R.string.settings_ha_mqtt_discovery_active)
+            val subtitle = when (status) {
+                HaStatus.NOT_CONFIGURED -> stringResource(R.string.settings_ha_add_url_token)
+                HaStatus.UNREACHABLE -> stringResource(
+                    R.string.settings_ha_last_error,
+                    (health as? HaHealth.Error)?.message.orEmpty(),
+                )
+                // Publishing happens at ride edges, so a correct setup sits
+                // here for most of a session. It must not claim discovery is
+                // active on the strength of a saved token.
+                HaStatus.CONFIGURED -> stringResource(R.string.settings_ha_nothing_published_yet)
+                HaStatus.READY -> stringResource(R.string.settings_ha_mqtt_discovery_active)
             }
             Text(
                 text = subtitle,

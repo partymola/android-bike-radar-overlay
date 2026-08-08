@@ -18,6 +18,24 @@ data class BatteryEntry(
     val lastSeenElapsedMs: Long = SystemClock.elapsedRealtime(),
 )
 
+/**
+ * Widest age at which a stored battery read may still be shown as a live
+ * reading. Matches the window the radar and dashcam sub-screens already apply.
+ *
+ * The bus is never cleared in production - the service owns its lifetime - so
+ * an entry read once at the start of a ride sits there for the rest of the
+ * process. Any surface that renders an entry without checking this is claiming
+ * a device is connected on the strength of a reading that may be hours old.
+ */
+const val BATTERY_UI_FRESH_MS = 30_000L
+
+/** True when [readAtMs] is recent enough to render as a live reading. */
+fun batteryReadIsFresh(
+    readAtMs: Long,
+    nowMs: Long,
+    windowMs: Long = BATTERY_UI_FRESH_MS,
+): Boolean = nowMs - readAtMs < windowMs
+
 object BatteryStateBus {
     private val _entries = MutableStateFlow<Map<String, BatteryEntry>>(emptyMap())
     val entries: StateFlow<Map<String, BatteryEntry>> = _entries

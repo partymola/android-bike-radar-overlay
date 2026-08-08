@@ -31,9 +31,12 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,9 +52,11 @@ import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
@@ -82,15 +87,30 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val creds = remember { HaCredentials(ctx) }
     val haConfigured = creds.baseUrl.isNotBlank() && creds.token.isNotBlank()
 
+    // Re-read on a tick so a device that drops while this screen is open stops
+    // reporting as connected: the entries flow only emits when a device IS
+    // seen, so without this the last verdict would stand indefinitely.
+    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5_000)
+            tickNowMs = System.currentTimeMillis()
+        }
+    }
+
+    // Stale entries are dropped rather than rendered: BatteryStateBus is never
+    // cleared in production, so an entry survives long after the device is off,
+    // and every consumer below treats "present" as "connected".
     val radarBattery: BatteryEntry? = batteryEntries.values.firstOrNull { entry ->
         DeviceNameMatcher.isRadarName(entry.name)
-    }
+    }?.takeIf { batteryReadIsFresh(it.readAtMs, tickNowMs) }
     val dashcamSlug = prefsSnap.dashcamMac?.let { mac ->
         BikeRadarService.macToSlug[mac]
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
     }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
+        ?.takeIf { batteryReadIsFresh(it.readAtMs, tickNowMs) }
 
     val grantedCount = PERMISSIONS.count { isSpecGranted(ctx, it) }
     val requiredMissing = PERMISSIONS.count { it.required && !isSpecGranted(ctx, it) }

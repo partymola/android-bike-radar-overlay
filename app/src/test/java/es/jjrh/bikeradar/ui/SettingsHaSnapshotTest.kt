@@ -18,6 +18,7 @@ import org.robolectric.annotation.GraphicsMode
  * Variants:
  *  - empty: no fields filled, never tested
  *  - populated: fields filled, no test result yet
+ *  - savedNotYetPublished: saved, nothing published yet (en + es)
  *  - savedHealthOk: fields populated + healthy MQTT discovery
  *  - savedHealthError: fields populated + recent HA error
  *
@@ -70,6 +71,64 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Unknown,
                     haConfigured = false,
+                    onBack = {},
+                    onTestAndSave = {},
+                    onSaveWithoutTesting = {},
+                    onClear = {},
+                )
+            }
+        }
+    }
+
+    /**
+     * Saved, nothing published yet: the resting state of every correct setup
+     * between saving credentials and the first ride-edge publish, and the only
+     * home of the "nothing published yet" subtitle.
+     */
+    @Test
+    fun savedNotYetPublished() {
+        captureRoboImage {
+            UiTheme {
+                SettingsHaContent(
+                    urlField = "https://homeassistant.local:8123",
+                    onUrlChange = {},
+                    tokenField = "eyJ0eXAiOiJKV1QiLCJh.fake.token",
+                    onTokenChange = {},
+                    tokenVisible = false,
+                    onToggleTokenVisible = {},
+                    pingResult = null,
+                    mqttResult = null,
+                    pinging = false,
+                    haHealth = HaHealth.Unknown,
+                    haConfigured = true,
+                    onBack = {},
+                    onTestAndSave = {},
+                    onSaveWithoutTesting = {},
+                    onClear = {},
+                )
+            }
+        }
+    }
+
+    /** The es subtitle for the same state: the longest new string on this
+     *  screen, in a subtitle slot, where Spanish expands worst. */
+    @Test
+    @Config(qualifiers = "+es")
+    fun savedNotYetPublishedEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsHaContent(
+                    urlField = "https://homeassistant.local:8123",
+                    onUrlChange = {},
+                    tokenField = "eyJ0eXAiOiJKV1QiLCJh.fake.token",
+                    onTokenChange = {},
+                    tokenVisible = false,
+                    onToggleTokenVisible = {},
+                    pingResult = null,
+                    mqttResult = null,
+                    pinging = false,
+                    haHealth = HaHealth.Unknown,
+                    haConfigured = true,
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},

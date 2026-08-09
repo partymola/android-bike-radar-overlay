@@ -51,4 +51,35 @@ class SettingsScreenSnapshotTest {
             }
         }
     }
+
+    /**
+     * Every required permission granted, optional ones outstanding. The row
+     * that used to assert "All granted" over numbers that disagreed with it,
+     * and the only place the partial subtitle renders.
+     */
+    @Test
+    fun menuPermissionsPartiallyGranted() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = true,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        autoLightModeEnabled = true,
+                        radarLightAutoModeEnabled = true,
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
+                        eBikeDataEnabled = true,
+                    ),
+                    radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
+                    dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    haConfigured = true,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 2,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 4,
+                )
+            }
+        }
+    }
 }

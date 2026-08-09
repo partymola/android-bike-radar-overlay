@@ -102,11 +102,18 @@ internal class RadarLinkController(
      * They were one field, and that deadlocked re-pairing: losing the bond
      * cleared the MAC, the receiver matches on the MAC, so the BOND_BONDED
      * branch that clears [bondLost] could never run, and [start] refuses
-     * while [bondLost]. The rider re-paired, exactly as the notification
-     * told them to, and the link stayed dead for the rest of the process.
-     * This one survives disconnect so the re-pair is still recognised.
+     * while [bondLost]. This one survives disconnect, so a re-pair on the
+     * same address is still recognised from the broadcast.
+     *
+     * It is not sufficient on its own, and is not the gate's only lift: a
+     * re-pair can land on a different address, and a sighting of a second
+     * radar moves this field on. [start]'s adapter query covers both.
      */
     @Volatile private var bondWatchMac: String? = null
+
+    // Latches the one-per-episode refusal journal line; cleared when the gate
+    // lifts, so the next bond loss records again.
+    @Volatile private var bondRefusalJournalled = false
 
     // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
     @Volatile private var lastV2FrameMs: Long = 0L
@@ -146,13 +153,7 @@ internal class RadarLinkController(
             val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
             when (state) {
                 BluetoothDevice.BOND_NONE -> onRadarBondLost(mac)
-                BluetoothDevice.BOND_BONDED -> {
-                    if (bondLost) {
-                        Log.i(TAG, "radar re-paired ($mac); allowing reconnect")
-                        journal("radar re-paired")
-                        bondLost = false
-                    }
-                }
+                BluetoothDevice.BOND_BONDED -> liftBondGate(mac, via = "broadcast")
             }
         }
     }
@@ -204,17 +205,17 @@ internal class RadarLinkController(
         // this one can match. Either way the flag would never lift and the link
         // would stay dead for the process. A device the adapter reports as
         // bonded is worth trying, whatever we did or did not hear.
-        if (bondLost && deviceIsBonded(mac)) {
-            Log.i(TAG, "radar $mac bonded again; allowing reconnect")
-            journal("radar re-paired")
-            bondLost = false
-        }
-        // Set before the bond-lost gate: the watch must outlive the refusal,
-        // or nothing is left to notice the re-pair that lifts it.
+        if (bondLost && deviceIsBonded(mac)) liftBondGate(mac, via = "adapter")
         bondWatchMac = mac
         if (bondLost) {
             Log.d(TAG, "skip radar link start: bond lost, waiting for re-pair")
-            journal("radar link start refused: bond lost")
+            // Once per refusing episode, not once per sighting: the radar can
+            // sit unpaired but advertising for days, and a line per re-acquire
+            // would push the surrounding link history out of the journal.
+            if (!bondRefusalJournalled) {
+                journal("radar link start refused: bond lost")
+                bondRefusalJournalled = true
+            }
             return
         }
         Log.i(TAG, "starting radar link to $name $mac")
@@ -222,9 +223,31 @@ internal class RadarLinkController(
         radarJob = scope.launch { runRadarConnection(mac, name) }
     }
 
+    /**
+     * Lift the bond-lost gate and retract the notification that asked the
+     * rider to re-pair.
+     *
+     * One place, because the gate lifts from two: the BOND_BONDED broadcast
+     * and [start]'s adapter query. [via] records which, since "the fallback
+     * saved us" and "the normal path worked" are the informative distinction
+     * when a reconnect problem is being read back off the journal.
+     */
+    private fun liftBondGate(mac: String, via: String) {
+        if (!bondLost) return
+        Log.i(TAG, "radar re-paired ($mac, $via); allowing reconnect")
+        journal("radar re-paired ($via)")
+        bondLost = false
+        bondRefusalJournalled = false
+        // The shade still says "Re-pair in Bluetooth settings" otherwise, for
+        // the rest of the process, while the link runs and alerts fire.
+        notifications.cancelBondLost()
+    }
+
     /** The adapter's own view of whether [mac] is bonded. False when the
      *  address is malformed or the adapter is unavailable, which keeps the
-     *  reconnect loop from spinning against a peer that will refuse it. */
+     *  reconnect loop from spinning against a peer that will refuse it.
+     *  Only ever lifts the gate, never sets it, so a false negative preserves
+     *  a refusal that already held rather than creating one. */
     private fun deviceIsBonded(mac: String): Boolean = try {
         val btMgr = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         btMgr?.adapter?.getRemoteDevice(mac)?.bondState == BluetoothDevice.BOND_BONDED

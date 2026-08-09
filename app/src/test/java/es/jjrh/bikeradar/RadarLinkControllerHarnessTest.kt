@@ -536,6 +536,10 @@ class RadarLinkControllerHarnessTest {
             "an unbonded radar must not lift the gate",
             controller.isActive(),
         )
+        assertTrue(
+            "the refusal must say it was the bond gate, not merely fail to start",
+            journal.any { it.contains("start refused: bond lost") },
+        )
 
         // The rider re-pairs the original radar in system Bluetooth settings.
         setBonded(mac)
@@ -544,7 +548,40 @@ class RadarLinkControllerHarnessTest {
             "a radar the adapter reports as bonded must be startable again",
             controller.isActive(),
         )
+        assertTrue(
+            "the journal must distinguish the adapter lift from a broadcast one",
+            journal.any { it.contains("radar re-paired (adapter)") },
+        )
         controller.forceReconnect()
+    }
+
+    /**
+     * Recovering the link must also retract the notification that told the
+     * rider to re-pair.
+     *
+     * Before the gate could actually lift this rarely happened, so the
+     * notification outliving it went unnoticed. Now that a re-pair recovers,
+     * a stale high-priority "re-pair your radar" would sit in the shade for
+     * the rest of the process while the link runs and alerts fire.
+     */
+    @Test
+    fun recoveringTheLinkRetractsTheRePairNotification() = runTest {
+        val controller = controller(Link())
+        controller.registerBondReceiver()
+        controller.start("RearVue8", mac)
+
+        sendBondState(android.bluetooth.BluetoothDevice.BOND_NONE)
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        assertTrue(
+            "bond loss should post the re-pair notification",
+            shadowOf(nm).allNotifications.isNotEmpty(),
+        )
+
+        sendBondState(android.bluetooth.BluetoothDevice.BOND_BONDED)
+        assertTrue(
+            "re-pairing must clear the re-pair notification",
+            shadowOf(nm).allNotifications.isEmpty(),
+        )
     }
 
     private fun setBonded(address: String) {

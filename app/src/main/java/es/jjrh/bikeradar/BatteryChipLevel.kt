@@ -33,3 +33,25 @@ fun batteryChipLevel(pct: Int, lowThresholdPct: Int): BatteryChipLevel = when {
     batteryIsLow(pct, lowThresholdPct) -> BatteryChipLevel.LOW
     else -> BatteryChipLevel.NORMAL
 }
+
+/**
+ * Which devices the overlay should mark as low on battery.
+ *
+ * A reading only counts while it is recent enough to still describe the
+ * device: an entry the app has not refreshed within [staleAfterMs] says
+ * nothing about the battery now, and marking on it would be the same
+ * stale-reading-as-live-claim the chips avoid.
+ *
+ * Extracted rather than inlined in the overlay loop so the boundary has a
+ * test of its own. Inline, it sat inside a coroutine no unit test reaches,
+ * which is how it came to disagree with [batteryIsLow] by one percent.
+ */
+fun lowBatterySlugs(
+    entries: Collection<BatteryEntry>,
+    lowThresholdPct: Int,
+    nowMs: Long,
+    staleAfterMs: Long,
+): Set<String> = entries
+    .filter { batteryIsLow(it.pct, lowThresholdPct) && nowMs - it.readAtMs < staleAfterMs }
+    .map { it.slug }
+    .toSet()

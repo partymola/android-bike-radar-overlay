@@ -193,13 +193,12 @@ internal class OverlayPipeline(
                         view.setPrecog(overlayPrefs.precogEnabled)
                         view.setState(state)
 
-                        val threshold = prefs.batteryLowThresholdPct
-                        val lowSlugs = batteries.values
-                            .filter {
-                                batteryIsLow(it.pct, threshold) &&
-                                    now - it.readAtMs < BikeRadarService.BATTERY_STALE_MS
-                            }
-                            .map { it.slug }.toSet()
+                        val lowSlugs = lowBatterySlugs(
+                            entries = batteries.values,
+                            lowThresholdPct = prefs.batteryLowThresholdPct,
+                            nowMs = now,
+                            staleAfterMs = BikeRadarService.BATTERY_STALE_MS,
+                        )
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {

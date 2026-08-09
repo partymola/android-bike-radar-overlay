@@ -18,7 +18,6 @@ import android.graphics.PixelFormat
 import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
-import android.os.Build
 import android.os.IBinder
 import android.os.ParcelUuid
 import android.os.SystemClock
@@ -825,11 +824,7 @@ class BikeRadarService : Service() {
         val i = Intent(this, BatteryScanReceiver::class.java).apply {
             action = BatteryScanReceiver.ACTION_SCAN_RESULT
         }
-        val flags = if (Build.VERSION.SDK_INT >= 31) {
-            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val flags = PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         return PendingIntent.getBroadcast(this, SCAN_PI_REQ, i, flags)
     }
 

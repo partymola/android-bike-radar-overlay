@@ -35,9 +35,10 @@ import es.jjrh.bikeradar.data.Prefs
  */
 class BatteryScanReceiver : BroadcastReceiver() {
 
-    // Reads BluetoothDevice.name (BLUETOOTH_CONNECT). This receiver only fires
-    // from the scan PendingIntent the service registers after holding
-    // BLUETOOTH_SCAN + _CONNECT, so the permission is guaranteed here.
+    // Reads BluetoothDevice.name (BLUETOOTH_CONNECT). This receiver fires only
+    // from the scan PendingIntent the service registers while holding
+    // BLUETOOTH_SCAN + _CONNECT; the scan outlives the grant as well as the
+    // process, so a revoked _CONNECT would surface here rather than be caught.
     @SuppressLint("MissingPermission")
     override fun onReceive(ctx: Context, intent: Intent) {
         val errorCode = intent.getIntExtra(BluetoothLeScanner.EXTRA_ERROR_CODE, NO_ERROR_SENTINEL)
@@ -89,11 +90,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
                 putExtra(BikeRadarService.EXTRA_MAC, mac)
             }
             try {
-                if (Build.VERSION.SDK_INT >= 26) {
-                    ContextCompat.startForegroundService(ctx, i)
-                } else {
-                    ctx.startService(i)
-                }
+                ContextCompat.startForegroundService(ctx, i)
             } catch (e: ForegroundServiceStartNotAllowedException) {
                 // Every other result in this batch would be refused the same way.
                 Log.i(TAG, "service start refused, app not running: $e")

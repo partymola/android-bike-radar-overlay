@@ -4,7 +4,6 @@ package es.jjrh.bikeradar
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
@@ -32,12 +31,7 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
         Log.d(TAG, "$action: starting BikeRadarService")
-        val i = Intent(ctx, BikeRadarService::class.java)
-        if (Build.VERSION.SDK_INT >= 26) {
-            ContextCompat.startForegroundService(ctx, i)
-        } else {
-            ctx.startService(i)
-        }
+        ContextCompat.startForegroundService(ctx, Intent(ctx, BikeRadarService::class.java))
     }
 
     companion object {

@@ -7,7 +7,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import es.jjrh.bikeradar.data.Prefs
@@ -141,11 +140,7 @@ internal class ServiceNotifications(
         }
         val actionLabel = if (paused) context.getString(R.string.svc_main_notif_action_resume) else context.getString(R.string.svc_main_notif_action_pause)
         val actionBroadcast = if (paused) InternalControlReceiver.ACTION_RESUME else InternalControlReceiver.ACTION_PAUSE_1H
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val piFlags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val actionPi = PendingIntent.getBroadcast(
             context,
             NOTIF_ACTION_REQ,
@@ -173,11 +168,7 @@ internal class ServiceNotifications(
      *  service's bond-lost path. */
     fun postBondLost() {
         ensureChannels()
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val piFlags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val openSettings = PendingIntent.getActivity(
             context,
             BOND_NOTIF_REQ,
@@ -203,11 +194,7 @@ internal class ServiceNotifications(
      *  actions (tapping or swiping the body counts as Dismiss). The audible +
      *  haptic alarm tone is driven separately by the service. */
     fun postWalkAway() {
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val piFlags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val dismissPi = PendingIntent.getBroadcast(
             context,
             NOTIF_WALKAWAY_DISMISS_REQ,
@@ -356,11 +343,7 @@ internal class ServiceNotifications(
                 }
             }
         }
-        val piFlags = if (Build.VERSION.SDK_INT >= 23) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val piFlags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val openApp = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
             PendingIntent.getActivity(context, NOTIF_RIDE_SUMMARY_REQ, it, piFlags)
         }

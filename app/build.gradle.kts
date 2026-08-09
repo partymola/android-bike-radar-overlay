@@ -379,6 +379,26 @@ val coverageExcludes = listOf(
     "**/SyntheticScenarioService*.*",
     "**/ScreenshotCaptureService*.*",
 )
+// The diff-coverage gate's WIDER scope. It is per-diff, so there is nothing to
+// dilute: a new inline `when` over app state in a Composable body lands as
+// uncovered changed lines and fails, which is the mechanism that let a
+// two-state Home Assistant row ship. Only genuine leaf/render files stay out,
+// which is Roborazzi's actual remit.
+//
+// Deliberately NOT the ratchet's list. The two gates behave oppositely under
+// narrowing: the ratchet is an aggregate, so pulling Compose rendering in
+// drops the ratio and the only way back to green is lowering the floors,
+// which dresses a weakening up as a tightening. Keep them separate.
+val diffCoverageExcludes = listOf(
+    "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+    "**/*ComposableSingletons*.*",
+    "**/RadarOverlayView*.*", // Canvas view - Roborazzi-rendered, not line-coverable
+    "**/DebugOverlayService*.*",
+    "**/ReplayService*.*",
+    "**/SyntheticScenarioService*.*",
+    "**/ScreenshotCaptureService*.*",
+)
+
 // AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
 // this path the report/verification go empty (not silently wrong) - re-point.
 val coverageClassDir = "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
@@ -395,6 +415,39 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     }
     classDirectories.setFrom(
         fileTree(layout.buildDirectory.dir(coverageClassDir)) { exclude(coverageExcludes) },
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory.dir(coverageExecDir)) { include("**/*.exec") },
+    )
+}
+
+// Second report, wider scope, for INSPECTION only. The diff-coverage gate is
+// deliberately NOT pointed at it.
+//
+// The plan was to gate on this so derivation written inline in a Composable
+// body stopped being exempt. Measured before adopting, and the mechanism does
+// not hold: Compose's compiler transforms break JaCoCo line attribution, so
+// branches that goldens demonstrably render still report as uncovered. The
+// chip-colour `when` in UiPrimitives has a golden for each of its three arms
+// and reads 0/4; the four HaStatus arms in MainScreenCards have a golden each
+// and read the same. Gating on it would fail every UI change whether or not
+// it was tested - a gate that does not measure what it claims.
+//
+// Run it to see where UI coverage actually stands; do not wire it to a floor
+// until Compose line attribution is trustworthy. What does make inline
+// derivation stick meanwhile is extracting it to the root package, where the
+// ratchet and the diff gate both see it.
+tasks.register<JacocoReport>("jacocoDiffReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "JaCoCo coverage including Compose UI, read by the diff-coverage gate."
+    reports {
+        xml.required.set(true)
+        html.required.set(false)
+    }
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir(coverageClassDir)) { exclude(diffCoverageExcludes) },
     )
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(

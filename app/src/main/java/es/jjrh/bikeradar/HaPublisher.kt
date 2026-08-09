@@ -113,12 +113,18 @@ internal class HaPublisher(
         }
         val ok = ha.publishBatteryState(s, pct)
         if (newlyDiscovered) {
-            // Retire this device's entities from every naming generation the
+            // Retire this device's entities from the naming generations the
             // app has shipped, so the old ones do not sit beside the new.
-            // After the state write, not before: this is a couple of dozen
-            // round trips and must not delay the rider's first reading.
-            // Per-process, so a partial failure retries next launch.
-            Log.i(TAG, "HA stale-entity cleanup for $s: ok=${ha.cleanupStaleDiscoveryTopics(listOf(s))}")
+            //
+            // Launched, never awaited: this caller is the radar's notify loop,
+            // and a couple of dozen sequential round trips would stop it
+            // draining V2 frames long enough for the data-flow watchdog to
+            // tear the link down. Home Assistant housekeeping must not cost
+            // the rider their radar.
+            scope.launch {
+                val retired = ha.cleanupStaleDiscoveryTopics(listOf(s))
+                Log.i(TAG, "HA stale-entity cleanup for $s: ok=$retired")
+            }
         }
         if (ok) {
             HaHealthBus.reportOk()

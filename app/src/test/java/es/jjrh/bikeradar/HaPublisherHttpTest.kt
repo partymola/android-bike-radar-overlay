@@ -109,13 +109,15 @@ class HaPublisherHttpTest {
             "homeassistant/sensor/bikeradar_radar_battery/config",
             topics.first(),
         )
+        // The reading is published synchronously; the retirement is launched
+        // off this thread, because awaiting a couple of dozen round trips here
+        // would stall the radar's notify loop into the data-flow watchdog.
         val state = topics.indexOf("bikeradar/radar/battery")
-        val retire = topics.indexOf("homeassistant/sensor/varia_radar_battery/config")
-        assertTrue("the old generation's entities are retired", retire >= 0)
+        assertTrue("the reading is published without waiting on housekeeping", state >= 0)
+        awaitTopic { it == "homeassistant/sensor/varia_radar_battery/config" }
         assertTrue(
-            "the rider's reading is published before the retirement, which is " +
-                "a couple of dozen round trips of housekeeping",
-            state in 0..<retire,
+            "the reading precedes the retirement",
+            state < topics.indexOf("homeassistant/sensor/varia_radar_battery/config"),
         )
     }
 

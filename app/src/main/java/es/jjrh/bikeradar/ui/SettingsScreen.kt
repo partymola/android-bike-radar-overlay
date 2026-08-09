@@ -231,7 +231,14 @@ internal fun SettingsMenuBody(
                 )
                 SettingsRow(
                     icon = Icons.Default.Home,
-                    iconTint = br.safe,
+                    // Green only when it IS ready: this column's other status
+                    // colour, on the shield below, means "all granted", so a
+                    // green house beside "Not configured" reads as fine.
+                    iconTint = when (HaStatusDeriver.derive(haConfigured, haHealth)) {
+                        HaStatus.READY -> br.safe
+                        HaStatus.UNREACHABLE -> br.caution
+                        HaStatus.CONFIGURED, HaStatus.NOT_CONFIGURED -> br.fgDim
+                    },
                     title = stringResource(R.string.settings_home_ha_title),
                     subtitle = haSubtitle(ctx, haConfigured, haHealth),
                     onClick = { navController.navigate("settings/ha") },

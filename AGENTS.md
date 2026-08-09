@@ -170,9 +170,13 @@ decoders in both Python and Kotlin live there.
   prior-art credits, and device-name-matching heuristics (the radar
   advertises its local name as "RearVue8", so our matchers have to look
   for it literally).
-- MQTT topic prefixes and HA entity IDs keep the legacy `varia_` prefix on
-  purpose — renaming would break existing subscribers. See
-  `HaClient.kt:25-26`.
+- MQTT topics and HA entity IDs are namespaced under `HaClient.NS`
+  (`bikeradar`). It was a vendor name until the same namespace also carried
+  the front camera and the ride statistics. Renaming it again breaks every
+  rider's automations, so if it ever changes, add the old value to
+  `cleanupStaleDiscoveryTopics` to retire the entities it created.
+- `BikeRadarService.slug()` strips `varia_` from a device's ADVERTISED name
+  and is unrelated to that namespace. Leave it alone.
 
 ## Writing copy (UI strings)
 

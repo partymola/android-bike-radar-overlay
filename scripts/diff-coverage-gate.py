@@ -10,10 +10,10 @@
 # CI), so it passes with a note. Above that size, the changed lines must be
 # >= --fail-under percent covered or the gate fails and names the gaps.
 #
-# Scope is whatever the JaCoCo report contains. The report is ALREADY filtered
-# (Compose UI under es/jjrh/bikeradar/ui/** and the dev services are excluded -
-# see coverageExcludes in app/build.gradle.kts), so new UI is not gated here;
-# Roborazzi goldens cover it. The report must exist first: run
+# Scope is whatever the JaCoCo report contains. jacocoDiffReport keeps Compose
+# UI IN (see diffCoverageExcludes in app/build.gradle.kts), so derivation
+# written inline in a Composable body is gated rather than exempt; only
+# leaf/render files are excluded. The report must exist first: run
 # `:app:jacocoDiffReport` before this script.
 #
 # Base ref:

@@ -153,7 +153,7 @@ internal class RadarLinkController(
             val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
             when (state) {
                 BluetoothDevice.BOND_NONE -> onRadarBondLost(mac)
-                BluetoothDevice.BOND_BONDED -> liftBondGate(mac, via = "broadcast")
+                BluetoothDevice.BOND_BONDED -> liftBondGate(mac, via = "broadcast", name = device.name)
             }
         }
     }
@@ -188,6 +188,13 @@ internal class RadarLinkController(
         Log.w(TAG, "radar bond removed ($mac); stopping reconnect loop")
         journal("radar bond removed; reconnect loop stopped")
         bondLost = true
+        // Armed at the START of the episode, not only cleared at its end.
+        // liftBondGate is not synchronized and runs on the main thread while
+        // start() runs on IO, so a lift landing between start()'s read of
+        // bondLost and its write of the latch would leave the latch set with
+        // the gate clear - and the NEXT genuine bond loss would then journal
+        // nothing at all. Clearing here makes the invariant local.
+        bondRefusalJournalled = false
         radarJob?.cancel()
         radarJob = null
         linkState.markDisconnected()
@@ -205,7 +212,7 @@ internal class RadarLinkController(
         // this one can match. Either way the flag would never lift and the link
         // would stay dead for the process. A device the adapter reports as
         // bonded is worth trying, whatever we did or did not hear.
-        if (bondLost && deviceIsBonded(mac)) liftBondGate(mac, via = "adapter")
+        if (bondLost && deviceIsBonded(mac)) liftBondGate(mac, via = "adapter", name = name)
         bondWatchMac = mac
         if (bondLost) {
             Log.d(TAG, "skip radar link start: bond lost, waiting for re-pair")
@@ -232,10 +239,10 @@ internal class RadarLinkController(
      * saved us" and "the normal path worked" are the informative distinction
      * when a reconnect problem is being read back off the journal.
      */
-    private fun liftBondGate(mac: String, via: String) {
+    private fun liftBondGate(mac: String, via: String, name: String?) {
         if (!bondLost) return
         Log.i(TAG, "radar re-paired ($mac, $via); allowing reconnect")
-        journal("radar re-paired ($via)")
+        journal("radar re-paired ($via) $name")
         bondLost = false
         bondRefusalJournalled = false
         // The shade still says "Re-pair in Bluetooth settings" otherwise, for

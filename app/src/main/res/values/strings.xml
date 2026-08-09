@@ -311,6 +311,9 @@
     <string name="settings_home_lights_summary">Rear <xliff:g id="rear" example="on">%1$s</xliff:g> · Front <xliff:g id="front" example="off">%2$s</xliff:g></string>
     <string name="settings_home_lights_all_off">Off</string>
     <string name="settings_home_conn_connected">Connected · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
+    <!-- Camera row only. Spanish inflects "Conectado" for gender; the key
+         above serves the masculine radar row. -->
+    <string name="settings_home_conn_connected_cam">Connected · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
     <string name="settings_home_conn_not_connected">Not connected</string>
     <string name="settings_home_ebike_setup">Set up your eBike</string>
     <string name="settings_home_dont_have_one">Don\'t have one</string>

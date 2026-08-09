@@ -294,6 +294,7 @@
     <string name="settings_home_lights_summary">Trasera <xliff:g id="rear" example="on">%1$s</xliff:g> · Delantera <xliff:g id="front" example="off">%2$s</xliff:g></string>
     <string name="settings_home_lights_all_off">Apagadas</string>
     <string name="settings_home_conn_connected">Conectado · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
+    <string name="settings_home_conn_connected_cam">Conectada · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
     <string name="settings_home_conn_not_connected">No conectado</string>
     <string name="settings_home_ebike_setup">Configura tu eBike</string>
     <string name="settings_home_dont_have_one">No tengo</string>

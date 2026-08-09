@@ -400,7 +400,9 @@ private fun dashcamConnectionSubtitle(
     snap: es.jjrh.bikeradar.data.PrefsSnapshot,
     dashcamBattery: BatteryEntry?,
 ): String = if (dashcamBattery != null) {
-    ctx.getString(R.string.settings_home_conn_connected, dashcamBattery.pct)
+    // Camera-specific key: this row is labelled "Cámara" in Spanish, which
+    // inflects the adjective the radar row's key carries in the masculine.
+    ctx.getString(R.string.settings_home_conn_connected_cam, dashcamBattery.pct)
 } else {
     dashcamSubtitle(ctx, snap)
 }

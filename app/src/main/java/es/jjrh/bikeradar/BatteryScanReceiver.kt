@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar
 
 import android.annotation.SuppressLint
+import android.app.ForegroundServiceStartNotAllowedException
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanResult
@@ -10,7 +11,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
@@ -24,6 +27,11 @@ import es.jjrh.bikeradar.data.Prefs
  * For each matching result we hand off to BikeRadarService via ACTION_READ_DEVICE;
  * the service throttles per-device so rapid-fire adverts don't trigger rapid-fire
  * GATT reads.
+ *
+ * The scan outlives the process, so a sighting can arrive with nothing running
+ * and the service start is then refused. That is not an error state - it is the
+ * app being closed - so it leaves a journal line rather than an uncaught
+ * exception.
  */
 class BatteryScanReceiver : BroadcastReceiver() {
 
@@ -80,10 +88,20 @@ class BatteryScanReceiver : BroadcastReceiver() {
                 putExtra(BikeRadarService.EXTRA_NAME, name)
                 putExtra(BikeRadarService.EXTRA_MAC, mac)
             }
-            if (Build.VERSION.SDK_INT >= 26) {
-                ContextCompat.startForegroundService(ctx, i)
-            } else {
-                ctx.startService(i)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) {
+                    ContextCompat.startForegroundService(ctx, i)
+                } else {
+                    ctx.startService(i)
+                }
+            } catch (e: ForegroundServiceStartNotAllowedException) {
+                // Every other result in this batch would be refused the same way.
+                Log.i(TAG, "service start refused, app not running: $e")
+                if (refusalThrottle.shouldLog(SystemClock.elapsedRealtime())) {
+                    LinkEventJournal({ ctx.getExternalFilesDir(null) })
+                        .log("scan wake ignored: app not running, service start refused ($name)")
+                }
+                return
             }
         }
     }
@@ -101,10 +119,43 @@ class BatteryScanReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * Rate-limiter for the refused-start journal line.
+     *
+     * A refusal repeats for as long as the app stays closed, and each repeat
+     * says the same thing. Unthrottled, a ride's worth of them would push the
+     * link history out of the size-capped journal - the history being the
+     * reason the journal exists.
+     *
+     * Per-process and best-effort: a refusal means nothing is running, so the
+     * process it throttles is an empty one and the first the OS reaps. A wake
+     * after that reap starts from a clean slate and writes again.
+     */
+    internal class RefusalLogThrottle {
+        private var lastLogMs: Long? = null
+
+        /** Consumes the window when it says yes. */
+        fun shouldLog(nowMs: Long): Boolean {
+            val last = lastLogMs
+            if (last != null && nowMs - last < REFUSAL_LOG_WINDOW_MS) return false
+            lastLogMs = nowMs
+            return true
+        }
+    }
+
     companion object {
         private const val TAG = "BikeRadar.Scan"
         const val ACTION_SCAN_RESULT = "es.jjrh.bikeradar.BATTERY_SCAN_RESULT"
         private const val NO_ERROR_SENTINEL = Int.MIN_VALUE
+
+        /** How often a refused start may write a journal line. */
+        @VisibleForTesting
+        internal const val REFUSAL_LOG_WINDOW_MS = 15 * 60 * 1000L
+
+        /** Shared because the OS builds a fresh receiver per broadcast; read
+         *  and written only from the main thread that dispatches them. */
+        @VisibleForTesting
+        internal var refusalThrottle = RefusalLogThrottle()
 
         fun matchesVariaName(n: String): Boolean = DeviceNameMatcher.isKnownAccessory(n)
     }

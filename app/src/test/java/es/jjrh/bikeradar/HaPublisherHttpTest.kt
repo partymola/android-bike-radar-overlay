@@ -109,16 +109,19 @@ class HaPublisherHttpTest {
             "homeassistant/sensor/bikeradar_radar_battery/config",
             topics.first(),
         )
-        // The reading is published synchronously; the retirement is launched
-        // off this thread, because awaiting a couple of dozen round trips here
-        // would stall the radar's notify loop into the data-flow watchdog.
-        val state = topics.indexOf("bikeradar/radar/battery")
-        assertTrue("the reading is published without waiting on housekeeping", state >= 0)
-        awaitTopic { it == "homeassistant/sensor/varia_radar_battery/config" }
-        assertTrue(
-            "the reading precedes the retirement",
-            state < topics.indexOf("homeassistant/sensor/varia_radar_battery/config"),
-        )
+        // The reading is published synchronously. The retirement is a couple
+        // of dozen round trips and must NOT be awaited: this runs on the
+        // radar's notify loop, and blocking it stops V2 frames being drained
+        // for long enough that the data-flow watchdog tears the link down.
+        //
+        // So the assertion is that the call returned with the retirement still
+        // in flight, not merely that it happened later - awaiting it after the
+        // state write would satisfy an ordering check while reintroducing the
+        // stall.
+        val retire = "homeassistant/sensor/varia_radar_battery/config"
+        assertTrue("the reading is published", topics.contains("bikeradar/radar/battery"))
+        assertFalse("the retirement must not have been awaited", topics.contains(retire))
+        awaitTopic { it == retire }
     }
 
     @Test fun batteryPublishReturnsFalseWhenDiscoveryFails() = runBlocking {

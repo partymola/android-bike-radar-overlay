@@ -121,6 +121,8 @@
     <string name="main_system_value_not_paired">No emparejado</string>
     <string name="main_system_value_live">Activo</string>
     <string name="main_system_value_no_signal">Sin señal</string>
+    <string name="main_system_value_cam_not_paired">No emparejada</string>
+    <string name="main_system_value_cam_live">Activa</string>
     <string name="main_system_value_waiting_flow">Esperando a Flow</string>
     <string name="main_system_value_mqtt_ready">MQTT listo</string>
     <string name="main_system_value_unreachable">Inaccesible</string>
@@ -445,6 +447,7 @@
     <string name="settings_ha_connected">Conectado</string>
     <string name="settings_ha_not_configured">Sin configurar</string>
     <string name="settings_ha_configured">Configurado</string>
+    <string name="settings_ha_unreachable">Problema de conexión</string>
     <string name="settings_ha_nothing_published_yet">Guardado. Aún no se ha publicado nada.</string>
     <string name="settings_ha_add_url_token">Añade tu URL + token abajo.</string>
     <string name="settings_ha_last_error">Último error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>

@@ -10,8 +10,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
 /**
- * Proxy contract test for [ScreenshotCaptureService]'s start/stop ordering
- * (audit finding M11).
+ * Proxy contract test for [ScreenshotCaptureService]'s start/stop ordering.
  *
  * On API 31-33 a service started via startForegroundService() MUST call
  * startForeground() within ~5 s or the framework throws

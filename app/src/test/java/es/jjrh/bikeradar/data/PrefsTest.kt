@@ -385,7 +385,7 @@ class PrefsTest {
     }
 
     /**
-     * Audit finding M10: [Prefs.dumpAll] is a hand-maintained `buildString`
+     * [Prefs.dumpAll] is a hand-maintained `buildString`
      * that enumerates every field by name, and the diagnostic bundle it
      * produces is meant to be pasted into public issue trackers. The two
      * existing dump tests only pin the fields we already know to redact -
@@ -416,7 +416,7 @@ class PrefsTest {
     }
 
     /**
-     * Audit finding M10 companion: pins that the seeded identifier *values*
+     * Companion to the dump-coverage test above: pins that the seeded identifier *values*
      * never appear verbatim in the dump (catching leaks of any shape, not just
      * MAC-shaped), while the redaction markers for the two known identifier
      * fields are present. The key strings and the `<redacted>` marker are

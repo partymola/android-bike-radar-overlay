@@ -380,7 +380,6 @@ class RideStatsAccumulatorTest {
 
     // ── alarm-fatigue rates ───────────────────────────────────────────────────
 
-    /** Accrue 12 km of distance: 10 m/s integrated over a 1200 s interval. */
     /**
      * 12 km at 10 m/s, integrated the way a ride actually arrives: a frame a
      * second for 1200 s. Two frames 20 minutes apart would be quicker but

@@ -248,9 +248,6 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         DeviceNameMatcher.isRadarName(entry.name)
     }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
-    // Credentials are re-read on the 5 s tick rather than in a remember{}:
-    // they can be saved from Settings while this screen is open, and a
-    // composition-time snapshot would leave the row asserting the old state.
     val haStatus = HaStatusDeriver.derive(haConfigured, haHealth)
     // eBike freshness samples elapsedRealtime() fresh on every recompose;
     // the 5 s tickNowMs above is the recompose driver, so the dot drops to

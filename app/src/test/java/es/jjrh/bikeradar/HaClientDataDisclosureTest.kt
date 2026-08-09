@@ -23,12 +23,12 @@ class HaClientDataDisclosureTest {
     @Test
     fun everyOutboundTopicFamilyIsRegisteredInTheAnchor() {
         val source = readMainSource("HaClient.kt")
-        // Matches whole "$NS/..." string literals, which is how every topic in
-        // HaClient is written. Two ways this guard can go quiet, both of which
-        // make it pass vacuously rather than fail, so they are asserted below:
-        // a dynamically concatenated topic ("$NS/" + seg), and a rename of the
-        // namespace that leaves this pattern matching nothing.
-        val families = Regex("\"\\\$NS/[^\"]*\"")
+        // Whole "$NS/..." literals, in either interpolation form - the brace
+        // form is already used elsewhere in that file for entity ids, so a
+        // topic written that way must not slip past. A concatenated topic
+        // ("$NS/" + seg) still would; the non-empty assertion below catches
+        // only total silence, not that case.
+        val families = Regex("\"\\\$\\{?NS\\}?/[^\"]*\"")
             .findAll(source)
             .map { it.value.trim('"') }
             .map { normaliseFamily(it) }

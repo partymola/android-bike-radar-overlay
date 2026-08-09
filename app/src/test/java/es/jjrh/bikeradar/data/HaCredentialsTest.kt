@@ -4,7 +4,6 @@ package es.jjrh.bikeradar.data
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import es.jjrh.bikeradar.BuildConfig
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -15,6 +14,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.File
 
 /**
  * Verifies [HaCredentials]' backup-transferable storage contract: values
@@ -209,14 +209,23 @@ class HaCredentialsTest {
     }
 
     @Test
-    fun theReleaseBuildCarriesNoBakedInCredentials() {
+    fun onlyTheDebugBuildTypeCanBakeInCredentials() {
         // The disclosure "removed from the phone immediately" depends on
-        // nothing writing them back. Release ships empty BuildConfig fields;
-        // if a buildTypes edit ever changed that, seeding would undo a clear.
-        if (!BuildConfig.DEBUG) {
-            assertEquals("", BuildConfig.HA_BASE_URL)
-            assertEquals("", BuildConfig.HA_TOKEN)
-        }
+        // nothing writing them back, and seeding writes whenever the store is
+        // empty. Asserting BuildConfig directly would only ever run in the
+        // debug variant, which is the one allowed to carry values - so read
+        // the gradle config, which is where the invariant actually lives.
+        val gradle = listOf(File("build.gradle.kts"), File("app/build.gradle.kts"))
+            .firstOrNull { it.exists() }
+            ?: error("could not locate the module build file from ${File(".").absolutePath}")
+        val seeding = Regex("""buildConfigField\("String", "HA_(?:BASE_URL|TOKEN)", "\\"\$\{?localProps""")
+            .findAll(gradle.readText()).count()
+        assertEquals(
+            "only the debug buildType may seed HA credentials; a second seeding site " +
+                "would let a release build undo a rider's clear",
+            2,
+            seeding,
+        )
     }
 
     @Test

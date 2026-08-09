@@ -66,6 +66,11 @@ fi
 # 2. Every user-facing manifest permission must be named in the Privacy copy.
 perms="$(grep -oE 'android\.permission\.[A-Z_]+' "$MANIFEST" \
     | sed 's/android\.permission\.//' | sort -u)"
+if [ -z "$perms" ]; then
+    # Without this the loop below runs once with an empty pattern, and
+    # `grep -qF ""` matches every line, so every permission check passes.
+    blocker "could not parse any permission from $MANIFEST"
+fi
 mapfile -t perm_arr <<<"$perms"
 for p in "${perm_arr[@]}"; do
     case " $PERMISSION_ALLOWLIST " in

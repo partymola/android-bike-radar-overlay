@@ -106,7 +106,9 @@ class HaCredentials(context: Context) {
      * shape as the legacy-blob path [clear] already had to close. The release
      * BuildConfig fields are empty today, so the blank guard below would also
      * stop it, but that is a gradle default rather than a rule; this gate is
-     * the rule. [HaCredentialsTest] pins both halves.
+     * the rule. The no-op-when-configured half is pinned by
+     * [HaCredentialsTest]; this gate itself is not, since the suite runs only
+     * the debug variant.
      */
     fun seedFromBuildConfigIfEmpty() {
         if (!BuildConfig.DEBUG) return

@@ -111,7 +111,7 @@ class HaClientHttpTest {
     @Test
     fun publishMqttSendsAuthorizedJsonPostAndReportsSuccess() = runTest {
         respondAll(200)
-        val ok = client().publishMqtt("varia/x/battery", "88", retain = true)
+        val ok = client().publishMqtt("bikeradar/x/battery", "88", retain = true)
         assertTrue(ok)
         assertEquals(1, requests.size)
         val req = requests.single()
@@ -120,7 +120,7 @@ class HaClientHttpTest {
         assertEquals("Bearer tok", req.auth)
         assertEquals("application/json", req.contentType)
         val sent = JSONObject(req.body)
-        assertEquals("varia/x/battery", sent.getString("topic"))
+        assertEquals("bikeradar/x/battery", sent.getString("topic"))
         assertEquals("88", sent.getString("payload"))
         assertTrue(sent.getBoolean("retain"))
         assertEquals(0, sent.getInt("qos"))
@@ -175,7 +175,7 @@ class HaClientHttpTest {
         val req = requests.single()
         assertEquals("POST", req.method)
         assertEquals("/api/services/mqtt/publish", req.path)
-        assertEquals("varia/_probe", JSONObject(req.body).getString("topic"))
+        assertEquals("bikeradar/_probe", JSONObject(req.body).getString("topic"))
     }
 
     @Test
@@ -257,7 +257,7 @@ class HaClientHttpTest {
         // (the two async writes race).
         val topics = requests.map { JSONObject(it.body).getString("topic") }.toSet()
         assertEquals(
-            setOf("varia/rearvue8/close_pass", "varia/rearvue8/close_pass/last"),
+            setOf("bikeradar/rearvue8/close_pass", "bikeradar/rearvue8/close_pass/last"),
             topics,
         )
         for (req in requests) {
@@ -285,7 +285,7 @@ class HaClientHttpTest {
         assertTrue(ok)
         assertEquals(2, requests.size)
         val topics = requests.map { JSONObject(it.body).getString("topic") }.toSet()
-        assertEquals(setOf("varia/ride/edge", "varia/ride/edge/last"), topics)
+        assertEquals(setOf("bikeradar/ride/edge", "bikeradar/ride/edge/last"), topics)
         for (req in requests) {
             val sent = JSONObject(JSONObject(req.body).getString("payload"))
             assertEquals("ride_started", sent.getString("event_type"))
@@ -307,7 +307,7 @@ class HaClientHttpTest {
         val req = requests.single()
         val sent = JSONObject(req.body)
         assertEquals(
-            "homeassistant/sensor/varia_rearvue8_battery/config",
+            "homeassistant/sensor/bikeradar_rearvue8_battery/config",
             sent.getString("topic"),
         )
         assertTrue(sent.getBoolean("retain"))
@@ -318,7 +318,7 @@ class HaClientHttpTest {
         respondAll(200)
         assertTrue(client().publishBatteryState("rearvue8", 73))
         val sent = JSONObject(requests.single().body)
-        assertEquals("varia/rearvue8/battery", sent.getString("topic"))
+        assertEquals("bikeradar/rearvue8/battery", sent.getString("topic"))
         assertEquals("73", sent.getString("payload"))
     }
 
@@ -329,11 +329,11 @@ class HaClientHttpTest {
         assertTrue(client().publishFrontModeState("vue49548", "Day Flash"))
         assertEquals(2, requests.size)
         assertEquals(
-            "homeassistant/sensor/varia_vue49548_front_mode/config",
+            "homeassistant/sensor/bikeradar_vue49548_front_mode/config",
             JSONObject(requests[0].body).getString("topic"),
         )
         val state = JSONObject(requests[1].body)
-        assertEquals("varia/vue49548/front_mode", state.getString("topic"))
+        assertEquals("bikeradar/vue49548/front_mode", state.getString("topic"))
         assertEquals("Day Flash", state.getString("payload"))
     }
 
@@ -341,11 +341,24 @@ class HaClientHttpTest {
     fun cleanupStaleDiscoveryTopicsClearsAllWhenServerAccepts() = runTest {
         respondAll(200)
         assertTrue(client().cleanupStaleDiscoveryTopics(listOf("rearvue8")))
-        // Three legacy shapes per slug + two fixed probe topics, all retained
-        // empty payloads (a delete in MQTT discovery terms).
-        assertEquals(5, requests.size)
+        // Retiring a config means a retained EMPTY payload; anything else
+        // leaves the entity in the rider's Home Assistant as unavailable.
         assertTrue(requests.all { JSONObject(it.body).getString("payload").isEmpty() })
         assertTrue(requests.all { JSONObject(it.body).getBoolean("retain") })
+
+        // Every family the app has ever published must be retired, not just
+        // battery: by the time the namespace changed it also published
+        // light mode, close-pass events and twelve ride-summary sensors, and
+        // an unretired config is what leaves a permanently unavailable
+        // entity beside the new one.
+        val topics = requests.map { JSONObject(it.body).getString("topic") }
+        assertTrue("battery", topics.contains("homeassistant/sensor/varia_rearvue8_battery/config"))
+        assertTrue("front mode", topics.contains("homeassistant/sensor/varia_rearvue8_front_mode/config"))
+        assertTrue("close pass", topics.contains("homeassistant/event/varia_rearvue8_close_pass/config"))
+        assertTrue("a ride stat", topics.contains("homeassistant/sensor/varia_rearvue8_alerts_per_km/config"))
+        // Two pre-namespace battery shapes, the legacy namespace's four
+        // families (12 of them ride stats), and two fixed probe topics.
+        assertEquals(19, requests.size)
     }
 
     @Test

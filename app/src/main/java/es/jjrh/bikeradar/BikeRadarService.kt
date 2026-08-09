@@ -1249,6 +1249,15 @@ class BikeRadarService : Service() {
          *  user-selected dashcam MAC to the right battery entry. */
         val macToSlug = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+        /**
+         * Normalise a device's ADVERTISED name into a slug.
+         *
+         * The stripped prefix is the vendor word in the hardware's own name
+         * ("Varia RearVue8" -> `rearvue8`), not the app's MQTT namespace,
+         * which is [HaClient.NS] and is prepended separately. They are
+         * unrelated despite once having read the same; do not "finish the
+         * rename" here or every existing slug changes.
+         */
         fun slug(name: String): String = name.lowercase(Locale.ROOT)
             .replace(Regex("[^a-z0-9]+"), "_")
             .trim('_')

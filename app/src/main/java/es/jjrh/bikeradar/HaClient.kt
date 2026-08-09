@@ -22,10 +22,16 @@ import java.net.URL
  * HA prerequisite: the MQTT integration must be enabled. The app itself
  * never talks to the MQTT broker - HA does the publish on our behalf.
  *
- * Note: topic prefixes and slugs keep the legacy "varia_" prefix so existing
- * HA entity_ids (`sensor.varia_vue_49548_battery`, `sensor.varia_rearvue8_battery`)
- * and user automations keep working after the rebrand. Renaming them is a
- * conscious opt-in migration, not an implicit upgrade side-effect.
+ * Topics and entity ids are namespaced under [NS]. It named a radar vendor
+ * until now, which was wrong twice over: the app supports one vendor's radars
+ * but the same namespace also carries the front camera and every ride
+ * statistic, so it labelled ride facts with a radar brand.
+ *
+ * The rename is breaking, and handled rather than dropped on the rider:
+ * [cleanupStaleDiscoveryTopics] retires the old configs, so a rider gets the
+ * new entities instead of the new ones sitting beside permanently
+ * unavailable old ones. Automations referencing the old ids still have to be
+ * repointed by hand; the CHANGELOG says so.
  */
 // `open` (and the two close-pass publishers below) so a test double can record
 // publish attempts without a live broker - the close-pass un-gating split
@@ -124,7 +130,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/services/mqtt/publish")
                 val body = JSONObject()
-                    .put("topic", "varia/_probe")
+                    .put("topic", "$NS/_probe")
                     .put("payload", "")
                     .put("retain", true)
                     .put("qos", 0)
@@ -174,40 +180,60 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     suspend fun publishBatteryDiscovery(slug: String, deviceName: String): Boolean {
-        val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_battery/config"
+        val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_battery/config"
         val clean = cleanDeviceName(deviceName)
         val payload = JSONObject()
-            .put("object_id", "varia_${slug}_battery")
-            .put("unique_id", "varia_${slug}_battery")
+            .put("object_id", "${NS}_${slug}_battery")
+            .put("unique_id", "${NS}_${slug}_battery")
             .put("name", "battery")
             .put("has_entity_name", true)
-            .put("state_topic", "varia/$slug/battery")
+            .put("state_topic", "$NS/$slug/battery")
             .put("device_class", "battery")
             .put("unit_of_measurement", "%")
             .put("state_class", "measurement")
             .put(
                 "device",
                 JSONObject()
-                    .put("identifiers", JSONArray().put("varia_$slug"))
+                    .put("identifiers", JSONArray().put("${NS}_$slug"))
                     .put("name", "Varia $clean")
                     .put("manufacturer", "Garmin")
                     .put("model", "Varia")
-                    .put("via_device", "varia_reader"),
+                    .put("via_device", "${NS}_reader"),
             )
             .toString()
         return publishMqtt(topic, payload, retain = true)
     }
 
+    /**
+     * Retire discovery configs this app published under names it no longer
+     * uses, by publishing an empty retained payload to each.
+     *
+     * Every naming generation the app has shipped has to stay listed here.
+     * An entity whose config is not retired does not disappear when the app
+     * stops feeding it - it sits in the rider's Home Assistant as
+     * permanently unavailable, beside the new one, and looks like a bug in
+     * the app rather than a rename.
+     *
+     * [LEGACY_NS] is the vendor-named generation replaced by [NS]. It covers
+     * all four families, not just battery: the earlier generations above only
+     * ever published battery, but by then the app also published front-light
+     * mode, close-pass events and the ride-summary sensors.
+     */
     suspend fun cleanupStaleDiscoveryTopics(slugs: List<String>): Boolean {
         if (!isConfigured()) return false
         val topics = buildList {
             for (s in slugs) {
                 add("$DISCOVERY_PREFIX/sensor/$s/${s}_battery/config")
                 add("$DISCOVERY_PREFIX/sensor/${s}_battery/config")
-                add("$DISCOVERY_PREFIX/sensor/varia_${s}_battery/config")
+                add("$DISCOVERY_PREFIX/sensor/${LEGACY_NS}_${s}_battery/config")
+                add("$DISCOVERY_PREFIX/sensor/${LEGACY_NS}_${s}_front_mode/config")
+                add("$DISCOVERY_PREFIX/event/${LEGACY_NS}_${s}_close_pass/config")
+                for (f in RIDE_SUMMARY_SENSORS) {
+                    add("$DISCOVERY_PREFIX/sensor/${LEGACY_NS}_${s}_${f.field}/config")
+                }
             }
-            add("$DISCOVERY_PREFIX/sensor/varia_probe_83390a_battery/config")
-            add("$DISCOVERY_PREFIX/sensor/varia_probe_83390b_battery/config")
+            add("$DISCOVERY_PREFIX/sensor/${LEGACY_NS}_probe_83390a_battery/config")
+            add("$DISCOVERY_PREFIX/sensor/${LEGACY_NS}_probe_83390b_battery/config")
         }
         var allOk = true
         for (t in topics) {
@@ -219,7 +245,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 
     private fun cleanDeviceName(raw: String): String = raw.replace(Regex("[^\\x20-\\x7E]"), "").trim().ifEmpty { "device" }
 
-    suspend fun publishBatteryState(slug: String, pct: Int): Boolean = publishMqtt("varia/$slug/battery", pct.toString(), retain = true)
+    suspend fun publishBatteryState(slug: String, pct: Int): Boolean = publishMqtt("$NS/$slug/battery", pct.toString(), retain = true)
 
     /**
      * Publishes the MQTT-Discovery config for the front-camera/light mode entity.
@@ -228,30 +254,30 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * cannot remote-control the light.
      */
     suspend fun publishFrontModeDiscovery(slug: String, deviceName: String): Boolean {
-        val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_front_mode/config"
+        val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_front_mode/config"
         val clean = cleanDeviceName(deviceName)
         val payload = JSONObject()
-            .put("object_id", "varia_${slug}_front_mode")
-            .put("unique_id", "varia_${slug}_front_mode")
+            .put("object_id", "${NS}_${slug}_front_mode")
+            .put("unique_id", "${NS}_${slug}_front_mode")
             .put("name", "Front mode")
             .put("has_entity_name", true)
-            .put("state_topic", "varia/$slug/front_mode")
+            .put("state_topic", "$NS/$slug/front_mode")
             .put("icon", "mdi:car-light-high")
             .put(
                 "device",
                 JSONObject()
-                    .put("identifiers", JSONArray().put("varia_$slug"))
+                    .put("identifiers", JSONArray().put("${NS}_$slug"))
                     .put("name", "Varia $clean")
                     .put("manufacturer", "Garmin")
                     .put("model", "Varia")
-                    .put("via_device", "varia_reader"),
+                    .put("via_device", "${NS}_reader"),
             )
             .toString()
         return publishMqtt(topic, payload, retain = true)
     }
 
     /** Publishes the current front-camera/light mode as a retained state value. */
-    suspend fun publishFrontModeState(slug: String, modeName: String): Boolean = publishMqtt("varia/$slug/front_mode", modeName, retain = true)
+    suspend fun publishFrontModeState(slug: String, modeName: String): Boolean = publishMqtt("$NS/$slug/front_mode", modeName, retain = true)
 
     /**
      * Publishes the HA MQTT-Discovery config for the close-pass event
@@ -265,7 +291,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * session if the feature is enabled.
      */
     open suspend fun publishClosePassDiscovery(slug: String, deviceName: String): Boolean {
-        val topic = "$DISCOVERY_PREFIX/event/varia_${slug}_close_pass/config"
+        val topic = "$DISCOVERY_PREFIX/event/${NS}_${slug}_close_pass/config"
         val payload = buildClosePassDiscoveryPayload(slug, deviceName).toString()
         return publishMqtt(topic, payload, retain = true)
     }
@@ -285,10 +311,10 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      */
     internal fun buildClosePassDiscoveryPayload(slug: String, deviceName: String): JSONObject {
         val clean = cleanDeviceName(deviceName)
-        val eventTopic = "varia/$slug/close_pass"
+        val eventTopic = "$NS/$slug/close_pass"
         return JSONObject()
-            .put("object_id", "varia_${slug}_close_pass")
-            .put("unique_id", "varia_${slug}_close_pass")
+            .put("object_id", "${NS}_${slug}_close_pass")
+            .put("unique_id", "${NS}_${slug}_close_pass")
             .put("name", "Close pass")
             .put("has_entity_name", true)
             .put("state_topic", eventTopic)
@@ -297,11 +323,11 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             .put(
                 "device",
                 JSONObject()
-                    .put("identifiers", JSONArray().put("varia_$slug"))
+                    .put("identifiers", JSONArray().put("${NS}_$slug"))
                     .put("name", "Varia $clean")
                     .put("manufacturer", "Garmin")
                     .put("model", "Varia")
-                    .put("via_device", "varia_reader"),
+                    .put("via_device", "${NS}_reader"),
             )
     }
 
@@ -313,7 +339,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * display on load without waiting for the next overtake.
      */
     open suspend fun publishClosePassEvent(slug: String, eventJson: JSONObject): Boolean {
-        val topic = "varia/$slug/close_pass"
+        val topic = "$NS/$slug/close_pass"
         val payload = JSONObject(eventJson.toString()).put("event_type", "close_pass").toString()
         return coroutineScope {
             val j1 = async { publishMqtt(topic, payload, retain = false) }
@@ -329,15 +355,15 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * entities, one retained `/last` so a fresh dashboard card has
      * something to render on reload.
      *
-     * Topic: `varia/ride/edge` (and `varia/ride/edge/last`). The legacy
-     * `varia/` prefix is kept on purpose so existing HA configurations
-     * keep working without subscriber edits.
+     * Topic: `<NS>/ride/edge` (and `<NS>/ride/edge/last`). Unlike the
+     * discovery families there is no config topic to retire, so a rider
+     * subscribing to the old path has to repoint it by hand.
      *
      * @param edge "started" or "ended".
      * @param timestampIso ISO-8601 UTC timestamp of the edge.
      */
     suspend fun publishRideEdge(edge: String, timestampIso: String): Boolean {
-        val topic = "varia/ride/edge"
+        val topic = "$NS/ride/edge"
         val payload = JSONObject()
             .put("event_type", "ride_$edge")
             .put("timestamp", timestampIso)
@@ -388,32 +414,18 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         deviceName: String,
     ): List<Pair<String, JSONObject>> {
         val clean = cleanDeviceName(deviceName)
-        val stateTopic = "varia/$slug/ride_summary"
+        val stateTopic = "$NS/$slug/ride_summary"
         val device = JSONObject()
-            .put("identifiers", JSONArray().put("varia_$slug"))
+            .put("identifiers", JSONArray().put("${NS}_$slug"))
             .put("name", "Varia $clean")
             .put("manufacturer", "Garmin")
             .put("model", "Varia")
-            .put("via_device", "varia_reader")
-        val sensors = listOf(
-            RideSummarySensor("overtakes_total", "Overtakes", "total_increasing", null, null, null),
-            RideSummarySensor("close_pass_count", "Close passes", "total_increasing", null, null, null),
-            RideSummarySensor("grazing_count", "Grazing passes", "total_increasing", null, null, null),
-            RideSummarySensor("hgv_close_pass_count", "HGV close passes", "total_increasing", null, null, null),
-            RideSummarySensor("peak_closing_kmh", "Peak closing speed", "measurement", "speed", "km/h", null),
-            RideSummarySensor("closing_speed_p90_kmh", "Closing speed (p90)", "measurement", "speed", "km/h", null),
-            RideSummarySensor("min_lateral_clearance_m", "Tightest clearance", "measurement", "distance", "m", 2),
-            RideSummarySensor("distance_ridden_km", "Distance ridden", "total_increasing", "distance", "km", 2),
-            RideSummarySensor("exposure_seconds", "Time with traffic", "total_increasing", "duration", "s", null),
-            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate", "measurement", null, "%", 1),
-            RideSummarySensor("alerts_per_km", "Alerts per km", "measurement", null, "/km", 2),
-            RideSummarySensor("alerts_per_hour_of_ride", "Alerts per hour", "measurement", null, "/h", 1),
-        )
-        return sensors.map { s ->
-            val topic = "$DISCOVERY_PREFIX/sensor/varia_${slug}_${s.field}/config"
+            .put("via_device", "${NS}_reader")
+        return RIDE_SUMMARY_SENSORS.map { s ->
+            val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_${s.field}/config"
             val payload = JSONObject()
-                .put("object_id", "varia_${slug}_${s.field}")
-                .put("unique_id", "varia_${slug}_${s.field}")
+                .put("object_id", "${NS}_${slug}_${s.field}")
+                .put("unique_id", "${NS}_${slug}_${s.field}")
                 .put("name", s.displayName)
                 .put("has_entity_name", true)
                 .put("state_topic", stateTopic)
@@ -466,7 +478,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                     .put("range_y_m", tp.rangeYAtMinM.toDouble()),
             )
         }
-        return publishMqtt("varia/$slug/ride_summary", payload.toString(), retain = true)
+        return publishMqtt("$NS/$slug/ride_summary", payload.toString(), retain = true)
     }
 
     private data class RideSummarySensor(
@@ -481,6 +493,41 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     companion object {
         private const val TAG = "BikeRadar"
         private const val DISCOVERY_PREFIX = "homeassistant"
+
+        /**
+         * The namespace every topic and entity id is built from. One constant
+         * so a rename is one edit and cannot be applied to some families and
+         * not others - the previous name was spelled out at forty sites.
+         *
+         * Changing this again breaks every rider's automations. If it ever
+         * changes, add the old value to [cleanupStaleDiscoveryTopics] so the
+         * entities it created are retired rather than left unavailable.
+         */
+        const val NS = "bikeradar"
+
+        /** The vendor-named generation [NS] replaced. Read only by
+         *  [cleanupStaleDiscoveryTopics], to retire what it created. */
+        private const val LEGACY_NS = "varia"
+
+        /**
+         * The ride-summary sensor family, in one place so the publisher and
+         * the stale-topic cleanup cannot disagree about which entities exist.
+         * A sensor added here is published AND retired on the next rename.
+         */
+        private val RIDE_SUMMARY_SENSORS = listOf(
+            RideSummarySensor("overtakes_total", "Overtakes", "total_increasing", null, null, null),
+            RideSummarySensor("close_pass_count", "Close passes", "total_increasing", null, null, null),
+            RideSummarySensor("grazing_count", "Grazing passes", "total_increasing", null, null, null),
+            RideSummarySensor("hgv_close_pass_count", "HGV close passes", "total_increasing", null, null, null),
+            RideSummarySensor("peak_closing_kmh", "Peak closing speed", "measurement", "speed", "km/h", null),
+            RideSummarySensor("closing_speed_p90_kmh", "Closing speed (p90)", "measurement", "speed", "km/h", null),
+            RideSummarySensor("min_lateral_clearance_m", "Tightest clearance", "measurement", "distance", "m", 2),
+            RideSummarySensor("distance_ridden_km", "Distance ridden", "total_increasing", "distance", "km", 2),
+            RideSummarySensor("exposure_seconds", "Time with traffic", "total_increasing", "duration", "s", null),
+            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate", "measurement", null, "%", 1),
+            RideSummarySensor("alerts_per_km", "Alerts per km", "measurement", null, "/km", 2),
+            RideSummarySensor("alerts_per_hour_of_ride", "Alerts per hour", "measurement", null, "/h", 1),
+        )
 
         // 3 s connect+read keeps the radio awake at most ~6 s on a failed
         // publish during a flaky cell handover; the next heartbeat will

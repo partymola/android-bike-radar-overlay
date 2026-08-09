@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- **Home Assistant entities have been renamed, and you will need to repoint any automations.** Every entity this app publishes moves from a `varia_` prefix to `bikeradar_`, so `sensor.varia_rearvue8_battery` becomes `sensor.bikeradar_rearvue8_battery`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic. The app retires the old entities for you, so you get the new ones instead of both, but anything in your own automations, dashboards or scripts that refers to the old names has to be updated by hand. The Home Assistant screen now lists your actual entity ids so you can copy them.
+
 ## v1.1.0 - 2026-07-17
 
 ### Features

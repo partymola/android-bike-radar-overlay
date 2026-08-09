@@ -104,17 +104,17 @@ internal class HaPublisher(
             val ok = ha.publishBatteryDiscovery(s, name)
             if (!ok) {
                 discoveredSlugs.remove(s)
-                Log.w(TAG, "HA discovery failed for varia_${s}_battery")
+                Log.w(TAG, "HA discovery failed for ${HaClient.NS}_${s}_battery")
                 return false
             }
-            Log.i(TAG, "HA discovery published for varia_${s}_battery")
+            Log.i(TAG, "HA discovery published for ${HaClient.NS}_${s}_battery")
         }
         val ok = ha.publishBatteryState(s, pct)
         if (ok) {
             HaHealthBus.reportOk()
         } else {
             HaHealthBus.reportError("battery publish failed")
-            Log.w(TAG, "HA state publish failed for varia/$s/battery")
+            Log.w(TAG, "HA state publish failed for ${HaClient.NS}/$s/battery")
         }
         return ok
     }

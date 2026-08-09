@@ -106,7 +106,7 @@ class HaPublisherHttpTest {
     @Test fun batteryPublishPostsDiscoveryThenStateAndReportsSuccess() = runBlocking {
         assertTrue(publisher().publishBatteryToHa("Radar", 80))
         assertEquals(
-            listOf("homeassistant/sensor/varia_radar_battery/config", "varia/radar/battery"),
+            listOf("homeassistant/sensor/bikeradar_radar_battery/config", "bikeradar/radar/battery"),
             topics.toList(),
         )
     }
@@ -122,7 +122,7 @@ class HaPublisherHttpTest {
         statusFor = { if (it.endsWith("/config")) 200 else 500 }
         assertFalse(publisher().publishBatteryToHa("Radar", 80))
         assertTrue("discovery still went out", topics.any { it.endsWith("/config") })
-        assertTrue("state write was attempted", topics.contains("varia/radar/battery"))
+        assertTrue("state write was attempted", topics.contains("bikeradar/radar/battery"))
     }
 
     @Test fun discoveryFailureRollsBackSoTheNextCallRetriesDiscovery() = runBlocking {
@@ -151,7 +151,7 @@ class HaPublisherHttpTest {
         // The timestamp is opaque to the publisher (forwarded into the payload);
         // the test only pins that the edge topic gets published.
         publisher().publishRideEdgeIfHa("started", "stamp")
-        awaitTopic { it == "varia/ride/edge" }
+        awaitTopic { it == "bikeradar/ride/edge" }
     }
 
     // ── ride summary ─────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ class HaPublisherHttpTest {
         ).publishRideSummaryIfChanged()
         assertTrue(
             "resolved to the radar slug via the uppercase fallback",
-            topics.any { it.startsWith("homeassistant/sensor/varia_radar_") },
+            topics.any { it.startsWith("homeassistant/sensor/bikeradar_radar_") },
         )
     }
 

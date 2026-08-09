@@ -104,6 +104,12 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         // RESUMED-gated: this screen sits in the backstack behind its
         // sub-screens, and an ungated loop keeps recomposing there.
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Resume-first, then loop. The gated loop restarts on RESUME
+            // and would otherwise delay BEFORE its first assignment, so a
+            // screen left open across an hour of standby would difference
+            // two hour-old values, get a small number, and render a dead
+            // device as connected for the first five seconds back.
+            tickNowMs = System.currentTimeMillis()
             while (true) {
                 delay(5_000)
                 tickNowMs = System.currentTimeMillis()

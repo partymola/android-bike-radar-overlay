@@ -317,8 +317,10 @@ internal fun SystemCard(
         icon = Icons.Default.Videocam,
         label = stringResource(R.string.main_system_front_dashcam),
         value = when (dashcamLink) {
-            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_not_paired)
-            DeviceLinkState.LIVE -> dashcamDisplayName ?: stringResource(R.string.main_system_value_live)
+            // Camera-specific keys: this row is labelled "Cámara" in Spanish
+            // and the shared values agree with the masculine radar row.
+            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_cam_not_paired)
+            DeviceLinkState.LIVE -> dashcamDisplayName ?: stringResource(R.string.main_system_value_cam_live)
             DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
         },
         muted = dashcamLink.muted,

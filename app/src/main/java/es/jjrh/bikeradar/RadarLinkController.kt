@@ -726,10 +726,13 @@ internal class RadarLinkController(
      * Debug-only radar tail-light mode-set write-probe. Writes `07 00 NN` to
      * the radar's SETTINGS_ACK (6a4e2f11), mirroring the front camera's mode-set,
      * so a bench sweep can find which command sets the tail-light mode (and
-     * whether NN selects a cycle-slot or a stable mode-type). Reached only via
-     * the dev-only [RemoteControlReceiver] with the probe toggle on; the write
-     * lands on the live radar connection if one is up. Not a shipping path - the
-     * production controller will be derived once the encoding is pinned.
+     * whether NN selects a cycle-slot or a stable mode-type). The write lands
+     * on the live radar connection if one is up. Its only entry point is the
+     * dev-only [RemoteControlReceiver] with the probe toggle on, which is not
+     * a supported route, so in practice reach the same write through
+     * [probeWriteRadarRaw] from the Debug screen's raw-hex field. Not a
+     * shipping path - the production controller will be derived once the
+     * encoding is pinned.
      */
     fun probeWriteRadarLight(nn: Int) {
         if (nn !in 0..0xFF) {

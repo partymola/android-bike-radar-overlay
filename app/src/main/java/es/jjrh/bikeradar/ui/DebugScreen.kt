@@ -425,9 +425,9 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             }
             // Write-probe: shown only while the probe toggle is on. Sends writes
             // to the radar's 6a4e2f11 via the live connection (same-uid
-            // startService - shell broadcasts can't reach the non-exported
-            // receiver on Android 16). Tap, watch the tail light, read the
-            // radar_probe_write + radar_2f14 echo in the capture log.
+            // startService rather than a broadcast, which is not a supported
+            // route to the non-exported receiver). Tap, watch the tail light,
+            // read the radar_probe_write + radar_2f14 echo in the capture log.
             if (prefsSnap.radarSettingsProbeEnabled) {
                 val sendRadarHex: (String) -> Unit = { hex ->
                     ctx.startService(

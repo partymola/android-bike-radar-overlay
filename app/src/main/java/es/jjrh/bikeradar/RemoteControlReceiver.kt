@@ -9,14 +9,13 @@ import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
 /**
- * Receiver for adb-driven dev actions only (replay + synthetic scenario).
- * NOT exported: a peer app must never start the debug overlay/replay FGSes,
- * even on a device where the user has flipped [Prefs.devModeUnlocked] (which
- * each branch still checks, so a non-dev install is a no-op beyond a log
- * warning). adb reaches it with an explicit component, which shell may
- * deliver to a non-exported receiver:
- *   am broadcast -n es.jjrh.bikeradar/.RemoteControlReceiver \
- *                -a es.jjrh.bikeradar.DEV_REPLAY
+ * Receiver for the dev-only actions: replay, synthetic scenario, and the
+ * radar tail-light write-probe. NOT exported: a peer app must never start
+ * the debug overlay/replay FGSes, even on a device where the user has
+ * flipped [Prefs.devModeUnlocked] (which each branch still checks, so a
+ * non-dev install is a no-op beyond a log warning). Keep it that way.
+ * The Debug screen reaches all three; driving them by shell broadcast is
+ * not a supported route and has never been seen to work.
  *
  * Notification-driven Pause/Resume and walk-away dismiss/snooze live on
  * the (also non-exported) [InternalControlReceiver].

@@ -127,13 +127,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- Dev-only (adb) replay/synthetic actions. Not exported: a peer
-             app must never be able to start the debug overlay/replay FGSes,
-             even on a device where the user has flipped devModeUnlocked. adb
-             still reaches it with an explicit component, which shell may
-             deliver to a non-exported receiver:
-               am broadcast -n es.jjrh.bikeradar/.RemoteControlReceiver \
-                            -a es.jjrh.bikeradar.DEV_REPLAY -->
+        <!-- Dev-only replay, synthetic-scenario and radar-light actions.
+             Not exported: a peer app must never be able to start the debug
+             overlay/replay FGSes, even on a device where the user has
+             flipped devModeUnlocked. Keep it that way. Reach all three from
+             the Debug screen; driving them by shell broadcast is not a
+             supported route and has never been seen to work. -->
         <receiver
             android:name=".RemoteControlReceiver"
             android:exported="false">

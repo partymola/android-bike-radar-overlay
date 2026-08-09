@@ -10,8 +10,20 @@ import org.junit.Test
 
 class AlertDeciderTest {
 
-    private fun car(id: Int, distanceM: Int, isBehind: Boolean = false) = Vehicle(id = id, distanceM = distanceM, speedMs = 5f, isBehind = isBehind)
+    /**
+     * A target whose speed is not what the test is about: zero, so it neither
+     * closes nor recedes.
+     *
+     * It carried +5 m/s, which is RECEDING (speedMs is negative toward the
+     * rider), so every test using it drove the decider with a car pulling
+     * away. That is invisible in a test asserting beep tiers by distance, and
+     * it silently held the closing-speed gates shut underneath all of them.
+     * Zero is the honest "not under test" value. Anything asserting behaviour
+     * that depends on approach speed must use [closingCar] and say so.
+     */
+    private fun car(id: Int, distanceM: Int, isBehind: Boolean = false) = Vehicle(id = id, distanceM = distanceM, speedMs = 0f, isBehind = isBehind)
 
+    /** A target actually approaching: pass a NEGATIVE speedMs. */
     private fun closingCar(id: Int, distanceM: Int, speedMs: Float) = Vehicle(id = id, distanceM = distanceM, speedMs = speedMs)
 
     private val alertMax = 21

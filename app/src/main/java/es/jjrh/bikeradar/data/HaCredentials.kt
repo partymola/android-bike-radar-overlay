@@ -95,11 +95,21 @@ class HaCredentials(context: Context) {
         sp.unregisterOnSharedPreferenceChangeListener(listener)
     }
 
-    // On first launch, seed from BuildConfig if local.properties was
-    // populated at build time and the store is still empty. End users
-    // do not need local.properties; this only matters for development
-    // builds with credentials baked in.
+    /**
+     * Seed from BuildConfig on a development build whose local.properties
+     * carried credentials. End users never need local.properties.
+     *
+     * Debug-gated, and that gate is load-bearing rather than tidiness: this
+     * writes whenever the store is empty, and [clear] is exactly what empties
+     * it. Ungated, a rider who cleared their credentials would have them
+     * restored on the next launch and publishing would resume - the same
+     * shape as the legacy-blob path [clear] already had to close. The release
+     * BuildConfig fields are empty today, so the blank guard below would also
+     * stop it, but that is a gradle default rather than a rule; this gate is
+     * the rule. [HaCredentialsTest] pins both halves.
+     */
     fun seedFromBuildConfigIfEmpty() {
+        if (!BuildConfig.DEBUG) return
         if (!isConfigured()) {
             val url = BuildConfig.HA_BASE_URL
             val tok = BuildConfig.HA_TOKEN

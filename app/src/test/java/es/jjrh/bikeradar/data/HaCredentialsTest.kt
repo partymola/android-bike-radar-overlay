@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.data
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.BuildConfig
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -205,6 +206,17 @@ class HaCredentialsTest {
         assertEquals("https://recovered.example", creds.baseUrl)
         assertEquals("tok-recovered", creds.token)
         assertNull("migrated blobs must be removed", rawPrefs().getString("ha_base_url", null))
+    }
+
+    @Test
+    fun theReleaseBuildCarriesNoBakedInCredentials() {
+        // The disclosure "removed from the phone immediately" depends on
+        // nothing writing them back. Release ships empty BuildConfig fields;
+        // if a buildTypes edit ever changed that, seeding would undo a clear.
+        if (!BuildConfig.DEBUG) {
+            assertEquals("", BuildConfig.HA_BASE_URL)
+            assertEquals("", BuildConfig.HA_TOKEN)
+        }
     }
 
     @Test

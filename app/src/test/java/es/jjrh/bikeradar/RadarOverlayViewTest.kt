@@ -123,6 +123,46 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun precogTargetPredictedPastTheRiderDrawsNoBorder() {
+        // With precog on, the strip works in PREDICTED range and drops a
+        // target predicted to have passed the rider. At 8 m closing 16 m/s
+        // the one-second prediction is behind the rider, so the strip paints
+        // nothing, and a border gated on the measured 8 m would alarm the
+        // whole screen over an empty panel. No golden set precog before this,
+        // so the two filters could disagree unnoticed.
+        overlay().apply {
+            setVisualMaxM(20)
+            setPrecog(true)
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 8, speedMs = -16f)),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun precogTargetPredictedIntoTheWindowDrawsItsBorder() {
+        // The other half: measured 60 m is outside a 20 m window, but the
+        // predicted 44 m is inside a 50 m one, so the strip draws it and the
+        // border must agree. A border reading measured distance would stay
+        // dark over a red box.
+        overlay().apply {
+            setVisualMaxM(50)
+            setPrecog(true)
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 60, speedMs = -16f)),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
     fun multipleVehicles() {
         overlay().apply {
             setState(

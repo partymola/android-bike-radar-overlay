@@ -234,6 +234,26 @@ class RadarOverlayView(context: Context) : View(context) {
         contentDescription = context.overlayA11yDescription(model)
     }
 
+    /**
+     * The range the strip will actually draw [v] at, or null when it does not draw
+     * the target at all.
+     *
+     * The single answer to "is this target on screen, and how far out": with
+     * precog on the strip works in predicted range and drops anything
+     * predicted to have passed the rider, so any other consumer asking the
+     * measured distance is asking a different question and will disagree.
+     */
+    private fun drawnRangeM(v: Vehicle): Float? {
+        val r: Float
+        if (precog) {
+            r = v.distanceM + v.speedMs * PRECOG_LOOKAHEAD_S
+            if (r <= 0f) return null
+        } else {
+            r = v.distanceM.toFloat()
+        }
+        return if (r > visualMaxM) null else r
+    }
+
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
@@ -264,14 +284,14 @@ class RadarOverlayView(context: Context) : View(context) {
         val bikeKmh = state.bikeSpeedMs?.let { (it * 3.6f).roundToInt() }
         val bands = if (adaptiveAlerts) adaptiveSpeedBands(bikeKmh) else FIXED_SPEED_BANDS
 
-        // Same filters as the draw loop below. Before the sign fix this
-        // predicate needed a fast RECEDER, so it effectively never fired and
-        // the mismatch was invisible; now it fires on real traffic, and an
-        // unfiltered version would paint a full-screen red border for a target
-        // beyond visualMaxM that the strip does not draw at all.
+        // Gated on the SAME range the strip draws at, via drawnRangeM, not on
+        // the measured distance. With precog on the two diverge: the strip
+        // works in predicted range and drops targets predicted past the rider,
+        // so a measured-distance border painted the whole screen red over an
+        // empty strip, and missed a target the strip did draw in red.
         if (!clear &&
             state.vehicles.any {
-                !it.isBehind && it.distanceM <= visualMaxM && it.closingKmh >= bands.redKmh
+                !it.isBehind && drawnRangeM(it) != null && it.closingKmh >= bands.redKmh
             }
         ) {
             val half = dangerBorderPaint.strokeWidth / 2f
@@ -313,20 +333,13 @@ class RadarOverlayView(context: Context) : View(context) {
             // swing a beat before it happens. Targets predicted to have
             // passed the rider drop out of the frame; they're about to
             // stop being useful to track.
-            val rangeYm: Float
-            val lateralMeters: Float
-            if (precog) {
-                val predRangeY = v.distanceM + v.speedMs * PRECOG_LOOKAHEAD_S
-                if (predRangeY <= 0f) continue
-                val currentLateralM = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
-                val predLateralM = currentLateralM + (v.speedXMs ?: 0) * PRECOG_LOOKAHEAD_S
-                rangeYm = predRangeY
-                lateralMeters = predLateralM
+            val rangeYm = drawnRangeM(v) ?: continue
+            val currentLateralM = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
+            val lateralMeters = if (precog) {
+                currentLateralM + (v.speedXMs ?: 0) * PRECOG_LOOKAHEAD_S
             } else {
-                rangeYm = v.distanceM.toFloat()
-                lateralMeters = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
+                currentLateralM
             }
-            if (rangeYm > visualMaxM) continue
 
             val halfW = vehicleHalfWidth(v.size)
             val halfH = vehicleHalfHeight(v.size)

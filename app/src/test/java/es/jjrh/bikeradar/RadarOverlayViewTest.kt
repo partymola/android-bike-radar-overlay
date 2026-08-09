@@ -123,6 +123,23 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun aTargetBehindTheRiderIsNeitherDrawnNorBordered() {
+        // No overlay fixture set isBehind before this, so dropping the check
+        // was an unkilled mutation on both surfaces. A car already past the
+        // rider closing hard must produce an empty strip and no border.
+        overlay().apply {
+            setVisualMaxM(20)
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 10, speedMs = -16f, isBehind = true)),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
     fun precogTargetPredictedPastTheRiderDrawsNoBorder() {
         // With precog on, the strip works in PREDICTED range and drops a
         // target predicted to have passed the rider. At 8 m closing 16 m/s

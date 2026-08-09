@@ -242,8 +242,12 @@ class RadarOverlayView(context: Context) : View(context) {
      * precog on the strip works in predicted range and drops anything
      * predicted to have passed the rider, so any other consumer asking the
      * measured distance is asking a different question and will disagree.
+     *
+     * Behind-the-rider targets return null here too, so this is the complete
+     * answer to "does the strip draw this" rather than one clause of it.
      */
     private fun drawnRangeM(v: Vehicle): Float? {
+        if (v.isBehind) return null
         val r: Float
         if (precog) {
             r = v.distanceM + v.speedMs * PRECOG_LOOKAHEAD_S
@@ -291,7 +295,7 @@ class RadarOverlayView(context: Context) : View(context) {
         // empty strip, and missed a target the strip did draw in red.
         if (!clear &&
             state.vehicles.any {
-                !it.isBehind && drawnRangeM(it) != null && it.closingKmh >= bands.redKmh
+                drawnRangeM(it) != null && it.closingKmh >= bands.redKmh
             }
         ) {
             val half = dangerBorderPaint.strokeWidth / 2f
@@ -324,8 +328,6 @@ class RadarOverlayView(context: Context) : View(context) {
         val maxLateralPx = (trackX - dp(18f)).coerceAtLeast(dp(10f))
 
         for (v in state.vehicles) {
-            if (v.isBehind) continue
-
             // Precog: render each vehicle at its predicted position one
             // PRECOG_LOOKAHEAD_S from now, extrapolated from the radar's
             // speedY + speedXMs fields. The visual jump from current to

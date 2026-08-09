@@ -142,6 +142,9 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
+| `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
+| `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |

@@ -6,9 +6,9 @@ package es.jjrh.bikeradar
  *
  * The single derivation behind every Home Assistant status surface: the home
  * screen's System row, the Settings menu subtitle, and the Home Assistant
- * screen's connection pill and published-entity dots. They disagreeing is the
- * defect this exists to prevent, so a new surface reads its state from here
- * rather than re-deriving one.
+ * screen's connection pill and published-entity dots. Those surfaces
+ * disagreeing is the defect this exists to prevent, so a new one reads its
+ * state from here rather than re-deriving its own.
  *
  * The defect this replaces: the System row counted [HaHealth.Unknown] as
  * healthy and had no not-configured state at all, so a rider who had never

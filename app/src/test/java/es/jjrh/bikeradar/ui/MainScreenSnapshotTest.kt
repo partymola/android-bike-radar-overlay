@@ -103,7 +103,7 @@ class MainScreenSnapshotTest {
                         radarBattery = null,
                         dashcamBattery = null,
                         // A fresh install has never configured Home Assistant,
-                        // so this is the state the reported defect rendered as
+                        // so this is the state the shipped defect rendered as
                         // a green "MQTT ready". It is the whole point of this
                         // golden: nothing paired, nothing set up, nothing
                         // claiming to work.

@@ -18,7 +18,7 @@ import org.junit.Test
 class HaStatusDeriverTest {
 
     @Test fun unconfiguredIsNeverHealthyWhateverTheHealthSays() {
-        // The reported bug: Unknown is the resting state of a never-configured
+        // The shipped bug: Unknown is the resting state of a never-configured
         // install, and it rendered green. Configuration is the gate, and it
         // wins over every health value including a stale success.
         assertEquals(HaStatus.NOT_CONFIGURED, HaStatusDeriver.derive(configured = false, health = HaHealth.Unknown))

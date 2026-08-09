@@ -61,8 +61,24 @@ class HaCredentials(context: Context) {
             .apply()
     }
 
+    /**
+     * Remove the rider's stored credentials, both formats.
+     *
+     * The legacy blobs go too, and that is not tidiness. Ciphertext this
+     * device cannot currently read is still the rider's credentials in
+     * storage, and the Privacy screen promises they are gone. Worse, leaving
+     * them is not inert: [migrateLegacyCiphertext] writes v3 whenever v3 is
+     * blank, and a clear is precisely what blanks it, so a blob that
+     * outlived a clear would be migrated back in on a later construction and
+     * quietly resume publishing to a Home Assistant the rider disconnected.
+     */
     fun clear() {
-        sp.edit().remove(KEY_BASE_URL_V3).remove(KEY_TOKEN_V3).apply()
+        sp.edit()
+            .remove(KEY_BASE_URL_V3)
+            .remove(KEY_TOKEN_V3)
+            .remove(LEGACY_KEY_BASE_URL)
+            .remove(LEGACY_KEY_TOKEN)
+            .apply()
     }
 
     /** Notify [listener] when the stored credentials change (any writer:

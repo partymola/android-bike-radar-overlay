@@ -208,6 +208,52 @@ class HaCredentialsTest {
     }
 
     @Test
+    fun clearRemovesLegacyBlobsToo() {
+        // The Privacy screen promises stored credentials are removed from
+        // the phone immediately. Ciphertext this device cannot read is still
+        // the rider's credentials sitting in storage.
+        rawPrefs().edit()
+            .putString("ha_base_url", "not-decryptable-on-this-device")
+            .putString("ha_token", "also-not-decryptable")
+            .apply()
+
+        HaCredentials(app).clear()
+
+        assertNull("clear must remove the legacy url blob", rawPrefs().getString("ha_base_url", null))
+        assertNull("clear must remove the legacy token blob", rawPrefs().getString("ha_token", null))
+    }
+
+    @Test
+    fun clearedCredentialsAreNotResurrectedByALaterMigration() {
+        // The rider clears, then the Keystore recovers. The migration writes
+        // v3 whenever v3 is blank - and a clear is exactly what blanks it -
+        // so a surviving blob would restore the credentials the rider
+        // deleted and quietly resume publishing to their Home Assistant.
+        val working = InMemoryCryptor()
+        rawPrefs().edit()
+            .putString("ha_base_url", working.encrypt("https://cleared.example"))
+            .putString("ha_token", working.encrypt("tok-cleared"))
+            .apply()
+
+        // A Keystore hiccup on this launch leaves the blobs in place.
+        HaCredentials.cryptorFactory = {
+            object : Cryptor {
+                override fun encrypt(plain: String) = plain
+                override fun decrypt(blob: String?) = ""
+            }
+        }
+        HaCredentials(app).clear()
+
+        // Keystore is healthy again next time the app builds the store.
+        HaCredentials.cryptorFactory = { working }
+        val afterClear = HaCredentials(app)
+
+        assertFalse("cleared credentials must not come back", afterClear.isConfigured())
+        assertEquals("", afterClear.baseUrl)
+        assertEquals("", afterClear.token)
+    }
+
+    @Test
     fun migrationNeverOverwritesExistingTransferableValues() {
         // A restore can carry BOTH formats (v3 written on the old phone
         // after its own migration, plus a stale legacy blob from an even

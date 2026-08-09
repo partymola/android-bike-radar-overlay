@@ -423,21 +423,30 @@ tasks.register<JacocoReport>("jacocoTestReport") {
 }
 
 // Second report, wider scope, for INSPECTION only. The diff-coverage gate is
-// deliberately NOT pointed at it.
+// deliberately NOT pointed at it yet.
 //
-// The plan was to gate on this so derivation written inline in a Composable
-// body stopped being exempt. Measured before adopting, and the mechanism does
-// not hold: Compose's compiler transforms break JaCoCo line attribution, so
-// branches that goldens demonstrably render still report as uncovered. The
-// chip-colour `when` in UiPrimitives has a golden for each of its three arms
-// and reads 0/4; the four HaStatus arms in MainScreenCards have a golden each
-// and read the same. Gating on it would fail every UI change whether or not
-// it was tested - a gate that does not measure what it claims.
+// The intent (see the audit notes) is to gate on this so derivation written
+// inline in a Composable body stops being exempt. It is not wired up because
+// the numbers are not yet understood, and a gate nobody trusts gets disabled
+// on its first red build:
 //
-// Run it to see where UI coverage actually stands; do not wire it to a floor
-// until Compose line attribution is trustworthy. What does make inline
-// derivation stick meanwhile is extracting it to the root package, where the
-// ratchet and the diff gate both see it.
+//   - It scores a recent UI-heavy diff at 70 percent, and much of that is
+//     real: default arguments no call site omits, error branches with no
+//     fixture.
+//   - But BatteryChip's body reads zero covered instructions while several
+//     committed goldens render it, and that is unexplained. Composable bodies
+//     elsewhere ARE attributed normally - MainScreenCards is 76 percent with
+//     per-arm resolution on its `when` - so it is not a blanket
+//     Compose-instrumentation failure, and no cause has been established.
+//
+// Settle that discrepancy before attaching a floor. Until then, the way to
+// make inline derivation stick is extracting it to the root package, where
+// the ratchet and the diff gate already see it.
+//
+// Either way, do NOT narrow the ratchet's report to match. The two behave
+// oppositely under narrowing: the ratchet is an aggregate, so pulling Compose
+// rendering into it drops the ratio, and the only route back to green is
+// lowering the floors - a weakening dressed up as a tightening.
 tasks.register<JacocoReport>("jacocoDiffReport") {
     dependsOn("testDebugUnitTest")
     group = "verification"

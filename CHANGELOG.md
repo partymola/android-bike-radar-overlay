@@ -4,7 +4,41 @@
 
 ### Breaking
 
-- **Home Assistant entities have been renamed, and you will need to repoint any automations.** Every entity this app publishes moves from a `varia_` prefix to `bikeradar_`, so `sensor.varia_rearvue8_battery` becomes `sensor.bikeradar_rearvue8_battery`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic. The app retires the old entities for you the first time it sees each device after the update, so from your next ride you have the new ones instead of both - but anything in your own automations, dashboards or scripts that refers to the old names has to be updated by hand. The Home Assistant screen now lists your actual entity ids so you can copy them.
+- **Home Assistant entities and topics have been renamed, and you will need to repoint anything that uses the old names.** Entity ids move from a `varia_` prefix to `bikeradar_`, so `sensor.varia_<slug>_battery` becomes `sensor.bikeradar_<slug>_battery`; the MQTT topics move the same way, from `varia/...` to `bikeradar/...`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic.
+- **Your own automations, dashboards and scripts have to be repointed by hand**, including anything that triggers on a raw topic rather than an entity. The Home Assistant settings screen now lists your actual entity ids.
+- **The app retires the old entities for you**, the first time each device's new ones reach your Home Assistant, so you are left with the new set rather than both. The last retained values sit on your broker under the old topics until you delete them.
+- **The new entities start with no history.** Home Assistant treats a changed id as a new entity, so anything already recorded stays under the old ids, and renames, areas and icons you had set do not carry over.
+
+### Features
+
+- **Beep tiers now follow how close a vehicle really is.** They scored distance along your line of travel, which collapses to nothing as a car draws level, so a vehicle already passing you could climb the tiers as though it were bearing down. Tiers, and the choice of which vehicle to voice, now use true range, so traffic off to one side no longer masks a real threat and there are fewer top-tier beeps. A new threat still gets its first cue on the same frame it would have before, and the all-clear and the urgent warning are untouched - but a vehicle off to one side now reaches each tier later, or not at all if it stays wide, so its cue can start a tier lower than it used to.
+- **Set your own coordinates for the light auto-mode.** Switching between daytime and night mode needs local sunrise and sunset times, and without a location it used London for everyone. You can now type coordinates instead of granting location access, from onboarding or from Settings, and they take precedence over GPS if you have granted it. They stay on the phone, out of the logs and out of the diagnostic bundle.
+
+### Fix
+
+- **The app no longer dies mid-ride when a cue cannot be built.** Preparing an alert's audio can fail when the phone's audio service is under strain, which is exactly the case the app is built to recover from - instead the failure killed the app. Every cue path now treats it as a failed cue and retries on rebuilt audio. The crash itself needed the experimental Directional alert audio switched on; the hardening covers every path.
+- **An ordinary beep can no longer silence the urgent warning.** The imminent-impact cue shared the awareness beeps' cooldown, so a beep landing just before it suppressed the warning outright. The urgent cue is now paced on its own and cuts short any beep still sounding. Replaying 126 rides, no urgent warning disappeared and seven were added.
+- **Directional audio no longer drops one ear.** At full deflection the quieter side was muted rather than turned down, on the assumption that alert audio never reaches headphones, so a rider with one earbud in could lose that side entirely. It is now floored at a fixed level instead of silenced. Directional alert audio is experimental and off unless you turn it on.
+- **Cars closing on you now show the right colour.** The overlay coloured each vehicle from the raw sensor value instead of how fast it was closing, so an approaching car painted green at any speed, and the full-screen red border could only appear for traffic pulling away. Colour, border and tail length now all track closing speed. The beeps were never affected.
+- **Re-pairing your radar brings it back.** If you removed and re-paired the radar in Bluetooth settings - which is what the app's own notification tells you to do - it could stay disconnected for the rest of the session, leaving you with no radar and no alerts. The app now recognises the re-paired radar, including when pairing gives it a new address, and clears the prompt once the link is back.
+- **A radar dropout no longer invents distance.** Ride distance was filled in across a gap the radar never saw, adding kilometres nobody rode and understating alerts per km by the same factor. One ride could also be written to your history twice.
+- **Screens stop claiming a device is connected when it isn't.** The Settings screens judged "Connected" from a battery reading that could be hours old, and kept that verdict while left open - including for the first few seconds after unlocking your phone.
+- **The permissions row stops contradicting itself.** It read "All granted" over numbers that said otherwise, and counted permissions that need action against a different total.
+- **Home Assistant status is honest on every screen.** A never-configured install showed "MQTT ready" with a green dot on the main screen while Settings said "Not configured". Saved credentials on their own read as "Connected" before anything had been published, so a wrong URL or token looked healthy until the first ride edge tried to use it. And a configured server that could not be reached read "Connection issue" in the Settings list while the Home Assistant screen headed it "Not configured" and told you to enter credentials you had already entered.
+- **The battery chip follows the threshold you set.** It was fixed at 10 and 20 per cent, so raising the threshold left the chip neutral while the overlay marked the device low.
+- **In Spanish, the camera reads as feminine.** Its status shared a set of strings with the radar on the main and Settings screens, so it came out masculine in every state.
+
+### Security
+
+- **Clearing your Home Assistant configuration now really clears it.** Credentials stored in the older format survived a clear, and could be restored silently afterwards, resuming publishing to a server you had disconnected. This fixes clearing from now on; if you cleared your configuration on an earlier version, clear it once more after updating to remove what was left behind.
+- **A spoofed device name can no longer reach the connect path.** The scan that looks for your radar matched on the advertised name alone, so anything in Bluetooth range could present that name and be remembered for later. It now has to be a device you have paired as well.
+- **A device name cannot forge entries in the connection log.** Names go into the connection record the Debug screen shows, and a name containing a line break could split or fake entries in it. Control characters are now replaced with spaces as the entry is written.
+- **Your location stays out of logs.** Approximate coordinates were written to the system log on release builds, which put them in any bug report you shared.
+
+### Diagnostics
+
+- **Capture logs say which build wrote them.** The header now carries the app version and build type, so a ride can be tied to the release that recorded it instead of guessed from when the app was installed.
+- **Hear the alert cues on the bench.** The radar-reconnect cue only fires after a long mid-ride dropout, which cannot be staged safely, so there was no way to check it sounds different from the others. The Debug screen can now play each cue on demand.
 
 ## v1.1.0 - 2026-07-17
 

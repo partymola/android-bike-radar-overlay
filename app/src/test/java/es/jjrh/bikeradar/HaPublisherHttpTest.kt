@@ -105,17 +105,17 @@ class HaPublisherHttpTest {
 
     @Test fun batteryPublishPostsDiscoveryThenStateAndReportsSuccess() = runBlocking {
         assertTrue(publisher().publishBatteryToHa("Radar", 80))
-        // Discovery, then the legacy-entity retirement for this device, then
-        // the state write. The retirement is empty retained payloads to the
-        // previous naming generations and must not displace either end.
         assertEquals(
             "homeassistant/sensor/bikeradar_radar_battery/config",
             topics.first(),
         )
-        assertEquals("bikeradar/radar/battery", topics.last())
+        val state = topics.indexOf("bikeradar/radar/battery")
+        val retire = topics.indexOf("homeassistant/sensor/varia_radar_battery/config")
+        assertTrue("the old generation's entities are retired", retire >= 0)
         assertTrue(
-            "the old generation's entities are retired alongside the new one",
-            topics.any { it == "homeassistant/sensor/varia_radar_battery/config" },
+            "the rider's reading is published before the retirement, which is " +
+                "a couple of dozen round trips of housekeeping",
+            state in 0..<retire,
         )
     }
 

@@ -351,20 +351,22 @@ internal fun SettingsHaContent(
                 }
             }
 
-            // Published entities (synthetic — these are HA discovery
-            // entries the app is known to publish; live count would
-            // require a query we don't run yet). The status dot reflects
-            // whether HA is currently reachable, not the entity value.
-            // Dots reflect whether anything has actually published, not
-            // whether credentials are stored: these rows previously showed
-            // green with a literal "on" for entities that need not exist.
+            // The entity FAMILIES this app publishes, not a live list: no
+            // query is run, so no per-entity value can be shown and none is.
+            // `<device>` stands for the per-device slug HaClient builds the
+            // object_id from. Named from HaClient's own discovery topics, so
+            // a family added there is added here. It previously listed a
+            // binary_sensor the app has never published and gave it a
+            // literal "on", which is the one direction this screen must not
+            // err in - claiming an entity exists in the rider's Home
+            // Assistant when nothing put it there.
             val published = haStatus == HaStatus.READY
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
             SettingsRowGroup {
-                EntityRow(name = "sensor.bike_radar_battery", value = "\u2014", connected = published, isLast = false)
-                EntityRow(name = "sensor.bike_dashcam_battery", value = "\u2014", connected = published, isLast = false)
-                EntityRow(name = "event.bike_close_pass", value = "events", connected = published, isLast = false)
-                EntityRow(name = "binary_sensor.bike_radar_online", value = if (published) "on" else "off", connected = published, isLast = true)
+                EntityRow(name = "sensor.varia_<device>_battery", value = "\u2014", connected = published, isLast = false)
+                EntityRow(name = "sensor.varia_<device>_front_mode", value = "\u2014", connected = published, isLast = false)
+                EntityRow(name = "event.varia_<device>_close_pass", value = "\u2014", connected = published, isLast = false)
+                EntityRow(name = "sensor.varia_<device>_<ride stat>", value = "\u2014", connected = published, isLast = true)
             }
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -407,8 +409,12 @@ private fun ConnectionStateCard(status: HaStatus, health: HaHealth) {
                 text = when (status) {
                     HaStatus.READY -> stringResource(R.string.settings_ha_connected)
                     HaStatus.NOT_CONFIGURED -> stringResource(R.string.settings_ha_not_configured)
-                    HaStatus.CONFIGURED, HaStatus.UNREACHABLE ->
-                        stringResource(R.string.settings_ha_configured)
+                    HaStatus.CONFIGURED -> stringResource(R.string.settings_ha_configured)
+                    // Its own title. Sharing CONFIGURED's left the failure
+                    // state headed "Configured", with only the accent colour
+                    // and the subtitle to say otherwise; this matches the
+                    // Settings menu's wording for the same state.
+                    HaStatus.UNREACHABLE -> stringResource(R.string.settings_ha_unreachable)
                 },
                 color = accent,
                 fontSize = 13.sp,

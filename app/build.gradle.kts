@@ -427,31 +427,22 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     )
 }
 
-// Second report, wider scope, for INSPECTION only. The diff-coverage gate is
-// deliberately NOT pointed at it yet.
+// The report the diff-coverage gate reads. Wider than the ratchet's on
+// purpose: Compose UI stays IN, so derivation written inline in a Composable
+// body is gated rather than exempt. Per-diff there is nothing to dilute.
 //
-// The intent is to gate on this so derivation written
-// inline in a Composable body stops being exempt. It is not wired up because
-// the numbers are not yet understood, and a gate nobody trusts gets disabled
-// on its first red build:
+// Do NOT narrow the ratchet's report to match. The two behave oppositely
+// under narrowing: the ratchet is an aggregate, so pulling Compose rendering
+// into it drops the ratio and the only route back to green is lowering the
+// floors, which is a weakening dressed up as a tightening.
 //
-//   - It scores a recent UI-heavy diff at 70 percent, and much of that is
-//     real: default arguments no call site omits, error branches with no
-//     fixture.
-//   - But BatteryChip's body reads zero covered instructions while several
-//     committed goldens render it, and that is unexplained. Composable bodies
-//     elsewhere ARE attributed normally - MainScreenCards is 76 percent with
-//     per-arm resolution on its `when` - so it is not a blanket
-//     Compose-instrumentation failure, and no cause has been established.
-//
-// Settle that discrepancy before attaching a floor. Until then, the way to
-// make inline derivation stick is extracting it to the root package, where
-// the ratchet and the diff gate already see it.
-//
-// Either way, do NOT narrow the ratchet's report to match. The two behave
-// oppositely under narrowing: the ratchet is an aggregate, so pulling Compose
-// rendering into it drops the ratio, and the only route back to green is
-// lowering the floors - a weakening dressed up as a tightening.
+// The dependency below is the load-bearing part. Roborazzi composes only when
+// its own task property is set, so depending on the plain unit-test task
+// overwrites the exec data with a run in which no golden rendered - and every
+// Composable exercised solely by a snapshot test then reads as uncovered.
+// That artefact put Compose UI at 52 percent and BatteryChip at zero while
+// goldens plainly rendered it; against the rendering task the same code is 78
+// percent. If this number ever collapses, check this dependency first.
 tasks.register<JacocoReport>("jacocoDiffReport") {
     // verifyRoborazziDebug, NOT testDebugUnitTest. Roborazzi only composes
     // when its task property is set, and a bare testDebugUnitTest run

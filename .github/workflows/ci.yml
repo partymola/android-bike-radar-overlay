@@ -59,13 +59,15 @@ jobs:
         # Canvas screenshot goldens via Robolectric Native Graphics and fails on
         # pixel drift - it runs in cold-cache CI, which Paparazzi's layoutlib
         # loader could not.
-        run: gradle :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport --console=plain --no-daemon
+        run: gradle :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport :app:jacocoDiffReport --console=plain --no-daemon
 
       # Diff-coverage gate: new/changed executable production lines must clear
       # the floor, so an untested feature can't land while the project average
       # holds (the fixed jacocoCoverageVerification floor can't catch that).
-      # Scope is the filtered jacocoTestReport (Compose UI + dev services already
-      # excluded). A PR is gated against its base; a push against the prior main
+      # Scope is jacocoDiffReport, which keeps Compose UI IN: per-diff there is
+      # nothing to dilute, so derivation written inline in a Composable body is
+      # gated rather than exempt. (The ratchet keeps the narrower report - see
+      # app/build.gradle.kts for why the two must not share one exclusion list.) A PR is gated against its base; a push against the prior main
       # tip; a tiny or unreachable-base diff passes (see the script header).
       - name: Diff-coverage gate
         run: |

@@ -381,9 +381,14 @@ val coverageExcludes = listOf(
 )
 // The diff-coverage gate's WIDER scope. It is per-diff, so there is nothing to
 // dilute: a new inline `when` over app state in a Composable body lands as
-// uncovered changed lines and fails, which is the mechanism that let a
-// two-state Home Assistant row ship. Only genuine leaf/render files stay out,
-// which is Roborazzi's actual remit.
+// uncovered changed lines and fails, so derivation written there is not
+// exempt from the gate. Only genuine leaf/render files stay out, which is
+// Roborazzi's actual remit.
+//
+// Do not claim this would have caught the two-state Home Assistant row: it
+// would not. That was `haHealthy = !haErrorRecent && (...)`, a single line
+// already executed with both values across nine goldens - a wrong predicate,
+// not an uncovered branch. Coverage measures execution, not correctness.
 //
 // Deliberately NOT the ratchet's list. The two gates behave oppositely under
 // narrowing: the ratchet is an aggregate, so pulling Compose rendering in
@@ -425,7 +430,7 @@ tasks.register<JacocoReport>("jacocoTestReport") {
 // Second report, wider scope, for INSPECTION only. The diff-coverage gate is
 // deliberately NOT pointed at it yet.
 //
-// The intent (see the audit notes) is to gate on this so derivation written
+// The intent is to gate on this so derivation written
 // inline in a Composable body stops being exempt. It is not wired up because
 // the numbers are not yet understood, and a gate nobody trusts gets disabled
 // on its first red build:
@@ -448,7 +453,11 @@ tasks.register<JacocoReport>("jacocoTestReport") {
 // rendering into it drops the ratio, and the only route back to green is
 // lowering the floors - a weakening dressed up as a tightening.
 tasks.register<JacocoReport>("jacocoDiffReport") {
-    dependsOn("testDebugUnitTest")
+    // verifyRoborazziDebug, NOT testDebugUnitTest. Roborazzi only composes
+    // when its task property is set, and a bare testDebugUnitTest run
+    // overwrites the exec data with one where no golden rendered - so every
+    // Composable exercised solely by a snapshot test reads as uncovered.
+    dependsOn("verifyRoborazziDebug")
     group = "verification"
     description = "JaCoCo coverage including Compose UI, read by the diff-coverage gate."
     reports {

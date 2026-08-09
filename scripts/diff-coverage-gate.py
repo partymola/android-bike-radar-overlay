@@ -2,7 +2,8 @@
 # Diff-coverage gate: do the changed executable production lines in this range
 # meet the coverage floor?
 #
-# Wraps `diff-cover` (pip; reads the filtered jacocoTestReport.xml and computes
+# Wraps `diff-cover` (pip; reads jacocoDiffReport.xml - Compose UI IN scope,
+# unlike the ratchet's narrower report - and computes
 # the git diff itself) and adds the one thing diff-cover lacks - a tiny-diff
 # exemption. A change with fewer than --min-lines executable changed lines is
 # too small to hold to a percentage (a single untested line should not fail
@@ -13,7 +14,7 @@
 # (Compose UI under es/jjrh/bikeradar/ui/** and the dev services are excluded -
 # see coverageExcludes in app/build.gradle.kts), so new UI is not gated here;
 # Roborazzi goldens cover it. The report must exist first: run
-# `:app:jacocoTestReport` before this script.
+# `:app:jacocoDiffReport` before this script.
 #
 # Base ref:
 #   - contributor PR -> the PR base SHA (gate the PR's own changed lines;
@@ -54,7 +55,7 @@ def main():
     ap.add_argument("--base", required=True, help="base git ref/SHA to diff against")
     ap.add_argument(
         "--report",
-        default="app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml",
+        default="app/build/reports/jacoco/jacocoDiffReport/jacocoDiffReport.xml",
     )
     ap.add_argument("--src-roots", default="app/src/main/java")
     ap.add_argument("--fail-under", type=float, default=85.0)
@@ -72,7 +73,7 @@ def main():
         )
         return 0
     if not os.path.exists(args.report):
-        print(f"diff-coverage: report not found at {args.report} - run :app:jacocoTestReport first.", file=sys.stderr)
+        print(f"diff-coverage: report not found at {args.report} - run :app:jacocoDiffReport first.", file=sys.stderr)
         return 2
     if not shutil.which("diff-cover"):
         print("diff-coverage: diff-cover not installed - `pip install diff-cover`.", file=sys.stderr)

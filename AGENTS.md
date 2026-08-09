@@ -319,9 +319,14 @@ enforces them, and CONTRIBUTING.md points contributors here:
     as a mandatory pre-push `/qc` gate - never leave it to CI alone): the
     changed executable production lines in a PR (or a push) must be >= 85%
     covered. The project ratchet above can't see a 200-line untested feature
-    while the average holds; this gate does. It wraps `diff-cover` over the
-    same logic-scoped `jacocoTestReport` (so new Compose UI under `ui/**` is
-    not gated - Roborazzi covers that). Diffs under 10 executable changed
+    while the average holds; this gate does. It wraps `diff-cover` over
+    `jacocoDiffReport`, which keeps Compose UI in scope - per-diff there is
+    nothing to dilute, so a new inline `when` over app state in a Composable
+    body is gated rather than exempt. That report depends on
+    `verifyRoborazziDebug`, not `testDebugUnitTest`: Roborazzi only composes
+    when its task property is set, so a bare unit-test run overwrites the
+    exec data with one where no golden rendered and every
+    snapshot-only Composable reads as uncovered. Diffs under 10 executable changed
     lines are exempt (one untested line shouldn't fail CI), and an
     unreachable base ref skips rather than fails. It fires on PRs and direct
     pushes to `main` alike; a contributor PR is the case it most guards.

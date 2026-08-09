@@ -279,7 +279,9 @@ internal fun SystemCard(
     ebikeEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
     ebikeBatterySoc: Int? = null,
-    /** The rider's low-battery threshold, so the chips band where the cue fires. */
+    /** The rider's low-battery threshold, so the chips band where the
+     *  overlay's low-battery marker shows. Nothing sounds for a low
+     *  battery; the threshold drives that marker and these colours only. */
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
 ) {
     val br = LocalBrColors.current

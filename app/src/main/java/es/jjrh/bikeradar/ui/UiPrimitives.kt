@@ -182,7 +182,9 @@ fun BatteryChip(
     pct: Int,
     label: String? = null,
     modifier: Modifier = Modifier,
-    /** The rider's low-battery threshold, so the chip agrees with the cue. */
+    /** The rider's low-battery threshold, so the chip agrees with the
+     *  overlay's low-battery marker. Both read [batteryIsLow]; nothing
+     *  sounds for a low battery. */
     lowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
 ) {
     val br = LocalBrColors.current

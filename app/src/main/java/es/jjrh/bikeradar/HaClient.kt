@@ -521,6 +521,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             radarSlug: String?,
             cameraSlug: String?,
             closePassEnabled: Boolean,
+            autoLightModeEnabled: Boolean,
         ): List<String> = buildList {
             if (radarSlug != null) {
                 add("sensor.${NS}_${radarSlug}_battery")
@@ -529,7 +530,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             }
             if (cameraSlug != null) {
                 add("sensor.${NS}_${cameraSlug}_battery")
-                add("sensor.${NS}_${cameraSlug}_front_mode")
+                // The camera link only runs, and so only publishes the mode,
+                // when the rider has the light auto-mode on.
+                if (autoLightModeEnabled) add("sensor.${NS}_${cameraSlug}_front_mode")
             }
         }
 

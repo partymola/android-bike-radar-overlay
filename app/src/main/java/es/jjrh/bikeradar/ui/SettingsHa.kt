@@ -90,7 +90,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         BikeRadarService.macToSlug[mac]
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
-    }
+    }?.takeIf { batteryEntries.containsKey(it) }
 
     // urlField + tokenField + tokenVisible survive Activity recreate
     // (rotation, system-killed-on-resume) so a half-typed token isn't
@@ -142,6 +142,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         radarSlug = radarSlug,
         cameraSlug = cameraSlug,
         closePassEnabled = prefsSnap.closePassLoggingEnabled,
+        autoLightModeEnabled = prefsSnap.autoLightModeEnabled,
         onBack = { navController.popBackStack() },
         onTestAndSave = {
             val url = urlField.trim()
@@ -243,6 +244,7 @@ internal fun SettingsHaContent(
     /** Battery and light mode only. */
     cameraSlug: String? = null,
     closePassEnabled: Boolean = false,
+    autoLightModeEnabled: Boolean = false,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -383,6 +385,7 @@ internal fun SettingsHaContent(
                 radarSlug = radarSlug,
                 cameraSlug = cameraSlug,
                 closePassEnabled = closePassEnabled,
+                autoLightModeEnabled = autoLightModeEnabled,
             )
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
             if (entityIds.isEmpty()) {

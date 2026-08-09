@@ -1,0 +1,83 @@
+name: CodeQL
+
+# Advanced setup, because Kotlin cannot be scanned any other way here.
+# Kotlin extraction happens during a real compile, so `build-mode: none`
+# analyses the Java sources and silently skips every .kt file - a green
+# scan of nothing. A manual build gives the extractor the compile it needs,
+# and it needs JDK 21: the project targets VERSION_21, while the runner's
+# default toolchain is older and fails with "invalid source release: 21".
+#
+# Advanced and default setup cannot coexist, so this workflow has to cover
+# the actions and python languages default setup was scanning as well.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '31 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up JDK 21
+        if: matrix.build-mode == 'manual'
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        if: matrix.build-mode == 'manual'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+
+      - name: Install Android SDK platform 37
+        if: matrix.build-mode == 'manual'
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Set up Gradle
+        if: matrix.build-mode == 'manual'
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
+        with:
+          gradle-version: '9.6.1'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@18420e3271f74589575af831a523c833acda327f  # codeql-bundle-v2.26.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Both daemons have to go, not just Gradle's: the Kotlin compiler runs
+      # out-of-process by default, so with only --no-daemon the .kt files
+      # would compile outside the process tree CodeQL traces and the scan
+      # would come back green having extracted nothing. Confirm the first run
+      # reports a non-zero Kotlin file count before trusting a green result.
+      - name: Build for extraction
+        if: matrix.build-mode == 'manual'
+        run: |
+          gradle :app:assembleDebug --console=plain --no-daemon \
+            -Dkotlin.compiler.execution.strategy=in-process
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@18420e3271f74589575af831a523c833acda327f  # codeql-bundle-v2.26.2
+        with:
+          category: /language:${{ matrix.language }}

@@ -340,6 +340,15 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - **detekt** is intentionally not wired: no stable release targets the
   pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
   in a public build. Revisit when a stable detekt supports the toolchain.
+- **CodeQL** runs from `.github/workflows/codeql.yml` on pushes to `main` and
+  weekly, over three languages: `actions` and `python` buildlessly, and
+  `java-kotlin` from a real `:app:assembleDebug`. The build is not optional
+  there - CodeQL extracts Kotlin only from an actual compile, so the buildless
+  mode skips every `.kt` file and reports a green scan of nothing. The build
+  step disables the Gradle *and* Kotlin compiler daemons for the same reason:
+  a compile outside the traced process tree extracts nothing. Advanced setup
+  cannot coexist with GitHub's default setup, which is why one workflow covers
+  all three languages rather than only the one that needs a build.
 
 ## Gotchas
 

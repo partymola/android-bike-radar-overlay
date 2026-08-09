@@ -76,8 +76,15 @@ class RideStatsAccumulator(
         // ten minutes at 5.5 m/s is 3.3 km of ride history and Home Assistant
         // data that no sensor ever saw, and it deflates alerts-per-km by the
         // same factor. Under-reporting an unobserved stretch is the honest
-        // failure; the ride stats never claim to measure what the radar could
-        // not see.
+        // failure.
+        //
+        // Scope of that, precisely, because one field deliberately differs:
+        // distanceRiddenM and exposureMs count observed time only, while
+        // rideDurationMs is wall-elapsed and spans the gap on purpose - it
+        // answers "how long was the ride", which a dropout does not shorten.
+        // So after a long dropout alertsPerKm and alertsPerHourOfRide rest on
+        // different denominators, by intent. Do not "fix" the rate to exposure
+        // time: per hour OF RIDE is what alarm fatigue is measured against.
         if (prev != null && (nowMs - prev) <= MAX_FRAME_GAP_MS) {
             val dtMs = (nowMs - prev).coerceAtLeast(0L)
             // Use the bike speed that applied DURING the just-ended interval —

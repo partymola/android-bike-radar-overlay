@@ -197,16 +197,39 @@ internal class RadarLinkController(
     @Synchronized
     fun start(name: String, mac: String) {
         if (radarJob?.isActive == true) return
+        // Ask the adapter, do not wait to be told. BOND_BONDED is an edge and
+        // there are two ordinary ways to miss it: a re-pair can land on a
+        // different address (the peer is free to change it), and a sighting of
+        // another radar moves [bondWatchMac] on, after which no broadcast for
+        // this one can match. Either way the flag would never lift and the link
+        // would stay dead for the process. A device the adapter reports as
+        // bonded is worth trying, whatever we did or did not hear.
+        if (bondLost && deviceIsBonded(mac)) {
+            Log.i(TAG, "radar $mac bonded again; allowing reconnect")
+            journal("radar re-paired")
+            bondLost = false
+        }
         // Set before the bond-lost gate: the watch must outlive the refusal,
         // or nothing is left to notice the re-pair that lifts it.
         bondWatchMac = mac
         if (bondLost) {
             Log.d(TAG, "skip radar link start: bond lost, waiting for re-pair")
+            journal("radar link start refused: bond lost")
             return
         }
         Log.i(TAG, "starting radar link to $name $mac")
         journal("radar link start $name")
         radarJob = scope.launch { runRadarConnection(mac, name) }
+    }
+
+    /** The adapter's own view of whether [mac] is bonded. False when the
+     *  address is malformed or the adapter is unavailable, which keeps the
+     *  reconnect loop from spinning against a peer that will refuse it. */
+    private fun deviceIsBonded(mac: String): Boolean = try {
+        val btMgr = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        btMgr?.adapter?.getRemoteDevice(mac)?.bondState == BluetoothDevice.BOND_BONDED
+    } catch (_: Throwable) {
+        false
     }
 
     /** True while the connection coroutine is live. */

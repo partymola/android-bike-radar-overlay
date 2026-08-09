@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -501,6 +502,57 @@ class RadarLinkControllerHarnessTest {
             "re-pairing must lift the bond-lost gate",
             journal.any { it.contains("re-paired") },
         )
+    }
+
+    /**
+     * A re-pair the BOND_BONDED broadcast cannot report must still lift the
+     * gate, because the adapter is asked directly.
+     *
+     * Two ordinary situations produce no usable broadcast: the rider owns a
+     * second radar whose sighting moves the bond watch on, and a re-pair that
+     * lands on a different address. Both leave the watch pointing somewhere
+     * other than the radar being re-paired, so the receiver's match fails and
+     * the flag stays set for the life of the process. This drives the first:
+     * a second radar takes the watch, then the original is re-paired with no
+     * broadcast that can match it.
+     */
+    @Test
+    fun aRePairNoBroadcastCanReportStillLiftsTheGate() = runTest {
+        val otherRadar = "11:22:33:44:55:66"
+        val controller = controller(Link())
+        controller.registerBondReceiver()
+        controller.start("RearVue8", mac)
+
+        sendBondState(android.bluetooth.BluetoothDevice.BOND_NONE)
+        assertTrue(
+            "bond loss should stop the reconnect loop",
+            journal.any { it.contains("bond removed") },
+        )
+
+        // A sighting of the rider's other radar takes the bond watch. It is
+        // unbonded, so the gate holds and nothing is now watching `mac`.
+        controller.start("RearVue8", otherRadar)
+        assertFalse(
+            "an unbonded radar must not lift the gate",
+            controller.isActive(),
+        )
+
+        // The rider re-pairs the original radar in system Bluetooth settings.
+        setBonded(mac)
+        controller.start("RearVue8", mac)
+        assertTrue(
+            "a radar the adapter reports as bonded must be startable again",
+            controller.isActive(),
+        )
+        controller.forceReconnect()
+    }
+
+    private fun setBonded(address: String) {
+        val device = (
+            app.getSystemService(android.content.Context.BLUETOOTH_SERVICE)
+                as android.bluetooth.BluetoothManager
+            ).adapter.getRemoteDevice(address)
+        shadowOf(device).setBondState(android.bluetooth.BluetoothDevice.BOND_BONDED)
     }
 
     private fun sendBondState(state: Int) {

@@ -62,6 +62,19 @@ class RideSummaryEdgeTrackerTest {
         assertEquals(RideSummaryEdgeTracker.State(lastRadarOffSinceMs = null, rideSummaryPosted = false), out.state)
     }
 
+    @Test fun `a long off with nothing posted still starts a new ride`() {
+        // The long-gap half of the reset, isolated. Every other reset case
+        // here sets rideSummaryPosted, so the posted disjunct alone satisfies
+        // them and the new-ride half went unpinned: deleting it left the whole
+        // suite green. A ride short enough to post nothing, parked overnight,
+        // would then carry yesterday's overtakes, close passes and distance
+        // into today.
+        val prev = RideSummaryEdgeTracker.State(lastRadarOffSinceMs = 1_000L, rideSummaryPosted = false)
+        val out = onTick(prev, radarOffSinceMs = null, nowMs = 1_000L + longOff) { snap }
+        assertEquals(listOf(RideSummaryEdgeTracker.Action.ResetRideStats), out.actions)
+        assertEquals(RideSummaryEdgeTracker.State(lastRadarOffSinceMs = null, rideSummaryPosted = false), out.state)
+    }
+
     // ── radar off ────────────────────────────────────────────────────────────
 
     @Test fun `radar off within the dwell tracks the off-instant without snapshotting`() {

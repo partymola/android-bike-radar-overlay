@@ -81,6 +81,34 @@ class RideStatsAccumulatorTest {
     }
 
     @Test
+    fun theWidestContinuousIntervalStillIntegrates() {
+        // The boundary itself, inclusive side. Nearest fixtures were 1 s and
+        // 600 s, so an off-by-one or a retuned window moved silently between
+        // them. 5 s at 5.5 m/s is 27.5 m.
+        val clock = FakeClock()
+        val a = acc(clock)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+        clock.advance(5_000L)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+
+        assertEquals(0.0275f, a.snapshot().distanceRiddenKm, 0.0002f)
+    }
+
+    @Test
+    fun oneMillisecondPastTheWidestIntervalIsADropout() {
+        // The exclusive side. One frame later than the link's own stall
+        // threshold is a gap the radar did not observe, so it contributes
+        // nothing rather than the 27.5 m the interval above earns.
+        val clock = FakeClock()
+        val a = acc(clock)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+        clock.advance(5_001L)
+        a.observeFrame(radarState(bikeSpeedMs = 5.5f))
+
+        assertEquals(0.0f, a.snapshot().distanceRiddenKm, 0.0001f)
+    }
+
+    @Test
     fun anOrdinaryFrameIntervalStillIntegrates() {
         // The guard must not swallow normal multi-Hz frames: 5.5 m/s for one
         // second is 5.5 m.

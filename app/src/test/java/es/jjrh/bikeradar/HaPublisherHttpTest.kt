@@ -105,9 +105,17 @@ class HaPublisherHttpTest {
 
     @Test fun batteryPublishPostsDiscoveryThenStateAndReportsSuccess() = runBlocking {
         assertTrue(publisher().publishBatteryToHa("Radar", 80))
+        // Discovery, then the legacy-entity retirement for this device, then
+        // the state write. The retirement is empty retained payloads to the
+        // previous naming generations and must not displace either end.
         assertEquals(
-            listOf("homeassistant/sensor/bikeradar_radar_battery/config", "bikeradar/radar/battery"),
-            topics.toList(),
+            "homeassistant/sensor/bikeradar_radar_battery/config",
+            topics.first(),
+        )
+        assertEquals("bikeradar/radar/battery", topics.last())
+        assertTrue(
+            "the old generation's entities are retired alongside the new one",
+            topics.any { it == "homeassistant/sensor/varia_radar_battery/config" },
         )
     }
 
@@ -131,7 +139,13 @@ class HaPublisherHttpTest {
         assertFalse(p.publishBatteryToHa("Radar", 80))
         statusFor = { 200 }
         assertTrue(p.publishBatteryToHa("Radar", 80))
-        assertEquals("discovery retried after rollback", 2, topics.count { it.endsWith("/config") })
+        // Count the NEW namespace's discovery only: the retirement path also
+        // writes /config topics, under the old namespace.
+        assertEquals(
+            "discovery retried after rollback",
+            2,
+            topics.count { it == "homeassistant/sensor/bikeradar_radar_battery/config" },
+        )
     }
 
     @Test fun batteryThrottleSkipsRepeatWithinHeartbeatAndRepublishesOnChange() = runBlocking {

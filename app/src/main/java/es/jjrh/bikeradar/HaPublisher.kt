@@ -108,6 +108,12 @@ internal class HaPublisher(
                 return false
             }
             Log.i(TAG, "HA discovery published for ${HaClient.NS}_${s}_battery")
+            // Retire this device's entities from every naming generation the
+            // app has shipped, at the moment its new one appears, so the two
+            // never sit side by side. Per-process rather than a persisted
+            // one-shot, so a partial failure simply retries next launch.
+            val retired = ha.cleanupStaleDiscoveryTopics(listOf(s))
+            Log.i(TAG, "HA stale-entity cleanup for $s: ok=$retired")
         }
         val ok = ha.publishBatteryState(s, pct)
         if (ok) {

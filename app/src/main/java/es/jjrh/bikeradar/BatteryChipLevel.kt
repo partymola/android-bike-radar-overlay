@@ -39,8 +39,16 @@ fun batteryChipLevel(pct: Int, lowThresholdPct: Int): BatteryChipLevel = when {
  *
  * A reading only counts while it is recent enough to still describe the
  * device: an entry the app has not refreshed within [staleAfterMs] says
- * nothing about the battery now, and marking on it would be the same
- * stale-reading-as-live-claim the chips avoid.
+ * nothing about the battery now, and marking on it would be the
+ * stale-reading-as-live-claim the chips also refuse to make.
+ *
+ * The two windows are deliberately different, not accidentally so: the
+ * caller passes `BATTERY_STALE_MS` (15 min) here, while the chips use
+ * `BATTERY_UI_FRESH_MS` (30 s). The marker is an in-ride glance at a slowly
+ * moving quantity, where a reading minutes old is still worth showing; the
+ * chip is a "connected right now" claim on a screen being read at rest,
+ * where it is not. So a five-minute-old reading can mark on the overlay and
+ * be dropped in Settings. That is intended; do not collapse them to one.
  *
  * Extracted rather than inlined in the overlay loop so the boundary has a
  * test of its own. Inline, it sat inside a coroutine no unit test reaches,

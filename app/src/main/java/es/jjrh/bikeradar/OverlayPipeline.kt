@@ -195,7 +195,10 @@ internal class OverlayPipeline(
 
                         val threshold = prefs.batteryLowThresholdPct
                         val lowSlugs = batteries.values
-                            .filter { it.pct < threshold && now - it.readAtMs < BikeRadarService.BATTERY_STALE_MS }
+                            .filter {
+                                batteryIsLow(it.pct, threshold) &&
+                                    now - it.readAtMs < BikeRadarService.BATTERY_STALE_MS
+                            }
                             .map { it.slug }.toSet()
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 

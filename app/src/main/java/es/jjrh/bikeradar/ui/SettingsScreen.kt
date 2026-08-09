@@ -41,9 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
@@ -84,6 +88,7 @@ fun SettingsScreen(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val devUnlocked by DevModeState.unlocked.collectAsState()
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val haHealth by HaHealthBus.state.collectAsState()
@@ -95,10 +100,14 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     // reporting as connected: the entries flow only emits when a device IS
     // seen, so without this the last verdict would stand indefinitely.
     var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5_000)
-            tickNowMs = System.currentTimeMillis()
+    LaunchedEffect(lifecycleOwner) {
+        // RESUMED-gated: this screen sits in the backstack behind its
+        // sub-screens, and an ungated loop keeps recomposing there.
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(5_000)
+                tickNowMs = System.currentTimeMillis()
+            }
         }
     }
 
@@ -226,24 +235,34 @@ internal fun SettingsMenuBody(
 
             SettingsSectionLabel(stringResource(R.string.settings_home_section_system))
             SettingsRowGroup {
+                val permissionsSummary = PermissionsSummaryDeriver.derive(
+                    grantedCount = permissionsGrantedCount,
+                    requiredMissing = permissionsRequiredMissing,
+                    total = permissionsTotal,
+                )
                 SettingsRow(
                     icon = Icons.Default.Shield,
-                    iconTint = if (permissionsRequiredMissing > 0) br.danger else br.caution,
+                    // Tinted from the same three states the subtitle reads, so
+                    // the colour cannot say "attention" while the text says
+                    // everything is granted.
+                    iconTint = when (permissionsSummary) {
+                        PermissionsSummary.ACTION_NEEDED -> br.danger
+                        PermissionsSummary.PARTIALLY_GRANTED -> br.caution
+                        PermissionsSummary.ALL_GRANTED -> br.safe
+                    },
                     title = stringResource(R.string.settings_home_permissions_title),
-                    subtitle = when (
-                        PermissionsSummaryDeriver.derive(
-                            grantedCount = permissionsGrantedCount,
-                            requiredMissing = permissionsRequiredMissing,
-                            total = permissionsTotal,
-                        )
-                    ) {
-                        PermissionsSummary.ACTION_NEEDED -> stringResource(
-                            R.string.settings_home_permissions_subtitle_action,
+                    subtitle = when (permissionsSummary) {
+                        // Counts required-missing only, with no denominator:
+                        // pairing it with the all-permissions total read "1 of
+                        // 4 need action" while three were outstanding.
+                        PermissionsSummary.ACTION_NEEDED -> pluralStringResource(
+                            R.plurals.settings_home_permissions_subtitle_action,
                             permissionsRequiredMissing,
-                            permissionsTotal,
+                            permissionsRequiredMissing,
                         )
-                        PermissionsSummary.PARTIALLY_GRANTED -> stringResource(
-                            R.string.settings_home_permissions_subtitle_partial,
+                        PermissionsSummary.PARTIALLY_GRANTED -> pluralStringResource(
+                            R.plurals.settings_home_permissions_subtitle_partial,
+                            permissionsGrantedCount,
                             permissionsGrantedCount,
                             permissionsTotal,
                         )

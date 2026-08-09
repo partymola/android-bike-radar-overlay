@@ -271,9 +271,15 @@
     <string name="settings_home_ebike_title">eBike</string>
     <string name="settings_home_ha_title">Home Assistant</string>
     <string name="settings_home_permissions_title">Permisos</string>
-    <string name="settings_home_permissions_subtitle_action"><xliff:g id="missing" example="2">%1$d</xliff:g> de <xliff:g id="total" example="7">%2$d</xliff:g> requieren acción</string>
+    <plurals name="settings_home_permissions_subtitle_action">
+        <item quantity="one"><xliff:g id="missing" example="1">%1$d</xliff:g> permiso requiere acción</item>
+        <item quantity="other"><xliff:g id="missing" example="2">%1$d</xliff:g> permisos requieren acción</item>
+    </plurals>
     <string name="settings_home_permissions_subtitle_granted">Todos concedidos (<xliff:g id="granted" example="7">%1$d</xliff:g> de <xliff:g id="total" example="7">%2$d</xliff:g>)</string>
-    <string name="settings_home_permissions_subtitle_partial"><xliff:g id="granted" example="2">%1$d</xliff:g> de <xliff:g id="total" example="4">%2$d</xliff:g> concedidos</string>
+    <plurals name="settings_home_permissions_subtitle_partial">
+        <item quantity="one"><xliff:g id="granted" example="1">%1$d</xliff:g> de <xliff:g id="total" example="3">%2$d</xliff:g> concedido</item>
+        <item quantity="other"><xliff:g id="granted" example="2">%1$d</xliff:g> de <xliff:g id="total" example="4">%2$d</xliff:g> concedidos</item>
+    </plurals>
     <string name="settings_home_experimental_title">Experimental</string>
     <string name="settings_home_debug_title">Depuración</string>
     <string name="settings_home_debug_subtitle">Modo de desarrollador desbloqueado</string>

@@ -286,9 +286,15 @@
     <string name="settings_home_ebike_title">eBike</string>
     <string name="settings_home_ha_title">Home Assistant</string>
     <string name="settings_home_permissions_title">Permissions</string>
-    <string name="settings_home_permissions_subtitle_action"><xliff:g id="missing" example="2">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g> need action</string>
+    <plurals name="settings_home_permissions_subtitle_action">
+        <item quantity="one"><xliff:g id="missing" example="1">%1$d</xliff:g> permission needs action</item>
+        <item quantity="other"><xliff:g id="missing" example="2">%1$d</xliff:g> permissions need action</item>
+    </plurals>
     <string name="settings_home_permissions_subtitle_granted">All granted (<xliff:g id="granted" example="7">%1$d</xliff:g> of <xliff:g id="total" example="7">%2$d</xliff:g>)</string>
-    <string name="settings_home_permissions_subtitle_partial"><xliff:g id="granted" example="2">%1$d</xliff:g> of <xliff:g id="total" example="4">%2$d</xliff:g> granted</string>
+    <plurals name="settings_home_permissions_subtitle_partial">
+        <item quantity="one"><xliff:g id="granted" example="1">%1$d</xliff:g> of <xliff:g id="total" example="3">%2$d</xliff:g> granted</item>
+        <item quantity="other"><xliff:g id="granted" example="2">%1$d</xliff:g> of <xliff:g id="total" example="4">%2$d</xliff:g> granted</item>
+    </plurals>
     <string name="settings_home_experimental_title">Experimental</string>
     <string name="settings_home_debug_title">Debug</string>
     <string name="settings_home_debug_subtitle">Developer mode unlocked</string>

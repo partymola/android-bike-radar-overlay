@@ -28,9 +28,9 @@ import java.net.URL
  * statistic, so it labelled ride facts with a radar brand.
  *
  * The rename is breaking, and handled rather than dropped on the rider:
- * [cleanupStaleDiscoveryTopics] retires the old configs, so a rider gets the
- * new entities instead of the new ones sitting beside permanently
- * unavailable old ones. Automations referencing the old ids still have to be
+ * [cleanupStaleDiscoveryTopics] retires the old configs as each device's new
+ * entity appears, so the old ones do not sit beside them permanently
+ * unavailable. Automations referencing the old ids still have to be
  * repointed by hand; the CHANGELOG says so.
  */
 // `open` (and the two close-pass publishers below) so a test double can record
@@ -378,7 +378,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     /**
      * Publishes the HA MQTT-Discovery config for the per-ride summary
      * sensors. Twelve sensors share the single retained state topic
-     * `varia/<slug>/ride_summary` and decompose its JSON via value_template,
+     * `<NS>/<slug>/ride_summary` and decompose its JSON via value_template,
      * so one MQTT message updates every sensor atomically. All sensors
      * sit under the same `device.identifiers` as the battery + close-pass
      * entities so they group on a single HA device card.
@@ -510,6 +510,30 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         private const val LEGACY_NS = "varia"
 
         /**
+         * The entity ids this app publishes, for the devices it has seen.
+         *
+         * Here rather than in the UI because the families are not per-device:
+         * battery for any device, light mode for the camera, close-pass and
+         * the ride statistics for the radar only. A list that fanned all of
+         * them across every slug named entities nothing had published.
+         */
+        fun publishedEntityIds(
+            radarSlug: String?,
+            cameraSlug: String?,
+            closePassEnabled: Boolean,
+        ): List<String> = buildList {
+            if (radarSlug != null) {
+                add("sensor.${NS}_${radarSlug}_battery")
+                if (closePassEnabled) add("event.${NS}_${radarSlug}_close_pass")
+                RIDE_SUMMARY_SENSORS.forEach { add("sensor.${NS}_${radarSlug}_${it.field}") }
+            }
+            if (cameraSlug != null) {
+                add("sensor.${NS}_${cameraSlug}_battery")
+                add("sensor.${NS}_${cameraSlug}_front_mode")
+            }
+        }
+
+        /**
          * The ride-summary sensor family, in one place so the publisher and
          * the stale-topic cleanup cannot disagree about which entities exist.
          * A sensor added here is published AND retired on the next rename.
@@ -548,7 +572,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
  * off-device (to the user's own Home Assistant), keyed by MQTT topic family.
  *
  * Why it exists: keeps the privacy disclosures honest as the app grows.
- * [HaClientDataDisclosureTest] fails if [HaClient] publishes a `varia/...`
+ * [HaClientDataDisclosureTest] fails if [HaClient] publishes a namespaced
  * data topic whose family is not registered here, and
  * `scripts/privacy-disclosure-check.sh` fails if a registered flow's
  * [Flow.disclosureKeyword] is missing from the Settings → Privacy screen.
@@ -557,9 +581,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
  */
 object DataDisclosure {
     /**
-     * @param topicFamily the distinctive MQTT topic token after the `varia/`
+     * @param topicFamily the distinctive MQTT topic token after the [NS]
      *   prefix, slug- and `/last`-stripped (e.g. `battery`, or the fixed
-     *   `ride_edge` from `varia/ride/edge`).
+     *   `ride_edge` from `<NS>/ride/edge`).
      * @param category human description of what is sent.
      * @param disclosureKeyword a substring that MUST appear in the Privacy
      *   screen's "What goes to your Home Assistant" copy.

@@ -101,9 +101,11 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Unknown,
                     haConfigured = true,
-                    // A seen device, so the entity list renders the real ids
-                    // rather than its empty state.
-                    deviceSlugs = listOf("rearvue8"),
+                    // A seen radar, so the list renders its real ids. No
+                    // camera: a radar-only rider must not be shown a
+                    // front-camera entity.
+                    radarSlug = "rearvue8",
+                    closePassEnabled = true,
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -132,9 +134,11 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Unknown,
                     haConfigured = true,
-                    // A seen device, so the entity list renders the real ids
-                    // rather than its empty state.
-                    deviceSlugs = listOf("rearvue8"),
+                    // A seen radar, so the list renders its real ids. No
+                    // camera: a radar-only rider must not be shown a
+                    // front-camera entity.
+                    radarSlug = "rearvue8",
+                    closePassEnabled = true,
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -160,9 +164,11 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Ok,
                     haConfigured = true,
-                    // A seen device, so the entity list renders the real ids
-                    // rather than its empty state.
-                    deviceSlugs = listOf("rearvue8"),
+                    // A seen radar, so the list renders its real ids. No
+                    // camera: a radar-only rider must not be shown a
+                    // front-camera entity.
+                    radarSlug = "rearvue8",
+                    closePassEnabled = true,
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -188,9 +194,11 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Error("connection refused", atMs = 0L),
                     haConfigured = true,
-                    // A seen device, so the entity list renders the real ids
-                    // rather than its empty state.
-                    deviceSlugs = listOf("rearvue8"),
+                    // A seen radar, so the list renders its real ids. No
+                    // camera: a radar-only rider must not be shown a
+                    // front-camera entity.
+                    radarSlug = "rearvue8",
+                    closePassEnabled = true,
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},

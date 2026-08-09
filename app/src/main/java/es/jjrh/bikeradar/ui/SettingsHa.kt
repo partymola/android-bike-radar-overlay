@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -62,6 +64,7 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun SettingsHa(navController: NavController, prefs: Prefs) {
@@ -76,10 +79,18 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
     val scope = rememberCoroutineScope()
     val creds = remember { HaCredentials(ctx) }
     val haHealth by HaHealthBus.state.collectAsState()
-    // The slugs the app has actually seen. These are the same slugs HaClient
-    // builds its object_ids from, so the ids listed below are the ones in the
-    // rider's Home Assistant, not a shape to substitute into.
+    val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
+    // Resolved by device class, because the entity families differ per device.
+    // Deliberately NOT freshness-filtered like the other reads of this bus: an
+    // entity persists in HA whether or not the device was seen recently.
     val batteryEntries by BatteryStateBus.entries.collectAsState()
+    val radarSlug = batteryEntries.values
+        .firstOrNull { DeviceNameMatcher.isRadarName(it.name) }?.slug
+    val cameraSlug = prefsSnap.dashcamMac?.let { mac ->
+        BikeRadarService.macToSlug[mac]
+            ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
+            ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
+    }
 
     // urlField + tokenField + tokenVisible survive Activity recreate
     // (rotation, system-killed-on-resume) so a half-typed token isn't
@@ -128,7 +139,9 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         pinging = pinging,
         haHealth = haHealth,
         haConfigured = haConfigured,
-        deviceSlugs = batteryEntries.keys.toList(),
+        radarSlug = radarSlug,
+        cameraSlug = cameraSlug,
+        closePassEnabled = prefsSnap.closePassLoggingEnabled,
         onBack = { navController.popBackStack() },
         onTestAndSave = {
             val url = urlField.trim()
@@ -225,11 +238,11 @@ internal fun SettingsHaContent(
     onTestAndSave: () -> Unit,
     onSaveWithoutTesting: () -> Unit,
     onClear: () -> Unit,
-    /** Slugs of devices the app has actually seen, so the entity list can
-     *  show the rider the ids that exist in their Home Assistant rather than
-     *  a template they have to substitute by hand. Empty before any device
-     *  has been seen. */
-    deviceSlugs: List<String> = emptyList(),
+    /** Battery, close-pass events and the ride statistics. */
+    radarSlug: String? = null,
+    /** Battery and light mode only. */
+    cameraSlug: String? = null,
+    closePassEnabled: Boolean = false,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -362,31 +375,27 @@ internal fun SettingsHaContent(
                 }
             }
 
-            // The ids the rider will actually find in Home Assistant, built
-            // from the same namespace and slugs HaClient publishes under, for
-            // the devices this install has seen. No value is shown because
-            // none is queried - and this screen must never claim an entity
-            // exists that nothing published, which is what a hardcoded list
-            // did when it named a binary_sensor the app has never had.
+            // The ids the rider will find in their Home Assistant. No value is
+            // shown because none is queried.
             val published = haStatus == HaStatus.READY
-            val entityIds = deviceSlugs.sorted().flatMap { slug ->
-                listOf(
-                    "sensor.${HaClient.NS}_${slug}_battery",
-                    "sensor.${HaClient.NS}_${slug}_front_mode",
-                    "event.${HaClient.NS}_${slug}_close_pass",
-                    "sensor.${HaClient.NS}_${slug}_distance_ridden_km",
-                )
-            }
+            // Asked of the publisher: the families are not per-device.
+            val entityIds = HaClient.publishedEntityIds(
+                radarSlug = radarSlug,
+                cameraSlug = cameraSlug,
+                closePassEnabled = closePassEnabled,
+            )
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
-            SettingsRowGroup {
-                if (entityIds.isEmpty()) {
-                    EntityRow(
-                        name = stringResource(R.string.settings_ha_entities_none_yet),
-                        value = "",
-                        connected = false,
-                        isLast = true,
-                    )
-                } else {
+            if (entityIds.isEmpty()) {
+                // Prose, not an EntityRow: through that it renders monospace
+                // with a status dot and reads as a fake entity id.
+                Text(
+                    text = stringResource(R.string.settings_ha_entities_none_yet),
+                    color = br.fgMuted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            } else {
+                SettingsRowGroup {
                     entityIds.forEachIndexed { i, id ->
                         EntityRow(
                             name = id,

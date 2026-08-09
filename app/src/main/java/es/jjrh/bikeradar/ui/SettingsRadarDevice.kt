@@ -26,9 +26,11 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -41,11 +43,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarSelection
+import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.Prefs
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -70,6 +77,7 @@ fun SettingsRadarDevice(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
     val allBonded = remember(prefsSnap.radarMac) { RadarSelection.bondedDevices(ctx) }
@@ -78,13 +86,26 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // recognise, offered behind "My radar isn't listed".
     val others = remember(allBonded) { allBonded.filterNot { RadarSelection.isRadarName(it.name) } }
 
+    // Ticked, not sampled once: the entries flow only emits when a device IS
+    // seen, so a screen left open would hold its last verdict indefinitely and
+    // keep calling a dead radar connected.
+    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(5_000)
+                tickNowMs = System.currentTimeMillis()
+            }
+        }
+    }
+
     // Radar battery is matched by name across the bus (same heuristic the home
-    // Quick Status card uses); a read within 30s == connected.
+    // Quick Status card uses); a recent read is the proxy for connected.
     val radarBattery = batteryEntries.values.firstOrNull { entry ->
         RadarSelection.isRadarName(entry.name)
     }
     val connected = radarBattery != null &&
-        System.currentTimeMillis() - radarBattery.readAtMs < 30_000L
+        batteryReadIsFresh(radarBattery.readAtMs, tickNowMs)
 
     val chosen = prefsSnap.radarMac
     // The chosen unit may live in EITHER list (a pinned odd-name radar is

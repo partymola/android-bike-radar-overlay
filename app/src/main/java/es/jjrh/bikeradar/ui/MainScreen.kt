@@ -73,6 +73,7 @@ import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -180,7 +181,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
     }
     val dashcamFresh = dashcamSlug?.let { slug ->
-        batteryEntries[slug]?.let { now - it.readAtMs < 30_000L } == true
+        batteryEntries[slug]?.let { batteryReadIsFresh(it.readAtMs, now) } == true
     } ?: false
     val dashcamPaired = prefsSnap.dashcamMac != null
     val dashcamOwned = prefsSnap.dashcamOwnership == DashcamOwnership.YES

@@ -28,9 +28,11 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -42,13 +44,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.ServiceNotifications
+import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 @Composable
@@ -61,6 +68,7 @@ fun SettingsDashcam(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
@@ -69,9 +77,21 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
     }
+    // Ticked, not sampled once: the entries flow only emits when a device IS
+    // seen, so a screen left open would hold its last verdict indefinitely and
+    // keep calling a dead dashcam connected.
+    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(5_000)
+                tickNowMs = System.currentTimeMillis()
+            }
+        }
+    }
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
     val dashcamConnected = dashcamBattery != null &&
-        System.currentTimeMillis() - dashcamBattery.readAtMs < 30_000L
+        batteryReadIsFresh(dashcamBattery.readAtMs, tickNowMs)
 
     var walkAwayThreshold by rememberSaveable { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
 

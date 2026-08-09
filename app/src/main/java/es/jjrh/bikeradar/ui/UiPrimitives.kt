@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import es.jjrh.bikeradar.BatteryChipLevel
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.batteryChipLevel
+import es.jjrh.bikeradar.data.Prefs
 import kotlin.math.max
 
 /**
@@ -167,8 +168,10 @@ fun StatusDot(
     }
 }
 
-/** Matches Prefs' own default, so an untouched install renders as before. */
-const val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = 20
+/** Compose default for previews and leaf callers. Reads Prefs' own default
+ *  rather than restating it, so the two cannot disagree about the number an
+ *  untouched install renders at. */
+val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = Prefs.DEFAULT_BATTERY_LOW_THRESHOLD_PCT
 
 // ── BatteryChip ───────────────────────────────────────────────────────
 //

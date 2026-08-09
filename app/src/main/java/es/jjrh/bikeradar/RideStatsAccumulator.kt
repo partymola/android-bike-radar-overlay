@@ -238,9 +238,10 @@ class RideStatsAccumulator(
         private const val MAX_TRACK_DISTANCE_M = 40
 
         /** Widest frame interval still treated as continuous observation.
-         *  Matches the radar link's V2 data-flow stall threshold, which is
-         *  what tears the GATT down when frames stop. */
-        private const val MAX_FRAME_GAP_MS = 5_000L
+         *  Reads the radar link's own stall threshold rather than copying it:
+         *  that value is what tears the GATT down when frames stop, so the two
+         *  must move together and a second literal could drift. */
+        private val MAX_FRAME_GAP_MS = RadarLinkController.V2_FRAME_STALL_MS
         private const val MS_TO_KMH = 3.6f
     }
 }

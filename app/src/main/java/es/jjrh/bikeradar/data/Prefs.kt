@@ -160,7 +160,7 @@ class Prefs(context: Context) {
         }
 
     var batteryLowThresholdPct: Int
-        get() = sp.getInt(KEY_BATTERY_LOW_THRESHOLD_PCT, 20)
+        get() = sp.getInt(KEY_BATTERY_LOW_THRESHOLD_PCT, DEFAULT_BATTERY_LOW_THRESHOLD_PCT)
         set(v) {
             sp.edit().putInt(KEY_BATTERY_LOW_THRESHOLD_PCT, v).apply()
         }
@@ -792,6 +792,10 @@ class Prefs(context: Context) {
     }
 
     companion object {
+        /** The low-battery threshold an untouched install runs at. The single
+         *  source: the getter below and the Compose default both read it. */
+        const val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = 20
+
         private const val FILE = "bike_radar_prefs"
         const val KEY_FIRST_RUN_COMPLETE = "first_run_complete"
         const val KEY_SERVICE_ENABLED = "service_enabled"

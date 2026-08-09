@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -75,6 +76,10 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
     val scope = rememberCoroutineScope()
     val creds = remember { HaCredentials(ctx) }
     val haHealth by HaHealthBus.state.collectAsState()
+    // The slugs the app has actually seen. These are the same slugs HaClient
+    // builds its object_ids from, so the ids listed below are the ones in the
+    // rider's Home Assistant, not a shape to substitute into.
+    val batteryEntries by BatteryStateBus.entries.collectAsState()
 
     // urlField + tokenField + tokenVisible survive Activity recreate
     // (rotation, system-killed-on-resume) so a half-typed token isn't
@@ -123,6 +128,7 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         pinging = pinging,
         haHealth = haHealth,
         haConfigured = haConfigured,
+        deviceSlugs = batteryEntries.keys.toList(),
         onBack = { navController.popBackStack() },
         onTestAndSave = {
             val url = urlField.trim()
@@ -219,6 +225,11 @@ internal fun SettingsHaContent(
     onTestAndSave: () -> Unit,
     onSaveWithoutTesting: () -> Unit,
     onClear: () -> Unit,
+    /** Slugs of devices the app has actually seen, so the entity list can
+     *  show the rider the ids that exist in their Home Assistant rather than
+     *  a template they have to substitute by hand. Empty before any device
+     *  has been seen. */
+    deviceSlugs: List<String> = emptyList(),
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -351,22 +362,40 @@ internal fun SettingsHaContent(
                 }
             }
 
-            // The entity FAMILIES this app publishes, not a live list: no
-            // query is run, so no per-entity value can be shown and none is.
-            // `<device>` stands for the per-device slug HaClient builds the
-            // object_id from. Named from HaClient's own discovery topics, so
-            // a family added there is added here. It previously listed a
-            // binary_sensor the app has never published and gave it a
-            // literal "on", which is the one direction this screen must not
-            // err in - claiming an entity exists in the rider's Home
-            // Assistant when nothing put it there.
+            // The ids the rider will actually find in Home Assistant, built
+            // from the same namespace and slugs HaClient publishes under, for
+            // the devices this install has seen. No value is shown because
+            // none is queried - and this screen must never claim an entity
+            // exists that nothing published, which is what a hardcoded list
+            // did when it named a binary_sensor the app has never had.
             val published = haStatus == HaStatus.READY
+            val entityIds = deviceSlugs.sorted().flatMap { slug ->
+                listOf(
+                    "sensor.${HaClient.NS}_${slug}_battery",
+                    "sensor.${HaClient.NS}_${slug}_front_mode",
+                    "event.${HaClient.NS}_${slug}_close_pass",
+                    "sensor.${HaClient.NS}_${slug}_distance_ridden_km",
+                )
+            }
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
             SettingsRowGroup {
-                EntityRow(name = "sensor.varia_<device>_battery", value = "\u2014", connected = published, isLast = false)
-                EntityRow(name = "sensor.varia_<device>_front_mode", value = "\u2014", connected = published, isLast = false)
-                EntityRow(name = "event.varia_<device>_close_pass", value = "\u2014", connected = published, isLast = false)
-                EntityRow(name = "sensor.varia_<device>_<ride stat>", value = "\u2014", connected = published, isLast = true)
+                if (entityIds.isEmpty()) {
+                    EntityRow(
+                        name = stringResource(R.string.settings_ha_entities_none_yet),
+                        value = "",
+                        connected = false,
+                        isLast = true,
+                    )
+                } else {
+                    entityIds.forEachIndexed { i, id ->
+                        EntityRow(
+                            name = id,
+                            value = "",
+                            connected = published,
+                            isLast = i == entityIds.lastIndex,
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))

@@ -101,6 +101,9 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Unknown,
                     haConfigured = true,
+                    // A seen device, so the entity list renders the real ids
+                    // rather than its empty state.
+                    deviceSlugs = listOf("rearvue8"),
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -129,6 +132,9 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Unknown,
                     haConfigured = true,
+                    // A seen device, so the entity list renders the real ids
+                    // rather than its empty state.
+                    deviceSlugs = listOf("rearvue8"),
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -154,6 +160,9 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Ok,
                     haConfigured = true,
+                    // A seen device, so the entity list renders the real ids
+                    // rather than its empty state.
+                    deviceSlugs = listOf("rearvue8"),
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},
@@ -179,6 +188,9 @@ class SettingsHaSnapshotTest {
                     pinging = false,
                     haHealth = HaHealth.Error("connection refused", atMs = 0L),
                     haConfigured = true,
+                    // A seen device, so the entity list renders the real ids
+                    // rather than its empty state.
+                    deviceSlugs = listOf("rearvue8"),
                     onBack = {},
                     onTestAndSave = {},
                     onSaveWithoutTesting = {},

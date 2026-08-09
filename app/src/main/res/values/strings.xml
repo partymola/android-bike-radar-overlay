@@ -468,6 +468,7 @@
     <string name="settings_ha_not_configured">Not configured</string>
     <string name="settings_ha_configured">Configured</string>
     <string name="settings_ha_unreachable">Connection issue</string>
+    <string name="settings_ha_entities_none_yet">Appears once your radar has been seen</string>
     <string name="settings_ha_nothing_published_yet">Saved. Nothing has been published yet.</string>
     <string name="settings_ha_add_url_token">Add your URL + token below.</string>
     <string name="settings_ha_last_error">Last error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>

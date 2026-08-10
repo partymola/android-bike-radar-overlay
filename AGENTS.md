@@ -346,7 +346,11 @@ enforces them, and CONTRIBUTING.md points contributors here:
   there - CodeQL extracts Kotlin only from an actual compile, so the buildless
   mode skips every `.kt` file and reports a green scan of nothing. The build
   step disables the Gradle *and* Kotlin compiler daemons for the same reason:
-  a compile outside the traced process tree extracts nothing. Advanced setup
+  a compile outside the traced process tree extracts nothing. It also passes
+  `--no-build-cache`, because a cache entry restored from an earlier run
+  satisfies `compileDebugKotlin` without running the compiler at all, and a
+  grep over the build log fails the step unless that task appears as
+  executed rather than FROM-CACHE or UP-TO-DATE. Advanced setup
   cannot coexist with GitHub's default setup, which is why one workflow covers
   all three languages rather than only the one that needs a build.
 

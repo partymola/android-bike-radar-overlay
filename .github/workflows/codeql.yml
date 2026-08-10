@@ -66,16 +66,26 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
-      # Both daemons have to go, not just Gradle's: the Kotlin compiler runs
-      # out-of-process by default, so with only --no-daemon the .kt files
-      # would compile outside the process tree CodeQL traces and the scan
-      # would come back green having extracted nothing. Confirm the first run
-      # reports a non-zero Kotlin file count before trusting a green result.
+      # Two flags stand between this build and a green scan of nothing.
+      # --no-daemon is not enough alone: the Kotlin compiler runs
+      # out-of-process by default, outside the process tree CodeQL traces.
+      # --no-build-cache, because a cache entry written by an earlier run on
+      # main satisfies compileDebugKotlin without running the compiler at
+      # all; disabling the action's cache would do that too, and throw away
+      # the dependency cache with it.
+      # The grep pins the second case only - the compile has to appear in
+      # the log as executed, not FROM-CACHE or UP-TO-DATE. Nothing here pins
+      # the in-process strategy except CodeQL's own refusal to finalize a
+      # database it found no Kotlin for.
       - name: Build for extraction
         if: matrix.build-mode == 'manual'
         run: |
-          gradle :app:assembleDebug --console=plain --no-daemon \
-            -Dkotlin.compiler.execution.strategy=in-process
+          set -euo pipefail
+          gradle :app:assembleDebug --console=plain --no-daemon --no-build-cache \
+            -Dkotlin.compiler.execution.strategy=in-process \
+            | tee "$RUNNER_TEMP/build.log"
+          grep -qE '^> Task :app:compileDebugKotlin[[:space:]]*$' "$RUNNER_TEMP/build.log" \
+            || { echo "::error::no executed compileDebugKotlin task in the log - CodeQL would extract no Kotlin"; exit 1; }
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@18420e3271f74589575af831a523c833acda327f  # codeql-bundle-v2.26.2

@@ -510,33 +510,6 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         private const val LEGACY_NS = "varia"
 
         /**
-         * The entity ids this app publishes, for the devices it has seen.
-         *
-         * Here rather than in the UI because the families are not per-device:
-         * battery for any device, light mode for the camera, close-pass and
-         * the ride statistics for the radar only. A list that fanned all of
-         * them across every slug named entities nothing had published.
-         */
-        fun publishedEntityIds(
-            radarSlug: String?,
-            cameraSlug: String?,
-            closePassEnabled: Boolean,
-            autoLightModeEnabled: Boolean,
-        ): List<String> = buildList {
-            if (radarSlug != null) {
-                add("sensor.${NS}_${radarSlug}_battery")
-                if (closePassEnabled) add("event.${NS}_${radarSlug}_close_pass")
-                RIDE_SUMMARY_SENSORS.forEach { add("sensor.${NS}_${radarSlug}_${it.field}") }
-            }
-            if (cameraSlug != null) {
-                add("sensor.${NS}_${cameraSlug}_battery")
-                // The camera link only runs, and so only publishes the mode,
-                // when the rider has the light auto-mode on.
-                if (autoLightModeEnabled) add("sensor.${NS}_${cameraSlug}_front_mode")
-            }
-        }
-
-        /**
          * The ride-summary sensor family, in one place so the publisher and
          * the stale-topic cleanup cannot disagree about which entities exist.
          * A sensor added here is published AND retired on the next rename.

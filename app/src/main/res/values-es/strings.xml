@@ -444,12 +444,13 @@
     <string name="settings_ha_chip_ha_error">HA: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_chip_mqtt_ready">MQTT: listo</string>
     <string name="settings_ha_chip_mqtt_error">MQTT: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
-    <string name="settings_ha_published_entities">Entidades publicadas</string>
+    <string name="settings_ha_published_entities">Tus entidades</string>
     <string name="settings_ha_connected">Conectado</string>
     <string name="settings_ha_not_configured">Sin configurar</string>
     <string name="settings_ha_configured">Configurado</string>
     <string name="settings_ha_unreachable">Problema de conexión</string>
-    <string name="settings_ha_entities_none_yet">Aparecerán cuando la app conecte con el radar</string>
+    <string name="settings_ha_entities_look_up_in_ha">Tus ID de entidad están en HA: Ajustes → Dispositivos y servicios → Entidades.</string>
+    <string name="settings_ha_entities_after_publishing">Aparecen en HA cuando la app haya publicado: Ajustes → Dispositivos y servicios → Entidades.</string>
     <string name="settings_ha_nothing_published_yet">Guardado. Aún no se ha publicado nada.</string>
     <string name="settings_ha_add_url_token">Añade tu URL + token abajo.</string>
     <string name="settings_ha_last_error">Último error: <xliff:g id="message" example="timeout">%1$s</xliff:g></string>

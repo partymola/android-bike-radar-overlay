@@ -111,11 +111,17 @@ class HaClientGuardsTest {
             "event_types must include close_pass",
             (0 until eventTypes.length()).any { eventTypes.getString(it) == "close_pass" },
         )
-        // HA binds entity_id to (unique_id, object_id) on first publish;
-        // diverging the two creates a duplicate entity that ignores the
-        // dashboard's bindings (issue home-assistant/core#124259).
+        // Keeps the two in step so a future edit cannot move one without the
+        // other. It is NOT what fixes the entity id: with `has_entity_name`
+        // set on a named device, HA builds the id from the device name plus
+        // the entity's display name and does not use `object_id` at all. The
+        // published ride-summary ids show it: they read `..._close_passes` and
+        // `..._peak_closing_speed` (the display names) rather than
+        // `close_pass_count` / `peak_closing_kmh` (the object_ids). Never
+        // claim HA binds entity_id to object_id - it is false, and this
+        // assertion is not evidence for it.
         assertEquals(
-            "unique_id must equal object_id to preserve entity binding",
+            "unique_id and object_id must stay in step",
             payload.getString("unique_id"),
             payload.getString("object_id"),
         )

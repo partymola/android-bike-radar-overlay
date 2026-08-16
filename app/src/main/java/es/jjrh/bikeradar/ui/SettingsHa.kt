@@ -50,9 +50,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.BatteryStateBus
-import es.jjrh.bikeradar.BikeRadarService
-import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -64,7 +61,6 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 @Composable
 fun SettingsHa(navController: NavController, prefs: Prefs) {
@@ -80,18 +76,6 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
     val creds = remember { HaCredentials(ctx) }
     val haHealth by HaHealthBus.state.collectAsState()
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
-    // Resolved by device class, because the entity families differ per device.
-    // Deliberately NOT freshness-filtered like the other reads of this bus: an
-    // entity persists in HA whether or not the device was seen recently.
-    val batteryEntries by BatteryStateBus.entries.collectAsState()
-    val radarSlug = batteryEntries.values
-        .firstOrNull { DeviceNameMatcher.isRadarName(it.name) }?.slug
-    val cameraSlug = prefsSnap.dashcamMac?.let { mac ->
-        BikeRadarService.macToSlug[mac]
-            ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
-            ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
-    }?.takeIf { batteryEntries.containsKey(it) }
-
     // urlField + tokenField + tokenVisible survive Activity recreate
     // (rotation, system-killed-on-resume) so a half-typed token isn't
     // lost. pingResult/mqttResult/pinging are transient — if the
@@ -139,10 +123,6 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         pinging = pinging,
         haHealth = haHealth,
         haConfigured = haConfigured,
-        radarSlug = radarSlug,
-        cameraSlug = cameraSlug,
-        closePassEnabled = prefsSnap.closePassLoggingEnabled,
-        autoLightModeEnabled = prefsSnap.autoLightModeEnabled,
         onBack = { navController.popBackStack() },
         onTestAndSave = {
             val url = urlField.trim()
@@ -239,12 +219,6 @@ internal fun SettingsHaContent(
     onTestAndSave: () -> Unit,
     onSaveWithoutTesting: () -> Unit,
     onClear: () -> Unit,
-    /** Battery, close-pass events and the ride statistics. */
-    radarSlug: String? = null,
-    /** Battery and light mode only. */
-    cameraSlug: String? = null,
-    closePassEnabled: Boolean = false,
-    autoLightModeEnabled: Boolean = false,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -377,38 +351,25 @@ internal fun SettingsHaContent(
                 }
             }
 
-            // The ids the rider will find in their Home Assistant. No value is
-            // shown because none is queried.
-            val published = haStatus == HaStatus.READY
-            // Asked of the publisher: the families are not per-device.
-            val entityIds = HaClient.publishedEntityIds(
-                radarSlug = radarSlug,
-                cameraSlug = cameraSlug,
-                closePassEnabled = closePassEnabled,
-                autoLightModeEnabled = autoLightModeEnabled,
-            )
+            // Points at Home Assistant rather than listing ids, because the app
+            // cannot know them: HA derives an entity id from the device name
+            // and the entity's display name using its own slug rules, and does
+            // not use the payload's `object_id`. Reproducing that here would be
+            // a second copy of another system's naming rule, free to drift.
+            // Two branches, because until a publish has succeeded there is
+            // nothing in HA to go and look at, and sending the rider there
+            // would have them hunting for entities that do not exist yet.
             SettingsSectionLabel(stringResource(R.string.settings_ha_published_entities))
-            if (entityIds.isEmpty()) {
-                // Prose, not an EntityRow: through that it renders monospace
-                // with a status dot and reads as a fake entity id.
-                Text(
-                    text = stringResource(R.string.settings_ha_entities_none_yet),
-                    color = br.fgMuted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                )
-            } else {
-                SettingsRowGroup {
-                    entityIds.forEachIndexed { i, id ->
-                        EntityRow(
-                            name = id,
-                            value = "",
-                            connected = published,
-                            isLast = i == entityIds.lastIndex,
-                        )
-                    }
-                }
-            }
+            Text(
+                text = if (haStatus == HaStatus.READY) {
+                    stringResource(R.string.settings_ha_entities_look_up_in_ha)
+                } else {
+                    stringResource(R.string.settings_ha_entities_after_publishing)
+                },
+                color = br.fgMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
 
             Spacer(modifier = Modifier.height(28.dp))
         }
@@ -578,45 +539,5 @@ private fun GhostButton(
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
         )
-    }
-}
-
-@Composable
-private fun EntityRow(name: String, value: String, connected: Boolean, isLast: Boolean) {
-    val br = LocalBrColors.current
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            StatusDot(color = if (connected) br.safe else br.fgDim, size = 5.dp)
-            Text(
-                text = name,
-                color = br.fg,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = value,
-                color = br.fgDim,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-            )
-        }
-        if (!isLast) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .padding(start = 20.dp, end = 20.dp)
-                    .background(br.hairline),
-            )
-        }
     }
 }

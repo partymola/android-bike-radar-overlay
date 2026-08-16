@@ -6,13 +6,13 @@
 
 - **The Home Assistant MQTT topics have been renamed, so anything that triggers on a raw topic needs repointing by hand.** They move from `varia/...` to `bikeradar/...`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic.
 - **Your entity ids keep the same naming, but each entity is re-registered, and some come back with a `_2` on the end.** On current Home Assistant releases the entity id is built from the device name, which has not changed, so the id an entity settles on is the one you already have. What does change is the hidden key Home Assistant identifies it by, so every entity is registered afresh - and where the old one still holds the id, the new one lands as `..._2` instead. Anything pointing at the original id goes dead until you delete the stale entity and rename the `_2` back. Check your battery sensors, the close-pass event, and the front light mode if you have the camera: those three publish before the app retires the old set, so they are the ones that collide.
-- **The app retires the old entities for you**, the first time each device's new ones reach your Home Assistant, so you are left with one set rather than two. The last retained values sit on your broker under the old topics until you delete them.
+- **The app retires the old entities for you** when a device's battery reading is first published under the new names, so you are left with one set rather than two. That is the only trigger, so a device whose battery never reports keeps its old entities until you remove them by hand. The last retained values sit on your broker under the old topics until you delete them.
 - **The rebuilt entities start with no history**, and areas, icons and custom names you had set do not carry over.
 
 ### Features
 
 - **Beep tiers now follow how close a vehicle really is.** They scored distance along your line of travel, which collapses to nothing as a car draws level, so a vehicle already passing you could climb the tiers as though it were bearing down. Tiers, and the choice of which vehicle to voice, now use true range, so traffic off to one side no longer masks a real threat and there are fewer top-tier beeps. A new threat still gets its first cue on the same frame it would have before, and the all-clear and the urgent warning are untouched - but a vehicle off to one side now reaches each tier later, or not at all if it stays wide, so its cue can start a tier lower than it used to.
-- **Set your own coordinates for the light auto-mode.** Switching between daytime and night mode needs local sunrise and sunset times, and without a location it used London for everyone. You can now type coordinates instead of granting location access, from onboarding or from Settings, and they take precedence over GPS if you have granted it. They stay on the phone, out of the logs and out of the diagnostic bundle.
+- **Set your own coordinates for the light auto-mode.** Switching between daytime and night mode needs local sunrise and sunset times, and without a location it used London for everyone. You can now type coordinates instead of granting location access, from onboarding or from Settings, and they take precedence over GPS if you have granted it. They are never published to Home Assistant and never reach a log or a diagnostic report; like the rest of your settings they are included in your Android backup, so they follow you to a new phone.
 
 ### Fix
 
@@ -28,7 +28,7 @@
 - **Home Assistant status is honest on every screen.** A never-configured install showed "MQTT ready" with a green dot on the main screen while Settings said "Not configured". Saved credentials on their own read as "Connected" before anything had been published, so a wrong URL or token looked healthy until the first ride edge tried to use it. And a configured server that could not be reached read "Connection issue" in the Settings list while the Home Assistant screen headed it "Not configured" and told you to enter credentials you had already entered.
 - **The battery chip follows the threshold you set.** It was fixed at 10 and 20 per cent, so raising the threshold left the chip neutral while the overlay marked the device low.
 - **In Spanish, the camera reads as feminine.** Its status shared a set of strings with the radar on the main and Settings screens, so it came out masculine in every state.
-- **The Home Assistant screen stops listing entity ids it was guessing.** It showed ids built from the topic name, which is not what Home Assistant names an entity, so pasting one into an automation matched nothing and reported no error. The screen now points you at where the real ids live instead.
+- **The Home Assistant screen stops listing entity ids it was guessing.** It showed a fixed list of example ids, one of them for an entity the app has never published, so pasting one into an automation matched nothing and reported no error. The app cannot know the ids - Home Assistant builds them - so the screen now points you at where the real ones live instead.
 
 ### Security
 
@@ -44,7 +44,8 @@
 
 ### Internal
 
-- **The shipped app is now checked by CI, not just compiled.** Every other gate builds the unshrunk variant, so nothing covered the shrinking step that runs on the release you install. A new gate reads the packaged app and fails the build if any of the setting values the app stores on your phone, or publishes to Home Assistant, has lost the name it is saved under. It reads the app rather than running it, so it replaces none of the on-device testing. Build tools are pinned to the version CI installs rather than left to a default.
+- **The shipped app is now checked by CI, not just compiled.** Every other gate builds the unshrunk variant, so nothing covered the shrinking step that runs on the release you install. A new gate reads the packaged app and fails the build if one of the settings it stores by name, or publishes to Home Assistant by name, has lost that name. It reads the app rather than running it, so it replaces none of the on-device testing. Build tools are pinned to the version CI installs rather than left to a default.
+- Kotlin is now scanned by CodeQL on every push to the main branch and weekly, which needed a real compile: the buildless mode skips every Kotlin file and reports a green scan of nothing. The coverage report was widened, and the per-change coverage gate now covers changed lines inside Compose screens too. A new check reports when a README or store screenshot stops matching the rendered screen it came from. The release keyword scan moved into repository secrets.
 
 ## v1.1.0 - 2026-07-17
 

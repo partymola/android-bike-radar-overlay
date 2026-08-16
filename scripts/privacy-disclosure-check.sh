@@ -100,6 +100,21 @@ if [ "$(grep -cF '<exclude' "$RULES")" -ne 2 ] || ! grep -qF 'domain="external"'
 fi
 grep -qF 'disableIfNoEncryptionCapabilities="true"' "$RULES" \
     || blocker "cloud backup must refuse devices without a lock-screen secret (the screen-lock encryption claim depends on it)"
+# Anything stored in SharedPreferences rides the backup, so a paragraph about
+# one of those values may not claim it stays on the device. This exists because
+# the manual-coordinate paragraph said "on this phone only ... never sent
+# anywhere" while every check above passed: they prove the backup posture is
+# DISCLOSED SOMEWHERE, not that a specific paragraph agrees with it. A rider's
+# home coordinates are the worst value to be wrong about.
+loc=$(sed -n 's/.*<string name="settings_privacy_on_phone_location">\(.*\)<\/string>.*/\1/p' "$STRINGS")
+[ -n "$loc" ] || blocker "settings_privacy_on_phone_location missing from the Privacy copy (strings.xml)"
+case "$loc" in
+    *"this phone only"*|*"never sent anywhere"*|*"never leaves"*)
+        blocker "the manual-coordinate paragraph claims the coordinates stay on the device, but they are SharedPreferences and travel in the Android backup" ;;
+esac
+printf '%s' "$loc" | grep -qF "backup" \
+    || blocker "the manual-coordinate paragraph must say the coordinates are included in the Android backup"
+
 grep -qF "HTTPS" "$STRINGS" || blocker "network claim 'HTTPS' missing from the Privacy copy (strings.xml)"
 grep -qF "Not affiliated" "$STRINGS" || blocker "'Not affiliated' disclaimer missing from the About copy (strings.xml)"
 

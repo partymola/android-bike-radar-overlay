@@ -70,11 +70,18 @@ taller, and would carry the rider's real Home Assistant host and device names
 into a public artefact.
 
 `scripts/check-screenshot-freshness.py` reports any portrait image that is no
-longer a copy of a current golden. Run it when a screen changes and before a
-release; it is deliberately not in CI, because a stale marketing image should
-not block a release the way a stale claim inside the app would. It cannot tell
-whether a slot holds the RIGHT golden, only that it holds one - the README alt
-text is the only statement of which screen belongs where.
+longer a copy of a current golden. It runs in `ci.yml` as a **non-blocking**
+step: the goldens re-record on any UI change, so failing the build would turn
+every UI pull request red until the copies were refreshed in the same commit,
+and a check that fires on routine work gets bypassed. Read the log rather than
+the exit status.
+
+Two things it cannot do, both worth knowing before reading a pass as coverage.
+It cannot tell whether a slot holds the RIGHT golden, only that it holds one -
+the README alt text is the only statement of which screen belongs where. And
+it skips the landscape images entirely, which means the only device-captured
+images in the repo are precisely the ones it never inspects; those are the
+class that could carry a real host or real device names, so check them by eye.
 
 Why it exists: nothing else can see inside a PNG, and these had drifted far
 enough to advertise a credential-encryption layer the app does not have, an

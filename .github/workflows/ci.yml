@@ -110,6 +110,17 @@ jobs:
       - name: Run lint and ktlint
         run: gradle :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
 
+      # Non-blocking on purpose. The goldens re-record on any UI change, so
+      # failing the build here would turn every UI pull request red until the
+      # README and store copies were refreshed in the same commit, and a check
+      # that fires on routine work gets bypassed. It runs on every push so the
+      # drift is visible in the log the day it appears: the store listing
+      # advertised an encryption layer the app does not have for months,
+      # because nothing ran.
+      - name: Screenshot freshness (report only)
+        continue-on-error: true
+        run: python3 scripts/check-screenshot-freshness.py
+
   # The release variant's only coverage. Every other job here builds debug,
   # which R8 never touches, so without this the first thing that can fail on a
   # shrunk APK is the tag build - and by then the tag is public and the only

@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased
+## v1.2.0 - 2026-08-16
 
 ### Breaking
 
-- **Home Assistant entities and topics have been renamed, and you will need to repoint anything that uses the old names.** Entity ids move from a `varia_` prefix to `bikeradar_`, so `sensor.varia_<slug>_battery` becomes `sensor.bikeradar_<slug>_battery`; the MQTT topics move the same way, from `varia/...` to `bikeradar/...`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic.
-- **Your own automations, dashboards and scripts have to be repointed by hand**, including anything that triggers on a raw topic rather than an entity. The Home Assistant settings screen now lists your actual entity ids.
-- **The app retires the old entities for you**, the first time each device's new ones reach your Home Assistant, so you are left with the new set rather than both. The last retained values sit on your broker under the old topics until you delete them.
-- **The new entities start with no history.** Home Assistant treats a changed id as a new entity, so anything already recorded stays under the old ids, and renames, areas and icons you had set do not carry over.
+- **The Home Assistant MQTT topics have been renamed, so anything that triggers on a raw topic needs repointing by hand.** They move from `varia/...` to `bikeradar/...`. The old prefix named one radar brand while the same entities also cover the front camera and every ride statistic.
+- **Your entity ids keep the same naming, but each entity is re-registered, and some come back with a `_2` on the end.** On current Home Assistant releases the entity id is built from the device name, which has not changed, so the id an entity settles on is the one you already have. What does change is the hidden key Home Assistant identifies it by, so every entity is registered afresh - and where the old one still holds the id, the new one lands as `..._2` instead. Anything pointing at the original id goes dead until you delete the stale entity and rename the `_2` back. Check your battery sensors, the close-pass event, and the front light mode if you have the camera: those three publish before the app retires the old set, so they are the ones that collide.
+- **The app retires the old entities for you**, the first time each device's new ones reach your Home Assistant, so you are left with one set rather than two. The last retained values sit on your broker under the old topics until you delete them.
+- **The rebuilt entities start with no history**, and areas, icons and custom names you had set do not carry over.
 
 ### Features
 
@@ -28,6 +28,7 @@
 - **Home Assistant status is honest on every screen.** A never-configured install showed "MQTT ready" with a green dot on the main screen while Settings said "Not configured". Saved credentials on their own read as "Connected" before anything had been published, so a wrong URL or token looked healthy until the first ride edge tried to use it. And a configured server that could not be reached read "Connection issue" in the Settings list while the Home Assistant screen headed it "Not configured" and told you to enter credentials you had already entered.
 - **The battery chip follows the threshold you set.** It was fixed at 10 and 20 per cent, so raising the threshold left the chip neutral while the overlay marked the device low.
 - **In Spanish, the camera reads as feminine.** Its status shared a set of strings with the radar on the main and Settings screens, so it came out masculine in every state.
+- **The Home Assistant screen stops listing entity ids it was guessing.** It showed ids built from the topic name, which is not what Home Assistant names an entity, so pasting one into an automation matched nothing and reported no error. The screen now points you at where the real ids live instead.
 
 ### Security
 
@@ -40,6 +41,10 @@
 
 - **Capture logs say which build wrote them.** The header now carries the app version and build type, so a ride can be tied to the release that recorded it instead of guessed from when the app was installed.
 - **Hear the alert cues on the bench.** The radar-reconnect cue only fires after a long mid-ride dropout, which cannot be staged safely, so there was no way to check it sounds different from the others. The Debug screen can now play each cue on demand.
+
+### Internal
+
+- **The shipped app is now checked by CI, not just compiled.** Every other gate builds the unshrunk variant, so nothing covered the shrinking step that runs on the release you install. A new gate reads the packaged app and fails the build if any of the setting values the app stores on your phone, or publishes to Home Assistant, has lost the name it is saved under. It reads the app rather than running it, so it replaces none of the on-device testing. Build tools are pinned to the version CI installs rather than left to a default.
 
 ## v1.1.0 - 2026-07-17
 

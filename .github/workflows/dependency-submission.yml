@@ -31,10 +31,6 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
       - name: Submit release-runtime dependency graph
         uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          # No Gradle wrapper in the repo (builds run via Docker / setup-gradle),
-          # so the action needs an explicit version - matches ci.yml.
-          gradle-version: '9.6.1'
         env:
           # Only the app's shipped release runtime closure goes into the graph;
           # the plugin/build classpath (a separate, non-Runtime configuration)

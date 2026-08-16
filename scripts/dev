@@ -102,7 +102,7 @@ gradle_cmd() {
             -u "$(id -u):$(id -g)" \
             -w /workspace \
             "${CONTAINER_NAME}" \
-            gradle "$@"
+            ./gradlew "$@"
     else
         exec docker run --rm \
             ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
@@ -112,7 +112,7 @@ gradle_cmd() {
             -e GRADLE_USER_HOME=/gradle-cache \
             -w /workspace \
             "${IMAGE_NAME}" \
-            gradle --no-daemon "$@"
+            ./gradlew --no-daemon "$@"
     fi
 }
 

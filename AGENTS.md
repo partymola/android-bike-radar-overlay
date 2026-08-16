@@ -24,13 +24,27 @@ docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
   -e GRADLE_USER_HOME=/gradle-cache \
   -w /workspace bike-radar-builder \
-  gradle :app:testDebugUnitTest --console=plain --no-daemon
+  ./gradlew :app:testDebugUnitTest --console=plain --no-daemon
 
 # `scripts/dev gradle ...` auto-falls back to the one-shot pattern when
 # the persistent container is not up, so it is safe to use either way.
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+**Every build runs the wrapper, and `gradle/wrapper/gradle-wrapper.properties`
+is the only place a Gradle version is written down.** The container ships a
+JDK and no Gradle, and no workflow passes `gradle-version:` to
+`gradle/actions/*` - absent it, those actions use the wrapper. That is
+deliberate: the version used to be repeated in the image tag and seven
+workflow pins, a dependency bump moved the wrapper alone twice, and both times
+a from-source build (the F-Droid path) would have compiled with a Gradle no
+gate had run. Do not reintroduce a pin to "be explicit" - a second place to
+write the version is the whole defect, and nothing checks the two agree.
+
+One consequence worth knowing: the distribution is no longer baked into the
+image, so the first `./gradlew` against a cold `~/.cache/bike-radar-gradle`
+downloads it and needs network.
 
 Screenshot tests: `:app:verifyRoborazziDebug` renders the Compose and
 Canvas goldens via Robolectric Native Graphics, so they run inside
@@ -481,10 +495,10 @@ enforces them, and CONTRIBUTING.md points contributors here:
   without it `getLaunchIntentForPackage` returns null on Android 11+ and
   "Open Flow" silently falls back to the Play Store.
 - To test Onboarding without destroying your production install's pairing
-  state, build the `onbtest` buildType (`gradle :app:assembleOnbtest`). It
-  installs side-by-side under `es.jjrh.bikeradar.onbtest` with its own
-  SharedPreferences and zeroed HA seed. Uninstall when done:
-  `adb uninstall es.jjrh.bikeradar.onbtest`.
+  state, build the `onbtest` buildType
+  (`scripts/dev gradle :app:assembleOnbtest`). It installs side-by-side under
+  `es.jjrh.bikeradar.onbtest` with its own SharedPreferences and zeroed HA
+  seed. Uninstall when done: `adb uninstall es.jjrh.bikeradar.onbtest`.
 - Live-testing via ADB: `am stopservice .../BikeRadarService` BEFORE
   `adb install -r` lets `onDestroy` clear the radar GATT cleanly. Post-
   install, `am force-stop` + `monkey ... LAUNCHER 1` for a clean relaunch.

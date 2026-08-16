@@ -1,4 +1,7 @@
-FROM gradle:9.6.1-jdk21
+# A JDK and the Android SDK, deliberately no Gradle: builds run ./gradlew, so
+# the wrapper is the only place a Gradle version is written down. A gradle:X
+# image would put a second version in this tag, and the two drift.
+FROM eclipse-temurin:21-jdk
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk
@@ -6,7 +9,10 @@ ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-too
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends wget unzip ca-certificates; \
+    # git for the capture-log build stamp, python3 for verifyReleaseDexKeeps
+    # and the checks under scripts/. The old gradle:X image supplied both;
+    # a plain JDK base does not.
+    apt-get install -y --no-install-recommends wget unzip ca-certificates git python3; \
     rm -rf /var/lib/apt/lists/*; \
     mkdir -p $ANDROID_HOME/cmdline-tools; \
     cd /tmp; \

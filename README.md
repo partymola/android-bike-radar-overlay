@@ -295,7 +295,7 @@ docker run --rm \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
   -e GRADLE_USER_HOME=/gradle-cache \
   -w /workspace bike-radar-builder \
-  gradle assembleDebug --console=plain --no-daemon
+  ./gradlew assembleDebug --console=plain --no-daemon
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```

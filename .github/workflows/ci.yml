@@ -37,8 +37,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          gradle-version: '9.6.1'
 
       # Robolectric downloads its android-all-instrumented SDK jars (~100 MB
       # per API level) into ~/.m2 the first time a test runs on each level.
@@ -59,7 +57,7 @@ jobs:
         # Canvas screenshot goldens via Robolectric Native Graphics and fails on
         # pixel drift - it runs in cold-cache CI, which Paparazzi's layoutlib
         # loader could not.
-        run: gradle :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport :app:jacocoDiffReport --console=plain --no-daemon
+        run: ./gradlew :app:testDebugUnitTest :app:verifyRoborazziDebug :app:jacocoCoverageVerification :app:jacocoTestReport :app:jacocoDiffReport --console=plain --no-daemon
 
       # Diff-coverage gate: new/changed executable production lines must clear
       # the floor, so an untested feature can't land while the project average
@@ -67,7 +65,8 @@ jobs:
       # Scope is jacocoDiffReport, which keeps Compose UI IN: per-diff there is
       # nothing to dilute, so derivation written inline in a Composable body is
       # gated rather than exempt. (The ratchet keeps the narrower report - see
-      # app/build.gradle.kts for why the two must not share one exclusion list.) A PR is gated against its base; a push against the prior main
+      # app/build.gradle.kts for why the two must not share one exclusion
+      # list.) A PR is gated against its base; a push against the prior main
       # tip; a tiny or unreachable-base diff passes (see the script header).
       - name: Diff-coverage gate
         run: |
@@ -104,11 +103,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          gradle-version: '9.6.1'
 
       - name: Run lint and ktlint
-        run: gradle :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
+        run: ./gradlew :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
 
       # Non-blocking on purpose. The goldens re-record on any UI change, so
       # failing the build here would turn every UI pull request red until the
@@ -155,11 +152,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          gradle-version: '9.6.1'
 
       - name: Build the shrunk APK and check its kept names
-        run: gradle :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
+        run: ./gradlew :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
 
   # Real-APK boot smoke - runs only on pushes to main (not PRs) to avoid
   # spending 5+ minutes on an emulator for every PR iteration. It runs
@@ -199,11 +194,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          gradle-version: '9.6.1'
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --console=plain --no-daemon
+        run: ./gradlew :app:assembleDebug --console=plain --no-daemon
 
       - name: Enable KVM hardware acceleration
         run: |

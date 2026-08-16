@@ -55,12 +55,11 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
+        # No gradle-version: absent it, the action uses the wrapper, which is
+        # the only place this repo records a Gradle version. AGP 9.3 sets the
+        # floor the wrapper has to clear, per
+        # https://developer.android.com/build/releases/gradle-plugin .
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
-        with:
-          # Pinned to the minimum Gradle required by AGP 9.3 per
-          # https://developer.android.com/build/releases/gradle-plugin .
-          # Bump in lockstep with any AGP upgrade.
-          gradle-version: '9.6.1'
 
       - name: Decode release keystore into runner temp
         env:
@@ -78,7 +77,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
+        run: ./gradlew :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
 
       - name: Rename APK with tag
         run: |

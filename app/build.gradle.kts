@@ -1,5 +1,8 @@
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
@@ -139,6 +142,13 @@ android {
     namespace = "es.jjrh.bikeradar"
     compileSdk = 37
 
+    // Pinned rather than left to AGP's default, which is a different version
+    // (36.0.0 as of AGP 9.3) from the one every workflow installs. Leaving it
+    // implicit means the build tools arrive by auto-download instead of the
+    // sdkmanager line, and verifyReleaseDexKeeps resolves dexdump out of this
+    // directory. Keep in step with the sdkmanager lines in .github/workflows.
+    buildToolsVersion = "37.0.0"
+
     defaultConfig {
         applicationId = "es.jjrh.bikeradar"
         minSdk = 31
@@ -208,8 +218,10 @@ android {
             // code - chiefly the unused material-icons-extended dex (~5 MB) -
             // without renaming or optimizing, so the reflection-free string
             // lookups (org.json, enum valueOf, prefs keys) and the BLE
-            // callbacks keep working. A minified release MUST be ride-tested
-            // before the next v* tag.
+            // callbacks keep working. verifyReleaseDexKeeps below holds the
+            // enum-name part of that list against the packaged APK; the
+            // string literals and the callbacks are not checked, because no
+            // R8 configuration rewrites them.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -365,6 +377,96 @@ tasks.withType<Test>().configureEach {
     }
 }
 
+/**
+ * Runs the release DEX keep gate over the packaged APK.
+ *
+ * Typed task with ProcessBuilder for the same reasons as
+ * [EnsureDebugKeystore] above: no capture of the script's Project reference,
+ * and no Gradle 9-removed exec APIs.
+ */
+abstract class VerifyReleaseDexKeeps : DefaultTask() {
+    @get:InputDirectory
+    abstract val apkDir: DirectoryProperty
+
+    @get:InputFile
+    abstract val gateScript: RegularFileProperty
+
+    @get:InputFile
+    abstract val dexdump: RegularFileProperty
+
+    // Not inheritIO(): a Gradle task's ProcessBuilder inherits the DAEMON's
+    // stdio, so anything the gate printed would land in the daemon log rather
+    // than the console the failure is read on.
+    private fun runGate(vararg args: String): Pair<Int, String> {
+        val process = try {
+            ProcessBuilder(
+                "python3",
+                gateScript.get().asFile.absolutePath,
+                *args,
+            ).redirectErrorStream(true).start()
+        } catch (e: java.io.IOException) {
+            throw RuntimeException(
+                "verifyReleaseDexKeeps needs python3 on PATH. It is not wired to " +
+                    "assembleRelease, so building the APK does not require it.",
+                e,
+            )
+        }
+        // Drained before waitFor(), or a full pipe deadlocks the wait.
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        return process.waitFor() to output
+    }
+
+    @TaskAction
+    fun run() {
+        // The parser's own check, before it is trusted against the APK. If
+        // section tracking ever regresses it returns a SUPERSET of the static
+        // fields, which makes the real check pass unconditionally - a green
+        // gate over a broken one, the failure this whole task exists to avoid.
+        val (selfTestCode, selfTestOutput) = runGate("--self-test")
+        if (selfTestCode != 0) {
+            throw RuntimeException("release DEX keep gate self-test failed:\n$selfTestOutput")
+        }
+
+        val apks = apkDir.get().asFile.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
+        val apk = apks.singleOrNull()
+            ?: throw RuntimeException(
+                "expected exactly one APK in ${apkDir.get().asFile}, found ${apks.size}",
+            )
+        val (code, output) = runGate(
+            "--apk",
+            apk.absolutePath,
+            "--dexdump",
+            dexdump.get().asFile.absolutePath,
+        )
+        if (code != 0) {
+            throw RuntimeException("release DEX keep gate failed:\n$output")
+        }
+        logger.lifecycle(output)
+    }
+}
+
+// Rationale and scope: AGENTS.md, "Release DEX keep gate".
+//
+// Deliberately NOT wired to assembleRelease. F-Droid builds this from source
+// to verify the published APK reproduces, and a finalizer would put python3
+// and a matching build-tools dexdump inside THEIR build. The workflows name
+// this task alongside assembleRelease instead, so the requirement stays ours.
+tasks.register<VerifyReleaseDexKeeps>("verifyReleaseDexKeeps") {
+    // apkDir is packageRelease's output directory, so without this Gradle
+    // rejects the task graph as having an implicit dependency.
+    dependsOn("packageRelease")
+    apkDir.set(layout.buildDirectory.dir("outputs/apk/release"))
+    gateScript.set(
+        rootProject.layout.projectDirectory.file("scripts/check-release-dex-keeps.py"),
+    )
+    val buildTools = android.buildToolsVersion
+    dexdump.set(
+        androidComponents.sdkComponents.sdkDirectory.map {
+            it.file("build-tools/$buildTools/dexdump")
+        },
+    )
+}
+
 // Classes kept out of the coverage figure: Compose UI (covered by Roborazzi
 // snapshots, not JaCoCo) and framework-bound services. Without this the raw
 // number reflects mostly untestable UI/service code rather than the logic the
@@ -404,7 +506,7 @@ val diffCoverageExcludes = listOf(
     "**/ScreenshotCaptureService*.*",
 )
 
-// AGP 9.2 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
+// AGP 9.3 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
 // this path the report/verification go empty (not silently wrong) - re-point.
 val coverageClassDir = "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
 // The on-the-fly agent writes build/jacoco/testDebugUnitTest.exec.
@@ -496,7 +598,7 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     }
     violationRules {
         // Project floors on the testable layer, each ratcheted a few points
-        // below the current figure (LINE ~84%, INSTRUCTION ~83%, BRANCH ~73%)
+        // below the current figure (LINE ~88%, INSTRUCTION ~87%, BRANCH ~78%)
         // so legitimately hard-to-test new code doesn't trip them while a mass
         // regression still fails the build. The per-PR diff-coverage gate
         // guards new code; these guard against wholesale drops. Raise as

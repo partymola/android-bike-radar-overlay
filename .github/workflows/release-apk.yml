@@ -57,7 +57,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
         with:
-          # Pinned to the minimum Gradle required by AGP 9.2 per
+          # Pinned to the minimum Gradle required by AGP 9.3 per
           # https://developer.android.com/build/releases/gradle-plugin .
           # Bump in lockstep with any AGP upgrade.
           gradle-version: '9.6.1'
@@ -78,7 +78,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle :app:assembleRelease --console=plain --no-daemon
+        run: gradle :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
 
       - name: Rename APK with tag
         run: |

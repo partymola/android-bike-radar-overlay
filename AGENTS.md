@@ -58,6 +58,28 @@ a `v*` tag (e.g.
 which builds a release-signed APK and publishes a GitHub pre-release.
 The workflow defaults `prerelease: true` until the app exits alpha.
 
+**The store and README screenshots are Roborazzi goldens, copied.** Every
+PORTRAIT image under `screenshots/` and `fastlane/.../phoneScreenshots/` is a
+byte copy of a golden from `app/src/test/snapshots/images/` at 1344x2991, which
+is why they carry the fixture host `homeassistant.local:8123`, a masked token
+and no device names. The landscape ones are genuine device captures of the ride
+overlay, which no golden reproduces.
+
+**Re-copy rather than re-capture.** A device capture is 1344x2992, one pixel
+taller, and would carry the rider's real Home Assistant host and device names
+into a public artefact.
+
+`scripts/check-screenshot-freshness.py` reports any portrait image that is no
+longer a copy of a current golden. Run it when a screen changes and before a
+release; it is deliberately not in CI, because a stale marketing image should
+not block a release the way a stale claim inside the app would. It cannot tell
+whether a slot holds the RIGHT golden, only that it holds one - the README alt
+text is the only statement of which screen belongs where.
+
+Why it exists: nothing else can see inside a PNG, and these had drifted far
+enough to advertise a credential-encryption layer the app does not have, an
+entity list it no longer renders, and a version from the alpha series.
+
 **Build-dir permission gotcha:** if `:app:testDebugUnitTest` fails with
 `Unable to delete directory .../test-results/...`, a previous container left
 root-owned files. Clean with:
@@ -122,9 +144,7 @@ summary; the Key files table maps each part to its file.
   build=...`), plus `commit=` on non-release builds only - so don't infer a
   build from the APK's install time. **A release-variant capture is NOT
   attributable to a tree**: two release APKs built from different code stamp
-  identically, including the minified release that `app/build.gradle.kts`
-  requires be ride-tested before a `v*` tag. Why, and the `commit=unknown`
-  fallback: `BuildStamp` KDoc.
+  identically. Why, and the `commit=unknown` fallback: `BuildStamp` KDoc.
 
 ## Key files
 
@@ -337,6 +357,79 @@ enforces them, and CONTRIBUTING.md points contributors here:
     lines are exempt (one untested line shouldn't fail CI), and an
     unreachable base ref skips rather than fails. It fires on PRs and direct
     pushes to `main` alike; a contributor PR is the case it most guards.
+- **Release DEX keep gate** (`scripts/check-release-dex-keeps.py`, run by
+  `:app:verifyReleaseDexKeeps`): the only check that reads the artifact riders
+  install. Every gate above runs the debug variant, which R8 never touches, so
+  nothing else covers the minified APK. It unzips `classes*.dex`, runs
+  `dexdump -f`, and fails if any enum constant in its table is absent under its
+  exact name. The `release-shrink` CI job runs it on every push to `main` and
+  every PR targeting `main`, so it can go red BEFORE a tag exists rather than
+  stranding a public tag. Tag pushes do not trigger `ci.yml`; `release-apk.yml`
+  names the task too, so they are covered there.
+  - **Deliberately not wired to `assembleRelease`.** A from-source build by a
+    packager - which is what the pending F-Droid submission would do - must not
+    need `python3` and a matching build-tools `dexdump` just to produce the
+    APK, and a finalizer would make both hard requirements of it. `ci.yml` and
+    `release-apk.yml` name the task explicitly instead, so the requirement
+    stays ours. It does `dependsOn("packageRelease")`, without which Gradle
+    rejects the task graph for an implicit dependency on the APK directory.
+  - **What that costs, stated rather than assumed:** any APK built outside
+    those two workflows is not itself gate-checked - a packager's from-source
+    build, or one built by hand and uploaded. Such a build carries the property
+    only if it is byte-identical to one that was checked, which is what a
+    reproducible-build verification would establish. Publish through the
+    workflow.
+  - **What the gate does NOT replace.** It reads names out of the DEX; it never
+    executes the APK. `boot-smoke` installs the DEBUG APK, which R8 never
+    processes, so nothing in CI boots the shrunk artifact. Nothing requires a
+    ride test of a minified build before a tag either, and this gate does not
+    create one: it is narrower than the requirement it replaced and covers a
+    different failure. That is a real reduction in assurance, not an even
+    trade. Do not read a green `verifyReleaseDexKeeps` as evidence the release
+    runs.
+  - **The table is the set whose NAME crosses a process boundary**, and that
+    is the whole scope: six enums persisted by name and read back with
+    `valueOf()`, plus `VehicleSize`, `ClosePassDetector.Side` and
+    `ClosePassDetector.Severity`, published by name into Home Assistant
+    payloads and the close-pass event JSON. Renaming one silently resets a
+    saved setting or stops a rider's automation firing, with no compile error
+    and no failing test. String literals (`org.json` field names, the prefs
+    key constants) are deliberately NOT covered: no R8 configuration rewrites
+    them, so checking them would add assertions that cannot fail. Same for
+    manifest components, kept by the AAPT rules whatever
+    `proguard-rules.pro` says.
+  - **Write the expected table by hand from the enum declarations.** Deriving
+    it from a DEX, `usage.txt` or `seeds.txt` makes it agree with the artifact
+    it checks by construction.
+  - **Nothing forces a NEW name-crossing enum into the table.** The check is
+    only that the table is a subset of what shipped, so a seventh
+    `CameraLightMode` constant, or a new enum persisted by name, ships ungated
+    and silent. Add it by hand when you add the enum. Deriving the table from
+    the Kotlin SOURCE would close this and is not the same mistake as deriving
+    it from the artifact under test.
+  - Read a failure as the R8 config change needing a keep rule, not the gate
+    needing an edit.
+  - **Both failure branches are pinned against real R8 output, not just the
+    parser.** Removing `-dontobfuscate` renames the classes, so all nine
+    descriptors leave the DEX at once (the whole-class branch). Removing
+    `-dontoptimize` leaves the classes in place but takes the static fields for
+    `CameraLightMode.HIGH/MEDIUM/NIGHT_FLASH/OFF` and
+    `RadarLightMode.SOLID/PELOTON/OFF` out of the shipped DEX (the constant
+    branch). That is the measurement; which R8 pass does it, and whether
+    `valueOf` would still resolve those names from `$VALUES`, is not
+    established - read `usage.txt` from a mutation build if you need to know.
+    The gate pins the contract, not a reproduction of rider-visible harm.
+    Re-run either mutation to re-confirm it.
+  - `--self-test` covers the parser separately, and the Gradle task runs it
+    BEFORE the APK check. A regression in section tracking returns a superset
+    of the static fields, which would make the real check pass unconditionally.
+  - **Do not add `testReleaseUnitTest` and call the release covered** - it
+    runs against release-variant classes *before* R8, so it reports green on
+    exactly the risk it appears to address.
+  - The gate pins enum constant NAMES, not their order. `CameraLightMode`'s BLE
+    wire value is `ordinal + 1`, so reordering its constants breaks the device
+    protocol and passes this gate green. Different hazard, different guard: R8
+    does not reorder, a maintainer does.
 - **detekt** is intentionally not wired: no stable release targets the
   pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
   in a public build. Revisit when a stable detekt supports the toolchain.

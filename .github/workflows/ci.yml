@@ -110,6 +110,46 @@ jobs:
       - name: Run lint and ktlint
         run: gradle :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
 
+  # The release variant's only coverage. Every other job here builds debug,
+  # which R8 never touches, so without this the first thing that can fail on a
+  # shrunk APK is the tag build - and by then the tag is public and the only
+  # way out is a dead tag and a re-cut.
+  #
+  # No secrets needed: the release signingConfig falls back to debug signing
+  # when the keystore env vars are absent, which is the case here. This job
+  # proves the shrunk APK still carries the names it persists, not that the
+  # signed artefact is publishable.
+  #
+  # Unlike boot-smoke below, this DOES run on PRs, despite costing a full R8
+  # and resource-shrink build each iteration. A PR editing proguard-rules.pro
+  # is the case it most guards, and finding that out after the merge means
+  # finding it out at tag time.
+  release-shrink:
+    name: Release shrink gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+
+      - name: Install Android SDK platform 37
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92  # v6.2.0
+        with:
+          gradle-version: '9.6.1'
+
+      - name: Build the shrunk APK and check its kept names
+        run: gradle :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
+
   # Real-APK boot smoke - runs only on pushes to main (not PRs) to avoid
   # spending 5+ minutes on an emulator for every PR iteration. It runs
   # concurrently with unit-tests rather than after it: parallelism wins ~3 min
@@ -118,13 +158,15 @@ jobs:
   # almost always green, so that trade favours wall-clock).
   #
   # What this catches that the JVM suite cannot: missing manifest entries,
-  # ProGuard/R8 class stripping, AndroidKeyStore first-use failures,
-  # permission requests that throw at startup, immediate crashes in
-  # Application or Activity onCreate that only surface on a real Dalvik/ART VM.
+  # AndroidKeyStore first-use failures, permission requests that throw at
+  # startup, immediate crashes in Application or Activity onCreate that only
+  # surface on a real Dalvik/ART VM.
   #
   # What this does NOT cover: BLE (scanner is null on the stock emulator),
   # the SYSTEM_ALERT_WINDOW overlay (permission not granted automatically),
-  # or any logic tested by the Robolectric suite.
+  # or any logic tested by the Robolectric suite. Nor R8 stripping - it
+  # installs app-debug.apk, which R8 never processes. release-shrink above
+  # is what covers that.
   boot-smoke:
     name: APK boot smoke (API 34 emulator)
     if: github.event_name == 'push'

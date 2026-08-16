@@ -10,8 +10,12 @@
 # classes to keep.
 #
 # This is the safe starting point for a safety-overlay app that must start
-# reliably. A minified release build MUST be ride-tested before the next v*
-# tag. Tighten (drop -dontoptimize, enable obfuscation) only after that.
+# reliably. scripts/check-release-dex-keeps.py is a first canary on tightening
+# it (dropping -dontoptimize, enabling obfuscation): both of those take names
+# out of the shipped DEX and turn it red. It does not clear such a change on
+# its own - it checks enum names, and optimization can break reflection or BLE
+# dispatch without touching one. Read its failure as this file needing a keep
+# rule, not the gate needing an edit.
 
 -dontobfuscate
 -dontoptimize

@@ -12,7 +12,7 @@
 ### Features
 
 - **Beep tiers now follow how close a vehicle really is.** They scored distance along your line of travel, which collapses to nothing as a car draws level, so a vehicle already passing you could climb the tiers as though it were bearing down. Tiers, and the choice of which vehicle to voice, now use true range, so traffic off to one side no longer masks a real threat and there are fewer top-tier beeps. A new threat still gets its first cue on the same frame it would have before, and the all-clear and the urgent warning are untouched - but a vehicle off to one side now reaches each tier later, or not at all if it stays wide, so its cue can start a tier lower than it used to.
-- **Set your own coordinates for the light auto-mode.** Switching between daytime and night mode needs local sunrise and sunset times, and without a location it used London for everyone. You can now type coordinates instead of granting location access, from onboarding or from Settings, and they take precedence over GPS if you have granted it. They are never published to Home Assistant and never reach a log or a diagnostic report; like the rest of your settings they are included in your Android backup, so they follow you to a new phone.
+- **Set your own coordinates for the light auto-mode.** Switching between daytime and night mode needs local sunrise and sunset times, and without a location it used London for everyone. You can now type coordinates instead of granting location access, from onboarding or from Settings, and they take precedence over GPS if you have granted it. They are never published to Home Assistant and never reach a log or a diagnostic report; like the rest of your settings they are included in your Android backup if you have it turned on, so they follow you to a new phone.
 
 ### Fix
 
@@ -45,7 +45,7 @@
 ### Internal
 
 - **The shipped app is now checked by CI, not just compiled.** Every other gate builds the unshrunk variant, so nothing covered the shrinking step that runs on the release you install. A new gate reads the packaged app and fails the build if one of the settings it stores by name, or publishes to Home Assistant by name, has lost that name. It reads the app rather than running it, so it replaces none of the on-device testing. Build tools are pinned to the version CI installs rather than left to a default.
-- Kotlin is now scanned by CodeQL on every push to the main branch and weekly, which needed a real compile: the buildless mode skips every Kotlin file and reports a green scan of nothing. The coverage report was widened, and the per-change coverage gate now covers changed lines inside Compose screens too. A new check reports when a README or store screenshot stops matching the rendered screen it came from. The release keyword scan moved into repository secrets.
+- Kotlin is now scanned by CodeQL on every push to the main branch and weekly, which needed a real compile: the buildless mode skips every Kotlin file and reports a green scan of nothing. The coverage report was widened, and the per-change coverage gate now covers changed lines inside Compose screens too. A new check reports when a README or store screenshot is no longer a copy of any current rendered screen. The release keyword scan moved into repository secrets.
 
 ## v1.1.0 - 2026-07-17
 

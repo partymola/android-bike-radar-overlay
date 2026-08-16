@@ -440,7 +440,12 @@ class Prefs(context: Context) {
      *  ([es.jjrh.bikeradar.RideLocationResolver.validManualLocation] enforces
      *  it). Deliberately NOT in [snapshot] / [flow]: it is read on demand by the
      *  light controllers and the Settings screen, and a home coordinate should
-     *  not ride the app-wide reactive snapshot. */
+     *  not ride the app-wide reactive snapshot.
+     *
+     *  In the ordinary prefs file, so these ride the Android backup. That is
+     *  intended - a new phone should not cost the rider working light times -
+     *  so do not move them behind a `domain="sharedpref"` exclusion.
+     *  `scripts/privacy-disclosure-check.sh` pins the matching disclosure. */
     val manualLocationLat: Double?
         get() = if (sp.contains(KEY_MANUAL_LOCATION_LAT)) {
             Double.fromBits(sp.getLong(KEY_MANUAL_LOCATION_LAT, 0L))

@@ -14,6 +14,10 @@ jobs:
   scan:
     name: Commit message + diff keyword scan
     runs-on: ubuntu-latest
+    # Job-level so the two scan steps cannot drift apart. A wrong-but-plausible
+    # copy of this in one step only would fail open, skipping that scan.
+    env:
+      SECRETLESS_PR: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -30,7 +34,7 @@ jobs:
             echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
             echo "head=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
           else
-            # First push of a branch — scan back to the initial commit.
+            # First push of a branch - scan back to the initial commit.
             echo "base=$(git rev-list --max-parents=0 HEAD | tail -1)" >> "$GITHUB_OUTPUT"
             echo "head=HEAD" >> "$GITHUB_OUTPUT"
           fi
@@ -40,13 +44,14 @@ jobs:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
           SCAN_REGEX: ${{ secrets.KEYWORD_SCAN_PATTERN }}
-          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           if [ -z "$SCAN_REGEX" ]; then
-            if [ "$FORK_PR" = "true" ]; then
-              # Fork PRs don't receive repository secrets; the same commits
-              # are re-scanned by the push run when they land on main.
-              echo "::notice::Scan pattern unavailable on fork PRs - skipping; the push to main re-runs this scan."
+            if [ "$SECRETLESS_PR" = "true" ]; then
+              # Neither a fork PR nor a Dependabot PR receives repository
+              # secrets, so there is no pattern to scan with; the same
+              # commits are re-scanned by the push run when they land on
+              # main.
+              echo "::notice::Scan pattern unavailable on this pull request - skipping; the push to main re-runs this scan."
               exit 0
             fi
             echo "::error::KEYWORD_SCAN_PATTERN secret is not set"
@@ -66,11 +71,10 @@ jobs:
           BASE: ${{ steps.range.outputs.base }}
           HEAD: ${{ steps.range.outputs.head }}
           SCAN_REGEX: ${{ secrets.KEYWORD_SCAN_PATTERN }}
-          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           if [ -z "$SCAN_REGEX" ]; then
-            if [ "$FORK_PR" = "true" ]; then
-              echo "::notice::Scan pattern unavailable on fork PRs - skipping; the push to main re-runs this scan."
+            if [ "$SECRETLESS_PR" = "true" ]; then
+              echo "::notice::Scan pattern unavailable on this pull request - skipping; the push to main re-runs this scan."
               exit 0
             fi
             echo "::error::KEYWORD_SCAN_PATTERN secret is not set"

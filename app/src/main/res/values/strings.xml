@@ -46,7 +46,7 @@
     <string name="permission_overlay_title">Draw over other apps</string>
     <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
     <string name="permission_location_title">Approximate location</string>
-    <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Skip it and sunset is estimated for London.</string>
+    <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Skip it and sunset is estimated for London, unless you enter coordinates.</string>
     <string name="permission_mark_recommended">Recommended</string>
 
     <!-- Shared light-mode display names (SettingsAtoms.kt) -->

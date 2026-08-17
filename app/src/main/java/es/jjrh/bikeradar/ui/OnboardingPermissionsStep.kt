@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -129,22 +128,16 @@ internal fun PermissionsStepContent(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for ((spec, granted) in states) {
-                    val isLocation = Manifest.permission.ACCESS_COARSE_LOCATION in spec.permissions
                     PermissionCard(
                         spec = spec,
                         granted = granted,
                         onChanged = onPermissionChanged,
-                        alternative = if (isLocation) {
-                            PermissionAlternative(
-                                actionLabelRes = R.string.settings_lights_loc_enter_coords,
-                                setTitleRes = R.string.settings_lights_loc_manual_set_title,
-                                summary = manualLocationSummary,
-                                onEnter = onEnterCoordinates,
-                                onClear = onClearCoordinates,
-                            )
-                        } else {
-                            null
-                        },
+                        alternative = locationAlternative(
+                            spec = spec,
+                            manualLocationSummary = manualLocationSummary,
+                            onEnterCoordinates = onEnterCoordinates,
+                            onClearCoordinates = onClearCoordinates,
+                        ),
                     )
                 }
                 StepPrivacyNote(

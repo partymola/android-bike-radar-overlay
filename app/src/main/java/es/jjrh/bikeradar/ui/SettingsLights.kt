@@ -138,12 +138,11 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
                 spec = locSpec,
                 granted = locGranted,
                 onChanged = { locPermTick++ },
-                alternative = PermissionAlternative(
-                    actionLabelRes = R.string.settings_lights_loc_enter_coords,
-                    setTitleRes = R.string.settings_lights_loc_manual_set_title,
-                    summary = manualSummary,
-                    onEnter = { showCoordDialog = true },
-                    onClear = {
+                alternative = locationAlternative(
+                    spec = locSpec,
+                    manualLocationSummary = manualSummary,
+                    onEnterCoordinates = { showCoordDialog = true },
+                    onClearCoordinates = {
                         manualLat = null
                         manualLon = null
                         prefs.setManualLocation(null, null)
@@ -215,8 +214,8 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
 /**
  * Stateless leaf so snapshot tests can render without a `LocalContext`, a
  * permission launcher, or an Activity. The shared location card is a slot
- * gated by `(rearAuto || frontAuto) && !locGranted`; the dashcam section is
- * gated by ownership.
+ * gated by `(rearAuto || frontAuto)`; the dashcam section is gated by
+ * ownership.
  */
 @Composable
 internal fun SettingsLightsContent(

@@ -34,7 +34,7 @@
     <string name="permission_overlay_title">Dibujar sobre otras apps</string>
     <string name="permission_overlay_rationale">Dibujar la barra lateral del radar encima de lo que tengas en pantalla. Sin esto, las alertas siguen sonando pero no verás la barra lateral.</string>
     <string name="permission_location_title">Ubicación aproximada</string>
-    <string name="permission_location_rationale">Se usa una vez por ruta para ajustar tu luz delantera y la del radar según el atardecer local. Si la omites, el atardecer se estima para Londres.</string>
+    <string name="permission_location_rationale">Se usa una vez por ruta para ajustar tu luz delantera y la del radar según el atardecer local. Si la omites, el atardecer se estima para Londres, salvo que introduzcas coordenadas.</string>
     <string name="permission_mark_recommended">Recomendado</string>
 
     <!-- Nombres de modos de luz compartidos (SettingsAtoms.kt) -->

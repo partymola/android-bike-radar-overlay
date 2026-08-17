@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -54,6 +55,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RideLocationResolver
 import es.jjrh.bikeradar.data.Prefs
 import android.provider.Settings as AndroidSettings
 
@@ -65,7 +67,7 @@ fun SettingsPermissions(navController: NavController, prefs: Prefs) {
 }
 
 @Composable
-private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNUSED_PARAMETER") prefs: Prefs) {
+private fun SettingsPermissionsBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
 
@@ -85,6 +87,13 @@ private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNU
         PERMISSIONS.map { spec -> spec to isSpecGranted(ctx, spec) }
     }
 
+    var manualLat by rememberSaveable { mutableStateOf(prefs.manualLocationLat) }
+    var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
+    var showCoordDialog by rememberSaveable { mutableStateOf(false) }
+    val manualSummary = remember(manualLat, manualLon) {
+        RideLocationResolver.summary(manualLat, manualLon)
+    }
+
     // The body runs `PermissionCard` per spec so each card gets its own
     // permission-launcher (one launcher per call-site). The stateless
     // [SettingsPermissionsContent] mirrors this chrome for snapshot
@@ -100,12 +109,40 @@ private fun SettingsPermissionsBody(navController: NavController, @Suppress("UNU
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for ((spec, granted) in states) {
-                    PermissionCard(spec, granted, onChanged = { refreshTick++ })
+                    PermissionCard(
+                        spec = spec,
+                        granted = granted,
+                        onChanged = { refreshTick++ },
+                        alternative = locationAlternative(
+                            spec = spec,
+                            manualLocationSummary = manualSummary,
+                            onEnterCoordinates = { showCoordDialog = true },
+                            onClearCoordinates = {
+                                manualLat = null
+                                manualLon = null
+                                prefs.setManualLocation(null, null)
+                            },
+                        ),
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    if (showCoordDialog) {
+        CoordinateEntryDialog(
+            initialLat = manualLat,
+            initialLon = manualLon,
+            onSave = { lat, lon ->
+                manualLat = lat
+                manualLon = lon
+                prefs.setManualLocation(lat, lon)
+                showCoordDialog = false
+            },
+            onDismiss = { showCoordDialog = false },
+        )
     }
 }
 
@@ -122,6 +159,9 @@ internal fun SettingsPermissionsContent(
     specsAndGranted: List<Pair<PermissionSpec, Boolean>>,
     permanentlyDeniedFor: (PermissionSpec) -> Boolean = { false },
     onAction: (PermissionSpec) -> Unit = {},
+    manualLocationSummary: String? = null,
+    onEnterCoordinates: () -> Unit = {},
+    onClearCoordinates: () -> Unit = {},
 ) {
     val br = LocalBrColors.current
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -140,6 +180,12 @@ internal fun SettingsPermissionsContent(
                         granted = granted,
                         permanentlyDenied = permanentlyDeniedFor(spec),
                         onAction = { onAction(spec) },
+                        alternative = locationAlternative(
+                            spec = spec,
+                            manualLocationSummary = manualLocationSummary,
+                            onEnterCoordinates = onEnterCoordinates,
+                            onClearCoordinates = onClearCoordinates,
+                        ),
                     )
                 }
             }
@@ -165,6 +211,33 @@ internal data class PermissionAlternative(
     val onEnter: () -> Unit,
     val onClear: () -> Unit,
 )
+
+/**
+ * The coordinates alternative for the location card, null for every other spec.
+ *
+ * Every surface rendering [PERMISSIONS] must build the alternative here rather
+ * than constructing its own. A surface that skips it renders a location card
+ * whose rationale offers coordinate entry as the way out of the London
+ * fallback, with nothing on the card to enter or read them - and the rider's
+ * already-set coordinates invisible. It compiles, and the goldens for this
+ * screen cannot see it (see `SettingsPermissionsCoordinatesTest`).
+ */
+internal fun locationAlternative(
+    spec: PermissionSpec,
+    manualLocationSummary: String?,
+    onEnterCoordinates: () -> Unit,
+    onClearCoordinates: () -> Unit,
+): PermissionAlternative? = if (Manifest.permission.ACCESS_COARSE_LOCATION in spec.permissions) {
+    PermissionAlternative(
+        actionLabelRes = R.string.settings_lights_loc_enter_coords,
+        setTitleRes = R.string.settings_lights_loc_manual_set_title,
+        summary = manualLocationSummary,
+        onEnter = onEnterCoordinates,
+        onClear = onClearCoordinates,
+    )
+} else {
+    null
+}
 
 @Composable
 internal fun PermissionCard(

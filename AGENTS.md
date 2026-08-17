@@ -525,13 +525,22 @@ enforces them, and CONTRIBUTING.md points contributors here:
   path entirely (visual overlay still fires). Non-negotiable, no Settings
   toggle.
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
-  in Settings -> Permissions, and via a contextual re-grant card in Settings ->
-  Light auto-mode (shown when either light's auto-mode is on and location is
-  not yet granted). Both surfaces also offer manual coordinate entry as an
-  alternative to the grant (the onboarding location card and the Light
-  auto-mode card share one integrated "grant or enter coordinates" component).
-  If neither is granted nor set, the day/night auto-mode falls back to London
-  times.
+  in Settings -> Permissions, and via a contextual card in Settings -> Light
+  auto-mode (shown whenever either light's auto-mode is on - granted or not,
+  because the card also carries the manual-coordinate override). All three
+  surfaces offer manual coordinate entry as an alternative to the grant,
+  sharing one integrated "grant or enter coordinates" component. Production
+  surfaces build that alternative ONLY via `locationAlternative()` in
+  `SettingsPermissions.kt`; a card rendered without it promises coordinate
+  entry the screen does not offer, and nothing compiled catches it. (Snapshot
+  tests legitimately inject their own `PermissionAlternative` into a slot -
+  which is why they cannot pin this.) **The Roborazzi goldens do not pin the
+  Settings screen**: they render `SettingsPermissionsContent`, which has no
+  production caller, so they stay green whatever the shipped
+  `SettingsPermissionsBody` passes. `SettingsPermissionsCoordinatesTest` and
+  `SettingsLightsCoordinatesTest` compose the real screens and are the tests
+  that fail. If location is neither granted nor set, the day/night auto-mode
+  falls back to London times.
 
 ## Audio design
 

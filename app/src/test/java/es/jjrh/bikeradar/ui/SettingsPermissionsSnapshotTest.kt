@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import android.Manifest
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -15,8 +16,9 @@ import org.robolectric.annotation.GraphicsMode
  * stateless [SettingsPermissionsContent] leaf so the test does not
  * depend on real `Context`-backed permission state.
  *
- * Variants cover the three card-mix states a fresh-install user can
- * actually land in: everything granted, a mix, and everything denied.
+ * Variants cover the card-mix states a fresh-install user can actually land
+ * in - everything granted, a mix, everything denied - plus the location
+ * card's two coordinates-set states and a Spanish render.
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -48,6 +50,14 @@ class SettingsPermissionsSnapshotTest {
         markLabelRes = R.string.permission_mark_recommended,
     )
 
+    private val location = PermissionSpec(
+        permissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+        titleRes = R.string.permission_location_title,
+        rationaleRes = R.string.permission_location_rationale,
+        required = false,
+        markLabelRes = R.string.common_optional,
+    )
+
     @Test
     fun allGranted() {
         captureRoboImage {
@@ -58,6 +68,7 @@ class SettingsPermissionsSnapshotTest {
                         nearby to true,
                         notifications to true,
                         overlay to true,
+                        location to true,
                     ),
                 )
             }
@@ -74,6 +85,7 @@ class SettingsPermissionsSnapshotTest {
                         nearby to true,
                         notifications to false,
                         overlay to false,
+                        location to false,
                     ),
                 )
             }
@@ -90,7 +102,74 @@ class SettingsPermissionsSnapshotTest {
                         nearby to false,
                         notifications to false,
                         overlay to false,
+                        location to false,
                     ),
+                )
+            }
+        }
+    }
+
+    /**
+     * Coordinates set but location ungranted: the card shows them instead of
+     * the "or / Enter coordinates" choice. Non-London coordinates, so the
+     * value row is visibly distinct from the fallback the rationale names.
+     */
+    @Test
+    fun locationManualSet() {
+        captureRoboImage {
+            UiTheme {
+                SettingsPermissionsContent(
+                    navController = rememberNavController(),
+                    specsAndGranted = listOf(
+                        nearby to true,
+                        notifications to true,
+                        overlay to true,
+                        location to false,
+                    ),
+                    manualLocationSummary = "-33.8688, 151.2093",
+                )
+            }
+        }
+    }
+
+    /** Granted AND overridden - manual coordinates beat GPS in the resolver. */
+    @Test
+    fun locationGrantedWithManualSet() {
+        captureRoboImage {
+            UiTheme {
+                SettingsPermissionsContent(
+                    navController = rememberNavController(),
+                    specsAndGranted = listOf(
+                        nearby to true,
+                        notifications to true,
+                        overlay to true,
+                        location to true,
+                    ),
+                    manualLocationSummary = "-33.8688, 151.2093",
+                )
+            }
+        }
+    }
+
+    /**
+     * Spanish, where the rationale runs ~25% longer than English and the value
+     * row's Cambiar/Borrar are wider than Change/Clear. Wider than the London
+     * pair, so the monospace column is not at its narrowest.
+     */
+    @Test
+    @Config(qualifiers = "+es")
+    fun locationManualSetEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsPermissionsContent(
+                    navController = rememberNavController(),
+                    specsAndGranted = listOf(
+                        nearby to true,
+                        notifications to true,
+                        overlay to true,
+                        location to false,
+                    ),
+                    manualLocationSummary = "-33.8688, 151.2093",
                 )
             }
         }

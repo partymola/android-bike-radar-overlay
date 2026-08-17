@@ -66,10 +66,9 @@ internal val PERMISSIONS = buildList {
     )
     // Approximate location, read once per ride for the front- and radar-light
     // day/night auto-modes (sunrise/sunset). Genuinely optional: skipped or
-    // denied, SunsetCalculator falls back to London, so the app is fully
-    // usable without it. Surfaced here so onboarding and Settings ->
-    // Permissions both prompt for it; it was previously manifest-only, so
-    // users had to grant it through Android system settings.
+    // denied, the rider can still supply coordinates by hand, and only with
+    // neither does SunsetCalculator fall back to London. Surfaced here so
+    // onboarding and Settings -> Permissions both prompt for it.
     add(
         PermissionSpec(
             listOf(Manifest.permission.ACCESS_COARSE_LOCATION),

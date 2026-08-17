@@ -16,9 +16,13 @@ import org.robolectric.annotation.GraphicsMode
  * Roborazzi goldens for the consolidated Settings → Light auto-mode screen,
  * using the stateless [SettingsLightsContent] leaf (no Context-backed
  * permission state / launcher). Pins: the radar + dashcam sub-sections, the
- * radar-only no-read-back disclosure line, the SHARED location re-grant card
- * (shown when either auto-mode is on and location is denied), and the
- * no-dashcam degradation (front section collapses to a deep-link row).
+ * radar-only no-read-back disclosure line, the SHARED location card (shown
+ * whenever either auto-mode is on, granted or not), and the no-dashcam
+ * degradation (front section collapses to a deep-link row).
+ *
+ * These inject their own [PermissionAlternative] into the slot, so they pin
+ * how the card LOOKS, never that the production screen wires one up - see
+ * `SettingsLightsCoordinatesTest` for that.
  *
  * Renders via Robolectric Native Graphics. Verify with
  * `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -38,7 +42,7 @@ class SettingsLightsSnapshotTest {
         markLabelRes = R.string.common_optional,
     )
 
-    private fun locationAlternative(summary: String?) = PermissionAlternative(
+    private fun fakeLocationAlternative(summary: String?) = PermissionAlternative(
         actionLabelRes = R.string.settings_lights_loc_enter_coords,
         setTitleRes = R.string.settings_lights_loc_manual_set_title,
         summary = summary,
@@ -66,7 +70,7 @@ class SettingsLightsSnapshotTest {
                             granted = false,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = null),
+                            alternative = fakeLocationAlternative(summary = null),
                         )
                     },
                 )
@@ -96,7 +100,7 @@ class SettingsLightsSnapshotTest {
                             granted = false,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = "51.5074, -0.1278"),
+                            alternative = fakeLocationAlternative(summary = "51.5074, -0.1278"),
                         )
                     },
                 )
@@ -126,7 +130,7 @@ class SettingsLightsSnapshotTest {
                             granted = true,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = "51.5074, -0.1278"),
+                            alternative = fakeLocationAlternative(summary = "51.5074, -0.1278"),
                         )
                     },
                 )
@@ -154,7 +158,7 @@ class SettingsLightsSnapshotTest {
                             granted = true,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = null),
+                            alternative = fakeLocationAlternative(summary = null),
                         )
                     },
                 )
@@ -204,7 +208,7 @@ class SettingsLightsSnapshotTest {
                             granted = true,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = null),
+                            alternative = fakeLocationAlternative(summary = null),
                         )
                     },
                 )
@@ -232,7 +236,7 @@ class SettingsLightsSnapshotTest {
                             granted = true,
                             permanentlyDenied = false,
                             onAction = {},
-                            alternative = locationAlternative(summary = null),
+                            alternative = fakeLocationAlternative(summary = null),
                         )
                     },
                 )

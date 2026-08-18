@@ -154,14 +154,18 @@ class HaPublisherHttpTest {
     }
 
     @Test fun batteryThrottleSkipsRepeatWithinHeartbeatAndRepublishesOnChange() = runBlocking {
+        // Counts the state topic, never `topics.size`: the first publish leaves
+        // the stale-discovery retirement in flight by design, so the total keeps
+        // growing on another thread and a size comparison measures that race
+        // rather than the throttle.
         val p = publisher()
+        val state = "bikeradar/radar/battery"
         p.maybePublishBatteryToHa("Radar", 80)
-        val afterFirst = topics.size
-        assertTrue(afterFirst > 0)
+        assertEquals("the first reading publishes", 1, topics.count { it == state })
         p.maybePublishBatteryToHa("Radar", 80)
-        assertEquals("same pct within heartbeat is throttled", afterFirst, topics.size)
+        assertEquals("same pct within heartbeat is throttled", 1, topics.count { it == state })
         p.maybePublishBatteryToHa("Radar", 81)
-        assertTrue("a pct change re-publishes", topics.size > afterFirst)
+        assertEquals("a pct change re-publishes", 2, topics.count { it == state })
     }
 
     // ── ride edge ────────────────────────────────────────────────────────────

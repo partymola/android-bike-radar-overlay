@@ -46,7 +46,7 @@
     <string name="permission_overlay_title">Draw over other apps</string>
     <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
     <string name="permission_location_title">Approximate location</string>
-    <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Skip it and sunset is estimated for London, unless you enter coordinates.</string>
+    <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Without a location or coordinates, sunset is estimated for London. Coordinates you enter take priority.</string>
     <string name="permission_mark_recommended">Recommended</string>
 
     <!-- Shared light-mode display names (SettingsAtoms.kt) -->
@@ -560,7 +560,7 @@
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 
     <!-- Settings → Light auto-mode (SettingsLights.kt) -->
-    <string name="settings_lights_loc_rationale">Sets your lights to day or night mode automatically.</string>
+    <string name="settings_lights_loc_rationale">Sets your lights to day or night mode automatically. Coordinates you enter take priority.</string>
     <string name="settings_lights_title">Light auto-mode</string>
     <string name="settings_lights_radar_section">Radar tail light</string>
     <string name="settings_lights_auto_switch">Auto-switch day/night</string>

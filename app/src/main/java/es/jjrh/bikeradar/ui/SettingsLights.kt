@@ -103,12 +103,7 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
     var locPermTick by rememberSaveable { mutableStateOf(0) }
     val locGranted = remember(locPermTick) { isSpecGranted(ctx, locSpec) }
 
-    var manualLat by rememberSaveable { mutableStateOf(prefs.manualLocationLat) }
-    var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
-    var showCoordDialog by rememberSaveable { mutableStateOf(false) }
-    val manualSummary = remember(manualLat, manualLon) {
-        RideLocationResolver.summary(manualLat, manualLon)
-    }
+    val manualLocation = rememberManualLocation(prefs)
 
     SettingsLightsContent(
         onBack = { navController.popBackStack() },
@@ -138,33 +133,12 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
                 spec = locSpec,
                 granted = locGranted,
                 onChanged = { locPermTick++ },
-                alternative = locationAlternative(
-                    spec = locSpec,
-                    manualLocationSummary = manualSummary,
-                    onEnterCoordinates = { showCoordDialog = true },
-                    onClearCoordinates = {
-                        manualLat = null
-                        manualLon = null
-                        prefs.setManualLocation(null, null)
-                    },
-                ),
+                alternative = locationAlternativeFor(locSpec, manualLocation),
             )
         },
     )
 
-    if (showCoordDialog) {
-        CoordinateEntryDialog(
-            initialLat = manualLat,
-            initialLon = manualLon,
-            onSave = { lat, lon ->
-                manualLat = lat
-                manualLon = lon
-                prefs.setManualLocation(lat, lon)
-                showCoordDialog = false
-            },
-            onDismiss = { showCoordDialog = false },
-        )
-    }
+    ManualLocationDialog(manualLocation)
 
     when (openPicker) {
         LightPicker.RADAR_DAY -> RadarModePickerDialog(

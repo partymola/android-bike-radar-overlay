@@ -112,5 +112,22 @@ class SettingsPermissionsCoordinatesTest {
 
         assertEquals(-33.8688, prefs.manualLocationLat!!, 1e-6)
         assertEquals(151.2093, prefs.manualLocationLon!!, 1e-6)
+        composeRule.onNodeWithText("Latitude").assertDoesNotExist()
+        // The card must show them, not just store them: a save the card ignores
+        // reads to the rider as a save that failed.
+        composeRule.onNodeWithText("-33.8688, 151.2093").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun cancellingTheDialogLeavesTheCoordinatesUnset() {
+        showPermissionsScreen()
+
+        composeRule.onNodeWithText("Enter coordinates").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Latitude").assertDoesNotExist()
+        assertNull(prefs.manualLocationLat)
     }
 }

@@ -55,7 +55,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.R
-import es.jjrh.bikeradar.RideLocationResolver
 import es.jjrh.bikeradar.data.Prefs
 import android.provider.Settings as AndroidSettings
 
@@ -87,12 +86,7 @@ private fun SettingsPermissionsBody(navController: NavController, prefs: Prefs) 
         PERMISSIONS.map { spec -> spec to isSpecGranted(ctx, spec) }
     }
 
-    var manualLat by rememberSaveable { mutableStateOf(prefs.manualLocationLat) }
-    var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
-    var showCoordDialog by rememberSaveable { mutableStateOf(false) }
-    val manualSummary = remember(manualLat, manualLon) {
-        RideLocationResolver.summary(manualLat, manualLon)
-    }
+    val manualLocation = rememberManualLocation(prefs)
 
     // The body runs `PermissionCard` per spec so each card gets its own
     // permission-launcher (one launcher per call-site). The stateless
@@ -113,16 +107,7 @@ private fun SettingsPermissionsBody(navController: NavController, prefs: Prefs) 
                         spec = spec,
                         granted = granted,
                         onChanged = { refreshTick++ },
-                        alternative = locationAlternative(
-                            spec = spec,
-                            manualLocationSummary = manualSummary,
-                            onEnterCoordinates = { showCoordDialog = true },
-                            onClearCoordinates = {
-                                manualLat = null
-                                manualLon = null
-                                prefs.setManualLocation(null, null)
-                            },
-                        ),
+                        alternative = locationAlternativeFor(spec, manualLocation),
                     )
                 }
             }
@@ -131,19 +116,7 @@ private fun SettingsPermissionsBody(navController: NavController, prefs: Prefs) 
         }
     }
 
-    if (showCoordDialog) {
-        CoordinateEntryDialog(
-            initialLat = manualLat,
-            initialLon = manualLon,
-            onSave = { lat, lon ->
-                manualLat = lat
-                manualLon = lon
-                prefs.setManualLocation(lat, lon)
-                showCoordDialog = false
-            },
-            onDismiss = { showCoordDialog = false },
-        )
-    }
+    ManualLocationDialog(manualLocation)
 }
 
 /**

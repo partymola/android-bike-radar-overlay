@@ -13,9 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -25,7 +23,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import es.jjrh.bikeradar.R
-import es.jjrh.bikeradar.RideLocationResolver
 import es.jjrh.bikeradar.data.Prefs
 
 // ── Step 0 - Permissions ─────────────────────────────────────────────
@@ -52,40 +49,19 @@ internal fun PermissionsStep(prefs: Prefs, onContinue: () -> Unit) {
     // grant: the same coordinate dialog as Settings, so the light auto-modes can
     // still compute local sunset. Manual coordinates override GPS in
     // RideLocationResolver, so setting them here carries through to every ride.
-    var manualLat by rememberSaveable { mutableStateOf(prefs.manualLocationLat) }
-    var manualLon by rememberSaveable { mutableStateOf(prefs.manualLocationLon) }
-    var showCoordDialog by rememberSaveable { mutableStateOf(false) }
-    val manualSummary = remember(manualLat, manualLon) {
-        RideLocationResolver.summary(manualLat, manualLon)
-    }
+    val manualLocation = rememberManualLocation(prefs)
 
     PermissionsStepContent(
         states = states,
         requiredGranted = requiredGranted,
         onContinue = onContinue,
         onPermissionChanged = { refresh++ },
-        manualLocationSummary = manualSummary,
-        onEnterCoordinates = { showCoordDialog = true },
-        onClearCoordinates = {
-            manualLat = null
-            manualLon = null
-            prefs.setManualLocation(null, null)
-        },
+        manualLocationSummary = manualLocation.summary,
+        onEnterCoordinates = manualLocation::openDialog,
+        onClearCoordinates = manualLocation::clear,
     )
 
-    if (showCoordDialog) {
-        CoordinateEntryDialog(
-            initialLat = manualLat,
-            initialLon = manualLon,
-            onSave = { lat, lon ->
-                manualLat = lat
-                manualLon = lon
-                prefs.setManualLocation(lat, lon)
-                showCoordDialog = false
-            },
-            onDismiss = { showCoordDialog = false },
-        )
-    }
+    ManualLocationDialog(manualLocation)
 }
 
 /**

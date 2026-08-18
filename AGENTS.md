@@ -529,18 +529,20 @@ enforces them, and CONTRIBUTING.md points contributors here:
   auto-mode (shown whenever either light's auto-mode is on - granted or not,
   because the card also carries the manual-coordinate override). All three
   surfaces offer manual coordinate entry as an alternative to the grant,
-  sharing one integrated "grant or enter coordinates" component. Production
-  surfaces build that alternative ONLY via `locationAlternative()` in
-  `SettingsPermissions.kt`; a card rendered without it promises coordinate
-  entry the screen does not offer, and nothing compiled catches it. (Snapshot
-  tests legitimately inject their own `PermissionAlternative` into a slot -
-  which is why they cannot pin this.) **The Roborazzi goldens do not pin the
-  Settings screen**: they render `SettingsPermissionsContent`, which has no
-  production caller, so they stay green whatever the shipped
-  `SettingsPermissionsBody` passes. `SettingsPermissionsCoordinatesTest` and
-  `SettingsLightsCoordinatesTest` compose the real screens and are the tests
-  that fail. If location is neither granted nor set, the day/night auto-mode
-  falls back to London times.
+  sharing one integrated "grant or enter coordinates" component. A screen that
+  builds the alternative itself does so ONLY via `locationAlternativeFor()` in
+  `ManualLocation.kt`, which binds it to the shared `ManualLocationState`; a
+  screen that delegates to a stateless leaf passes that state's summary and
+  callbacks down, and the leaf calls `locationAlternative()`. Never hand-build a
+  `PermissionAlternative` on a production screen: the card then promises
+  coordinate entry the screen does not wire up, and nothing compiled catches it.
+  **The Roborazzi goldens cannot pin this** - the permissions ones render
+  `SettingsPermissionsContent`, which has no production caller, and the lights
+  ones inject their own alternative into the `locationCard` slot. The three
+  `*CoordinatesTest` classes compose the real screens and are what fails; each
+  pins that save reaches `Prefs` and the card, that clear empties both, and that
+  the dialog opens and closes. If location is neither granted nor set, the
+  day/night auto-mode falls back to London times.
 
 ## Audio design
 

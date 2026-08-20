@@ -182,7 +182,13 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Cámara delantera",
+                        // A device name, not the row's own label: these two
+                        // fixtures feed the public es store screenshots, and
+                        // repeating the label made the row read as a
+                        // duplication bug. Mirrors the en pair, "Front
+                        // dashcam" / "Front cam". Not a real product name -
+                        // these images are published.
+                        dashcamDisplayName = "Cam frontal",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -272,7 +278,13 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Cámara delantera",
+                        // A device name, not the row's own label: these two
+                        // fixtures feed the public es store screenshots, and
+                        // repeating the label made the row read as a
+                        // duplication bug. Mirrors the en pair, "Front
+                        // dashcam" / "Front cam". Not a real product name -
+                        // these images are published.
+                        dashcamDisplayName = "Cam frontal",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,

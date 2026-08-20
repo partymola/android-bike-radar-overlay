@@ -279,6 +279,22 @@ class OverlayPipelineDrivingTest {
     }
 
     @Test
+    fun alertLogNamesTheClosestCarTheDeciderActuallySaw() = runTest {
+        // frame_closest_* is filtered by the alert envelope, and it must be
+        // the envelope decide() gated on. Reading it fresh from prefs would
+        // name a different car on the same line under a mid-ride change.
+        // prefs says 5 m here, the snapshot says 20: a fresh read filters
+        // the near car out entirely and reports no closest at all.
+        prefs.alertMaxDistanceM = 5
+        val doctored = { prefs.snapshot().copy(alertMaxDistanceM = 20) }
+        val urgentLine = driveStationaryUrgent(overlayPrefsSnapshot = doctored)
+        assertTrue(
+            "alert line must name the near car the decider saw, got $urgentLine",
+            urgentLine.contains("frame_closest_tid=3") && urgentLine.contains("frame_closest_d=8"),
+        )
+    }
+
+    @Test
     fun urgentAlertLogCarriesTheMarginItWasGatedOn() = runTest {
         // The pass gate records a threshold only when it VETOES, so without
         // this a reported spurious cue cannot be told apart from one the

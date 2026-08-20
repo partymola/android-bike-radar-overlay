@@ -323,6 +323,7 @@ internal class OverlayPipeline(
                 nowWallMs,
                 preferredBikeSpeedMs,
                 overlayPrefs.urgentPassClearanceM,
+                overlayPrefs.alertMaxDistanceM,
                 alerts,
             )
         }
@@ -344,6 +345,7 @@ internal class OverlayPipeline(
         nowMs: Long,
         gateBikeSpeedMs: Float?,
         gatePassClearanceM: Float,
+        gateAlertMaxM: Int,
         alerts: AlertDecider,
     ) {
         val evStr = when (ev) {
@@ -381,9 +383,11 @@ internal class OverlayPipeline(
                     " tier_true_d=${alerts.lastTierDistanceM}"
             }
         } ?: ""
-        val alertMax = prefs.alertMaxDistanceM
+        // The envelope decide() gated on, not a fresh read: a mid-ride change
+        // would otherwise name a different "closest car" here than the
+        // decider actually saw, on the same line.
         val closest = state.vehicles
-            .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..alertMax }
+            .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..gateAlertMaxM }
             .minByOrNull { it.distanceM }
         clog(
             "# alert ts=$nowMs event=$evStr " +

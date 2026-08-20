@@ -2,7 +2,8 @@
 <!--
   Recursos de cadenas en espanol (es-ES).
 
-  BORRADOR DE PRIMERA PASADA: pendiente de revision por un hablante nativo.
+  Registro (es-ES). Convenciones fijadas en AGENTS.md, "Writing copy (UI
+  strings)", incluidas las de terminologia y unidades.
   Las claves name="..." son identicas a las del fichero por defecto. El
   elemento <xliff:g> y sus argumentos (%1$s, %1$d, etc.) se conservan tal
   cual; solo se traduce el texto que los rodea. Nombres propios y terminos
@@ -60,7 +61,7 @@
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> vehículo, el más cercano a <xliff:g id="metres" example="8">%2$d</xliff:g> metros.</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> vehículos, el más cercano a <xliff:g id="metres" example="8">%2$d</xliff:g> metros.</item>
     </plurals>
-    <string name="overlay_a11y_dashcam_dropped">Conexión con la cámara delantera perdida.</string>
+    <string name="overlay_a11y_dashcam_dropped">Conexión perdida con la cámara delantera.</string>
     <string name="overlay_a11y_dashcam_missing">Cámara delantera no encontrada.</string>
     <string name="overlay_a11y_dashcam_searching">Buscando la cámara delantera.</string>
     <string name="overlay_a11y_low_battery">Batería baja.</string>
@@ -70,7 +71,7 @@
          quien tiene eBike y la bici sigue desbloqueada - sirve también de aviso
          de "se te ha olvidado bloquearla". -->
     <string name="overlay_radar_disconnected">Radar trasero desconectado</string>
-    <string name="overlay_radar_disconnected_unlocked">pero bicicleta desbloqueada</string>
+    <string name="overlay_radar_disconnected_unlocked">pero bici sin bloquear</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)
@@ -158,7 +159,7 @@
     <string name="onboarding_last_step">Último paso</string>
     <string name="onboarding_privacy_full_detail">Más detalle: Ajustes → Privacidad</string>
     <string name="onboarding_radarpos_title">¿Dónde va montado el radar?</string>
-    <string name="onboarding_radarpos_sub">Lo normal es centrado. Si el tuyo va a un lado, indícalo aquí para que la barra lateral y los avisos sean fieles. Puedes cambiarlo cuando quieras en Ajustes.</string>
+    <string name="onboarding_radarpos_sub">Lo normal es centrado. Si el tuyo va a un lado, indícalo aquí para que la barra lateral y los avisos sean precisos. Puedes cambiarlo cuando quieras en Ajustes.</string>
 
     <!-- Paso 1: permisos -->
     <string name="onboarding_perm_title">Conceder permisos</string>
@@ -240,13 +241,13 @@
     <string name="onboarding_ebike_allset">Todo listo</string>
     <string name="onboarding_ebike_almost">Casi está</string>
     <string name="onboarding_ebike_sub_receiving">Podemos leer tu eBike - no tienes que hacer nada.</string>
-    <string name="onboarding_ebike_sub_open">Abre Bosch Flow y déjalo en marcha mientras ruedas.</string>
-    <string name="onboarding_ebike_sub_install">Instala Bosch Flow para obtener los datos en vivo de tu eBike.</string>
+    <string name="onboarding_ebike_sub_open">Abre Bosch Flow y déjala en marcha mientras ruedas.</string>
+    <string name="onboarding_ebike_sub_install">Instala Bosch Flow para obtener los datos de tu eBike en tiempo real.</string>
     <string name="onboarding_ebike_open_flow">Abrir Bosch Flow</string>
     <string name="onboarding_ebike_install_flow">Instalar Bosch Flow</string>
     <string name="onboarding_ebike_finish_later">Puedes finalizar ahora y configurar esto más tarde.</string>
     <string name="onboarding_ebike_go_back">¿No tienes una eBike Bosch? Volver atrás</string>
-    <string name="onboarding_ebike_flow_open_failed">No se pudo abrir Flow. Instálalo desde Play Store e inténtalo de nuevo.</string>
+    <string name="onboarding_ebike_flow_open_failed">No se ha podido abrir Flow. Instálala desde Play Store e inténtalo de nuevo.</string>
     <string name="onboarding_ebike_privacy_heading">Qué se recopila</string>
     <string name="onboarding_ebike_bullet_reads">Lee la batería, la velocidad y el pedaleo de tu bici - solo lectura, nunca envía nada a tu bici</string>
     <string name="onboarding_ebike_bullet_phone">Se queda en tu teléfono, guardado en el registro de la ruta</string>
@@ -257,7 +258,7 @@
          ════════════════════════════════════════════════════════════════ -->
 
     <!-- Inicio de Ajustes (SettingsScreen.kt) -->
-    <string name="settings_home_quick_status">Estado rápido</string>
+    <string name="settings_home_quick_status">De un vistazo</string>
     <string name="settings_home_chip_radar">Radar</string>
     <string name="settings_home_chip_cam">Cámara</string>
     <string name="settings_home_chip_radar_not_seen">No detectado</string>
@@ -311,7 +312,7 @@
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_panning">Direccional</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
-    <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> activado</string>
+    <string name="settings_home_exp_active">Activado: <xliff:g id="features" example="Precog + Panning">%1$s</xliff:g></string>
 
     <!-- Ajustes → Permisos (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permisos</string>
@@ -336,11 +337,11 @@
     <string name="settings_exp_title">Experimental</string>
     <string name="settings_exp_intro">Funciones aún en pruebas. Pueden ir a tirones o cambiar sin previo aviso.</string>
     <string name="settings_exp_precog_title">Predecir trayectorias de adelantamiento (1 s de anticipación)</string>
-    <string name="settings_exp_precog_subtitle">Dibuja cada vehículo 1 s en el futuro - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
+    <string name="settings_exp_precog_subtitle">Dibuja cada vehículo donde estará dentro de 1 s - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
     <string name="settings_exp_panning_title">Audio de alerta direccional</string>
     <string name="settings_exp_panning_subtitle">Los pitidos y avisos urgentes suenan por el altavoz del lado de la amenaza, para hacerlo más fácil de identificar. Funciona con los altavoces del teléfono en horizontal (gira con el soporte) y con auriculares estéreo (BT, BLE, cable, USB, audífono). En vertical suena en mono.</string>
     <string name="settings_exp_invert_title">Invertir izquierda/derecha</string>
-    <string name="settings_exp_invert_subtitle">Invierte los canales si los avisos direccionales suenan en el oído equivocado (rareza poco frecuente del dispositivo o auriculares puestos al revés).</string>
+    <string name="settings_exp_invert_subtitle">Invierte los canales si los avisos direccionales suenan en el oído equivocado (fallo raro de algunos dispositivos o auriculares puestos al revés).</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>
@@ -365,7 +366,7 @@
     <string name="settings_radar_urgent_clearance_title">Holgura del aviso urgente</string>
     <string name="settings_radar_urgent_clearance_helper">El aviso urgente no suena si parece que un vehículo va a pasar a más de esta distancia del centro de tu bici. Increméntala para incluir también adelantamientos más holgados.</string>
     <string name="settings_radar_urgent_low_speed_title">Aviso urgente a baja velocidad</string>
-    <string name="settings_radar_urgent_low_speed_subtitle">Hace sonar el aviso urgente cuando un vehículo se te echa encima mientras circulas despacio, no solo cuando te detienes.</string>
+    <string name="settings_radar_urgent_low_speed_subtitle">Hace sonar el aviso urgente cuando un vehículo se te echa encima mientras circulas despacio, no solo cuando estás parado.</string>
     <string name="settings_radar_turn_title">Vía despejada fiable en curvas</string>
     <string name="settings_radar_turn_subtitle">Al girar no suena el aviso de vía despejada mientras pueda quedar un coche detrás.</string>
     <string name="settings_radar_visual_distance_title">Distancia visual</string>
@@ -383,18 +384,18 @@
     <string name="settings_radar_idle_interval_title">Intervalo de reconexión en reposo</string>
     <string name="settings_radar_idle_interval_helper">Con qué frecuencia reintentar la conexión mientras el radar está en reposo. Los valores más largos ahorran batería por la noche; los más cortos detectan el radar más rápido al volver.</string>
     <string name="settings_radar_banner_persistent_title">Mantener el aviso de radar</string>
-    <string name="settings_radar_banner_persistent_subtitle">Sin eBike Bosch: mantén el aviso del radar trasero en pantalla hasta que se reconecte, en vez de ocultarlo a los pocos segundos.</string>
+    <string name="settings_radar_banner_persistent_subtitle">Sin eBike Bosch: mantiene el aviso del radar trasero en pantalla hasta que se reconecte, en vez de ocultarlo a los pocos segundos.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
-    <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'CÁMARA 8%\' en pantalla en lugar de un tinte de aviso silencioso.</string>
+    <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'CÁMARA 8%\' en pantalla en lugar de un cambio de color discreto.</string>
     <string name="settings_radar_close_pass_title">Contar pases cercanos</string>
     <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio y en tu historial de rutas.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio, en tu historial de rutas y enviados a Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Umbral de holgura lateral</string>
     <string name="settings_radar_lateral_clearance_helper">Solo cuenta un pase cuando la holgura lateral mínima baja de esta distancia.</string>
     <string name="settings_radar_min_rider_speed_title">Velocidad mínima del ciclista</string>
-    <string name="settings_radar_min_rider_speed_helper">El detector ignora las situaciones con el ciclista parado (semáforos en rojo, empujar la bici).</string>
+    <string name="settings_radar_min_rider_speed_helper">Ignora los momentos en que estás parado (semáforo en rojo, empujando la bici).</string>
     <string name="settings_radar_min_closing_speed_title">Velocidad mínima de aproximación</string>
     <string name="settings_radar_min_closing_speed_helper">Aproximadamente <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h de velocidad relativa de aproximación.</string>
     <string name="settings_radar_stop_scanning">Detener la búsqueda</string>
@@ -462,29 +463,29 @@
 
     <!-- Ajustes → eBike (SettingsEBike.kt) -->
     <string name="settings_ebike_title">eBike</string>
-    <string name="settings_ebike_data_on_toast">Los datos en vivo de la eBike están activados. Deja Bosch Flow en segundo plano mientras ruedas.</string>
-    <string name="settings_ebike_data_off_toast">Los datos en vivo de la eBike están desactivados.</string>
+    <string name="settings_ebike_data_on_toast">Los datos en tiempo real de la eBike están activados. Deja Bosch Flow en segundo plano mientras ruedas.</string>
+    <string name="settings_ebike_data_off_toast">Los datos en tiempo real de la eBike están desactivados.</string>
     <string name="settings_ebike_intro">Muestra la batería y el estado de conexión de tu eBike en la pantalla de inicio, mientras Bosch Flow se ejecuta en segundo plano en este teléfono.</string>
     <string name="settings_ebike_requirements">Necesita una eBike Bosch Smart System y la app Bosch Flow.</string>
     <string name="settings_ebike_intent_title">Ya tengo una eBike Bosch Smart System</string>
-    <string name="settings_ebike_intent_subtitle">Toca para activar los datos en vivo.</string>
+    <string name="settings_ebike_intent_subtitle">Toca para activar los datos en tiempo real.</string>
     <string name="settings_ebike_use_data">Usar datos de la eBike</string>
     <string name="settings_ebike_use_data_subtitle_off">Actívalo para mostrar la batería y el estado de la eBike en la pantalla de inicio.</string>
     <string name="settings_ebike_use_data_subtitle_on">Batería y estado - se muestran mientras Bosch Flow se ejecuta en segundo plano.</string>
     <string name="settings_ebike_status_label">Estado</string>
-    <string name="settings_ebike_receiving">Recibiendo datos en vivo</string>
+    <string name="settings_ebike_receiving">Recibiendo datos en tiempo real</string>
     <string name="settings_ebike_waiting">Esperando a Bosch Flow</string>
-    <string name="settings_ebike_receiving_subtitle">Batería y estado de ruta de tu bici.</string>
+    <string name="settings_ebike_receiving_subtitle">Batería y estado de la ruta de tu bici.</string>
     <string name="settings_ebike_waiting_subtitle">Abre Flow y rueda - los datos aparecen aquí automáticamente.</string>
     <string name="settings_ebike_alerts_label">Avisos</string>
     <string name="settings_ebike_forgot_lock_title">Aviso de olvido de bloqueo</string>
-    <string name="settings_ebike_forgot_lock_subtitle">Vibra tu reloj si te alejas con la bici aún sin bloquear.</string>
+    <string name="settings_ebike_forgot_lock_subtitle">Hace vibrar tu reloj si te alejas sin haber bloqueado la bici.</string>
     <string name="settings_ebike_override_dnd">Saltarse No molestar</string>
     <string name="settings_ebike_override_dnd_subtitle_allowed">Permitido. El aviso vibra en tu reloj aunque No molestar esté activado.</string>
     <string name="settings_ebike_override_dnd_subtitle_tap">Toca para que el aviso vibre en tu reloj con No molestar activado.</string>
     <string name="settings_ebike_actions_label">Acciones</string>
     <string name="settings_ebike_open_flow">Abrir Bosch Flow</string>
-    <string name="settings_ebike_open_flow_subtitle">Los datos en vivo necesitan que Flow se ejecute en segundo plano mientras ruedas.</string>
+    <string name="settings_ebike_open_flow_subtitle">Los datos en tiempo real necesitan que Flow se ejecute en segundo plano mientras ruedas.</string>
     <string name="settings_ebike_open">Abrir</string>
     <string name="settings_ebike_what_it_does_label">Qué hace</string>
     <string name="settings_ebike_does_item_battery">Muestra la batería y el estado de conexión de la eBike en la pantalla de inicio</string>
@@ -495,7 +496,7 @@
     <string name="settings_ebike_collected_item_phone">Se queda en tu teléfono, guardado en el registro de la ruta</string>
     <string name="settings_ebike_collected_item_ha">La información de ruta y batería se envía a Home Assistant solo si lo configuras</string>
     <string name="settings_ebike_privacy_detail">Más detalle en la pantalla de Privacidad.</string>
-    <string name="settings_ebike_open_flow_failed_toast">No se pudo abrir Flow. Instálalo desde Play Store e inténtalo de nuevo.</string>
+    <string name="settings_ebike_open_flow_failed_toast">No se ha podido abrir Flow. Instálala desde Play Store e inténtalo de nuevo.</string>
 
     <!-- Ajustes → Dashcam (SettingsDashcam.kt) -->
     <string name="settings_dashcam_title">Cámara delantera</string>
@@ -540,7 +541,7 @@
     <string name="settings_privacy_permissions_label">Permisos</string>
     <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, cámara delantera y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• WAKE_LOCK: dar a tiempo el aviso de radar caído si el radar se corta a mitad de ruta con la pantalla apagada\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
     <string name="settings_privacy_source_label">Código fuente</string>
-    <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Comprueba cualquiera de lo anterior leyendo el código.</string>
+    <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Verifica todo lo anterior leyendo el código.</string>
 
     <!-- Ajustes → Modo automático de luces (SettingsLights.kt) -->
     <string name="settings_lights_loc_rationale">Pone tus luces en modo día o noche automáticamente. Las coordenadas que introduzcas tienen prioridad.</string>
@@ -565,14 +566,14 @@
     <string name="settings_coord_lon_label">Longitud</string>
     <string name="settings_coord_lat_error">La latitud debe estar entre -90 y 90</string>
     <string name="settings_coord_lon_error">La longitud debe estar entre -180 y 180</string>
-    <string name="settings_coord_hint">Pulsa ± para el sur o el oeste. Mantén pulsada tu ubicación en una app de mapas para copiar las coordenadas.</string>
+    <string name="settings_coord_hint">Toca ± para el sur o el oeste. Mantén pulsada tu ubicación en una app de mapas para copiar las coordenadas.</string>
     <string name="settings_coord_sign_toggle">Signo negativo (sur u oeste)</string>
     <string name="settings_coord_save">Guardar</string>
 
     <!-- Ajustes → Licencias de código abierto (SettingsLicenses.kt). Los nombres
          de bibliotecas, autores y nombres de licencia SPDX quedan sin traducir como atribución legal. -->
     <string name="settings_licenses_title">Licencias de código abierto</string>
-    <string name="settings_licenses_intro">Bike Radar es en sí GPL-3.0-or-later. Cada biblioteca de terceros de la que depende se lista abajo con su licencia. Todas las licencias son compatibles con GPL-3.0.</string>
+    <string name="settings_licenses_intro">El propio Bike Radar es GPL-3.0-or-later. Cada biblioteca de terceros de la que depende aparece abajo con su licencia. Todas las licencias son compatibles con GPL-3.0.</string>
     <string name="settings_licenses_section_language_runtime">Lenguaje y runtime</string>
     <string name="settings_licenses_section_android_platform">Plataforma Android</string>
     <string name="settings_licenses_section_ui">UI</string>
@@ -585,7 +586,7 @@
     <string name="dashcam_picker_other_paired_devices">Otros dispositivos emparejados</string>
     <string name="dashcam_picker_pair_new_device">Emparejar un nuevo dispositivo en los Ajustes de Android</string>
     <string name="dashcam_picker_info_badge">i</string>
-    <string name="dashcam_picker_explainer">Las coincidencias probables son dispositivos emparejados cuyo nombre se parece al de una cámara delantera de ciclismo o que han anunciado batería en esta sesión.</string>
+    <string name="dashcam_picker_explainer">Las coincidencias probables son dispositivos emparejados cuyo nombre se parece al de una cámara delantera de ciclismo o que han emitido su nivel de batería en esta sesión.</string>
     <string name="dashcam_picker_refreshing">ACTUALIZANDO CADA 2 s</string>
     <string name="dashcam_picker_cancel">Cancelar</string>
     <string name="dashcam_picker_save">Guardar</string>
@@ -645,7 +646,7 @@
     <string name="debug_periodic_screenshots_subtitle">Captura la pantalla cada minuto mientras la barra lateral del radar está activa. Se guarda en el directorio de archivos de la app, bajo screenshots/.</string>
     <string name="debug_section_manual_ha_push">Envío manual a HA</string>
     <string name="debug_send_discovery">Enviar detección</string>
-    <string name="debug_send_battery_50">Enviar batería al 50 %</string>
+    <string name="debug_send_battery_50">Enviar batería al 50%</string>
     <string name="debug_section_diagnostics">Diagnósticos</string>
     <string name="debug_log_unknown_ebike_ids_title">Registrar IDs de objeto desconocidos de la eBike</string>
     <string name="debug_log_unknown_ebike_ids_subtitle">Escribe líneas ebike_unk para los registros sin mapear. Alterna cada estado de la bici durante una captura para identificar los IDs de bloqueo/luz/cargador, luego desactívalo.</string>
@@ -667,7 +668,7 @@
     <string name="debug_toast_screen_capture_denied">Permiso de captura de pantalla denegado</string>
     <string name="debug_toast_force_reconnect_sent">Reconexión forzada enviada</string>
     <string name="debug_toast_discovery_sent">Detección enviada</string>
-    <string name="debug_toast_state_sent">Estado enviado al 50 %</string>
+    <string name="debug_toast_state_sent">Estado enviado al 50%</string>
     <string name="debug_toast_log_missing_or_empty">Archivo de registro inexistente o vacío</string>
     <string name="debug_toast_cannot_share_file">No se puede compartir este archivo: <xliff:g id="reason" example="not found">%1$s</xliff:g></string>
     <string name="debug_share_chooser_title">Compartir <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g></string>
@@ -683,12 +684,12 @@
     <string name="svc_main_notif_paused_until">En pausa hasta las <xliff:g id="time" example="14:30">%1$s</xliff:g></string>
     <string name="svc_main_notif_action_resume">Reanudar</string>
     <string name="svc_main_notif_action_pause">Pausar 1 h</string>
-    <string name="svc_main_bond_lost_text">Se eliminó el emparejamiento del radar. Vuelve a emparejarlo en los ajustes de Bluetooth para reanudar.</string>
+    <string name="svc_main_bond_lost_text">Se ha eliminado el emparejamiento del radar. Vuelve a emparejarlo en los ajustes de Bluetooth para reanudar.</string>
     <string name="svc_main_dashcam_light_title">Luz de la cámara</string>
     <string name="svc_main_radar_light_title">Luz del radar</string>
-    <string name="svc_main_light_fail_text">No se pudo cambiar a <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - comprueba la conexión.</string>
+    <string name="svc_main_light_fail_text">No se ha podido cambiar a <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - comprueba la conexión.</string>
     <string name="svc_main_light_fail_channel_name">Luz de la cámara</string>
-    <string name="svc_main_light_fail_channel_desc">Avisa cuando no se pudo aplicar el modo de la cámara/luz delantera.</string>
+    <string name="svc_main_light_fail_channel_desc">Avisa si no se puede aplicar el modo de la cámara o luz delantera.</string>
     <string name="svc_main_forgot_lock_channel_name">Olvido de bloqueo</string>
     <string name="svc_main_forgot_lock_channel_desc">Te avisa si te vas sin bloquear la eBike.</string>
     <string name="svc_main_forgot_lock_title">Bici sin bloquear</string>
@@ -701,15 +702,15 @@
     <string name="notif_ride_summary_tightest">Pase más ajustado: <xliff:g id="m" example="0,8">%1$s</xliff:g> m a <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
     <!-- Aviso de fin de ruta (bucket 3): compartido por la notificación de resumen y la tarjeta de inicio. -->
     <string name="attention_title">Requiere atención</string>
-    <string name="attention_radar_battery">Carga el radar - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
-    <string name="attention_dashcam_battery">Carga la cámara - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
-    <string name="attention_ebike_battery">Carga el eBike - <xliff:g id="pct" example="12">%1$d</xliff:g> %%</string>
-    <string name="attention_unclean_restart">La app se reinició en ruta - algunos datos pueden faltar</string>
+    <string name="attention_radar_battery">Carga el radar - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_dashcam_battery">Carga la cámara - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_ebike_battery">Carga la bici - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_unclean_restart">La app se ha reiniciado en plena ruta - pueden faltar datos</string>
     <plurals name="attention_audio_failures">
-        <item quantity="one">Un aviso no sonó - revisa el volumen</item>
-        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no sonaron - revisa el volumen</item>
+        <item quantity="one">Un aviso no ha sonado - revisa el volumen</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no han sonado - revisa el volumen</item>
     </plurals>
-    <string name="attention_dismiss_cd">Descartar: <xliff:g id="item" example="Carga el radar - 12 %">%1$s</xliff:g></string>
+    <string name="attention_dismiss_cd">Descartar: <xliff:g id="item" example="Carga el radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Cámara dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la cámara delantera sigue emitiendo desde la bici.</string>
     <string name="svc_main_walkaway_notif_title">Cámara dejada en la bici</string>

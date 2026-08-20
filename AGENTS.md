@@ -262,9 +262,12 @@ enforces them, and CONTRIBUTING.md points contributors here:
   - **Nominal style in short status strings** - drop ser/estar: "Disco lleno",
     "Cámara no disponible", not "El disco está lleno".
   - **Symbols, not abbreviations, for units** (no period, no plural, space):
-    "30 s", "2 min", "10 km", "%". Ordinary abbreviations keep the dot and
-    accent ("máx.", "mín.", "núm."). Reuse the Android-es words riders know
-    ("Ajustes", "No molestar").
+    "30 s", "2 min", "10 km". **The percent sign is the exception and takes
+    no space**: "12%", not "12 %". This overrides the RAE norm deliberately
+    and `values-es` is consistent with it throughout, so a lone "12 %" is a
+    regression rather than a correction. Ordinary abbreviations keep the dot
+    and accent ("máx.", "mín.", "núm."). Reuse the Android-es words riders
+    know ("Ajustes", "No molestar").
   - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
   - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
     "Seguir Mi Luz").

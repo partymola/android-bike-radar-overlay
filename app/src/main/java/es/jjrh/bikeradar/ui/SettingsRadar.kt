@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -271,6 +272,10 @@ internal fun SettingsRadarContent(
 ) {
     val br = LocalBrColors.current
     val ctx = LocalContext.current
+    // Read through the configuration, not Locale.getDefault(): the decimal
+    // separator differs by locale (1.5 m vs 1,5 m) and a composable that
+    // reads the default directly does not recompose when it changes.
+    val locale = LocalConfiguration.current.locales.get(0) ?: Locale.ROOT
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -302,7 +307,7 @@ internal fun SettingsRadarContent(
                 title = stringResource(R.string.settings_radar_urgent_clearance_title),
                 valueDisplay = stringResource(
                     R.string.settings_radar_meters_decimal_value,
-                    String.format(Locale.US, "%.1f", urgentMargin),
+                    String.format(locale, "%.1f", urgentMargin),
                 ),
                 helper = stringResource(R.string.settings_radar_urgent_clearance_helper),
                 value = urgentMargin,
@@ -441,7 +446,7 @@ internal fun SettingsRadarContent(
                             title = stringResource(R.string.settings_radar_lateral_clearance_title),
                             valueDisplay = stringResource(
                                 R.string.settings_radar_meters_decimal_value,
-                                String.format(Locale.US, "%.1f", closePassEmitMinX),
+                                String.format(locale, "%.1f", closePassEmitMinX),
                             ),
                             helper = stringResource(R.string.settings_radar_lateral_clearance_helper),
                             value = closePassEmitMinX,

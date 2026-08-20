@@ -359,7 +359,7 @@
     <string name="settings_radar_seconds_value"><xliff:g id="s" example="30">%1$d</xliff:g> s</string>
     <string name="settings_radar_kmh_value"><xliff:g id="kmh" example="10">%1$d</xliff:g> km/h</string>
     <string name="settings_radar_ms_value"><xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
-    <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1.0">%1$s</xliff:g> m</string>
+    <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1,0">%1$s</xliff:g> m</string>
     <string name="settings_radar_alert_volume_title">Volumen de alerta</string>
     <string name="settings_radar_alert_volume_helper">Volumen de los pitidos de aviso de aproximación. 0 silencia el audio; la barra lateral sigue parpadeando.</string>
     <string name="settings_radar_alert_distance_title">Distancia de alerta</string>

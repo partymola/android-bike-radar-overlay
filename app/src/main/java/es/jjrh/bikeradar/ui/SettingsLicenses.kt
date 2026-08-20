@@ -29,12 +29,31 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.R
 
 /**
- * Open-source licences for the dependencies the app ships with. Hand-
+ * Open-source licences for the app's direct dependencies. Hand-
  * curated rather than via Google's `OssLicensesPlugin` because adding
  * the plugin pulls Play Services as a transitive dependency, which is
  * something an open-source app deliberately avoiding tracking should
  * not be doing. The list below mirrors `app/build.gradle.kts`'s
  * implementation deps, plus the language and platform.
+ *
+ * Scope is the app's DIRECT dependencies, and the screen says so. Build and
+ * test tooling is absent because it is never combined into the distributed
+ * work, and listing it would put the screen's own "all compatible with
+ * GPL-3.0" claim in the wrong - JUnit 4 is EPL 1.0, which the FSF holds
+ * GPL-incompatible.
+ *
+ * `SettingsLicencesCoverageTest` pins both halves of the claim, but only
+ * over what `app/build.gradle.kts` DECLARES, and only over the lists
+ * below - an entry added inline in the composable body would render
+ * unchecked. The APK also packages transitive libraries no entry names:
+ * androidx.emoji2, recyclerview and kotlinx-serialization among them. So
+ * do NOT widen the wording to everything the app ships, which is a claim
+ * nothing here can back.
+ *
+ * Closing that gap needs the built artifact, not a longer hand-curated
+ * list. Note the obvious route is only a partial one: the per-library
+ * version files AGP packages into META-INF cover AndroidX-style libraries
+ * and miss others, kotlinx-serialization included.
  */
 @Composable
 fun SettingsLicenses(navController: NavController) {
@@ -61,45 +80,36 @@ private fun SettingsLicensesBody(navController: NavController) {
             )
 
             SettingsSectionLabel(stringResource(R.string.settings_licenses_section_language_runtime))
-            LicenseGroup(
-                listOf(
-                    LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0"),
-                    LicenseEntry("Kotlinx Coroutines", "JetBrains s.r.o. and contributors", "Apache 2.0"),
-                ),
-            )
+            LicenseGroup(LANGUAGE_RUNTIME_LICENCES)
 
             SettingsSectionLabel(stringResource(R.string.settings_licenses_section_android_platform))
-            LicenseGroup(
-                listOf(
-                    LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
-                    LicenseEntry("Activity Compose", "The Android Open Source Project", "Apache 2.0"),
-                    LicenseEntry("Navigation Compose", "The Android Open Source Project", "Apache 2.0"),
-                    LicenseEntry("Material Components for Android", "Google", "Apache 2.0"),
-                ),
-            )
+            LicenseGroup(ANDROID_PLATFORM_LICENCES)
 
             SettingsSectionLabel(stringResource(R.string.settings_licenses_section_ui))
-            LicenseGroup(
-                listOf(
-                    LicenseEntry("Jetpack Compose UI / Material 3 / Material Icons Extended", "The Android Open Source Project", "Apache 2.0"),
-                ),
-            )
-
-            SettingsSectionLabel(stringResource(R.string.settings_licenses_section_build_test))
-            LicenseGroup(
-                listOf(
-                    LicenseEntry("Android Gradle Plugin", "Google", "Apache 2.0"),
-                    LicenseEntry("Gradle", "Gradle Inc.", "Apache 2.0"),
-                    LicenseEntry("JUnit 4", "JUnit team", "Eclipse Public License 1.0"),
-                ),
-            )
+            LicenseGroup(UI_LICENCES)
 
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
 
-private data class LicenseEntry(val name: String, val author: String, val licence: String)
+internal data class LicenseEntry(val name: String, val author: String, val licence: String)
+
+internal val LANGUAGE_RUNTIME_LICENCES = listOf(
+    LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0"),
+    LicenseEntry("Kotlinx Coroutines", "JetBrains s.r.o. and contributors", "Apache 2.0"),
+)
+
+internal val ANDROID_PLATFORM_LICENCES = listOf(
+    LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
+    LicenseEntry("Activity Compose", "The Android Open Source Project", "Apache 2.0"),
+    LicenseEntry("Navigation Compose", "The Android Open Source Project", "Apache 2.0"),
+    LicenseEntry("Material Components for Android", "Google", "Apache 2.0"),
+)
+
+internal val UI_LICENCES = listOf(
+    LicenseEntry("Jetpack Compose UI / Material 3 / Material Icons Extended", "The Android Open Source Project", "Apache 2.0"),
+)
 
 @Composable
 private fun LicenseGroup(entries: List<LicenseEntry>) {

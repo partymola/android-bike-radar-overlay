@@ -348,7 +348,7 @@
     <string name="settings_about_tagline">Rear-radar alerts, on screen and with sound.</string>
     <string name="settings_about_section_legal">Legal</string>
     <string name="settings_about_licences_title">Open source licences</string>
-    <string name="settings_about_licences_subtitle">Every dependency the app ships with</string>
+    <string name="settings_about_licences_subtitle">The app\'s direct dependencies</string>
     <string name="settings_about_privacy_title">Privacy</string>
     <string name="settings_about_privacy_subtitle">What stays on the phone, what doesn\'t</string>
     <string name="settings_about_unaffiliated_title">Not affiliated with Garmin or Bosch</string>
@@ -594,11 +594,10 @@
     <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
          authors and SPDX licence names stay hardcoded as legal attribution. -->
     <string name="settings_licenses_title">Open source licences</string>
-    <string name="settings_licenses_intro">Bike Radar is itself GPL-3.0-or-later. Every third-party library it depends on is listed below with its licence. All licences are compatible with GPL-3.0.</string>
+    <string name="settings_licenses_intro">Bike Radar is itself GPL-3.0-or-later. Every third-party library it depends on directly is listed below with its licence, and all of them are compatible with GPL-3.0.</string>
     <string name="settings_licenses_section_language_runtime">Language &amp; runtime</string>
     <string name="settings_licenses_section_android_platform">Android platform</string>
     <string name="settings_licenses_section_ui">UI</string>
-    <string name="settings_licenses_section_build_test">Build &amp; test</string>
 
     <!-- Dashcam picker bottom sheet (DashcamPickerSheet.kt) -->
     <string name="dashcam_picker_title">Select dashcam</string>

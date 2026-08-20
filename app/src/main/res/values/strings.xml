@@ -408,8 +408,8 @@
     <string name="settings_radar_show_labels_title">Show device labels</string>
     <string name="settings_radar_show_labels_subtitle">Show \'RADAR 12%\' or \'DASHCAM 8%\' on screen instead of a silent warning tint.</string>
     <string name="settings_radar_close_pass_title">Count close passes</string>
-    <string name="settings_radar_close_pass_subtitle">Count overtakes inside the clearance below - on the home screen and in your ride history.</string>
-    <string name="settings_radar_close_pass_subtitle_ha">Count overtakes inside the clearance below - on the home screen, in your ride history, and sent to Home Assistant.</string>
+    <string name="settings_radar_close_pass_subtitle">Count overtakes that squeeze past too close - on the home screen and in your ride history.</string>
+    <string name="settings_radar_close_pass_subtitle_ha">Count overtakes that squeeze past too close - on the home screen, in your ride history, and sent to Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Lateral clearance threshold</string>
     <string name="settings_radar_lateral_clearance_helper">Only count a pass when the minimum lateral clearance drops below this distance.</string>
     <string name="settings_radar_min_rider_speed_title">Minimum rider speed</string>

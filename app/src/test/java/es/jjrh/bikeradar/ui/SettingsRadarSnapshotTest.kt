@@ -65,6 +65,21 @@ class SettingsRadarSnapshotTest {
         }
     }
 
+    @Test
+    // Taller than the en siblings on purpose: Spanish runs long enough that
+    // h2200dp cuts the danger zone off entirely, so a golden added to catch
+    // es overflow would stop covering the last section on the screen.
+    @Config(qualifiers = "es-w448dp-h2800dp-xxhdpi")
+    fun closePassSectionEs() {
+        // The es toggle title is the longest string on this screen, and the
+        // section header roughly doubled when the concept was renamed. The
+        // other two close-pass goldens are en only, so nothing rendered
+        // either one in Spanish.
+        captureRoboImage {
+            UiTheme { RadarContent(haConfigured = false) }
+        }
+    }
+
     @Composable
     private fun RadarContent(haConfigured: Boolean) {
         SettingsRadarContent(

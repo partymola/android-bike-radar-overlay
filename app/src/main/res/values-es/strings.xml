@@ -131,13 +131,13 @@
     <string name="main_system_value_configured">Configurado</string>
 
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
-    <string name="main_section_close_passes">Pases cercanos</string>
+    <string name="main_section_close_passes">Adelantamientos ajustados</string>
     <string name="main_close_passes_caption">esta ruta</string>
     <string name="main_close_passes_history_link">Historial ›</string>
-    <string name="main_close_passes_empty_hint">Activa el recuento de pases cercanos en Ajustes → Alertas para contarlos aquí y guardar un historial de rutas.</string>
+    <string name="main_close_passes_empty_hint">Activa el recuento de adelantamientos ajustados en Ajustes → Alertas para contarlos aquí y guardar un historial de rutas.</string>
     <plurals name="main_close_passes_count_desc">
-        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano esta ruta</item>
-        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos esta ruta</item>
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> adelantamiento ajustado en esta ruta</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> adelantamientos ajustados en esta ruta</item>
     </plurals>
 
     <!-- Tarjeta de aviso de si tienes dashcam (flujos de primer uso). -->
@@ -194,7 +194,7 @@
     <string name="onboarding_ha_skipped_body">Puedes añadir Home Assistant en cualquier momento en Ajustes → Home Assistant.</string>
     <string name="onboarding_ha_use_ha_button">Usar Home Assistant</string>
     <string name="onboarding_ha_privacy_heading">Qué se envía</string>
-    <string name="onboarding_ha_bullet_sends">Envía la batería, el modo de luz, las horas de ruta y las estadísticas de la ruta (incl. los pases cercanos) a tu HA</string>
+    <string name="onboarding_ha_bullet_sends">Envía la batería, el modo de luz, las horas de ruta y las estadísticas de la ruta (incluidos los adelantamientos ajustados) a tu HA</string>
     <string name="onboarding_ha_bullet_only_ha">Va solo a tu Home Assistant - nunca al desarrollador</string>
     <string name="onboarding_ha_bullet_private">La dirección de tu HA y el token se quedan en el almacenamiento privado de la app y en tu copia de seguridad cifrada de Android</string>
 
@@ -231,7 +231,7 @@
     <string name="onboarding_ebike_title">El estado de tu eBike</string>
     <string name="onboarding_ebike_sub">Muestra la batería y el estado de conexión de tu eBike mientras ruedas - funciona junto con la app Bosch Flow.</string>
     <string name="onboarding_ebike_bullet_status">Batería y estado de la eBike en la pantalla de inicio</string>
-    <string name="onboarding_ebike_bullet_climb">Los pitidos de pase cercano siguen activos en una subida lenta</string>
+    <string name="onboarding_ebike_bullet_climb">Los pitidos de adelantamiento ajustado siguen activos en una subida lenta</string>
     <string name="onboarding_ebike_bullet_timing">El ritmo de los pitidos se ajusta a la velocidad de tu rueda</string>
     <string name="onboarding_ebike_have_title">Tengo una</string>
     <string name="onboarding_ebike_have_sub">Enciéndela.</string>
@@ -350,7 +350,7 @@
     <string name="settings_radar_section_adaptive">Adaptativo</string>
     <string name="settings_radar_section_connection">Conexión</string>
     <string name="settings_radar_section_battery">Avisos de batería</string>
-    <string name="settings_radar_section_close_pass">Registro de pases cercanos</string>
+    <string name="settings_radar_section_close_pass">Adelantamientos ajustados</string>
     <string name="settings_radar_section_danger">Zona de peligro</string>
     <string name="settings_radar_percent_value"><xliff:g id="pct" example="80">%1$d</xliff:g>%%</string>
     <string name="settings_radar_meters_value"><xliff:g id="m" example="20">%1$d</xliff:g> m</string>
@@ -389,11 +389,11 @@
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
     <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'CÁMARA 8%\' en pantalla en lugar de un cambio de color discreto.</string>
-    <string name="settings_radar_close_pass_title">Contar pases cercanos</string>
-    <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio y en tu historial de rutas.</string>
-    <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos por dentro de la holgura de abajo - en la pantalla de inicio, en tu historial de rutas y enviados a Home Assistant.</string>
+    <string name="settings_radar_close_pass_title">Contar adelantamientos ajustados</string>
+    <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos que pasan demasiado cerca y los muestra en la pantalla de inicio y en tu historial de rutas.</string>
+    <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos que pasan demasiado cerca; los muestra en la pantalla de inicio y en tu historial de rutas, y los envía a Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Umbral de holgura lateral</string>
-    <string name="settings_radar_lateral_clearance_helper">Solo cuenta un pase cuando la holgura lateral mínima baja de esta distancia.</string>
+    <string name="settings_radar_lateral_clearance_helper">Solo cuenta un adelantamiento cuando la holgura lateral mínima baja de esta distancia.</string>
     <string name="settings_radar_min_rider_speed_title">Velocidad mínima del ciclista</string>
     <string name="settings_radar_min_rider_speed_helper">Ignora los momentos en que estás parado (semáforo en rojo, empujando la bici).</string>
     <string name="settings_radar_min_closing_speed_title">Velocidad mínima de aproximación</string>
@@ -489,7 +489,7 @@
     <string name="settings_ebike_open">Abrir</string>
     <string name="settings_ebike_what_it_does_label">Qué hace</string>
     <string name="settings_ebike_does_item_battery">Muestra la batería y el estado de conexión de la eBike en la pantalla de inicio</string>
-    <string name="settings_ebike_does_item_beeps">Mantiene los pitidos de pase cercano activos en una subida lenta</string>
+    <string name="settings_ebike_does_item_beeps">Mantiene los pitidos de adelantamiento ajustado activos en una subida lenta</string>
     <string name="settings_ebike_does_item_timing">Ajusta el ritmo de los pitidos a la velocidad de tu rueda</string>
     <string name="settings_ebike_whats_collected_label">Qué se recopila</string>
     <string name="settings_ebike_collected_item_reads">Lee la batería, la velocidad y el pedaleo - solo lectura, nunca envía nada a tu bici</string>
@@ -526,12 +526,12 @@
     <string name="settings_privacy_on_phone_settings">Tus ajustes (volumen de alerta, distancia de alerta, estado del radar emparejado, preferencias de la cámara delantera y similares) residen en el almacenamiento privado de la app, que ninguna otra app puede leer. Viajan en tu copia de seguridad de Android cuando la tienes activada, y en la transferencia directa entre teléfonos, así que te acompañan al cambiar de teléfono.</string>
     <string name="settings_privacy_on_phone_location">Si introduces una ubicación manual para el cambio automático de luz (en vez de conceder acceso a la ubicación), esas coordenadas se guardan en el almacenamiento privado de la app, que ninguna otra app puede leer. Solo sirven para calcular tu amanecer y atardecer locales: no se publican en Home Assistant ni aparecen en ningún registro o informe de diagnóstico. Como el resto de tus ajustes, viajan en tu copia de seguridad de Android cuando la tienes activada, y en la transferencia directa entre teléfonos.</string>
     <string name="settings_privacy_on_phone_creds">La URL de tu Home Assistant y el token residen en ese mismo almacenamiento privado y pasan al teléfono nuevo con tu copia de seguridad de Android (cifrada por Android con tu bloqueo de pantalla) y con la transferencia directa entre teléfonos, que no pasa por ningún servidor. No van a ningún otro sitio.</string>
-    <string name="settings_privacy_on_phone_rides">Se guarda un breve historial de rutas (horas, distancia, recuentos de adelantamientos y pases cercanos, y a qué distancia y velocidad pasaron los vehículos más cercanos - sin ubicación, sin recorrido) en el almacenamiento privado de la app para la pantalla Historial de rutas. Las entradas más antiguas se descartan a partir de 200 rutas; no se comparte nada.</string>
+    <string name="settings_privacy_on_phone_rides">Se guarda un breve historial de rutas (horas, distancia, recuentos de adelantamientos totales y ajustados, y a qué distancia y velocidad pasaron los vehículos más cercanos - sin ubicación, sin recorrido) en el almacenamiento privado de la app para la pantalla Historial de rutas. Las entradas más antiguas se descartan a partir de 200 rutas; no se comparte nada.</string>
     <string name="settings_privacy_on_phone_capture">El registro de capturas está desactivado por defecto. Si lo activas (pantalla de Depuración), la app registra cada ruta - paquetes del radar, notificaciones BLE, datos de la eBike de Bosch Flow, muestras de batería del teléfono y cambios de estado de giro de los sensores de movimiento (si activas los avisos en curvas); sin ubicación. Los registros se quedan en tu teléfono (comprimidos con gzip para ahorrar espacio) y solo se comparten si tocas Compartir.</string>
     <string name="settings_privacy_on_phone_crashes">Si la app falla, se guarda un informe (versión de la app, hilo y traza del error; sin datos de rutas ni ubicación) en el almacenamiento privado de la app, y solo se comparte si tocas Compartir en la pantalla de Depuración.</string>
     <string name="settings_privacy_on_phone_linklog">Se guarda un pequeño registro de conexiones (cuándo el radar, la cámara delantera y el servicio de la app se conectaron, desconectaron o fallaron al conectar; solo nombres de dispositivo y horas, sin datos de rutas ni ubicación) en el almacenamiento privado de la app para diagnóstico en la pantalla de Depuración.</string>
     <string name="settings_privacy_to_ha_label">Qué va a tu Home Assistant</string>
-    <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la cámara delantera\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de pases cercanos, velocidades de aproximación, holguras)\n• un registro de pases cercanos por evento, si lo activas</string>
+    <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la cámara delantera\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de adelantamientos ajustados, velocidades de aproximación, holguras)\n• un registro de adelantamientos ajustados por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del teléfono de inmediato.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">El emparejamiento se hace en el flujo de Bluetooth del sistema Android, no en esta app. La app lee tu lista de dispositivos vinculados para identificar el radar, la cámara delantera y tu eBike Bosch. Los permisos de Bluetooth se declaran con `usesPermissionFlags=\"neverForLocation\"`, de modo que la búsqueda por Bluetooth nunca deduce la ubicación.</string>
@@ -602,8 +602,8 @@
         <item quantity="other"><xliff:g id="count" example="48">%1$d</xliff:g> adelantamientos</item>
     </plurals>
     <plurals name="ride_history_close_passes">
-        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pase cercano</item>
-        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> pases cercanos</item>
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> ajustado</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> ajustados</item>
     </plurals>
     <string name="ride_history_tightest">mínimo <xliff:g id="m" example="0,8">%1$s</xliff:g> m</string>
     <string name="ride_history_km_value"><xliff:g id="km" example="12,4">%1$s</xliff:g> km</string>
@@ -620,9 +620,9 @@
     <string name="debug_section_service_control">Control del servicio</string>
     <string name="debug_force_radar_reconnect">Forzar reconexión del radar</string>
     <string name="debug_section_cue_preview">Previsualizar avisos</string>
-    <string name="debug_cue_beep1">Paso cercano (1 pitido)</string>
-    <string name="debug_cue_beep2">Paso cercano (2 pitidos)</string>
-    <string name="debug_cue_beep3">Paso cercano (3 pitidos)</string>
+    <string name="debug_cue_beep1">Adelantamiento ajustado (1 pitido)</string>
+    <string name="debug_cue_beep2">Adelantamiento ajustado (2 pitidos)</string>
+    <string name="debug_cue_beep3">Adelantamiento ajustado (3 pitidos)</string>
     <string name="debug_cue_clear">Vía libre</string>
     <string name="debug_cue_urgent">Impacto inminente</string>
     <string name="debug_cue_dropped">Radar perdido</string>
@@ -697,9 +697,9 @@
     <string name="notif_ride_summary_channel_name">Resúmenes de ruta</string>
     <string name="notif_ride_summary_channel_desc">Un repaso silencioso de cada ruta cuando el radar se apaga.</string>
     <string name="notif_ride_summary_title">Resumen de la ruta</string>
-    <string name="notif_ride_summary_text">Adelantamientos: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Pases cercanos: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12,4">%3$s</xliff:g> km</string>
+    <string name="notif_ride_summary_text">Adelantamientos: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Ajustados: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12,4">%3$s</xliff:g> km</string>
     <string name="notif_ride_summary_alerts">Alertas por km: <xliff:g id="rate" example="1,4">%1$s</xliff:g></string>
-    <string name="notif_ride_summary_tightest">Pase más ajustado: <xliff:g id="m" example="0,8">%1$s</xliff:g> m a <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
+    <string name="notif_ride_summary_tightest">El más ajustado: <xliff:g id="m" example="0,8">%1$s</xliff:g> m a <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
     <!-- Aviso de fin de ruta (bucket 3): compartido por la notificación de resumen y la tarjeta de inicio. -->
     <string name="attention_title">Requiere atención</string>
     <string name="attention_radar_battery">Carga el radar - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>

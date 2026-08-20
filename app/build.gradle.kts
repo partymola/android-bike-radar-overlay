@@ -171,7 +171,6 @@ android {
         buildConfigField("boolean", "GIT_DIRTY", "false")
 
         vectorDrawables { useSupportLibrary = true }
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // AGP otherwise embeds a Google-signed dependency-metadata blob in the
@@ -685,8 +684,4 @@ dependencies {
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.72.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.72.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.08.00"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

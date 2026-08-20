@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -626,9 +627,13 @@ fun HeroIcon(
 //
 // Small `PAIRED` green pill with a leading dot, drawn beside a device
 // row when it has a system Bluetooth bond.
+//
+// [labelRes] exists because the chip agrees in gender with whatever the
+// row is about: "EMPAREJADO" for el radar, "EMPAREJADA" for la cámara.
+// Callers on a feminine device pass R.string.ui_chip_paired_cam.
 
 @Composable
-fun PairedChip(modifier: Modifier = Modifier) {
+fun PairedChip(modifier: Modifier = Modifier, @StringRes labelRes: Int = R.string.ui_chip_paired) {
     val br = LocalBrColors.current
     Row(
         modifier = modifier
@@ -645,7 +650,7 @@ fun PairedChip(modifier: Modifier = Modifier) {
                 .background(br.safe),
         )
         Text(
-            text = stringResource(R.string.ui_chip_paired),
+            text = stringResource(labelRes),
             color = br.safe,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,

@@ -36,6 +36,9 @@
     <!-- UI primitives (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
     <string name="ui_chip_paired">PAIRED</string>
+    <!-- Same word in English; Spanish and other gendered languages need the
+         feminine form beside "Cámara delantera". -->
+    <string name="ui_chip_paired_cam">PAIRED</string>
 
     <!-- OS permission specs (PermissionSpec.kt) - shown on the onboarding
          permissions step and Settings → Permissions. -->

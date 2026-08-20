@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -217,6 +218,7 @@ internal fun PairingStepContent(
                             onPrimary = onPickDashcam,
                             extraAction = stringResource(R.string.onboarding_pair_dont_have_one),
                             onExtra = onDashcamSkip,
+                            pairedLabelRes = R.string.ui_chip_paired_cam,
                         )
                     }
                 }
@@ -407,6 +409,10 @@ internal fun DeviceRow(
     onPrimary: () -> Unit,
     extraAction: String? = null,
     onExtra: (() -> Unit)? = null,
+    /** Paired-chip wording for THIS row's device, which carries its own
+     *  gender in Spanish. A card about a feminine device passes the
+     *  feminine string; the default suits the radar. */
+    @StringRes pairedLabelRes: Int = R.string.ui_chip_paired,
 ) {
     val br = LocalBrColors.current
     // Hoisted out of the semantics lambda below (not a @Composable scope).
@@ -442,7 +448,7 @@ internal fun DeviceRow(
                     Text(text = subtitle, color = br.fgDim, fontSize = 11.sp)
                 }
             }
-            if (bonded) PairedChip()
+            if (bonded) PairedChip(labelRes = pairedLabelRes)
         }
         Spacer(modifier = Modifier.height(10.dp))
         Box(

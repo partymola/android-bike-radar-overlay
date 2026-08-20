@@ -25,6 +25,7 @@
     <!-- Primitivas de UI (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
     <string name="ui_chip_paired">EMPAREJADO</string>
+    <string name="ui_chip_paired_cam">EMPAREJADA</string>
 
     <!-- Especificaciones de permisos del SO (PermissionSpec.kt) - se muestran
          en el paso de permisos de la introducción y en Ajustes → Permisos. -->

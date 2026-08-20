@@ -55,7 +55,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
         if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST) {
             extractResults(intent).forEach { r ->
                 val n = r.scanRecord?.deviceName ?: r.device?.name ?: "?"
-                Log.i(TAG, "match-lost $n ${r.device?.address}")
+                Log.i(TAG, "match-lost $n ${LogRedaction.mac(r.device?.address)}")
             }
             return
         }
@@ -82,7 +82,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
                 Log.d(TAG, "skip $name: not bonded")
                 continue
             }
-            Log.i(TAG, "match $name $mac cbType=$callbackType")
+            Log.i(TAG, "match $name ${LogRedaction.mac(mac)} cbType=$callbackType")
 
             val i = Intent(ctx, BikeRadarService::class.java).apply {
                 action = BikeRadarService.ACTION_READ_DEVICE

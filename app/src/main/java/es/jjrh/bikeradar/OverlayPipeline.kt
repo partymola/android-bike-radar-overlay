@@ -156,9 +156,14 @@ internal class OverlayPipeline(
                         if (status != lastLoggedDashcamStatus) {
                             Log.i(
                                 TAG,
+                                // No MAC: this is logcat, which a release build
+                                // also writes and `adb bugreport` collects, so
+                                // it leaves the device. The slug identifies the
+                                // same device for anyone reading their own log,
+                                // and KnownDevices maps it back on this phone.
                                 "dashcam status=$status " +
                                     "warn=${prefs.dashcamWarnWhenOff} " +
-                                    "mac=${prefs.dashcamMac ?: "-"} slug=${dashcamSlug ?: "-"} " +
+                                    "slug=${dashcamSlug ?: "-"} " +
                                     "entries=${batteries.size} " +
                                     "seen=$seenDashcamThisSession " +
                                     "ageMs=${dashcamEntry?.let { now - it.readAtMs } ?: -1L} " +

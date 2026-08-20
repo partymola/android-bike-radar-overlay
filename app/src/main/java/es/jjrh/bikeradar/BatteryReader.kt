@@ -95,7 +95,7 @@ internal class BatteryReader(
 
         val readFn = readBatteryFn ?: { m -> readBattery(m) }
         val pct = readFn(mac) ?: run {
-            Log.w(TAG, "battery read failed: $name $mac")
+            Log.w(TAG, "battery read failed: $name ${LogRedaction.mac(mac)}")
             // Count the consecutive failure so the dashcam ticker can back its
             // probe off. Scoped to the dashcam mac (the only one the ticker reads)
             // so this stays in sync with the map's name; only the readBattery==null

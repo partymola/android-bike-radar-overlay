@@ -185,7 +185,7 @@ internal class RadarLinkController(
      * the user knows why the link went silent.
      */
     private fun onRadarBondLost(mac: String) {
-        Log.w(TAG, "radar bond removed ($mac); stopping reconnect loop")
+        Log.w(TAG, "radar bond removed (${LogRedaction.mac(mac)}); stopping reconnect loop")
         journal("radar bond removed; reconnect loop stopped")
         bondLost = true
         // Armed at the START of the episode, not only cleared at its end.
@@ -225,7 +225,7 @@ internal class RadarLinkController(
             }
             return
         }
-        Log.i(TAG, "starting radar link to $name $mac")
+        Log.i(TAG, "starting radar link to $name ${LogRedaction.mac(mac)}")
         journal("radar link start $name")
         radarJob = scope.launch { runRadarConnection(mac, name) }
     }
@@ -241,7 +241,7 @@ internal class RadarLinkController(
      */
     private fun liftBondGate(mac: String, via: String, name: String?) {
         if (!bondLost) return
-        Log.i(TAG, "radar re-paired ($mac, $via); allowing reconnect")
+        Log.i(TAG, "radar re-paired (${LogRedaction.mac(mac)}, $via); allowing reconnect")
         journal("radar re-paired ($via) $name")
         bondLost = false
         bondRefusalJournalled = false
@@ -294,10 +294,10 @@ internal class RadarLinkController(
         try {
             while (true) {
                 if (bondLost) {
-                    Log.i(TAG, "bond lost for $mac; reconnect loop suspended")
+                    Log.i(TAG, "bond lost for ${LogRedaction.mac(mac)}; reconnect loop suspended")
                     return
                 }
-                Log.i(TAG, "connect attempt to $name $mac")
+                Log.i(TAG, "connect attempt to $name ${LogRedaction.mac(mac)}")
                 lastConnectionReachedDecode = false
                 val quickReconnect = connectAndRun(device, name)
                 linkState.markDisconnected()

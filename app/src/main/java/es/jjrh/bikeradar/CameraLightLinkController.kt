@@ -76,7 +76,7 @@ internal class CameraLightLinkController(
     @Synchronized
     fun start(name: String, mac: String) {
         if (cameraLightJob?.isActive == true) return
-        Log.i(TAG, "starting camera light link to $name $mac")
+        Log.i(TAG, "starting camera light link to $name ${LogRedaction.mac(mac)}")
         journal("camera link start $name")
         cameraLightJob = scope.launch { runCameraLightConnection(mac, name) }
     }
@@ -109,7 +109,7 @@ internal class CameraLightLinkController(
                     Log.i(TAG, "auto light mode disabled; exiting link")
                     return
                 }
-                Log.i(TAG, "connect attempt to $name $mac")
+                Log.i(TAG, "connect attempt to $name ${LogRedaction.mac(mac)}")
                 val quickReconnect = connectAndRunCameraLight(device, name)
                 cameraLightGattActive = false
                 val delayMs = ReconnectLoopPlanner.nextDelayMs(backoffMs, quickReconnect)

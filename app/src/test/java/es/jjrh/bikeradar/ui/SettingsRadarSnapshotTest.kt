@@ -38,6 +38,18 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
+    @Config(qualifiers = "+es")
+    fun defaultsEs() {
+        // Spanish runs 15-30% longer than English and the tightest surfaces
+        // here are the slider titles, which share their row with a value.
+        // Nothing else rendered this screen in es, so the copy rules' "check
+        // the es golden for clipping" had no golden to check.
+        captureRoboImage {
+            UiTheme { RadarContent(haConfigured = false) }
+        }
+    }
+
+    @Test
     @Config(qualifiers = "w448dp-h2200dp-xxhdpi")
     fun closePassSectionNoHa() {
         captureRoboImage {
@@ -102,6 +114,12 @@ class SettingsRadarSnapshotTest {
             bannerPersistent = false,
             onBannerPersistentChange = {},
             onStopScanningClick = {},
+            // Literal, not the production constant: a fixture reading the
+            // constant would render whatever it becomes, so the golden could
+            // not catch the shipped default changing.
+            urgentMargin = 1.5f,
+            onUrgentMarginChange = {},
+            onUrgentMarginFinished = {},
         )
     }
 }

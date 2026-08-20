@@ -45,6 +45,7 @@ class DebugOverlayService : Service() {
 
     private var volumePct = AlertBeeper.DEFAULT_VOLUME_PCT
     private var maxDistanceM = DEFAULT_MAX_DISTANCE_M
+    private var passClearanceM = AlertDecider.DEFAULT_PASS_CLEARANCE_M
     private var visualMaxM = RadarOverlayView.DEFAULT_VISUAL_MAX_M
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -73,6 +74,7 @@ class DebugOverlayService : Service() {
         val prefs = Prefs(this)
         volumePct = prefs.alertVolume
         maxDistanceM = prefs.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
+        passClearanceM = prefs.urgentPassClearanceM
         visualMaxM = prefs.visualMaxDistanceM
             .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
 
@@ -112,6 +114,7 @@ class DebugOverlayService : Service() {
             prefs.flow.collect { snap ->
                 beeper?.setVolumePct(snap.alertVolume)
                 maxDistanceM = snap.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
+                passClearanceM = snap.urgentPassClearanceM
                 visualMaxM = snap.visualMaxDistanceM
                     .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
                 view.setVisualMaxM(visualMaxM)
@@ -150,7 +153,12 @@ class DebugOverlayService : Service() {
 
     private fun handleAlerts(state: RadarState) {
         val b = beeper ?: return
-        val ev = alerts.decide(state.vehicles, maxDistanceM, System.currentTimeMillis())
+        val ev = alerts.decide(
+            state.vehicles,
+            maxDistanceM,
+            System.currentTimeMillis(),
+            passClearanceM = passClearanceM,
+        )
         when (val cue = AlertCue.forEvent(ev)) {
             is AlertCue.Beep -> b.play(cue.count, cue.lateralPos)
             AlertCue.Clear -> b.playClear()

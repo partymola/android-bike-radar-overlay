@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
@@ -70,6 +71,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     // commits to Prefs, which is the durable backing store.
     var alertVol by rememberSaveable { mutableIntStateOf(prefs.alertVolume) }
     var alertDist by rememberSaveable { mutableIntStateOf(prefs.alertMaxDistanceM) }
+    var urgentMargin by rememberSaveable { mutableFloatStateOf(prefs.urgentPassClearanceM) }
     var visualDist by rememberSaveable { mutableIntStateOf(prefs.visualMaxDistanceM) }
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
@@ -102,6 +104,9 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         alertDist = alertDist,
         onAlertDistChange = { alertDist = it },
         onAlertDistFinished = { prefs.alertMaxDistanceM = alertDist },
+        urgentMargin = urgentMargin,
+        onUrgentMarginChange = { urgentMargin = it },
+        onUrgentMarginFinished = { prefs.urgentPassClearanceM = urgentMargin },
         visualDist = visualDist,
         onVisualDistChange = { visualDist = it },
         onVisualDistFinished = { prefs.visualMaxDistanceM = visualDist },
@@ -223,6 +228,9 @@ internal fun SettingsRadarContent(
     alertDist: Int,
     onAlertDistChange: (Int) -> Unit,
     onAlertDistFinished: () -> Unit,
+    urgentMargin: Float,
+    onUrgentMarginChange: (Float) -> Unit,
+    onUrgentMarginFinished: () -> Unit,
     visualDist: Int,
     onVisualDistChange: (Int) -> Unit,
     onVisualDistFinished: () -> Unit,
@@ -289,6 +297,22 @@ internal fun SettingsRadarContent(
                 valueRange = 10f..40f,
                 onValueChange = { onAlertDistChange(it.toInt()) },
                 onValueChangeFinished = onAlertDistFinished,
+            )
+            SettingsSliderRow(
+                title = stringResource(R.string.settings_radar_urgent_clearance_title),
+                valueDisplay = stringResource(
+                    R.string.settings_radar_meters_decimal_value,
+                    String.format(Locale.US, "%.1f", urgentMargin),
+                ),
+                helper = stringResource(R.string.settings_radar_urgent_clearance_helper),
+                value = urgentMargin,
+                valueRange = AlertDecider.MIN_PASS_CLEARANCE_M..AlertDecider.MAX_PASS_CLEARANCE_M,
+                // Six stops at half-metre intervals; `steps` counts the
+                // intermediate ones. Finer would imply a precision the pass
+                // fit does not have.
+                steps = 4,
+                onValueChange = onUrgentMarginChange,
+                onValueChangeFinished = onUrgentMarginFinished,
             )
             SettingsRowGroup {
                 SettingsToggleRow(

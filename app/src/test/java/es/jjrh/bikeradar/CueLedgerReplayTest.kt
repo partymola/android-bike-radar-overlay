@@ -73,6 +73,7 @@ class CueLedgerReplayTest {
         alertMaxM: Int,
         urgentLowSpeedEnabled: Boolean,
         tierDistance: TierDistance = TierDistance.TRUE_RANGE,
+        passClearanceM: Float = AlertDecider.DEFAULT_PASS_CLEARANCE_M,
     ): List<String> {
         val frames = loadFixture()
         var clock = 0L
@@ -90,6 +91,7 @@ class CueLedgerReplayTest {
                 bikeNotDriving = null,
                 climbing = false,
                 urgentLowSpeedEnabled = urgentLowSpeedEnabled,
+                passClearanceM = passClearanceM,
             )
             // Pin that the ledger's notion of "audible" matches production's:
             // describe() returns null exactly when AlertCue.forEvent treats the
@@ -149,6 +151,24 @@ class CueLedgerReplayTest {
         assertEquals(
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = false),
+        )
+    }
+
+    @Test
+    fun passClearanceIsNoOpForThisFixture() {
+        // Same shape, and the same warning, as the low-speed toggle above:
+        // the fixture never reaches the imminent-impact override, so the
+        // pass margin decides nothing here and the extremes of the Settings
+        // range produce an identical ledger. AGENTS.md sells this test as
+        // the in-repo companion to the corpus gate for alert-parsimony
+        // changes; pinning the equality records that it does NOT cover this
+        // one, so nobody reads a green run as evidence about the margin.
+        // Only the private corpus can see that change - and if a future
+        // fixture ever makes the margin bite here, this fails and the
+        // golden above needs an Urgent entry.
+        assertEquals(
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 0.5f),
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 3.0f),
         )
     }
 

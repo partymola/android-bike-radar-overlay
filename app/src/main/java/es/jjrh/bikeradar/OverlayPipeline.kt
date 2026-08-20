@@ -314,9 +314,17 @@ internal class OverlayPipeline(
             } else {
                 TurnStateDecider.State.IDLE
             },
+            passClearanceM = overlayPrefs.urgentPassClearanceM,
         )
         if (ev !is AlertDecider.Event.None) {
-            logAlertEvent(ev, state, nowWallMs, preferredBikeSpeedMs, alerts)
+            logAlertEvent(
+                ev,
+                state,
+                nowWallMs,
+                preferredBikeSpeedMs,
+                overlayPrefs.urgentPassClearanceM,
+                alerts,
+            )
         }
         beeper.setPanning(
             enabled = overlayPrefs.experimentalLateralPanning,
@@ -335,6 +343,7 @@ internal class OverlayPipeline(
         state: RadarState,
         nowMs: Long,
         gateBikeSpeedMs: Float?,
+        gatePassClearanceM: Float,
         alerts: AlertDecider,
     ) {
         val evStr = when (ev) {
@@ -347,13 +356,17 @@ internal class OverlayPipeline(
         // (low-speed moving extension vs stationary path) so post-ride
         // threshold tuning can count moving fires directly. gate_speed_mps
         // is the speed decide() actually gated on (eBike wheel speed when
-        // bonded), which can differ from the radar's bike_speed_mps. The
-        // trigger_* fields are the vehicle that opened the urgent gate -
+        // bonded), which can differ from the radar's bike_speed_mps.
+        // gate_clearance_m is the rider's pass margin as decide() was called
+        // with it, so a cue reported as spurious can be told apart from one
+        // the rider widened the margin into. The trigger_* fields are the
+        // vehicle that opened the urgent gate -
         // frame_closest_* below is just the nearest car, often a different,
         // slower one, so without these an urgent cannot be audited from the
         // capture log.
         val urgentPath = (ev as? AlertDecider.Event.UrgentApproach)?.let {
             " urgent_path=${if (it.viaMovingPath) "moving" else "stationary"}" +
+                " gate_clearance_m=$gatePassClearanceM" +
                 " trigger_tid=${it.triggerTid} trigger_d=${it.triggerDistanceM}" +
                 " trigger_closing_mps=${it.triggerClosingMs} trigger_rx=${it.triggerRangeXm}"
         } ?: ""

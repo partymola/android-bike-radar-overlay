@@ -79,6 +79,9 @@ class PrefsTest {
         assertEquals(1.0f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(15, s.closePassRiderSpeedFloorKmh)
         assertEquals(6, s.closePassClosingSpeedFloorMs)
+        // The snapshot field, not the getter: OverlayPipeline gates the
+        // urgent cue on this one, so it is the value that reaches a rider.
+        assertEquals(1.5f, s.urgentPassClearanceM, 0.001f)
         assertFalse(s.autoLightModeEnabled)
         assertEquals(CameraLightMode.DAY_FLASH, s.cameraLightDayMode)
         assertEquals(CameraLightMode.LOW, s.cameraLightNightMode)
@@ -451,5 +454,31 @@ class PrefsTest {
         // Couples to Prefs' private file name; the corrupt-enum test needs to
         // write past the typed setters into the same backing store.
         const val PREFS_FILE = "bike_radar_prefs"
+    }
+
+    @Test
+    fun `urgent pass clearance clamps to the range the slider can express`() {
+        // Literal bounds, not the constants: reading them back from the code
+        // under test would keep this green whatever they became. The floor
+        // matters most - the lower the margin, the more confident passes are
+        // vetoed. It does not silence the cue outright: most urgent
+        // candidates never get a confident fit and the gate fails open, and
+        // a predicted hit is never vetoed at any margin.
+        prefs.urgentPassClearanceM = 9f
+        assertEquals(3.0f, prefs.urgentPassClearanceM, 0.001f)
+        prefs.urgentPassClearanceM = 0.1f
+        assertEquals(0.5f, prefs.urgentPassClearanceM, 0.001f)
+        prefs.urgentPassClearanceM = 1.5f
+        assertEquals(1.5f, prefs.urgentPassClearanceM, 0.001f)
+    }
+
+    @Test
+    fun `urgent pass clearance defaults to the shipped margin when never set`() {
+        // The clamp test above writes before it reads, so it says nothing
+        // about the value a rider who never opens the slider actually gets -
+        // and that unset path is the one every install takes. A fallback of
+        // 0.5 here would veto every confident pass that clears at all, with
+        // the rest of the suite still green.
+        assertEquals(1.5f, prefs.urgentPassClearanceM, 0.001f)
     }
 }

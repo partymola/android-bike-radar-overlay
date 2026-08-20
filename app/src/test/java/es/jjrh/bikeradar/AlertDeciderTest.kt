@@ -959,7 +959,7 @@ class AlertDeciderTest {
     @Test fun `track committed to a side pass is vetoed by the predicted-pass fit`() {
         // A car holding a steady 3 m lateral offset while approaching is
         // committed to the adjacent lane: the fit extrapolates a 3 m pass
-        // (>= URGENT_PASS_LATERAL_MIN_M) on a confident baseline
+        // (clear of the configured margin, 1.5 m by default) on a confident baseline
         // (5 samples spanning 8 m) - suppressed, even though distance +
         // closing satisfy the urgent gates on the firing frame. The
         // history is built while the car closes slowly (below the 6 m/s
@@ -1190,6 +1190,104 @@ class AlertDeciderTest {
         val vetoLines = lines.filter { it.startsWith("# gate urgent-pass-veto tid=1") }
         assertEquals("the veto must be recorded exactly once, not once a frame", 1, vetoLines.size)
         assertTrue("the line must name the window that decided", vetoLines.single().contains("fit=recent"))
+        // The margin is rider-set, so a veto read back months later says
+        // nothing without the threshold it was judged against. The
+        // non-default case is pinned in AlertDeciderPassClearanceTest, "the
+        // gate line records the margin it judged against".
+        assertTrue(
+            "the line must carry the margin it judged against, got ${vetoLines.single()}",
+            vetoLines.single().contains("gate_clearance_m=1.5"),
+        )
+    }
+
+    @Test fun `the veto line records which side the fit predicts`() {
+        // min_clearance is a distance and carries no side, so a log of
+        // gate decisions alone cannot show them stacking on one side -
+        // which is what a mount offset looks like after a ride. Same
+        // committed pass on each side; only the sign of the recorded
+        // intercept may differ.
+        fun interceptFieldFor(sign: Float): String {
+            val lines = mutableListOf<String>()
+            val c = Clock(dtMs = 100L)
+            val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+            c.jump(2000)
+            for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+                d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = sign * 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            }
+            d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = sign * 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            val veto = lines.single { it.startsWith("# gate urgent-pass-veto tid=1") }
+            return veto.substringAfter("intercept=").substringBefore(" ")
+        }
+        assertTrue("a pass on the right must record a positive intercept", interceptFieldFor(1f).toFloat() > 0f)
+        assertTrue("a pass on the left must record a negative intercept", interceptFieldFor(-1f).toFloat() < 0f)
+    }
+
+    @Test fun `a track swept out for staleness does not carry its verdicts into the next car`() {
+        // The sibling test below revives the tid with no frame in between, so
+        // it takes the RECYCLE prune path only. This one lets the stale sweep
+        // run first - one empty frame after the gap - which is the other path,
+        // and the one both memos were silently unpinned on: deleting either
+        // remove() at the sweep site left the whole suite green.
+        val lines = mutableListOf<String>()
+        val c = Clock(dtMs = 100L)
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // Each car straddles the margin, so it writes BOTH memos - the pass
+        // one and the veto one. A car that only passed would leave the veto
+        // memo empty and the test could not see that prune at all.
+        fun driveStraddlingCar() {
+            for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+                d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            }
+            d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            for (dist in intArrayOf(14, 13, 12, 11, 10, 9, 8)) {
+                d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            }
+            d.decide(listOf(sideCar(id = 1, distanceM = 7, speedMs = -8f, rangeXm = 3f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        driveStraddlingCar()
+        assertTrue("car A must log a pass, got $lines", lines.any { it.startsWith("# gate urgent-pass-ok tid=1") })
+        assertTrue("car A must log a veto, got $lines", lines.any { it.startsWith("# gate urgent-pass-veto tid=1") })
+        lines.clear()
+        // The gap, then an EMPTY frame so the stale sweep actually runs
+        // before tid 1 comes back as a different car.
+        c.jump(AlertDecider.URGENT_PASS_HISTORY_RESET_MS + 500L)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        driveStraddlingCar()
+        assertTrue("the swept tid's own pass must be logged, got $lines", lines.any { it.startsWith("# gate urgent-pass-ok tid=1") })
+        assertTrue("the swept tid's own veto must be logged, got $lines", lines.any { it.startsWith("# gate urgent-pass-veto tid=1") })
+    }
+
+    @Test fun `a recycled tid does not inherit the previous car's logged PASS`() {
+        // The pass verdict keeps its own memo, so it needs its own pruning at
+        // every site the veto memo is pruned at - three of them, two inside
+        // updateLateralHistory. Miss one and a recycled tid inherits the old
+        // car's "already logged", and the new car's confident pass never
+        // reaches the capture log at all.
+        val lines = mutableListOf<String>()
+        val c = Clock(dtMs = 100L)
+        val d = AlertDecider(stationaryDwellMs = 2000L, minBeepGapMs = 700L, onGateEvent = { lines.add(it) })
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        // Car A under tid 1, holding a line well inside the margin: passes.
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue("car A's pass must have been logged, got $lines", lines.any { it.startsWith("# gate urgent-pass-ok tid=1") })
+        lines.clear()
+        // The track dies and tid 1 is handed to a different car.
+        c.jump(AlertDecider.URGENT_PASS_HISTORY_RESET_MS + 500L)
+        for (dist in intArrayOf(24, 22, 20, 18, 16)) {
+            d.decide(listOf(sideCar(id = 1, distanceM = dist, speedMs = -2f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        d.decide(listOf(sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 0.4f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue(
+            "the recycled tid's own pass must be logged, got $lines",
+            lines.any { it.startsWith("# gate urgent-pass-ok tid=1") },
+        )
     }
 
     @Test fun `a recycled tid does not inherit the previous car's logged verdict`() {

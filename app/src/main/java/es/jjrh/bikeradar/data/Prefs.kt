@@ -3,6 +3,7 @@ package es.jjrh.bikeradar.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.RadarLightMode
 import kotlinx.coroutines.channels.awaitClose
@@ -33,6 +34,7 @@ data class PrefsSnapshot(
     val serviceEnabled: Boolean,
     val alertVolume: Int,
     val alertMaxDistanceM: Int,
+    val urgentPassClearanceM: Float,
     val visualMaxDistanceM: Int,
     val overlayOpacity: Float,
     val radarLongOfflineThresholdMinutes: Int,
@@ -97,6 +99,30 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_ALERT_VOLUME, 50)
         set(v) {
             sp.edit().putInt(KEY_ALERT_VOLUME, v).apply()
+        }
+
+    /** How close a vehicle must be predicted to come to the bike before the
+     *  urgent (imminent-impact) cue is allowed to sound, measured from the
+     *  bike's centreline. The awareness beeps and the all-clear read nothing
+     *  from here, but that does NOT make the beeps independent of it: an
+     *  urgent fire consumes the pending beep and advances the `lastBeepAtMs`
+     *  the ordinary cooldown reads, and an urgent candidate is one of the
+     *  disjuncts that arms a beep at all - so changing this margin can move
+     *  a later beep. The all-clear genuinely is untouched; the urgent branch
+     *  writes none of the clear state. Over the captures the replay gate
+     *  compares, no beep or clear tally moved. Range matches the Settings
+     *  slider so a hand-edited value cannot put the decider somewhere the UI
+     *  cannot express. */
+    var urgentPassClearanceM: Float
+        get() = sp.getFloat(KEY_URGENT_PASS_CLEARANCE_M, AlertDecider.DEFAULT_PASS_CLEARANCE_M)
+            .coerceIn(AlertDecider.MIN_PASS_CLEARANCE_M, AlertDecider.MAX_PASS_CLEARANCE_M)
+        set(v) {
+            sp.edit()
+                .putFloat(
+                    KEY_URGENT_PASS_CLEARANCE_M,
+                    v.coerceIn(AlertDecider.MIN_PASS_CLEARANCE_M, AlertDecider.MAX_PASS_CLEARANCE_M),
+                )
+                .apply()
         }
 
     var alertMaxDistanceM: Int
@@ -692,6 +718,7 @@ class Prefs(context: Context) {
         serviceEnabled = serviceEnabled,
         alertVolume = alertVolume,
         alertMaxDistanceM = alertMaxDistanceM,
+        urgentPassClearanceM = urgentPassClearanceM,
         visualMaxDistanceM = visualMaxDistanceM,
         overlayOpacity = overlayOpacity,
         radarLongOfflineThresholdMinutes = radarLongOfflineThresholdMinutes,
@@ -751,6 +778,7 @@ class Prefs(context: Context) {
         appendLine("service_enabled=$serviceEnabled")
         appendLine("alert_volume=$alertVolume")
         appendLine("alert_max_distance_m=$alertMaxDistanceM")
+        appendLine("urgent_pass_clearance_m=$urgentPassClearanceM")
         appendLine("visual_max_distance_m=$visualMaxDistanceM")
         appendLine("overlay_opacity=$overlayOpacity")
         appendLine("radar_long_offline_threshold_min=$radarLongOfflineThresholdMinutes")
@@ -806,6 +834,7 @@ class Prefs(context: Context) {
         const val KEY_SERVICE_ENABLED = "service_enabled"
         const val KEY_ALERT_VOLUME = "alert_volume"
         const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"
+        const val KEY_URGENT_PASS_CLEARANCE_M = "urgent_pass_clearance_m"
         const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
         const val KEY_OVERLAY_OPACITY = "overlay_opacity"
         const val KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN = "radar_long_offline_threshold_min"

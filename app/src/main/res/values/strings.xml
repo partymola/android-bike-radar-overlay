@@ -381,6 +381,8 @@
     <string name="settings_radar_alert_volume_helper">Beep volume for approach alerts. 0 silences audio; the overlay still flashes.</string>
     <string name="settings_radar_alert_distance_title">Alert distance</string>
     <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
+    <string name="settings_radar_urgent_clearance_title">Urgent warning clearance</string>
+    <string name="settings_radar_urgent_clearance_helper">The urgent warning stays quiet when a vehicle looks set to clear the middle of your bike by more than this. Raise it to include wider passes too.</string>
     <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
     <string name="settings_radar_turn_title">No false all-clear in corners</string>

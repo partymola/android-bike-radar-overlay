@@ -49,6 +49,30 @@ enum class TierDistance { TRUE_RANGE, ALONG_AXIS }
 enum class UrgentCooldown { SHARED_WITH_BEEPS, EPISODE_ONLY }
 
 /**
+ * What the predicted-pass veto scores the vehicle against.
+ *
+ *  - [BIKE_ENVELOPE]: the closest the fitted path comes to the bike's
+ *    centreline anywhere along the bike, from [AlertDecider.BIKE_AHEAD_OF_RADAR_M]
+ *    in front of the radar to [AlertDecider.BIKE_BEHIND_RADAR_M] behind it.
+ *  - [RADAR_POINT]: the fitted path's offset where it draws level with the
+ *    RADAR, which is one point on a machine about 2.5 m long. Retained so a
+ *    corpus replay can diff the two directly.
+ *
+ * The envelope is what lets the threshold be a number a rider can reason about
+ * ("do not warn me about anything that will clear my bike by 1.5 m") instead of
+ * an offset from a sensor. Measured over the ride corpus, the span itself moves
+ * only a few cues; the working part of the change is that the threshold now
+ * means something physical, and so can be exposed in Settings.
+ *
+ * The capture log writes the scored quantity as `min_clearance=` under both,
+ * which under [RADAR_POINT] is the radar-point offset rather than a minimum
+ * over anything. No production caller selects [RADAR_POINT] - it is reachable
+ * only from a test - so no capture log can hold one of its lines, and nothing
+ * has to tell the two apart after a ride.
+ */
+enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
+
+/**
  * Pure-JVM alert decision engine. Fed one frame at a time, returns either a
  * `Beep(urgency)` to acknowledge a new threat or a closer-distance escalation,
  * a `Clear` chime when the road empties, or `None`.
@@ -158,10 +182,14 @@ enum class UrgentCooldown { SHARED_WITH_BEEPS, EPISODE_ONLY }
  *         lateral offset at distance 0 (the pass point). When the fit is
  *         confident ([URGENT_PASS_FIT_MIN_POINTS]+ sightings spanning
  *         [URGENT_PASS_FIT_MIN_SPAN_M]+ of approach) and predicts
- *         `|rangeXm|` >= [URGENT_PASS_LATERAL_MIN_M] at the pass, the
- *         car is committed to a side pass, not an impact line. The
- *         threshold is deliberately loose - a dead-centre threat must
- *         never be vetoed; see the constant's KDoc. The newest
+ *         the fitted line clears the bike's centreline by at least the
+ *         rider's configured margin (default [DEFAULT_PASS_CLEARANCE_M])
+ *         at its CLOSEST point along the bike, the car is committed to a
+ *         side pass, not an impact line. A line predicted to cross the
+ *         centreline anywhere along the bike scores zero and is never
+ *         vetoed, whatever the margin. Scored across the whole machine rather than
+ *         at the radar, because a converging vehicle reaches the front
+ *         wheel first; see [PassScoring]. The newest
  *         [URGENT_PASS_RECENT_FIT_WINDOW] samples are judged first
  *         (swerve-reactive); the full retained history is the fallback
  *         when that window bunches at one distance, which is the normal
@@ -268,6 +296,10 @@ class AlertDecider(
      *  See [UrgentCooldown]. [UrgentCooldown.SHARED_WITH_BEEPS] is the shipped
      *  pre-change behaviour, retained for re-validation. */
     private val urgentCooldown: UrgentCooldown = UrgentCooldown.EPISODE_ONLY,
+    /** What the predicted-pass veto scores against. See [PassScoring];
+     *  [PassScoring.RADAR_POINT] is the pre-change behaviour, retained so the
+     *  corpus can be replayed against both. */
+    private val passScoring: PassScoring = PassScoring.BIKE_ENVELOPE,
     /** Diagnostic hook: invoked once per turn when the adaptive
      *  clear-deferral tail is anchored, with the computed tail length.
      *  The pipeline writes it to the capture log so every deferral is
@@ -471,6 +503,23 @@ class AlertDecider(
      *  with [lateralHistory], whose lifetime it shadows. */
     private val passGateLogged = HashMap<Int, String>()
 
+    /** tid -> fit windows whose confident-PASS verdict has been recorded.
+     *  Deliberately NOT routed through [passGateLogged], which holds one
+     *  verdict per track: a fit hovering at the margin would then alternate
+     *  pass/veto and emit a line per transition, and because that slot is
+     *  shared it would also re-arm the off-axis and corroboration verdicts,
+     *  which are deduped today. Kept separate, the pass verdict costs one
+     *  line per track per fit window, and a pass cannot re-arm any of the
+     *  three - the pass path never writes [passGateLogged] at all. The veto
+     *  half of that is pinned by "a fit oscillating across the margin does
+     *  not log once a crossing", which would see two veto lines if a pass
+     *  reset the slot; the off-axis and corroboration halves hold by the
+     *  same construction but have no test, because a track cannot be both
+     *  inside the margin and beyond the off-axis bar on one frame. Pruned
+     *  wherever [passGateLogged] is - all three sites, two of which sit
+     *  inside [updateLateralHistory]. */
+    private val passGateOkLogged = HashMap<Int, MutableSet<String>>()
+
     /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
      *  the lateral vetoes passed) was last present. Two qualifying
      *  sightings closer together than [URGENT_EPISODE_GAP_MS] belong to
@@ -502,6 +551,12 @@ class AlertDecider(
         climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
         turnState: TurnStateDecider.State = TurnStateDecider.State.IDLE,
+        /** Clearance the predicted pass must keep, in metres from the bike's
+         *  centreline. NOT clamped here - [data.Prefs] is the only production
+         *  source and clamps to [MIN_PASS_CLEARANCE_M]..[MAX_PASS_CLEARANCE_M]
+         *  on both read and write. A value below that range only widens the
+         *  veto; a predicted hit still fires at any margin. */
+        passClearanceM: Float = DEFAULT_PASS_CLEARANCE_M,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -779,7 +834,7 @@ class AlertDecider(
                     closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
                     v.distanceM in 0..alertMaxM &&
                     v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
-                (byProximity || byTtc) && urgentLaterallyPlausible(v)
+                (byProximity || byTtc) && urgentLaterallyPlausible(v, passClearanceM)
             }
         }
         // Urgent episode pacing. A qualifying-target gap longer than
@@ -1030,6 +1085,7 @@ class AlertDecider(
         lastNotStationaryAtMs = NOT_INITIALIZED
         lateralHistory.clear()
         passGateLogged.clear()
+        passGateOkLogged.clear()
         urgentLastQualifyingSeenMs = NOT_INITIALIZED
         urgentLastFireMs = NOT_INITIALIZED
         urgentEpisodePeakClosing = 0f
@@ -1070,6 +1126,7 @@ class AlertDecider(
                 // the new car would inherit the old one's verdict - and its
                 // own first decision would be deduped into silence.
                 passGateLogged.remove(v.id)
+                passGateOkLogged.remove(v.id)
             }
             val tail = h.lastOrNull()
             if (tail != null && tail.distanceM == v.distanceM && tail.rangeXm == v.rangeXm) {
@@ -1086,7 +1143,10 @@ class AlertDecider(
             val stale = newest == null || nowMs - newest.atMs > URGENT_PASS_HISTORY_RESET_MS
             // The logged-verdict memo shadows the history: a recycled tid
             // must not inherit the previous car's line and so go unlogged.
-            if (stale) passGateLogged.remove(tid)
+            if (stale) {
+                passGateLogged.remove(tid)
+                passGateOkLogged.remove(tid)
+            }
             stale
         }
     }
@@ -1097,7 +1157,7 @@ class AlertDecider(
      *  dead centre and passes) and unconfident fits fire; an
      *  unknown-sentinel firing frame stands down only the instantaneous
      *  off-axis veto, never the history-derived pass prediction. */
-    private fun urgentLaterallyPlausible(v: Vehicle): Boolean {
+    private fun urgentLaterallyPlausible(v: Vehicle, passClearanceM: Float): Boolean {
         // Unknown-sentinel frames hold a carried-forward lateral value, not
         // a measurement, so the OFF-AXIS veto (an instantaneous read of the
         // firing frame) stands down. The PREDICTED-PASS veto does NOT: its
@@ -1133,12 +1193,32 @@ class AlertDecider(
                 true
             }
             is PassFit.Confident -> {
-                val veto = abs(fit.predictedRangeXm) >= URGENT_PASS_LATERAL_MIN_M
+                val (minClearance, threshold) = when (passScoring) {
+                    PassScoring.BIKE_ENVELOPE -> fit.minClearanceM to passClearanceM
+                    PassScoring.RADAR_POINT -> abs(fit.predictedRangeXm) to URGENT_PASS_LATERAL_MIN_M
+                }
+                // A predicted hit scores zero and is never vetoed, however
+                // low the rider sets the margin. Without the second term a
+                // margin of zero would veto exactly the case the cue exists
+                // for ("a predicted hit is never vetoed, even at a zero
+                // margin" pins it).
+                val veto = minClearance >= threshold && minClearance > 0f
+                // Both verdicts are logged, not just the veto: otherwise a
+                // fired cue records the threshold with no value beside it,
+                // and a confident pass reads the same as no fit at all.
+                // min_clearance is a distance and carries no side, so the
+                // signed intercept rides along - a mount offset shows up as
+                // decisions stacking on one side, which needs a sign to see.
+                val tag = if (veto) "veto" else "ok"
+                val message = {
+                    "# gate urgent-pass-$tag tid=${v.id} fit=${fit.source}" +
+                        " min_clearance=$minClearance gate_clearance_m=$threshold" +
+                        " intercept=${fit.predictedRangeXm} d=${v.distanceM}"
+                }
                 if (veto) {
-                    logPassGate(v.id, "veto:${fit.source}") {
-                        "# gate urgent-pass-veto tid=${v.id} fit=${fit.source}" +
-                            " predicted=${fit.predictedRangeXm} d=${v.distanceM}"
-                    }
+                    logPassGate(v.id, "veto:${fit.source}", message)
+                } else if (passGateOkLogged.getOrPut(v.id) { HashSet() }.add(fit.source)) {
+                    onGateEvent(message())
                 }
                 !veto
             }
@@ -1156,7 +1236,18 @@ class AlertDecider(
      *  distance ticks down and the fitted intercept jitters every frame, so
      *  a dwelling car would emit a fresh "identical" verdict at frame rate.
      *  The numbers still reach the log - they ride in [message], recorded on
-     *  the transition that is worth reading later. */
+     *  the transition that is worth reading later.
+     *
+     *  This memo covers the off-axis, corroboration and veto verdicts only.
+     *  The confident-PASS verdict keeps its own ([passGateOkLogged]) and
+     *  never reaches here; a fifth verdict added to this one would re-arm
+     *  all three of the above, which is the trap that split them.
+     *
+     *  A consequence worth knowing before reading a capture: these lines are
+     *  each verdict's FIRST occurrence for a track, not a chronology. On
+     *  veto -> pass -> veto the second veto is deduped, so the last gate line
+     *  for that track says `ok` while the verdict in force was `veto`. Read
+     *  the set of lines, not the last one. */
     private fun logPassGate(tid: Int, verdict: String, message: () -> String) {
         if (passGateLogged[tid] == verdict) return
         passGateLogged[tid] = verdict
@@ -1169,7 +1260,16 @@ class AlertDecider(
      *  refused to corroborate. The last two both fail OPEN; they are
      *  distinct only so the capture log can tell them apart after a ride. */
     private sealed interface PassFit {
-        data class Confident(val predictedRangeXm: Float, val source: String) : PassFit
+        /** [predictedRangeXm] is the fitted offset where the track draws
+         *  level with the RADAR; [minClearanceM] is the closest the same
+         *  fitted line comes to the bike's centreline anywhere along the
+         *  bike. Both are carried so [PassScoring] can pick without
+         *  refitting. */
+        data class Confident(
+            val predictedRangeXm: Float,
+            val minClearanceM: Float,
+            val source: String,
+        ) : PassFit
         data object Unconfident : PassFit
         data class FreshOverride(val newestRangeXm: Float) : PassFit
     }
@@ -1193,9 +1293,9 @@ class AlertDecider(
      *  geometry, and a least-squares fit lets dozens of old wide-offset
      *  points outvote the handful showing a car swinging INTO the rider's
      *  line. A car whose latest measured offset is already inside
-     *  [URGENT_PASS_LATERAL_MIN_M] is, by this gate's own threshold, not
-     *  committed to a side pass - whatever lane it held on the approach -
-     *  so the stale fit does not get to veto it.
+     *  [URGENT_PASS_LATERAL_MIN_M] is not committed to a side pass -
+     *  whatever lane it held on the approach - so the stale fit does not
+     *  get to veto it.
      *
      *  Everything here fails OPEN: an unconfident fit, a refused
      *  corroboration, and a track never measured across enough approach
@@ -1204,22 +1304,43 @@ class AlertDecider(
     private fun predictedPassFit(tid: Int): PassFit {
         val all = lateralHistory[tid]?.toList().orEmpty()
         val recent = all.takeLast(URGENT_PASS_RECENT_FIT_WINDOW)
-        fitInterceptAtZero(recent)?.let { return PassFit.Confident(it, "recent") }
+        fitLine(recent)?.let { return confident(it, "recent") }
         val newest = all.lastOrNull() ?: return PassFit.Unconfident
+        // Deliberately NOT the configured clearance. The veto asks "is this
+        // predicted to clear me?", which is the rider's margin; this asks "is
+        // the freshest measurement close enough that a STALE fit must not be
+        // trusted?", which is a question about the fit and not about comfort.
+        // Tying them together narrows this fail-open every time a rider
+        // tightens the margin, and it is the guard that fires the cue for a
+        // car crossing INTO the rider's line (AlertDeciderTest, "stale
+        // side-pass history cannot veto a car swinging into the rider").
         if (abs(newest.rangeXm) < URGENT_PASS_LATERAL_MIN_M) {
             return PassFit.FreshOverride(newest.rangeXm)
         }
-        val fallback = fitInterceptAtZero(all) ?: return PassFit.Unconfident
-        return PassFit.Confident(fallback, "fallback")
+        val fallback = fitLine(all) ?: return PassFit.Unconfident
+        return confident(fallback, "fallback")
+    }
+
+    /** Package a fitted line as a [PassFit.Confident], carrying both the
+     *  radar-point offset and the whole-bike minimum so [PassScoring] can
+     *  choose without refitting. The line is straight, so its closest
+     *  approach to the centreline over a span is at one of the two ends
+     *  unless it crosses the centreline in between - which is a predicted
+     *  hit, clearance zero. */
+    private fun confident(line: Pair<Float, Float>, source: String): PassFit.Confident {
+        val (a, b) = line
+        val front = a + b * -BIKE_AHEAD_OF_RADAR_M
+        val rear = a + b * BIKE_BEHIND_RADAR_M
+        val clearance = if ((front > 0f) != (rear > 0f)) 0f else minOf(abs(front), abs(rear))
+        return PassFit.Confident(a, clearance, source)
     }
 
     /** Least-squares fit of rangeXm = a + b * distanceM over [samples],
-     *  returning the intercept `a` (the lateral offset where the track
-     *  crosses distance 0). Null when the samples are too thin to trust -
-     *  fewer than [URGENT_PASS_FIT_MIN_POINTS] points or an approach span
-     *  shorter than [URGENT_PASS_FIT_MIN_SPAN_M] (an intercept
-     *  extrapolated from a narrow distance band amplifies radar jitter). */
-    private fun fitInterceptAtZero(samples: List<LateralSample>): Float? {
+     *  returning intercept and slope. Null when the samples are too thin to
+     *  trust - fewer than [URGENT_PASS_FIT_MIN_POINTS] points or an approach
+     *  span shorter than [URGENT_PASS_FIT_MIN_SPAN_M] (a line extrapolated
+     *  from a narrow distance band amplifies radar jitter). */
+    private fun fitLine(samples: List<LateralSample>): Pair<Float, Float>? {
         if (samples.size < URGENT_PASS_FIT_MIN_POINTS) return null
         val minD = samples.minOf { it.distanceM }
         val maxD = samples.maxOf { it.distanceM }
@@ -1232,8 +1353,7 @@ class AlertDecider(
         val denom = n * sumDd - sumD * sumD
         if (denom <= 0.0) return null
         val b = (n * sumDx - sumD * sumX) / denom
-        val a = (sumX - b * sumD) / n
-        return a.toFloat()
+        return ((sumX - b * sumD) / n).toFloat() to b.toFloat()
     }
 
     /**
@@ -1491,12 +1611,91 @@ class AlertDecider(
         const val URGENT_LATERAL_MAX_M = 6f
 
         /** Minimum |predicted pass rangeXm| (m) at which the
-         *  predicted-pass veto suppresses an urgent candidate: the fit
-         *  says the car crosses distance 0 at least this far to the
-         *  side. Deliberately loose - a dead-centre threat must never
-         *  be vetoed, so the threshold must exceed the residual error
-         *  of the mount-offset setting plus fit noise with margin. */
+         *  predicted-pass veto suppresses an urgent candidate, under
+         *  [PassScoring.RADAR_POINT] only: the fit says the car crosses
+         *  distance 0 at least this far to the side. Deliberately loose - a
+         *  dead-centre threat must never be vetoed, so the threshold must
+         *  exceed the residual error of the mount-offset setting plus fit
+         *  noise with margin. Retained for the corpus A/B;
+         *  [DEFAULT_PASS_CLEARANCE_M] is what ships. */
         const val URGENT_PASS_LATERAL_MIN_M = 2.5f
+
+        /** How far the bike reaches in front of and behind the radar. The
+         *  radar sits on the seatpost, so the machine extends well past it
+         *  forward and a little aft, and a converging vehicle reaches the
+         *  front wheel first.
+         *
+         *  A conservative estimate for one bike, not a measurement and not a
+         *  spec figure. Erring long is the safe direction: over-stating the
+         *  reach lowers the scored clearance, so the error fires cues rather
+         *  than silencing them. A radar mounted somewhere other than the
+         *  seatpost - a rack, a saddlebag - has a different fore/aft split
+         *  and this does not adapt to it; the lateral mount offset is
+         *  configurable ([data.Prefs.radarLateralOffsetCm]) but the
+         *  longitudinal span is not. */
+        const val BIKE_AHEAD_OF_RADAR_M = 2.0f
+        const val BIKE_BEHIND_RADAR_M = 0.5f
+
+        /** Default clearance (m) from the bike's CENTRELINE that a predicted
+         *  pass must keep, anywhere along the bike, before the imminent-impact
+         *  cue is vetoed. Subtract the half-width at the bars to read it as
+         *  clearance from the bodywork. Rider-configurable between
+         *  [MIN_PASS_CLEARANCE_M] and [MAX_PASS_CLEARANCE_M].
+         *
+         *  **The hazard this number carries.** The veto acts on a fitted
+         *  intercept, not a measurement, so intercept error - fit noise over a
+         *  short approach span, plus whatever the mount-offset setting leaves
+         *  behind - can score a vehicle wider than it really passes and veto a
+         *  genuinely close one. That is why [URGENT_PASS_LATERAL_MIN_M], the
+         *  threshold this replaces, was set loose enough to swallow the error
+         *  rather than tuned. Lowering this value spends that safety margin.
+         *
+         *  **How 1.5 m answers it - measured, not reasoned.** An offline
+         *  sweep over 183 ride captures at `alertMaxM` 30, above the 20 m
+         *  default, removes 16 of 100 urgent cues at
+         *  this value, and 14 vehicles lose their urgent cue outright rather
+         *  than losing a repeat. Three of the removals are on vehicles that
+         *  came within 2.0 m of the radar: two are the reported false alarms
+         *  this change exists to fix, and the third's track still gets a
+         *  warning from another cue. Read that 2.0 m with its own metric in
+         *  mind - closest approach there is measured to the RADAR, so for a
+         *  vehicle converging on the front wheel it understates how close
+         *  the car came to the bike, which is the point this whole scoring
+         *  change rests on. That is the error budget, sampled rather than
+         *  bounded: it says the intercept error did not swing a vehicle
+         *  measured close to the radar across the line on those rides, not
+         *  that it cannot.
+         *
+         *  **Two replays, two populations - do not read one as reproducing
+         *  the other.** The sweep above reads both `.log` and `.log.gz` and
+         *  covers the whole corpus. [CorpusReplayGate] is `.log`-only and
+         *  compares against a stored baseline, so it sees a subset: measured
+         *  against the PRE-CHANGE baseline this value moved 9 captures,
+         *  removed 10 urgent cues, and left every beep and all-clear tally
+         *  identical. That baseline has since been re-recorded, so running
+         *  the gate today reproduces no diff - the figures above are the
+         *  evidence for the change, not something the gate will re-derive.
+         *  The gate is the runnable check; the sweep is where 16 of 100
+         *  comes from.
+         *
+         *  **Do not lower the default without re-running both.** The corpus
+         *  is private ride data, so neither replay is in this tree and CI
+         *  runs neither; the in-repo cue-ledger fixture reaches no urgent
+         *  cue and cannot stand in
+         *  ([CueLedgerReplayTest.passClearanceIsNoOpForThisFixture] pins
+         *  that). A rider may of course set it lower; the setting is theirs,
+         *  and the helper text says which way it trades. */
+        const val DEFAULT_PASS_CLEARANCE_M = 1.5f
+
+        /** Bounds for the rider-set clearance, kept beside the default so the
+         *  three cannot drift apart across files. The bottom reaches the
+         *  predicted-hit path (a fitted line crossing the centreline inside
+         *  the bike scores zero), which only changes an outcome below a metre;
+         *  the top reaches a near-equivalent of the pre-change behaviour -
+         *  near, not identical, since over the corpus 2.5 m of envelope
+         *  clearance differed from [PassScoring.RADAR_POINT] by 3 cues in 100. */
+        const val MIN_PASS_CLEARANCE_M = 0.5f
+        const val MAX_PASS_CLEARANCE_M = 3.0f
 
         /** Minimum samples in a track's lateral history before its
          *  predicted-pass intercept is trusted. */

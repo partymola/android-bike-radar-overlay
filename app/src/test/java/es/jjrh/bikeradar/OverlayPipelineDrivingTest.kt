@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.data.PrefsSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.firstOrNull
@@ -193,6 +194,7 @@ class OverlayPipelineDrivingTest {
         turnSensorStop: () -> Unit = {},
         clog: (String) -> Unit = {},
         clockMono: (() -> Long)? = null,
+        overlayPrefsSnapshot: () -> PrefsSnapshot = { prefs.snapshot() },
         ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined,
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
@@ -203,7 +205,7 @@ class OverlayPipelineDrivingTest {
             override fun readSnapshot(): PhoneBatteryReading? = null
         },
         rideStats = { RideStatsAccumulator() },
-        overlayPrefsSnapshot = { prefs.snapshot() },
+        overlayPrefsSnapshot = overlayPrefsSnapshot,
         ebikeSnapshot = { null },
         climbingNow = { false },
         turnState = turnState,
@@ -220,25 +222,28 @@ class OverlayPipelineDrivingTest {
         ioDispatcher = ioDispatcher,
     )
 
-    @Test
-    fun urgentAlertLogCarriesTheTriggerVehicle() = runTest {
-        // The capture-log audit contract: an UrgentApproach line must name
-        // the vehicle that opened the gate (trigger_*), because
-        // frame_closest_* records the nearest car - in the field often a
-        // different, slower one, which made urgents unauditable.
+    /** Drive one stationary urgent and return the alert line it logged:
+     *  confirm the dwell with an empty frame, age it out, then two frames
+     *  carrying a slow near car and the fast far trigger - the second
+     *  fires. Two frames of history leave the pass fit unconfident, so the
+     *  pass gate fails open whatever margin is configured. */
+    private suspend fun kotlinx.coroutines.test.TestScope.driveStationaryUrgent(
+        overlayPrefsSnapshot: () -> PrefsSnapshot = { prefs.snapshot() },
+    ): String {
         var mono = 1_000L
         val clogLines = mutableListOf<String>()
-        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
+        val pipeline = buildPipeline(
+            clog = { clogLines += it },
+            clockMono = { mono },
+            overlayPrefsSnapshot = overlayPrefsSnapshot,
+        )
         val job = pipeline.attach(this, "TestRadar")
         runCurrent()
-        // Confirm the stationary dwell with an empty frame, then age it out.
         RadarStateBus.publish(
             RadarState(source = DataSource.V2, timestamp = 1_000L, vehicles = emptyList(), bikeSpeedMs = 0f),
         )
         runCurrent()
         mono = 3_500L
-        // A slow near car plus the fast far trigger; two frames build the
-        // sustain, the second fires the urgent.
         val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
         val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
         RadarStateBus.publish(
@@ -252,15 +257,41 @@ class OverlayPipelineDrivingTest {
         runCurrent()
         val urgentLine = clogLines.firstOrNull { it.contains("event=UrgentApproach") }
         assertTrue("expected an UrgentApproach alert line, got $clogLines", urgentLine != null)
+        job.cancel()
+        job.join()
+        return urgentLine!!
+    }
+
+    @Test
+    fun urgentAlertLogCarriesTheTriggerVehicle() = runTest {
+        // The capture-log audit contract: an UrgentApproach line must name
+        // the vehicle that opened the gate (trigger_*), because
+        // frame_closest_* records the nearest car - in the field often a
+        // different, slower one, which made urgents unauditable.
+        val urgentLine = driveStationaryUrgent()
         assertTrue(
             "urgent line must carry the trigger vehicle, got $urgentLine",
-            urgentLine!!.contains("trigger_tid=9") &&
+            urgentLine.contains("trigger_tid=9") &&
                 urgentLine.contains("trigger_d=15") &&
                 urgentLine.contains("trigger_closing_mps=8.0") &&
                 urgentLine.contains("trigger_rx=-1.0"),
         )
-        job.cancel()
-        job.join()
+    }
+
+    @Test
+    fun urgentAlertLogCarriesTheMarginItWasGatedOn() = runTest {
+        // The pass gate records a threshold only when it VETOES, so without
+        // this a reported spurious cue cannot be told apart from one the
+        // rider had widened the margin into. It must be the value decide()
+        // was called with, not a fresh read at log time: the snapshot here
+        // deliberately disagrees with what prefs holds.
+        val doctored = { prefs.snapshot().copy(urgentPassClearanceM = 2.75f) }
+        assertTrue("prefs must not already hold the doctored margin", prefs.urgentPassClearanceM != 2.75f)
+        val urgentLine = driveStationaryUrgent(overlayPrefsSnapshot = doctored)
+        assertTrue(
+            "urgent line must carry the gated margin, got $urgentLine",
+            urgentLine.contains("gate_clearance_m=2.75"),
+        )
     }
 
     @Test

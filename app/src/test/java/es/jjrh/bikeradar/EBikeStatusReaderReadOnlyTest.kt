@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 /**
  * Guards the "read-only GATT client" safety contract for [EBikeStatusReader].
@@ -77,12 +77,5 @@ class EBikeStatusReaderReadOnlyTest {
         .map { (idx, line) -> "line ${idx + 1}: ${line.trim()}" }
         .toList()
 
-    private fun readMainSource(fileName: String): String {
-        val file = listOf(
-            "src/main/java/es/jjrh/bikeradar/$fileName",
-            "app/src/main/java/es/jjrh/bikeradar/$fileName",
-        ).map { File(it) }.firstOrNull { it.exists() }
-            ?: error("could not locate $fileName from ${File(".").absolutePath}")
-        return file.readText()
-    }
+    private fun readMainSource(fileName: String): String = RepoFiles.mainSource(fileName).readText()
 }

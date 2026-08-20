@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Guards the [DataDisclosure] anchor against drift. The anchor is the single
@@ -73,14 +73,5 @@ class HaClientDataDisclosureTest {
         .replace("\$slug", "")
         .replace("/", "_")
 
-    private fun readMainSource(fileName: String): String {
-        // Gradle runs unit tests with the module dir (app/) as the working
-        // directory; the repo-root fallback covers other runners.
-        val file = listOf(
-            "src/main/java/es/jjrh/bikeradar/$fileName",
-            "app/src/main/java/es/jjrh/bikeradar/$fileName",
-        ).map { File(it) }.firstOrNull { it.exists() }
-            ?: error("could not locate $fileName from ${File(".").absolutePath}")
-        return file.readText()
-    }
+    private fun readMainSource(fileName: String): String = RepoFiles.mainSource(fileName).readText()
 }

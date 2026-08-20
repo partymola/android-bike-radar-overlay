@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Guards the two absolute claims the licences screen makes: that every
@@ -57,12 +57,7 @@ class SettingsLicencesCoverageTest {
     private val vettedGplV3CompatibleLicences = setOf("Apache 2.0")
 
     private fun shippedCoordinates(): List<String> {
-        // Module path first: a root `build.gradle.kts` also exists, so probing
-        // the bare name first picks it whenever the working directory is the
-        // repo root, and it declares no dependencies at all.
-        val gradle = listOf(File("app/build.gradle.kts"), File("build.gradle.kts"))
-            .firstOrNull { it.exists() }
-            ?: error("could not locate the module build file from ${File(".").absolutePath}")
+        val gradle = RepoFiles.moduleBuildFile()
         // `coreLibraryDesugaring` is in the list because its payload is
         // GPL-2.0-with-Classpath-Exception, not Apache 2.0: enabling it would
         // ship a licence this screen does not list, under a sentence saying

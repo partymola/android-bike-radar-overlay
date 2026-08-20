@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,7 +15,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.io.File
 
 /**
  * Verifies [HaCredentials]' backup-transferable storage contract: values
@@ -215,9 +215,7 @@ class HaCredentialsTest {
         // empty. Asserting BuildConfig directly would only ever run in the
         // debug variant, which is the one allowed to carry values - so read
         // the gradle config, which is where the invariant actually lives.
-        val gradle = listOf(File("build.gradle.kts"), File("app/build.gradle.kts"))
-            .firstOrNull { it.exists() }
-            ?: error("could not locate the module build file from ${File(".").absolutePath}")
+        val gradle = RepoFiles.moduleBuildFile()
         val seeding = Regex("""buildConfigField\("String", "HA_(?:BASE_URL|TOKEN)", "\\"\$\{?localProps""")
             .findAll(gradle.readText()).count()
         assertEquals(

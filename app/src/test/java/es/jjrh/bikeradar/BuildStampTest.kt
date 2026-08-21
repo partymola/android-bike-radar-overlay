@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar
 
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BuildStampTest {
     /** Rendered width of a microsecond-precision `java.time.Instant`. */
@@ -158,7 +158,7 @@ class BuildStampTest {
         // skipping: a source-zip checkout has no .git and must degrade to the
         // marker, while a git checkout that still produced "unknown" is the
         // silent degradation this test exists to catch.
-        val repoPresent = File(".git").isDirectory || File("../.git").isDirectory
+        val repoPresent = RepoFiles.repoPresent()
         val expected = if (repoPresent) {
             Regex(" commit=[0-9a-f]{7,}(-dirty)?$")
         } else {

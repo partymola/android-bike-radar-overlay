@@ -4,7 +4,8 @@ package es.jjrh.bikeradar.testutil
 import java.io.File
 
 /**
- * Locates repo files for the tests that read source or build config as text.
+ * Facts about the repo's layout, from a test's point of view: where a file
+ * is, and whether a git checkout is there at all.
  *
  * Gradle runs unit tests with the module directory as the working directory,
  * while a test invoked from the repo root has to reach one level down, so any
@@ -36,9 +37,13 @@ object RepoFiles {
      * the real working directory can pin the order. A test that cannot see
      * the order cannot pin it, which is what these two exist for.
      *
-     * The wrappers above are the part no test reaches: they hardwire `File(".")`
-     * and the JVM cannot change directory, so a mutant that inlined the wrong
-     * candidate into either would still resolve correctly under Gradle.
+     * The zero-argument wrappers - these two and `repoPresent` - are the part
+     * no test reaches directly: they hardwire `File(".")` and the JVM cannot
+     * change directory, so a mutant that inlined the wrong candidate into one
+     * would still resolve correctly under Gradle. `repoPresent` is the
+     * exception in practice, because `BuildStampTest` calls it from the real
+     * working directory: dropping the `../.git` candidate fails that test and
+     * nothing else.
      */
     internal fun moduleBuildFileFrom(base: File): File = locate(base, "app/build.gradle.kts", "build.gradle.kts")
 
@@ -47,6 +52,24 @@ object RepoFiles {
         "app/src/main/java/es/jjrh/bikeradar/$fileName",
         "src/main/java/es/jjrh/bikeradar/$fileName",
     )
+
+    /**
+     * Whether the build ran inside a git checkout, for the tests that branch
+     * on it rather than skipping.
+     *
+     * `exists()` and not `isDirectory`: in a git worktree `.git` is a FILE
+     * pointing at the real git directory, so an isDirectory probe reads a
+     * perfectly good checkout as a source zip. A test branching on that then
+     * asserts the degraded value is the correct one, which is the opposite of
+     * what it was written to catch.
+     *
+     * Returning false rather than throwing is deliberate, and is why this does
+     * not go through `locate`: absence is an answer here, not a failure. Do not
+     * unify the two - `repoPresentIsFalseWhereThereIsNoCheckoutAtAll` pins it.
+     */
+    fun repoPresent(): Boolean = repoPresentFrom(File("."))
+
+    internal fun repoPresentFrom(base: File): Boolean = listOf(".git", "../.git").any { File(base, it).exists() }
 
     private fun locate(base: File, vararg candidates: String): File {
         val found = candidates.map { File(base, it) }.firstOrNull { it.exists() }

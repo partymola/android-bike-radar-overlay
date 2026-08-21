@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.testutil
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -77,6 +78,30 @@ class RepoFilesTest {
         assertTrue(
             "resolved a file that is not HaClient.kt",
             RepoFiles.mainSource("HaClient.kt").readText().contains("class HaClient("),
+        )
+    }
+
+    @Test
+    fun repoPresentSeesAWorktreeWhereGitIsAFileNotADirectory() {
+        // `git worktree` writes `.git` as a file holding a gitdir pointer, so
+        // a checkout that is fully a repo looks like a source zip to an
+        // isDirectory test - and the caller then asserts the degraded stamp
+        // is the correct one.
+        val worktree = tmp.newFolder()
+        File(worktree, ".git").writeText("gitdir: /elsewhere/.git/worktrees/x\n")
+
+        assertTrue(
+            "a worktree checkout was read as having no repo",
+            RepoFiles.repoPresentFrom(worktree),
+        )
+    }
+
+    @Test
+    fun repoPresentIsFalseWhereThereIsNoCheckoutAtAll() {
+        // The branch a source-zip build genuinely needs.
+        assertFalse(
+            "an empty directory was read as a git checkout",
+            RepoFiles.repoPresentFrom(tmp.newFolder()),
         )
     }
 

@@ -55,7 +55,7 @@ class TurnStateDeciderTest {
     }
 
     @Test
-    fun leftTurnQualifiesLikeRight() {
+    fun negativeRotationQualifiesLikePositive() {
         val d = TurnStateDecider()
         val end = d.feed(-0.5f, durationMs = 3_200, startMs = 1_000)
         assertEquals(TurnStateDecider.State.TURNING, d.stateAt(end))
@@ -131,5 +131,68 @@ class TurnStateDeciderTest {
         val d = TurnStateDecider()
         val end = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)
         assertTrue(d.holdActive(end))
+    }
+
+    @Test
+    fun cumulativeDegTracksTheEpisodeAndClearsWhenItCloses() {
+        val d = TurnStateDecider()
+        // 0.5 rad/s in 50 ms steps: the opening sample only starts the
+        // episode, so 64 samples integrate 0.025 rad each = 1.6 rad.
+        val end = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)
+        assertEquals(91.67f, d.cumulativeDeg, 0.1f)
+        d.feed(0f, durationMs = 1_000, startMs = end + 50)
+        assertEquals(0f, d.cumulativeDeg, 1e-4f)
+    }
+
+    @Test
+    fun lastEpisodeDegKeepsTheSignedTotalAfterTheEpisodeCloses() {
+        val d = TurnStateDecider()
+        val end = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)
+        // Not knowable until the episode ends - it is still running here.
+        assertEquals(0f, d.lastEpisodeDeg, 1e-4f)
+        d.feed(0f, durationMs = 1_000, startMs = end + 50)
+        assertEquals(91.67f, d.lastEpisodeDeg, 0.1f)
+    }
+
+    @Test
+    fun episodeActiveIsLiveBeforeTheAngleQualifies() {
+        val d = TurnStateDecider()
+        // 17 degrees: above the rate floor, far below the qualifying
+        // angle. The episode is running while the state still reads IDLE.
+        val end = d.feed(0.3f, durationMs = 1_000, startMs = 1_000)
+        assertTrue(d.episodeActive)
+        assertEquals(TurnStateDecider.State.IDLE, d.stateAt(end))
+        val after = d.feed(0f, durationMs = 1_500, startMs = end + 50)
+        assertFalse(d.episodeActive)
+        assertEquals(TurnStateDecider.State.IDLE, d.stateAt(after))
+    }
+
+    @Test
+    fun lastEpisodeDegIsNegativeForTheOtherDirection() {
+        val d = TurnStateDecider()
+        val end = d.feed(-0.5f, durationMs = 3_200, startMs = 1_000)
+        d.feed(0f, durationMs = 1_000, startMs = end + 50)
+        assertEquals(-91.67f, d.lastEpisodeDeg, 0.1f)
+    }
+
+    @Test
+    fun lastEpisodeDegRecordsEpisodesThatNeverQualified() {
+        val d = TurnStateDecider()
+        // A 17-degree lane change: never TURNING, but its total is still
+        // the last rotation the rider made and is recorded as such.
+        val end = d.feed(0.3f, durationMs = 1_000, startMs = 1_000)
+        val after = d.feed(0f, durationMs = 1_500, startMs = end + 50)
+        assertEquals(TurnStateDecider.State.IDLE, d.stateAt(after))
+        assertEquals(17.19f, d.lastEpisodeDeg, 0.1f)
+    }
+
+    @Test
+    fun resetClearsLastEpisodeDeg() {
+        val d = TurnStateDecider()
+        val end = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)
+        d.feed(0f, durationMs = 1_000, startMs = end + 50)
+        assertEquals(91.67f, d.lastEpisodeDeg, 0.1f)
+        d.reset()
+        assertEquals(0f, d.lastEpisodeDeg, 1e-4f)
     }
 }

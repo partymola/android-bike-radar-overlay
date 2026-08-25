@@ -6,6 +6,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
+import java.util.Locale
 import kotlin.math.sqrt
 
 /**
@@ -27,6 +28,18 @@ import kotlin.math.sqrt
  * was TAKEN) rather than the delivery time - sensor batching can deliver
  * several samples in one burst and integrating with delivery times would
  * squash their spacing.
+ *
+ * Capture-log lines: `# turn yaw ts_mono=<ms> rate=<rad/s> cum_deg=<deg>`,
+ * emitted while a rotation episode runs. A sampled series needs its own
+ * time base - a `#` line carries no timestamp prefix of its own, so
+ * without one its only time information is its position between packet
+ * lines written from other threads.
+ *
+ * The field is `ts_mono`, not `ts`, because `# alert ts=` already means
+ * wall clock: these are elapsedRealtime, the sensor's own base, and the
+ * two must not be read as one series. The capture carries no anchor
+ * between the bases, so align to wall clock via the surrounding packet
+ * lines and use `ts_mono` only for spacing between yaw samples.
  */
 class TurnSensorController(
     private val sensorManager: SensorManager?,
@@ -51,6 +64,8 @@ class TurnSensorController(
      *  reviewer must be able to tell "rider straightened" from "sensor
      *  went stale" when a deferral ends. Reset on the next real sample. */
     @Volatile private var staleLogged = false
+
+    private var lastYawLogMs = 0L
 
     /** The rider's current turn state. Safe to call from any thread.
      *  Always [TurnStateDecider.State.IDLE] while stopped.
@@ -100,6 +115,7 @@ class TurnSensorController(
         lastState = TurnStateDecider.State.IDLE
         lastSampleAtMs = Long.MIN_VALUE
         staleLogged = false
+        lastYawLogMs = 0L
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -110,14 +126,28 @@ class TurnSensorController(
             Sensor.TYPE_GYROSCOPE -> {
                 val g = gravityUnit ?: return
                 val nowMs = event.timestamp / 1_000_000
-                decider.onYawSample(yawRateAboutGravity(event.values, g), nowMs)
+                val yaw = yawRateAboutGravity(event.values, g)
+                decider.onYawSample(yaw, nowMs)
                 lastSampleAtMs = nowMs
                 staleLogged = false
                 val state = decider.stateAt(nowMs)
                 stateNow = state
                 if (state != lastState) {
-                    clog("# turn state=$state")
+                    clog(
+                        when (state) {
+                            TurnStateDecider.State.TURNING -> "# turn state=$state cum_deg=${fmt(decider.cumulativeDeg)}"
+                            TurnStateDecider.State.HOLD -> "# turn state=$state total_deg=${fmt(decider.lastEpisodeDeg)}"
+                            TurnStateDecider.State.IDLE -> "# turn state=$state"
+                        },
+                    )
                     lastState = state
+                }
+                if (decider.episodeActive && nowMs - lastYawLogMs >= YAW_LOG_INTERVAL_MS) {
+                    lastYawLogMs = nowMs
+                    clog(
+                        "# turn yaw ts_mono=$nowMs rate=${fmt(yaw)}" +
+                            " cum_deg=${fmt(decider.cumulativeDeg)}",
+                    )
                 }
             }
         }
@@ -133,8 +163,44 @@ class TurnSensorController(
          *  (TURN_TAIL_MIN_MS = 3 s). */
         const val SENSOR_STALE_MS = 1_000L
 
+        /** Minimum gap (ms) between logged yaw samples; the gyro itself
+         *  delivers at roughly 60 ms.
+         *
+         *  Sampling is gated on [TurnStateDecider.episodeActive] rather
+         *  than on TURNING. TURNING starts only once the qualifying angle
+         *  has accumulated, which would leave a corner's entry untraced -
+         *  and that is where the radar starts sweeping tracks off. It
+         *  would also miss rotation during the post-turn HOLD window,
+         *  where an unqualified episode reads as HOLD. */
+        private const val YAW_LOG_INTERVAL_MS = 200L
+
+        /** Capture-log number format: fixed 3 decimals, never scientific
+         *  notation. `Float.toString` switches to E-notation below 1e-3,
+         *  which the decaying rates at the end of every episode reach
+         *  routinely.
+         *
+         *  `Locale.ROOT` is load-bearing, not decoration: the default
+         *  locale formats a decimal point as a comma in most of Europe,
+         *  which would split every value across the log's space-separated
+         *  `key=value` fields and break any parser. Do not drop it. */
+        internal fun fmt(v: Float): String = String.format(Locale.ROOT, "%.3f", v)
+
         /** Rotation rate (rad/s) about the world-vertical axis: the
-         *  gyroscope vector projected onto the gravity unit vector. */
+         *  gyroscope vector projected onto the gravity unit vector.
+         *
+         *  That the result is a projection, and that its sign survives
+         *  integration, are pinned by `yawRateIsGyroProjectedOnGravity`
+         *  and `lastEpisodeDegIsNegativeForTheOtherDirection`.
+         *
+         *  Which real-world direction each sign means is NOT pinned by
+         *  anything here - it follows from two Android conventions, so a
+         *  test in this repo can only restate it. Android's gravity sensor
+         *  reports the vector pointing AWAY from the earth (+9.81 on z
+         *  with the device flat, screen up), and its gyroscope is
+         *  counter-clockwise-positive about the device axes. Counter-
+         *  clockwise seen from above is a left turn, so POSITIVE should be
+         *  a left turn. Confirm that against a corner whose direction is
+         *  known before using the sign to place anything in the world. */
         internal fun yawRateAboutGravity(gyro: FloatArray, gravityUnit: FloatArray): Float = gyro[0] * gravityUnit[0] + gyro[1] * gravityUnit[1] + gyro[2] * gravityUnit[2]
 
         /** Normalised copy of [v]; returns [fallback] when the magnitude is

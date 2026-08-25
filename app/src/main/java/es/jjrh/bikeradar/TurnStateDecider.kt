@@ -55,6 +55,39 @@ class TurnStateDecider(
     private var lastAboveFloorMs = 0L
     private var holdUntilMs = Long.MIN_VALUE
 
+    /** True while a rotation episode is in progress, qualifying or not.
+     *  Distinct from [State.TURNING], which additionally requires
+     *  [turnAngleDeg] to have accumulated: an episode is live from the
+     *  first sample above the rate floor, so this covers a corner's entry
+     *  phase and an unqualified episode during the post-turn HOLD window,
+     *  both of which read as not-TURNING. (A HOLD-window episode that does
+     *  reach the angle reports TURNING from that sample, like any other.) */
+    val episodeActive: Boolean get() = inEpisode
+
+    /** Signed heading change accumulated so far in the current rotation
+     *  episode, in degrees; zero between episodes. The sign is whatever
+     *  the caller's yaw-rate sign means - for the shipped feed, see
+     *  [TurnSensorController.yawRateAboutGravity].
+     *
+     *  A stalled sensor stream understates it: the integration step is
+     *  clamped to [MAX_SAMPLE_GAP_MS], so an episode spanning a stall
+     *  yields a floor on the angle turned, not the angle turned. */
+    val cumulativeDeg: Float get() = Math.toDegrees(cumRad.toDouble()).toFloat()
+
+    /** Signed heading change of the last COMPLETED rotation episode, in
+     *  degrees; sign convention as for [cumulativeDeg].
+     *  [cumulativeDeg] is cleared when an episode closes, so
+     *  without this the total angle of a corner - the only thing that says
+     *  which way the rider went - is lost at the moment it becomes
+     *  knowable.
+     *
+     *  Every completed episode overwrites it, qualifying or not, so a
+     *  sub-threshold wobble during the post-turn HOLD window will replace
+     *  a corner's total with a few degrees. Read it on the transition, not
+     *  later. */
+    var lastEpisodeDeg: Float = 0f
+        private set
+
     /** Feed one yaw-rate sample. [nowMs] must be monotonic (elapsedRealtime). */
     fun onYawSample(yawRateRadS: Float, nowMs: Long) {
         val above = abs(yawRateRadS) >= rateFloorRadS
@@ -78,6 +111,7 @@ class TurnStateDecider(
         if (!above && nowMs - lastAboveFloorMs >= quietEndMs) {
             // Episode over: rotation has been below the floor long enough.
             if (qualified) holdUntilMs = nowMs + holdMs
+            lastEpisodeDeg = cumulativeDeg
             inEpisode = false
             qualified = false
             cumRad = 0f
@@ -99,6 +133,7 @@ class TurnStateDecider(
         inEpisode = false
         qualified = false
         cumRad = 0f
+        lastEpisodeDeg = 0f
         lastSampleMs = 0L
         lastAboveFloorMs = 0L
         holdUntilMs = Long.MIN_VALUE

@@ -16,6 +16,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.SensorEventBuilder
 import org.robolectric.shadows.ShadowSensor
 import org.robolectric.shadows.ShadowSensorManager
+import java.util.Locale
 
 /**
  * Pins [TurnSensorController]: yaw is the gyro projected on the gravity
@@ -46,13 +47,24 @@ class TurnSensorControllerTest {
 
     @Test
     fun yawRateIsGyroProjectedOnGravity() {
-        // Phone upright in a handlebar mount: gravity along device -Y.
+        // Phone upright in a handlebar mount. Device +Y points at the sky,
+        // and the gravity SENSOR reports the vector pointing away from the
+        // earth, so it reads +Y - not the direction gravity pulls.
         // Rotation about world-vertical then lives on the device Y gyro
         // axis; X/Z rates (road vibration, pitch) must not leak in.
-        val g = floatArrayOf(0f, -1f, 0f)
+        val g = floatArrayOf(0f, 1f, 0f)
+        assertEquals(
+            0.5f,
+            TurnSensorController.yawRateAboutGravity(floatArrayOf(0.2f, 0.5f, 0.1f), g),
+            1e-6f,
+        )
+        // Mount inverted: the same device-frame rates project to the
+        // opposite sign. That is what MAKES the reading mount-independent
+        // rather than contradicting it - a physically inverted phone also
+        // reports flipped gyro axes, and the two flips cancel.
         assertEquals(
             -0.5f,
-            TurnSensorController.yawRateAboutGravity(floatArrayOf(0.2f, 0.5f, 0.1f), g),
+            TurnSensorController.yawRateAboutGravity(floatArrayOf(0.2f, 0.5f, 0.1f), floatArrayOf(0f, -1f, 0f)),
             1e-6f,
         )
         // Phone flat: gravity along +Z, yaw is the Z rate.
@@ -167,6 +179,145 @@ class TurnSensorControllerTest {
             event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, 0.5f), tNs),
         )
         assertEquals(TurnStateDecider.State.TURNING, c.state())
+    }
+
+    /** Drive a corner of [samples] gyro steps at [rate] rad/s, 50 ms
+     *  apart, then quiet the rotation until the episode closes. Returns
+     *  every line the controller logged. */
+    private fun cornerLog(rate: Float, samples: Int, quietSamples: Int = 20): List<String> {
+        val sm = sensorManager()
+        val shadow = shadowOf(sm)
+        val lines = mutableListOf<String>()
+        val c = TurnSensorController(sm, clog = { lines += it })
+        c.start()
+        var tNs = 1_000_000_000L
+        shadow.sendSensorEventToListeners(
+            event(sm, Sensor.TYPE_GRAVITY, floatArrayOf(0f, 0f, 9.81f), tNs),
+        )
+        repeat(samples) {
+            tNs += 50_000_000L
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, rate), tNs),
+            )
+        }
+        repeat(quietSamples) {
+            tNs += 50_000_000L
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, 0f), tNs),
+            )
+        }
+        return lines
+    }
+
+    @Test
+    fun captureNumbersUseADecimalPointInACommaDecimalLocale() {
+        // The app ships a Spanish translation, so comma-decimal locales
+        // are a supported configuration: there the default formatter
+        // renders 0.5 as "0,5", which would split a value across the log's
+        // space-separated key=value fields and break every parser. The
+        // suite's own en-US default cannot expose it, so force the locale.
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("es-ES"))
+            assertEquals("0.500", TurnSensorController.fmt(0.5f))
+            assertEquals("-170.455", TurnSensorController.fmt(-170.4551f))
+            // Float.toString would render this as "8.0E-4"; the decaying
+            // rates at the end of every episode reach this range routinely.
+            assertEquals("0.001", TurnSensorController.fmt(8.0e-4f))
+        } finally {
+            Locale.setDefault(original)
+        }
+    }
+
+    @Test
+    fun yawSamplesAreThrottledWellBelowTheSensorRate() {
+        // 120 samples at 50 ms = 6 s of rotation at 0.5 rad/s, plus the
+        // 700 ms quiet-end before the episode closes. The episode is live
+        // from the opening sample, so 133 of the 140 samples fall inside
+        // it; at the 200 ms throttle that is 34 lines, not 133.
+        // Deterministic - shadow sensors on fixed timestamps - so this is
+        // an equality, not a range. It is coarser than it looks even so:
+        // the throttle quantises to whole 50 ms samples, so any interval
+        // in (150, 200] ms yields the same count.
+        val yaw = cornerLog(rate = 0.5f, samples = 120).filter { it.startsWith("# turn yaw ") }
+        assertEquals(34, yaw.size)
+    }
+
+    @Test
+    fun theCornerEntryIsTracedBeforeTheTurnQualifies() {
+        // The hole this gate exists to close. TURNING is only reached once
+        // 60 degrees have accumulated - 2.1 s in at this rate - and the
+        // radar starts sweeping tracks off well before that, so a trace
+        // that began at TURNING would miss the entry entirely.
+        val lines = cornerLog(rate = 0.5f, samples = 120)
+        val firstYaw = lines.indexOfFirst { it.startsWith("# turn yaw ") }
+        val turning = lines.indexOfFirst { it.startsWith("# turn state=TURNING") }
+        assertTrue("entry untraced: first yaw $firstYaw, TURNING $turning", firstYaw < turning)
+    }
+
+    @Test
+    fun rotationDuringThePostTurnHoldWindowIsTraced() {
+        // A second junction phase right after a corner opens a fresh
+        // episode that never reaches 60 degrees, so stateAt reports HOLD
+        // throughout. Gating on TURNING would drop it; gating on the
+        // episode keeps it.
+        val sm = sensorManager()
+        val shadow = shadowOf(sm)
+        val lines = mutableListOf<String>()
+        val c = TurnSensorController(sm, clog = { lines += it })
+        c.start()
+        var tNs = 1_000_000_000L
+        shadow.sendSensorEventToListeners(
+            event(sm, Sensor.TYPE_GRAVITY, floatArrayOf(0f, 0f, 9.81f), tNs),
+        )
+        fun feed(rate: Float, n: Int) = repeat(n) {
+            tNs += 50_000_000L
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, rate), tNs),
+            )
+        }
+        feed(0.5f, 120)
+        feed(0f, 20)
+        assertEquals(TurnStateDecider.State.HOLD, c.state())
+        val before = lines.count { it.startsWith("# turn yaw ") }
+        // 30 degrees of fresh rotation: above the rate floor, below the
+        // qualifying angle.
+        feed(0.3f, 35)
+        assertEquals(TurnStateDecider.State.HOLD, c.state())
+        assertTrue(
+            "rotation during HOLD went untraced",
+            lines.count { it.startsWith("# turn yaw ") } > before,
+        )
+    }
+
+    @Test
+    fun yawLinesCarryTheSignedRateAndRunningAngle() {
+        // Named by sign, not by side. The sign-to-direction mapping is
+        // unconfirmed (see yawRateAboutGravity), so naming these left and
+        // right would assert something no test here establishes.
+        // Read the SECOND line, not the first: the sample that opens an
+        // episode returns before integrating, so the first line always
+        // reports cum_deg=0.000 and could not show a sign either way.
+        val positive = cornerLog(rate = 0.5f, samples = 120).filter { it.startsWith("# turn yaw ") }[1]
+        assertTrue(positive, Regex("^# turn yaw ts_mono=\\d+ rate=0\\.500 cum_deg=[0-9]").containsMatchIn(positive))
+        val negative = cornerLog(rate = -0.5f, samples = 120).filter { it.startsWith("# turn yaw ") }[1]
+        assertTrue(negative, Regex("^# turn yaw ts_mono=\\d+ rate=-0\\.500 cum_deg=-[0-9]").containsMatchIn(negative))
+    }
+
+    @Test
+    fun turnTransitionsCarryTheAngleAndTheCompletedTotal() {
+        val lines = cornerLog(rate = -0.5f, samples = 120)
+        // The TURNING line reports the angle that qualified it: the first
+        // integration count past the 60-degree threshold, which is 42 at
+        // 0.025 rad each = 60.16 degrees. The delta is well under one
+        // integration step (1.43 degrees), so this cannot be satisfied by
+        // qualifying a sample early or late.
+        val turning = lines.first { it.startsWith("# turn state=TURNING") }
+        assertEquals(-60.16f, turning.substringAfter("cum_deg=").toFloat(), 0.1f)
+        // The HOLD line reports the whole corner: 120 samples less the one
+        // that opened the episode, 0.025 rad each = 170.46 degrees.
+        val hold = lines.first { it.startsWith("# turn state=HOLD") }
+        assertEquals(-170.46f, hold.substringAfter("total_deg=").toFloat(), 0.1f)
     }
 
     @Test

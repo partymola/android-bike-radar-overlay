@@ -76,9 +76,9 @@ strip; the rest of your screen stays yours. (*Image credits
   the rider's leaving window after a parked-and-locked bike state.
 - Optional per-ride capture log (off by default; enable on the Debug
   screen) written to app-private storage: radar packets, BLE
-  characteristic notifications, phone-battery trace, turn direction and
-  rate from the motion sensors, and decoder events; useful for post-ride
-  replay and bug reports.
+  characteristic notifications, eBike telemetry from Bosch Flow,
+  phone-battery trace, turn direction and rate from the motion sensors,
+  and decoder events; useful for post-ride replay and bug reports.
 
 </details>
 

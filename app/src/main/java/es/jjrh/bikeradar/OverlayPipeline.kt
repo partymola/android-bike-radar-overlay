@@ -275,19 +275,22 @@ internal class OverlayPipeline(
         }
     }
 
-    private fun maybeLogPhoneBattery(nowMs: Long) {
-        if (nowMs - lastPhoneBatteryLogMs < BikeRadarService.PHONE_BATTERY_LOG_PERIOD_MS) return
+    /** [nowWallMs] is wall clock: it is stamped into the capture line as a
+     *  unix epoch, so the base is part of the contract, not an implementation
+     *  detail of the throttle it also drives. */
+    private fun maybeLogPhoneBattery(nowWallMs: Long) {
+        if (nowWallMs - lastPhoneBatteryLogMs < BikeRadarService.PHONE_BATTERY_LOG_PERIOD_MS) return
         val reading = phoneBattery.readSnapshot() ?: return
         clog(
             BikeRadarService.formatPhoneBatteryLog(
-                unixMs = nowMs,
+                unixMs = nowWallMs,
                 level = reading.level,
                 scale = reading.scale,
                 tempDc = reading.tempDc,
                 plugged = reading.plugged,
             ),
         )
-        lastPhoneBatteryLogMs = nowMs
+        lastPhoneBatteryLogMs = nowWallMs
     }
 
     private fun resolveDashcamSlug(): String? = prefs.dashcamMac?.let { mac ->
@@ -323,13 +326,13 @@ internal class OverlayPipeline(
         )
         if (ev !is AlertDecider.Event.None) {
             logAlertEvent(
-                ev,
-                state,
-                nowWallMs,
-                preferredBikeSpeedMs,
-                overlayPrefs.urgentPassClearanceM,
-                overlayPrefs.alertMaxDistanceM,
-                alerts,
+                ev = ev,
+                state = state,
+                nowWallMs = nowWallMs,
+                gateBikeSpeedMs = preferredBikeSpeedMs,
+                gatePassClearanceM = overlayPrefs.urgentPassClearanceM,
+                gateAlertMaxM = overlayPrefs.alertMaxDistanceM,
+                alerts = alerts,
             )
         }
         beeper.setPanning(
@@ -347,7 +350,13 @@ internal class OverlayPipeline(
     private fun logAlertEvent(
         ev: AlertDecider.Event,
         state: RadarState,
-        nowMs: Long,
+        /** Wall clock. `# alert ts=` is a unix-epoch field, and callers
+         *  hold both bases, so a base-neutral name here would be one
+         *  positional slip away from stamping the line with
+         *  elapsedRealtime. The sole caller passes every argument by name,
+         *  which is what rules the slip out; nothing downstream checks the
+         *  base of this field. */
+        nowWallMs: Long,
         gateBikeSpeedMs: Float?,
         gatePassClearanceM: Float,
         gateAlertMaxM: Int,
@@ -395,7 +404,7 @@ internal class OverlayPipeline(
             .filter { !it.isBehind && !it.isAlongsideStationary && it.distanceM in 0..gateAlertMaxM }
             .minByOrNull { it.distanceM }
         clog(
-            "# alert ts=$nowMs event=$evStr " +
+            "# alert ts=$nowWallMs event=$evStr " +
                 "frame_closest_tid=${closest?.id ?: -1} " +
                 "frame_closest_d=${closest?.distanceM ?: -1} " +
                 "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +

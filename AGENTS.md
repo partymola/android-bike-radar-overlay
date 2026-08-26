@@ -337,10 +337,21 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - **Cue-ledger gate** (`CueLedgerReplayTest`): the in-repo, CI-run companion
   to the corpus gate. Replays the committed `replay-fixture.txt` through the
   real decoder -> decider -> cue and asserts the *ordered* cue ledger against
-  a baked golden, so any alert-parsimony change surfaces as a reviewable diff
-  with no private corpus. Regenerate after an intentional change with
-  `-Pbikeradar.cueLedgerRecord=true` and paste the printed ledger into the
-  test's `DEFAULT_GOLDEN`; cite the diff in review.
+  a baked golden, so a change to the BEEP and CLEAR paths surfaces as a
+  reviewable diff with no private corpus. Regenerate after an intentional
+  change with `-Pbikeradar.cueLedgerRecord=true` and paste the printed ledger
+  into the test's `DEFAULT_GOLDEN`; cite the diff in review.
+  - **It reaches no urgent cue, so the whole imminent-impact and
+    pass-prediction path is invisible to CI.** The fixture is 30 s of moving
+    traffic with no stopped-rider-plus-fast-closer encounter, and the test
+    pins that absence deliberately in
+    `urgentLowSpeedToggleIsNoOpForThisFixture` and
+    `passClearanceIsNoOpForThisFixture` - both assert the ledger is unchanged
+    with the feature toggled, which is a statement about the fixture, not
+    about the feature. Only the private `CorpusReplayGate` corpus can see a
+    change there. Extending `replay-fixture.txt` with a real stationary
+    off-axis window is what would close it; until then, never read a green CI
+    as cover for an urgent-path change.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

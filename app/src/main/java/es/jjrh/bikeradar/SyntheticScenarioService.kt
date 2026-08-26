@@ -29,11 +29,11 @@ import kotlinx.coroutines.launch
  *  - Car 3 [t=10..28]   second queued, d=90 at v=5. Closest-threat tracking.
  *  - Car 4 [t=22..39]   fast approach (v=10), brake/match (v=0, d=5), then overtake.
  *  - Car 5 TRUCK [t=36..42]  v=14 m/s (50.4 km/h), triggers red danger border.
- *  - Dense traffic [t=42..54] BIKE + 2 cars with lateral positions.
+ *  - Dense traffic [t=42..54] 3 cars with lateral positions.
  *  - Phantom blip [t=56.0..56.05] single frame; AlertDecider sustain=2 must suppress it.
  *  - Silence [t=56.1..60] all-clear window.
  *
- * Dashcam status sequence (with the default dashcamOffIndicator on):
+ * Dashcam status sequence (with the default dashcamWarnWhenOff on):
  *  - t=0..10       Searching  (cold-start grace; no battery advert yet)
  *  - t=10..20      Missing    (amber, never-seen this session)
  *  - t=20          simulated dashcam advert pushed to BatteryStateBus
@@ -131,55 +131,69 @@ class SyntheticScenarioService : Service() {
         }
     }
 
-    private fun scriptAt(tMs: Long): List<Vehicle> {
+    /**
+     * The scripted traffic at [tMs]. Pure, and `internal` so
+     * `SyntheticScenarioServiceScriptTest` can walk the timeline.
+     *
+     * **[Vehicle.speedMs] is negative for a vehicle that is approaching** -
+     * the convention is stated on the field itself, and every gate in
+     * [AlertDecider] reads it that way. Declaring a positive speed on a
+     * vehicle whose `distanceM` is counting down describes a car that is
+     * both closing and receding, and the closing gates all read the
+     * receding half: no urgent cue, no close-pass arm, no danger band. The
+     * scenario then demonstrates something other than what it says it does,
+     * and nothing goes red. `AlertDeciderTest`'s `car()` helper encodes the
+     * same convention.
+     */
+    internal fun scriptAt(tMs: Long): List<Vehicle> {
         val t = tMs / 1000.0
         val out = mutableListOf<Vehicle>()
 
         if (t in 2.0..15.5) {
             val d = 80.0 - 6.0 * (t - 2.0)
-            if (d >= 0) out.add(Vehicle(id = 1, distanceM = d.toInt().coerceAtLeast(0), speedMs = 6f, lateralPos = 0f))
+            if (d >= 0) out.add(Vehicle(id = 1, distanceM = d.toInt().coerceAtLeast(0), speedMs = -6f, lateralPos = 0f))
         }
         if (t in 10.0..25.0) {
             val d = 75.0 - 5.0 * (t - 10.0)
-            if (d >= 0) out.add(Vehicle(id = 2, distanceM = d.toInt().coerceAtLeast(0), speedMs = 5f, lateralPos = -0.3f))
+            if (d >= 0) out.add(Vehicle(id = 2, distanceM = d.toInt().coerceAtLeast(0), speedMs = -5f, lateralPos = -0.3f))
         }
         if (t in 10.0..28.0) {
             val d = 90.0 - 5.0 * (t - 10.0)
-            if (d >= 0) out.add(Vehicle(id = 3, distanceM = d.toInt().coerceAtLeast(0), speedMs = 5f, lateralPos = 0.3f))
+            if (d >= 0) out.add(Vehicle(id = 3, distanceM = d.toInt().coerceAtLeast(0), speedMs = -5f, lateralPos = 0.3f))
         }
         if (t in 22.0..30.5) {
             val d = 90.0 - 10.0 * (t - 22.0)
-            out.add(Vehicle(id = 4, distanceM = d.toInt().coerceAtLeast(5), speedMs = 10f, lateralPos = 0f))
+            out.add(Vehicle(id = 4, distanceM = d.toInt().coerceAtLeast(5), speedMs = -10f, lateralPos = 0f))
         } else if (t > 30.5 && t <= 37.5) {
             out.add(Vehicle(id = 4, distanceM = 5, speedMs = 0f, lateralPos = 0f))
         } else if (t > 37.5 && t <= 39.0) {
             val d = 5.0 - 4.0 * (t - 37.5)
-            out.add(Vehicle(id = 4, distanceM = d.toInt().coerceAtLeast(0), speedMs = 4f, lateralPos = 0.4f))
+            out.add(Vehicle(id = 4, distanceM = d.toInt().coerceAtLeast(0), speedMs = -4f, lateralPos = 0.4f))
         }
         if (t in 36.0..42.1) {
             val d = 85.0 - 14.0 * (t - 36.0)
-            if (d >= 0) out.add(Vehicle(id = 5, distanceM = d.toInt().coerceAtLeast(0), speedMs = 14f, size = VehicleSize.TRUCK, lateralPos = 0.4f))
+            if (d >= 0) out.add(Vehicle(id = 5, distanceM = d.toInt().coerceAtLeast(0), speedMs = -14f, size = VehicleSize.TRUCK, lateralPos = 0.4f))
         }
         if (t in 42.0..54.0) {
             val d = 70.0 - 6.0 * (t - 42.0)
-            if (d >= 0) out.add(Vehicle(id = 6, distanceM = d.toInt().coerceAtLeast(0), speedMs = 6f, size = VehicleSize.CAR, lateralPos = -0.7f))
+            if (d >= 0) out.add(Vehicle(id = 6, distanceM = d.toInt().coerceAtLeast(0), speedMs = -6f, size = VehicleSize.CAR, lateralPos = -0.7f))
         }
         if (t in 42.0..53.1) {
             val d = 55.0 - 5.0 * (t - 42.0)
-            if (d >= 0) out.add(Vehicle(id = 7, distanceM = d.toInt().coerceAtLeast(0), speedMs = 5f, lateralPos = 0f))
+            if (d >= 0) out.add(Vehicle(id = 7, distanceM = d.toInt().coerceAtLeast(0), speedMs = -5f, lateralPos = 0f))
         }
         if (t in 42.0..53.5) {
             val d = 80.0 - 7.0 * (t - 42.0)
-            if (d >= 0) out.add(Vehicle(id = 8, distanceM = d.toInt().coerceAtLeast(0), speedMs = 7f, lateralPos = 0.6f))
+            if (d >= 0) out.add(Vehicle(id = 8, distanceM = d.toInt().coerceAtLeast(0), speedMs = -7f, lateralPos = 0.6f))
         }
         if (t in 56.0..56.05) {
-            out.add(Vehicle(id = 9, distanceM = 15, speedMs = 10f, lateralPos = 0f))
+            out.add(Vehicle(id = 9, distanceM = 15, speedMs = -10f, lateralPos = 0f))
         }
 
         // Extra "rush hour" overlap density between t=10 and t=30 to
         // exercise the box-shrink and the renderer-side stationary
-        // suppression. id=10 is a parked-in-next-lane case that should
-        // edge-dock once the rider speed gate flips on at t=10.
+        // suppression. id=10 is a parked-in-next-lane case that docks at
+        // t=15, three seconds after it appears - the dwell below.
         if (t in 12.0..28.0) {
             out.add(
                 Vehicle(
@@ -189,6 +203,17 @@ class SyntheticScenarioService : Service() {
                     size = VehicleSize.CAR,
                     lateralPos = -0.65f,
                     speedXMs = 0,
+                    // The decoder would dock this one after its dwell
+                    // (the rider-slow, near-zero-relative-speed, close,
+                    // off-to-one-side, held-3 s rule it applies to set
+                    // Vehicle.isAlongsideStationary). The scenario builds
+                    // Vehicles directly and so bypasses that, and an undocked
+                    // parked car sits at 4 m for its whole sixteen-second
+                    // life. Under the closest-only audio model it then
+                    // correctly mutes every car behind it that is further
+                    // away, which reads on the bench as the app having gone
+                    // deaf. Dock it on the same dwell the decoder uses.
+                    isAlongsideStationary = t >= 15.0,
                 ),
             )
         }
@@ -199,7 +224,7 @@ class SyntheticScenarioService : Service() {
                     Vehicle(
                         id = 11,
                         distanceM = d.toInt().coerceAtLeast(0),
-                        speedMs = 4f,
+                        speedMs = -4f,
                         lateralPos = 0.55f,
                         speedXMs = 0,
                     ),
@@ -213,7 +238,7 @@ class SyntheticScenarioService : Service() {
                     Vehicle(
                         id = 12,
                         distanceM = d.toInt().coerceAtLeast(0),
-                        speedMs = 8f,
+                        speedMs = -8f,
                         size = VehicleSize.CAR,
                         lateralPos = -0.4f,
                         speedXMs = 0,
@@ -228,7 +253,7 @@ class SyntheticScenarioService : Service() {
                     Vehicle(
                         id = 13,
                         distanceM = d.toInt().coerceAtLeast(0),
-                        speedMs = 12f,
+                        speedMs = -12f,
                         size = VehicleSize.TRUCK,
                         lateralPos = 0.65f,
                         speedXMs = 0,
@@ -244,7 +269,7 @@ class SyntheticScenarioService : Service() {
                     Vehicle(
                         id = 14,
                         distanceM = d.toInt().coerceAtLeast(0),
-                        speedMs = 13f,
+                        speedMs = -13f,
                         size = VehicleSize.CAR,
                         lateralPos = 0.15f,
                         speedXMs = 0,
@@ -262,7 +287,7 @@ class SyntheticScenarioService : Service() {
      *  window mirrors a real device-status delay before the first
      *  speed frame arrives. The crawl segment uses 2 m/s (~7 km/h):
      *  comfortably <= ALONGSIDE_RIDER_SLOW_MS = 2.75 with margin. */
-    private fun bikeSpeedAt(tMs: Long): Float? {
+    internal fun bikeSpeedAt(tMs: Long): Float? {
         val t = tMs / 1000.0
         return when {
             t < 5.0 -> null

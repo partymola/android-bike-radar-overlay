@@ -28,18 +28,14 @@ import es.jjrh.bikeradar.data.Prefs
  * the service throttles per-device so rapid-fire adverts don't trigger rapid-fire
  * GATT reads.
  *
- * The scan outlives the process, so a sighting can arrive with nothing running
- * and the service start is then refused. That is not an error state - it is the
- * app being closed - so it leaves a journal line rather than an uncaught
- * exception.
+ * The scan outlives both the process and the permission grant, so a sighting
+ * can arrive with nothing running - the service start is then refused - or with
+ * BLUETOOTH_CONNECT revoked, when the device read is denied. Neither is an
+ * error state: one is the app being closed, the other the rider taking a
+ * permission back. Each is journalled rather than thrown.
  */
 class BatteryScanReceiver : BroadcastReceiver() {
 
-    // Reads BluetoothDevice.name (BLUETOOTH_CONNECT). This receiver fires only
-    // from the scan PendingIntent the service registers while holding
-    // BLUETOOTH_SCAN + _CONNECT; the scan outlives the grant as well as the
-    // process, so a revoked _CONNECT would surface here rather than be caught.
-    @SuppressLint("MissingPermission")
     override fun onReceive(ctx: Context, intent: Intent) {
         val errorCode = intent.getIntExtra(BluetoothLeScanner.EXTRA_ERROR_CODE, NO_ERROR_SENTINEL)
         if (errorCode != NO_ERROR_SENTINEL && errorCode != 0) {
@@ -53,24 +49,23 @@ class BatteryScanReceiver : BroadcastReceiver() {
         )
 
         if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST) {
-            extractResults(intent).forEach { r ->
-                val n = r.scanRecord?.deviceName ?: r.device?.name ?: "?"
-                Log.i(TAG, "match-lost $n ${LogRedaction.mac(r.device?.address)}")
-            }
+            val lost = sightings(ctx, extractResults(intent)) ?: return
+            lost.forEach { Log.i(TAG, "match-lost ${it.name ?: "?"} ${LogRedaction.mac(it.mac)}") }
             return
         }
 
         val results = extractResults(intent)
         if (results.isEmpty()) return
+        val seen = sightings(ctx, results) ?: return
 
         // Escape hatch for radars the name heuristic doesn't know: a sighting
         // of the explicitly pinned radar MAC passes even with a foreign name,
         // so a pinned unit can reach the link path at all.
         val pinnedRadarMac = Prefs(ctx).radarMac
 
-        for (r in results) {
-            val name = r.scanRecord?.deviceName ?: r.device?.name ?: continue
-            val mac = r.device?.address ?: continue
+        for (s in seen) {
+            val name = s.name ?: continue
+            val mac = s.mac ?: continue
             val pinned = pinnedRadarMac != null && mac.equals(pinnedRadarMac, ignoreCase = true)
             if (!matchesVariaName(name) && !pinned) continue
             // Defence-in-depth: only act on devices the user has paired
@@ -78,7 +73,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
             // advertising the Garmin company UUID + a name matching the
             // heuristic could trigger GATT churn or BatteryEntry slug
             // injection.
-            if (!isBonded(r)) {
+            if (!s.bonded) {
                 Log.d(TAG, "skip $name: not bonded")
                 continue
             }
@@ -103,8 +98,41 @@ class BatteryScanReceiver : BroadcastReceiver() {
         }
     }
 
+    private class Sighting(val name: String?, val mac: String?, val bonded: Boolean)
+
+    /**
+     * Reads every result's device fields up front, or null when the read is
+     * denied - which ends the batch, since the denial is app-wide.
+     *
+     * Reading is what a revoked grant denies, so the reads sit inside the try
+     * and the service start deliberately does not: a SecurityException from
+     * there is treated as a bug rather than a revocation, so it propagates
+     * instead of being filed under the rider's permission. The catch is pinned
+     * narrow from both sides: `aSecurityExceptionFromTheServiceStartStillPropagates`
+     * for the start, `aNonSecurityFailureOnTheDeviceReadStillPropagates` for the read.
+     */
     @SuppressLint("MissingPermission")
-    private fun isBonded(r: ScanResult): Boolean = r.device?.bondState == BluetoothDevice.BOND_BONDED
+    private fun sightings(ctx: Context, results: List<ScanResult>): List<Sighting>? = try {
+        results.map { r ->
+            Sighting(
+                name = r.scanRecord?.deviceName ?: r.device?.name,
+                mac = r.device?.address,
+                bonded = r.device?.bondState == BluetoothDevice.BOND_BONDED,
+            )
+        }
+    } catch (_: SecurityException) {
+        // No exception text - it is boilerplate.
+        Log.i(TAG, "device read denied, Bluetooth permission revoked")
+        if (revocationThrottle.shouldLog(SystemClock.elapsedRealtime())) {
+            LinkEventJournal({ ctx.getExternalFilesDir(null) })
+                .log(
+                    "scan wake ignored: Bluetooth permission revoked since the scan started" +
+                        " - re-grant ${ctx.getString(R.string.permission_nearby_title)}" +
+                        " to restore the radar link",
+                )
+        }
+        null
+    }
 
     @Suppress("DEPRECATION", "UNCHECKED_CAST")
     private fun extractResults(intent: Intent): List<ScanResult> {
@@ -117,24 +145,31 @@ class BatteryScanReceiver : BroadcastReceiver() {
     }
 
     /**
-     * Rate-limiter for the refused-start journal line.
+     * Rate-limiter for a journal line whose cause repeats every wake.
      *
-     * A refusal repeats for as long as the app stays closed, and each repeat
-     * says the same thing. Unthrottled, a ride's worth of them would push the
-     * link history out of the size-capped journal - the history being the
+     * A refused start or a denied read says the same thing on every wake for as
+     * long as its cause lasts. Unthrottled, a ride's worth of them would push
+     * the link history out of the size-capped journal - the history being the
      * reason the journal exists.
      *
-     * Per-process and best-effort: a refusal means nothing is running, so the
-     * process it throttles is an empty one and the first the OS reaps. A wake
-     * after that reap starts from a clean slate and writes again.
+     * Per-process and best-effort: a process death resets it. In either case
+     * that process is an empty one the OS reaps early, so a wake after the
+     * reap starts from a clean slate and writes again.
+     *
+     * One instance per cause: sharing one would let whichever fired first hide
+     * the other, and the two say different things.
+     *
+     * Instances live on the receiver's companion because the OS builds a fresh
+     * receiver per broadcast; read and written only from the main thread that
+     * dispatches them.
      */
-    internal class RefusalLogThrottle {
+    internal class JournalLogThrottle {
         private var lastLogMs: Long? = null
 
         /** Consumes the window when it says yes. */
         fun shouldLog(nowMs: Long): Boolean {
             val last = lastLogMs
-            if (last != null && nowMs - last < REFUSAL_LOG_WINDOW_MS) return false
+            if (last != null && nowMs - last < JOURNAL_LOG_WINDOW_MS) return false
             lastLogMs = nowMs
             return true
         }
@@ -145,14 +180,16 @@ class BatteryScanReceiver : BroadcastReceiver() {
         const val ACTION_SCAN_RESULT = "es.jjrh.bikeradar.BATTERY_SCAN_RESULT"
         private const val NO_ERROR_SENTINEL = Int.MIN_VALUE
 
-        /** How often a refused start may write a journal line. */
+        /** How often each condition may write a journal line, counted per
+         *  condition rather than shared between them. */
         @VisibleForTesting
-        internal const val REFUSAL_LOG_WINDOW_MS = 15 * 60 * 1000L
+        internal const val JOURNAL_LOG_WINDOW_MS = 15 * 60 * 1000L
 
-        /** Shared because the OS builds a fresh receiver per broadcast; read
-         *  and written only from the main thread that dispatches them. */
         @VisibleForTesting
-        internal var refusalThrottle = RefusalLogThrottle()
+        internal var refusalThrottle = JournalLogThrottle()
+
+        @VisibleForTesting
+        internal var revocationThrottle = JournalLogThrottle()
 
         fun matchesVariaName(n: String): Boolean = DeviceNameMatcher.isKnownAccessory(n)
     }

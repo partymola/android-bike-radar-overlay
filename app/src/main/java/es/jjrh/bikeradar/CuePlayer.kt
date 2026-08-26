@@ -7,9 +7,9 @@ package es.jjrh.bikeradar
  * with a fake, without an AudioTrack-backed beeper.
  */
 internal interface CuePlayer {
-    fun play(beeps: Int, lateralPos: Float = 0f)
+    fun play(beeps: Int)
     fun playClear()
-    fun playUrgent(lateralPos: Float = 0f)
+    fun playUrgent()
     fun playRadarDropped()
     fun playRadarReconnected()
 }

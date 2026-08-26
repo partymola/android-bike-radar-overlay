@@ -69,10 +69,10 @@ class AlertDeciderTrueRangeTierTest {
         // the step function turns a sub-3% distance shift into a discrete
         // tier flip, which is the accepted cost of the change.
         val atBoundary = run(listOf(car(1, 7, rangeXm = 2f)), listOf(car(1, 7, rangeXm = 2f)))
-        assertEquals(listOf(Event.Beep(2)), atBoundary.map { untagged(it) })
+        assertEquals(listOf(Event.Beep(2)), atBoundary)
 
         val insideIt = run(listOf(car(1, 6, rangeXm = 2f)), listOf(car(1, 6, rangeXm = 2f)))
-        assertEquals(listOf(Event.Beep(3)), insideIt.map { untagged(it) })
+        assertEquals(listOf(Event.Beep(3)), insideIt)
     }
 
     @Test fun `a car drawing abeam does not reach the top tier`() {
@@ -87,7 +87,7 @@ class AlertDeciderTrueRangeTierTest {
             listOf(car(1, 11, rangeXm = 9f)),
             listOf(car(1, 9, rangeXm = 9f)),
             listOf(car(1, 7, rangeXm = 9f)),
-        ).map { untagged(it) }
+        )
         assertEquals(listOf(Event.Beep(1), Event.Beep(2)), events)
     }
 
@@ -107,12 +107,12 @@ class AlertDeciderTrueRangeTierTest {
         assertEquals(
             "true range must hold the top tier back to the 5 m frame",
             listOf(1 to Event.Beep(2), 3 to Event.Beep(3)),
-            runIndexed(TierDistance.TRUE_RANGE, *frames).map { it.first to untagged(it.second) },
+            runIndexed(TierDistance.TRUE_RANGE, *frames),
         )
         assertEquals(
             "along-axis fires the top tier a frame earlier - the difference this pins",
             listOf(1 to Event.Beep(2), 2 to Event.Beep(3)),
-            runIndexed(TierDistance.ALONG_AXIS, *frames).map { it.first to untagged(it.second) },
+            runIndexed(TierDistance.ALONG_AXIS, *frames),
         )
     }
 
@@ -129,10 +129,7 @@ class AlertDeciderTrueRangeTierTest {
         val c = Clock()
         d.decide(listOf(ghost, real), alertMax, c.tick())
         val ev = d.decide(listOf(ghost, real), alertMax, c.tick())
-        assertEquals(Event.Beep(3), untagged(ev))
-        // lateralPos identifies which vehicle the cue describes: the ghost
-        // saturates at 1.0, the real car sits at 1/3.
-        assertEquals(1f / 3f, (ev as Event.Beep).lateralPos, 1e-4f)
+        assertEquals(Event.Beep(3), ev)
         // This is the divergence the capture log has to record: the nearest
         // car by along-axis distance is the ghost, the tier came from the real
         // one. Without this assertion the attribution fields could name either
@@ -149,8 +146,8 @@ class AlertDeciderTrueRangeTierTest {
         val held = car(1, 6, rangeXm = 8f).copy(lateralUnknown = true)
         val centred = car(1, 6)
         assertEquals(
-            run(listOf(centred), listOf(centred)).map { untagged(it) },
-            run(listOf(held), listOf(held)).map { untagged(it) },
+            run(listOf(centred), listOf(centred)),
+            run(listOf(held), listOf(held)),
         )
     }
 
@@ -169,12 +166,12 @@ class AlertDeciderTrueRangeTierTest {
         assertEquals(
             "the escalation waits for the spike to pass, then fires",
             listOf(1 to Event.Beep(2), 4 to Event.Beep(3)),
-            runIndexed(TierDistance.TRUE_RANGE, *frames).map { it.first to untagged(it.second) },
+            runIndexed(TierDistance.TRUE_RANGE, *frames),
         )
         assertEquals(
             "along-axis never sees the spike, so it escalates two frames earlier",
             listOf(1 to Event.Beep(2), 2 to Event.Beep(3)),
-            runIndexed(TierDistance.ALONG_AXIS, *frames).map { it.first to untagged(it.second) },
+            runIndexed(TierDistance.ALONG_AXIS, *frames),
         )
     }
 
@@ -190,10 +187,7 @@ class AlertDeciderTrueRangeTierTest {
             listOf(car(1, 5, rangeXm = 9f)), // demoted by the spike
             listOf(car(1, 5)), // recovered to tier 3
             listOf(car(1, 5)),
-        ).map { untagged(it) }
+        )
         assertEquals(listOf(Event.Beep(3)), events)
     }
-
-    /** Drops the pan field so a cue compares on count alone. */
-    private fun untagged(ev: Event): Event = if (ev is Event.Beep) Event.Beep(ev.count) else ev
 }

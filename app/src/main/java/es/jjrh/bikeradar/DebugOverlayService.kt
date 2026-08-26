@@ -10,14 +10,12 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
-import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
@@ -80,22 +78,7 @@ class DebugOverlayService : Service() {
 
         beeper = try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            // Service contexts cannot call Context.getDisplay() on Android 16
-            // (UnsupportedOperationException). DisplayManager returns a live
-            // Display whose getRotation() tracks orientation. See
-            // BikeRadarService.onCreate for the production-path equivalent.
-            val defaultDisplay: Display? = getSystemService(DisplayManager::class.java)
-                ?.getDisplay(Display.DEFAULT_DISPLAY)
-            AlertBeeper(
-                audioManager = audioManager,
-                rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
-            ).also {
-                it.setVolumePct(volumePct)
-                it.setPanning(
-                    enabled = prefs.experimentalLateralPanning,
-                    invertLR = prefs.experimentalLateralPanningInvertLR,
-                )
-            }
+            AlertBeeper(audioManager = audioManager).also { it.setVolumePct(volumePct) }
         } catch (e: Exception) {
             Log.w(TAG, "AlertBeeper init failed: ${e.message}")
             null
@@ -160,9 +143,9 @@ class DebugOverlayService : Service() {
             passClearanceM = passClearanceM,
         )
         when (val cue = AlertCue.forEvent(ev)) {
-            is AlertCue.Beep -> b.play(cue.count, cue.lateralPos)
+            is AlertCue.Beep -> b.play(cue.count)
             AlertCue.Clear -> b.playClear()
-            is AlertCue.Urgent -> b.playUrgent(cue.lateralPos)
+            AlertCue.Urgent -> b.playUrgent()
             AlertCue.Silence -> {}
         }
     }

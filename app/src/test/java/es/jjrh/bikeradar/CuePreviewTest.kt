@@ -13,7 +13,7 @@ class CuePreviewTest {
     private class FakeCuePlayer : CuePlayer {
         val calls = mutableListOf<String>()
 
-        override fun play(beeps: Int, lateralPos: Float) {
+        override fun play(beeps: Int) {
             calls += "play$beeps"
         }
 
@@ -21,7 +21,7 @@ class CuePreviewTest {
             calls += "clear"
         }
 
-        override fun playUrgent(lateralPos: Float) {
+        override fun playUrgent() {
             calls += "urgent"
         }
 

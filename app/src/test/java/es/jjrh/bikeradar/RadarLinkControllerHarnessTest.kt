@@ -66,7 +66,6 @@ class RadarLinkControllerHarnessTest {
         BatteryStateBus.clearForTest()
         beeper = AlertBeeper(
             audioManager = app.getSystemService(AudioManager::class.java),
-            rotationProvider = { android.view.Surface.ROTATION_0 },
             onCue = {},
         )
     }

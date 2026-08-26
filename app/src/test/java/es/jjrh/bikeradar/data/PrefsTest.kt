@@ -73,8 +73,6 @@ class PrefsTest {
         assertTrue(s.adaptiveAlertsEnabled)
         assertTrue(s.turnAwareAlertsEnabled)
         assertFalse(s.precogEnabled)
-        assertFalse(s.experimentalLateralPanning)
-        assertFalse(s.experimentalLateralPanningInvertLR)
         assertFalse(s.closePassLoggingEnabled)
         assertEquals(1.0f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(15, s.closePassRiderSpeedFloorKmh)
@@ -116,8 +114,6 @@ class PrefsTest {
         prefs.walkAwayAlarmThresholdSec = 60
         prefs.adaptiveAlertsEnabled = false
         prefs.precogEnabled = true
-        prefs.experimentalLateralPanning = true
-        prefs.experimentalLateralPanningInvertLR = true
         prefs.closePassLoggingEnabled = true
         prefs.closePassEmitMinRangeXM = 1.5f
         prefs.closePassRiderSpeedFloorKmh = 20
@@ -161,8 +157,6 @@ class PrefsTest {
         assertEquals(60, s.walkAwayAlarmThresholdSec)
         assertFalse(s.adaptiveAlertsEnabled)
         assertTrue(s.precogEnabled)
-        assertTrue(s.experimentalLateralPanning)
-        assertTrue(s.experimentalLateralPanningInvertLR)
         assertTrue(s.closePassLoggingEnabled)
         assertEquals(1.5f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(20, s.closePassRiderSpeedFloorKmh)

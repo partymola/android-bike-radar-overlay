@@ -319,11 +319,10 @@ class AlertDecider(
 ) {
 
     sealed class Event {
-        /** Closest stable target's `lateralPos` is carried on each
-         *  Beep so audio consumers can pan to the threat's side
-         *  (experimental flag). `0f` when no directional information
-         *  is available; consumers treat that as centred. */
-        data class Beep(val count: Int, val lateralPos: Float = 0f) : Event()
+        /** [count] is the urgency tier of the closest stable target, 1 to 3
+         *  outward-in. It is the whole cue: tiers are told apart by pulse
+         *  count, never by pitch. */
+        data class Beep(val count: Int) : Event()
         object Clear : Event()
 
         /** Imminent-impact override: the rider is stopped - or, with the
@@ -337,9 +336,7 @@ class AlertDecider(
          *  is intentionally distinct from a normal Beep so the rider
          *  knows this is the impact-warning case. See the class KDoc
          *  for the full gate semantics.
-         *  `lateralPos` is the triggering vehicle's lateral position
-         *  for directional audio (experimental flag); `0f` when not
-         *  available. `viaMovingPath` records which gate opened - the
+         *  `viaMovingPath` records which gate opened - the
          *  low-speed moving extension vs the stationary path - so the
          *  capture log can attribute each fire for threshold tuning;
          *  the audio cue is identical either way. The `trigger*` fields
@@ -348,7 +345,6 @@ class AlertDecider(
          *  slower car, which made field urgents unauditable - a hidden
          *  fast closer and a false positive looked identical. */
         data class UrgentApproach(
-            val lateralPos: Float = 0f,
             val viaMovingPath: Boolean = false,
             val triggerTid: Int = -1,
             val triggerDistanceM: Int = -1,
@@ -807,8 +803,8 @@ class AlertDecider(
         // `stableClose` preserves the upstream order from
         // `RadarV2Decoder.snapshot()`, which sorts by `distanceM`
         // ascending. So `firstOrNull` here returns the CLOSEST
-        // imminent-impact threat - the right one to pan the urgent
-        // cue toward.
+        // imminent-impact threat: the one the cue is about, and the one
+        // whose id and distance the capture log attributes it to.
         val urgentViaMoving = urgentLowSpeedEnabled &&
             !riderBelowStationaryForUrgent &&
             bikeSpeedMs != null &&
@@ -978,16 +974,12 @@ class AlertDecider(
                 when {
                     anyImminentImpact -> {
                         // Held imminent threat: re-fire at the episode
-                        // pacing until it clears. Carry the triggering
-                        // vehicle's lateralPos so audio consumers can pan
-                        // to the threat's side when the experimental
-                        // directional-audio flag is on.
+                        // pacing until it clears.
                         lastBeepAtMs = nowMs
                         beepPending = false
                         urgentLastFireMs = nowMs
                         urgentFiredThisEpisode = true
                         Event.UrgentApproach(
-                            lateralPos = imminentImpactTrigger.lateralPos,
                             viaMovingPath = urgentViaMoving,
                             triggerTid = imminentImpactTrigger.id,
                             triggerDistanceM = imminentImpactTrigger.distanceM,
@@ -1038,18 +1030,14 @@ class AlertDecider(
                             else -> {
                                 lastBeepAtMs = nowMs
                                 beepPending = false
-                                // closestVehicle's lateralPos feeds
-                                // directional audio when the experimental
-                                // flag is on; defaults to 0f when no
-                                // closest is tracked (defensive -
-                                // beepPending shouldn't normally reach
-                                // here in that state).
+                                // The guard is defensive: beepPending should
+                                // not reach here with no closest track, and
+                                // the tier latch has nothing to key on if it
+                                // does. The cue fires either way.
                                 if (v != null) {
                                     firedTierPerTid[v.id] = closestUrgency
-                                    Event.Beep(count = closestUrgency, lateralPos = v.lateralPos)
-                                } else {
-                                    Event.Beep(count = closestUrgency, lateralPos = 0f)
                                 }
+                                Event.Beep(count = closestUrgency)
                             }
                         }
                     }

@@ -311,9 +311,8 @@
     <string name="settings_home_ha_mqtt_ready">Conectado · MQTT listo</string>
     <string name="settings_home_ha_configured">Configurado</string>
     <string name="settings_home_exp_precog">Precog</string>
-    <string name="settings_home_exp_panning">Direccional</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
-    <string name="settings_home_exp_active">Activado: <xliff:g id="features" example="Precog + Panning">%1$s</xliff:g></string>
+    <string name="settings_home_exp_active">Activado: <xliff:g id="features" example="Precog">%1$s</xliff:g></string>
 
     <!-- Ajustes → Permisos (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permisos</string>
@@ -339,10 +338,6 @@
     <string name="settings_exp_intro">Funciones aún en pruebas. Pueden ir a tirones o cambiar sin previo aviso.</string>
     <string name="settings_exp_precog_title">Predecir trayectorias de adelantamiento (1 s de anticipación)</string>
     <string name="settings_exp_precog_subtitle">Dibuja cada vehículo donde estará dentro de 1 s - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
-    <string name="settings_exp_panning_title">Audio de alerta direccional</string>
-    <string name="settings_exp_panning_subtitle">Los pitidos y avisos urgentes suenan por el altavoz del lado de la amenaza, para hacerlo más fácil de identificar. Funciona con los altavoces del teléfono en horizontal (gira con el soporte) y con auriculares estéreo (BT, BLE, cable, USB, audífono). En vertical suena en mono.</string>
-    <string name="settings_exp_invert_title">Invertir izquierda/derecha</string>
-    <string name="settings_exp_invert_subtitle">Invierte los canales si los avisos direccionales suenan en el oído equivocado (fallo raro de algunos dispositivos o auriculares puestos al revés).</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>

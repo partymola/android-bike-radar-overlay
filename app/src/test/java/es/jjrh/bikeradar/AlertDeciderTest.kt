@@ -2237,35 +2237,6 @@ class AlertDeciderTest {
         assertUrgent(again)
     }
 
-    // ── lateralPos plumbing for directional-audio (experimental) ───────
-
-    @Test fun `Beep carries closest target lateralPos`() {
-        // Vehicle at far third with lateralPos = +0.7 (right-of-rider).
-        // The Beep event must surface that lateralPos so the AlertBeeper
-        // pan stage can steer the cue to the rider's right ear.
-        val d = AlertDecider()
-        val c = Clock()
-        val v = Vehicle(id = 1, distanceM = 18, speedMs = 5f, lateralPos = 0.7f)
-        d.decide(listOf(v), alertMax, c.tick())
-        val ev = d.decide(listOf(v), alertMax, c.tick())
-        assertEquals(AlertDecider.Event.Beep(count = 1, lateralPos = 0.7f), ev)
-    }
-
-    @Test fun `UrgentApproach carries triggering vehicle lateralPos`() {
-        // Stationary rider; vehicle closes fast at lateralPos = -0.6
-        // (left-of-rider). The UrgentApproach must surface -0.6 so the
-        // urgent cue pans to the rider's left ear.
-        val d = AlertDecider(stationaryDwellMs = 2000L)
-        val c = Clock()
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
-        c.jump(2000)
-        val v = Vehicle(id = 1, distanceM = 5, speedMs = -8f, lateralPos = -0.6f)
-        d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        val ev = d.decide(listOf(v), alertMax, c.tick(), bikeSpeedMs = 0f)
-        val urgent = ev as AlertDecider.Event.UrgentApproach
-        assertEquals(-0.6f, urgent.lateralPos)
-    }
-
     @Test fun `UrgentApproach carries the triggering vehicle for the capture log`() {
         // The capture log's frame_closest_* fields record the NEAREST car,
         // which in the field is often a slower one than the car that opened

@@ -54,8 +54,6 @@ data class PrefsSnapshot(
     val adaptiveAlertsEnabled: Boolean,
     val urgentLowSpeedEnabled: Boolean,
     val precogEnabled: Boolean,
-    val experimentalLateralPanning: Boolean,
-    val experimentalLateralPanningInvertLR: Boolean,
     val turnAwareAlertsEnabled: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
@@ -319,28 +317,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_PRECOG, false)
         set(v) {
             sp.edit().putBoolean(KEY_PRECOG, v).apply()
-        }
-
-    /** Experimental: hard-pan Beep + UrgentApproach to the threat's side.
-     *  Works on stereo headphones (BT/BLE/wired/USB/hearing aid) and on the
-     *  phone's two built-in speakers in landscape (rotation-aware); portrait
-     *  and unknown routes stay centred. Default off. */
-    var experimentalLateralPanning: Boolean
-        get() = sp.getBoolean(KEY_LATERAL_PANNING, false)
-        set(v) {
-            sp.edit().putBoolean(KEY_LATERAL_PANNING, v).apply()
-        }
-
-    /** Safety valve for [experimentalLateralPanning]: swap left/right at
-     *  the final gain step. Covers the rare cases where the rider's
-     *  headphones report channels inverted (factory-mislabelled buds,
-     *  or a remembered earbud-on-wrong-ear), or a device-class quirk in
-     *  AudioTrack stereo routing. Off by default; only meaningful when
-     *  [experimentalLateralPanning] is on. */
-    var experimentalLateralPanningInvertLR: Boolean
-        get() = sp.getBoolean(KEY_LATERAL_PANNING_INVERT, false)
-        set(v) {
-            sp.edit().putBoolean(KEY_LATERAL_PANNING_INVERT, v).apply()
         }
 
     /** Hold the alert episode open through substantial corners. Cornering
@@ -738,8 +714,6 @@ class Prefs(context: Context) {
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
         urgentLowSpeedEnabled = urgentLowSpeedEnabled,
         precogEnabled = precogEnabled,
-        experimentalLateralPanning = experimentalLateralPanning,
-        experimentalLateralPanningInvertLR = experimentalLateralPanningInvertLR,
         turnAwareAlertsEnabled = turnAwareAlertsEnabled,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
@@ -799,8 +773,6 @@ class Prefs(context: Context) {
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("precog_enabled=$precogEnabled")
-        appendLine("experimental_lateral_panning=$experimentalLateralPanning")
-        appendLine("experimental_lateral_panning_invert_lr=$experimentalLateralPanningInvertLR")
         appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
@@ -855,8 +827,13 @@ class Prefs(context: Context) {
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_TURN_AWARE_ALERTS = "turn_aware_alerts_enabled"
-        const val KEY_LATERAL_PANNING = "experimental_lateral_panning"
-        const val KEY_LATERAL_PANNING_INVERT = "experimental_lateral_panning_invert_lr"
+
+        // Two keys are deliberately absent: `experimental_lateral_panning` and
+        // `experimental_lateral_panning_invert_lr`, from the removed
+        // directional-audio feature. Any value an existing install still holds
+        // is inert - nothing reads them - so they are left in place rather than
+        // migrated away, which would cost a one-shot edit on every start to
+        // clean up two booleans nobody can observe. Do not reuse the names.
         const val KEY_CLOSE_PASS_ENABLED = "close_pass_logging_enabled"
         const val KEY_CLOSE_PASS_EMIT_MIN_X_M = "close_pass_emit_min_x_m"
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"

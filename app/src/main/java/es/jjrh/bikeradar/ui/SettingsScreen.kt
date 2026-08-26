@@ -467,7 +467,6 @@ private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): Str
 private fun experimentalSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {
     val on = buildList {
         if (snap.precogEnabled) add(ctx.getString(R.string.settings_home_exp_precog))
-        if (snap.experimentalLateralPanning) add(ctx.getString(R.string.settings_home_exp_panning))
     }
     return if (on.isEmpty()) {
         ctx.getString(R.string.settings_home_exp_all_off)

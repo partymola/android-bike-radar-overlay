@@ -16,13 +16,11 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.SensorManager
-import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.IBinder
 import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
-import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
@@ -317,16 +315,8 @@ class BikeRadarService : Service() {
         // Service-scope AlertBeeper. AudioTracks are warmed once here
         // so the first beep after any radar reconnect lands without
         // mixer / MinBuf cold-start latency.
-        //
-        // Rotation is fetched via DisplayManager rather than Context.getDisplay():
-        // on Android 16 the latter throws UnsupportedOperationException for
-        // Service contexts (no associated Display). The DisplayManager handle
-        // returns a live Display whose getRotation() tracks orientation changes.
-        val defaultDisplay: Display? = getSystemService(DisplayManager::class.java)
-            ?.getDisplay(Display.DEFAULT_DISPLAY)
         alertBeeper = AlertBeeper(
             audioManager = getSystemService(AUDIO_SERVICE) as AudioManager,
-            rotationProvider = { defaultDisplay?.rotation ?: android.view.Surface.ROTATION_90 },
             // Record every cue outcome (post-suppression) in the capture log:
             // bare tags for cues that sounded, `cue_failed ...` lines for play
             // failures - so a wrong-time beep OR a silent-audio window can be
@@ -354,13 +344,7 @@ class BikeRadarService : Service() {
             // hands any pending restore to walkAwayAlarm.stop(). Guarded:
             // walkAwayAlarm is constructed later in onCreate.
             walkAwayOverrideActive = { ::walkAwayAlarm.isInitialized && walkAwayAlarm.overrideActive },
-        ).also {
-            it.setVolumePct(prefs.alertVolume)
-            it.setPanning(
-                enabled = prefs.experimentalLateralPanning,
-                invertLR = prefs.experimentalLateralPanningInvertLR,
-            )
-        }
+        ).also { it.setVolumePct(prefs.alertVolume) }
 
         overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
         reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)

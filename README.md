@@ -45,8 +45,6 @@ strip; the rest of your screen stays yours. (*Image credits
 - **Alerts you don't have to look at.** Beeps rise in tiers as the
   closest car nears, a distinct urgent tone fires if an impact looks
   imminent, and a clear chime sounds when the road behind is empty.
-  Optional left/right panning puts the beep on the threat's side, on
-  speakers or any stereo headphone route.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the overtakes that pass close, notifies a post-ride summary, and
   keeps per-ride stats - distance, overtakes, close passes, how close

@@ -331,9 +331,8 @@
     <string name="settings_home_ha_mqtt_ready">Connected · MQTT ready</string>
     <string name="settings_home_ha_configured">Configured</string>
     <string name="settings_home_exp_precog">Precog</string>
-    <string name="settings_home_exp_panning">Directional</string>
     <string name="settings_home_exp_all_off">All off</string>
-    <string name="settings_home_exp_active"><xliff:g id="features" example="Precog + Panning">%1$s</xliff:g> on</string>
+    <string name="settings_home_exp_active"><xliff:g id="features" example="Precog">%1$s</xliff:g> on</string>
 
     <!-- Settings → Permissions chrome (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permissions</string>
@@ -359,10 +358,6 @@
     <string name="settings_exp_intro">Features still being tested. May be jittery or change without notice.</string>
     <string name="settings_exp_precog_title">Predict overtake paths (1 s lookahead)</string>
     <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
-    <string name="settings_exp_panning_title">Directional alert audio</string>
-    <string name="settings_exp_panning_subtitle">Pan beeps and urgent cues to the threat\'s side via stereo. Works on phone speakers in landscape (rotates with the mount) and on stereo headphones (BT, BLE, wired, USB, hearing aid). Portrait plays mono.</string>
-    <string name="settings_exp_invert_title">Invert left/right</string>
-    <string name="settings_exp_invert_subtitle">Flip channels if directional cues land in the wrong ear (rare device-class quirk or earbuds worn on the wrong side).</string>
 
     <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alerts</string>

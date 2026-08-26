@@ -13,8 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,10 +39,6 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
         navController = navController,
         precogEnabled = prefsSnap.precogEnabled,
         onPrecogChange = { prefs.precogEnabled = it },
-        lateralPanningEnabled = prefsSnap.experimentalLateralPanning,
-        onLateralPanningChange = { prefs.experimentalLateralPanning = it },
-        lateralPanningInvertLR = prefsSnap.experimentalLateralPanningInvertLR,
-        onLateralPanningInvertLRChange = { prefs.experimentalLateralPanningInvertLR = it },
     )
 }
 
@@ -57,10 +51,6 @@ internal fun SettingsExperimentalContent(
     navController: NavController,
     precogEnabled: Boolean,
     onPrecogChange: (Boolean) -> Unit,
-    lateralPanningEnabled: Boolean,
-    onLateralPanningChange: (Boolean) -> Unit,
-    lateralPanningInvertLR: Boolean,
-    onLateralPanningInvertLRChange: (Boolean) -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -86,28 +76,6 @@ internal fun SettingsExperimentalContent(
                     checked = precogEnabled,
                     onCheckedChange = onPrecogChange,
                 )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            SettingsRowGroup {
-                SettingsToggleRow(
-                    leadingIcon = Icons.Default.Headphones,
-                    leadingTint = br.brand,
-                    title = stringResource(R.string.settings_exp_panning_title),
-                    subtitle = stringResource(R.string.settings_exp_panning_subtitle),
-                    checked = lateralPanningEnabled,
-                    onCheckedChange = onLateralPanningChange,
-                )
-                if (lateralPanningEnabled) {
-                    SettingsToggleRow(
-                        leadingIcon = Icons.Default.SwapHoriz,
-                        leadingTint = br.fgDim,
-                        title = stringResource(R.string.settings_exp_invert_title),
-                        subtitle = stringResource(R.string.settings_exp_invert_subtitle),
-                        checked = lateralPanningInvertLR,
-                        onCheckedChange = onLateralPanningInvertLRChange,
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))

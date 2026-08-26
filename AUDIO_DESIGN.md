@@ -71,8 +71,7 @@ confused with each other or with the awareness beeps:
   the last and the gaps accelerating - so the sound perceptually rushes at the
   rider. A looming-intensity envelope shortens brake reaction time (Gray,
   "Looming Auditory Collision Warnings for Driving", Human Factors 2011); the
-  effect is carried by loudness and tempo, with no pitch motif. It is also
-  panned toward the threat's side (see Stereo panning) to trim the head-check.
+  effect is carried by loudness and tempo, with no pitch motif.
   It is told apart from a three-beep by count and cadence, not pitch.
 - **Radar link dropped.** When the rear-radar link dies mid-ride the overlay
   freezes on its last frame, so a dead radar looks identical to a clear road.
@@ -111,7 +110,7 @@ not a fine-pitch distinction; within the class the cues are separated by
 | All clear | (road empties) | 1100 to 700 Hz | soft two-tone descent |
 
 The status cues share one carrier and are read purely by pulse count: one for
-reconnect, two for battery, three for drop. The all-clear is its own class (a
+reconnect, three for drop. The all-clear is its own class (a
 falling glide, never a status carrier), and it is never allowed to overlap a beep
 on the speaker.
 
@@ -191,26 +190,20 @@ heard. A dead audio server (a rare but real mid-ride event) is detected by the
 play failing, which triggers a throttled rebuild of the cue tracks and a retry,
 so the cue still sounds once the server is back.
 
-## Stereo panning (experimental, off by default)
+## Every cue is mono
 
-When enabled, the close-pass beep and the urgent cue bias toward the threat's
-side to give a pre-attentive "which side" cue that saves a head-check. The
-deflection is strong - a ~3 dB bias was tried first and could not be localised -
-but the far channel is floored rather than silenced. Headphone-class routes are a
-supported pan path, and a rider wearing a single earbud cannot be detected from
-an app: a wireless pair presents as one output, and wear state lives in the bud's
-own firmware. Muting a channel outright would leave that rider with no cue at all
-for threats on the missing side while still hearing every centred all-clear,
-which is a worse picture than no panning at all. What the floor gives up is the
-rest of the channel difference: the two ears differ by about 12 dB rather than
-by everything, still four times the 3 dB that proved too subtle.
+Directional cues were built and shipped behind an experimental toggle, then
+removed. The reasoning is recorded in `AlertBeeper.kt`'s KDoc: a cue declared as
+alarm-usage audio reaches one speaker while other audio on the same phone drives
+both, so a hard pan was not localisable left from right, and on a headset the
+phone plays each cue on its own speaker as well, with the Bluetooth copy
+arriving later.
 
-On headphone-class routes the channel labels travel intact; on the built-in
-speaker panning only helps in landscape (the two speakers are far enough apart
-there) and the app compensates for phone rotation so the cue reaches the correct
-ear. Portrait and unknown routes fall back to mono. It is default-off because its
-value depends on assumptions about localisation that need on-road validation
-before it becomes a default.
+The delayed second copy is NOT a panning defect and did not leave with panning;
+it was present on every cue with the headsets tried on this phone, panned or
+not. Do not read
+this section as a reason to re-open panning in order to fix it. Which side a
+vehicle is on is carried by the overlay, not by the audio.
 
 ## The alarm-system frame, and the non-claim
 
@@ -240,8 +233,7 @@ device and makes no compliance claim.
     `markedly faster closer bypasses episode pacing` - the urgent channel's
     episode pacing and its escape hatch.
   - `AlertBeeperCueShapeTest` pins each cue's pulse count and inter-pulse
-    timing, so the count-and-timing vocabulary cannot silently change; the pan
-    resolution is exhausted in `AlertBeeperPanTest`.
+    timing, so the count-and-timing vocabulary cannot silently change.
 
 Before changing alert behaviour, read the relevant KDoc, run the decider tests,
 and replay the cue-ledger gate (`CueLedgerReplayTest`) so any change in cue

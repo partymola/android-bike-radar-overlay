@@ -42,8 +42,6 @@ internal object SnapshotFixtures {
         adaptiveAlertsEnabled = true,
         urgentLowSpeedEnabled = true,
         precogEnabled = false,
-        experimentalLateralPanning = false,
-        experimentalLateralPanningInvertLR = false,
         turnAwareAlertsEnabled = true,
         closePassLoggingEnabled = false,
         closePassEmitMinRangeXM = 1.0f,

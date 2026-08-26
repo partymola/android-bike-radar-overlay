@@ -106,10 +106,6 @@ internal class OverlayPipeline(
             var overlayAdded = false
             val view = overlayHost.createView()
             beeper.setVolumePct(prefs.alertVolume)
-            beeper.setPanning(
-                enabled = prefs.experimentalLateralPanning,
-                invertLR = prefs.experimentalLateralPanningInvertLR,
-            )
             val alerts = AlertDecider(
                 onTurnDefer = { tailMs -> clog("# turn clear-defer tail_ms=$tailMs") },
                 onGateEvent = clog,
@@ -335,14 +331,10 @@ internal class OverlayPipeline(
                 alerts = alerts,
             )
         }
-        beeper.setPanning(
-            enabled = overlayPrefs.experimentalLateralPanning,
-            invertLR = overlayPrefs.experimentalLateralPanningInvertLR,
-        )
         when (val cue = AlertCue.forEvent(ev)) {
-            is AlertCue.Beep -> beeper.play(cue.count, cue.lateralPos)
+            is AlertCue.Beep -> beeper.play(cue.count)
             AlertCue.Clear -> beeper.playClear()
-            is AlertCue.Urgent -> beeper.playUrgent(cue.lateralPos)
+            AlertCue.Urgent -> beeper.playUrgent()
             AlertCue.Silence -> {}
         }
     }

@@ -278,9 +278,8 @@ internal fun PairingStepContent(
         // without the overlay so blocking onboarding on pairing would
         // close off legitimate use cases. The eBike step follows.
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Discovery hint: experimental features (directional audio,
-            // overtake prediction) live behind a single Settings entry
-            // so onboarding stays minimal.
+            // Discovery hint: the experimental features live behind a
+            // single Settings entry so onboarding stays minimal.
             Text(
                 text = stringResource(R.string.onboarding_pair_more_features),
                 color = br.fgDim,

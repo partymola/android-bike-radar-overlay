@@ -51,7 +51,6 @@ class OverlayPipelineDrivingTest {
         prefs = Prefs(context)
         beeper = AlertBeeper(
             audioManager = context.getSystemService(AudioManager::class.java),
-            rotationProvider = { android.view.Surface.ROTATION_0 },
             onCue = {},
         )
         fakeHost = FakeOverlayHost(context)

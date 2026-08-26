@@ -64,10 +64,7 @@ class CueLedgerReplayTest {
      * ledger of audible cues (one line per non-silent cue). Beep carries its
      * count; UrgentApproach carries which gate opened it (the v0.11 low-speed
      * moving extension vs the stationary path) since that attribution is the
-     * safety-relevant part of the event. Lateral pan position is deliberately
-     * excluded - it is experimental and pinned separately by AlertBeeperPanTest;
-     * keeping it out of the golden stops sub-metre decoder jitter from churning
-     * this safety pin.
+     * safety-relevant part of the event.
      */
     private fun replayLedger(
         alertMaxM: Int,

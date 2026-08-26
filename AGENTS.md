@@ -163,7 +163,14 @@ summary; the Key files table maps each part to its file.
   multiple files and the dead-radar window between them is uncaptured.
   Every file's header carries a build stamp (`# app version=... code=...
   build=...`), plus `commit=` on non-release builds only - so don't infer a
-  build from the APK's install time. **A release-variant capture is NOT
+  build from the APK's install time. It also carries
+  `# clock unix_ms=.. mono_ms=..`, both clocks read at one instant: packet
+  lines are prefixed with wall-clock ms while sensor series such as
+  `# turn yaw ts_mono=` are elapsedRealtime, and this converts between them
+  by subtraction rather than by correlation. The offset holds while the wall
+  clock is not stepped - an NTP correction mid-ride moves the packet stamps
+  and not the anchor, and nothing in the file records it.
+  **A release-variant capture is NOT
   attributable to a tree**: two release APKs built from different code stamp
   identically. Why, and the `commit=unknown` fallback: `BuildStamp` KDoc.
 

@@ -226,9 +226,10 @@ class TurnSensorControllerTest {
         // sample, so at the 200 ms throttle the first three lines land at
         // 1050 / 1250 / 1450. Asserting the values rather than the shape:
         // a `ts_mono=\d+` pattern is equally satisfied by a constant 0 and
-        // by a wall-clock reading, and the `_mono` suffix is a promise
-        // nothing else in the capture can check - the file carries no
-        // anchor between this base and the `unix_ms` packet prefixes.
+        // by a wall-clock reading, and the `_mono` suffix is a promise no
+        // other line can check: the header's clock anchor gives a reader
+        // the offset between the bases, which silently mis-converts every
+        // yaw sample if this field is not on the base it names.
         val stamps = cornerLog(rate = 0.5f, samples = 120)
             .filter { it.startsWith("# turn yaw ") }
             .take(3)

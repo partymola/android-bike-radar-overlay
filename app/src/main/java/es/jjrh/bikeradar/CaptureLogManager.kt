@@ -24,9 +24,11 @@ import java.util.UUID
  * file is created, so every [clog] then no-ops on the null writer.
  *
  * Dependencies are injected so the class is JVM/Robolectric-constructible:
- * [externalFilesDir] supplies the app-private external root, [mirror] is the
- * debug-only logcat echo (kept out of release builds by the caller), and
- * [onActiveName] mirrors the active file name to wherever the UI reads it.
+ * [externalFilesDir] supplies the app-private external root,
+ * [captureLoggingEnabled] is the opt-in read, [mirror] is the debug-only
+ * logcat echo (kept out of release builds by the caller), [onActiveName]
+ * mirrors the active file name to wherever the UI reads it, and [clockAnchor]
+ * samples the two time bases for the header.
  *
  * [buildStamp] is written into every file's header rather than once per
  * process: a mid-ride radar drop starts a new file, so a per-process stamp
@@ -39,6 +41,13 @@ internal class CaptureLogManager(
     private val mirror: (String) -> Unit = {},
     private val onActiveName: (String?) -> Unit = {},
     private val buildStamp: () -> String = { BuildConfigStamp.line() },
+    /** Samples both clocks ADJACENTLY and renders the header's anchor line.
+     *  The two reads have to stay in one place: the whole value of the line
+     *  is that the offset between the bases is accurate, and a caller that
+     *  passed them in separately could interleave work between them. */
+    private val clockAnchor: () -> String = {
+        anchorLine(System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime())
+    },
 ) {
     private val lock = Any()
 
@@ -64,6 +73,7 @@ internal class CaptureLogManager(
         // catch of its own - a throw there would abort the connection before
         // the overlay/alert pipeline attaches.
         val stampLine = runCatching { buildStamp() }.getOrElse { "# app stamp unavailable" }
+        val anchor = runCatching { clockAnchor() }.getOrElse { "# clock unavailable" }
         try {
             // No autoFlush: it write()s on every println, defeating the
             // BufferedWriter and adding a syscall per BLE notify (~11 Hz).
@@ -80,10 +90,14 @@ internal class CaptureLogManager(
             clog("# bike-radar capture started ${java.time.Instant.now()}")
             clog("# format: unix_ms char_tail_4hex hex_bytes_no_spaces")
             clog(stampLine)
+            // After the stamp, so the stamp's position in the header is
+            // unchanged for anything already reading it.
+            clog(anchor)
             // Flush the whole header now. lastFlushMs above only forces the
-            // FIRST line out; without this the format line and the stamp sit
-            // in the buffer for up to FLUSH_INTERVAL_MS, so a hard kill early
-            // in a ride would leave a log that cannot be attributed to a build.
+            // FIRST line out; without this the format line, the stamp and the
+            // clock anchor sit in the buffer for up to FLUSH_INTERVAL_MS, so a
+            // hard kill early in a ride would leave a log that cannot be
+            // attributed to a build or placed on the wall clock.
             flushNow()
             Log.i(TAG, "capture log: ${file.absolutePath}")
             // Prune after the new file exists so steady-state count is
@@ -208,6 +222,25 @@ internal class CaptureLogManager(
     }
 
     companion object {
+        /** The header's clock anchor: one wall-clock reading and one
+         *  monotonic reading of the same instant.
+         *
+         *  Packet lines are prefixed with `unix_ms`, but the sampled series
+         *  written from sensors - `# turn yaw ts_mono=` - is elapsedRealtime,
+         *  and the two bases have no fixed relationship across a reboot. With
+         *  no anchor, placing a yaw sample on wall time means correlating it
+         *  against the packet lines around it, which is an estimate with a
+         *  spread rather than a conversion. Subtracting the two values here
+         *  gives the offset at the instant they were read.
+         *
+         *  That offset holds for the rest of the file only while the wall
+         *  clock is not stepped: `System.currentTimeMillis` is settable, so
+         *  an NTP correction or a manual change mid-ride moves the packet
+         *  stamps and leaves the anchor where it was. Nothing in the file
+         *  records that it happened, so a conversion far from the header is
+         *  worth sanity-checking against the packet lines around it. */
+        internal fun anchorLine(unixMs: Long, monoMs: Long): String = "# clock unix_ms=$unixMs mono_ms=$monoMs"
+
         const val CAPTURE_DIR = "captures"
         const val MAX_CAPTURE_LOGS = 50
         const val MIN_USEFUL_LOG_BYTES = 500L

@@ -37,9 +37,13 @@ import kotlin.math.sqrt
  *
  * The field is `ts_mono`, not `ts`, because `# alert ts=` already means
  * wall clock: these are elapsedRealtime, the sensor's own base, and the
- * two must not be read as one series. The capture carries no anchor
- * between the bases, so align to wall clock via the surrounding packet
- * lines and use `ts_mono` only for spacing between yaw samples.
+ * two must not be read as one series. The header's
+ * `# clock unix_ms=.. mono_ms=..` line samples both at one instant, which
+ * converts between the bases without correlation for as long as the wall
+ * clock is not stepped - see
+ * [CaptureLogManager.anchorLine]. Captures written before that line
+ * existed carry no anchor and have to be aligned against the surrounding
+ * packet lines, which is an estimate with a spread.
  */
 class TurnSensorController(
     private val sensorManager: SensorManager?,

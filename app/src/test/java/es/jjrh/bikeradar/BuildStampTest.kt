@@ -190,6 +190,8 @@ class BuildStampTest {
             startedLine,
             "# format: unix_ms char_tail_4hex hex_bytes_no_spaces",
             stamp,
+            // Widest plausible anchor: both bases at 13 digits.
+            CaptureLogManager.anchorLine(unixMs = 1_800_000_000_000L, monoMs = 9_999_999_999_999L),
         ).sumOf { it.length + 1 }
         assertTrue(
             "header $header bytes must stay under the prune threshold",

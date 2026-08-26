@@ -23,6 +23,12 @@ import java.util.zip.GZIPInputStream
 @RunWith(RobolectricTestRunner::class)
 class CaptureLogManagerTest {
 
+    /** Lines `open()` writes before any traffic: started, format, build
+     *  stamp, clock anchor. Asserting "in the header" rather than "somewhere
+     *  in the file" is what stops a write drifting to close(), where a
+     *  crash-truncated log would carry neither. */
+    private val headerLines = 4
+
     @Test fun openIsANoOpWhenLoggingDisabled() {
         val root = Files.createTempDirectory("caplog").toFile()
         var name: String? = "sentinel"
@@ -68,8 +74,45 @@ class CaptureLogManagerTest {
         // In the HEADER, not merely somewhere in the file: moving the write to
         // close() would keep the counts above at 1 while a crash-truncated log
         // - the case this feature exists to diagnose - carried no stamp.
-        val inHeader = listOf(kept, second).map { gz -> readLines(gz).take(3).count { it == expected } }
+        val inHeader = listOf(kept, second).map { gz -> readLines(gz).take(headerLines).count { it == expected } }
         assertEquals("stamped within the header of both files", listOf(1, 1), inHeader)
+    }
+
+    @Test fun theClockAnchorFormatNamesBothBases() {
+        // Pure formatter. Both keys are load-bearing for a reader: without
+        // the names, two bare numbers on a line cannot say which base is
+        // which, and subtracting them the wrong way round is silent.
+        assertEquals(
+            "# clock unix_ms=1787739158644 mono_ms=636270669",
+            CaptureLogManager.anchorLine(1787739158644L, 636270669L),
+        )
+    }
+
+    @Test fun theDefaultClockWiringWritesBothBasesTheRightWayRound() {
+        // Constructs without clockAnchor, so this exercises the production
+        // default. The two readings are of different bases, and which is
+        // which is the whole point: a wall clock is epoch-scale, a
+        // monotonic one counts from boot. Swapping them, or sampling one
+        // clock twice, produces a line that still parses.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val m = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        m.open()
+        m.clog("a-line")
+        m.close()
+
+        val gz = File(root, CaptureLogManager.CAPTURE_DIR)
+            .listFiles { f -> f.name.endsWith(".log.gz") }!!.single()
+        val line = readLines(gz).take(headerLines).single { it.startsWith("# clock ") }
+        val unixMs = line.substringAfter("unix_ms=").substringBefore(' ').toLong()
+        val monoMs = line.substringAfter("mono_ms=").toLong()
+        // Epoch millis at the start of 2026. Any wall clock this app runs
+        // under is past it; reaching it as an uptime would take 56,000
+        // years. The two bands cannot both be satisfied by one clock, which
+        // is what makes this catch a swap or a doubled sample rather than
+        // just a well-formed line.
+        val epochFloorMs = 1_767_225_600_000L
+        assertTrue("unix_ms must be epoch-scale, got $unixMs", unixMs > epochFloorMs)
+        assertTrue("mono_ms must be an uptime, not an epoch, got $monoMs", monoMs in 0 until epochFloorMs)
     }
 
     @Test fun theDefaultStampWiringWritesARealBuildLine() {
@@ -85,7 +128,7 @@ class CaptureLogManagerTest {
 
         val gz = File(root, CaptureLogManager.CAPTURE_DIR)
             .listFiles { f -> f.name.endsWith(".log.gz") }!!.single()
-        val stamp = readLines(gz).take(3).single { it.startsWith("# app version=") }
+        val stamp = readLines(gz).take(headerLines).single { it.startsWith("# app version=") }
         assertTrue("default wiring must name the build type: $stamp", stamp.contains(" build=debug"))
         assertTrue(
             "default wiring must carry a resolved commit, not a shaped placeholder: $stamp",

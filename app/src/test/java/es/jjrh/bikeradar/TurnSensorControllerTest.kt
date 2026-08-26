@@ -375,9 +375,11 @@ class TurnSensorControllerTest {
 
     @Test
     fun yawLinesCarryTheSignedRateAndRunningAngle() {
-        // Named by sign, not by side. The sign-to-direction mapping is
-        // unconfirmed (see yawRateAboutGravity), so naming these left and
-        // right would assert something no test here establishes.
+        // Named by sign, not by side. The sign-to-direction mapping rests
+        // on Android's own conventions plus a road check (see
+        // yawRateAboutGravity); neither is something a test in this repo
+        // can establish, so naming these left and right would dress up a
+        // restatement as an assertion.
         // Read the SECOND line, not the first: the sample that opens an
         // episode returns before integrating, so the first line always
         // reports cum_deg=0.000 and could not show a sign either way.

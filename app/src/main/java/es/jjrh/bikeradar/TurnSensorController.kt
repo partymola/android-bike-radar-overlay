@@ -198,9 +198,17 @@ class TurnSensorController(
          *  reports the vector pointing AWAY from the earth (+9.81 on z
          *  with the device flat, screen up), and its gyroscope is
          *  counter-clockwise-positive about the device axes. Counter-
-         *  clockwise seen from above is a left turn, so POSITIVE should be
-         *  a left turn. Confirm that against a corner whose direction is
-         *  known before using the sign to place anything in the world. */
+         *  clockwise seen from above is a left turn, so POSITIVE is a left
+         *  turn.
+         *
+         *  Checked on the road rather than only derived: the outbound and
+         *  return legs of one commute through the same junction, taken in
+         *  opposite directions, produced opposite-signed episodes with the
+         *  left turn positive. That is field evidence from a single day,
+         *  and it settles the SIGN only - the magnitude is integrated
+         *  steering, not heading change, so a roughly 90-degree junction
+         *  reported about 175 and about -196 degrees on the two legs. Do
+         *  not read a completed episode's total as an angle turned. */
         internal fun yawRateAboutGravity(gyro: FloatArray, gravityUnit: FloatArray): Float = gyro[0] * gravityUnit[0] + gyro[1] * gravityUnit[1] + gyro[2] * gravityUnit[2]
 
         /** Normalised copy of [v]; returns [fallback] when the magnitude is

@@ -64,17 +64,23 @@ class TurnStateDecider(
      *  reach the angle reports TURNING from that sample, like any other.) */
     val episodeActive: Boolean get() = inEpisode
 
-    /** Signed heading change accumulated so far in the current rotation
-     *  episode, in degrees; zero between episodes. The sign is whatever
-     *  the caller's yaw-rate sign means - for the shipped feed, see
+    /** Signed integral of yaw rate over the current rotation episode, in
+     *  degrees; zero between episodes. The sign is whatever the caller's
+     *  yaw-rate sign means - for the shipped feed, see
      *  [TurnSensorController.yawRateAboutGravity].
+     *
+     *  This is integrated steering, NOT heading change, and the two are not
+     *  interchangeable: a roughly 90-degree junction measured about 175 and
+     *  about -196 degrees on its two legs (see
+     *  [TurnSensorController.yawRateAboutGravity]). Use it to tell a corner
+     *  from a wobble, never to report how far the rider turned.
      *
      *  A stalled sensor stream understates it: the integration step is
      *  clamped to [MAX_SAMPLE_GAP_MS], so an episode spanning a stall
-     *  yields a floor on the angle turned, not the angle turned. */
+     *  yields a floor on the integral rather than the integral. */
     val cumulativeDeg: Float get() = Math.toDegrees(cumRad.toDouble()).toFloat()
 
-    /** Signed heading change of the last COMPLETED rotation episode, in
+    /** Signed integrated steering of the last COMPLETED rotation episode, in
      *  degrees; sign convention as for [cumulativeDeg].
      *  [cumulativeDeg] is cleared when an episode closes, so
      *  without this the total angle of a corner - the only thing that says
@@ -140,12 +146,17 @@ class TurnStateDecider(
     }
 
     companion object {
-        /** Cumulative heading change (degrees) for a rotation episode to
-         *  count as a turn. 60 catches 90-degree corners and strong
-         *  roundabout exits - the manoeuvres observed to drop every
+        /** Integrated steering (degrees, see [cumulativeDeg]) for a rotation
+         *  episode to count as a turn. 60 catches 90-degree corners and
+         *  strong roundabout exits - the manoeuvres observed to drop every
          *  followed track - while ignoring lane changes and gentle bends,
          *  which do not. Steering wobble integrates to a few degrees at
-         *  most before the quiet-end resets the episode. */
+         *  most before the quiet-end resets the episode.
+         *
+         *  Do not read 60 as "a 60-degree corner". The quantity is
+         *  integrated steering, so a measured 90-degree junction ran to
+         *  about 175 degrees: the threshold trips partway INTO such a
+         *  corner, which is what the alert hold wants. */
         const val TURN_ANGLE_DEG = 60f
 
         /** Yaw rate (rad/s, ~8.6 deg/s) that opens and sustains a rotation

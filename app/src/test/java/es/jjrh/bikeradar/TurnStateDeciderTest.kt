@@ -187,6 +187,23 @@ class TurnStateDeciderTest {
     }
 
     @Test
+    fun eachCompletedEpisodeOverwritesTheLastEpisodeAngle() {
+        val d = TurnStateDecider()
+        val corner = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)
+        val afterCorner = d.feed(0f, durationMs = 1_000, startMs = corner + 50)
+        assertEquals(91.67f, d.lastEpisodeDeg, 0.1f)
+        // A 17-degree wobble in the post-turn window replaces the corner's
+        // total. The KDoc names that as deliberate and tells a maintainer
+        // not to "fix" it, with nothing pinning it: every other test here
+        // starts from a fresh decider, where a write-once guard still
+        // takes the first value and stays green. Under such a guard this
+        // field would report the ride's FIRST rotation forever after.
+        val wobble = d.feed(0.3f, durationMs = 1_000, startMs = afterCorner + 50)
+        d.feed(0f, durationMs = 1_500, startMs = wobble + 50)
+        assertEquals(17.19f, d.lastEpisodeDeg, 0.1f)
+    }
+
+    @Test
     fun resetClearsLastEpisodeDeg() {
         val d = TurnStateDecider()
         val end = d.feed(0.5f, durationMs = 3_200, startMs = 1_000)

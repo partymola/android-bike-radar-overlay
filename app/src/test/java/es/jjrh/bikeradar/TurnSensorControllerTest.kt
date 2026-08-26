@@ -24,6 +24,13 @@ import java.util.Locale
  * the decider through a synthetic corner (TURNING -> HOLD -> IDLE),
  * missing sensors degrade to a no-op, and stop() resets the published
  * state.
+ *
+ * The capture-log tests pin the trace by VALUE, not by shape: the sample
+ * clock, the running angle, the fixed-3-decimal format on both the yaw and
+ * the transition lines, and the exact line counts either side of TURNING.
+ * A pattern that accepts any digits is satisfied by a constant, and a count
+ * asserted as "more than none" is satisfied by one - both leave a log a
+ * post-ride reviewer reads as measurement free to drift.
  */
 @RunWith(RobolectricTestRunner::class)
 class TurnSensorControllerTest {
@@ -206,7 +213,41 @@ class TurnSensorControllerTest {
                 event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, 0f), tNs),
             )
         }
+        // Unregister before returning: the SensorManager is per-test, not
+        // per-call, so a controller left listening also receives the events
+        // of every later cornerLog in the same test.
+        c.stop()
         return lines
+    }
+
+    @Test
+    fun yawLinesCarryTheMonotonicSampleClock() {
+        // cornerLog stamps gravity at 1000 ms and steps the gyro 50 ms per
+        // sample, so at the 200 ms throttle the first three lines land at
+        // 1050 / 1250 / 1450. Asserting the values rather than the shape:
+        // a `ts_mono=\d+` pattern is equally satisfied by a constant 0 and
+        // by a wall-clock reading, and the `_mono` suffix is a promise
+        // nothing else in the capture can check - the file carries no
+        // anchor between this base and the `unix_ms` packet prefixes.
+        val stamps = cornerLog(rate = 0.5f, samples = 120)
+            .filter { it.startsWith("# turn yaw ") }
+            .take(3)
+            .map { it.substringAfter("ts_mono=").substringBefore(' ').toLong() }
+        assertEquals(listOf(1050L, 1250L, 1450L), stamps)
+    }
+
+    @Test
+    fun rotationBelowTheEpisodeFloorIsNotTraced() {
+        // 0.02 rad/s (~1.1 deg/s) is steering wobble: it never opens an
+        // episode, so the trace stays empty for the whole 7 s.
+        //
+        // The suite already held this property, but by one line - 35
+        // against an ungated 34 - and only because cornerLog defaults to
+        // 20 quiet samples. At quietSamples 10, 12 or 14 the ungated
+        // version passes, so a future edit to that default would retire
+        // the coverage with nothing going red.
+        val lines = cornerLog(rate = 0.02f, samples = 120)
+        assertTrue(lines.toString(), lines.none { it.startsWith("# turn yaw ") })
     }
 
     @Test
@@ -246,13 +287,18 @@ class TurnSensorControllerTest {
     @Test
     fun theCornerEntryIsTracedBeforeTheTurnQualifies() {
         // The hole this gate exists to close. TURNING is only reached once
-        // 60 degrees have accumulated - 2.1 s in at this rate - and the
-        // radar starts sweeping tracks off well before that, so a trace
-        // that began at TURNING would miss the entry entirely.
+        // 60 degrees have accumulated - declared at the 43rd sample,
+        // 3150 ms in at this rate - and the radar starts sweeping tracks
+        // off well before that, so a trace that began at TURNING would
+        // miss the entry entirely.
+        //
+        // Counted, not merely ordered: `firstYaw < turning` is satisfied by
+        // one line arriving a single sample early, which is not what "the
+        // entry is traced" means. At the 200 ms throttle, 11 precede it.
         val lines = cornerLog(rate = 0.5f, samples = 120)
-        val firstYaw = lines.indexOfFirst { it.startsWith("# turn yaw ") }
         val turning = lines.indexOfFirst { it.startsWith("# turn state=TURNING") }
-        assertTrue("entry untraced: first yaw $firstYaw, TURNING $turning", firstYaw < turning)
+        val yawBefore = lines.take(turning).count { it.startsWith("# turn yaw ") }
+        assertEquals(11, yawBefore)
     }
 
     @Test
@@ -284,10 +330,47 @@ class TurnSensorControllerTest {
         // qualifying angle.
         feed(0.3f, 35)
         assertEquals(TurnStateDecider.State.HOLD, c.state())
-        assertTrue(
-            "rotation during HOLD went untraced",
-            lines.count { it.startsWith("# turn yaw ") } > before,
+        // The count is deterministic - shadow sensors on fixed timestamps -
+        // so assert it. `> before` is satisfied by one line, which would
+        // still pass if the throttle or the gate dropped almost all of the
+        // HOLD-window trace.
+        assertEquals(9, lines.count { it.startsWith("# turn yaw ") } - before)
+    }
+
+    @Test
+    fun aQualifyingEpisodeInsideTheHoldWindowReportsTurning() {
+        // episodeActive's KDoc says a HOLD-window episode that DOES reach
+        // the angle reports TURNING from that sample, like any other -
+        // stateAt orders `inEpisode && qualified` ahead of the hold branch.
+        // Nothing drove that: the HOLD-window test only ever feeds 29
+        // degrees, so the parenthetical was documentation with no test
+        // behind it, on the branch that decides whether a second corner
+        // taken straight out of a first one defers the all-clear.
+        val sm = sensorManager()
+        val shadow = shadowOf(sm)
+        val c = TurnSensorController(sm)
+        c.start()
+        var tNs = 1_000_000_000L
+        shadow.sendSensorEventToListeners(
+            event(sm, Sensor.TYPE_GRAVITY, floatArrayOf(0f, 0f, 9.81f), tNs),
         )
+        fun feed(rate: Float, n: Int) = repeat(n) {
+            tNs += 50_000_000L
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, rate), tNs),
+            )
+        }
+        feed(0.5f, 120)
+        feed(0f, 20)
+        assertEquals(TurnStateDecider.State.HOLD, c.state())
+        // A fresh episode inside the window. Its opening sample only
+        // starts it, so 42 integrations of 0.025 rad reach 60.16 degrees:
+        // one short of that the state is still the hold.
+        feed(0.5f, 42)
+        assertEquals(TurnStateDecider.State.HOLD, c.state())
+        feed(0.5f, 1)
+        assertEquals(TurnStateDecider.State.TURNING, c.state())
+        c.stop()
     }
 
     @Test
@@ -298,10 +381,17 @@ class TurnSensorControllerTest {
         // Read the SECOND line, not the first: the sample that opens an
         // episode returns before integrating, so the first line always
         // reports cum_deg=0.000 and could not show a sign either way.
+        // The angle is asserted as a VALUE, not as a leading character: a
+        // `cum_deg=[0-9]` pattern pins the sign and nothing else, so any
+        // scaling of the running angle passes it. Line [1] is stamped
+        // 1250 ms, four 50 ms integration steps past the opener, so at
+        // 0.5 rad/s it is 4 * 1.432 = 5.73 degrees.
         val positive = cornerLog(rate = 0.5f, samples = 120).filter { it.startsWith("# turn yaw ") }[1]
-        assertTrue(positive, Regex("^# turn yaw ts_mono=\\d+ rate=0\\.500 cum_deg=[0-9]").containsMatchIn(positive))
+        assertTrue(positive, Regex("^# turn yaw ts_mono=\\d+ rate=0\\.500 cum_deg=-?\\d+\\.\\d{3}$").matches(positive))
+        assertEquals(5.73f, positive.substringAfter("cum_deg=").toFloat(), 0.1f)
         val negative = cornerLog(rate = -0.5f, samples = 120).filter { it.startsWith("# turn yaw ") }[1]
-        assertTrue(negative, Regex("^# turn yaw ts_mono=\\d+ rate=-0\\.500 cum_deg=-[0-9]").containsMatchIn(negative))
+        assertTrue(negative, Regex("^# turn yaw ts_mono=\\d+ rate=-0\\.500 cum_deg=-?\\d+\\.\\d{3}$").matches(negative))
+        assertEquals(-5.73f, negative.substringAfter("cum_deg=").toFloat(), 0.1f)
     }
 
     @Test
@@ -318,6 +408,14 @@ class TurnSensorControllerTest {
         // that opened the episode, 0.025 rad each = 170.46 degrees.
         val hold = lines.first { it.startsWith("# turn state=HOLD") }
         assertEquals(-170.46f, hold.substringAfter("total_deg=").toFloat(), 0.1f)
+        // Both transition lines go through the same fixed-3-decimal
+        // formatter as the yaw lines. `toFloat()` above parses a raw
+        // `Float.toString` just as happily, so without this the formatter
+        // could be dropped here alone and every assertion would still
+        // pass - taking the comma-decimal-locale protection with it on
+        // the two lines that carry a completed corner's angle.
+        assertTrue(turning, Regex("^# turn state=TURNING cum_deg=-\\d+\\.\\d{3}$").matches(turning))
+        assertTrue(hold, Regex("^# turn state=HOLD total_deg=-\\d+\\.\\d{3}$").matches(hold))
     }
 
     @Test

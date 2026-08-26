@@ -14,6 +14,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,6 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 import java.io.File
 import java.time.Duration
@@ -189,6 +191,22 @@ class BatteryScanReceiverTest {
         val started = shadowOf(app).peekNextStartedService()
         assertEquals(BikeRadarService.ACTION_READ_DEVICE, started.action)
         assertEquals("RearVue8", started.getStringExtra(BikeRadarService.EXTRA_NAME))
+        assertEquals("AA:BB:CC:DD:EE:FF", started.getStringExtra(BikeRadarService.EXTRA_MAC))
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.S, Build.VERSION_CODES.S_V2])
+    fun bondedMatchingDeviceForwardsAReadDeviceStartBeforeTiramisu() {
+        // extractResults picks its overload on SDK_INT, and robolectric.properties
+        // pins the suite to 35 - so the pre-33 arm is live on API 31-32 and runs
+        // in no other test. It is the arm that reads the batch at all: if it
+        // returned nothing, every wake on those two API levels would silently
+        // stop reaching the service.
+        val r = scanResultFor("AA:BB:CC:DD:EE:FF", "RearVue8", BluetoothDevice.BOND_BONDED)
+        receiver.onReceive(app, batchIntent(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, r))
+        val started = shadowOf(app).peekNextStartedService()
+        assertNotNull("expected the pre-33 arm to read the batch", started)
+        assertEquals(BikeRadarService.ACTION_READ_DEVICE, started.action)
         assertEquals("AA:BB:CC:DD:EE:FF", started.getStringExtra(BikeRadarService.EXTRA_MAC))
     }
 

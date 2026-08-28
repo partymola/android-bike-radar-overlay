@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.3.0 - 2026-08-28
+
+### Breaking
+
+- **Directional alert audio is gone, so if you had it switched on your cues are mono again.** Both toggles have been removed from Experimental, the panning switch and the invert-left-right one nested under it, and there is nothing to change by hand. It worked, but it did nothing on a phone speaker: cues play through only one of them, so a hard left pan and a hard right pan were indistinguishable. On headphones the phone plays each cue on its own speaker as well, with the Bluetooth copy landing later, and panning turned that smear into an echo.
+
+### Features
+
+- **The urgent warning now judges whether a car will clear your whole bike, not just the radar.** It was vetoed on where the predicted path passed the radar, a single point on a bike about 2.5 m long, so a vehicle converging on your front wheel scored as clear and the warning was withheld. The pass is now scored across the length of the bike, and you can set the margin in Settings, default 1.5 m. Across 183 rides, measured at a 30 m alert range, this removed 16 of 100 urgent cues, 14 of them vehicles that lost the cue entirely. On the subset of those rides the replay gate covers, beep and all-clear counts were unchanged.
+
+### Security
+
+- **Your accessories' Bluetooth addresses stay out of release logs.** A Bluetooth address is a durable hardware identifier, and eleven log lines wrote one into the system log on release builds. The system log is not private to the app: a bug report collects it, and a bug report is a file you hand to someone else. Addresses are now withheld on release builds, and device names still print at most of those lines, so a log you share is still readable.
+
+### Fix
+
+- **The app no longer dies in the background when Bluetooth permission is taken away.** The scan that watches for your accessories outlives the permission that started it, so after revoking Bluetooth access every wake killed the app. Each death was counted as a crash, which made the app look unstable and buried real crash reports. A denial now ends the batch quietly and is noted once every fifteen minutes.
+- **Settings shows your coordinates on the Permissions screen too.** The location card there was drawn without the "grant or enter coordinates" alternative every other screen gives it, so if you had typed coordinates you could not read or change them from Permissions. Its wording also claimed the London fallback unconditionally, which is wrong once you have set coordinates.
+- **The location card says what actually sets your sunset times.** It opened with "Skip it", so on a card where you had already granted location the London clause read as something only a decliner could reach. It now names the condition and reads the same either way. Both cards also say that coordinates you type override GPS, which they do, so coordinates entered for one trip keep driving your lights afterwards.
+- **Distances read the way your language writes them.** Both metre sliders formatted their value against US conventions, so Spanish showed "1.5 m" where it writes "1,5 m". The ride-summary notification already got this right, so one screen disagreed with another about the same number.
+- **The licences screen no longer overstates what it covers.** It promised the app's whole dependency tree and claimed every licence was GPL-3.0-compatible, then listed build tooling that is not in the app at all and includes a licence the FSF holds incompatible. It now covers direct dependencies, which is what it can actually list.
+
+### UX
+
+- **Spanish reads like Spanish.** The close-pass counter used a word that in Spain belongs to football and bullfighting; the paired badge and the eBike came out masculine where the camera and the bike are not; and several strings were simply ungrammatical, among them an intransitive verb given an object, a habitual clause sequenced with a punctual past, and a bare time adverbial. Toggle descriptions now say what the switch does rather than telling you what to do, and the LatAm and broadcast register is gone.
+
+### Diagnostics
+
+- **A capture log can now be placed on the clock by subtraction.** Packet lines carry wall-clock time while the sensor traces carry time since boot, and nothing in the file related the two, so putting a sensor sample on wall time meant estimating it per capture. The header now carries both clocks read at one instant. The offset holds for the rest of the file unless the phone's clock is stepped, which nothing records.
+- **Capture logs record which way you turned.** Turn state was logged without direction, so a vehicle's offset could not be resolved to a side of the road. The log now carries yaw rate and cumulative yaw, at most one line every 200 ms, and the Privacy screen and README say so. Cumulative yaw is integrated steering rather than the angle of the corner, so do not read it as one.
+- **The alert line names the car the app actually judged.** It reported the closest vehicle from a live setting read while the decision had been made against the frame's own snapshot, so changing your alert distance mid-ride could make one line name a car the app never considered.
+- **The bench cues sound like real traffic.** Every moving car in the debug scenario declared itself as receding while its distance counted down, so the alert logic read the receding half and stayed silent: no urgent cue, no close-pass, no danger band. The parked car was never removed either, so it sat at 4 m for its whole sixteen-second life and correctly muted the traffic further behind it, which on the bench reads as deafness.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the BLE protocol or the Home Assistant payloads, so nothing that worked with v1.2.0's renamed entities needs touching again.
+
+### Internal
+
+- **A new report covers the licence of every library on the release classpath, not just the ones the licences screen lists.** It watches for a dependency arriving under a licence this project cannot absorb, carried in by a routine version bump nobody reads as a licensing change. Its findings are report-only, because it reads each library's own metadata over the network and a check that fails on a passing network blip gets ignored. What it does fail on is examining nothing: an unreadable list, one that does not look like this app's, or a run that reached no metadata at all. A check that looked at nothing must never read as a clean one.
+- The Gradle version is now written in one place instead of nine, so a from-source build cannot use a version no gate ran. The Spanish store listing has its own icon, its screenshot no longer names the camera after its own label, and the store shots are refreshed against the current screens. The keyword scan no longer fails on dependency bumps that cannot see the repository's secrets. Dead instrumentation-test declarations are gone. Test coverage was added for the accessory batch read on older Android versions, the build stamp inside a git worktree, and the yaw trace's actual numbers rather than their shape.
+
 ## v1.2.0 - 2026-08-16
 
 ### Breaking

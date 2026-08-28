@@ -680,8 +680,8 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation(platform("androidx.compose:compose-bom:2026.08.00"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
-    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.72.0")
-    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.72.0")
-    testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.72.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.73.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.73.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.73.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

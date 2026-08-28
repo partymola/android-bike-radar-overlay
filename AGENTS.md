@@ -472,6 +472,59 @@ enforces them, and CONTRIBUTING.md points contributors here:
     wire value is `ordinal + 1`, so reordering its constants breaks the device
     protocol and passes this gate green. Different hazard, different guard: R8
     does not reorder, a maintainer does.
+- **Transitive licence check** (`scripts/check-transitive-licences.py`, fed by
+  `:app:writeReleaseRuntimeCoordinates`): reports the licence of every artifact
+  on the release runtime classpath, resolved from each artifact's own POM.
+  **Findings are report-only in `ci.yml`** - read the log, not the exit status.
+  `--strict` makes findings fail; promote once it has been quiet for a while.
+  - **It is hardening, not a compliance fix.** Measured Aug 2026: no artifact
+    on the release runtime classpath distributes a `NOTICE` file, so Apache 2.0
+    s.4(d) has nothing to carry forward, and the APK embeds the full Apache 2.0
+    text for six AndroidX artifacts. Note the trigger for s.4(d) is whether the
+    upstream **Work** ships a NOTICE, not whether our APK does - never argue it
+    from our own APK's contents, which would make stripping NOTICE files read
+    as a defence. Nothing re-checks this: the script reads POM `<licenses>`,
+    not NOTICE files, so a future bump can invalidate it silently. This watches
+    for a bump introducing an incompatible licence unnoticed - otherwise
+    invisible, because a bump is not read as a licensing change.
+  - **Two cheaper-looking routes were measured and are dead**, so do not
+    rebuild either. The Gradle module cache holds no `.pom` for most of what
+    ships (core-ktx, material3, navigation-compose have none), so a cache
+    reader silently skips the majority and reports clean. GitHub's
+    dependency-graph SBOM enumerates the shipped set correctly but resolves a
+    licence for 13 of 149 artifacts and **none of the 123 AndroidX ones**.
+  - **The upstream POMs do carry it**, which is why a direct fetch works where
+    those fail - and why this needs no Gradle resolution API and therefore **no
+    configuration-cache exemption**, which was the cost that made this a
+    decision rather than a chore.
+  - Findings are report-only for a different reason than the screenshot check
+    above: this one reaches the network, and a gate that reds on a CDN blip
+    gets bypassed.
+  - **The allow-list is exact spellings, not a regex on "apache".** A substring
+    match would absorb "Apache License 2.0 with Commons Clause", which is not a
+    free licence. An unfamiliar spelling should reach a human.
+  - **Anti-vacuity is the one thing that is always fatal**, findings-report-only
+    or not: exit 2 means the check examined nothing, and the workflow step
+    swallows every other code but re-raises that one. It fires on an unreadable
+    coordinate list, a list that does not look like this app's classpath, and a
+    run where no coordinate resolved at all. **`continue-on-error` on the step
+    would defeat all of it**, because it discards exit 2 exactly as it discards
+    exit 1, so the step swallows findings explicitly in its own script instead.
+    Do not "simplify" that back.
+  - `--self-test` pins that the classifier can REJECT, that a vacuous run
+    aborts, and that an all-unrecognised or all-undeclared run does not. That
+    last property is the one the abort exists to avoid having, and it is pinned
+    against real bucket shapes through `resolved_count`, because the defect it
+    guards was never in the predicate but in which quantity the caller fed it.
+    CI runs the self-test before the real check. Proven against real data too:
+    dropping one Apache spelling from the allow-list flips almost every
+    artifact to `unrecognised`.
+  - Current state: every artifact on the classpath resolves to Apache-2.0, in
+    four spellings. The count is not written here - the check prints it.
+  - `coreLibraryDesugaring`'s payload is GPL-2.0-with-Classpath-Exception and
+    is a real legal question, deliberately not pre-vetted. It is not enabled
+    (`minSdk 31`), and `SettingsLicencesCoverageTest` already watches for the
+    declaration appearing.
 - **detekt** is intentionally not wired: no stable release targets the
   pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
   in a public build. Revisit when a stable detekt supports the toolchain.

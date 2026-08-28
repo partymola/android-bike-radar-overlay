@@ -466,6 +466,58 @@ tasks.register<VerifyReleaseDexKeeps>("verifyReleaseDexKeeps") {
     )
 }
 
+/**
+ * Writes every artifact on the release runtime classpath as `group:name:version`,
+ * one per line, for `scripts/check-transitive-licences.py` to look up.
+ *
+ * Takes the resolution result as a `Property<ResolvedComponentResult>` rather
+ * than reaching for `configurations` inside the action: the latter captures
+ * the Project and breaks the configuration cache, which this repo runs
+ * everywhere. Resolution happens at execution time either way; only WHERE the
+ * graph is obtained differs.
+ *
+ * The classpath, not the whole build: plugin and build-host dependencies (AGP,
+ * ktlint, Roborazzi) never reach a rider's phone, and including them would
+ * bury the shipped set the check exists to cover - the same scoping
+ * `dependency-submission.yml` applies for the same reason.
+ */
+abstract class WriteReleaseRuntimeCoordinates : DefaultTask() {
+    @get:Input
+    abstract val root: Property<org.gradle.api.artifacts.result.ResolvedComponentResult>
+
+    @get:OutputFile
+    abstract val coordinates: RegularFileProperty
+
+    @TaskAction
+    fun run() {
+        val out = sortedSetOf<String>()
+        val seen = mutableSetOf<org.gradle.api.artifacts.component.ComponentIdentifier>()
+        val queue = ArrayDeque(listOf(root.get()))
+        while (queue.isNotEmpty()) {
+            val component = queue.removeFirst()
+            if (!seen.add(component.id)) continue
+            (component.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)?.let {
+                out += "${it.group}:${it.module}:${it.version}"
+            }
+            component.dependencies
+                .filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>()
+                .forEach { queue.addLast(it.selected) }
+        }
+        val file = coordinates.get().asFile
+        file.parentFile.mkdirs()
+        file.writeText(out.joinToString("\n", postfix = "\n"))
+        logger.lifecycle("release runtime classpath: ${out.size} artifacts -> $file")
+    }
+}
+
+tasks.register<WriteReleaseRuntimeCoordinates>("writeReleaseRuntimeCoordinates") {
+    root.set(
+        configurations.named("releaseRuntimeClasspath")
+            .flatMap { it.incoming.resolutionResult.rootComponent },
+    )
+    coordinates.set(layout.buildDirectory.file("reports/licences/release-runtime-coordinates.txt"))
+}
+
 // Classes kept out of the coverage figure: Compose UI (covered by Roborazzi
 // snapshots, not JaCoCo) and framework-bound services. Without this the raw
 // number reflects mostly untestable UI/service code rather than the logic the

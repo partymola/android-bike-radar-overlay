@@ -118,6 +118,40 @@ jobs:
         continue-on-error: true
         run: python3 scripts/check-screenshot-freshness.py
 
+      # Findings here are non-blocking, for a different reason to the step
+      # above: this one reaches the network to read each artifact's POM, so a
+      # CDN blip would red a build that has nothing wrong with it, and a check
+      # that cries wolf gets bypassed. It is a watch on dependency bumps, not a
+      # release gate.
+      #
+      # To promote once it has been quiet for a few months: add --strict AND
+      # delete the whole `set +e` ... `exit 0` wrapper, leaving the bare
+      # invocation. Adding --strict on its own does nothing, because its only
+      # signal is exit 1 and the wrapper swallows exactly that. Deleting only
+      # the `if` line is worse than doing nothing: `exit 0` then swallows the
+      # abort as well.
+      #
+      # The wrapper is why the promotion is a two-part edit rather than a flag:
+      # it also isolates a crash in the script, which would exit 1 and red a
+      # step that is meant to be advisory.
+      #
+      # The step is NOT continue-on-error, because that discards every exit
+      # code including the abort. Findings are swallowed explicitly below and
+      # exit 2 - "the check examined nothing" - is left fatal, since that must
+      # never read as "found nothing". The Gradle step and the self-test are
+      # fatal for the same reason: without either, the real check cannot run.
+      - name: Transitive licences (report only)
+        run: |
+          ./gradlew :app:writeReleaseRuntimeCoordinates --console=plain --no-daemon
+          python3 scripts/check-transitive-licences.py --self-test
+          set +e
+          python3 scripts/check-transitive-licences.py \
+            --coordinates app/build/reports/licences/release-runtime-coordinates.txt
+          code=$?
+          set -e
+          if [ "$code" = 2 ]; then exit 2; fi
+          exit 0
+
   # The release variant's only coverage. Every other job here builds debug,
   # which R8 never touches, so without this the first thing that can fail on a
   # shrunk APK is the tag build - and by then the tag is public and the only

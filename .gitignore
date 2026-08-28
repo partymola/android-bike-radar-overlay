@@ -17,3 +17,8 @@ debug.keystore
 # tooling output, and anything else that must never enter public
 # history. One rule - nothing under do-not-commit/ is ever committed.
 do-not-commit/
+
+# Importing a scripts/ check (as a test or a probe does) leaves a bytecode
+# cache beside it.
+__pycache__/
+*.pyc

@@ -68,9 +68,10 @@ short per-version changelog at
 F-Droid / store "What's New"; keyed by `versionCode`, not the name) - a tight
 benefit-framed summary, not the full CHANGELOG section. Then push
 a `v*` tag (e.g.
-`v0.7.1-alpha`). The tag triggers `.github/workflows/release-apk.yml`,
-which builds a release-signed APK and publishes a GitHub pre-release.
-The workflow defaults `prerelease: true` until the app exits alpha.
+`v1.3.0`). The tag triggers `.github/workflows/release-apk.yml`,
+which builds a release-signed APK and publishes a GitHub release.
+The workflow sets `prerelease: false`, because the app has been stable
+since 1.0.0. Cutting a pre-release means flipping that for the tag.
 
 **The store and README screenshots are Roborazzi goldens, copied.** Every
 PORTRAIT image under `screenshots/` and `fastlane/.../phoneScreenshots/` is a

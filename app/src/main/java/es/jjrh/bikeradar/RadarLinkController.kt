@@ -140,6 +140,12 @@ internal class RadarLinkController(
 
     private var linkProbeSeeded = false
 
+    // One cache refresh per reconnect loop before the legacy fallback is
+    // allowed to trust a "no V2 characteristic" reading. Loop-scoped rather
+    // than per-attempt so a genuine legacy radar pays the extra cycle once,
+    // and reset by runRadarConnection so a fresh link re-earns the check.
+    @Volatile private var legacyCacheRefreshed = false
+
     // Set true when the current connection reaches the V2 decode loop; read
     // after connectAndRun returns to decide whether to reset the backoff.
     @Volatile private var lastConnectionReachedDecode = false
@@ -312,6 +318,7 @@ internal class RadarLinkController(
         } ?: return
 
         currentRadarMac = mac
+        legacyCacheRefreshed = false
         var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
         try {
             while (true) {
@@ -520,6 +527,24 @@ internal class RadarLinkController(
 
             if (handshakeAbort != null) {
                 val legacyChar = legacyStreamChar(gatt)
+                if (legacyChar != null && !legacyCacheRefreshed) {
+                    // Do NOT trust a first-look table for this decision. Android
+                    // serves discovery from a per-device cache that survives
+                    // reboots for a bonded device, so a table can arrive
+                    // GATT_SUCCESS yet incomplete - this file already carries
+                    // two guards written for exactly that. A cached table
+                    // missing only the V2 characteristic would pin a healthy
+                    // radar out of its modern stream until it is power-cycled,
+                    // which is the one outcome this fallback must never cause.
+                    // Clear the cache, take the reconnect, and decide next
+                    // attempt on a table the device actually sent.
+                    legacyCacheRefreshed = true
+                    val refreshed = refreshGattCache(gatt)
+                    captureLog.clog("# legacy candidate; refreshing gatt cache first, refresh=$refreshed")
+                    journal("radar legacy candidate; cache refresh=$refreshed")
+                    gatt.disconnect()
+                    return true
+                }
                 if (legacyChar != null) {
                     captureLog.clog("# handshake aborted at $handshakeAbort; no V2 char, trying the legacy stream")
                     journal("radar legacy stream attempt after $handshakeAbort")

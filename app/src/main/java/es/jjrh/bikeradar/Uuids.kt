@@ -21,7 +21,8 @@ object Uuids {
     // Radar service (rear radar only)
     val SVC_RADAR: UUID = UUID.fromString("6a4e3200-667b-11e3-949a-0800200c9a66")
 
-    // V1 cleartext stream. The app never subscribes this.
+    // V1 cleartext stream. Subscribed ONLY on a radar whose service table has
+    // no 6a4e3204 at all - never as a fallback on a radar that has one.
     //
     // Writing the CCCD before the unlock (fw 6.70) makes the radar unlock into
     // V1: the handshake still reports success, V1 heartbeats arrive here, and
@@ -29,12 +30,14 @@ object Uuids {
     // never touch the CCCD also got no V2, until the radar was power-cycled.
     // Silent failure: link up, handshake OK, zero targets.
     //
-    // Writing it after a successful unlock left V2 undisturbed, as with 6a4e2f14.
-    // The rule is still absolute - never write it - because only the ordering
-    // makes that safe: a subscribe hoisted ahead of the handshake by some later
-    // reconnect or retry path costs a blind radar until power-cycle, and V1
-    // carries nothing V2 does not.
-    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66") // NOTIFY (never subscribed)
+    // So the guard is on the SERVICE TABLE, not on how the handshake went: a
+    // radar that advertises 3204 keeps V2 as its only stream however badly the
+    // attempt ends, because a subscribe here costs it V2 until someone
+    // power-cycles it, and V1 carries nothing V2 does not. A radar that has no
+    // 3204 has no V2 to lose. Pinned by RadarLinkControllerHarnessTest >
+    // aV2CapableRadarNeverFallsBackHoweverTheHandshakeEnds; do not relax it to
+    // a handshake-outcome test.
+    val RADAR_V1: UUID = UUID.fromString("6a4e3203-667b-11e3-949a-0800200c9a66") // NOTIFY (only when 3204 absent)
     val RADAR_V2: UUID = UUID.fromString("6a4e3204-667b-11e3-949a-0800200c9a66") // NOTIFY (subscribe post-handshake)
 
     // Control / settings service (rear radar only)

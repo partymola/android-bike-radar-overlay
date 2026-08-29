@@ -200,13 +200,6 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
 }
 
 /**
- * Stateless leaf - renders the scrolling Settings → Alerts
- * content from already-derived UI state. No `rememberSaveable`, no
- * `Prefs`. Visible to snapshot tests so the visual contract can be
- * locked without Prefs scaffolding. The body wires the saveable
- * slider/toggle state and the stop-scanning dialog.
- */
-/**
  * Map the slider value (0.5..1.0 multiplier) to the 4-step user-facing
  * label. The slider is stepped at 4 stops so the float lands close to
  * one of these regardless of jitter.
@@ -218,6 +211,13 @@ internal fun overlayDimLabel(context: Context, opacity: Float): String = when {
     else -> context.getString(R.string.settings_radar_overlay_dim_strong)
 }
 
+/**
+ * Stateless leaf - renders the scrolling Settings → Alerts
+ * content from already-derived UI state. No `rememberSaveable`, no
+ * `Prefs`. Visible to snapshot tests so the visual contract can be
+ * locked without Prefs scaffolding. The body wires the saveable
+ * slider/toggle state and the stop-scanning dialog.
+ */
 @Composable
 internal fun SettingsRadarContent(
     navController: NavController,

@@ -118,7 +118,7 @@ internal class HaPublisher(
             //
             // Launched, never awaited: this caller is the radar's notify loop,
             // and a couple of dozen sequential round trips would stop it
-            // draining V2 frames long enough for the data-flow watchdog to
+            // draining radar frames long enough for the data-flow watchdog to
             // tear the link down. Home Assistant housekeeping must not cost
             // the rider their radar.
             scope.launch {

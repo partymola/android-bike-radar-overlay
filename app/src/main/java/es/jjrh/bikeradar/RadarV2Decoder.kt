@@ -439,15 +439,14 @@ class RadarV2Decoder(
          *  behind the rider is not the parked-car case - it might be a
          *  follower and must keep its centre-lane render. */
         const val ALONGSIDE_MIN_LATERAL_M = 0.5f
-        /** Rider's own bike speed (km/h) below which the dock activates.
-         *  At cruising speed even truly parked cars sweep past quickly and
-         *  never linger over the chevron; only crawling traffic produces
-         *  the multi-second overlap that motivated this rule. */
+
         /** Rider speed (m/s) at or below which alongside-stationary
-         *  docking applies. 2.75 m/s catches raw bytes 0..11 inclusive,
-         *  matching the prior 10 km/h gate exactly (raw 11 = 9.9 km/h
-         *  rounded to 10 was at the edge; raw 12 = 10.8 km/h was just
-         *  above). */
+         *  docking applies. At cruising speed even truly parked cars sweep
+         *  past quickly and never linger over the chevron; only crawling
+         *  traffic produces the multi-second overlap that motivated this
+         *  rule. 2.75 m/s catches raw bytes 0..11 inclusive, matching the
+         *  prior 10 km/h gate exactly (raw 11 = 9.9 km/h rounded to 10 was
+         *  at the edge; raw 12 = 10.8 km/h was just above). */
         const val ALONGSIDE_RIDER_SLOW_MS = 2.75f
 
         /** Minimum dwell time (ms) on a track before the dock activates.

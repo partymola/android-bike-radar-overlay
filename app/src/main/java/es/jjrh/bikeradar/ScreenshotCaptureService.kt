@@ -43,7 +43,7 @@ import java.util.Locale
  * Periodic screenshot capture, gated on a live radar link.
  *
  * Captures the device screen via MediaProjection on a fixed interval and
- * writes a PNG only when [RadarStateBus] is publishing fresh V2 frames
+ * writes a PNG only when [RadarStateBus] is publishing fresh decoded frames
  * (i.e. the overlay is being drawn on top of whatever app the rider is
  * using). Frames acquired while the radar is disconnected are dropped, so
  * leaving the toggle on between rides does not flood the files dir.

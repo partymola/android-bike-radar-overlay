@@ -44,6 +44,104 @@ class CaptureLogManagerTest {
         assertEquals("active name untouched when disabled", "sentinel", name)
     }
 
+    @Test fun openWithAFileAlreadyOpenKeepsWritingToIt() {
+        // Setup-transcript mode opens at connection start and the existing
+        // post-handshake open() then fires on the same connection; rotating
+        // would orphan the transcript half. One file, one header, all lines.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val m = CaptureLogManager(
+            externalFilesDir = { root },
+            captureLoggingEnabled = { true },
+        )
+        val dir = File(root, CaptureLogManager.CAPTURE_DIR)
+
+        m.open()
+        m.clog("# script: before")
+        m.open()
+        m.clog("# script: after")
+        m.close()
+
+        val gz = dir.listFiles()!!.single()
+        val lines = readLines(gz)
+        assertEquals("one header only", 1, lines.count { it.startsWith("# bike-radar capture started") })
+        assertTrue("pre-second-open line kept", lines.contains("# script: before"))
+        assertTrue("post-second-open line kept", lines.contains("# script: after"))
+    }
+
+    @Test fun openClosesAnOpenFileWhenLoggingHasBeenSwitchedOff() {
+        // A setup transcript spans the reconnect loop, so it is open across a
+        // rider switching the master toggle off mid-loop. open() runs at the
+        // top of every attempt, so it is the call that has to honour the
+        // switch: returning early would leave the file it opened recording a
+        // ride the toggle now forbids.
+        val root = Files.createTempDirectory("caplog").toFile()
+        var enabled = true
+        val m = CaptureLogManager(
+            externalFilesDir = { root },
+            captureLoggingEnabled = { enabled },
+        )
+        val dir = File(root, CaptureLogManager.CAPTURE_DIR)
+
+        m.open()
+        m.clog("# script: while the toggle was on")
+        assertTrue("a plain log is open", dir.listFiles()!!.any { it.name.endsWith(".log") })
+
+        enabled = false
+        m.open()
+
+        assertTrue(
+            "the open file must be closed and gzipped, not left recording",
+            dir.listFiles()!!.any { it.name.endsWith(".log.gz") },
+        )
+        assertFalse(
+            "no plain log may be left open",
+            dir.listFiles()!!.any { it.name.endsWith(".log") },
+        )
+
+        // And nothing reopens while it stays off.
+        m.open()
+        m.clog("must-not-be-written")
+        assertEquals(
+            "no second file while logging is off",
+            1,
+            dir.listFiles()!!.size,
+        )
+    }
+
+    @Test fun aSecondOpenDuringTheFirstDoesNotOrphanTheInstalledWriter() {
+        // The recheck inside open()'s install guards a concurrent open(), not a
+        // close, and it needs no threads to drive: buildStamp() is invoked
+        // before the writer is constructed, so a re-entrant stamp lambda makes
+        // the inner call install first and the outer take the loser path.
+        // Asserting on the onActiveName count rather than on file contents
+        // keeps this independent of the same-second filename collision.
+        val root = Files.createTempDirectory("caplog").toFile()
+        val names = mutableListOf<String?>()
+        var reentered = false
+        lateinit var m: CaptureLogManager
+        m = CaptureLogManager(
+            externalFilesDir = { root },
+            captureLoggingEnabled = { true },
+            onActiveName = { names += it },
+            buildStamp = {
+                if (!reentered) {
+                    reentered = true
+                    m.open()
+                }
+                "# app version=9.9.9 code=99 build=debug commit=deadbee"
+            },
+        )
+
+        m.open()
+
+        assertTrue("the re-entrant open must actually have run", reentered)
+        assertEquals(
+            "exactly one writer may be installed; the loser must not overwrite it. Saw: $names",
+            1,
+            names.count { it != null },
+        )
+    }
+
     @Test fun everyFileHeaderCarriesTheBuildStamp() {
         // Per-file, not per-process: a mid-ride radar drop opens a second file
         // and it must be attributable to the same build as the first.

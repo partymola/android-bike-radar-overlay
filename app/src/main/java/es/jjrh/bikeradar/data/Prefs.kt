@@ -74,6 +74,7 @@ data class PrefsSnapshot(
     val eBikeUnknownObjectLogEnabled: Boolean,
     val radarSettingsProbeEnabled: Boolean,
     val captureLoggingEnabled: Boolean,
+    val setupTranscriptEnabled: Boolean,
 )
 
 class Prefs(context: Context) {
@@ -254,11 +255,32 @@ class Prefs(context: Context) {
         }
 
     /** Sticky bit set the first time the user dismisses the capture-log
-     *  share warning dialog. Used so the warning only shows once. */
+     *  share warning dialog. Used so the warning only shows once.
+     *
+     *  Superseded by [captureLogShareWarningSeenV2] and still written so a
+     *  downgrade does not re-prompt; nothing reads it any more. */
     var captureLogShareWarningSeen: Boolean
         get() = sp.getBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, false)
         set(v) {
             sp.edit().putBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN, v).apply()
+        }
+
+    /** The sticky bit the share dialog actually reads.
+     *
+     *  A second key rather than a condition on the first, because the dialog's
+     *  body gained a category the old one never mentioned: with the setup
+     *  transcript on, a capture log carries the radar's hardware identifiers.
+     *  A rider who dismissed the old dialog would otherwise never see the new
+     *  body, and that rider is precisely the one filing a hardware report.
+     *
+     *  Keying it on the transcript toggle instead was tried and is wrong: the
+     *  transcript is excluded from the Share list until it CLOSES, and what
+     *  closes it is the rider turning that toggle off, so the toggle reads
+     *  false exactly when the file carrying identifiers becomes shareable. */
+    var captureLogShareWarningSeenV2: Boolean
+        get() = sp.getBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN_V2, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_CAPTURE_LOG_SHARE_WARNING_SEEN_V2, v).apply()
         }
 
     /** Master toggle for the walk-away alarm (radar-off-while-dashcam-
@@ -639,6 +661,24 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_CAPTURE_LOGGING, v).apply()
         }
 
+    /** Extend capture logs back to the start of each radar connection: the
+     *  connection states, the discovered services and every handshake step -
+     *  including the abort, for a radar that never gets further - land in the
+     *  file, and one file spans the whole reconnect loop instead of one per
+     *  attempt. The debugging mode for "my radar never shows as connected".
+     *  Off by default; does nothing unless [captureLoggingEnabled] is also on.
+     *  The transcript carries the radar's hardware identifiers - its DIS
+     *  serial number and the handshake's device-ID frame - which
+     *  post-handshake logs do not; the toggle's subtitle discloses that.
+     *  The file closes, and so becomes shareable, only when the reconnect
+     *  loop exits, which for an always-failing radar means turning this
+     *  back off. */
+    var setupTranscriptEnabled: Boolean
+        get() = sp.getBoolean(KEY_SETUP_TRANSCRIPT, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_SETUP_TRANSCRIPT, v).apply()
+        }
+
     /** The rider's own STREAM_ALARM level, persisted by the walk-away alarm
      *  just before it forces the stream to max, and cleared when the override
      *  is undone (clean stop or play-failure rollback). Null when no override
@@ -755,6 +795,7 @@ class Prefs(context: Context) {
         eBikeUnknownObjectLogEnabled = eBikeUnknownObjectLogEnabled,
         radarSettingsProbeEnabled = radarSettingsProbeEnabled,
         captureLoggingEnabled = captureLoggingEnabled,
+        setupTranscriptEnabled = setupTranscriptEnabled,
     )
 
     val flow: Flow<PrefsSnapshot> = callbackFlow {
@@ -817,6 +858,7 @@ class Prefs(context: Context) {
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
         appendLine("radar_settings_probe_enabled=$radarSettingsProbeEnabled")
         appendLine("capture_logging_enabled=$captureLoggingEnabled")
+        appendLine("capture_setup_transcript_enabled=$setupTranscriptEnabled")
         appendLine("dirty_restart_count=$dirtyRestartCount")
     }
 
@@ -863,6 +905,7 @@ class Prefs(context: Context) {
         const val KEY_CLOSE_PASS_RIDER_FLOOR_KMH = "close_pass_rider_floor_kmh"
         const val KEY_CLOSE_PASS_CLOSING_FLOOR_MS = "close_pass_closing_floor_ms"
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
+        const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN_V2 = "capture_log_share_warning_seen_v2"
         const val KEY_RECONNECT_BANNER_PERSISTENT = "reconnect_banner_persistent"
         const val KEY_FORGOT_TO_LOCK_ALERT = "forgot_to_lock_alert_enabled"
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
@@ -892,6 +935,7 @@ class Prefs(context: Context) {
         const val KEY_EBIKE_UNKNOWN_OBJ_LOG = "ebike_unknown_object_log_enabled"
         const val KEY_RADAR_SETTINGS_PROBE = "radar_settings_probe_enabled"
         const val KEY_CAPTURE_LOGGING = "capture_logging_enabled"
+        const val KEY_SETUP_TRANSCRIPT = "capture_setup_transcript_enabled"
         const val KEY_SERVICE_RUNNING_MARKER = "service_running_marker"
         const val KEY_DIRTY_RESTART_COUNT = "dirty_restart_count"
         const val KEY_WALKAWAY_SAVED_ALARM_VOLUME = "walk_away_saved_alarm_volume"

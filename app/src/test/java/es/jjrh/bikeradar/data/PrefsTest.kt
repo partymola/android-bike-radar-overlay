@@ -88,6 +88,10 @@ class PrefsTest {
         assertFalse(s.eBikeUnknownObjectLogEnabled)
         // Capture logging is opt-in: a fresh install must not write ride logs.
         assertFalse(s.captureLoggingEnabled)
+        // Opt-in for a second reason: the setup transcript is the only sink
+        // that records the radar's serial number and device-ID frame, and
+        // every disclosure of it starts from "off by default".
+        assertFalse(s.setupTranscriptEnabled)
     }
 
     @Test
@@ -131,6 +135,7 @@ class PrefsTest {
         prefs.eBikeUnknownObjectLogEnabled = true
         prefs.radarSettingsProbeEnabled = true
         prefs.captureLoggingEnabled = true
+        prefs.setupTranscriptEnabled = true
 
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
@@ -174,6 +179,7 @@ class PrefsTest {
         assertTrue(s.eBikeUnknownObjectLogEnabled)
         assertTrue(s.radarSettingsProbeEnabled)
         assertTrue(s.captureLoggingEnabled)
+        assertTrue(s.setupTranscriptEnabled)
     }
 
     @Test

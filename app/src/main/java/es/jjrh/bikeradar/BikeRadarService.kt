@@ -632,7 +632,6 @@ class BikeRadarService : Service() {
         if (::bluetoothStateMonitor.isInitialized) bluetoothStateMonitor.unregister()
         unregisterEventScan()
         if (::radarLink.isInitialized) radarLink.shutdown()
-        closeCaptureLog()
         RadarStateBus.clear()
         if (::reconnectHost.isInitialized) {
             reconnectBannerView?.let { reconnectHost.detach(it) }
@@ -650,6 +649,12 @@ class BikeRadarService : Service() {
         ebikeStatusReader = null
         EBikeStateBus.reset()
         scope.cancel()
+        // After scope.cancel(), not before: the reconnect loop opens the file at
+        // the top of every attempt in transcript mode, so closing it while that
+        // loop can still resume from its backoff leaves a stray header-only file
+        // behind. Prune clears those, but the last one written survives until
+        // the next open.
+        closeCaptureLog()
         // Walk-away and bond-lost notifications survive stopForeground; clear
         // after scope.cancel() so no in-flight coroutine can re-emit them.
         notifications.cancelWalkAway()

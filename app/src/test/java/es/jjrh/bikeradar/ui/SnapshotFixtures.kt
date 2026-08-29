@@ -62,6 +62,7 @@ internal object SnapshotFixtures {
         eBikeUnknownObjectLogEnabled = false,
         radarSettingsProbeEnabled = false,
         captureLoggingEnabled = false,
+        setupTranscriptEnabled = false,
         urgentPassClearanceM = 1.5f,
     )
 }

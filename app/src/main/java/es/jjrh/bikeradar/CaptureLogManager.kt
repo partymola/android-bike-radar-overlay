@@ -59,9 +59,23 @@ internal class CaptureLogManager(
 
     private var activeName: String? = null
 
-    /** Open a fresh capture file for this connection (no-op when logging is off). */
+    /** Open a fresh capture file for this connection. No-op when a file is
+     *  already open: setup-transcript mode opens at connection start and spans
+     *  the reconnect loop, so the post-handshake open() on the same connection
+     *  must keep the file rather than rotate it.
+     *
+     *  When logging is off this CLOSES an open file rather than just returning.
+     *  A setup transcript spans the reconnect loop, so a rider switching the
+     *  master toggle off mid-loop would otherwise keep feeding a file that
+     *  toggle is meant to govern. The Debug screen promises the switch takes
+     *  effect on the next radar connection, and transcript mode calls this at
+     *  the start of every attempt, so that is where the promise is kept. */
     fun open() {
-        if (!captureLoggingEnabled()) return
+        if (!captureLoggingEnabled()) {
+            if (writer != null) close()
+            return
+        }
+        if (writer != null) return
         val root = externalFilesDir() ?: return
         val dir = File(root, CAPTURE_DIR).apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
@@ -80,10 +94,31 @@ internal class CaptureLogManager(
             // close() flushes on the normal path; writeLine flushes at most every
             // FLUSH_INTERVAL_MS, so an abnormal kill loses at most one window.
             val pw = PrintWriter(BufferedWriter(FileWriter(file)))
-            synchronized(lock) {
-                writer = pw
-                // Force the first line (the header) of a fresh log to flush.
-                lastFlushMs = 0L
+            // Check and install in one step. What the recheck guards is a
+            // second concurrent open(), NOT a close: a close landing in the gap
+            // leaves writer null, so the install is then correct. Only
+            // RadarLinkController's connection coroutine opens, so nothing can
+            // produce that second caller today - the recheck is here so a
+            // future second opener cannot silently orphan a live writer.
+            val installed = synchronized(lock) {
+                if (writer != null) {
+                    false
+                } else {
+                    writer = pw
+                    // Force the first line (the header) of a fresh log to flush.
+                    lastFlushMs = 0L
+                    true
+                }
+            }
+            if (!installed) {
+                // Closed, never deleted. Names carry second resolution, so a
+                // loser inside the same second computes the SAME path as the
+                // winner and would delete the file the winner is writing into -
+                // whose fd survives unlinked, so the capture would be lost with
+                // no error. An empty orphan is cheaper: the Debug list skips
+                // zero-length files and prune sweeps it.
+                pw.close()
+                return
             }
             activeName = file.name
             onActiveName(file.name)
@@ -109,15 +144,24 @@ internal class CaptureLogManager(
         }
     }
 
-    /** Flush + close the active file, then gzip it (off the live write path). */
+    /** Flush + close the active file, then gzip it (off the live write path).
+     *
+     *  The name is taken and cleared INSIDE the lock, so two callers racing
+     *  here cannot both come away with it. `scope.cancel()` does not join, so
+     *  the service's teardown close and the connection coroutine's `finally`
+     *  can overlap; if both read the same name they both gzip the same source
+     *  into one truncating stream, and the second to finish sees a non-empty
+     *  output and deletes the original. That loses the transcript silently and
+     *  reports success. Exactly one caller gets a non-null name. */
     fun close() {
-        synchronized(lock) {
+        val closedName = synchronized(lock) {
             writer?.flush()
             writer?.close()
             writer = null
+            val name = activeName
+            activeName = null
+            name
         }
-        val closedName = activeName
-        activeName = null
         onActiveName(null)
         // Gzip the just-finalised file. Runs after the PrintWriter close so the
         // live write path is never on a gzip stream (which would lose its
@@ -179,6 +223,9 @@ internal class CaptureLogManager(
         // session where the radar never connected. Only applies to plain `.log`
         // files - a `.log.gz` is always small (a real session compresses small,
         // but even a multi-KB plain session can gzip below the threshold).
+        // A closed setup transcript is a .gz and so always survives this gate;
+        // a single aborting attempt's transcript can be under the threshold in
+        // plain form, so raising the threshold is not free.
         val tiny = logs.filter {
             it.name != active &&
                 !CaptureLogFiles.isGzipped(it) &&

@@ -352,6 +352,9 @@ internal class RadarLinkController(
             }
         } finally {
             currentRadarMac = null
+            // Transcript mode leaves the file open across attempts; the loop's
+            // exit is where it finally closes. Safe no-op otherwise.
+            captureLog.close()
         }
     }
 
@@ -451,6 +454,16 @@ internal class RadarLinkController(
                 notifyChannel.trySend(ch.uuid to value)
             }
         }
+
+        // Setup-transcript mode: open the capture file BEFORE the connect, so
+        // the connection states, the discovered services and the handshake
+        // script lines - dropped on the null writer otherwise - land in it.
+        // open() is a no-op when a file is already open, so the aborting
+        // attempts of a reconnect loop accumulate into one file rather than
+        // spraying one per retry; the per-attempt close below is skipped to
+        // match, and the loop's exit closes.
+        val setupTranscript = prefs.setupTranscriptEnabled
+        if (setupTranscript) captureLog.open()
 
         gatt = openGatt(context, device, true, cb)
         if (gatt == null) {
@@ -689,7 +702,7 @@ internal class RadarLinkController(
             // the latest values before the next reconnect's backoff delay.
             scope.launch(Dispatchers.IO) { haPublisher.publishRideSummaryIfChanged() }
             closeOnce()
-            captureLog.close()
+            if (!setupTranscript) captureLog.close()
         }
     }
 

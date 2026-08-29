@@ -31,6 +31,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import java.io.File
+import java.nio.file.Files
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -148,11 +150,12 @@ class RadarLinkControllerHarnessTest {
         wallClock: () -> Long = { System.currentTimeMillis() },
         returnNull: Boolean = false,
         setUp: (BluetoothGatt) -> Unit = ::setUpRadarServices,
+        captureLog: CaptureLogManager = CaptureLogManager(externalFilesDir = { null }, captureLoggingEnabled = { false }),
     ): RadarLinkController = RadarLinkController(
         context = app,
         scope = backgroundScope,
         prefs = prefs,
-        captureLog = CaptureLogManager(externalFilesDir = { null }, captureLoggingEnabled = { false }),
+        captureLog = captureLog,
         overlayPipeline = overlayPipeline(prefs),
         haPublisher = haPublisher(backgroundScope),
         notifications = ServiceNotifications(app) { Prefs(app) },
@@ -529,6 +532,176 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    // ── setup transcript: the capture log's reach ───────────────────────────────
+
+    /** With the transcript off, a handshake-failing radar produces no capture
+     *  file at all - the file opens only after a successful handshake. Pinned
+     *  so the transcript path cannot quietly become the default. */
+    @Test fun transcriptOffKeepsCaptureClosedThroughAnAbort() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-transcript-off").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        val controller = controller(
+            link,
+            prefs = p,
+            setUp = ::setUpServicesMissingTx,
+            captureLog = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true }),
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar handshake aborted at tx-char-missing (quick reconnect)") })
+
+        val dir = File(root, CaptureLogManager.CAPTURE_DIR)
+        assertTrue(
+            "no capture file for an aborting radar with the transcript off",
+            !dir.exists() || dir.listFiles().isNullOrEmpty(),
+        )
+        controller.forceReconnect()
+    }
+
+    /** With the transcript on, the file opens before the connect and one file
+     *  accumulates the retries: the abort reason and the discovered-service
+     *  line - both dropped on the null writer otherwise - are in it. */
+    @Test fun transcriptOnCapturesTheAbortingHandshakeAcrossRetries() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-transcript-on").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        p.setupTranscriptEnabled = true
+        val capture = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        val controller = controller(
+            link,
+            prefs = p,
+            setUp = ::setUpServicesMissingTx,
+            captureLog = capture,
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar handshake aborted at tx-char-missing (quick reconnect)") })
+        assertTrue("expected a second attempt", pumpUntil { link.openCount >= 2 })
+
+        capture.flushNow()
+        val files = File(root, CaptureLogManager.CAPTURE_DIR).listFiles()!!
+        assertEquals("retries accumulate into one file, not one per attempt", 1, files.size)
+        val lines = files.single().readLines()
+        assertTrue(
+            "the abort reason must be in the transcript: $lines",
+            lines.any { it.contains("# script: ABORT: handshake TX characteristic not found") },
+        )
+        assertTrue(
+            "the discovered-service line must be in the transcript",
+            lines.any { it.startsWith("# services discovered status=") },
+        )
+
+        // The file the retries accumulated into still closes when the loop
+        // exits, or the transcript never gzips and never appears in the Debug
+        // screen's shareable list.
+        controller.forceReconnect()
+        assertTrue(
+            "the transcript must close and gzip when the reconnect loop exits",
+            pumpUntil {
+                File(root, CaptureLogManager.CAPTURE_DIR)
+                    .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
+            },
+        )
+    }
+
+    /**
+     * Turning the transcript toggle off closes the accumulated file, WITHOUT
+     * the loop being cancelled. This is the route the app itself tells riders
+     * to use ("turn it off when you're done: the log appears in the list once
+     * it closes"), and it works only because the pref is read per attempt: a
+     * tidy-up hoisting that read out of the attempt would leave every rider
+     * who follows the on-screen instruction with a file that never appears.
+     */
+    @Test fun turningTheTranscriptOffClosesTheAccumulatedFile() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-transcript-toggled-off").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        p.setupTranscriptEnabled = true
+        val controller = controller(
+            link,
+            prefs = p,
+            setUp = ::setUpServicesMissingTx,
+            captureLog = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true }),
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("expected a second attempt", pumpUntil { link.openCount >= 2 })
+
+        p.setupTranscriptEnabled = false
+
+        assertTrue(
+            "the transcript must close and gzip once the toggle goes off, with the loop still running",
+            pumpUntil {
+                File(root, CaptureLogManager.CAPTURE_DIR)
+                    .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
+            },
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * Turning the capture-log MASTER switch off closes an open transcript at
+     * the next attempt. The transcript spans the reconnect loop, so without
+     * this the switch stops governing the file it opened, while its own
+     * subtitle promises it takes effect on the next radar connection.
+     */
+    @Test fun turningCaptureLoggingOffClosesAnOpenTranscript() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-transcript-master-off").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        p.setupTranscriptEnabled = true
+        // Reads the live pref rather than a constant, which is what makes the
+        // switch reachable from inside the manager at all.
+        val controller = controller(
+            link,
+            prefs = p,
+            setUp = ::setUpServicesMissingTx,
+            captureLog = CaptureLogManager(
+                externalFilesDir = { root },
+                captureLoggingEnabled = { p.captureLoggingEnabled },
+            ),
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("expected a second attempt", pumpUntil { link.openCount >= 2 })
+
+        p.captureLoggingEnabled = false
+
+        assertTrue(
+            "the master switch must close the open transcript at the next attempt",
+            pumpUntil {
+                File(root, CaptureLogManager.CAPTURE_DIR)
+                    .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
+            },
+        )
+        // And nothing reopens behind it while the loop keeps retrying.
+        val before = link.openCount
+        assertTrue(pumpUntil { link.openCount >= before + 2 })
+        assertTrue(
+            "no new plain log may be opened once logging is off",
+            File(root, CaptureLogManager.CAPTURE_DIR)
+                .listFiles()?.none { it.name.endsWith(".log") } ?: true,
+        )
+        controller.forceReconnect()
+    }
+
     /**
      * A link that stops at a different step on alternating attempts keeps each
      * answer's OWN first-seen stamp. A single last-answer slot differs from the
@@ -608,6 +781,43 @@ class RadarLinkControllerHarnessTest {
             "a restart must not restamp an answer that has not changed",
             "since=1000 svc=2800[2811] out=tx-char-missing",
             p.radarLinkProbe,
+        )
+        controller.forceReconnect()
+    }
+
+    /** Transcript off, working radar: the per-attempt lifecycle is untouched -
+     *  the file opens after the handshake and closes (gzipped) on teardown. */
+    @Test fun captureClosesPerAttemptWithTranscriptOff() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-transcript-off-ok").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        val controller = controller(
+            link,
+            prefs = p,
+            captureLog = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true }),
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+
+        // Radar drops; the reconnect loop stays alive. The attempt's file must
+        // gzip NOW, not when the loop eventually exits.
+        requireNotNull(link.cb).onConnectionStateChange(
+            requireNotNull(link.gatt),
+            BluetoothGatt.GATT_SUCCESS,
+            BluetoothProfile.STATE_DISCONNECTED,
+        )
+        assertTrue(
+            "the attempt's file must gzip on teardown while the loop is still running",
+            pumpUntil {
+                File(root, CaptureLogManager.CAPTURE_DIR)
+                    .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
+            },
         )
         controller.forceReconnect()
     }

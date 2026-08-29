@@ -76,7 +76,10 @@ strip; the rest of your screen stays yours. (*Image credits
   screen) written to app-private storage: radar packets, BLE
   characteristic notifications, eBike telemetry from Bosch Flow,
   phone-battery trace, turn direction and rate from the motion sensors,
-  and decoder events; useful for post-ride replay and bug reports.
+  and decoder events; useful for post-ride replay and bug reports. A
+  second toggle extends the log back to the start of each connection, for
+  a radar that never connects; that adds the connection steps and your
+  radar's hardware identifiers, including its serial number.
 
 </details>
 

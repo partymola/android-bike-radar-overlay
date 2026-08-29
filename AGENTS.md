@@ -159,9 +159,45 @@ summary; the Key files table maps each part to its file.
   When the toggle is off, `openCaptureLog` no-ops and no file is created.
   `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
   release builds keep BLE/movement payloads out of logcat.
-  A fresh capture file is opened per radar connection (after handshake) and
-  closed on disconnect, so a mid-ride radar drop splits one ride across
-  multiple files and the dead-radar window between them is uncaptured.
+  By default, a fresh capture file is opened per radar connection (after
+  handshake) and closed on disconnect, so a mid-ride radar drop splits one
+  ride across multiple files and the dead-radar window between them is
+  uncaptured.
+  Consequence: a radar that never completes the handshake produces no
+  capture at all. The second Debug toggle, **Record connection setup**
+  (`Prefs.setupTranscriptEnabled`), exists for exactly that: it opens the
+  file before the GATT connect - so the connection states, the discovered
+  services and the handshake script lines (including the `ABORT:` reason)
+  are recorded - and one file spans the whole reconnect loop instead of
+  one per attempt. Because the loop has no self-exit, that file keeps
+  growing across every later connection too, successful rides included,
+  and it reaches the Debug screen's Share list only once it closes: at the
+  end of the first attempt after the toggle goes off, when the service
+  stops, or when Bluetooth drops. Flipping the toggle does not close it on
+  the spot, which against an aborting radar is a second or two and after a
+  successful connect is the rest of the ride. The toggle subtitle and the
+  issue template both say to turn it off when done.
+  Turning the capture-log master switch off closes it at the next attempt
+  too: `CaptureLogManager.open` closes an open file when logging is off
+  rather than just returning, so that switch keeps meaning what its own
+  subtitle promises.
+  It is the tool for unsupported-hardware reports. The transcript carries
+  the radar's DIS serial number and its device-ID frame, which
+  post-handshake captures do not - when the handshake gets that far. Both
+  reads sit near the end of the sequence, so an abort at an early step
+  records neither.
+  Independent of it, the discovered-service table and abort token of every
+  attempt that reaches service discovery are stored in
+  `Prefs.radarLinkProbe` (see `LinkProbe`) and printed in the diagnostic
+  bundle, so even a bundle without any capture names the failing step. The
+  two earlier exits - a null GATT, and discovery itself failing - do not
+  reach that write and are named by the link journal instead. The slot is
+  rewritten only when the answer changes, and the stamp is when that
+  answer was first seen. Those stamps are kept per distinct answer in the
+  process, and the stored one is read back at start-up, so an alternating
+  link reports each answer's real age within a session and the last-written
+  answer keeps its age across a restart. The slot holds one line, so the
+  other answer restamps after a restart.
   Every file's header carries a build stamp (`# app version=... code=...
   build=...`), plus `commit=` on non-release builds only - so don't infer a
   build from the APK's install time. It also carries
@@ -196,6 +232,7 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
+| `app/src/main/java/es/jjrh/bikeradar/RadarConnStatusDeriver.kt` | Pure tri-state for the Settings radar card (Connected / Connecting / Not in range), fed by the service-published link state |
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |

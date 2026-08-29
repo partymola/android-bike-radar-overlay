@@ -45,3 +45,21 @@ then Settings -> Debug -> enable **Write capture logs**, power-cycle the
 device so it reconnects, wait a minute, and Share the newest log from
 the same screen. Capture logs record exact packet timing (so they
 reveal when you rode) but no location or account data.
+
+**For a rear radar only:** if it pairs but never shows as connected,
+also enable **Record connection setup** next to it before the
+power-cycle. The log then starts at the moment the radar is found and
+shows each connection step and where it stopped; without it, a radar
+that never connects produces no log at all. The switch will not help
+diagnose a camera/light or an eBike, so leave it off for those.
+
+That log also holds your radar's model, firmware and serial number, and
+it keeps recording across later rides until you turn the switch off, so
+it can cover a full ride. Anything attached here is publicly visible:
+only attach it if you are comfortable with that.
+
+After the radar has tried for a minute, and **while it is still powered
+on**, turn **Record connection setup** back off. The log stays open
+while it is recording and reaches the Share list only once it closes,
+which takes until the radar's next connection attempt ends. Turning the
+radar off first leaves the log open and it will not appear.

@@ -255,13 +255,31 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     checked = prefsSnap.captureLoggingEnabled,
                     onCheckedChange = { prefs.captureLoggingEnabled = it },
                 )
+                SettingsToggleRow(
+                    title = stringResource(R.string.debug_setup_transcript_title),
+                    subtitle = stringResource(R.string.debug_setup_transcript_subtitle),
+                    checked = prefsSnap.setupTranscriptEnabled,
+                    // Inert without the master switch, so it says so structurally
+                    // rather than only in prose. Auto-enabling the master instead
+                    // would start ride-tracking-grade logging without the rider
+                    // seeing that row's own disclosure, and hiding the row would
+                    // break the issue template, which tells a reporter to find
+                    // this one next to it.
+                    enabled = prefsSnap.captureLoggingEnabled,
+                    onCheckedChange = { prefs.setupTranscriptEnabled = it },
+                )
             }
 
             // Capture logs
             DebugCaptureLogList(
                 logFiles = logFiles,
                 onShare = { f ->
-                    if (prefs.captureLogShareWarningSeen) {
+                    // V2: the dialog body gained the hardware identifiers a
+                    // setup transcript records, so a rider who dismissed the
+                    // old one has to see it once more. See the pref's KDoc for
+                    // why this is a second key and not a test of the transcript
+                    // toggle.
+                    if (prefs.captureLogShareWarningSeenV2) {
                         shareFile(ctx, f)
                     } else {
                         pendingShareFile = f
@@ -592,6 +610,8 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             },
             confirmButton = {
                 TextButton(onClick = {
+                    prefs.captureLogShareWarningSeenV2 = true
+                    // Kept in step so a downgrade does not re-prompt.
                     prefs.captureLogShareWarningSeen = true
                     pendingShareFile = null
                     shareFile(ctx, file)

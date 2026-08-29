@@ -217,4 +217,54 @@ class RadarThreatRenderTest {
         // threshold is NOT demoted (stays a filled box).
         assertFalse(edgeDock(lateralPos = RENDERER_STATIONARY_MIN_LATERAL))
     }
+
+    // ── range-based colouring, for a source with no closing speed ──────────
+
+    @Test
+    fun rangeColouringEscalatesAsATargetClosesIn() {
+        // The legacy stream reports no closing speed, so every target arrives
+        // at zero, which sits under the amber band: colouring by speed would
+        // paint a car bearing down at 60 km/h calm all the way in and the
+        // danger border could never fire. Range is the quantity that source
+        // actually measures. Literal boundaries against a 60 m window.
+        assertEquals(ThreatLevel.SAFE, threatLevelFromRange(60, 60))
+        assertEquals(ThreatLevel.SAFE, threatLevelFromRange(41, 60))
+        assertEquals(ThreatLevel.WARNING, threatLevelFromRange(40, 60))
+        assertEquals(ThreatLevel.WARNING, threatLevelFromRange(21, 60))
+        assertEquals(ThreatLevel.DANGER, threatLevelFromRange(20, 60))
+        assertEquals(ThreatLevel.DANGER, threatLevelFromRange(0, 60))
+    }
+
+    @Test
+    fun rangeColouringTracksTheRidersOwnWindow() {
+        // Thirds of the visible window rather than absolute distances, so a
+        // rider who shortens their range does not get everything painted red.
+        assertEquals(ThreatLevel.SAFE, threatLevelFromRange(21, 30))
+        assertEquals(ThreatLevel.DANGER, threatLevelFromRange(9, 30))
+        // Degenerate window must not divide by zero.
+        assertEquals(ThreatLevel.DANGER, threatLevelFromRange(0, 0))
+    }
+
+    @Test
+    fun aSourceWithoutClosingSpeedIsNotColouredBySpeed() {
+        // Pins the branch, not just the helper: the overlay picks its
+        // classifier off the SOURCE's capability. Were it to colour a
+        // range-only source by speed, every target would read SAFE.
+        assertFalse(DataSource.V1.hasClosingSpeed)
+        assertTrue(DataSource.V2.hasClosingSpeed)
+        // Through the selector the view actually uses, so the CHOICE is pinned
+        // and not merely the two classifiers it chooses between.
+        val closeIn = Vehicle(id = 1, distanceM = 5, speedMs = 0f, lateralUnknown = true)
+        assertEquals(
+            "a close legacy target must not read SAFE",
+            ThreatLevel.DANGER,
+            threatLevelFor(closeIn, DataSource.V1, FIXED_SPEED_BANDS, 60),
+        )
+        // The same target on a source that DOES report speed keeps the
+        // speed-banded answer, so this cannot be read as "range always wins".
+        assertEquals(
+            ThreatLevel.SAFE,
+            threatLevelFor(closeIn, DataSource.V2, FIXED_SPEED_BANDS, 60),
+        )
+    }
 }

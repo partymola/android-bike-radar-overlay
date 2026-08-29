@@ -134,10 +134,15 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     val framesFresh = radarState.source != DataSource.NONE &&
         tickNow - radarState.timestamp < RADAR_FRAME_FRESH_MS
     // Kept as a nullable rather than a boolean so the chip below still has a
-    // reading to render. "Connected" no longer implies a battery entry exists:
-    // a radar can stream targets and expose no battery at all.
+    // reading to render, but it deliberately does NOT feed `connected`.
+    // A battery reading proves the link works, not that the radar is
+    // delivering targets, and the setup sequence now publishes one on every
+    // attempt that reaches its battery step - so an aborting radar retrying
+    // every 1.5 s would keep a reading permanently fresh and read Connected
+    // while sending nothing. That is the state the tri-state was built to
+    // stop calling Connected.
     val freshBattery = radarBattery?.takeIf { batteryReadIsFresh(it.readAtMs, tickNow) }
-    val connected = framesFresh || freshBattery != null
+    val connected = framesFresh
 
     // The static is not a snapshot read, so a service (re)start invalidates
     // nothing by itself - the tick's recomposition is what re-reads it, within
@@ -173,6 +178,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         chosenMac = chosen,
         activeName = activeName,
         status = status,
+        limitedSource = radarState.source == DataSource.V1,
         batteryPct = freshBattery?.pct,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
@@ -218,6 +224,10 @@ internal fun SettingsRadarDeviceContent(
     onOffsetChange: (Int) -> Unit = {},
     onOffsetCommit: () -> Unit = {},
     firmwareRev: String? = null,
+    /** True when the live link is running on the range-only legacy stream.
+     *  Drives the limitations note: a rider must not mistake a partly-working
+     *  radar for a fully-working one, and nothing else on any screen says so. */
+    limitedSource: Boolean = false,
 ) {
     val br = LocalBrColors.current
     var othersExpanded by rememberSaveable { mutableStateOf(false) }
@@ -322,6 +332,14 @@ internal fun SettingsRadarDeviceContent(
                             Text(
                                 text = stringResource(R.string.settings_radardev_firmware, firmwareRev),
                                 color = br.fgDim,
+                                fontSize = 11.sp,
+                            )
+                        }
+                        if (limitedSource) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.settings_radardev_limited_source),
+                                color = br.caution,
                                 fontSize = 11.sp,
                             )
                         }

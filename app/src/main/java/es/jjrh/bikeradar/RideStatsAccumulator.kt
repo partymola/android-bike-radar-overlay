@@ -98,10 +98,15 @@ class RideStatsAccumulator(
             // Exposure: any tracked vehicle (excluding alongside-stationary
             // and lateralUnknown sentinel frames) means the rider is in
             // traffic for this interval.
+            // The lateralUnknown skip is about a BAD FRAME on a source that
+            // has lateral, so it must not apply to a source that has none:
+            // that would make every frame of a legacy ride look bad and leave
+            // the rider a ride record of all zeroes, which reads as "quiet
+            // ride" rather than "not measured".
             val anyTraffic = state.vehicles.any { v ->
                 !v.isBehind &&
                     !v.isAlongsideStationary &&
-                    !v.lateralUnknown &&
+                    (!v.lateralUnknown || !state.source.hasLateral) &&
                     v.distanceM in 0..MAX_TRACK_DISTANCE_M
             }
             if (anyTraffic) {
@@ -117,7 +122,11 @@ class RideStatsAccumulator(
 
         // Per-frame extrema and overtake-id dedup.
         for (v in state.vehicles) {
-            if (v.isBehind || v.lateralUnknown) continue
+            // Same distinction as the exposure gate above: skip a bad frame,
+            // not an entire source. The lateral-derived extrema below are
+            // separately guarded, so a source with no lateral still gets its
+            // vehicle count and its ride row.
+            if (v.isBehind || (v.lateralUnknown && state.source.hasLateral)) continue
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
             if (seenTrackIds.add(v.id)) generation++
@@ -132,7 +141,12 @@ class RideStatsAccumulator(
                 }
             }
 
-            if (!v.isAlongsideStationary) {
+            // Source capability, not just the alongside gate: on a source with
+            // no lateral channel every lateralPos is 0f, and recording that
+            // would write a 0.0 m clearance into the ride record and publish it
+            // to Home Assistant as though it had been measured. Null is the
+            // honest value for "never measured"; the counts above still accrue.
+            if (!v.isAlongsideStationary && state.source.hasLateral) {
                 val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
                 val current = minLateralM
                 if (current == null || lateralM < current) {

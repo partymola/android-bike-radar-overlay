@@ -376,7 +376,7 @@ class RadarOverlayView(context: Context) : View(context) {
 
             val clampedLateral = (lateralMeters / RadarV2Decoder.LATERAL_FULL_M).coerceIn(-1f, 1f)
             val centreX = trackX + clampedLateral * maxLateralPx
-            val color = threatColor(threatLevel(v.closingKmh, bands))
+            val color = threatColor(threatLevelFor(v, state.source, bands, visualMaxM))
 
             // Tail length grows with CLOSING speed, so it is driven by the
             // negated wire value like the colour above; a receding target

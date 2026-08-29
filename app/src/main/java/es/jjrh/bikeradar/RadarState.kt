@@ -4,16 +4,39 @@ package es.jjrh.bikeradar
 enum class VehicleSize { CAR, TRUCK }
 
 /**
- * Which stream a [RadarState] came from.
+ * Which stream a [RadarState] came from, and what that stream can measure.
  *
- * [V1] is the legacy stream, and it carries range only: no closing speed, no
- * lateral position, no rider speed. Everything derived from those has to fail
- * CLOSED on it rather than read a default as a measurement, because a default
- * here is indistinguishable from a real zero. See [RadarV1Decoder] for how the
- * two zeroes it does write are made harmless, and
- * `RadarV1SafetyTest` for the gates that hold it.
+ * [V1] is the legacy stream and carries RANGE ONLY. The capability flags below
+ * exist because the alternative - reading a zero and hoping every consumer
+ * treats it as absent - does not survive contact: a zero closing speed is
+ * indistinguishable from a car pacing the rider exactly, and a zero lateral
+ * offset means "dead centre behind me". Ask the SOURCE what it can measure;
+ * do not infer it from a value.
+ *
+ * This is deliberately separate from [Vehicle.lateralUnknown], which is a
+ * PER-FRAME condition on a source that does have lateral ("this frame's read
+ * was unreliable, skip it and take the next"). Conflating the two makes every
+ * frame of a legacy ride look like a bad frame, which silently empties the
+ * ride record. Source capability is permanent; frame transience is not.
  */
-enum class DataSource { NONE, V1, V2 }
+enum class DataSource {
+    NONE,
+    V1,
+    V2,
+    ;
+
+    /** Per-target closing speed. False on [V1]: the legacy threat record's
+     *  third byte is a state flag, not a velocity. */
+    val hasClosingSpeed: Boolean get() = this == V2
+
+    /** Per-target lateral offset. False on [V1]: no lateral channel exists,
+     *  so every target can only be drawn on the centreline. */
+    val hasLateral: Boolean get() = this == V2
+
+    /** The rider's own bike speed, from the device-status frame. False on
+     *  [V1], which has no such frame. */
+    val hasRiderSpeed: Boolean get() = this == V2
+}
 
 data class Vehicle(
     val id: Int,

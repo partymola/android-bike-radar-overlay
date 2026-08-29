@@ -68,6 +68,47 @@ internal fun threatLevel(closingKmh: Int, bands: SpeedBands): ThreatLevel = when
 }
 
 /**
+ * Picks the classifier a source is entitled to.
+ *
+ * A pure function rather than a branch inside the draw call, because the draw
+ * call is reachable only through a rendered golden and no golden renders a
+ * range-only source - so the choice would be pinned by nothing. Getting it
+ * wrong paints an approaching car calm, which is a lie the rider acts on.
+ */
+internal fun threatLevelFor(
+    v: Vehicle,
+    source: DataSource,
+    bands: SpeedBands,
+    visualMaxM: Int,
+): ThreatLevel = if (source.hasClosingSpeed) {
+    threatLevel(v.closingKmh, bands)
+} else {
+    threatLevelFromRange(v.distanceM, visualMaxM)
+}
+
+/**
+ * Threat class from RANGE alone, for a source that reports no closing speed.
+ *
+ * The speed-banded [threatLevel] cannot be used there: every target arrives
+ * with a closing speed of zero, which lands under the amber band, so a car
+ * bearing down at speed would render in the calm colour all the way in and the
+ * danger border could never fire. Colouring by range is not as good, but it is
+ * a quantity the source actually measured, and it matches what the rider is
+ * hearing, since the awareness tiers are scored on range too.
+ *
+ * Thirds of the visible window, so the bands move with the rider's own
+ * range setting rather than pinning to absolute distances.
+ */
+internal fun threatLevelFromRange(distanceM: Int, visualMaxM: Int): ThreatLevel {
+    val span = visualMaxM.coerceAtLeast(1)
+    return when {
+        distanceM * 3 > span * 2 -> ThreatLevel.SAFE
+        distanceM * 3 > span -> ThreatLevel.WARNING
+        else -> ThreatLevel.DANGER
+    }
+}
+
+/**
  * Maps a distance to its position fraction down the strip: 0 m -> 0f (at the
  * rider), [visualMaxM] -> 1f (farthest). Clamped so out-of-window targets pin
  * to the ends. The view lerps this between its top and bottom Y.

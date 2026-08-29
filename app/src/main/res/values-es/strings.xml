@@ -412,6 +412,7 @@
     <string name="settings_radardev_connected">Conectado</string>
     <string name="settings_radardev_not_in_range">Fuera de alcance</string>
     <string name="settings_radardev_connecting">Conectando…</string>
+    <string name="settings_radardev_limited_source">Radar limitado: este solo informa de la distancia. Tienes avisos de proximidad y el aviso de vía libre. Sin colores por velocidad, sin registro de adelantamientos cercanos y sin aviso si el radar se corta durante la ruta.</string>
     <string name="settings_radardev_choose_radar">Elige el radar de esta bici</string>
     <string name="settings_radardev_selected">Seleccionado</string>
     <string name="settings_radardev_tap_to_use">Toca para usar este radar</string>

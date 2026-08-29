@@ -12,7 +12,11 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.RadarLinkState
+import es.jjrh.bikeradar.RadarState
+import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.Vehicle
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -56,6 +60,7 @@ class SettingsRadarDeviceStatusTest {
     fun tearDown() {
         BikeRadarService.radarLinkStateForUi = null
         BatteryStateBus.clearForTest()
+        RadarStateBus.clear()
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
     }
 
@@ -143,16 +148,40 @@ class SettingsRadarDeviceStatusTest {
     }
 
     @Test
-    fun freshBatteryReadsConnectedEvenWhileTheLinkFlagsSayConnecting() {
-        // Data flowing outranks the link flags: a fresh battery reading means
-        // CONNECTED whatever the GATT state claims.
+    fun aFreshBatteryAloneDoesNotReadConnected() {
+        // This replaces a test that asserted the opposite, and the reason is
+        // the point: a battery reading used to be evidence of data flowing,
+        // because only a live decode loop refreshed it. The setup sequence now
+        // publishes one on every attempt that reaches its battery step, so an
+        // aborting radar retrying every 1.5 s keeps a reading permanently
+        // fresh while sending no targets at all. Under the old rule that radar
+        // read Connected, which is a worse lie than either state the tri-state
+        // was built to choose between.
         BikeRadarService.radarLinkStateForUi =
             MutableStateFlow(RadarLinkState(radarGattActive = true))
         BatteryStateBus.update(BatteryEntry(slug = "rearvue8", name = "RearVue8", pct = 78))
 
         showScreen()
 
+        composeRule.onNodeWithText("Connecting…").assertIsDisplayed()
+    }
+
+    @Test
+    fun freshDecodedFramesReadConnected() {
+        // The positive half: what Connected now means is that the radar is
+        // delivering targets, which is the question the rider is asking.
+        BikeRadarService.radarLinkStateForUi =
+            MutableStateFlow(RadarLinkState(radarGattActive = true))
+        RadarStateBus.publish(
+            RadarState(
+                vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = -4f)),
+                timestamp = System.currentTimeMillis(),
+                source = DataSource.V2,
+            ),
+        )
+
+        showScreen()
+
         composeRule.onNodeWithText("Connected").assertIsDisplayed()
-        composeRule.onNodeWithText("78%").assertIsDisplayed()
     }
 }

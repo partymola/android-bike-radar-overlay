@@ -64,11 +64,30 @@ class RadarV1Decoder(
         val changed = when {
             payload.size == 1 -> pruneStale(now)
             payload.size == 6 && payload[0] == 0x06.toByte() -> pruneStale(now)
-            payload.size >= 4 && (payload.size - 1) % 3 == 0 -> ingestThreat(payload, now)
+            isThreatPacket(payload) -> ingestThreat(payload, now)
             else -> pruneStale(now)
         }
         return if (changed) snapshot(now) else null
     }
+
+    /**
+     * The spec's full detection rule, including the low-nibble type tag that
+     * the reference decoder omits.
+     *
+     * The length test alone accepts any packet family whose length happens to
+     * be 1+3N, and the hardware this path serves is precisely the hardware
+     * nobody has a capture of. A misparsed packet becomes a phantom vehicle at
+     * whatever range its bytes imply, and the born-close ghost filter cannot
+     * catch it here because legacy tracks carry no birth metadata. The nibble
+     * is one comparison and it is what the protocol notes actually specify.
+     */
+    private fun isThreatPacket(payload: ByteArray): Boolean = payload.size >= 4 &&
+        (payload.size - 1) % 3 == 0 &&
+        (payload[0].toInt() and 0x0F) == 0x02
+
+    /** The current track set without feeding a payload, so a caller can
+     *  refresh liveness on a heartbeat that changed nothing. */
+    fun currentState(): RadarState = snapshot(nowMs())
 
     private fun ingestThreat(payload: ByteArray, now: Long): Boolean {
         var changed = pruneStale(now)

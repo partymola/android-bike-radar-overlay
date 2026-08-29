@@ -139,6 +139,69 @@ class RadarV1SafetyTest {
         assertNull(state.bikeSpeedMs)
     }
 
+    // ── through the real decider, which is what the claim is about ─────────
+
+    /**
+     * Drive a legacy approach through the real [AlertDecider] and collect
+     * every cue.
+     *
+     * The tests above pin what the DECODER emits. That is not the same claim:
+     * "the awareness tiers still work and the urgent cue cannot fire" is a
+     * statement about the decider, and asserting `speedMs > -6f` would stay
+     * green if the decider's own gate were ever loosened to `speedMs <= 0`.
+     */
+    private fun cuesForLegacyApproach(
+        bikeSpeedMs: Float?,
+        bikeNotDriving: Boolean? = null,
+    ): List<AlertDecider.Event> {
+        val decider = AlertDecider()
+        val cues = mutableListOf<AlertDecider.Event>()
+        var now = 1_000L
+        val d = decoderAt { now }
+        for (dist in 40 downTo 2) {
+            // Two packets per range, so tracks clear the decider's
+            // sustain-frames debounce the way a real stream would.
+            repeat(2) {
+                now += 120L
+                val state = d.feed(threat(1 to dist)) ?: return@repeat
+                cues += decider.decide(
+                    vehicles = state.vehicles,
+                    alertMaxM = 20,
+                    nowMs = now,
+                    bikeSpeedMs = bikeSpeedMs,
+                    bikeNotDriving = bikeNotDriving,
+                )
+            }
+        }
+        return cues
+    }
+
+    @Test
+    fun awarenessBeepsDoFireOnLegacyData() {
+        // The feature's whole point: a rider on this hardware was shown and
+        // told nothing at all. Without this, someone copying the close-pass
+        // `lateralUnknown` skip into the tier path would silence every legacy
+        // rider with the entire suite still green.
+        val cues = cuesForLegacyApproach(bikeSpeedMs = 8f)
+        assertTrue(
+            "a closing legacy track must raise at least one awareness beep, got: $cues",
+            cues.any { it is AlertDecider.Event.Beep },
+        )
+    }
+
+    @Test
+    fun theUrgentCueNeverFiresOnLegacyDataEvenWhenTheRiderIsStationary() {
+        // The stationary rider is the case that ARMS the imminent-impact
+        // override, so it is the one where only the closing-speed floor is
+        // left holding the line. Rider speed is supplied from elsewhere, as an
+        // eBike would, so the decider cannot simply bail for want of a speed.
+        val cues = cuesForLegacyApproach(bikeSpeedMs = 0f, bikeNotDriving = true)
+        assertTrue(
+            "range-only data must never raise the urgent cue, got: $cues",
+            cues.none { it is AlertDecider.Event.UrgentApproach },
+        )
+    }
+
     // ── packet-level rejections, so junk cannot become a phantom vehicle ───
 
     @Test
@@ -161,5 +224,50 @@ class RadarV1SafetyTest {
         val d = decoderAt { 1_000L }
         // 5 bytes: not a heartbeat, not 1+3N, not a sector packet.
         assertNull(d.feed(byteArrayOf(0x02, 0x81.toByte(), 10, 0x00, 0x00)))
+    }
+
+    // ── the ride record, where a zero would be published as a measurement ──
+
+    /** Run a legacy approach through the accumulator and snapshot it. */
+    private fun legacyRideStats(): RideStatsSnapshot {
+        var mono = 10_000L
+        val stats = RideStatsAccumulator(nowMsProvider = { 1_700_000_000_000L }, monoMsProvider = { mono })
+        var now = 1_000L
+        val d = decoderAt { now }
+        for (dist in 30 downTo 4) {
+            now += 100L
+            mono += 100L
+            d.feed(threat(1 to dist))?.let { stats.observeFrame(it) }
+        }
+        return stats.snapshot()
+    }
+
+    @Test
+    fun aLegacyRideStillGetsAVehicleCount() {
+        // The whole-source skip, pointed the wrong way. Every legacy track is
+        // lateralUnknown, so a skip that keys on that flag alone drops every
+        // vehicle of every frame - and the rider ends a real commute holding a
+        // ride record of zeroes that reads as a quiet ride rather than as data
+        // the radar could not supply.
+        assertEquals("one tracked vehicle over the approach", 1, legacyRideStats().overtakesTotal)
+    }
+
+    @Test
+    fun aLegacyRideRecordsNoLateralClearance() {
+        // The other direction, and the one that publishes a falsehood: with no
+        // lateral channel every lateralPos is 0f, so an unguarded extremum
+        // writes a 0.0 m clearance into ride history and into Home Assistant -
+        // a rider's tightest-pass record inventing a vehicle that shaved them.
+        // Null is the honest value for "never measured".
+        assertNull(legacyRideStats().minLateralClearanceM)
+    }
+
+    @Test
+    fun aLegacyRideRecordsNoPeakClosingSpeed() {
+        // Same class: the decoder writes 0 m/s, and the peak-closing extremum
+        // only takes strictly-negative speeds, so nothing is recorded. Pinned
+        // because a mutant relaxing that comparison to `<= 0` would publish a
+        // measured "peak closing 0 km/h" for a ride full of overtakes.
+        assertNull(legacyRideStats().peakClosingKmh)
     }
 }

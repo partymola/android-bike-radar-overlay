@@ -5,12 +5,16 @@ package es.jjrh.bikeradar
 enum class RadarConnStatus { CONNECTED, CONNECTING, NOT_IN_RANGE }
 
 /**
- * Pure tri-state for the Settings radar card. "Connected" stays what it always
- * was - a fresh battery reading, the proof data is flowing - but the old screen
- * collapsed everything else to "Not in range", which is false for a radar the
- * app is actively connecting to and failing the setup sequence against. That
- * rider needs to hear "Connecting", or the report we get is "never in range"
- * about a radar the app talks to every couple of seconds.
+ * Pure tri-state for the Settings radar card. "Connected" means decoded target
+ * frames are arriving, which is the question the rider is actually asking; a
+ * battery reading is not evidence of it, because the setup sequence publishes
+ * one on every attempt that reaches its battery step, so a radar aborting and
+ * retrying every 1.5 s keeps a reading permanently fresh while sending no
+ * targets at all. The old screen collapsed everything short of that to "Not in
+ * range", which is false for a radar the app is actively connecting to and
+ * failing the setup sequence against. That rider needs to hear "Connecting",
+ * or the report we get is "never in range" about a radar the app talks to
+ * every couple of seconds.
  *
  * A recently-dropped link still reads CONNECTING for [RECENT_OFF_MS]: an
  * aborting radar cycles connect/abort with ~1.5 s gaps, and without the bridge
@@ -35,8 +39,9 @@ object RadarConnStatusDeriver {
      *  connect and discovery time - the abort path never grows its backoff),
      *  short enough that a radar genuinely gone reads NOT_IN_RANGE within two
      *  screen ticks. Deliberately NOT sized to cover an ordinary mid-ride
-     *  reconnect (corpus floor ~5.3 s): there the fresh-battery precedence
-     *  holds CONNECTED through the gap, and stretching this window only makes
+     *  reconnect (corpus floor ~5.3 s): the frame-freshness window feeding
+     *  [derive]'s dataFresh (RADAR_FRAME_FRESH_MS, 10 s) already holds
+     *  CONNECTED across a gap that size, and stretching this window only makes
      *  a switched-off radar lie "Connecting" for longer. The sibling
      *  measurement lives on RADAR_DROP_VISUAL_THRESHOLD_MS. */
     const val RECENT_OFF_MS = 5_000L

@@ -44,6 +44,48 @@ class RideStatsAccumulatorTest {
         bikeSpeedMs: Float? = null,
     ) = RadarState(vehicles = vehicles, source = DataSource.V2, bikeSpeedMs = bikeSpeedMs)
 
+    /** A range-only legacy state: every track carries lateralUnknown because
+     *  the source has no lateral channel at all, which is a different thing
+     *  from a bad frame on a source that does. */
+    private fun legacyState(vehicles: List<Vehicle>) = RadarState(vehicles = vehicles, source = DataSource.V1)
+
+    @Test
+    fun aLegacyRideStillCountsItsVehicles() {
+        // The lateralUnknown skip is per-FRAME on a source that has lateral.
+        // Applied to a source that has none it skips every frame, and the
+        // rider finishes a ride the app beeped through with a record showing
+        // no vehicles, no exposure, and therefore no ride-history row at all.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(legacyState(listOf(veh(1, lateralUnknown = true))))
+        clock.advance(500L)
+        a.observeFrame(legacyState(listOf(veh(1, lateralUnknown = true))))
+        clock.advance(500L)
+        a.observeFrame(legacyState(listOf(veh(2, lateralUnknown = true))))
+
+        val snap = a.snapshot()
+        assertEquals("both legacy tracks must be counted", 2, snap.overtakesTotal)
+    }
+
+    @Test
+    fun aLegacyRideRecordsNoLateralClearance() {
+        // The dangerous direction. Legacy tracks carry lateralPos 0f, so a
+        // clearance computed from them is 0.0 m - a tightest-pass reading the
+        // radar never measured, written into the ride record and published to
+        // Home Assistant where an automation cannot tell it from a real one.
+        // Null is what "never measured" has to look like.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(legacyState(listOf(veh(1, lateralUnknown = true))))
+        clock.advance(500L)
+        a.observeFrame(legacyState(listOf(veh(1, lateralUnknown = true))))
+
+        assertNull(
+            "a source with no lateral channel must record no clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+    }
+
     private fun closeEvent(
         ts: Long = 1_000L,
         clearance: Float = 0.7f,

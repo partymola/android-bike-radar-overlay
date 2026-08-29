@@ -757,6 +757,27 @@ internal class RadarLinkController(
         }
     }
 
+    /** One-shot battery read for the legacy path, best-effort. The standard
+     *  service needs no bonding and no unlock on this family, and this is the
+     *  only battery such a radar can report: it aborts before the sequence's
+     *  own battery step, and the one-shot reader stands down while a link is
+     *  live. Swallows failures because a missing battery service must not stop
+     *  the radar streaming. */
+    private suspend fun readLegacyBattery(gatt: BluetoothGatt, queue: BleOpQueue, name: String) {
+        try {
+            val ch = gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY) ?: return
+            val pct = queue.read(gatt, ch)?.firstOrNull()?.toInt()?.and(0xFF) ?: return
+            if (pct !in 0..100) return
+            val s = slug(name)
+            gatt.device?.address?.let { macToSlug[it] = s }
+            BatteryStateBus.update(BatteryEntry(s, name, pct))
+            captureLog.clog("# legacy battery $pct%")
+            queue.writeCccd(gatt, ch)
+        } catch (t: Throwable) {
+            Log.w(TAG, "legacy battery read failed: $t")
+        }
+    }
+
     /**
      * The legacy-stream characteristic, but ONLY on a radar that has no V2
      * characteristic to lose.
@@ -806,11 +827,22 @@ internal class RadarLinkController(
             return false
         }
 
+        // The legacy stream has no device-status frame, so the standard
+        // battery service is the only reading available. One read here, on an
+        // idle queue, rather than none at all: this hardware aborts before the
+        // sequence's own battery step, so nothing else ever fetches one.
+        readLegacyBattery(gatt, queue, name)
+
+        // Same radio treatment as the V2 path: the radar pushes at its own
+        // cadence, so a tighter connection interval only costs power.
+        try {
+            gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
+        } catch (t: Throwable) {
+            Log.w(TAG, "requestConnectionPriority threw: $t")
+        }
+
         val dec = RadarV1Decoder()
         var frames = 0
-        // A healthy session for the backoff's purposes: this connection is
-        // delivering data, so the loop should not grow its retry delay.
-        lastConnectionReachedDecode = true
         lastV2FrameMs = clock()
 
         // Same watchdog as the V2 path. EVERY payload counts as liveness,
@@ -834,13 +866,32 @@ internal class RadarLinkController(
 
         try {
             for ((uuid, bytes) in notifyChannel) {
+                if (uuid == Uuids.CHAR_BATTERY) {
+                    val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                    val s = slug(name)
+                    gatt.device?.address?.let { macToSlug[it] = s }
+                    BatteryStateBus.update(BatteryEntry(s, name, pct))
+                    if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
+                    continue
+                }
                 if (uuid != Uuids.RADAR_V1) continue
                 lastV2FrameMs = clock()
                 if (frames++ == 0) {
                     Log.i(TAG, "first legacy frame")
                     journal("radar legacy stream live")
+                    // Only now is this a session worth resetting the backoff
+                    // for. A radar that ACKs the subscribe and then streams
+                    // nothing is not delivering, and treating the ACK as
+                    // success would pin the retry delay at its floor and
+                    // churn the radio for the whole ride.
+                    lastConnectionReachedDecode = true
                 }
-                dec.feed(bytes)?.let { RadarStateBus.publish(it) }
+                // Published on EVERY payload, not only the ones that change the
+                // track set. Heartbeats are the only traffic on an empty road,
+                // and a consumer scoring liveness off the published timestamp
+                // would otherwise call a healthy radar stale within seconds of
+                // the road clearing.
+                RadarStateBus.publish(dec.feed(bytes) ?: dec.currentState())
             }
         } finally {
             watchdog.cancel()

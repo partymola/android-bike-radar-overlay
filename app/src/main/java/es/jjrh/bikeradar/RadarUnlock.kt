@@ -438,7 +438,14 @@ object RadarUnlock {
     ): ByteArray? = withTimeoutOrNull(timeoutMs) {
         for ((uuid, bytes) in notifies) {
             if (uuid == charUuid) {
-                Log.d("BikeRadar.RadarUnlock", "rx ${charUuid.toString().substring(4, 8)}: ${bytes.toHex()}")
+                // Debug builds only. These are raw handshake replies, and the
+                // device-ID frame is among them - the same data the setup
+                // transcript treats as opt-in and discloses before recording.
+                // Two policies for one payload is the part that is wrong, not
+                // which one; the capture log is the sink that has consent.
+                if (BuildConfig.DEBUG) {
+                    Log.d("BikeRadar.RadarUnlock", "rx ${charUuid.toString().substring(4, 8)}: ${bytes.toHex()}")
+                }
                 if (matches(bytes)) return@withTimeoutOrNull bytes
             }
         }

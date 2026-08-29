@@ -236,7 +236,9 @@ internal class CameraLightLinkController(
                 queue,
                 notifyChannel,
                 DeviceVariant.FRONT_CAMERA,
-            ) { msg -> Log.d(TAG, msg) }
+                // Debug builds only: the script lines carry the raw handshake
+                // exchange with the camera, which no release sink records.
+            ) { msg -> if (BuildConfig.DEBUG) Log.d(TAG, msg) }
 
             if (handshakeAbort != null) {
                 Log.w(TAG, "handshake failed; closing for quick reconnect")
@@ -334,7 +336,7 @@ internal class CameraLightLinkController(
                     }
                     Uuids.SETTINGS_14 -> {
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
-                        Log.d(TAG, "mode-state notify: $mode")
+                        if (BuildConfig.DEBUG) Log.d(TAG, "mode-state notify: $mode")
                         val expected = cameraLightLastWrittenMode
                         if (!cameraLightUserOverride && CameraLightOverrideDecider.isOverride(expected, mode)) {
                             cameraLightUserOverride = true

@@ -158,7 +158,21 @@ summary; the Key files table maps each part to its file.
   logs, not the whole external-files root). Cap is `MAX_CAPTURE_LOGS = 50`.
   When the toggle is off, `openCaptureLog` no-ops and no file is created.
   `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
-  release builds keep BLE/movement payloads out of logcat.
+  release builds keep BLE/movement payloads out of logcat. Every other sink
+  carrying raw device bytes is guarded the same way, for the same reason: the
+  handshake replies include the device-ID frame, and a release build printing
+  it unconditionally would undo the consent the setup transcript asks for.
+  `SettingsPrivacyLogcatGuardTest` names those sites and pins each one,
+  because `BuildConfig.DEBUG` is true under the test variant so no runtime
+  test can reach the release behaviour; read the list there rather than
+  restating it here. The first-V2-frame line keeps its message on release
+  builds and drops only the hex, so a live test still has its signal.
+  The boundary is RAW BYTES, not everything a device reports: a decoded
+  value the app already publishes to Home Assistant - a light mode, say -
+  is not a payload, and some of those are guarded only because they sit
+  beside one. Device names and connection state also still reach release
+  logcat, deliberately, since the link journal already records them and the
+  Privacy screen discloses it.
   By default, a fresh capture file is opened per radar connection (after
   handshake) and closed on disconnect, so a mid-ride radar drop splits one
   ride across multiple files and the dead-radar window between them is

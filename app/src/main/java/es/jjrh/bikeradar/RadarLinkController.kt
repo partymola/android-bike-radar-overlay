@@ -654,7 +654,13 @@ internal class RadarLinkController(
                 when (uuid) {
                     Uuids.RADAR_V2 -> {
                         lastV2FrameMs = clock()
-                        if (v2FrameCount++ == 0) Log.i(TAG, "first V2 frame: ${bytes.toHex()}")
+                        if (v2FrameCount++ == 0) {
+                            // The frame itself is a movement payload, so it
+                            // goes the way the handshake replies do. The line
+                            // stays on release builds because it is the signal
+                            // a live test waits for.
+                            Log.i(TAG, if (BuildConfig.DEBUG) "first V2 frame: ${bytes.toHex()}" else "first V2 frame")
+                        }
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
                     Uuids.SETTINGS_14 -> {
@@ -719,11 +725,11 @@ internal class RadarLinkController(
      * sighting, and [seedLinkProbeDebounce] carries it across a process start.
      *
      * The write RATE is deliberately not bounded, and the debounce below does
-     * bound it: a link alternating between two stopping points differs from the
-     * previous answer every attempt, so it still writes about every 1.5 s. What
-     * it writes is now one of two stable strings rather than a fresh stamp each
-     * time. `apply()` is asynchronous, so the cost is a prefs-XML rewrite on the
-     * writer thread rather than anything on this path.
+     * not bound it: a link alternating between two stopping points differs from
+     * the previous answer every attempt, so it still writes about every 1.5 s.
+     * What it writes is now one of two stable strings rather than a fresh
+     * stamp each time. `apply()` is asynchronous, so the cost is a prefs-XML
+     * rewrite on the writer thread rather than anything on this path.
      *
      * [HANDSHAKE_OK] means the sequence completed, NOT that targets will
      * stream: the battery read and subscribe inside the handshake ignore their

@@ -622,11 +622,31 @@ enforces them, and CONTRIBUTING.md points contributors here:
   `runRadarConnection`'s ABORT path closes and reconnects automatically
   (~1.5 s). If the reconnect doesn't happen, see live-testing recovery
   below.
-- Never subscribe the CCCD of `6a4e3203` (V1 radar char). Written before the
-  unlock (fw 6.70), the radar unlocks into V1: handshake succeeds, V1 heartbeats
-  arrive on `6a4e3203`, `6a4e3204` never emits - and later connections that never
-  touch the CCCD get no V2 either, until the radar is power-cycled. See
-  `Uuids.RADAR_V1`.
+- Never subscribe the CCCD of `6a4e3203` (V1 radar char) on a radar that has
+  `6a4e3204`. Written before the unlock (fw 6.70), the radar unlocks into V1:
+  handshake succeeds, V1 heartbeats arrive on `6a4e3203`, `6a4e3204` never
+  emits - and later connections that never touch the CCCD get no V2 either,
+  until the radar is power-cycled. See `Uuids.RADAR_V1`.
+  - **The one sanctioned subscribe is the legacy-stream fallback**, and its
+    gate is that whole exception. `RadarLinkController.legacyStreamChar`
+    returns the characteristic ONLY when the radar service carries no
+    `6a4e3204`, read off the discovered GATT table rather than the stored
+    probe. A radar with V2 therefore cannot reach the subscribe, so the pin
+    cannot be applied to a radar it would cost anything. `RadarLinkControllerHarnessTest`
+    pins both directions: falls back when the characteristic is absent, never
+    falls back when it is present however the handshake ends.
+  - **Do not relax that gate to a retry count.** A count fires on a healthy
+    radar after a transient handshake failure, which is precisely when the pin
+    is expensive - it would cost the rider V2 until they power-cycle. The
+    absence of `6a4e3204` is a fact about the hardware; a retry count is a
+    guess about the moment.
+  - The stream itself carries range only. `RadarV1Decoder` writes a zero
+    closing speed and sets `lateralUnknown` on every track, and both are
+    fail-closed sentinels rather than measurements: the urgent cue and
+    close-pass detection must stay shut on it, while the distance-scored
+    awareness tiers and the all-clear still work. `RadarV1SafetyTest` is the
+    argument, and it holds close-pass shut even if a rider speed later arrives
+    from another source. Read it before widening this path.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

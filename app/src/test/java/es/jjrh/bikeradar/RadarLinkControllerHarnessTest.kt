@@ -245,6 +245,29 @@ class RadarLinkControllerHarnessTest {
         gatt.discoverServices()
     }
 
+    /** A legacy radar: the radar service carries the V1 characteristic and NO
+     *  V2 one, and there is no config service, so the handshake aborts at
+     *  `tx-char-missing` and the legacy fallback is eligible. */
+    private fun setUpLegacyOnlyRadar(gatt: BluetoothGatt) {
+        addService(gatt, Uuids.SVC_RADAR, char(Uuids.RADAR_V1, propNotify, cccd = true))
+        gatt.discoverServices()
+    }
+
+    /** A V2-capable radar whose handshake still aborts: the radar service has
+     *  BOTH characteristics, so the fallback must refuse it however the
+     *  handshake ends. This is the shape that would be pinned into the legacy
+     *  stream if the gate ever regressed. */
+    private fun setUpV2RadarWithFailingHandshake(gatt: BluetoothGatt) {
+        addService(gatt, Uuids.SVC_CONFIG, char(Uuids.HANDSHAKE_RX, propNotify, cccd = true))
+        addService(
+            gatt,
+            Uuids.SVC_RADAR,
+            char(Uuids.RADAR_V2, propNotify, cccd = true),
+            char(Uuids.RADAR_V1, propNotify, cccd = true),
+        )
+        gatt.discoverServices()
+    }
+
     /** No `discoverServices()` call, so Robolectric never auto-fires the SUCCESS
      *  `onServicesDiscovered`; the test then injects a FAILURE status by hand. */
     private fun setUpNoDiscover(gatt: BluetoothGatt) {
@@ -818,6 +841,73 @@ class RadarLinkControllerHarnessTest {
                 File(root, CaptureLogManager.CAPTURE_DIR)
                     .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
             },
+        )
+        controller.forceReconnect()
+    }
+
+    // ── legacy-stream fallback: the gate, pinned in both directions ────────────
+
+    /**
+     * A radar with no V2 characteristic falls back to the legacy stream after
+     * the handshake aborts, and its targets reach the state bus.
+     *
+     * This is the whole point of the fallback: a device that cannot run the
+     * handshake at all still produces a usable radar.
+     */
+    @Test fun aRadarWithNoV2CharFallsBackToTheLegacyStream() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(
+            "the fallback must run after the abort",
+            pumpUntil { journalHas("radar legacy stream subscribe ok=true") },
+        )
+
+        // One threat packet: track 1 at 24 m, with the vehicle-present bit set.
+        requireNotNull(link.cb).onCharacteristicChanged(
+            requireNotNull(link.gatt),
+            requireNotNull(link.gatt).getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V1),
+            byteArrayOf(0x02, 0x81.toByte(), 24, 0x00),
+        )
+        assertTrue(
+            "the decoded target must reach the state bus",
+            pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } },
+        )
+        assertEquals(DataSource.V1, RadarStateBus.state.value.source)
+        controller.forceReconnect()
+    }
+
+    /**
+     * A radar that HAS the V2 characteristic must never reach the legacy
+     * subscribe, whatever the handshake does.
+     *
+     * Subscribing the legacy CCCD pins such a radar out of V2, and the pin
+     * survives every later reconnect until the unit is power-cycled. So this
+     * is not a preference about which stream is nicer: it is the guard that
+     * stops a transient handshake failure costing a healthy radar its modern
+     * stream. Do not relax the gate to a retry count.
+     */
+    @Test fun aV2CapableRadarNeverFallsBackHoweverTheHandshakeEnds() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpV2RadarWithFailingHandshake)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        // The handshake aborts, exactly as for the legacy radar above.
+        assertTrue(pumpUntil { journal.any { it.startsWith("radar handshake aborted at") } })
+        // Give the loop several further attempts to be sure the fallback is
+        // not merely late.
+        assertTrue(pumpUntil { link.openCount >= 3 })
+
+        assertFalse(
+            "a radar with a V2 characteristic must never subscribe the legacy stream",
+            journal.any { it.contains("legacy stream") },
         )
         controller.forceReconnect()
     }

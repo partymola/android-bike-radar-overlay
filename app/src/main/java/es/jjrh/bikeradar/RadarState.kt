@@ -3,7 +3,17 @@ package es.jjrh.bikeradar
 
 enum class VehicleSize { CAR, TRUCK }
 
-enum class DataSource { NONE, V2 }
+/**
+ * Which stream a [RadarState] came from.
+ *
+ * [V1] is the legacy stream, and it carries range only: no closing speed, no
+ * lateral position, no rider speed. Everything derived from those has to fail
+ * CLOSED on it rather than read a default as a measurement, because a default
+ * here is indistinguishable from a real zero. See [RadarV1Decoder] for how the
+ * two zeroes it does write are made harmless, and
+ * `RadarV1SafetyTest` for the gates that hold it.
+ */
+enum class DataSource { NONE, V1, V2 }
 
 data class Vehicle(
     val id: Int,

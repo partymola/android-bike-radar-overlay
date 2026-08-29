@@ -510,6 +510,17 @@ internal class RadarLinkController(
             recordLinkProbe(gatt, handshakeAbort ?: HANDSHAKE_OK)
 
             if (handshakeAbort != null) {
+                val legacyChar = legacyStreamChar(gatt)
+                if (legacyChar != null) {
+                    captureLog.clog("# handshake aborted at $handshakeAbort; no V2 char, trying the legacy stream")
+                    journal("radar legacy stream attempt after $handshakeAbort")
+                    // The probe keeps the ABORT token, not a legacy marker:
+                    // the token is the diagnostic, and the journal line above
+                    // is what records that the fallback ran.
+                    captureLog.open()
+                    overlayJob = overlayPipeline.attach(scope, name)
+                    return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name)
+                }
                 captureLog.clog("# handshake aborted - closing gatt for quick reconnect")
                 journal("radar handshake aborted at $handshakeAbort (quick reconnect)")
                 gatt.disconnect()
@@ -710,6 +721,98 @@ internal class RadarLinkController(
             closeOnce()
             if (!setupTranscript) captureLog.close()
         }
+    }
+
+    /**
+     * The legacy-stream characteristic, but ONLY on a radar that has no V2
+     * characteristic to lose.
+     *
+     * That condition is the whole safety argument for the fallback, not a
+     * tidy-up. Subscribing this CCCD pins a V2-capable radar into the legacy
+     * stream, and the pin outlives the connection: every later reconnect gets
+     * a silent V2 too, until the unit is power-cycled. Gating on the absence
+     * of [Uuids.RADAR_V2] means a radar that HAS V2 can never reach the
+     * subscribe, so the pin cannot be applied to a radar it would cost
+     * anything. Read off the discovered GATT table rather than the stored
+     * probe string, so it cannot drift from what this connection actually saw.
+     *
+     * Do not relax this to a retry count. A count fires on a healthy radar
+     * after a transient handshake failure, which is exactly the case where
+     * the pin is expensive. `RadarLinkControllerHarnessTest` pins both
+     * directions.
+     */
+    private fun legacyStreamChar(gatt: BluetoothGatt): BluetoothGattCharacteristic? {
+        val svc = gatt.getService(Uuids.SVC_RADAR) ?: return null
+        if (svc.getCharacteristic(Uuids.RADAR_V2) != null) return null
+        return svc.getCharacteristic(Uuids.RADAR_V1)
+    }
+
+    /**
+     * Decode the legacy stream until the link drops.
+     *
+     * Returns false so the reconnect loop treats this like an ordinary session
+     * end rather than a quick post-abort retry.
+     *
+     * The stream carries range only. [RadarV1Decoder] documents what that
+     * costs and `RadarV1SafetyTest` pins which cues stay closed; nothing here
+     * should try to synthesise the missing channels.
+     */
+    private suspend fun runLegacyStream(
+        gatt: BluetoothGatt,
+        queue: BleOpQueue,
+        notifyChannel: Channel<Pair<UUID, ByteArray>>,
+        v1Char: BluetoothGattCharacteristic,
+        name: String,
+    ): Boolean {
+        val subscribed = queue.writeCccd(gatt, v1Char)
+        captureLog.clog("# legacy stream subscribe ok=$subscribed")
+        journal("radar legacy stream subscribe ok=$subscribed")
+        if (!subscribed) {
+            gatt.disconnect()
+            return false
+        }
+
+        val dec = RadarV1Decoder()
+        var frames = 0
+        // A healthy session for the backoff's purposes: this connection is
+        // delivering data, so the loop should not grow its retry delay.
+        lastConnectionReachedDecode = true
+        lastV2FrameMs = clock()
+
+        // Same watchdog as the V2 path. EVERY payload counts as liveness,
+        // including heartbeats, because a legacy radar with no traffic behind
+        // it emits nothing but heartbeats and is perfectly healthy.
+        val capturedGatt = gatt
+        val watchdog = scope.launch {
+            while (true) {
+                delay(V2_WATCHDOG_TICK_MS)
+                val now = clock()
+                if (V2WatchdogDecider.isStale(now, lastV2FrameMs, V2_FRAME_STALL_MS)) {
+                    Log.w(TAG, "legacy stream silent for ${now - lastV2FrameMs}ms; tearing down")
+                    journal("radar legacy stream silent; tearing down")
+                    try {
+                        capturedGatt.disconnect()
+                    } catch (_: Throwable) {}
+                    return@launch
+                }
+            }
+        }
+
+        try {
+            for ((uuid, bytes) in notifyChannel) {
+                if (uuid != Uuids.RADAR_V1) continue
+                lastV2FrameMs = clock()
+                if (frames++ == 0) {
+                    Log.i(TAG, "first legacy frame")
+                    journal("radar legacy stream live")
+                }
+                dec.feed(bytes)?.let { RadarStateBus.publish(it) }
+            }
+        } finally {
+            watchdog.cancel()
+            dec.reset()
+        }
+        return false
     }
 
     /**

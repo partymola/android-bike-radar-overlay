@@ -231,16 +231,16 @@ internal class CameraLightLinkController(
             cameraLightOffSinceMs = null
             Log.i(TAG, "connected, running handshake")
 
-            val handshakeOk = RadarUnlock.runHandshake(
+            val handshakeAbort = RadarUnlock.runHandshake(
                 gatt,
                 queue,
                 notifyChannel,
                 DeviceVariant.FRONT_CAMERA,
             ) { msg -> Log.d(TAG, msg) }
 
-            if (!handshakeOk) {
+            if (handshakeAbort != null) {
                 Log.w(TAG, "handshake failed; closing for quick reconnect")
-                journal("camera handshake failed (quick reconnect)")
+                journal("camera handshake failed at $handshakeAbort (quick reconnect)")
                 gatt.disconnect()
                 return true
             }

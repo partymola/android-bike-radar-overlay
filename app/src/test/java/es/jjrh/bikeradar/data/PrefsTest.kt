@@ -316,6 +316,19 @@ class PrefsTest {
     }
 
     @Test
+    fun radarLinkProbeDefaultsNullRoundTripsAndIsDumpedReadable() {
+        assertNull(prefs.radarLinkProbe)
+        assertTrue(prefs.dumpAll().contains("radar_link_probe=<unset>"))
+
+        prefs.radarLinkProbe = "since=1786034957178 svc=3200[3203,3204] out=v2-cccd"
+        assertEquals("since=1786034957178 svc=3200[3203,3204] out=v2-cccd", prefs.radarLinkProbe)
+        // Dumped in full: redacting it would remove the only thing it is for.
+        assertTrue(
+            prefs.dumpAll().contains("radar_link_probe=since=1786034957178 svc=3200[3203,3204] out=v2-cccd"),
+        )
+    }
+
+    @Test
     fun radarFirmwareRevDefaultsNullAndRoundTrips() {
         assertNull(prefs.radarFirmwareRev)
         prefs.radarFirmwareRev = "6.70"
@@ -401,6 +414,10 @@ class PrefsTest {
         // A display name shaped like a MAC: proves names are redacted too,
         // not merely the field we happen to call the "MAC".
         prefs.dashcamDisplayName = "AA:BB:CC:DD:EE:FF"
+        // The probe is dumped readable, so it is the one field whose safety
+        // rests on its producer rather than on this file. Seed it with the
+        // thing a future producer change could put there.
+        prefs.radarLinkProbe = "since=1 svc=3200[3204] out=handshake-ok AA:BB:CC:DD:EE:FF"
         val dump = prefs.dumpAll()
         val macRegex = Regex("""\b([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b""")
         assertFalse(

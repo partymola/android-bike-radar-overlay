@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -177,10 +178,58 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
-        assertFalse("missing TX characteristic must abort", ok)
+        assertEquals("missing TX characteristic must abort", "tx-char-missing", abort)
         assertTrue("abort must be logged", log.any { it.contains("TX characteristic not found") })
+        queue.cancel()
+    }
+
+    /**
+     * The TX characteristic is present but its reply channel cannot be
+     * subscribed. Distinct from a missing TX char, and distinct again from the
+     * control-service case below: each names a different thing to fix, and the
+     * token is all a rider's bug report carries.
+     */
+    @Test fun abortsAtTheReplyChannelWhenItsCccdIsMissing() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.HANDSHAKE_TX, propWriteNoResp or propWrite),
+            char(Uuids.HANDSHAKE_RX, propNotify, cccd = false),
+        )
+        gatt.discoverServices()
+        // No driver: the CCCD write fails on the absent descriptor without
+        // reaching the queue, and the driver would dereference that descriptor.
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        backgroundScope.launch { queue.run() }
+
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+
+        assertEquals("rx-cccd", abort)
+        queue.cancel()
+    }
+
+    /** Config service complete, no control service at all. */
+    @Test fun abortsAtTheControlServiceSubscribeWhenThatServiceIsAbsent() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.HANDSHAKE_TX, propWriteNoResp or propWrite),
+            char(Uuids.HANDSHAKE_RX, propNotify, cccd = true),
+        )
+        gatt.discoverServices()
+        startDriver(queue, gatt, radar = true)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        backgroundScope.launch { queue.run() }
+
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+
+        assertEquals("ack-cccd", abort)
         queue.cancel()
     }
 
@@ -191,8 +240,50 @@ class RadarUnlockHarnessTest {
         val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
         backgroundScope.launch { queue.run() }
 
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
-        assertFalse("missing config service must abort", ok)
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+        assertEquals("missing config service must abort", "tx-char-missing", abort)
+        queue.cancel()
+    }
+
+    /**
+     * A shape an unknown radar can present: the AMV session runs to completion
+     * and only the V2 stream is missing. It must be reported as its own
+     * stopping point, because "no config service" and "no V2 characteristic"
+     * call for different work and a rider's bundle is all we get to tell them
+     * apart.
+     */
+    @Test fun abortsAtTheV2SubscribeWhenTheRadarServiceHasNoV2Characteristic() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.HANDSHAKE_TX, propWriteNoResp or propWrite),
+            char(Uuids.HANDSHAKE_RX, propNotify, cccd = true),
+        )
+        addService(gatt, Uuids.SVC_CONTROL, char(Uuids.SETTINGS_ACK, propIndicate or propWrite, cccd = true))
+        addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propRead or propNotify, cccd = true))
+        // Radar service present, but carrying the legacy stream only.
+        addService(gatt, Uuids.SVC_RADAR, char(Uuids.RADAR_V1, propNotify, cccd = true))
+        gatt.discoverServices()
+        startDriver(queue, gatt, radar = true)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("000600"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("0001000000000000000004000040"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("0001000000000000000016000000"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("80000102030405060708090a0b0c0d0e0f1011121314"))
+        backgroundScope.launch { queue.run() }
+
+        val log = mutableListOf<String>()
+        val abort = withTimeout(60_000) {
+            RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        }
+
+        assertEquals("v2-cccd", abort)
+        assertTrue(
+            "the AMV session must have completed before the V2 subscribe; log=$log",
+            log.any { it.contains("handshake complete") },
+        )
         queue.cancel()
     }
 
@@ -208,9 +299,9 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
-        assertFalse(ok)
+        assertEquals("amv-open", abort)
         assertTrue("must abort on the AMV open reply", log.any { it.contains("AMV open reply never arrived") })
         queue.cancel()
     }
@@ -228,10 +319,73 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
-        assertFalse(ok)
+        assertEquals("amv-04", abort)
         assertTrue("must abort on the cmd-04 reply", log.any { it.contains("AMV 04 reply never arrived") })
+        queue.cancel()
+    }
+
+    // ── ABORT: cmd-16 reply never arrives ───────────────────────────────────────
+
+    @Test fun abortsWhenCmd16ReplyTimesOut() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        setUpRadarServices(gatt)
+        startDriver(queue, gatt, radar = true)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        // Feed open + cmd-04; starve cmd-16.
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("000600"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("0001000000000000000004000040"))
+        backgroundScope.launch { queue.run() }
+
+        val log = mutableListOf<String>()
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+
+        assertEquals("amv-16", abort)
+        assertTrue("must abort on the cmd-16 reply", log.any { it.contains("AMV 16 reply never arrived") })
+        queue.cancel()
+    }
+
+    // ── ABORT: later 0x18 toggle frames (FRONT_CAMERA) ──────────────────────────
+
+    @Test fun abortsWhenSecondSubmodeToggleReplyTimesOut() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        setUpFrontCameraServices(gatt)
+        startDriver(queue, gatt, radar = false)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        notifies.trySend(Uuids.CHAR_2810 to frame("000600"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0001000000000000000004000040"))
+        // One toggle reply only: frame 1 consumes it, frame 2 starves.
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561800"))
+        backgroundScope.launch { queue.run() }
+
+        val log = mutableListOf<String>()
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+
+        assertEquals("submode-2", abort)
+        assertTrue("must abort on the second 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 2 reply never arrived") })
+        queue.cancel()
+    }
+
+    @Test fun abortsWhenThirdSubmodeToggleReplyTimesOut() = runTest {
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue)
+        setUpFrontCameraServices(gatt)
+        startDriver(queue, gatt, radar = false)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        notifies.trySend(Uuids.CHAR_2810 to frame("000600"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0001000000000000000004000040"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561800"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561882"))
+        backgroundScope.launch { queue.run() }
+
+        val log = mutableListOf<String>()
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+
+        assertEquals("submode-3", abort)
+        assertTrue("must abort on the third 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 3 reply never arrived") })
         queue.cancel()
     }
 
@@ -250,9 +404,9 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
-        assertFalse(ok)
+        assertEquals("dev-id", abort)
         assertTrue("must abort on the device-ID frame", log.any { it.contains("device-ID frame never arrived") })
         queue.cancel()
     }
@@ -271,9 +425,9 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
 
-        assertFalse(ok)
+        assertEquals("submode-1", abort)
         assertTrue("must abort on the first 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 1 reply never arrived") })
         queue.cancel()
     }
@@ -294,11 +448,11 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = withTimeout(60_000) {
+        val abort = withTimeout(60_000) {
             RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
         }
 
-        assertTrue("radar handshake should report success; log=$log", ok)
+        assertNull("radar handshake should report success; log=$log", abort)
         assertTrue("handshake complete must be logged", log.any { it.contains("handshake complete") })
         assertTrue(
             "the DIS-CCCD-DIS tail must run for the RADAR variant",
@@ -325,11 +479,11 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val ok = withTimeout(60_000) {
+        val abort = withTimeout(60_000) {
             RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
         }
 
-        assertTrue("front camera handshake should report success; log=$log", ok)
+        assertNull("front camera handshake should report success; log=$log", abort)
         assertTrue("front camera handshake complete must be logged", log.any { it.contains("front camera handshake complete") })
         queue.cancel()
     }

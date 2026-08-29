@@ -32,9 +32,10 @@ What you expected to happen instead.
 Long-press the "Bike Radar" wordmark on the home screen three times to
 unlock Developer options, then open Settings -> Debug:
 
-- **Copy diagnostic bundle** puts app settings, recent crash reports and
-  the connection journal on your clipboard - paste it here. It contains
-  device names and ride times but no location or account data.
+- **Copy diagnostic bundle** puts app settings, recent crash reports, the
+  connection journal and what your radar's last connection attempt found on
+  your clipboard - paste it here. It contains device names and ride times
+  but no location or account data.
 - For connection problems, expand **LINK JOURNAL** on the same screen
   and include the recent lines.
 - For decoding or alert problems, enable **Write capture logs**,

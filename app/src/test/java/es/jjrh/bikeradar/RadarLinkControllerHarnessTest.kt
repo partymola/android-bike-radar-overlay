@@ -143,6 +143,9 @@ class RadarLinkControllerHarnessTest {
         prefs: Prefs = prefs(),
         gateway: FakeGateway = FakeGateway(),
         clock: () -> Long = { 0L },
+        // Matches production, so a test that does not care about the stamp
+        // still exercises the real default rather than a synthetic one.
+        wallClock: () -> Long = { System.currentTimeMillis() },
         returnNull: Boolean = false,
         setUp: (BluetoothGatt) -> Unit = ::setUpRadarServices,
     ): RadarLinkController = RadarLinkController(
@@ -158,6 +161,7 @@ class RadarLinkControllerHarnessTest {
         slug = { it.lowercase() },
         journal = { journal += it },
         clock = clock,
+        wallClock = wallClock,
         openGatt = { ctx, dev, _, cb ->
             link.openCount++
             link.cb = cb
@@ -321,7 +325,9 @@ class RadarLinkControllerHarnessTest {
     @Test fun connectsHandshakesAndDecodesV2() = runTest {
         val link = Link()
         val gateway = FakeGateway()
-        val controller = controller(link, gateway = gateway)
+        val p = prefs()
+        p.radarLinkProbe = null
+        val controller = controller(link, prefs = p, gateway = gateway)
         startDriver(link)
 
         controller.start("TestRadar", mac)
@@ -331,6 +337,21 @@ class RadarLinkControllerHarnessTest {
 
         assertTrue("handshake must complete; journal=$journal", pumpUntil { journalHas("radar handshake complete") })
         assertTrue("the link state must be marked connected", gateway.connects >= 1)
+
+        // A working radar records its table too, so a later report has a
+        // baseline to compare an aborting one against.
+        assertTrue(pumpUntil { p.radarLinkProbe != null })
+        val probe = requireNotNull(p.radarLinkProbe)
+        assertTrue("expected the radar service in the table, got: $probe", probe.contains("3200[3204]"))
+        assertTrue("expected the completed-handshake outcome, got: $probe", probe.endsWith(" out=handshake-ok"))
+        // This construction takes the production stamp source. A maintainer who
+        // swapped it for the monotonic clock beside it, or for a constant, would
+        // leave every rider a well-formed probe nobody can date.
+        val stamp = requireNotNull(probe.removePrefix("since=").substringBefore(' ').toLongOrNull()) {
+            "expected a numeric since= stamp, got: $probe"
+        }
+        val now = System.currentTimeMillis()
+        assertTrue("stamp $stamp is not a wall-clock reading (now=$now)", stamp in (now - 600_000)..now)
 
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
         assertTrue(
@@ -454,8 +475,139 @@ class RadarLinkControllerHarnessTest {
         bootstrap(link)
 
         assertTrue(
-            "a missing handshake TX char must abort into the quick-reconnect branch",
-            pumpUntil { journalHas("radar handshake aborted (quick reconnect)") },
+            "a missing handshake TX char must abort into the quick-reconnect branch, naming the step",
+            pumpUntil { journalHas("radar handshake aborted at tx-char-missing (quick reconnect)") },
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * A radar that never reaches the decode loop opens no capture log, so the
+     * probe in prefs is the only place a rider's diagnostic bundle can carry
+     * what the device exposed and where the handshake stopped.
+     */
+    @Test fun handshakeAbortRecordsTheDiscoveredTableAndTheStoppingPoint() = runTest {
+        val link = Link()
+        val p = prefs()
+        p.radarLinkProbe = null
+        // Wall clock under the test's control, so the anti-rewrite assertion
+        // below fails on a real rewrite instead of depending on two attempts
+        // landing in different milliseconds.
+        var wall = 1_786_034_957_178L
+        val controller = controller(
+            link,
+            prefs = p,
+            wallClock = { wall },
+            setUp = ::setUpServicesMissingTx,
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { p.radarLinkProbe != null })
+
+        // The stamp is the wall clock, not a placeholder: the maintainer reads
+        // it as "failing this way since".
+        assertEquals(
+            "since=1786034957178 svc=2800[2811] out=tx-char-missing",
+            p.radarLinkProbe,
+        )
+
+        // The abort loop retries with the same answer. Rewriting the pref each
+        // time would churn SharedPreferences and fan out its change listener
+        // for the whole ride, and would move the stamp so a bug report could
+        // never show how long it has been failing. Moving the clock first means
+        // a rewrite is visible rather than merely possible.
+        wall += 60_000L
+        assertTrue("expected a second attempt", pumpUntil { link.openCount >= 2 })
+        assertEquals(
+            "the unchanged result must not be rewritten",
+            "since=1786034957178 svc=2800[2811] out=tx-char-missing",
+            p.radarLinkProbe,
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * A link that stops at a different step on alternating attempts keeps each
+     * answer's OWN first-seen stamp. A single last-answer slot differs from the
+     * previous answer every time, so it would rewrite every attempt and restamp
+     * on every flip - and a flapping link is exactly the case the stamp is for.
+     */
+    @Test fun anAlternatingAbortKeepsEachAnswersOwnFirstSeenStamp() = runTest {
+        val link = Link()
+        val p = prefs()
+        p.radarLinkProbe = null
+        var wall = 1_000L
+        // Odd attempts miss the TX characteristic; even attempts present the
+        // full radar table, so the two answers alternate.
+        val controller = controller(
+            link,
+            prefs = p,
+            wallClock = { wall },
+            setUp = { g -> if (link.openCount % 2 == 1) setUpServicesMissingTx(g) else setUpRadarServices(g) },
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { p.radarLinkProbe != null })
+        val firstAnswer = p.radarLinkProbe
+        assertEquals("since=1000 svc=2800[2811] out=tx-char-missing", firstAnswer)
+
+        // Second attempt: a different answer, so a new stamp is correct.
+        wall = 2_000L
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertTrue(pumpUntil { p.radarLinkProbe != firstAnswer })
+        val secondAnswer = p.radarLinkProbe
+        assertTrue(
+            "the second answer takes its own stamp: $secondAnswer",
+            secondAnswer!!.startsWith("since=2000 "),
+        )
+
+        // Third attempt returns to the FIRST answer. Its stamp must be the
+        // original one, not the clock as it now reads.
+        wall = 9_000L
+        assertTrue(pumpUntil { link.openCount >= 3 })
+        assertTrue(pumpUntil { p.radarLinkProbe == firstAnswer })
+        assertEquals(
+            "returning to an answer must restore its first-seen stamp, not restamp it",
+            "since=1000 svc=2800[2811] out=tx-char-missing",
+            p.radarLinkProbe,
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * A stored answer seeds the debounce, so a restart does not rewrite an
+     * unchanged result with a fresh stamp. Without it the field means "first
+     * seen since the last reboot", and a radar failing the same way for weeks
+     * reports seconds.
+     */
+    @Test fun aStoredProbeSurvivesARestartWithItsOriginalStamp() = runTest {
+        val link = Link()
+        val p = prefs()
+        // As a previous process left it.
+        p.radarLinkProbe = "since=1000 svc=2800[2811] out=tx-char-missing"
+        val controller = controller(
+            link,
+            prefs = p,
+            wallClock = { 9_999_999L },
+            setUp = ::setUpServicesMissingTx,
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("expected a second attempt", pumpUntil { link.openCount >= 2 })
+
+        assertEquals(
+            "a restart must not restamp an answer that has not changed",
+            "since=1000 svc=2800[2811] out=tx-char-missing",
+            p.radarLinkProbe,
         )
         controller.forceReconnect()
     }

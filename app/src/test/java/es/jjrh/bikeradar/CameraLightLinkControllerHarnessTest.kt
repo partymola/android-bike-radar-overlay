@@ -340,8 +340,8 @@ class CameraLightLinkControllerHarnessTest {
         bootstrap(link)
 
         assertTrue(
-            "a missing handshake TX char must abort into the quick-reconnect branch",
-            pumpUntil { journalHas("camera handshake failed (quick reconnect)") },
+            "a missing handshake TX char must abort into the quick-reconnect branch, naming the step",
+            pumpUntil { journalHas("camera handshake failed at tx-char-missing (quick reconnect)") },
         )
         controller.stop()
     }

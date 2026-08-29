@@ -76,6 +76,11 @@ internal class RadarLinkController(
      *  jump can't make a silently-dead radar look alive or mis-clear the
      *  rider's manual light override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
+    /** Wall clock, separate from [clock] because the connection probe's stamp
+     *  has to survive a reboot and be comparable with the other timestamps in
+     *  a diagnostic bundle; elapsedRealtime is neither. Injected so a test can
+     *  pin the stamp rather than race it. */
+    private val wallClock: () -> Long = { System.currentTimeMillis() },
     /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
      *  Injected only by the Robolectric harness so a test can capture the
      *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
@@ -117,6 +122,23 @@ internal class RadarLinkController(
 
     // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
     @Volatile private var lastV2FrameMs: Long = 0L
+
+    // Last answer written, so an unchanged one is not rewritten. Seeded from
+    // the stored value on first use rather than starting null - see
+    // [seedLinkProbeDebounce].
+    @Volatile private var lastLinkProbeBody: String? = null
+
+    // Wall clock of the FIRST sighting of each distinct answer. A single
+    // last-answer slot is not enough: a marginal link that stops at one step on
+    // one attempt and another on the next differs from the previous answer
+    // every time, so it would rewrite every 1.5 s and restamp on every flip -
+    // and a flapping link is exactly the case the stamp is meant to describe.
+    // Guarded by [linkProbeLock].
+    private val linkProbeFirstSeen = LinkedHashMap<String, Long>()
+
+    private val linkProbeLock = Any()
+
+    private var linkProbeSeeded = false
 
     // Set true when the current connection reaches the V2 decode loop; read
     // after connectAndRun returns to decide whether to reset the backoff.
@@ -461,7 +483,7 @@ internal class RadarLinkController(
             // Settings display and the capture-log line survive a session
             // whose read fails.
             var firmwareRev: String? = null
-            val handshakeOk = RadarUnlock.runHandshake(
+            val handshakeAbort = RadarUnlock.runHandshake(
                 gatt,
                 queue,
                 notifyChannel,
@@ -472,10 +494,11 @@ internal class RadarLinkController(
             ) { msg ->
                 captureLog.clog("# script: $msg")
             }
+            recordLinkProbe(gatt, handshakeAbort ?: HANDSHAKE_OK)
 
-            if (!handshakeOk) {
+            if (handshakeAbort != null) {
                 captureLog.clog("# handshake aborted - closing gatt for quick reconnect")
-                journal("radar handshake aborted (quick reconnect)")
+                journal("radar handshake aborted at $handshakeAbort (quick reconnect)")
                 gatt.disconnect()
                 return true
             }
@@ -671,6 +694,84 @@ internal class RadarLinkController(
     }
 
     /**
+     * Persist what this attempt found and where it stopped, for the diagnostic
+     * bundle. Only on a change, because the reconnect loop retries an aborting
+     * handshake every 1.5 s and the answer is usually the same every time.
+     *
+     * The stamp is when that answer was FIRST seen, which is why it reads
+     * `since=`, and holding that takes more than a last-answer slot. A marginal
+     * link can stop at one step on one attempt and another on the next, and
+     * each answer then differs from the one before it, so a single slot would
+     * restamp on every flip. [linkProbeFirstSeen] keeps each answer's own first
+     * sighting, and [seedLinkProbeDebounce] carries it across a process start.
+     *
+     * The write RATE is deliberately not bounded, and the debounce below does
+     * bound it: a link alternating between two stopping points differs from the
+     * previous answer every attempt, so it still writes about every 1.5 s. What
+     * it writes is now one of two stable strings rather than a fresh stamp each
+     * time. `apply()` is asynchronous, so the cost is a prefs-XML rewrite on the
+     * writer thread rather than anything on this path.
+     *
+     * [HANDSHAKE_OK] means the sequence completed, NOT that targets will
+     * stream: the battery read and subscribe inside the handshake ignore their
+     * own results, and that step is what keeps the radar off its legacy stream.
+     * The discovered table beside it is what shows a missing battery service,
+     * so record the table even on success.
+     *
+     * Not reached at all when the attempt stops before service discovery
+     * completes (a null GATT, or discovery itself failing). Those two leave the
+     * slot holding the previous answer; the link journal is what names them.
+     */
+    private fun recordLinkProbe(gatt: BluetoothGatt, outcome: String) {
+        val body = try {
+            LinkProbe.format(
+                gatt.services.map { svc ->
+                    svc.uuid.toString().substring(4, 8) to
+                        svc.characteristics.map { it.uuid.toString().substring(4, 8) }
+                },
+                outcome,
+            )
+        } catch (t: Throwable) {
+            // Swallowed on purpose: this is a diagnostic, and the connection
+            // coroutine rides a scope with no exception handler, so an escaping
+            // throw would take the process down over a bug report field.
+            Log.w(TAG, "link probe failed: $t")
+            return
+        }
+        seedLinkProbeDebounce()
+        if (body == lastLinkProbeBody) return
+        lastLinkProbeBody = body
+        prefs.radarLinkProbe = LinkProbe.render(firstSeenMs(body), body)
+    }
+
+    /** Read the stored answer back into the debounce, once per process. Without
+     *  it the first attempt after a restart rewrites an unchanged answer with a
+     *  fresh stamp, so a radar failing the same way for weeks reads `since=` a
+     *  few seconds ago. */
+    private fun seedLinkProbeDebounce() {
+        synchronized(linkProbeLock) {
+            if (linkProbeSeeded) return
+            linkProbeSeeded = true
+            val stored = LinkProbe.parse(prefs.radarLinkProbe) ?: return
+            linkProbeFirstSeen[stored.body] = stored.sinceMs
+            lastLinkProbeBody = stored.body
+        }
+    }
+
+    /** First time this exact answer was seen, remembering it if it is new.
+     *  Bounded: a given radar produces a handful of distinct answers, and the
+     *  cap stops a pathological one growing the map without limit. */
+    private fun firstSeenMs(body: String): Long = synchronized(linkProbeLock) {
+        linkProbeFirstSeen[body]?.let { return@synchronized it }
+        if (linkProbeFirstSeen.size >= MAX_LINK_PROBE_STAMPS) {
+            linkProbeFirstSeen.remove(linkProbeFirstSeen.keys.first())
+        }
+        val now = wallClock()
+        linkProbeFirstSeen[body] = now
+        now
+    }
+
+    /**
      * Invokes the hidden BluetoothGatt.refresh() method via reflection.
      *
      * Known Android workaround for stale GATT cache after a firmware-side
@@ -789,6 +890,18 @@ internal class RadarLinkController(
         // down so the outer loop reconnects.
         const val V2_WATCHDOG_TICK_MS = 2_000L
         const val V2_FRAME_STALL_MS = 5_000L
+
+        /** Probe outcome for a handshake that ran to the end. Says the sequence
+         *  completed, not that the radar will stream - see [recordLinkProbe]. */
+        const val HANDSHAKE_OK = "handshake-ok"
+
+        /** How many distinct probe answers keep their own first-seen stamp.
+         *  Above the eleven abort tokens plus `handshake-ok`, because eviction
+         *  drops the oldest-first-seen entry and a recurring answer past the
+         *  cap would be restamped as now - the exact lie the stamp exists to
+         *  prevent. One device has one service table, so twelve outcomes is
+         *  the realistic ceiling and this clears it. */
+        const val MAX_LINK_PROBE_STAMPS = 16
 
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
     }

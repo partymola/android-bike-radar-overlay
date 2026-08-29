@@ -530,6 +530,27 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_FIRMWARE_REV, v).apply()
         }
 
+    /** What a radar connection attempt found and where it stopped, as formatted
+     *  by [es.jjrh.bikeradar.LinkProbe]. Diagnostic, not a setting: it answers
+     *  "why does this radar never go live?" for a rider whose device aborts
+     *  before the capture log is ever opened.
+     *
+     *  The stamp is when this RESULT was first seen, not when the last attempt
+     *  ran - an aborting link repeats the same answer every 1.5 s and the writer
+     *  skips the unchanged rewrite. The writer keeps a first-seen stamp per
+     *  distinct answer and seeds it from this value at process start, so a link
+     *  alternating between two stopping points, or one carried across a reboot,
+     *  still reports how long it has been failing. That skip does NOT bound the
+     *  write rate: an alternating link changes the answer every attempt and so
+     *  rewrites every attempt. Deliberately absent from
+     *  [PrefsSnapshot]: no screen renders it, and a reconnect loop would
+     *  otherwise recompose the UI on every attempt. */
+    var radarLinkProbe: String?
+        get() = sp.getString(KEY_RADAR_LINK_PROBE, null)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_LINK_PROBE, v).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -788,6 +809,9 @@ class Prefs(context: Context) {
         appendLine("manual_location_set=${manualLocationLat != null && manualLocationLon != null}")
         appendLine("radar_lateral_offset_cm=$radarLateralOffsetCm")
         appendLine("radar_firmware_rev=${radarFirmwareRev ?: "<unset>"}")
+        // Kept readable - it is the whole diagnostic - so it goes through the
+        // address strip rather than redactPresence.
+        appendLine("radar_link_probe=${redactAddresses(radarLinkProbe)}")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
@@ -853,6 +877,7 @@ class Prefs(context: Context) {
         const val KEY_RADAR_DISPLAY_NAME = "radar_display_name"
         const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"
         const val KEY_RADAR_FIRMWARE_REV = "radar_firmware_rev"
+        const val KEY_RADAR_LINK_PROBE = "radar_link_probe"
 
         /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0
          *  (centred), then jumps to +/-[RADAR_LATERAL_OFFSET_MIN_CM] and runs in
@@ -889,5 +914,31 @@ class Prefs(context: Context) {
          * a literal stored value.
          */
         internal fun redactPresence(value: String?): String = if (value.isNullOrBlank()) "<unset>" else "<redacted>"
+
+        private val ADDRESS_SHAPED = Regex("""\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b""")
+
+        /**
+         * For a dumped field whose value must stay READABLE ([redactPresence]
+         * would destroy the point of it) but which is assembled elsewhere and
+         * so cannot be judged safe by reading this file.
+         *
+         * Strips Bluetooth addresses in the colon-separated form
+         * `BluetoothDevice.getAddress()` returns, which is the form anything in
+         * this app would have to hand. A compacted or hyphenated address passes
+         * through, so this is a guard against the realistic producer mistake,
+         * not a general identifier filter.
+         *
+         * Applied at the dump boundary rather than at the writer, so a later
+         * change to whatever builds the value is covered without anyone
+         * remembering to come back here. That placement follows
+         * [es.jjrh.bikeradar.LinkEventJournal.sanitizeEvent], which sanitises at
+         * its own boundary for the same reason - though it neutralises control
+         * characters rather than redacting anything.
+         */
+        internal fun redactAddresses(value: String?): String = if (value.isNullOrBlank()) {
+            "<unset>"
+        } else {
+            ADDRESS_SHAPED.replace(value, "<redacted>")
+        }
     }
 }

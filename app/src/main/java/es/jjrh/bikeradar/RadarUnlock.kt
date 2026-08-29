@@ -32,12 +32,36 @@ enum class DeviceVariant { RADAR, FRONT_CAMERA }
  *   base    — byte 0 of device-pushed device-ID frame → substituted as e0/e1 in
  *             capability frames (seen as 0xe0 or 0xd0 across sessions)
  *
- * Returns true on success.
- * Returns false on any ABORT — caller must close + reopen GATT (APK-reinstall
- * self-heal: Bluedroid keeps a half-open GATT reference on SIGKILL; reopening
- * clears it). Log fingerprint: "# script: ABORT" then "# gatt reopened".
+ * Returns null on success.
+ * Returns a short stable token naming the step it stopped at on any ABORT. The
+ * caller must close + reopen GATT (APK-reinstall self-heal: Bluedroid keeps a
+ * half-open GATT reference on SIGKILL; reopening clears it). Log fingerprint:
+ * "# script: ABORT" then "# gatt reopened".
+ *
+ * The tokens are what a rider's bug report carries (see [LinkProbe]) and are the
+ * only way to tell an unsupported radar model from a flaky link, so treat them
+ * as an external contract: add one for a new abort, never reword an existing
+ * one. They are deliberately terse and separate from the human-readable ABORT
+ * lines, which stay as they are because captures and the protocol notes quote
+ * them.
  */
 object RadarUnlock {
+
+    // Abort tokens. Stable identifiers, not prose: they reach a public issue
+    // tracker through the diagnostic bundle, and telling "this model has no
+    // config service" apart from "this link is flaky" is the whole point of
+    // recording them.
+    internal const val ABORT_TX_CHAR_MISSING = "tx-char-missing"
+    internal const val ABORT_RX_CCCD = "rx-cccd"
+    internal const val ABORT_ACK_CCCD = "ack-cccd"
+    internal const val ABORT_AMV_OPEN = "amv-open"
+    internal const val ABORT_AMV_04 = "amv-04"
+    internal const val ABORT_AMV_16 = "amv-16"
+    internal const val ABORT_DEV_ID = "dev-id"
+    internal const val ABORT_V2_CCCD = "v2-cccd"
+    internal const val ABORT_SUBMODE_1 = "submode-1"
+    internal const val ABORT_SUBMODE_2 = "submode-2"
+    internal const val ABORT_SUBMODE_3 = "submode-3"
 
     // 0x18 sub-mode toggle frame payloads (FRONT_CAMERA handshake path).
     // Format: 00 SS 00 00 00 00 00 00 41 4d 56 18 PP (13 bytes).
@@ -72,7 +96,7 @@ object RadarUnlock {
          *  second GATT round trip. */
         onFirmwareRevision: (String) -> Unit = {},
         clog: (String) -> Unit,
-    ): Boolean {
+    ): String? {
         val txUuid = if (deviceVariant == DeviceVariant.FRONT_CAMERA) Uuids.CHAR_2820 else Uuids.HANDSHAKE_TX
         val rxUuid = if (deviceVariant == DeviceVariant.FRONT_CAMERA) Uuids.CHAR_2810 else Uuids.HANDSHAKE_RX
 
@@ -82,7 +106,7 @@ object RadarUnlock {
         // unlocks.
         if (gatt.getService(Uuids.SVC_CONFIG)?.getCharacteristic(txUuid) == null) {
             clog("ABORT: handshake TX characteristic not found — GATT service list incomplete")
-            return false
+            return ABORT_TX_CHAR_MISSING
         }
 
         queue.requestMtu(gatt, 247)
@@ -91,8 +115,8 @@ object RadarUnlock {
         // Pre-handshake subscriptions.
         // RX NOTIFY — handshake reply channel, must come first.
         // 2f11 (SETTINGS_ACK) INDICATE — WRITE_REQ to 2f11 returns 0xFD without it.
-        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONFIG, rxUuid, clog)) return false
-        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK, clog)) return false
+        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONFIG, rxUuid, clog)) return ABORT_RX_CCCD
+        if (!subscribeCccd(gatt, queue, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK, clog)) return ABORT_ACK_CCCD
         delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
         // Battery read + CCCD subscribe. Without this the radar stays in
@@ -109,7 +133,7 @@ object RadarUnlock {
         }
         if (rOpen == null) {
             clog("ABORT: AMV open reply never arrived")
-            return false
+            return ABORT_AMV_OPEN
         }
         delay(400) // pacing for Android 16 + current firmware; under 200 ms intermittently fails
 
@@ -120,7 +144,7 @@ object RadarUnlock {
         }
         if (r04 == null) {
             clog("ABORT: AMV 04 reply never arrived")
-            return false
+            return ABORT_AMV_04
         }
         val pfxEnum = "%02x".format(r04[13].toInt() and 0xff)
         clog("pfxEnum=$pfxEnum reply=${r04.toHex()}")
@@ -143,9 +167,9 @@ object RadarUnlock {
         // cmd 01+16, device-ID push, and capability exchange below are rear-radar
         // specific (needed to unlock the V2 measurement stream).
         if (deviceVariant == DeviceVariant.FRONT_CAMERA) {
-            if (!runSubmodeToggle(gatt, queue, notifies, txUuid, rxUuid, clog)) return false
+            runSubmodeToggle(gatt, queue, notifies, txUuid, rxUuid, clog)?.let { return it }
             clog("front camera handshake complete")
-            return true
+            return null
         }
 
         // AMV cmd 01 + 16 back-to-back. Await both replies then the device-ID push.
@@ -158,7 +182,7 @@ object RadarUnlock {
         }
         if (r16 == null) {
             clog("ABORT: AMV 16 reply never arrived")
-            return false
+            return ABORT_AMV_16
         }
         // Front camera firmware 5.80 returns a 13-byte cmd-16 reply with no pfxCmd byte.
         // Fall back to a safe default (00) when the reply is too short to carry one.
@@ -171,7 +195,7 @@ object RadarUnlock {
         }
         if (devId == null) {
             clog("ABORT: device-ID frame never arrived")
-            return false
+            return ABORT_DEV_ID
         }
         val base = devId[0].toInt() and 0xff
         val e0 = "%02x".format(base)
@@ -236,7 +260,7 @@ object RadarUnlock {
             delay(80)
             readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_MODEL_NUMBER, clog)
             delay(140)
-            if (!subscribeCccd(gatt, queue, Uuids.SVC_RADAR, Uuids.RADAR_V2, clog)) return false
+            if (!subscribeCccd(gatt, queue, Uuids.SVC_RADAR, Uuids.RADAR_V2, clog)) return ABORT_V2_CCCD
             delay(140)
             readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_FIRMWARE_REV, clog)
                 ?.let { parseDisUtf8(it) }
@@ -246,7 +270,7 @@ object RadarUnlock {
             clog("DIS-CCCD-DIS sequence complete — observing 3204")
         }
 
-        return true
+        return null
     }
 
     /**
@@ -255,6 +279,8 @@ object RadarUnlock {
      * on timeout or unexpected trailer.
      *
      * Frame format: 00 SS 00 00 00 00 00 00 41 4d 56 18 PP
+     *
+     * Null on success, else the abort token for the frame that got no reply.
      */
     private suspend fun runSubmodeToggle(
         gatt: BluetoothGatt,
@@ -263,7 +289,7 @@ object RadarUnlock {
         txUuid: UUID,
         rxUuid: UUID,
         clog: (String) -> Unit,
-    ): Boolean {
+    ): String? {
         val svc = Uuids.SVC_CONFIG
 
         // Each frame gets its own await; [matchSubmodeReply] keeps the
@@ -275,7 +301,7 @@ object RadarUnlock {
         val r1 = awaitNotify(notifies, rxUuid, 1000, matcher)
         if (r1 == null) {
             clog("ABORT: 0x18 toggle frame 1 reply never arrived")
-            return false
+            return ABORT_SUBMODE_1
         }
         clog("0x18 toggle frame 1 ok: ${r1.toHex()}")
 
@@ -283,7 +309,7 @@ object RadarUnlock {
         val r2 = awaitNotify(notifies, rxUuid, 1000, matcher)
         if (r2 == null) {
             clog("ABORT: 0x18 toggle frame 2 reply never arrived")
-            return false
+            return ABORT_SUBMODE_2
         }
         clog("0x18 toggle frame 2 ok: ${r2.toHex()}")
 
@@ -291,11 +317,11 @@ object RadarUnlock {
         val r3 = awaitNotify(notifies, rxUuid, 1000, matcher)
         if (r3 == null) {
             clog("ABORT: 0x18 toggle frame 3 reply never arrived")
-            return false
+            return ABORT_SUBMODE_3
         }
         clog("0x18 toggle frame 3 ok: ${r3.toHex()}")
 
-        return true
+        return null
     }
 
     // ── private helpers ───────────────────────────────────────────────────────

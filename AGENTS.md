@@ -461,6 +461,27 @@ enforces them, and CONTRIBUTING.md points contributors here:
   every PR targeting `main`, so it can go red BEFORE a tag exists rather than
   stranding a public tag. Tag pushes do not trigger `ci.yml`; `release-apk.yml`
   names the task too, so they are covered there.
+  - **That job also keeps its APK as a run artifact, on pushes only.** It is
+    what a hardware report gets linked to, so an outsider installs a build
+    from a named commit rather than from a maintainer's laptop. It is
+    DEBUG-SIGNED, because no release keystore is injected here, and the
+    artifact name says so.
+  - **Two artifacts from two runs will NOT install over each other, which is
+    the part that bites.** `debug.keystore` is gitignored, so
+    `ensureDebugKeystore` mints a fresh keypair on every runner and each run's
+    APK has a different signer. A tester moving from one build to the next
+    gets `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and has to uninstall, losing
+    their pairing and settings. So the artifact suits a one-off "try this
+    build"; a back-and-forth over several builds wants a LOCAL build instead,
+    where the synced repo-root `debug.keystore` keeps one signature
+    throughout. Neither will upgrade over a store install.
+  - Not on pull requests: that would publish a binary built from unreviewed
+    fork code into this repo's Actions tab. Treat that as policy for honest
+    contributors rather than a control, since a fork runs its own copy of the
+    workflow; it reaches no secrets and holds a read-only token regardless.
+    Downloading an artifact prompts anyone signed out to log in, and it
+    expires after 90 days. Cut a tag and use the release for anything that
+    must outlive that or reach a signed-out reader.
   - **Deliberately not wired to `assembleRelease`.** A from-source build by a
     packager - which is what the pending F-Droid submission would do - must not
     need `python3` and a matching build-tools `dexdump` just to produce the

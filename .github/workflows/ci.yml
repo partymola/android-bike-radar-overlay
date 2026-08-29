@@ -190,6 +190,40 @@ jobs:
       - name: Build the shrunk APK and check its kept names
         run: ./gradlew :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
 
+      # Keeps the APK this job already built, so a hardware report can be
+      # answered with a link to a specific run instead of a build from
+      # somebody's laptop. It is DEBUG-SIGNED (see the job comment above) and
+      # it is not a release. The name says so, because the Actions tab is not
+      # where a reader expects to find that caveat.
+      #
+      # The signature is NOT stable between runs. `debug.keystore` is
+      # gitignored, so `ensureDebugKeystore` mints a fresh keypair on every
+      # runner: two artifacts from two runs have different signers and will
+      # not install over one another. A tester upgrading from one to the next
+      # has to uninstall first, losing their pairing and settings. For an
+      # iterative back-and-forth, a local build off the synced keystore keeps
+      # one signature throughout and is the better tool.
+      #
+      # Pushes only, so a pull request does not publish a binary built from
+      # unreviewed fork code. That is policy for honest contributors, not a
+      # control: a fork's own workflow file could drop this line. It reaches
+      # no secrets and holds a read-only token either way.
+      #
+      # if-no-files-found: error, because the default only warns and creates
+      # nothing, so a renamed output would leave a reporter with a link that
+      # downloads nothing.
+      - name: Keep the shrunk APK for hardware reports
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: app-release-debug-signed-${{ github.sha }}
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          # Re-running all jobs reuses github.sha, and the default refuses a
+          # name that already exists, reddening a step that had succeeded.
+          overwrite: true
+          retention-days: 90
+
   # Real-APK boot smoke - runs only on pushes to main (not PRs) to avoid
   # spending 5+ minutes on an emulator for every PR iteration. It runs
   # concurrently with unit-tests rather than after it: parallelism wins ~3 min

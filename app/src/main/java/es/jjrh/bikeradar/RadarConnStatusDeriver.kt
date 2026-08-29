@@ -42,12 +42,12 @@ object RadarConnStatusDeriver {
     const val RECENT_OFF_MS = 5_000L
 
     fun derive(
-        batteryFresh: Boolean,
+        dataFresh: Boolean,
         gattActive: Boolean,
         offSinceMs: Long?,
         nowMs: Long,
     ): RadarConnStatus = when {
-        batteryFresh -> RadarConnStatus.CONNECTED
+        dataFresh -> RadarConnStatus.CONNECTED
         gattActive -> RadarConnStatus.CONNECTING
         offSinceMs != null && nowMs - offSinceMs < RECENT_OFF_MS -> RadarConnStatus.CONNECTING
         else -> RadarConnStatus.NOT_IN_RANGE

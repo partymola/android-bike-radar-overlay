@@ -504,6 +504,15 @@ internal class RadarLinkController(
                     firmwareRev = rev
                     prefs.radarFirmwareRev = rev
                 },
+                // A radar whose handshake aborts never reaches the notify loop
+                // that normally feeds this, and the one-shot reader stands
+                // down while the link is live, so without this it reports no
+                // battery at all for as long as it keeps failing.
+                onBatteryPct = { pct ->
+                    val s = slug(name)
+                    gatt.device?.address?.let { macToSlug[it] = s }
+                    BatteryStateBus.update(BatteryEntry(s, name, pct))
+                },
             ) { msg ->
                 captureLog.clog("# script: $msg")
             }

@@ -72,6 +72,7 @@ import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RADAR_FRAME_FRESH_MS
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -160,8 +161,12 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     var lastDevTapMs by remember { mutableLongStateOf(0L) }
 
     val now = tickNowMs.coerceAtLeast(radarState.timestamp)
-    val radarFresh = radarState.source == DataSource.V2 &&
-        now - radarState.timestamp < 10_000L
+    // Any live stream counts, not V2 specifically: a radar on the legacy
+    // stream is delivering targets, and reading LIVE off the stream identity
+    // rather than off "is it the modern one" is what stops this card denying
+    // data the overlay is already drawing.
+    val radarFresh = radarState.source != DataSource.NONE &&
+        now - radarState.timestamp < RADAR_FRAME_FRESH_MS
     // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
     // migration (AndroidKeyStore work on installs that still hold undecryptable
     // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to

@@ -15,18 +15,18 @@ class RadarConnStatusDeriverTest {
     @Test fun freshBatteryIsConnectedWhateverTheLinkSays() {
         assertEquals(
             RadarConnStatus.CONNECTED,
-            RadarConnStatusDeriver.derive(batteryFresh = true, gattActive = false, offSinceMs = null, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = true, gattActive = false, offSinceMs = null, nowMs = 100_000L),
         )
         assertEquals(
             RadarConnStatus.CONNECTED,
-            RadarConnStatusDeriver.derive(batteryFresh = true, gattActive = true, offSinceMs = 99_000L, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = true, gattActive = true, offSinceMs = 99_000L, nowMs = 100_000L),
         )
     }
 
     @Test fun liveGattWithoutBatteryYetIsConnecting() {
         assertEquals(
             RadarConnStatus.CONNECTING,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = true, offSinceMs = null, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = true, offSinceMs = null, nowMs = 100_000L),
         )
     }
 
@@ -34,7 +34,7 @@ class RadarConnStatusDeriverTest {
         // 4999 ms after the drop: still inside the abort loop's cadence.
         assertEquals(
             RadarConnStatus.CONNECTING,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = false, offSinceMs = 95_001L, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = false, offSinceMs = 95_001L, nowMs = 100_000L),
         )
     }
 
@@ -43,14 +43,14 @@ class RadarConnStatusDeriverTest {
         // within one screen tick rather than one tick plus a boundary frame.
         assertEquals(
             RadarConnStatus.NOT_IN_RANGE,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = false, offSinceMs = 95_000L, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = false, offSinceMs = 95_000L, nowMs = 100_000L),
         )
     }
 
     @Test fun oldDropIsNotInRange() {
         assertEquals(
             RadarConnStatus.NOT_IN_RANGE,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = false, offSinceMs = 10_000L, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = false, offSinceMs = 10_000L, nowMs = 100_000L),
         )
     }
 
@@ -59,14 +59,14 @@ class RadarConnStatusDeriverTest {
         // coordinator's write; a negative age is "just dropped", not "ancient".
         assertEquals(
             RadarConnStatus.CONNECTING,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = false, offSinceMs = 100_001L, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = false, offSinceMs = 100_001L, nowMs = 100_000L),
         )
     }
 
     @Test fun neverConnectedThisSessionIsNotInRange() {
         assertEquals(
             RadarConnStatus.NOT_IN_RANGE,
-            RadarConnStatusDeriver.derive(batteryFresh = false, gattActive = false, offSinceMs = null, nowMs = 100_000L),
+            RadarConnStatusDeriver.derive(dataFresh = false, gattActive = false, offSinceMs = null, nowMs = 100_000L),
         )
     }
 }

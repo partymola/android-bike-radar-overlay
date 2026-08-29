@@ -390,7 +390,14 @@ class RadarLinkControllerHarnessTest {
         assertEquals(-8f, v.speedMs)
 
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50") // 0x50 = 80%
-        assertTrue("battery notify must reach BatteryStateBus", pumpUntil { BatteryStateBus.entries.value["testradar"] != null })
+        // Waits for the VALUE, not merely for an entry to exist. The handshake
+        // publishes its own battery read before this point, so "an entry
+        // appeared" is satisfied the moment the link comes up and would let
+        // this assert the handshake's reading instead of the notify's.
+        assertTrue(
+            "battery notify must reach BatteryStateBus",
+            pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 80 },
+        )
         assertEquals(80, BatteryStateBus.entries.value["testradar"]?.pct)
 
         controller.forceReconnect()
@@ -841,6 +848,36 @@ class RadarLinkControllerHarnessTest {
                 File(root, CaptureLogManager.CAPTURE_DIR)
                     .listFiles()?.any { it.name.endsWith(".log.gz") } ?: false
             },
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * A radar whose handshake aborts AFTER the battery step still reports its
+     * battery.
+     *
+     * This is the only battery such a radar can produce: the notify loop that
+     * normally feeds the bus is past the abort, and `scheduleRead` stands the
+     * one-shot reader down for as long as the link coroutine is alive, which
+     * for a permanently-aborting radar is forever. Before this, a rider in
+     * that state saw no battery at all and the card could not read Connected.
+     */
+    @Test fun anAbortingRadarStillReportsTheBatteryTheHandshakeRead() = runTest {
+        val link = Link()
+        // Full service map, so the sequence gets past the battery read, but no
+        // handshake replies are fed, so it aborts at the AMV open that follows.
+        val controller = controller(link, setUp = ::setUpRadarServices)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journal.any { it.startsWith("radar handshake aborted at") } })
+
+        // 0x64 is what the harness driver answers the battery read with.
+        assertTrue(
+            "an aborting radar must still surface a battery reading",
+            pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 100 },
         )
         controller.forceReconnect()
     }

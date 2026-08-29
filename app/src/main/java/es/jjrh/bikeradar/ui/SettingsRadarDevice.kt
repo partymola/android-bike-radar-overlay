@@ -50,11 +50,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RADAR_FRAME_FRESH_MS
 import es.jjrh.bikeradar.RadarConnStatus
 import es.jjrh.bikeradar.RadarConnStatusDeriver
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarSelection
+import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
@@ -121,8 +124,20 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     val radarBattery = batteryEntries.values.firstOrNull { entry ->
         RadarSelection.isRadarName(entry.name)
     }
-    val connected = radarBattery != null &&
-        batteryReadIsFresh(radarBattery.readAtMs, tickNow)
+    // Frames outrank the battery proxy. A battery reading is evidence the link
+    // works; decoded targets are evidence it is DOING its job, and the two come
+    // apart in both directions. A legacy-stream radar may expose no battery at
+    // all while streaming perfectly, and the home card has always scored itself
+    // on frame freshness, so reading this off the battery alone is also what
+    // let the two screens disagree about the same radar.
+    val radarState by RadarStateBus.state.collectAsState()
+    val framesFresh = radarState.source != DataSource.NONE &&
+        tickNow - radarState.timestamp < RADAR_FRAME_FRESH_MS
+    // Kept as a nullable rather than a boolean so the chip below still has a
+    // reading to render. "Connected" no longer implies a battery entry exists:
+    // a radar can stream targets and expose no battery at all.
+    val freshBattery = radarBattery?.takeIf { batteryReadIsFresh(it.readAtMs, tickNow) }
+    val connected = framesFresh || freshBattery != null
 
     // The static is not a snapshot read, so a service (re)start invalidates
     // nothing by itself - the tick's recomposition is what re-reads it, within
@@ -133,7 +148,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     val noServiceFlow = remember { MutableStateFlow(RadarLinkState()) }
     val linkSnap by (BikeRadarService.radarLinkStateForUi ?: noServiceFlow).collectAsState()
     val status = RadarConnStatusDeriver.derive(
-        batteryFresh = connected,
+        dataFresh = connected,
         gattActive = linkSnap.radarGattActive,
         offSinceMs = linkSnap.radarOffSinceMs,
         nowMs = SystemClock.elapsedRealtime(),
@@ -158,7 +173,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         chosenMac = chosen,
         activeName = activeName,
         status = status,
-        batteryPct = if (connected) radarBattery.pct else null,
+        batteryPct = freshBattery?.pct,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
             ctx.startActivity(

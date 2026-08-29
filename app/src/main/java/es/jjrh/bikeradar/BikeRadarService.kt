@@ -423,6 +423,7 @@ class BikeRadarService : Service() {
             acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
             releaseRideWakeLock = { rideWakeLock.release() },
         )
+        radarLinkStateForUi = radarLinkCoordinator.radarLinkState
         radarLink = RadarLinkController(
             context = this,
             scope = scope,
@@ -662,6 +663,7 @@ class BikeRadarService : Service() {
         // Companion-object cache survives across service instances within the
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
         macToSlug.clear()
+        radarLinkStateForUi = null
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -1225,6 +1227,14 @@ class BikeRadarService : Service() {
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
 
         @Volatile var activeCaptureLogName: String? = null
+            internal set
+
+        /** The radar link state, published for the Settings radar screen so it
+         *  can tell "connecting" from "not in range". Null while the service is
+         *  not running; the screen falls back to NOT_IN_RANGE then, which is
+         *  true. Same pattern as [activeCaptureLogName]: the screen reads the
+         *  current value on its own tick rather than collecting. */
+        @Volatile var radarLinkStateForUi: kotlinx.coroutines.flow.StateFlow<RadarLinkState>? = null
             internal set
 
         /** MAC (identity address) -> slug used in BatteryStateBus entries.

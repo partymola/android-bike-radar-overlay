@@ -3,6 +3,7 @@ package es.jjrh.bikeradar.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.RadarConnStatus
 import es.jjrh.bikeradar.RadarSelection
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,7 +33,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    connected = true,
+                    status = RadarConnStatus.CONNECTED,
                     batteryPct = 78,
                 )
             }
@@ -50,7 +51,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    connected = true,
+                    status = RadarConnStatus.CONNECTED,
                     batteryPct = 78,
                     offsetCm = 15,
                 )
@@ -69,9 +70,27 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    connected = true,
+                    status = RadarConnStatus.CONNECTED,
                     batteryPct = 78,
                     firmwareRev = "6.70",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun connecting() {
+        // The link is up but the setup has not produced data yet - the state
+        // that used to render as the false "Not in range".
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA),
+                    chosenMac = null,
+                    activeName = radarA.name,
+                    status = RadarConnStatus.CONNECTING,
+                    batteryPct = null,
                 )
             }
         }
@@ -86,7 +105,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    connected = false,
+                    status = RadarConnStatus.NOT_IN_RANGE,
                     batteryPct = null,
                 )
             }
@@ -102,7 +121,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = emptyList(),
                     chosenMac = null,
                     activeName = null,
-                    connected = false,
+                    status = RadarConnStatus.NOT_IN_RANGE,
                     batteryPct = null,
                 )
             }
@@ -120,7 +139,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    connected = false,
+                    status = RadarConnStatus.NOT_IN_RANGE,
                     batteryPct = null,
                     others = listOf(
                         RadarSelection.BondedRadar("CC:CC:CC:CC:CC:CC", "Pixel Watch"),
@@ -140,7 +159,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA, radarB),
                     chosenMac = radarA.mac,
                     activeName = radarA.name,
-                    connected = true,
+                    status = RadarConnStatus.CONNECTED,
                     batteryPct = 82,
                 )
             }

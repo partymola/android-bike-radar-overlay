@@ -431,6 +431,7 @@
     <string name="settings_radardev_pick_radar">Pick this bike\'s radar below</string>
     <string name="settings_radardev_connected">Connected</string>
     <string name="settings_radardev_not_in_range">Not in range</string>
+    <string name="settings_radardev_connecting">Connecting…</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>

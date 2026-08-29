@@ -51,6 +51,32 @@ class BikeRadarServiceSmokeTest {
     @After
     fun restoreCryptorFactory() {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
+        // Most tests here create() without destroy(), which would otherwise
+        // leave the static pointing at a dead coordinator for later classes.
+        BikeRadarService.radarLinkStateForUi = null
+    }
+
+    @Test
+    fun onCreatePublishesTheLinkStateAndDestroyRetractsIt() {
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        // The Settings radar screen derives "Connecting" vs "Not in range"
+        // from this static; unset, every not-yet-streaming radar reads as
+        // out of range, which is the lie this exists to remove.
+        val flow = BikeRadarService.radarLinkStateForUi
+        assertTrue("service must publish its link state for the UI", flow != null)
+        assertTrue("initial state is disconnected", flow!!.value.radarGattActive.not())
+        // Identity, not shape: a detached flow would satisfy both checks above
+        // while the card never leaves "Not in range" on a real ride.
+        assertTrue(
+            "the published flow must be the coordinator's own",
+            flow === controller.get().radarLinkCoordinator.radarLinkState,
+        )
+        controller.destroy()
+        assertTrue(
+            "a stopped service must retract the flow, or the screen reads a dead one",
+            BikeRadarService.radarLinkStateForUi == null,
+        )
     }
 
     @Test

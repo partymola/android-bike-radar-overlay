@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.ui
 
 import android.content.Intent
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,11 +49,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
+import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarConnStatus
+import es.jjrh.bikeradar.RadarConnStatusDeriver
+import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -107,11 +113,31 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
 
     // Radar battery is matched by name across the bus (same heuristic the home
     // Quick Status card uses); a recent read is the proxy for connected.
+    // The tick is hoisted past the && below, whose short-circuit would skip the
+    // read when no battery entry exists - and an unread tick means no
+    // recomposition, so the status would freeze exactly in the aborting-radar
+    // case it is for.
+    val tickNow = tickNowMs
     val radarBattery = batteryEntries.values.firstOrNull { entry ->
         RadarSelection.isRadarName(entry.name)
     }
     val connected = radarBattery != null &&
-        batteryReadIsFresh(radarBattery.readAtMs, tickNowMs)
+        batteryReadIsFresh(radarBattery.readAtMs, tickNow)
+
+    // The static is not a snapshot read, so a service (re)start invalidates
+    // nothing by itself - the tick's recomposition is what re-reads it, within
+    // 5 s. The remember on the fallback is load-bearing too: a fresh instance
+    // per recomposition would make collectAsState resubscribe on every tick.
+    // The deriver's age arithmetic is elapsedRealtime on BOTH sides; the tick
+    // stays wall clock for the battery freshness above.
+    val noServiceFlow = remember { MutableStateFlow(RadarLinkState()) }
+    val linkSnap by (BikeRadarService.radarLinkStateForUi ?: noServiceFlow).collectAsState()
+    val status = RadarConnStatusDeriver.derive(
+        batteryFresh = connected,
+        gattActive = linkSnap.radarGattActive,
+        offSinceMs = linkSnap.radarOffSinceMs,
+        nowMs = SystemClock.elapsedRealtime(),
+    )
 
     val chosen = prefsSnap.radarMac
     // The chosen unit may live in EITHER list (a pinned odd-name radar is
@@ -131,7 +157,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         others = others,
         chosenMac = chosen,
         activeName = activeName,
-        connected = connected,
+        status = status,
         batteryPct = if (connected) radarBattery.pct else null,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
@@ -157,9 +183,9 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
 }
 
 /**
- * Stateless leaf so snapshot tests can lock the three states (connected,
- * offline, never-paired) plus the ambiguous multi-radar selection list,
- * without a Bluetooth stack or `Prefs`.
+ * Stateless leaf so snapshot tests can lock the four states (connected,
+ * connecting, offline, never-paired) plus the ambiguous multi-radar selection
+ * list, without a Bluetooth stack or `Prefs`.
  */
 @Composable
 internal fun SettingsRadarDeviceContent(
@@ -167,7 +193,7 @@ internal fun SettingsRadarDeviceContent(
     bonded: List<RadarSelection.BondedRadar>,
     chosenMac: String?,
     activeName: String?,
-    connected: Boolean,
+    status: RadarConnStatus,
     batteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     others: List<RadarSelection.BondedRadar> = emptyList(),
@@ -256,7 +282,7 @@ internal fun SettingsRadarDeviceContent(
                             StatusDot(
                                 color = when {
                                     activeName == null -> br.fgDim
-                                    connected -> br.safe
+                                    status == RadarConnStatus.CONNECTED -> br.safe
                                     else -> br.caution
                                 },
                                 hollow = activeName == null,
@@ -265,13 +291,14 @@ internal fun SettingsRadarDeviceContent(
                             Text(
                                 text = when {
                                     activeName == null -> stringResource(R.string.settings_radardev_pick_radar)
-                                    connected -> stringResource(R.string.settings_radardev_connected)
+                                    status == RadarConnStatus.CONNECTED -> stringResource(R.string.settings_radardev_connected)
+                                    status == RadarConnStatus.CONNECTING -> stringResource(R.string.settings_radardev_connecting)
                                     else -> stringResource(R.string.settings_radardev_not_in_range)
                                 },
                                 color = br.fgMuted,
                                 fontSize = 12.sp,
                             )
-                            if (connected && batteryPct != null) {
+                            if (status == RadarConnStatus.CONNECTED && batteryPct != null) {
                                 BatteryChip(pct = batteryPct, lowThresholdPct = batteryLowThresholdPct)
                             }
                         }

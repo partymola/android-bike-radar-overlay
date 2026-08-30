@@ -105,6 +105,8 @@
     <string name="main_status_dashcam_off_title">Radar live, dashcam off</string>
     <string name="main_status_dashcam_off_sub">Turn on your <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g></string>
     <string name="main_status_dashcam_off_sub_generic">Turn on your dashcam</string>
+    <string name="main_status_limited_title">Radar live, distance only</string>
+    <string name="main_status_limited_sub">No urgent warning from this radar</string>
     <string name="main_status_live_title">Radar live</string>
     <string name="main_status_live_ha_down_sub">Home Assistant unreachable</string>
     <string name="main_status_live_dashcam_on_sub">Dashcam on</string>

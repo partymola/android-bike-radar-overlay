@@ -92,6 +92,8 @@
     <string name="main_status_dashcam_off_title">Radar activo, cámara delantera apagada</string>
     <string name="main_status_dashcam_off_sub">Enciende tu <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g></string>
     <string name="main_status_dashcam_off_sub_generic">Enciende tu cámara delantera</string>
+    <string name="main_status_limited_title">Radar activo, solo distancia</string>
+    <string name="main_status_limited_sub">Sin aviso urgente con este radar</string>
     <string name="main_status_live_title">Radar activo</string>
     <string name="main_status_live_ha_down_sub">Home Assistant inaccesible</string>
     <string name="main_status_live_dashcam_on_sub">Cámara delantera encendida</string>

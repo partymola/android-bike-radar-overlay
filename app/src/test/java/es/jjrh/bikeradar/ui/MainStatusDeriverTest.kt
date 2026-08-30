@@ -13,6 +13,7 @@ class MainStatusDeriverTest {
         pausedUntilEpochMs: Long = 0L,
         hasBond: Boolean = true,
         radarFresh: Boolean = true,
+        radarLimited: Boolean = false,
         haErrorRecent: Boolean = false,
         dashcamOwned: Boolean = false,
         dashcamWarnWhenOff: Boolean = false,
@@ -25,6 +26,7 @@ class MainStatusDeriverTest {
         pausedUntilEpochMs = pausedUntilEpochMs,
         hasBond = hasBond,
         radarFresh = radarFresh,
+        radarLimited = radarLimited,
         haErrorRecent = haErrorRecent,
         dashcamOwned = dashcamOwned,
         dashcamWarnWhenOff = dashcamWarnWhenOff,
@@ -224,5 +226,45 @@ class MainStatusDeriverTest {
         // the user should see onboarding rather than the BT prompt.
         val s = derive(baseInputs(firstRunComplete = false, bluetoothEnabled = false))
         assertEquals(R.string.main_status_setup_title, s.headlineRes)
+    }
+
+    @Test fun aLimitedRadarIsNotReportedAsAllGood() {
+        // The hero is the app's largest "you are covered" signal. A range-only
+        // radar delivers frames, so the old radarFresh branch painted it green
+        // and identical to a healthy one, while the urgent cue was held shut.
+        val model = derive(baseInputs(radarFresh = true, radarLimited = true))
+        assertEquals(MainStatusTone.Warn, model.tone)
+        assertEquals(MainStatusIcon.Warning, model.icon)
+        assertEquals(R.string.main_status_limited_title, model.headlineRes)
+    }
+
+    @Test fun theLimitedWarningOutranksTheDashcamWarning() {
+        // Both are Warn, so only precedence decides which the rider reads.
+        // The radar is the safety-critical device and the reason a cue they
+        // expect will not sound; a dashcam left off is neither.
+        val model = derive(
+            baseInputs(
+                radarFresh = true,
+                radarLimited = true,
+                dashcamOwned = true,
+                dashcamWarnWhenOff = true,
+                dashcamFresh = false,
+            ),
+        )
+        assertEquals(R.string.main_status_limited_title, model.headlineRes)
+    }
+
+    @Test fun aFullRadarIsStillReportedAsLive() {
+        // The other direction, so the branch cannot widen into always-warning.
+        val model = derive(baseInputs(radarFresh = true, radarLimited = false))
+        assertEquals(MainStatusTone.Good, model.tone)
+        assertEquals(R.string.main_status_live_title, model.headlineRes)
+    }
+
+    @Test fun limitedOnlyMattersWhileFramesArrive() {
+        // With nothing arriving there is no source to qualify; the honest
+        // answer is the waiting state, not a limitation claim.
+        val model = derive(baseInputs(radarFresh = false, radarLimited = true))
+        assertEquals(R.string.main_status_waiting_title, model.headlineRes)
     }
 }

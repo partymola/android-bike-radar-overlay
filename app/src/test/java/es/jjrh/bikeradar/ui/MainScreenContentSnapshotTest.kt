@@ -123,10 +123,10 @@ class MainScreenContentSnapshotTest {
                 MainShell {
                     MainScreenContent(
                         status = MainStatus(
-                            icon = MainStatusIcon.CheckCircle,
-                            tone = MainStatusTone.Good,
-                            headline = "Radar live",
-                            subtitle = "Distance only",
+                            icon = MainStatusIcon.Warning,
+                            tone = MainStatusTone.Warn,
+                            headline = "Radar live, distance only",
+                            subtitle = "No urgent warning from this radar",
                         ),
                         cta = null,
                         btEnabled = true,
@@ -144,6 +144,47 @@ class MainScreenContentSnapshotTest {
                         haStatus = HaStatus.READY,
                         closePassLoggingEnabled = false,
                         isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    // Landscape has its own SystemCard call site and, until this, no golden
+    // at all - so the row states were verified in one orientation only.
+    @Test
+    fun radarLimitedSourceLandscape() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Warning,
+                            tone = MainStatusTone.Warn,
+                            headline = "Radar live, distance only",
+                            subtitle = "No urgent warning from this radar",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        radarLimited = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = false,
+                        isLandscape = true,
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},

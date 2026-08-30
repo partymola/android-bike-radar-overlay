@@ -57,6 +57,10 @@ data class MainStatusInputs(
     val pausedUntilEpochMs: Long,
     val hasBond: Boolean,
     val radarFresh: Boolean,
+    /** The radar is delivering, but from a source that cannot raise the urgent
+     *  warning or log a close pass. Distinct from [radarFresh] because the
+     *  hero must not show "all good" green over a degraded link. */
+    val radarLimited: Boolean = false,
     val haErrorRecent: Boolean,
     val dashcamOwned: Boolean,
     val dashcamWarnWhenOff: Boolean,
@@ -152,6 +156,18 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Error,
                 headlineRes = R.string.main_status_not_paired_title,
                 subtitleRes = R.string.main_status_not_paired_sub,
+            )
+        }
+        if (inputs.radarFresh && inputs.radarLimited) {
+            // Ahead of the dashcam warning on purpose: this one is about the
+            // safety-critical device, and it is the reason the rider is not
+            // getting the cue they think they are. The row beside it says
+            // "Limited"; the hero must not simultaneously say all is well.
+            return MainStatusModel(
+                icon = MainStatusIcon.Warning,
+                tone = MainStatusTone.Warn,
+                headlineRes = R.string.main_status_limited_title,
+                subtitleRes = R.string.main_status_limited_sub,
             )
         }
         if (inputs.radarFresh) {

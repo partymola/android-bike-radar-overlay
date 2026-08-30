@@ -212,6 +212,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         pausedUntilEpochMs = prefsSnap.pausedUntilEpochMs,
         hasBond = hasBond,
         radarFresh = radarFresh,
+        radarLimited = radarLimited,
         haErrorRecent = haErrorRecent,
         dashcamOwned = dashcamOwned && dashcamPaired,
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,

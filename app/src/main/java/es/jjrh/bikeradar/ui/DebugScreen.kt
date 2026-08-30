@@ -1012,7 +1012,11 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
     logFiles.take(3).forEach { sb.appendLine("${it.name}  ${it.length() / 1024}KB") }
     val journal = readLinkJournal(ctx)
     sb.appendLine("--- Link journal (newest ${journal.size.coerceAtMost(40)}) ---")
-    journal.take(40).forEach { sb.appendLine(it) }
+    // Redacted to the same standard as the prefs dump above. These lines
+    // interpolate BLE device names and are appended AFTER dumpAll, so they
+    // used to bypass the only redaction in the bundle - and this bundle is
+    // pasted into public issue threads by reporters we ask for it.
+    journal.take(40).forEach { sb.appendLine(Prefs.redactAddresses(it)) }
     val crashFiles = enumerateCrashLogs(ctx)
     sb.appendLine()
     sb.appendLine("--- Crash reports (${crashFiles.size} on disk) ---")
@@ -1021,7 +1025,12 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
         sb.appendLine()
         sb.appendLine("--- Newest crash report ---")
         // Crash reports are version + thread + stack trace, a few KB at most.
-        sb.append(runCatching { newest.readText() }.getOrDefault("(unreadable)"))
+        // Same redaction: an exception message can carry whatever string threw.
+        sb.append(
+            Prefs.redactAddresses(
+                runCatching { newest.readText() }.getOrDefault("(unreadable)"),
+            ),
+        )
     }
 
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

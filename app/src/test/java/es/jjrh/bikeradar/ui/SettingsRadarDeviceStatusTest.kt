@@ -46,9 +46,10 @@ class SettingsRadarDeviceStatusTest {
     /** The disclosure, spelled out rather than read from the resource: a test
      *  asserting a string against itself stays green when the copy is gutted. */
     private val limitedSourceNote =
-        "Limited radar: this one reports distance only. You get proximity beeps " +
-            "and the all-clear. No urgent warning, no speed colours, no close-pass " +
-            "logging, and no dropout warning unless your eBike is connected."
+        "This radar reports distance only. You get approach beeps and the " +
+            "all-clear, and the overlay colours show distance rather than " +
+            "speed. No urgent warning, no close-pass logging, and no " +
+            "drop-alert sound unless your eBike is connected."
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var prefs: Prefs

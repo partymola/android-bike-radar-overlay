@@ -432,7 +432,7 @@
     <string name="settings_radardev_connected">Connected</string>
     <string name="settings_radardev_not_in_range">Not in range</string>
     <string name="settings_radardev_connecting">Connecting…</string>
-    <string name="settings_radardev_limited_source">Limited radar: this one reports distance only. You get proximity beeps and the all-clear. No urgent warning, no speed colours, no close-pass logging, and no dropout warning unless your eBike is connected.</string>
+    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning, no close-pass logging, and no drop-alert sound unless your eBike is connected.</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>

@@ -41,6 +41,28 @@ class SettingsRadarDeviceSnapshotTest {
     }
 
     @Test
+    fun limitedSourceNote() {
+        // The only visible state this screen gained, and the one whose LAYOUT
+        // is the risk rather than its presence: the note is several wrapped
+        // lines of caption inside the name column, beside a vertically-centred
+        // icon. A presence assertion proves it composes; only a golden shows
+        // whether the card still reads as a card.
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA),
+                    chosenMac = null,
+                    activeName = radarA.name,
+                    status = RadarConnStatus.CONNECTED,
+                    batteryPct = 78,
+                    limitedSource = true,
+                )
+            }
+        }
+    }
+
+    @Test
     fun mountOffsetRight() {
         // Non-zero mount offset: exercises the worded "N cm right" readout and
         // the off-centre slider thumb (every other snapshot sits at Centred).

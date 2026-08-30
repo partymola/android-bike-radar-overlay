@@ -644,8 +644,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    deletableCaptureLogs(logFiles, BikeRadarService.activeCaptureLogName)
-                        .forEach { it.delete() }
+                    deleteCaptureLogsExceptActive(logFiles, BikeRadarService.activeCaptureLogName)
                     logFiles = enumerateCaptureLogs(ctx)
                     pendingDeleteAll = false
                 }) { Text(stringResource(R.string.debug_delete_all)) }
@@ -698,6 +697,16 @@ internal fun onCaptureLogShareRequested(
  * [CaptureLogManager.prune] carries the same exclusion for the same reason.
  */
 internal fun deletableCaptureLogs(logs: List<File>, activeName: String?): List<File> = logs.filter { it.name != activeName }
+
+/** Delete every log Delete all is allowed to touch, returning how many went.
+ *  A function rather than a loop in the confirm lambda so the guard and the
+ *  deletion cannot drift apart: the count the dialog shows and the files it
+ *  removes come from one place. */
+internal fun deleteCaptureLogsExceptActive(logs: List<File>, activeName: String?): Int {
+    val doomed = deletableCaptureLogs(logs, activeName)
+    doomed.forEach { it.delete() }
+    return doomed.size
+}
 
 /**
  * Enumerate the shareable/deletable capture logs on disk, newest first.

@@ -155,6 +155,21 @@ class DebugCaptureLogListingTest {
     }
 
     @Test
+    fun deleteAllActuallyRemovesTheFilesItIsAllowedTo() {
+        // The guard and the deletion have to agree, so the same function does
+        // both: a filter that is correct while the loop beside it iterates the
+        // unfiltered list is exactly the defect this replaces.
+        val open = writeLog("bike-radar-capture-open.log")
+        val closed = writeLog("bike-radar-capture-closed.log.gz")
+
+        val deleted = deleteCaptureLogsExceptActive(listOf(open, closed), open.name)
+
+        assertEquals(1, deleted)
+        assertTrue("the recording log must survive on disk", open.exists())
+        assertTrue("the closed log must be gone from disk", !closed.exists())
+    }
+
+    @Test
     fun deleteAllRemovesEverythingWhenNothingIsRecording() {
         // The other direction, so the guard cannot be widened into a no-op:
         // with no active log, Delete all still means all.

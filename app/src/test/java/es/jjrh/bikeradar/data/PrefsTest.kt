@@ -335,6 +335,22 @@ class PrefsTest {
     }
 
     @Test
+    fun radarLegacyTallyDefaultsNullRoundTripsAndIsDumpedReadable() {
+        assertNull(prefs.radarLegacyTally)
+        assertTrue(prefs.dumpAll().contains("radar_legacy_tally=<unset>"))
+
+        prefs.radarLegacyTally = "frames=412 hb=380 threat=32 rec=0 unparsed=0"
+        assertEquals("frames=412 hb=380 threat=32 rec=0 unparsed=0", prefs.radarLegacyTally)
+        // Dumped in full, like the connection probe beside it: this line IS the
+        // diagnostic, and it carries counts rather than identifiers. Without
+        // the dump assertion the pref round-trips and reaches nobody, which is
+        // the same as not recording it.
+        assertTrue(
+            prefs.dumpAll().contains("radar_legacy_tally=frames=412 hb=380 threat=32 rec=0 unparsed=0"),
+        )
+    }
+
+    @Test
     fun radarFirmwareRevDefaultsNullAndRoundTrips() {
         assertNull(prefs.radarFirmwareRev)
         prefs.radarFirmwareRev = "6.70"

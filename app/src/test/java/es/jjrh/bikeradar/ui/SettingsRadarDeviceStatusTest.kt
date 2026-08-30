@@ -156,14 +156,13 @@ class SettingsRadarDeviceStatusTest {
 
     @Test
     fun aFreshBatteryAloneDoesNotReadConnected() {
-        // This replaces a test that asserted the opposite, and the reason is
-        // the point: a battery reading used to be evidence of data flowing,
-        // because only a live decode loop refreshed it. The setup sequence now
-        // publishes one on every attempt that reaches its battery step, so an
-        // aborting radar retrying every 1.5 s keeps a reading permanently
-        // fresh while sending no targets at all. Under the old rule that radar
-        // read Connected, which is a worse lie than either state the tri-state
-        // was built to choose between.
+        // A battery reading is not evidence that data is flowing. The setup
+        // sequence publishes one on every attempt that reaches its battery
+        // step, so a radar aborting and retrying every 1.5 s keeps a reading
+        // permanently fresh while sending no targets at all. Scoring
+        // Connected off the battery would call that radar Connected, which is
+        // a worse lie than either state the tri-state exists to choose
+        // between.
         BikeRadarService.radarLinkStateForUi =
             MutableStateFlow(RadarLinkState(radarGattActive = true))
         BatteryStateBus.update(BatteryEntry(slug = "rearvue8", name = "RearVue8", pct = 78))

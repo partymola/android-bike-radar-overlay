@@ -43,21 +43,31 @@ always `-667b-11e3-949a-0800200c9a66`.
 | `6a4e2f12` | Settings notify | NOTIFY | yes, post-handshake |
 | `6a4e2f14` | Settings indicate | INDICATE | yes, post-handshake |
 | `6a4e3200` | Radar service | — | — |
-| `6a4e3203` | V1 cleartext stream | NOTIFY | **never — see below** |
+| `6a4e3203` | V1 cleartext stream | NOTIFY | **only when `6a4e3204` is absent; see below** |
 | `6a4e3204` | V2 target stream | NOTIFY | yes, post-handshake only |
 
 Scan filter: the advert carries the 16-bit Garmin company UUID `0xfe1f`.
 The Vue does **not** advertise any `6a4e2xxx` service, so the scan filter
 has to match on `0xfe1f` to catch both devices (see `BatteryScanReceiver`).
 
-### Critical: never subscribe the V1 CCCD
+### Critical: never subscribe the V1 CCCD on a radar that has `6a4e3204`
 
 `6a4e3203` only starts notifying once its CCCD is subscribed - it does not
 broadcast regardless - and subscribing it can pin the radar in V1 mode and
 suppress the `6a4e3204` stream we rely on (the official app never subscribes
-it during a V2 session). So the app never writes this CCCD and never receives
-V1; only `6a4e3204` is routed to the decoder. See `Uuids.kt` for the
-permanent warning and the canonical spec for the firmware behaviour it guards.
+it during a V2 session). The pin outlives the connection: later connections
+that never touch the CCCD get no V2 either, until the radar is power-cycled.
+
+The one sanctioned subscribe is the range-only fallback below, and its gate
+is that whole hazard: it runs only on a radar whose freshly re-read service
+table carries no `6a4e3204` at all, so a radar that has V2 can never reach
+it, whatever the handshake does
+(`RadarLinkControllerHarnessTest.aV2CapableRadarNeverFallsBackHoweverTheHandshakeEnds`).
+The table must be re-read rather than trusted, because Android serves
+discovery from a per-device cache; if that cache cannot be cleared, the
+fallback is refused rather than risking the pin. See `Uuids.kt` for the
+permanent warning and the canonical spec for the firmware behaviour it
+guards.
 
 ## CCCD subscribe order
 
@@ -147,16 +157,24 @@ The decoder takes closing speed straight from `byte[7]` (x0.5 m/s; negative
 frame-to-frame `rangeY` deltas; byte[7] is the radar's own approach-speed
 signal and is smoother, so the delta method was dropped.
 
-## V1 stream (`6a4e3203`) - not used
+## V1 stream (`6a4e3203`) - range-only fallback
 
 V1 and V2 are mutually exclusive: the radar streams one or the other, and
-reaching V2 (via the unlock handshake) is what keeps V1 silent. The app
-targets V2 only and never subscribes `6a4e3203`, so V1 frames are not
-received and never appear in the capture log.
+reaching V2 (via the unlock handshake) is what keeps V1 silent. On a radar
+that exposes `6a4e3204`, the app targets V2 only and never subscribes
+`6a4e3203`, so V1 frames are not received and never appear in the capture
+log. A failing handshake on such a radar leaves the overlay empty until V2
+reconnects; it does NOT fall back.
 
-If a V2 handshake fails the overlay stays empty until V2 reconnects; there
-is no V1 fallback (it would need its own CCCD subscribe, which can pin the
-radar in V1 mode). See `bike-radar-docs/PROTOCOL.md` for the full V1 layout.
+On a radar whose service table carries no `6a4e3204` at all there is no V2
+to lose, and after the handshake aborts the app subscribes `6a4e3203` and
+decodes it with `RadarV1Decoder`. That stream carries range and nothing
+else, so the decoder writes fail-closed sentinels for closing speed and
+lateral position: the awareness beeps and the all-clear work, while the
+urgent cue and close-pass detection stay shut, and the ride record leaves
+the never-measured quantities null rather than logging a zero. The argument
+is `RadarV1SafetyTest`; read it before widening this path. See
+`bike-radar-docs/PROTOCOL.md` for the full V1 layout.
 
 ## Battery read (both devices)
 

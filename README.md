@@ -92,7 +92,7 @@ strip; the rest of your screen stays yours. (*Image credits
 | Garmin Varia RVR315 | ⚠️ Should work (unconfirmed) |
 | Garmin Varia RCT715 | ⚠️ Should work (unconfirmed) |
 | Garmin Varia eRTL615 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia RTL510 and older | ⚠️ Limited at best (unconfirmed) - see below |
+| Garmin Varia RTL510 and older | ⚠️ Limited at best (unconfirmed); see below |
 | Non-Garmin radars (Wahoo, Bryton, Magene, Trek, ...) | ❌ No - [why](COMPATIBILITY.md) |
 
 "Limited at best" means the app will try the legacy cleartext stream on a
@@ -159,7 +159,7 @@ Store-listing metadata lives under `fastlane/metadata/android/`
   protocol. V2 requires a one-time LE Secure Connections pair via
   Android's own Bluetooth settings; the app does not attempt
   `createBond()` itself. A radar whose service table has no V2
-  characteristic at all falls back to the legacy cleartext stream, which
+  characteristic at all can fall back to the legacy cleartext stream, which
   carries range and nothing else: proximity beeps and the all-clear work,
   the urgent warning and close-pass logging cannot. A radar that does have
   the V2 characteristic never gets the legacy subscribe, whatever the

@@ -1035,11 +1035,12 @@ class RadarLinkControllerHarnessTest {
      * every V2 radar whose cached table happens to be missing 6a4e3204. The
      * rider whose radar is genuinely legacy loses a feature they did not have
      * before; the rider whose radar is healthy would lose V2 until they
-     * power-cycled it. This test is the argument for that trade, and it is
-     * reachable at all only because the refresh is an injected seam - the real
-     * call returns false under Robolectric, so before the seam existed every
-     * legacy test was silently pinning this branch while claiming to test the
-     * other one.
+     * power-cycled it. This test is the argument for that trade.
+     *
+     * It is reachable at all only because the refresh is an injected seam.
+     * The real call returns false under Robolectric, so without the seam
+     * every legacy test would pin this branch while appearing to test the
+     * one that takes the fallback.
      */
     @Test fun aFailedCacheClearRefusesTheLegacyFallbackRatherThanRiskingThePin() = runTest {
         val link = Link()

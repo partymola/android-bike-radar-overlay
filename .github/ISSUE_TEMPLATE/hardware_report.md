@@ -58,8 +58,10 @@ it keeps recording across later rides until you turn the switch off, so
 it can cover a full ride. Anything attached here is publicly visible:
 only attach it if you are comfortable with that.
 
-After the radar has tried for a minute, and **while it is still powered
-on**, turn **Record connection setup** back off. The log stays open
-while it is recording and reaches the Share list only once it closes,
-which takes until the radar's next connection attempt ends. Turning the
-radar off first leaves the log open and it will not appear.
+After the radar has tried for a minute, open the Debug screen. The newest
+log in the list is marked as still recording; tap **Share** next to it and
+send it as it stands. You do not have to stop anything first.
+
+Turn **Record connection setup** back off once you are done. It keeps
+recording across later rides otherwise, and the log holds your radar's
+serial number.

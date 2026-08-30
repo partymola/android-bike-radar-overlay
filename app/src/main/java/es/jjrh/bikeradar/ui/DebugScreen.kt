@@ -614,6 +614,10 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
                     // Kept in step so a downgrade does not re-prompt.
                     prefs.captureLogShareWarningSeen = true
                     pendingShareFile = null
+                    // Flushed again: the first flush happened when the rider
+                    // tapped Share, and a still-recording log keeps growing
+                    // while they read this dialog.
+                    BikeRadarService.flushCaptureLogForUi?.invoke()
                     shareFile(ctx, file)
                 }) { Text(stringResource(R.string.debug_share_anyway)) }
             },
@@ -629,12 +633,19 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             title = { Text(stringResource(R.string.debug_delete_all_dialog_title)) },
             text = {
                 Text(
-                    stringResource(R.string.debug_delete_all_dialog_body, logFiles.size),
+                    stringResource(
+                        R.string.debug_delete_all_dialog_body,
+                        // The count the rider is asked to confirm must be the
+                        // count that will actually go, or the dialog overstates
+                        // by one whenever a log is recording.
+                        deletableCaptureLogs(logFiles, BikeRadarService.activeCaptureLogName).size,
+                    ),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    logFiles.forEach { it.delete() }
+                    deletableCaptureLogs(logFiles, BikeRadarService.activeCaptureLogName)
+                        .forEach { it.delete() }
                     logFiles = enumerateCaptureLogs(ctx)
                     pendingDeleteAll = false
                 }) { Text(stringResource(R.string.debug_delete_all)) }
@@ -671,6 +682,22 @@ internal fun onCaptureLogShareRequested(
     flush?.invoke()
     if (warningSeen) share() else requestWarning()
 }
+
+/**
+ * The subset of [logs] that Delete all may actually remove.
+ *
+ * Everything except the file the writer currently holds. Deleting that one
+ * unlinks it under a live PrintWriter, and the failure is entirely silent:
+ * the writer keeps feeding the unlinked inode, `open()` will not start a
+ * replacement while a writer exists, and `close()` skips the gzip because the
+ * source is gone. The rider loses the whole session and is told nothing.
+ *
+ * This guard used to be free. While the list excluded the open file, Delete
+ * all could not reach it; listing that file for sharing removed the accident
+ * that was protecting this path, so the guard is now explicit and pinned.
+ * [CaptureLogManager.prune] carries the same exclusion for the same reason.
+ */
+internal fun deletableCaptureLogs(logs: List<File>, activeName: String?): List<File> = logs.filter { it.name != activeName }
 
 /**
  * Enumerate the shareable/deletable capture logs on disk, newest first.

@@ -649,7 +649,7 @@
     <string name="debug_write_capture_logs_title">Write capture logs</string>
     <string name="debug_write_capture_logs_subtitle">Off by default. Records every radar packet, BLE notify and eBike snapshot with exact timing, plus phone battery and which way you turn - useful for bug reports, but ride-tracking-grade data kept on the phone. Takes effect on the next radar connection (the current ride\'s log finishes either way).</string>
     <string name="debug_setup_transcript_title">Record connection setup</string>
-    <string name="debug_setup_transcript_subtitle">Shows why a radar that never connects is failing.\n• Needs Write capture logs on\n• Starts the log when the radar is found, so it covers every connection step\n• Can include your radar\'s model, firmware and serial number\n• One log spans every attempt, later rides included\n• Share it from the list below whenever you like, even while it is still recording</string>
+    <string name="debug_setup_transcript_subtitle">Shows why a radar that never connects is failing.\n• Needs Write capture logs on\n• Starts the log when the radar is found, so it covers every connection step\n• Can include your radar\'s model, firmware and serial number\n• One log spans every attempt, later rides included\n• Share it from the list below at any time, even while it is still recording\n• Turn this off when you\'re done: it keeps recording across later rides</string>
     <string name="debug_section_capture_logs">Capture logs</string>
     <string name="debug_no_capture_logs">No capture logs yet.</string>
     <string name="debug_section_crashes">Crashes</string>

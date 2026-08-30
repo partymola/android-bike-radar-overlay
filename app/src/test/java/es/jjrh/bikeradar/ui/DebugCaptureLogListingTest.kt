@@ -140,6 +140,33 @@ class DebugCaptureLogListingTest {
     }
 
     @Test
+    fun deleteAllSparesTheLogBeingWritten() {
+        // Listing the open file for sharing removed the accident that used to
+        // protect Delete all from it. Unlinking it under the live writer loses
+        // the whole session in silence: the writer feeds an unlinked inode, no
+        // replacement file opens while the writer lives, and the close-time
+        // gzip skips because the source is gone.
+        val open = writeLog("bike-radar-capture-open.log")
+        val closed = writeLog("bike-radar-capture-closed.log.gz")
+
+        val deletable = deletableCaptureLogs(listOf(open, closed), open.name).map { it.name }
+
+        assertEquals(listOf(closed.name), deletable)
+    }
+
+    @Test
+    fun deleteAllRemovesEverythingWhenNothingIsRecording() {
+        // The other direction, so the guard cannot be widened into a no-op:
+        // with no active log, Delete all still means all.
+        val a = writeLog("bike-radar-capture-open.log")
+        val b = writeLog("bike-radar-capture-closed.log.gz")
+
+        val deletable = deletableCaptureLogs(listOf(a, b), activeName = null).map { it.name }
+
+        assertEquals(listOf(a.name, b.name), deletable)
+    }
+
+    @Test
     fun aNonCaptureFileIsNotListed() {
         writeLog("notes.txt")
 

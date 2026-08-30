@@ -16,15 +16,44 @@ import org.junit.Test
  * filing a hardware report, so the failure is invisible and lands on the people
  * the feature is for.
  *
- * Source-reading rather than behavioural because the gate lives in a lambda
- * inside a private Composable with no test entry point. That is a real
- * limitation and this is the weaker check, but the alternative measured here
- * was no check at all: a mutation swapping the two keys survived the whole
+ * Source-reading covers the CALL SITE only: that the V2 key is what gets passed
+ * to the gate. The gate itself now lives in `onCaptureLogShareRequested` and is
+ * exercised behaviourally by DebugCaptureLogListingTest, which is the half this
+ * file could never reach. Both are needed - hardcoding the argument here kills
+ * the source pin, inverting the branch there kills the behavioural one. The
+ * alternative measured before either existed was no check at all: a mutation
+ * swapping the two keys survived the whole
  * suite. See [SettingsPrivacyLogcatGuardTest] for the same pattern.
  */
 class CaptureLogShareWarningGateTest {
 
     private val source = RepoFiles.mainSource("ui/DebugScreen.kt").readText()
+    private val serviceSource = RepoFiles.mainSource("BikeRadarService.kt").readText()
+
+    /**
+     * The service must actually INSTALL the flush hook the Debug screen shares
+     * through, and clear it on teardown.
+     *
+     * Source-reading because the service is not constructible under this
+     * harness, and the alternative measured here was no check at all: deleting
+     * the install line survives the whole suite, and it silently reverts the
+     * feature the hook exists for. A shared in-progress log then ends at the
+     * last periodic flush, and on a parked reconnect loop - a radar switched
+     * off, which is the reporter's own scenario - no periodic flush ever fires
+     * again, so the staleness is unbounded rather than one window.
+     */
+    @Test
+    fun theServiceInstallsAndClearsTheFlushHook() {
+        assertTrue(
+            "BikeRadarService must install flushCaptureLogForUi, or a shared " +
+                "in-progress log silently loses its buffered tail",
+            serviceSource.contains("flushCaptureLogForUi = { captureLog.flushNow() }"),
+        )
+        assertTrue(
+            "BikeRadarService.onDestroy must clear flushCaptureLogForUi",
+            serviceSource.contains("flushCaptureLogForUi = null"),
+        )
+    }
 
     @Test
     fun theShareGateReadsTheV2StickyBit() {

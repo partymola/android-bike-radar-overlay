@@ -185,12 +185,19 @@ summary; the Key files table maps each part to its file.
   are recorded - and one file spans the whole reconnect loop instead of
   one per attempt. Because the loop has no self-exit, that file keeps
   growing across every later connection too, successful rides included,
-  and it reaches the Debug screen's Share list only once it closes: at the
-  end of the first attempt after the toggle goes off, when the service
-  stops, or when Bluetooth drops. Flipping the toggle does not close it on
-  the spot, which against an aborting radar is a second or two and after a
-  successful connect is the rest of the ride. The toggle subtitle and the
-  issue template both say to turn it off when done.
+  and it is listed on the Debug screen WHILE STILL OPEN, marked as
+  recording, so a reporter shares it as it stands. That row withholds
+  delete and Delete all skips it, because unlinking a file under the live
+  writer loses the session silently: the writer feeds an unlinked inode,
+  no replacement opens while the writer lives, and the close-time gzip
+  finds nothing to compress. `deletableCaptureLogs` is the guard and
+  `CaptureLogManager.prune` carries the same exclusion.
+  It still closes at the end of the first attempt after the toggle goes
+  off, when the service stops, or when Bluetooth drops - that just no
+  longer gates retrieval. The toggle subtitle and the issue template say
+  to turn it off when done, which is about retention rather than access:
+  it keeps recording across later rides and the file holds the serial
+  number.
   Turning the capture-log master switch off closes it at the next attempt
   too: `CaptureLogManager.open` closes an open file when logging is off
   rather than just returning, so that switch keeps meaning what its own

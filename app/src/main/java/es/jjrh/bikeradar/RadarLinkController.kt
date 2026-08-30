@@ -529,9 +529,7 @@ internal class RadarLinkController(
                 // down while the link is live, so without this it reports no
                 // battery at all for as long as it keeps failing.
                 onBatteryPct = { pct ->
-                    val s = slug(name)
-                    gatt.device?.address?.let { macToSlug[it] = s }
-                    BatteryStateBus.update(BatteryEntry(s, name, pct))
+                    publishRadarBattery(gatt.device?.address, name, pct)
                 },
             ) { msg ->
                 captureLog.clog("# script: $msg")
@@ -573,12 +571,17 @@ internal class RadarLinkController(
                     return true
                 }
                 if (legacyChar != null) {
+                    // Opened BEFORE the first clog, or with the setup
+                    // transcript off the writer is still null and the legacy
+                    // session's capture never says which stream it is or what
+                    // the handshake aborted at - and that capture is the whole
+                    // artefact a reporter sends back.
+                    captureLog.open()
                     captureLog.clog("# handshake aborted at $handshakeAbort; no V2 char, trying the legacy stream")
                     journal("radar legacy stream attempt after $handshakeAbort")
                     // The probe keeps the ABORT token, not a legacy marker:
                     // the token is the diagnostic, and the journal line above
                     // is what records that the fallback ran.
-                    captureLog.open()
                     overlayJob = overlayPipeline.attach(scope, name)
                     return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name)
                 }
@@ -756,10 +759,9 @@ internal class RadarLinkController(
                     Uuids.SETTINGS_12 -> if (prefs.radarSettingsProbeEnabled) captureLog.clog("# radar_2f12 ${bytes.toHex()}")
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        val s = slug(name)
-                        if (rearMac != null) macToSlug[rearMac] = s
-                        BatteryStateBus.update(BatteryEntry(s, name, pct))
-                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
+                        if (publishRadarBattery(rearMac, name, pct) && !prefs.isPaused) {
+                            haPublisher.maybePublishBatteryToHa(name, pct)
+                        }
                     }
                 }
             }
@@ -794,10 +796,7 @@ internal class RadarLinkController(
         try {
             val ch = gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY) ?: return
             val pct = queue.read(gatt, ch)?.firstOrNull()?.toInt()?.and(0xFF) ?: return
-            if (pct !in 0..100) return
-            val s = slug(name)
-            gatt.device?.address?.let { macToSlug[it] = s }
-            BatteryStateBus.update(BatteryEntry(s, name, pct))
+            if (!publishRadarBattery(gatt.device?.address, name, pct)) return
             captureLog.clog("# legacy battery $pct%")
             queue.writeCccd(gatt, ch)
         } catch (t: Throwable) {
@@ -895,10 +894,9 @@ internal class RadarLinkController(
             for ((uuid, bytes) in notifyChannel) {
                 if (uuid == Uuids.CHAR_BATTERY) {
                     val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                    val s = slug(name)
-                    gatt.device?.address?.let { macToSlug[it] = s }
-                    BatteryStateBus.update(BatteryEntry(s, name, pct))
-                    if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
+                    if (publishRadarBattery(gatt.device?.address, name, pct) && !prefs.isPaused) {
+                        haPublisher.maybePublishBatteryToHa(name, pct)
+                    }
                     continue
                 }
                 if (uuid != Uuids.RADAR_V1) continue
@@ -1021,6 +1019,33 @@ internal class RadarLinkController(
      * caller falls back to the original behaviour on failure.
      */
     private fun refreshGattCache(gatt: BluetoothGatt): Boolean = refreshGatt(gatt)
+
+    /**
+     * Validate one radar battery reading and put it on the battery bus.
+     * Returns false for a reading that is not a percentage, in which case
+     * nothing was published and the caller must not forward it either.
+     *
+     * One helper rather than the same four lines at four call sites, because
+     * they had already drifted: only the legacy read range-checked the byte,
+     * so a 0xFF "unknown" reply from either notify path reached the rider's
+     * chip as 255%. A validation every caller must remember is a validation
+     * that gets forgotten, so it lives here.
+     *
+     * Home Assistant publishing stays at the call sites: it suspends, and one
+     * caller is a plain lambda inside the handshake. The return value is what
+     * keeps the two in step - an unpublishable reading must not reach HA
+     * either, which is the half the old copies got wrong.
+     *
+     * [mac] is nullable because one caller reads it off a GATT whose device
+     * can be absent; a missing MAC costs the slug mapping, not the reading.
+     */
+    private fun publishRadarBattery(mac: String?, name: String, pct: Int): Boolean {
+        if (pct !in 0..100) return false
+        val s = slug(name)
+        if (mac != null) macToSlug[mac] = s
+        BatteryStateBus.update(BatteryEntry(s, name, pct))
+        return true
+    }
 
     /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
      *  a HIGH-priority notification + the NACK beep. Distinct notification ID

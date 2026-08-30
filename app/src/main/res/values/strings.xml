@@ -135,6 +135,8 @@
     <string name="main_system_home_assistant">Home Assistant</string>
     <string name="main_system_value_not_paired">Not paired</string>
     <string name="main_system_value_live">Live</string>
+    <string name="main_system_value_limited">Limited</string>
+    <string name="main_system_value_connecting">Connecting…</string>
     <string name="main_system_value_no_signal">No signal</string>
     <!-- Camera row only. Spanish inflects these for the feminine "Cámara";
          the shared keys above serve the masculine radar and eBike rows. -->

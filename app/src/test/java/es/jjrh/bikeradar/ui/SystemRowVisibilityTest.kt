@@ -31,6 +31,69 @@ class SystemRowVisibilityTest {
         assertEquals(DeviceLinkState.NO_SIGNAL, deviceLinkState(linked = true, fresh = false))
     }
 
+    @Test fun aConnectingLinkIsNotReportedAsNoSignal() {
+        // The row used to have no CONNECTING state at all, so a radar the app
+        // connects to and fails the setup sequence against read "No signal" -
+        // and the report that came back was "never in range" about a radar
+        // being talked to every second or so. The Settings card already
+        // distinguishes these two; this is the home screen catching up.
+        assertEquals(
+            DeviceLinkState.CONNECTING,
+            deviceLinkState(linked = true, fresh = false, connecting = true),
+        )
+        assertEquals(
+            DeviceLinkState.NO_SIGNAL,
+            deviceLinkState(linked = true, fresh = false, connecting = false),
+        )
+    }
+
+    @Test fun freshDataOutranksConnecting() {
+        // Data arriving is the stronger fact. A link that is both mid-attempt
+        // and delivering frames is delivering.
+        assertEquals(
+            DeviceLinkState.LIVE,
+            deviceLinkState(linked = true, fresh = true, connecting = true),
+        )
+    }
+
+    @Test fun aLimitedSourceIsNotReportedAsLive() {
+        // Green is this app's "you are covered" signal. A range-only radar
+        // cannot raise the urgent warning or log a close pass, so it must not
+        // render identically to a radar that can.
+        assertEquals(
+            DeviceLinkState.LIMITED,
+            deviceLinkState(linked = true, fresh = true, limited = true),
+        )
+        assertEquals(
+            DeviceLinkState.LIVE,
+            deviceLinkState(linked = true, fresh = true, limited = false),
+        )
+    }
+
+    @Test fun limitedOnlyAppliesWhileDataIsArriving() {
+        // "Limited" is a statement about the source that is feeding the row.
+        // With nothing arriving there is no source to qualify, and the honest
+        // answer is the connection state.
+        assertEquals(
+            DeviceLinkState.NO_SIGNAL,
+            deviceLinkState(linked = true, fresh = false, limited = true),
+        )
+        assertEquals(
+            DeviceLinkState.CONNECTING,
+            deviceLinkState(linked = true, fresh = false, limited = true, connecting = true),
+        )
+    }
+
+    @Test fun theUnpairedPreconditionStillWinsOverEverything() {
+        // A row that is not paired says so, whatever the other flags claim -
+        // otherwise a stale flag from a previous device could dress an unpaired
+        // row as connecting.
+        assertEquals(
+            DeviceLinkState.NOT_PAIRED,
+            deviceLinkState(linked = false, fresh = true, limited = true, connecting = true),
+        )
+    }
+
     @Test fun onlyNotPairedIsMutedAndHollow() {
         assertTrue("not-paired rows dim", DeviceLinkState.NOT_PAIRED.muted)
         assertTrue("not-paired rows show a hollow dot", DeviceLinkState.NOT_PAIRED.hollow)
@@ -38,6 +101,13 @@ class SystemRowVisibilityTest {
         assertFalse(DeviceLinkState.LIVE.hollow)
         assertFalse(DeviceLinkState.NO_SIGNAL.muted)
         assertFalse(DeviceLinkState.NO_SIGNAL.hollow)
+        // The two new states are live rows, not absent ones: a dimmed or
+        // hollow row reads as "nothing here", which is the opposite of what
+        // both of them mean.
+        assertFalse(DeviceLinkState.LIMITED.muted)
+        assertFalse(DeviceLinkState.LIMITED.hollow)
+        assertFalse(DeviceLinkState.CONNECTING.muted)
+        assertFalse(DeviceLinkState.CONNECTING.hollow)
     }
 
     @Test fun ebikeChipShowsSocOnlyWhileReceiving() {

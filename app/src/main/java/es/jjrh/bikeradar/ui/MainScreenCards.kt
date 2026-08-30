@@ -267,6 +267,8 @@ internal fun AttentionCard(items: List<AttentionItem>, onDismiss: (AttentionKind
 @Composable
 internal fun SystemCard(
     radarFresh: Boolean,
+    radarLimited: Boolean = false,
+    radarConnecting: Boolean = false,
     hasBond: Boolean,
     btEnabled: Boolean,
     dashcamOwned: Boolean,
@@ -293,13 +295,20 @@ internal fun SystemCard(
     // Plus: BT off shown ONCE as a card-level banner, never per-row.
     //
     // Battery chip hides outside Live to avoid surfacing stale numbers.
-    val radarLink = deviceLinkState(linked = btEnabled && hasBond, fresh = radarFresh)
+    val radarLink = deviceLinkState(
+        linked = btEnabled && hasBond,
+        fresh = radarFresh,
+        limited = radarLimited,
+        connecting = radarConnecting,
+    )
     val radarRow = SystemRow(
         icon = Icons.Default.Sensors,
         label = stringResource(R.string.main_system_rear_radar),
         value = when (radarLink) {
             DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_not_paired)
             DeviceLinkState.LIVE -> stringResource(R.string.main_system_value_live)
+            DeviceLinkState.LIMITED -> stringResource(R.string.main_system_value_limited)
+            DeviceLinkState.CONNECTING -> stringResource(R.string.main_system_value_connecting)
             DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
         },
         muted = radarLink.muted,
@@ -307,6 +316,10 @@ internal fun SystemCard(
         dot = when (radarLink) {
             DeviceLinkState.NOT_PAIRED -> br.fgDim
             DeviceLinkState.LIVE -> br.safe
+            // Amber, not green: a range-only link cannot raise the urgent
+            // warning, and a link still being established is not cover yet.
+            DeviceLinkState.LIMITED -> br.caution
+            DeviceLinkState.CONNECTING -> br.caution
             DeviceLinkState.NO_SIGNAL -> br.caution
         },
         hollow = radarLink.hollow,
@@ -321,6 +334,12 @@ internal fun SystemCard(
             // and the shared values agree with the masculine radar row.
             DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_cam_not_paired)
             DeviceLinkState.LIVE -> dashcamDisplayName ?: stringResource(R.string.main_system_value_cam_live)
+            // The camera row derives from battery adverts only, so it never
+            // asks for these two today. Mapped rather than defaulted so that
+            // adding a light-link signal here is a deliberate edit, not an
+            // else-branch silently absorbing a new state.
+            DeviceLinkState.LIMITED -> stringResource(R.string.main_system_value_limited)
+            DeviceLinkState.CONNECTING -> stringResource(R.string.main_system_value_connecting)
             DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
         },
         muted = dashcamLink.muted,
@@ -328,6 +347,7 @@ internal fun SystemCard(
         dot = when (dashcamLink) {
             DeviceLinkState.NOT_PAIRED -> br.fgDim
             DeviceLinkState.LIVE -> br.safe
+            DeviceLinkState.LIMITED, DeviceLinkState.CONNECTING -> br.caution
             DeviceLinkState.NO_SIGNAL -> br.caution
         },
         hollow = dashcamLink.hollow,

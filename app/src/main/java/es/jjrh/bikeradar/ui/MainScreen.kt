@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -63,6 +64,7 @@ import es.jjrh.bikeradar.AttentionStore
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
@@ -71,6 +73,9 @@ import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarConnStatus
+import es.jjrh.bikeradar.RadarConnStatusDeriver
+import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -79,6 +84,7 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.eBikeDataIsFresh
 import es.jjrh.bikeradar.radarStreamIsLive
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,6 +167,22 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
 
     val now = tickNowMs.coerceAtLeast(radarState.timestamp)
     val radarFresh = radarStreamIsLive(radarState, now)
+    // A range-only source is delivering, but cannot raise the urgent warning
+    // or log a close pass, so the row must not render it as full cover.
+    val radarLimited = radarState.source == DataSource.V1
+    // Routed through the SAME deriver the Settings radar card uses, rather
+    // than spelling the predicate out again here. Two surfaces answering one
+    // question with two copies of the logic is the defect this fixes: the
+    // Settings card learned to say "Connecting" and this row kept saying "No
+    // signal" about the same radar.
+    val noRadarLinkFlow = remember { MutableStateFlow(RadarLinkState()) }
+    val radarLinkSnap by (BikeRadarService.radarLinkStateForUi ?: noRadarLinkFlow).collectAsState()
+    val radarConnecting = RadarConnStatusDeriver.derive(
+        dataFresh = radarFresh,
+        gattActive = radarLinkSnap.radarGattActive,
+        offSinceMs = radarLinkSnap.radarOffSinceMs,
+        nowMs = SystemClock.elapsedRealtime(),
+    ) == RadarConnStatus.CONNECTING
     // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
     // migration (AndroidKeyStore work on installs that still hold undecryptable
     // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to
@@ -288,6 +310,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            radarLimited = radarLimited,
+            radarConnecting = radarConnecting,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
@@ -331,6 +355,8 @@ internal fun MainScreenContent(
     attentionItems: List<AttentionItem> = emptyList(),
     onAttentionDismiss: (AttentionKind) -> Unit = {},
     radarFresh: Boolean,
+    radarLimited: Boolean = false,
+    radarConnecting: Boolean = false,
     hasBond: Boolean,
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
@@ -362,6 +388,8 @@ internal fun MainScreenContent(
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            radarLimited = radarLimited,
+            radarConnecting = radarConnecting,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
@@ -392,6 +420,8 @@ internal fun MainScreenContent(
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            radarLimited = radarLimited,
+            radarConnecting = radarConnecting,
             hasBond = hasBond,
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
@@ -457,6 +487,8 @@ private fun MainScreenPortrait(
     attentionItems: List<AttentionItem>,
     onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
+    radarLimited: Boolean = false,
+    radarConnecting: Boolean = false,
     hasBond: Boolean,
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
@@ -500,6 +532,8 @@ private fun MainScreenPortrait(
             }
             SystemCard(
                 radarFresh = radarFresh,
+                radarLimited = radarLimited,
+                radarConnecting = radarConnecting,
                 hasBond = hasBond,
                 btEnabled = btEnabled,
                 dashcamOwned = dashcamOwned,
@@ -548,6 +582,8 @@ private fun MainScreenLandscape(
     attentionItems: List<AttentionItem>,
     onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
+    radarLimited: Boolean = false,
+    radarConnecting: Boolean = false,
     hasBond: Boolean,
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
@@ -616,6 +652,8 @@ private fun MainScreenLandscape(
                 // budget on a Pixel landscape after status bar + nav).
                 SystemCard(
                     radarFresh = radarFresh,
+                    radarLimited = radarLimited,
+                    radarConnecting = radarConnecting,
                     hasBond = hasBond,
                     btEnabled = btEnabled,
                     dashcamOwned = dashcamOwned,

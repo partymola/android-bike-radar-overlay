@@ -112,6 +112,88 @@ class MainScreenContentSnapshotTest {
         }
     }
 
+    // The two row states the home screen used to lack. Without them a
+    // range-only radar rendered a green "Live" identical to a healthy one
+    // while the urgent warning was held shut, and a radar the app was
+    // actively retrying rendered "No signal".
+    @Test
+    fun radarLimitedSource() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Radar live",
+                            subtitle = "Distance only",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        radarLimited = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun radarConnecting() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Connecting",
+                            subtitle = "Setting up the radar",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = false,
+                        radarConnecting = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
     @Test
     fun fullyConfigured() {
         // Same as idle() but with the eBike/Flow card present and receiving -

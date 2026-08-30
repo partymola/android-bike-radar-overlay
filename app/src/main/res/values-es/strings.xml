@@ -122,6 +122,8 @@
     <string name="main_system_home_assistant">Home Assistant</string>
     <string name="main_system_value_not_paired">No emparejado</string>
     <string name="main_system_value_live">Activo</string>
+    <string name="main_system_value_limited">Limitado</string>
+    <string name="main_system_value_connecting">Conectando…</string>
     <string name="main_system_value_no_signal">Sin señal</string>
     <string name="main_system_value_cam_not_paired">No emparejada</string>
     <string name="main_system_value_cam_live">Activa</string>

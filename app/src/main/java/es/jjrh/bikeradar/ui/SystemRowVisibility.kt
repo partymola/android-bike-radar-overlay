@@ -10,24 +10,54 @@ package es.jjrh.bikeradar.ui
  */
 
 /**
- * Three-state device vocabulary for a System-card row, from the UX converger:
+ * Device vocabulary for a System-card row:
  *  - [NOT_PAIRED] the device is not owned/bonded or its transport is off (grey,
  *    hollow ring, dimmed).
  *  - [LIVE] a recent reading is arriving (green, solid).
- *  - [NO_SIGNAL] paired but no fresh reading (amber).
+ *  - [LIMITED] readings are arriving, but from a source that cannot supply
+ *    everything the app advertises (amber).
+ *  - [CONNECTING] the app is actively working the link and has not got data
+ *    yet (amber).
+ *  - [NO_SIGNAL] paired, not connecting, no fresh reading (amber).
  */
-enum class DeviceLinkState { NOT_PAIRED, LIVE, NO_SIGNAL }
+enum class DeviceLinkState { NOT_PAIRED, LIVE, LIMITED, CONNECTING, NO_SIGNAL }
 
 /**
  * Classify a rear-radar / front-dashcam row.
  *
+ * [LIMITED] and [CONNECTING] exist because the row was telling the rider two
+ * false things, on the one surface whose whole job is to be trusted at a
+ * glance.
+ *
+ * Without [CONNECTING], a radar the app connects to and fails the setup
+ * sequence against reads "No signal" - and the report that comes back is
+ * "never in range" about a radar being talked to every second or so. That is
+ * the same lie [RadarConnStatusDeriver] was written to remove from the Settings
+ * card; this row simply never consumed it, so the two surfaces disagreed.
+ *
+ * Without [LIMITED], a radar on the range-only legacy stream reads a green
+ * "Live" identical to a healthy one, while the urgent warning and close-pass
+ * detection are held shut. Green is the app's "you are covered" signal, and it
+ * must not appear over a link that cannot raise the urgent cue.
+ *
  * @param linked the device is owned/bonded AND its transport is up - radar:
  *   Bluetooth on and bonded; dashcam: owned and paired.
  * @param fresh a reading arrived inside the row's freshness window.
+ * @param limited the source is delivering, but cannot supply the full feature
+ *   set. Only meaningful alongside [fresh].
+ * @param connecting the app currently holds or is establishing a link but has
+ *   no fresh reading yet.
  */
-fun deviceLinkState(linked: Boolean, fresh: Boolean): DeviceLinkState = when {
+fun deviceLinkState(
+    linked: Boolean,
+    fresh: Boolean,
+    limited: Boolean = false,
+    connecting: Boolean = false,
+): DeviceLinkState = when {
     !linked -> DeviceLinkState.NOT_PAIRED
+    fresh && limited -> DeviceLinkState.LIMITED
     fresh -> DeviceLinkState.LIVE
+    connecting -> DeviceLinkState.CONNECTING
     else -> DeviceLinkState.NO_SIGNAL
 }
 

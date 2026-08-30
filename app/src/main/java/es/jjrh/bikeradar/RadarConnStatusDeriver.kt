@@ -39,11 +39,13 @@ object RadarConnStatusDeriver {
      *  connect and discovery time - the abort path never grows its backoff),
      *  short enough that a radar genuinely gone reads NOT_IN_RANGE within two
      *  screen ticks. Deliberately NOT sized to cover an ordinary mid-ride
-     *  reconnect (corpus floor ~5.3 s): the frame-freshness window feeding
-     *  [derive]'s dataFresh (RADAR_FRAME_FRESH_MS, 10 s) already holds
-     *  CONNECTED across a gap that size, and stretching this window only makes
-     *  a switched-off radar lie "Connecting" for longer. The sibling
-     *  measurement lives on RADAR_DROP_VISUAL_THRESHOLD_MS. */
+     *  reconnect (corpus floor ~5.3 s): stretching this window only makes a
+     *  switched-off radar lie "Connecting" for longer, and a reconnect inside
+     *  it already reads CONNECTING, which is what is happening. Note the
+     *  frame-freshness window does NOT bridge such a gap on its own - the
+     *  teardown calls RadarStateBus.clear(), so dataFresh goes false as soon
+     *  as the stack notices the drop rather than after RADAR_FRAME_FRESH_MS.
+     *  The sibling measurement lives on RADAR_DROP_VISUAL_THRESHOLD_MS. */
     const val RECENT_OFF_MS = 5_000L
 
     fun derive(

@@ -12,7 +12,7 @@ import org.junit.Test
  */
 class RadarConnStatusDeriverTest {
 
-    @Test fun freshBatteryIsConnectedWhateverTheLinkSays() {
+    @Test fun freshDecodedFramesAreConnectedWhateverTheLinkSays() {
         assertEquals(
             RadarConnStatus.CONNECTED,
             RadarConnStatusDeriver.derive(dataFresh = true, gattActive = false, offSinceMs = null, nowMs = 100_000L),
@@ -23,7 +23,7 @@ class RadarConnStatusDeriverTest {
         )
     }
 
-    @Test fun liveGattWithoutBatteryYetIsConnecting() {
+    @Test fun liveGattWithoutFramesYetIsConnecting() {
         assertEquals(
             RadarConnStatus.CONNECTING,
             RadarConnStatusDeriver.derive(dataFresh = false, gattActive = true, offSinceMs = null, nowMs = 100_000L),

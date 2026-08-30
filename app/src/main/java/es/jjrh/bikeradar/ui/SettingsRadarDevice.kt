@@ -52,7 +52,6 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.R
-import es.jjrh.bikeradar.RADAR_FRAME_FRESH_MS
 import es.jjrh.bikeradar.RadarConnStatus
 import es.jjrh.bikeradar.RadarConnStatusDeriver
 import es.jjrh.bikeradar.RadarLinkState
@@ -60,6 +59,7 @@ import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.radarStreamIsLive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.abs
@@ -131,8 +131,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // on frame freshness, so reading this off the battery alone is also what
     // let the two screens disagree about the same radar.
     val radarState by RadarStateBus.state.collectAsState()
-    val framesFresh = radarState.source != DataSource.NONE &&
-        tickNow - radarState.timestamp < RADAR_FRAME_FRESH_MS
+    val framesFresh = radarStreamIsLive(radarState, tickNow)
     // Kept as a nullable rather than a boolean so the chip below still has a
     // reading to render, but it deliberately does NOT feed `connected`.
     // A battery reading proves the link works, not that the radar is

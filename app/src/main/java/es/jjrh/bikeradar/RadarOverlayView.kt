@@ -293,6 +293,14 @@ class RadarOverlayView(context: Context) : View(context) {
         // works in predicted range and drops targets predicted past the rider,
         // so a measured-distance border painted the whole screen red over an
         // empty strip, and missed a target the strip did draw in red.
+        // Stays keyed on closing speed, so it can NEVER fire on a range-only
+        // source. That is intended, not an oversight left behind by the
+        // capability work: on range-only data every overtake ends close, so a
+        // border scored on range would paint the screen on each one and the
+        // alarm-parsimony rule would be lost. The tiers on the strip already
+        // carry the range story there. Do not "fix" this to read
+        // ThreatLevel.DANGER; RadarThreatRenderTest pins the strip's colours,
+        // and nothing pins a border that is meant not to appear.
         if (!clear &&
             state.vehicles.any {
                 drawnRangeM(it) != null && it.closingKmh >= bands.redKmh

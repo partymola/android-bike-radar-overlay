@@ -220,6 +220,23 @@ class RadarV1SafetyTest {
     }
 
     @Test
+    fun aPacketOfTheRightLengthButTheWrongTypeIsNotReadAsTargets() {
+        // The length rule alone (1 + 3N) accepts any packet family whose
+        // length happens to fit, and this hardware is precisely the hardware
+        // nobody has a capture of - so an unknown family is likely, not
+        // hypothetical. Misparsed, its bytes become a vehicle at whatever
+        // range they imply, and the born-close ghost filter cannot catch it
+        // because legacy tracks carry no birth metadata. The low nibble is the
+        // spec's own type tag and one comparison.
+        val d = decoderAt { 1_000L }
+        // Same shape as a threat packet, type nibble 3 instead of 2.
+        assertNull(
+            "only a type-2 packet may be read as targets",
+            d.feed(byteArrayOf(0x03, 0x81.toByte(), 10, 0x00)),
+        )
+    }
+
+    @Test
     fun aMalformedLengthDoesNotThrow() {
         val d = decoderAt { 1_000L }
         // 5 bytes: not a heartbeat, not 1+3N, not a sector packet.
@@ -260,6 +277,27 @@ class RadarV1SafetyTest {
         // a rider's tightest-pass record inventing a vehicle that shaved them.
         // Null is the honest value for "never measured".
         assertNull(legacyRideStats().minLateralClearanceM)
+    }
+
+    @Test
+    fun aLegacyRideAccruesExposureTime() {
+        // The load-bearing one for a legacy rider's ride record, and the least
+        // obvious. Distance integrates bikeSpeedMs, which is null on this
+        // source, so it stays 0 km; close passes are structurally impossible.
+        // That leaves exposure as the ONLY non-zero quantity a legacy ride
+        // produces - and it is what RideSummaryNotificationDecider reads to
+        // decide the ride was worth recording at all. Let the frame gate treat
+        // lateralUnknown as a bad frame here rather than as a source without
+        // lateral, and every legacy commute silently produces no summary and
+        // no history row, with the whole suite green.
+        var mono = 10_000L
+        val stats = RideStatsAccumulator(nowMsProvider = { 1_700_000_000_000L }, monoMsProvider = { mono })
+        val d = decoderAt { 1_000L }
+        stats.observeFrame(d.feed(threat(1 to 20))!!)
+        mono += 2_000L
+        stats.observeFrame(RadarState(vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true)), timestamp = 1_100L, source = DataSource.V1))
+
+        assertEquals("two seconds of observed traffic", 2L, stats.snapshot().exposureSeconds)
     }
 
     @Test

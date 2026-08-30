@@ -16,6 +16,19 @@ import kotlinx.coroutines.flow.StateFlow
 const val RADAR_FRAME_FRESH_MS = 10_000L
 
 /**
+ * Whether [state] counts as a live radar for a screen reading it at [nowMs]
+ * (wall clock).
+ *
+ * ANY decoding source counts, not the modern one specifically: a radar on the
+ * legacy stream is delivering targets, and a screen that asks "is it V2"
+ * instead of "is it live" denies data the overlay is already drawing. The two
+ * surfaces that ask this shared a constant but each spelled the test out, so
+ * the shape could still drift apart even while the number agreed - which is
+ * the same defect the constant was introduced to remove, one level up.
+ */
+fun radarStreamIsLive(state: RadarState, nowMs: Long): Boolean = state.source != DataSource.NONE && nowMs - state.timestamp < RADAR_FRAME_FRESH_MS
+
+/**
  * Process-wide radar state, published by the live BLE link service and
  * consumed by the overlay service. Using a simple singleton StateFlow so we
  * don't need IBinder plumbing between the two foreground services.

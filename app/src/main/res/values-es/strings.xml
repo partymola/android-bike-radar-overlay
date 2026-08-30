@@ -129,6 +129,8 @@
     <string name="main_system_value_no_signal">Sin señal</string>
     <string name="main_system_value_cam_not_paired">No emparejada</string>
     <string name="main_system_value_cam_live">Activa</string>
+    <string name="main_system_value_ebike_no_permission">Falta permiso de Bluetooth</string>
+    <string name="main_system_value_ebike_not_bonded">eBike sin emparejar</string>
     <string name="main_system_value_waiting_flow">Esperando a Flow</string>
     <string name="main_system_value_mqtt_ready">MQTT listo</string>
     <string name="main_system_value_unreachable">Inaccesible</string>

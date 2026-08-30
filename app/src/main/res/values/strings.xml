@@ -144,6 +144,8 @@
          the shared keys above serve the masculine radar and eBike rows. -->
     <string name="main_system_value_cam_not_paired">Not paired</string>
     <string name="main_system_value_cam_live">Live</string>
+    <string name="main_system_value_ebike_no_permission">Needs Bluetooth permission</string>
+    <string name="main_system_value_ebike_not_bonded">eBike not paired</string>
     <string name="main_system_value_waiting_flow">Waiting for Flow</string>
     <string name="main_system_value_mqtt_ready">MQTT ready</string>
     <string name="main_system_value_unreachable">Unreachable</string>

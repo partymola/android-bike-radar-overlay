@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.ClosePassStateBus
+import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.R
 import org.junit.Before
@@ -134,6 +135,50 @@ class MainScreenContentSnapshotTest {
                         showDashcamPrompt = false,
                         radarFresh = true,
                         radarLimited = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = false,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    // Landscape has its own SystemCard call site and, until this, no golden
+    // at all - so the row states were verified in one orientation only.
+    // The eBike row used to say "Waiting for Flow" here, blaming a
+    // third-party app for a bike this app was never paired with.
+    @Test
+    fun ebikeNotPaired() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Radar live",
+                            subtitle = "Dashcam on",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        eBikeDataEnabled = true,
+                        ebikeStage = EBikeStage.NO_BONDED_BIKE,
                         hasBond = true,
                         dashcamOwned = true,
                         dashcamFresh = true,

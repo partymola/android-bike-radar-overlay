@@ -66,6 +66,7 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DeviceNameMatcher
+import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
@@ -131,6 +132,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val batteryEntries by BatteryStateBus.entries.collectAsState()
     val ebikeSnap by EBikeStateBus.snapshot.collectAsState()
     val ebikeLastUpdated by EBikeStateBus.lastUpdatedElapsedMs.collectAsState()
+    val ebikeStage by EBikeStateBus.stage.collectAsState()
 
     // Pollers below use repeatOnLifecycle(RESUMED) so they pause when
     // the screen is off / app backgrounded — there's no value in
@@ -311,6 +313,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            ebikeStage = ebikeStage,
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
             hasBond = hasBond,
@@ -356,6 +359,7 @@ internal fun MainScreenContent(
     attentionItems: List<AttentionItem> = emptyList(),
     onAttentionDismiss: (AttentionKind) -> Unit = {},
     radarFresh: Boolean,
+    ebikeStage: EBikeStage = EBikeStage.NOT_STARTED,
     radarLimited: Boolean = false,
     radarConnecting: Boolean = false,
     hasBond: Boolean,
@@ -389,6 +393,7 @@ internal fun MainScreenContent(
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            ebikeStage = ebikeStage,
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
             hasBond = hasBond,
@@ -421,6 +426,7 @@ internal fun MainScreenContent(
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
+            ebikeStage = ebikeStage,
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
             hasBond = hasBond,
@@ -488,6 +494,7 @@ private fun MainScreenPortrait(
     attentionItems: List<AttentionItem>,
     onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
+    ebikeStage: EBikeStage = EBikeStage.NOT_STARTED,
     radarLimited: Boolean = false,
     radarConnecting: Boolean = false,
     hasBond: Boolean,
@@ -533,6 +540,7 @@ private fun MainScreenPortrait(
             }
             SystemCard(
                 radarFresh = radarFresh,
+                ebikeStage = ebikeStage,
                 radarLimited = radarLimited,
                 radarConnecting = radarConnecting,
                 hasBond = hasBond,
@@ -583,6 +591,7 @@ private fun MainScreenLandscape(
     attentionItems: List<AttentionItem>,
     onAttentionDismiss: (AttentionKind) -> Unit,
     radarFresh: Boolean,
+    ebikeStage: EBikeStage = EBikeStage.NOT_STARTED,
     radarLimited: Boolean = false,
     radarConnecting: Boolean = false,
     hasBond: Boolean,

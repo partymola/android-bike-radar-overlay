@@ -515,13 +515,15 @@ class BikeRadarService : Service() {
     private fun maybeStartEBikeReader() {
         if (ebikeStatusReader != null) return
         if (!prefs.eBikeDataEnabled) return
-        if (!hasBlePermissions()) {
-            Log.i(TAG_RADAR, "ebike: feature on but BLE permissions not granted; skipping")
-            return
-        }
-        val ebikeMac = EBikeStatusReader.findBondedEBikeMac(this)
-        if (ebikeMac == null) {
-            Log.i(TAG_RADAR, "ebike: no bonded eBike found; status reader not started")
+        val ebikeMac = if (hasBlePermissions()) EBikeStatusReader.findBondedEBikeMac(this) else null
+        val startStage = eBikeStartStage(
+            featureEnabled = true,
+            blePermitted = hasBlePermissions(),
+            bondedMac = ebikeMac,
+        )
+        EBikeStateBus.setStage(startStage)
+        if (startStage != EBikeStage.WAITING || ebikeMac == null) {
+            linkJournal.log("ebike reader not started: $startStage")
             return
         }
         val reader = EBikeStatusReader(
@@ -532,7 +534,15 @@ class BikeRadarService : Service() {
                 ebikeSnapshotCoordinator.onSnapshot(snap)
                 EBikeStateBus.setSnapshot(snap)
             },
-            log = { m -> Log.i("BikeRadar.EBikeStatus", m) },
+            // Journalled as well as logged: every stage of this link used to
+            // reach logcat only, so a connect failure, a missing status
+            // characteristic and a failed subscribe all left the same trace as
+            // a healthy idle link - none. The journal is where the other two
+            // BLE links already record theirs, and it survives the session.
+            log = { m ->
+                Log.i("BikeRadar.EBikeStatus", m)
+                linkJournal.log(m)
+            },
             // Sink for the Debug "log unknown eBike object IDs" pinning
             // workflow. Always wired so flipping the toggle takes effect on
             // the next frame; the closure no-ops when the pref is off.

@@ -49,6 +49,7 @@ import es.jjrh.bikeradar.AttentionItem
 import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.ClosePassStateBus
+import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.isHollow
@@ -267,6 +268,7 @@ internal fun AttentionCard(items: List<AttentionItem>, onDismiss: (AttentionKind
 @Composable
 internal fun SystemCard(
     radarFresh: Boolean,
+    ebikeStage: EBikeStage = EBikeStage.NOT_STARTED,
     radarLimited: Boolean = false,
     radarConnecting: Boolean = false,
     hasBond: Boolean,
@@ -362,7 +364,15 @@ internal fun SystemCard(
         if (ebikeReceiving) {
             stringResource(R.string.main_system_value_live)
         } else {
-            stringResource(R.string.main_system_value_waiting_flow)
+            // "Waiting for Flow" is only true when the app is actually
+            // subscribed and nothing is arriving. The two precondition
+            // failures below are ours, not Flow's, and sending the rider to
+            // open Flow for them sends them where nothing can help.
+            when (ebikeStage) {
+                EBikeStage.NOT_PERMITTED -> stringResource(R.string.main_system_value_ebike_no_permission)
+                EBikeStage.NO_BONDED_BIKE -> stringResource(R.string.main_system_value_ebike_not_bonded)
+                else -> stringResource(R.string.main_system_value_waiting_flow)
+            }
         },
         muted = !ebikeReceiving,
         battery = ebikeBatteryChipSoc(ebikeReceiving, ebikeBatterySoc),

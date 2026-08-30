@@ -424,6 +424,7 @@ class BikeRadarService : Service() {
             releaseRideWakeLock = { rideWakeLock.release() },
         )
         radarLinkStateForUi = radarLinkCoordinator.radarLinkState
+        flushCaptureLogForUi = { captureLog.flushNow() }
         radarLink = RadarLinkController(
             context = this,
             scope = scope,
@@ -664,6 +665,7 @@ class BikeRadarService : Service() {
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
         macToSlug.clear()
         radarLinkStateForUi = null
+        flushCaptureLogForUi = null
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -1227,6 +1229,17 @@ class BikeRadarService : Service() {
         const val WALKAWAY_SNOOZE_MS = 2 * 60_000L
 
         @Volatile var activeCaptureLogName: String? = null
+            internal set
+
+        /** Push the open capture log's buffered tail to disk, so the Debug
+         *  screen can share a log that is still being written.
+         *
+         *  The writer is deliberately buffered (no autoFlush - it would cost a
+         *  syscall per BLE notify), so without this a shared in-progress log
+         *  ends mid-window and the last thing that happened, which is the part
+         *  a reporter cares about, is the part missing. Null while the service
+         *  is not running: nothing is open then, so nothing needs flushing. */
+        @Volatile var flushCaptureLogForUi: (() -> Unit)? = null
             internal set
 
         /** The radar link state, published for the Settings radar screen so it

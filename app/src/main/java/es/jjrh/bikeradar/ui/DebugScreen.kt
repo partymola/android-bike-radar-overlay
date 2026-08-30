@@ -278,6 +278,12 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             DebugCaptureLogList(
                 logFiles = logFiles,
                 onShare = { f ->
+                    // The log may still be open, and the writer is buffered on
+                    // purpose, so push its tail to disk first. Unconditional
+                    // because it is a no-op for a closed file and for a stopped
+                    // service, and because deciding here would mean trusting a
+                    // name comparison to get a data-loss question right.
+                    BikeRadarService.flushCaptureLogForUi?.invoke()
                     // V2: the dialog body gained the hardware identifiers a
                     // setup transcript records, so a rider who dismissed the
                     // old one has to see it once more. See the pref's KDoc for
@@ -651,22 +657,24 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
 }
 
 /**
- * Enumerate the shareable/deletable capture logs on disk (newest first),
- * excluding the log currently being written. Re-run after a delete so the
- * list reflects the true on-disk state rather than a stale in-memory copy.
+ * Enumerate the shareable/deletable capture logs on disk, newest first.
+ *
+ * INCLUDING the one currently being written, which used to be filtered out.
+ * That exclusion is reasonable for an ordinary ride log and wrong for the
+ * setup transcript, whose whole purpose is diagnosing a radar that never
+ * connects: it deliberately stays open across the reconnect loop, so hiding
+ * open files hid precisely the file a reporter needs, and getting at it meant
+ * a toggle-off dance that only works while the radar is still switched on.
+ * The row marks it as recording, flushes before sharing, and refuses delete.
+ *
+ * Re-run after a delete so the list reflects the true on-disk state rather
+ * than a stale in-memory copy.
  */
-private fun enumerateCaptureLogs(ctx: Context): List<File> {
-    val active = BikeRadarService.activeCaptureLogName
-    return ctx.getExternalFilesDir(null)
-        ?.let { File(it, CaptureLogManager.CAPTURE_DIR) }
-        ?.listFiles { f ->
-            CaptureLogFiles.isCaptureLog(f) &&
-                f.length() > 0L &&
-                f.name != active
-        }
-        ?.sortedByDescending { it.lastModified() }
-        ?: emptyList()
-}
+internal fun enumerateCaptureLogs(ctx: Context): List<File> = ctx.getExternalFilesDir(null)
+    ?.let { File(it, CaptureLogManager.CAPTURE_DIR) }
+    ?.listFiles { f -> CaptureLogFiles.isCaptureLog(f) && f.length() > 0L }
+    ?.sortedByDescending { it.lastModified() }
+    ?: emptyList()
 
 /**
  * Stateless leaf rendering the Replay/Synthetic scenario buttons.
@@ -811,7 +819,12 @@ internal fun DebugCaptureLogList(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             for (f in logFiles) {
-                CaptureLogCard(file = f, onShare = { onShare(f) }, onDelete = { onDelete(f) })
+                CaptureLogCard(
+                    file = f,
+                    onShare = { onShare(f) },
+                    onDelete = { onDelete(f) },
+                    isRecording = f.name == BikeRadarService.activeCaptureLogName,
+                )
             }
         }
     }
@@ -909,7 +922,12 @@ private fun DbgGhostButton(
 }
 
 @Composable
-private fun CaptureLogCard(file: File, onShare: () -> Unit, onDelete: () -> Unit) {
+private fun CaptureLogCard(
+    file: File,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    isRecording: Boolean = false,
+) {
     val br = LocalBrColors.current
     Row(
         modifier = Modifier
@@ -940,17 +958,31 @@ private fun CaptureLogCard(file: File, onShare: () -> Unit, onDelete: () -> Unit
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
             )
+            if (isRecording) {
+                Text(
+                    text = stringResource(R.string.debug_capture_log_recording),
+                    color = br.caution,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                )
+            }
         }
         DbgGhostButton(text = stringResource(R.string.debug_share), onClick = onShare)
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = stringResource(R.string.debug_delete_log_cd, file.name),
-                // Match the "Share" label's weight, not the dim caption grey -
-                // a no-undo destructive control shouldn't be the faintest thing
-                // in the row.
-                tint = br.fg,
-            )
+        // No delete while it is being written: the writer holds the file open,
+        // so a delete here removes the entry under a live PrintWriter and the
+        // rider loses the session they are in the middle of recording.
+        if (!isRecording) {
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.debug_delete_log_cd, file.name),
+                    // Match the "Share" label's weight, not the dim caption grey -
+                    // a no-undo destructive control shouldn't be the faintest thing
+                    // in the row.
+                    tint = br.fg,
+                )
+            }
         }
     }
 }

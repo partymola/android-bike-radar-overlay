@@ -629,7 +629,7 @@
     <string name="debug_write_capture_logs_title">Escribir registros de capturas</string>
     <string name="debug_write_capture_logs_subtitle">Desactivado por defecto. Registra cada paquete del radar, notificación BLE e instantánea de la eBike con tiempos exactos, además de la batería del teléfono y hacia qué lado giras - útil para informes de errores, pero son datos de nivel de seguimiento de rutas que se guardan en el teléfono. Surte efecto en la siguiente conexión del radar (el registro de la ruta actual termina igualmente).</string>
     <string name="debug_setup_transcript_title">Registrar el inicio de la conexión</string>
-    <string name="debug_setup_transcript_subtitle">Muestra por qué falla un radar que nunca conecta.\n• Requiere activar Escribir registros de capturas\n• El registro empieza al detectar el radar, así que cubre cada paso de la conexión\n• Puede incluir el modelo, el firmware y el número de serie de tu radar\n• Un mismo registro abarca todos los intentos, también en rutas posteriores\n• Desactiva esta opción al terminar, con el radar encendido: el registro se cierra y aparece en la lista</string>
+    <string name="debug_setup_transcript_subtitle">Muestra por qué falla un radar que nunca conecta.\n• Requiere activar Escribir registros de capturas\n• El registro empieza al detectar el radar, así que cubre cada paso de la conexión\n• Puede incluir el modelo, el firmware y el número de serie de tu radar\n• Un mismo registro abarca todos los intentos, también en rutas posteriores\n• Compártelo desde la lista de abajo cuando quieras, aunque siga grabando</string>
     <string name="debug_section_capture_logs">Registros de capturas</string>
     <string name="debug_no_capture_logs">Aún no hay registros de capturas.</string>
     <string name="debug_section_crashes">Fallos</string>
@@ -638,6 +638,7 @@
     <string name="debug_capture_logs_header">REGISTROS DE CAPTURAS</string>
     <string name="debug_delete_all">Eliminar todo</string>
     <string name="debug_share">Compartir</string>
+    <string name="debug_capture_log_recording">Sigue grabando. Puedes compartirlo ya.</string>
     <string name="debug_capture_log_meta"><xliff:g id="size_kb" example="12">%1$d</xliff:g> KB · <xliff:g id="modified">%2$s</xliff:g></string>
     <string name="debug_delete_log_cd">Eliminar <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g></string>
     <string name="debug_section_screenshot_capture">Captura de pantalla</string>

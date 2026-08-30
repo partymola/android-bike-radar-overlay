@@ -5,14 +5,18 @@ device names are used descriptively to state compatibility.*
 
 The app implements the Garmin Varia V2 (bonded) BLE radar protocol, documented
 in the companion [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs)
-repository. Compatibility follows from that protocol, so the matrix below is
-organised by what each device actually speaks, not by marketing family.
+repository, and falls back to the older V1 cleartext stream on a radar that
+exposes no V2 characteristic at all. Compatibility follows from those two
+protocols, so the matrix below is organised by what each device actually
+speaks, not by marketing family.
 
 Status legend: **Tested** = the author rides with it daily. **Expected** = same
 protocol family and the app's device detection already matches it, but nobody
 has confirmed it yet - a report either way is one of the most valuable
-contributions you can make. **No** = the device does not expose the protocol
-this app speaks.
+contributions you can make. **Limited** = the app can read the device's V1
+stream, which carries range and nothing else: proximity beeps and the all-clear
+work, the urgent warning, speed colours and close-pass logging cannot. **No** =
+the device exposes neither protocol over Bluetooth.
 
 ## Rear radar
 
@@ -23,7 +27,7 @@ this app speaks.
 | Garmin Varia RVR315 | ⚠️ Expected | Same family (radar-only, no light) |
 | Garmin Varia RCT715 | ⚠️ Expected | Same family (radar side only; the app never touches camera footage) |
 | Garmin Varia eRTL615 | ⚠️ Expected | Same family (eBike-powered variant) |
-| Garmin Varia RTL510 and older | ❌ No | Pre-BLE-V2 era (ANT+ / V1 only) |
+| Garmin Varia RTL510 and older | ⚠️ Limited at best | Pre-BLE-V2 era. If the unit exposes the V1 stream over Bluetooth the app reads it, range only; an ANT+-only unit cannot connect. Unconfirmed either way |
 | Non-Garmin radars (Bryton, Magene, Wahoo, Trek, Magicshine, Lezyne, CYCPLUS, Coospo, iGPSPORT, ...) | ❌ No | See below |
 
 **Why non-Garmin radars don't work:** there is no standard Bluetooth profile

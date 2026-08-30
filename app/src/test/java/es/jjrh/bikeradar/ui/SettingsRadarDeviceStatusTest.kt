@@ -47,8 +47,8 @@ class SettingsRadarDeviceStatusTest {
      *  asserting a string against itself stays green when the copy is gutted. */
     private val limitedSourceNote =
         "Limited radar: this one reports distance only. You get proximity beeps " +
-            "and the all-clear. No speed colours, no close-pass logging, and no " +
-            "warning if the radar drops out mid-ride."
+            "and the all-clear. No urgent warning, no speed colours, no close-pass " +
+            "logging, and no dropout warning unless your eBike is connected."
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var prefs: Prefs
@@ -232,9 +232,16 @@ class SettingsRadarDeviceStatusTest {
                 source = DataSource.V2,
             ),
         )
+        BatteryStateBus.update(BatteryEntry(slug = "rearvue8", name = "RearVue8", pct = 78))
 
         showScreen()
 
         composeRule.onNodeWithText("Connected").assertIsDisplayed()
+        // The chip's wiring from the battery bus through this screen is pinned
+        // nowhere else - the goldens render the stateless leaf with a literal
+        // percentage passed in, so dropping the body's lookup leaves every
+        // other test green and the rider with a blank chip. It is asserted in
+        // THIS test because the chip only renders while Connected.
+        composeRule.onNodeWithText("78%").assertIsDisplayed()
     }
 }

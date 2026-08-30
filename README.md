@@ -92,8 +92,14 @@ strip; the rest of your screen stays yours. (*Image credits
 | Garmin Varia RVR315 | ⚠️ Should work (unconfirmed) |
 | Garmin Varia RCT715 | ⚠️ Should work (unconfirmed) |
 | Garmin Varia eRTL615 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia RTL510 and older | ❌ No - pre-BLE (ANT+ / V1 only) |
+| Garmin Varia RTL510 and older | ⚠️ Limited at best (unconfirmed) - see below |
 | Non-Garmin radars (Wahoo, Bryton, Magene, Trek, ...) | ❌ No - [why](COMPATIBILITY.md) |
+
+"Limited at best" means the app will try the legacy cleartext stream on a
+radar that exposes no V2 characteristic. That stream carries range only,
+so proximity beeps and the all-clear work while the urgent warning, speed
+colours and close-pass logging cannot. Nobody has confirmed a radar of
+this generation either way, and an ANT+-only unit will not connect at all.
 
 Riding an "unconfirmed" one? A quick works / doesn't-work
 [report](../../issues) is the most valuable thing you can send. A manual
@@ -152,8 +158,12 @@ Store-listing metadata lives under `fastlane/metadata/android/`
   [`COMPATIBILITY.md`](COMPATIBILITY.md)) speaking the V2 (bonded)
   protocol. V2 requires a one-time LE Secure Connections pair via
   Android's own Bluetooth settings; the app does not attempt
-  `createBond()` itself. (Legacy V1 (cleartext) frames the radar emits
-  unsolicited are ignored; the app never subscribes the V1 channel.)
+  `createBond()` itself. A radar whose service table has no V2
+  characteristic at all falls back to the legacy cleartext stream, which
+  carries range and nothing else: proximity beeps and the all-clear work,
+  the urgent warning and close-pass logging cannot. A radar that does have
+  the V2 characteristic never gets the legacy subscribe, whatever the
+  handshake does.
 - Optional: Home Assistant for battery reporting and pushing close-pass
   and ride-summary events off the phone. See below for the bare-minimum
   HA-side set-up; the overlay, close-pass counting and ride history all
@@ -352,7 +362,9 @@ contributions are a hardware report from a radar the app hasn't seen
 before, and protocol corrections in the companion
 [`bike-radar-docs`](https://github.com/partymola/bike-radar-docs) repo.
 
-The app speaks the V2 (bonded) BLE rear-radar protocol. See
+The app speaks the V2 (bonded) BLE rear-radar protocol, and falls back to
+the range-only V1 cleartext stream on a radar that exposes no V2
+characteristic. See
 [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
 in the companion repository for the wire protocol, reference decoder,
 and unit tests.

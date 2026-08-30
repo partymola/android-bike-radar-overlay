@@ -573,6 +573,23 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_LINK_PROBE, v).apply()
         }
 
+    /** Packet tally from the last legacy-stream session, printed in the
+     *  diagnostic bundle beside [radarLinkProbe].
+     *
+     *  The probe says where a link STOPPED; this says what a link that got
+     *  all the way through actually carried. On a range-only radar those are
+     *  different questions, and the second one has no other answer: a silent
+     *  stream, an empty road, an unparsable stream and one that parses to
+     *  nothing are indistinguishable without the counts. Stored rather than
+     *  left in the link journal because a flapping link scrolls that journal's
+     *  line cap. Deliberately absent from [PrefsSnapshot]: no screen renders
+     *  it, and a reconnect loop would recompose the UI on every session. */
+    var radarLegacyTally: String?
+        get() = sp.getString(KEY_RADAR_LEGACY_TALLY, null)
+        set(v) {
+            sp.edit().putString(KEY_RADAR_LEGACY_TALLY, v).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -853,6 +870,9 @@ class Prefs(context: Context) {
         // Kept readable - it is the whole diagnostic - so it goes through the
         // address strip rather than redactPresence.
         appendLine("radar_link_probe=${redactAddresses(radarLinkProbe)}")
+        // Counts only, no identifiers, so it needs no strip - but it goes
+        // through the same one anyway rather than relying on that staying true.
+        appendLine("radar_legacy_tally=${redactAddresses(radarLegacyTally)}")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
@@ -921,6 +941,7 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"
         const val KEY_RADAR_FIRMWARE_REV = "radar_firmware_rev"
         const val KEY_RADAR_LINK_PROBE = "radar_link_probe"
+        const val KEY_RADAR_LEGACY_TALLY = "radar_legacy_tally"
 
         /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0
          *  (centred), then jumps to +/-[RADAR_LATERAL_OFFSET_MIN_CM] and runs in

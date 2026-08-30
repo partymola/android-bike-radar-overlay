@@ -243,6 +243,47 @@ class RadarV1SafetyTest {
         assertNull(d.feed(byteArrayOf(0x02, 0x81.toByte(), 10, 0x00, 0x00)))
     }
 
+    // ── the session tally, which is the only report a remote rider can send ──
+
+    @Test
+    fun theTallySeparatesTheWaysThisStreamCanFail() {
+        // Four outcomes present identically from outside the app: the link is
+        // up and no targets appear. Only these counts tell them apart, and on
+        // hardware nobody here owns that is the whole diagnostic.
+        val d = decoderAt { 1_000L }
+
+        // Empty road: heartbeats only.
+        d.feed(byteArrayOf(0x02))
+        d.feed(byteArrayOf(0x02))
+        assertEquals("frames=2 hb=2 threat=0 rec=0 unparsed=0", d.sessionTally(frames = 2))
+
+        // A packet family this decoder does not recognise: right length, wrong
+        // type nibble, so it is unparsed rather than a threat packet.
+        d.feed(byteArrayOf(0x03, 0x81.toByte(), 10, 0x00))
+        assertEquals("frames=3 hb=2 threat=0 rec=0 unparsed=1", d.sessionTally(frames = 3))
+
+        // A threat packet whose every record hits a sentinel: parsed, accepted
+        // nothing. Indistinguishable from the empty road without `threat`.
+        d.feed(byteArrayOf(0x02, 0x00, 10, 0x00))
+        assertEquals("frames=4 hb=2 threat=1 rec=0 unparsed=1", d.sessionTally(frames = 4))
+
+        // And a real one.
+        d.feed(threat(1 to 20))
+        assertEquals("frames=5 hb=2 threat=2 rec=1 unparsed=1", d.sessionTally(frames = 5))
+    }
+
+    @Test
+    fun endingASessionClearsTheTally() {
+        // reset() is what ends a session, so a decoder reused across two would
+        // otherwise report the first session's counts against the second.
+        val d = decoderAt { 1_000L }
+        d.feed(threat(1 to 20))
+        d.feed(byteArrayOf(0x02))
+        d.reset()
+
+        assertEquals("frames=0 hb=0 threat=0 rec=0 unparsed=0", d.sessionTally(frames = 0))
+    }
+
     // ── the ride record, where a zero would be published as a measurement ──
 
     /** Run a legacy approach through the accumulator and snapshot it. */

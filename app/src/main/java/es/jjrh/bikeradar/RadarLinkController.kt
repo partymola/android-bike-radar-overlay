@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -799,6 +800,12 @@ internal class RadarLinkController(
             if (!publishRadarBattery(gatt.device?.address, name, pct)) return
             captureLog.clog("# legacy battery $pct%")
             queue.writeCccd(gatt, ch)
+        } catch (e: CancellationException) {
+            // Cooperative cancellation (link teardown) - structured concurrency
+            // says re-throw so the launching scope sees it, rather than logging
+            // a shutdown as a battery-read failure and running on inside a job
+            // that is already dead.
+            throw e
         } catch (t: Throwable) {
             Log.w(TAG, "legacy battery read failed: $t")
         }
@@ -920,6 +927,17 @@ internal class RadarLinkController(
             }
         } finally {
             watchdog.cancel()
+            // The one line that separates the ways this stream can fail on
+            // hardware nobody here owns. Silent, heartbeat-only, unparsable,
+            // and parsed-to-nothing all present identically from outside:
+            // link up, no targets. Journalled unconditionally rather than to
+            // the capture log, so a reporter who never finds that toggle
+            // still sends something actionable. Stored too, because a
+            // flapping link scrolls the journal's line cap.
+            val tally = dec.sessionTally(frames)
+            journal("radar legacy stream ended $tally")
+            captureLog.clog("# legacy stream ended $tally")
+            prefs.radarLegacyTally = tally
             dec.reset()
         }
         return false

@@ -50,6 +50,42 @@ class RadarV1Decoder(
     private val tracks = HashMap<Int, Track>()
 
     /**
+     * Per-session packet tallies, for the one diagnostic line the link
+     * journals when a legacy session ends.
+     *
+     * They exist because `sync_log`-style "the stream was live" cannot
+     * separate the failure modes that matter on hardware nobody here owns.
+     * A silent stream, a stream of pure heartbeats over an empty road, a
+     * stream this decoder cannot parse, and a stream it parses to nothing
+     * because every record hits a sentinel all look identical from outside:
+     * the link is up and no targets appear. Only the counts tell them apart,
+     * and only the decoder can count them, because the packet classifier is
+     * private to it.
+     *
+     * Deliberately NOT behind the capture-log toggle: a reporter who never
+     * finds that switch still sends a diagnostic bundle, and this is the line
+     * that makes their report actionable.
+     */
+    var heartbeats: Int = 0
+        private set
+    var threatPackets: Int = 0
+        private set
+    var recordsAccepted: Int = 0
+        private set
+    var unparsedPackets: Int = 0
+        private set
+
+    /**
+     * One line naming which of the failure modes this session hit. Read by
+     * the link controller when the stream ends.
+     *
+     * `frames` counts every payload, so `frames == heartbeats` is an empty
+     * road and `frames == 0` is a radar that ACKed the subscribe and sent
+     * nothing at all.
+     */
+    fun sessionTally(frames: Int): String = "frames=$frames hb=$heartbeats threat=$threatPackets rec=$recordsAccepted unparsed=$unparsedPackets"
+
+    /**
      * Feed one notification payload. Returns a new [RadarState] when the
      * visible track set changed, else null.
      *
@@ -62,10 +98,19 @@ class RadarV1Decoder(
     fun feed(payload: ByteArray): RadarState? {
         val now = nowMs()
         val changed = when {
-            payload.size == 1 -> pruneStale(now)
+            payload.size == 1 -> {
+                heartbeats++
+                pruneStale(now)
+            }
             payload.size == 6 && payload[0] == 0x06.toByte() -> pruneStale(now)
-            isThreatPacket(payload) -> ingestThreat(payload, now)
-            else -> pruneStale(now)
+            isThreatPacket(payload) -> {
+                threatPackets++
+                ingestThreat(payload, now)
+            }
+            else -> {
+                unparsedPackets++
+                pruneStale(now)
+            }
         }
         return if (changed) snapshot(now) else null
     }
@@ -111,6 +156,7 @@ class RadarV1Decoder(
                 ),
                 lastSeen = now,
             )
+            recordsAccepted++
             changed = true
         }
         return changed
@@ -131,6 +177,15 @@ class RadarV1Decoder(
     /** Force-drop all tracks, e.g. on disconnect. */
     fun reset() {
         tracks.clear()
+        // The tallies are per SESSION, and reset is what ends one. Leaving
+        // them standing is harmless only while every caller builds a fresh
+        // decoder per session, which is a property of the caller rather than
+        // of this class; a reused decoder would then report one session's
+        // counts against the next and nothing would say so.
+        heartbeats = 0
+        threatPackets = 0
+        recordsAccepted = 0
+        unparsedPackets = 0
     }
 
     companion object {

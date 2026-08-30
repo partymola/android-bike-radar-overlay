@@ -74,6 +74,28 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun rangeOnlySourceIsColouredByRange() {
+        // The overlay's own call site for the source-aware colour choice, which
+        // no other golden reaches. On this source every closing speed is the
+        // fail-closed zero, so a speed-banded colour would paint a car bearing
+        // down at 5 m in the calm colour all the way in. Scored on range it
+        // renders in the danger colour, which is a quantity the radar actually
+        // measured and matches what the rider is hearing.
+        //
+        // The full-screen danger BORDER is deliberately absent here: it stays
+        // keyed on closing speed, so it can never fire on this source. Read
+        // RadarOverlayView's comment before "fixing" that.
+        overlay().apply {
+            setState(
+                RadarState(
+                    vehicles = listOf(Vehicle(id = 1, distanceM = 5, speedMs = 0f, lateralUnknown = true)),
+                    source = DataSource.V1,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
     fun closeApproach() {
         // Vehicle at 5 m triggers the danger-border highlight.
         overlay().apply {

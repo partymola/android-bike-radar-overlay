@@ -86,6 +86,14 @@ internal class RadarLinkController(
      *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
      *  production keeps the real connect path unchanged. */
     private val openGatt: (Context, BluetoothDevice, Boolean, BluetoothGattCallback) -> BluetoothGatt? = ::connectGattLe,
+    /** GATT-cache clear seam, defaulting to the reflection call. Injected so a
+     *  test can drive BOTH outcomes, which no harness can otherwise reach:
+     *  under Robolectric the hidden `refresh()` is absent, so the real call
+     *  always returns false and every test would silently pin the
+     *  refresh-failed branch - which is the branch that refuses the legacy
+     *  fallback. Without this seam the fallback's own success path is
+     *  unreachable from a test. */
+    private val refreshGatt: (BluetoothGatt) -> Boolean = { g -> refreshGattCacheByReflection(g) },
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
@@ -140,11 +148,16 @@ internal class RadarLinkController(
 
     private var linkProbeSeeded = false
 
-    // One cache refresh per reconnect loop before the legacy fallback is
-    // allowed to trust a "no V2 characteristic" reading. Loop-scoped rather
-    // than per-attempt so a genuine legacy radar pays the extra cycle once,
-    // and reset by runRadarConnection so a fresh link re-earns the check.
-    @Volatile private var legacyCacheRefreshed = false
+    // True once this reconnect loop has cleared the GATT cache SUCCESSFULLY,
+    // so the next discovery's table came from the device rather than from
+    // Android's per-device cache. The legacy fallback requires it. Loop-scoped
+    // rather than per-attempt so a genuine legacy radar pays the extra cycle
+    // once, and reset by runRadarConnection so a fresh link re-earns it.
+    //
+    // Named for the guarantee, not the attempt: a refresh that FAILED leaves
+    // the table exactly as untrustworthy as before, and a flag called
+    // "refreshed" invites the next reader to set it either way.
+    @Volatile private var legacyTableVerified = false
 
     // Set true when the current connection reaches the V2 decode loop; read
     // after connectAndRun returns to decide whether to reset the backoff.
@@ -318,7 +331,7 @@ internal class RadarLinkController(
         } ?: return
 
         currentRadarMac = mac
-        legacyCacheRefreshed = false
+        legacyTableVerified = false
         var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
         try {
             while (true) {
@@ -527,7 +540,7 @@ internal class RadarLinkController(
 
             if (handshakeAbort != null) {
                 val legacyChar = legacyStreamChar(gatt)
-                if (legacyChar != null && !legacyCacheRefreshed) {
+                if (legacyChar != null && !legacyTableVerified) {
                     // Do NOT trust a first-look table for this decision. Android
                     // serves discovery from a per-device cache that survives
                     // reboots for a bonded device, so a table can arrive
@@ -536,12 +549,26 @@ internal class RadarLinkController(
                     // missing only the V2 characteristic would pin a healthy
                     // radar out of its modern stream until it is power-cycled,
                     // which is the one outcome this fallback must never cause.
-                    // Clear the cache, take the reconnect, and decide next
-                    // attempt on a table the device actually sent.
-                    legacyCacheRefreshed = true
+                    //
+                    // So the flag is set from the REFRESH RESULT, not from
+                    // having tried. refresh() is a hidden method reached by
+                    // reflection and its own KDoc says a future Android could
+                    // remove it; on that day every table is unverifiable, and
+                    // the honest answer is that this device does not get the
+                    // fallback rather than that every radar gets pinned. The
+                    // rider degrades to the behaviour they had before the
+                    // feature existed. Same handling the stale-cache guard in
+                    // onServicesDiscovered already uses on the same call.
                     val refreshed = refreshGattCache(gatt)
+                    legacyTableVerified = refreshed
                     captureLog.clog("# legacy candidate; refreshing gatt cache first, refresh=$refreshed")
-                    journal("radar legacy candidate; cache refresh=$refreshed")
+                    journal(
+                        if (refreshed) {
+                            "radar legacy candidate; cache refresh=true"
+                        } else {
+                            "radar legacy fallback unavailable (cache refresh failed)"
+                        },
+                    )
                     gatt.disconnect()
                     return true
                 }
@@ -993,13 +1020,7 @@ internal class RadarLinkController(
      * Android release, so the call is wrapped in try/catch and the
      * caller falls back to the original behaviour on failure.
      */
-    private fun refreshGattCache(gatt: BluetoothGatt): Boolean = try {
-        val method = BluetoothGatt::class.java.getMethod("refresh")
-        method.invoke(gatt) as? Boolean ?: false
-    } catch (t: Throwable) {
-        Log.w(TAG, "BluetoothGatt.refresh() unavailable: $t")
-        false
-    }
+    private fun refreshGattCache(gatt: BluetoothGatt): Boolean = refreshGatt(gatt)
 
     /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
      *  a HIGH-priority notification + the NACK beep. Distinct notification ID
@@ -1112,4 +1133,26 @@ internal class RadarLinkController(
 
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
     }
+}
+
+/**
+ * Clears Android's cached GATT database for a device via the hidden
+ * `BluetoothGatt.refresh()`.
+ *
+ * Known Android workaround for a stale cache after a firmware-side service
+ * change; widely used in OSS BLE projects. Android caches the remote GATT
+ * database between connections, so if the peer's services changed since the
+ * cache was populated, discovery returns the stale list.
+ *
+ * The method is `@hide` and a future Android release could remove it, which is
+ * why this returns a Boolean rather than throwing: callers must decide what an
+ * unverifiable table means for them, and both callers in this file refuse to
+ * act on one rather than proceeding.
+ */
+private fun refreshGattCacheByReflection(gatt: BluetoothGatt): Boolean = try {
+    val method = BluetoothGatt::class.java.getMethod("refresh")
+    method.invoke(gatt) as? Boolean ?: false
+} catch (t: Throwable) {
+    Log.w("BikeRadar.Radar", "BluetoothGatt.refresh() unavailable: $t")
+    false
 }

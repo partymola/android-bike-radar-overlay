@@ -151,6 +151,12 @@ class RadarLinkControllerHarnessTest {
         returnNull: Boolean = false,
         setUp: (BluetoothGatt) -> Unit = ::setUpRadarServices,
         captureLog: CaptureLogManager = CaptureLogManager(externalFilesDir = { null }, captureLoggingEnabled = { false }),
+        // Defaults to SUCCESS, which is what a supported Android does. The real
+        // reflection call cannot be used here at all: Robolectric has no hidden
+        // refresh(), so it always returns false, and every legacy test would
+        // pin the refresh-FAILED branch - the one that refuses the fallback -
+        // while appearing to test the fallback itself.
+        refreshGatt: (BluetoothGatt) -> Boolean = { true },
     ): RadarLinkController = RadarLinkController(
         context = app,
         scope = backgroundScope,
@@ -165,6 +171,7 @@ class RadarLinkControllerHarnessTest {
         journal = { journal += it },
         clock = clock,
         wallClock = wallClock,
+        refreshGatt = refreshGatt,
         openGatt = { ctx, dev, _, cb ->
             link.openCount++
             link.cb = cb
@@ -908,9 +915,26 @@ class RadarLinkControllerHarnessTest {
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
+        // The cache clear comes FIRST and costs a whole reconnect cycle. Pin
+        // the order and the cost, not just the destination: without this the
+        // branch can be deleted outright and this test still passes, because
+        // the subscribe simply arrives one attempt earlier. That is exactly
+        // how a maintainer reads an unexplained extra reconnect and removes it.
+        assertTrue(
+            "the first legacy candidate must clear the cache, not subscribe",
+            pumpUntil { journalHas("radar legacy candidate; cache refresh=true") },
+        )
+        assertFalse(
+            "no subscribe may happen on the attempt that found the candidate",
+            journalHas("radar legacy stream subscribe"),
+        )
         assertTrue(
             "the fallback must run after the abort",
             pumpUntil { journalHas("radar legacy stream subscribe ok=true") },
+        )
+        assertTrue(
+            "the subscribe must land on a LATER connection than the candidate",
+            link.openCount >= 2,
         )
 
         // One threat packet: track 1 at 24 m, with the vehicle-present bit set.
@@ -998,6 +1022,47 @@ class RadarLinkControllerHarnessTest {
         assertTrue(
             "and it carries no phantom target",
             RadarStateBus.state.value.vehicles.isEmpty(),
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * When the cache clear FAILS, the fallback is refused outright.
+     *
+     * `BluetoothGatt.refresh()` is a hidden method reached by reflection, and
+     * a future Android could remove it. On that day no service table can be
+     * verified, and the choice is between refusing the fallback and pinning
+     * every V2 radar whose cached table happens to be missing 6a4e3204. The
+     * rider whose radar is genuinely legacy loses a feature they did not have
+     * before; the rider whose radar is healthy would lose V2 until they
+     * power-cycled it. This test is the argument for that trade, and it is
+     * reachable at all only because the refresh is an injected seam - the real
+     * call returns false under Robolectric, so before the seam existed every
+     * legacy test was silently pinning this branch while claiming to test the
+     * other one.
+     */
+    @Test fun aFailedCacheClearRefusesTheLegacyFallbackRatherThanRiskingThePin() = runTest {
+        val link = Link()
+        val controller = controller(
+            link,
+            setUp = ::setUpLegacyOnlyRadar,
+            refreshGatt = { false },
+        )
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(
+            "a failed cache clear must be journalled as the fallback being unavailable",
+            pumpUntil { journalHas("radar legacy fallback unavailable (cache refresh failed)") },
+        )
+        // Several further attempts, so this is a refusal and not merely a
+        // delay: the loop keeps retrying and must never reach the subscribe.
+        assertTrue(pumpUntil { link.openCount >= 3 })
+        assertFalse(
+            "an unverifiable table must never reach the legacy subscribe",
+            journalHas("radar legacy stream subscribe"),
         )
         controller.forceReconnect()
     }

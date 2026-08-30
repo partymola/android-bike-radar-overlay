@@ -253,6 +253,15 @@ class RadarLinkControllerHarnessTest {
         gatt.discoverServices()
     }
 
+    /** The same legacy radar, plus the standard battery service. That service
+     *  is the only battery reading such a radar can give: it aborts before the
+     *  setup sequence reaches its own battery step. */
+    private fun setUpLegacyOnlyRadarWithBattery(gatt: BluetoothGatt) {
+        addService(gatt, Uuids.SVC_RADAR, char(Uuids.RADAR_V1, propNotify, cccd = true))
+        addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propNotify or propRead, cccd = true))
+        gatt.discoverServices()
+    }
+
     /** A V2-capable radar whose handshake still aborts: the radar service has
      *  BOTH characteristics, so the fallback must refuse it however the
      *  handshake ends. This is the shape that would be pinned into the legacy
@@ -915,6 +924,103 @@ class RadarLinkControllerHarnessTest {
             pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } },
         )
         assertEquals(DataSource.V1, RadarStateBus.state.value.source)
+        controller.forceReconnect()
+    }
+
+    /**
+     * The legacy path reads the standard battery service, and follows its
+     * notifications afterwards.
+     *
+     * This is the ONLY battery a radar on this path can report. It aborts
+     * before the setup sequence reaches its own battery step, and the
+     * one-shot reader stands down while a link is live, so without this read
+     * the rider's battery chip stays empty for the whole ride.
+     */
+    @Test fun theLegacyPathReportsBatteryAndFollowsItsNotifications() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        // The driver answers the read with 0x64.
+        assertTrue(
+            "the one-shot read must reach the battery bus",
+            pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 100 },
+        )
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+
+        // And the subscribe is live: a later notification moves the value,
+        // which a read-once-and-forget path would leave stuck at 100 all ride.
+        requireNotNull(link.cb).onCharacteristicChanged(
+            requireNotNull(link.gatt),
+            requireNotNull(link.gatt).getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY),
+            byteArrayOf(0x2A),
+        )
+        assertTrue(
+            "a battery notification on the legacy link must update the bus",
+            pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 42 },
+        )
+        controller.forceReconnect()
+    }
+
+    /**
+     * A heartbeat that changes no track still publishes, so the link reads
+     * live.
+     *
+     * On an empty road heartbeats are the only traffic this stream carries.
+     * Publishing only on a changed track set would leave the last-published
+     * timestamp frozen at the moment the road cleared, and every consumer
+     * scoring liveness off it - the Settings card, the overlay, the drop cue -
+     * would call a perfectly healthy radar stale within seconds.
+     */
+    @Test fun aLegacyHeartbeatKeepsThePublishedStateFresh() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+
+        // A bare heartbeat on an empty road: the decoder has no track to
+        // prune, so it reports no change and returns nothing to publish.
+        // Publishing only on a decoder result would leave the bus untouched,
+        // which is the frozen-timestamp bug: nothing here would ever mark the
+        // source as live.
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02")
+        assertTrue(
+            "a no-change heartbeat must still reach the state bus",
+            pumpUntil { RadarStateBus.state.value.source == DataSource.V1 },
+        )
+        assertTrue(
+            "and it carries no phantom target",
+            RadarStateBus.state.value.vehicles.isEmpty(),
+        )
+        controller.forceReconnect()
+    }
+
+    /** A legacy stream that goes silent is torn down by the same watchdog the
+     *  V2 path uses. Without it a dead radar holds the link open and the
+     *  reconnect loop never gets to try again. */
+    @Test fun watchdogTearsDownSilentLegacyStream() = runTest {
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+
+        clockMs.set(1_000L + RadarLinkController.V2_FRAME_STALL_MS + 2_000L)
+        assertTrue(
+            "a silent legacy stream must be torn down by the watchdog",
+            pumpUntil { journalHas("radar legacy stream silent") },
+        )
         controller.forceReconnect()
     }
 

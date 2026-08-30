@@ -32,10 +32,6 @@ enum class DataSource {
     /** Per-target lateral offset. False on [V1]: no lateral channel exists,
      *  so every target can only be drawn on the centreline. */
     val hasLateral: Boolean get() = this == V2
-
-    /** The rider's own bike speed, from the device-status frame. False on
-     *  [V1], which has no such frame. */
-    val hasRiderSpeed: Boolean get() = this == V2
 }
 
 data class Vehicle(

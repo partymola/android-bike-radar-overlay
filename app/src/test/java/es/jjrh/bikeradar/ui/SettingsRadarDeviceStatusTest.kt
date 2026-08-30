@@ -43,6 +43,13 @@ class SettingsRadarDeviceStatusTest {
 
     @get:Rule val composeRule = createComposeRule()
 
+    /** The disclosure, spelled out rather than read from the resource: a test
+     *  asserting a string against itself stays green when the copy is gutted. */
+    private val limitedSourceNote =
+        "Limited radar: this one reports distance only. You get proximity beeps " +
+            "and the all-clear. No speed colours, no close-pass logging, and no " +
+            "warning if the radar drops out mid-ride."
+
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var prefs: Prefs
 
@@ -164,6 +171,52 @@ class SettingsRadarDeviceStatusTest {
         showScreen()
 
         composeRule.onNodeWithText("Connecting…").assertIsDisplayed()
+    }
+
+    @Test
+    fun aRangeOnlyRadarSaysWhatItCannotDo() {
+        // A rider whose radar streams range and nothing else gets a working
+        // overlay and working beeps, and silently loses speed colours,
+        // close-pass logging and the dropout warning. Without this line the
+        // card reads Connected and the missing half looks like a bug in the
+        // app rather than the limit of the hardware.
+        BikeRadarService.radarLinkStateForUi =
+            MutableStateFlow(RadarLinkState(radarGattActive = true))
+        RadarStateBus.publish(
+            RadarState(
+                vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true)),
+                timestamp = System.currentTimeMillis(),
+                source = DataSource.V1,
+            ),
+        )
+
+        showScreen()
+
+        composeRule.onNodeWithText("Connected").assertIsDisplayed()
+        composeRule
+            .onNodeWithText(limitedSourceNote)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun aFullRadarDoesNotCarryTheRangeOnlyNote() {
+        // The other half of the claim: the note is about the source, not
+        // decoration on every connected card.
+        BikeRadarService.radarLinkStateForUi =
+            MutableStateFlow(RadarLinkState(radarGattActive = true))
+        RadarStateBus.publish(
+            RadarState(
+                vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = -4f)),
+                timestamp = System.currentTimeMillis(),
+                source = DataSource.V2,
+            ),
+        )
+
+        showScreen()
+
+        composeRule
+            .onNodeWithText(limitedSourceNote)
+            .assertDoesNotExist()
     }
 
     @Test

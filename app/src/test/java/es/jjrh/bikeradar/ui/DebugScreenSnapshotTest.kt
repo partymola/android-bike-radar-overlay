@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.BikeRadarService
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -122,6 +123,32 @@ class DebugScreenSnapshotTest {
                     )
                 }
             }
+        }
+    }
+
+    @Test
+    fun logsWithOneStillRecording() {
+        // The row a hardware reporter actually needs: the setup transcript,
+        // still open, listed and shareable. It carries the recording caption
+        // and withholds delete, because the writer holds the file.
+        val recording = fakeLog(name = "bike-radar-capture-recording.log", kb = 6, mtime = pinnedMs)
+        val finished = fakeLog(name = "bike-radar-capture-finished.log.gz", kb = 3, mtime = pinnedMs - 3_600_000L)
+        BikeRadarService.activeCaptureLogName = recording.name
+        try {
+            captureRoboImage {
+                UiTheme {
+                    Column(Modifier.background(LocalBrColors.current.bg)) {
+                        DebugCaptureLogList(
+                            logFiles = listOf(recording, finished),
+                            onShare = {},
+                            onDelete = {},
+                            onDeleteAll = {},
+                        )
+                    }
+                }
+            }
+        } finally {
+            BikeRadarService.activeCaptureLogName = null
         }
     }
 

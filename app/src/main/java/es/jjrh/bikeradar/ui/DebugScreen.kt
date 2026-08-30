@@ -278,22 +278,12 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             DebugCaptureLogList(
                 logFiles = logFiles,
                 onShare = { f ->
-                    // The log may still be open, and the writer is buffered on
-                    // purpose, so push its tail to disk first. Unconditional
-                    // because it is a no-op for a closed file and for a stopped
-                    // service, and because deciding here would mean trusting a
-                    // name comparison to get a data-loss question right.
-                    BikeRadarService.flushCaptureLogForUi?.invoke()
-                    // V2: the dialog body gained the hardware identifiers a
-                    // setup transcript records, so a rider who dismissed the
-                    // old one has to see it once more. See the pref's KDoc for
-                    // why this is a second key and not a test of the transcript
-                    // toggle.
-                    if (prefs.captureLogShareWarningSeenV2) {
-                        shareFile(ctx, f)
-                    } else {
-                        pendingShareFile = f
-                    }
+                    onCaptureLogShareRequested(
+                        flush = BikeRadarService.flushCaptureLogForUi,
+                        warningSeen = prefs.captureLogShareWarningSeenV2,
+                        share = { shareFile(ctx, f) },
+                        requestWarning = { pendingShareFile = f },
+                    )
                 },
                 onDelete = { f ->
                     f.delete()
@@ -654,6 +644,32 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             },
         )
     }
+}
+
+/**
+ * What happens when the rider taps Share on a capture log.
+ *
+ * A function rather than a lambda body because both halves are easy to get
+ * wrong silently. [flush] must run FIRST and unconditionally: the log may still
+ * be open, the writer is buffered on purpose (autoFlush would cost a syscall
+ * per BLE notify), so without it a shared in-progress log ends mid-window and
+ * the last thing that happened is the part missing. It is a no-op for a closed
+ * file and null when the service is not running, so there is nothing to decide
+ * and no name comparison to get wrong.
+ *
+ * [warningSeen] reads the V2 key deliberately. The dialog body names the radar
+ * hardware identifiers a setup transcript records, so a rider who dismissed the
+ * older dialog has to meet it once more, and that rider is exactly the one
+ * filing a hardware report.
+ */
+internal fun onCaptureLogShareRequested(
+    flush: (() -> Unit)?,
+    warningSeen: Boolean,
+    share: () -> Unit,
+    requestWarning: () -> Unit,
+) {
+    flush?.invoke()
+    if (warningSeen) share() else requestWarning()
 }
 
 /**

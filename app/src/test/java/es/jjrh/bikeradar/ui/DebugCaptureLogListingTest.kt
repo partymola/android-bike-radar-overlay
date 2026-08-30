@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.CaptureLogManager
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +42,7 @@ class DebugCaptureLogListingTest {
     @After
     fun tearDown() {
         BikeRadarService.activeCaptureLogName = null
+        BikeRadarService.flushCaptureLogForUi = null
         capturesDir().listFiles()?.forEach { it.delete() }
     }
 
@@ -79,6 +81,62 @@ class DebugCaptureLogListingTest {
         val listed = enumerateCaptureLogs(app).map { it.name }
 
         assertTrue("a zero-byte log must not be offered: $listed", !listed.contains(empty.name))
+    }
+
+    @Test
+    fun sharingFlushesFirstAndOnlyThenAsksTheWarning() {
+        // Order is the point: an unflushed in-progress log is shared missing
+        // its most recent window, which is the part a reporter cares about.
+        val calls = mutableListOf<String>()
+        onCaptureLogShareRequested(
+            flush = { calls += "flush" },
+            warningSeen = false,
+            share = { calls += "share" },
+            requestWarning = { calls += "warn" },
+        )
+        assertEquals(listOf("flush", "warn"), calls)
+    }
+
+    @Test
+    fun sharingFlushesEvenWhenTheWarningIsAlreadySeen() {
+        val calls = mutableListOf<String>()
+        onCaptureLogShareRequested(
+            flush = { calls += "flush" },
+            warningSeen = true,
+            share = { calls += "share" },
+            requestWarning = { calls += "warn" },
+        )
+        assertEquals(listOf("flush", "share"), calls)
+    }
+
+    @Test
+    fun theServiceFlushHookIsInstallableInvokableAndClearable() {
+        // The contract the Debug screen depends on: present while the service
+        // runs, gone after it stops. A hook left installed past onDestroy would
+        // call into a released CaptureLogManager on the next share.
+        var flushed = 0
+        BikeRadarService.flushCaptureLogForUi = { flushed++ }
+        BikeRadarService.flushCaptureLogForUi?.invoke()
+        assertEquals(1, flushed)
+
+        BikeRadarService.flushCaptureLogForUi = null
+        BikeRadarService.flushCaptureLogForUi?.invoke()
+        assertEquals("a cleared hook must not still fire", 1, flushed)
+    }
+
+    @Test
+    fun sharingWorksWithNoServiceRunning() {
+        // The hook is null when the service is down, and a log from an earlier
+        // session is still shareable then. A non-null assertion here would
+        // crash the Debug screen for the commonest case: app open, ride over.
+        val calls = mutableListOf<String>()
+        onCaptureLogShareRequested(
+            flush = null,
+            warningSeen = true,
+            share = { calls += "share" },
+            requestWarning = { calls += "warn" },
+        )
+        assertEquals(listOf("share"), calls)
     }
 
     @Test

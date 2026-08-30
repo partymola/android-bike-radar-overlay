@@ -32,7 +32,7 @@ class CaptureLogShareWarningGateTest {
             "the share dialog must gate on captureLogShareWarningSeenV2; gating on the " +
                 "original key skips the hardware-identifier disclosure for every rider " +
                 "who dismissed the older dialog",
-            source.contains("if (prefs.captureLogShareWarningSeenV2)"),
+            source.contains("warningSeen = prefs.captureLogShareWarningSeenV2"),
         )
     }
 
@@ -53,11 +53,12 @@ class CaptureLogShareWarningGateTest {
     }
 
     /**
-     * The gate must not be keyed on the transcript toggle. That was tried and
-     * is inverted: the transcript is excluded from the Share list until it
-     * closes, and what closes it is the rider turning that toggle off, so the
-     * toggle reads false exactly when the file carrying identifiers becomes
-     * shareable.
+     * The gate must not be keyed on the transcript toggle, which was tried and
+     * is wrong in both directions. The toggle describes what the app is
+     * recording NOW, while the dialog is about what the file in the rider's
+     * hand contains: a transcript recorded earlier and shared after the toggle
+     * went off would skip the disclosure, and a plain ride log shared while the
+     * toggle happens to be on would claim identifiers it does not carry.
      */
     @Test
     fun theShareGateDoesNotDependOnTheTranscriptToggle() {

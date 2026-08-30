@@ -555,6 +555,14 @@ val diffCoverageExcludes = listOf(
     "**/ReplayService*.*",
     "**/SyntheticScenarioService*.*",
     "**/ScreenshotCaptureService*.*",
+    // Render/wiring leaf: its remaining bodies are Composable lambdas that
+    // pass arguments to functions elsewhere, and the harness cannot execute
+    // them - a Compose dialog is not reachable in this Robolectric setup, so
+    // a screen-level test cannot drive the confirm paths. Its capture-log
+    // DECISIONS live in ui/CaptureLogActions.kt, which is gated, unit-tested
+    // and mutation-checked. The exclusion is only honest while that stays
+    // true: logic added back into the screen file is silently ungated.
+    "**/DebugScreen*.*",
 )
 
 // AGP 9.3 emits Kotlin classes under built_in_kotlinc; if a future AGP moves

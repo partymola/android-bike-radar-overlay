@@ -63,6 +63,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.BuildConfigStamp
 import es.jjrh.bikeradar.CaptureLogFiles
 import es.jjrh.bikeradar.CaptureLogManager
 import es.jjrh.bikeradar.CrashLogger
@@ -997,6 +998,12 @@ private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
     val sb = StringBuilder()
     sb.appendLine("=== Bike Radar Diagnostic Bundle ===")
     sb.appendLine("Generated: ${Date()}")
+    // Which build produced this. A hand-built APK sent to one reporter carries
+    // no tag and shares its versionCode with every other build between
+    // releases, so without this line a pasted bundle cannot be tied to a tree.
+    // Release builds omit the commit unless deliberately stamped - see
+    // BuildStamp - so the line degrades to version and build type.
+    sb.appendLine(BuildConfigStamp.line().removePrefix("# "))
     sb.appendLine()
     sb.appendLine("--- Prefs ---")
     sb.appendLine(prefs.dumpAll())

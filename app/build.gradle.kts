@@ -167,8 +167,16 @@ android {
         // build-from-source check that dependenciesInfo below exists to pass.
         // A released build is already pinned by its tag. The debug buildType
         // fills these in, and onbtest inherits them via initWith(debug).
-        buildConfigField("String", "GIT_COMMIT", "\"\"")
-        buildConfigField("boolean", "GIT_DIRTY", "false")
+        //
+        // -Pbikeradar.stampCommit overrides that for a HAND-BUILT release APK
+        // sent to one reporter. Such a build is not a release: it carries no
+        // tag, so nothing else identifies which tree it came from, and two of
+        // them stamp identically at the same versionCode. The flag is opt-in
+        // precisely so the F-Droid path keeps building the reproducible bytes
+        // by default - never set it in a workflow that publishes.
+        val stampCommit = providers.gradleProperty("bikeradar.stampCommit").isPresent
+        buildConfigField("String", "GIT_COMMIT", if (stampCommit) "\"$gitCommit\"" else "\"\"")
+        buildConfigField("boolean", "GIT_DIRTY", if (stampCommit) "$gitDirty" else "false")
 
         vectorDrawables { useSupportLibrary = true }
     }

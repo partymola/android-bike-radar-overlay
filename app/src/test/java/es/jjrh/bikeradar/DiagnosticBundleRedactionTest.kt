@@ -57,4 +57,34 @@ class DiagnosticBundleRedactionTest {
             crashSection.contains("Prefs.redactAddresses("),
         )
     }
+
+    @Test
+    fun theBundleNamesTheBuildItCameFrom() {
+        // A hand-built APK sent to one reporter carries no tag and shares its
+        // versionCode with every build between releases, so without this the
+        // pasted bundle cannot be tied to a tree. It is deliberately here and
+        // not on a rendered screen: a screen would put the commit into every
+        // Roborazzi golden and force a re-record on each commit.
+        assertTrue(
+            "the bundle must state which build produced it",
+            source.contains("BuildConfigStamp.line()"),
+        )
+    }
+
+    @Test
+    fun noRenderedScreenShowsTheCommit() {
+        // The constraint that keeps the goldens stable. If a Composable ever
+        // renders the stamp, every golden carries the SHA and every commit
+        // invalidates all of them.
+        val uiDir = RepoFiles.mainSource("ui/DebugScreen.kt").parentFile
+        val offenders = uiDir?.listFiles { f: java.io.File -> f.name.endsWith(".kt") }
+            .orEmpty()
+            .filter { f ->
+                val text = f.readText()
+                text.contains("BuildConfigStamp.line()") && text.contains("Text(")
+            }
+            .map { it.name }
+            .filter { it != "DebugScreen.kt" }
+        assertEquals("no Composable may render the build stamp: $offenders", emptyList<String>(), offenders)
+    }
 }

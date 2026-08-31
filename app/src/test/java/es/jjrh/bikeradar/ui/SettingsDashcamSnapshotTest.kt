@@ -18,7 +18,10 @@ import org.robolectric.annotation.GraphicsMode
  * Variants cover the three ownership states the screen renders: NO
  * (top toggle only), YES with no device picked (toggle + Pick card),
  * and YES with a device picked (full set: device card, Behaviour
- * toggle, Walk-away alarm + DnD row + threshold slider).
+ * toggle, Walk-away alarm + DnD row + threshold slider). A picked
+ * camera that is not advertising gets its own golden: it is the state
+ * a rider arrives in from the home row, and while it had none the card
+ * could stop naming the state without a pixel changing.
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -39,6 +42,7 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = null,
                     dashcamWarnWhenOff = false,
                     dashcamConnected = false,
+                    btEnabled = true,
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = false,
                     walkAwayThreshold = 30,
@@ -66,8 +70,37 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = null,
                     dashcamWarnWhenOff = false,
                     dashcamConnected = false,
+                    btEnabled = true,
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = false,
+                    walkAwayThreshold = 30,
+                    canBypassDnd = false,
+                    onOwnershipChange = {},
+                    onPickDeviceClick = {},
+                    onWarnWhenOffChange = {},
+                    onWalkAwayEnabledChange = {},
+                    onWalkAwayThresholdChange = {},
+                    onWalkAwayThresholdFinished = {},
+                    onOverrideDndClick = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun ownershipYesPickedNoSignal() {
+        captureRoboImage {
+            UiTheme {
+                SettingsDashcamContent(
+                    navController = rememberNavController(),
+                    ownership = DashcamOwnership.YES,
+                    dashcamMac = "00:11:22:33:44:55",
+                    dashcamDisplayName = "Front cam",
+                    dashcamWarnWhenOff = true,
+                    dashcamConnected = false,
+                    btEnabled = true,
+                    dashcamBatteryPct = null,
+                    walkAwayAlarmEnabled = true,
                     walkAwayThreshold = 30,
                     canBypassDnd = false,
                     onOwnershipChange = {},
@@ -93,6 +126,7 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = "Front cam",
                     dashcamWarnWhenOff = true,
                     dashcamConnected = true,
+                    btEnabled = true,
                     dashcamBatteryPct = 64,
                     walkAwayAlarmEnabled = true,
                     walkAwayThreshold = 30,

@@ -41,7 +41,6 @@ class SystemRowTapTest {
                     dashcamOwned = true,
                     dashcamFresh = true,
                     dashcamPaired = true,
-                    dashcamDisplayName = "Front cam",
                     radarBattery = null,
                     dashcamBattery = null,
                     haStatus = HaStatus.READY,

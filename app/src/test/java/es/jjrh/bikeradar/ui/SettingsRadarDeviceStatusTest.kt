@@ -35,8 +35,11 @@ import org.robolectric.Shadows.shadowOf
  * radar - the goldens render only the stateless leaf, so only this test
  * exercises the wiring from the service's published link state to the card.
  * The claim under test: a radar the service holds a live GATT link to reads
- * "Connecting…", never the old blanket "Not in range" - and with the service
- * down, "Not in range" is what renders, because then it is true.
+ * "Connecting…", never the blanket "No signal", and with the service down
+ * "No signal" is what renders, because then it is true.
+ *
+ * The words are the shared device vocabulary, so these literals are also
+ * what the home System row says about the same radar.
  */
 @RunWith(RobolectricTestRunner::class)
 class SettingsRadarDeviceStatusTest {
@@ -81,6 +84,37 @@ class SettingsRadarDeviceStatusTest {
     }
 
     @Test
+    fun twoBondedRadarsAndNoPinStillReadsTheLiveState() {
+        // Every other test here bonds exactly ONE radar, which makes "is there
+        // a radar" and "which radar" the same question and lets a wiring that
+        // asks the wrong one pass. They are not the same: with two bonded and
+        // none pinned, RadarSelection.shouldLinkRadar falls back to name-match
+        // and streams from one, while no name can be resolved. A card asking
+        // "which" reads "Not paired" over that live stream, and the rider is
+        // sent to re-pair a radar that is beeping at traffic.
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val second = adapter.getRemoteDevice("AA:BB:CC:DD:EE:22")
+        shadowOf(second).setName("RearVue8 spare")
+        val first = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        shadowOf(adapter).setBondedDevices(setOf(first, second))
+
+        BikeRadarService.radarLinkStateForUi =
+            MutableStateFlow(RadarLinkState(radarGattActive = true))
+        RadarStateBus.publish(
+            RadarState(
+                vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = -4f)),
+                timestamp = System.currentTimeMillis(),
+                source = DataSource.V2,
+            ),
+        )
+
+        showScreen()
+
+        composeRule.onNodeWithText("Live").assertIsDisplayed()
+        composeRule.onNodeWithText("Not paired").assertDoesNotExist()
+    }
+
+    @Test
     fun liveLinkWithoutDataYetReadsConnecting() {
         BikeRadarService.radarLinkStateForUi =
             MutableStateFlow(RadarLinkState(radarGattActive = true))
@@ -91,12 +125,12 @@ class SettingsRadarDeviceStatusTest {
     }
 
     @Test
-    fun serviceDownReadsNotInRange() {
+    fun serviceDownReadsNoSignal() {
         BikeRadarService.radarLinkStateForUi = null
 
         showScreen()
 
-        composeRule.onNodeWithText("Not in range").assertIsDisplayed()
+        composeRule.onNodeWithText("No signal").assertIsDisplayed()
     }
 
     @Test
@@ -117,7 +151,7 @@ class SettingsRadarDeviceStatusTest {
     }
 
     @Test
-    fun aDropOlderThanTheBridgeReadsNotInRange() {
+    fun aDropOlderThanTheBridgeReadsNoSignal() {
         // The exit from CONNECTING, which the entry tests above cannot see. A
         // widened bridge window, or a wiring that ignores offSinceMs entirely
         // and treats any published state as "connecting", leaves the card
@@ -132,7 +166,7 @@ class SettingsRadarDeviceStatusTest {
 
         showScreen()
 
-        composeRule.onNodeWithText("Not in range").assertIsDisplayed()
+        composeRule.onNodeWithText("No signal").assertIsDisplayed()
     }
 
     @Test
@@ -145,7 +179,7 @@ class SettingsRadarDeviceStatusTest {
         BikeRadarService.radarLinkStateForUi = null
 
         showScreen()
-        composeRule.onNodeWithText("Not in range").assertIsDisplayed()
+        composeRule.onNodeWithText("No signal").assertIsDisplayed()
 
         BikeRadarService.radarLinkStateForUi =
             MutableStateFlow(RadarLinkState(radarGattActive = true))
@@ -192,7 +226,10 @@ class SettingsRadarDeviceStatusTest {
 
         showScreen()
 
-        composeRule.onNodeWithText("Connected").assertIsDisplayed()
+        // "Limited", not "Live": green is the app's "you are covered" signal
+        // and this link cannot raise the urgent cue. Same word the home row
+        // uses for the same radar.
+        composeRule.onNodeWithText("Limited").assertIsDisplayed()
         composeRule
             .onNodeWithText(limitedSourceNote)
             .assertIsDisplayed()
@@ -220,8 +257,8 @@ class SettingsRadarDeviceStatusTest {
     }
 
     @Test
-    fun freshDecodedFramesReadConnected() {
-        // The positive half: what Connected now means is that the radar is
+    fun freshDecodedFramesReadLive() {
+        // The positive half: what "Live" means is that the radar is
         // delivering targets, which is the question the rider is asking.
         BikeRadarService.radarLinkStateForUi =
             MutableStateFlow(RadarLinkState(radarGattActive = true))
@@ -236,7 +273,7 @@ class SettingsRadarDeviceStatusTest {
 
         showScreen()
 
-        composeRule.onNodeWithText("Connected").assertIsDisplayed()
+        composeRule.onNodeWithText("Live").assertIsDisplayed()
         // The chip's wiring from the battery bus through this screen is pinned
         // nowhere else - the goldens render the stateless leaf with a literal
         // percentage passed in, so dropping the body's lookup leaves every

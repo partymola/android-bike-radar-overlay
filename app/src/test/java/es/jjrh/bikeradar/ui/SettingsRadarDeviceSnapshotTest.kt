@@ -3,7 +3,6 @@ package es.jjrh.bikeradar.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
-import es.jjrh.bikeradar.RadarConnStatus
 import es.jjrh.bikeradar.RadarSelection
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,9 +11,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Roborazzi goldens for the Radar device-link screen, via the stateless
- * [SettingsRadarDeviceContent] leaf. Locks the four states: connected,
- * not-in-range (offline), never-paired (pair prompt), and the ambiguous
- * multi-radar selection list.
+ * [SettingsRadarDeviceContent] leaf. Locks the four states: live, no-signal
+ * (offline), never-paired (pair prompt), and the ambiguous multi-radar
+ * selection list.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -33,7 +32,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTED,
+                    link = DeviceLinkState.LIVE,
                     batteryPct = 78,
                 )
             }
@@ -54,9 +53,8 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTED,
+                    link = DeviceLinkState.LIMITED,
                     batteryPct = 78,
-                    limitedSource = true,
                 )
             }
         }
@@ -73,7 +71,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTED,
+                    link = DeviceLinkState.LIVE,
                     batteryPct = 78,
                     offsetCm = 15,
                 )
@@ -92,7 +90,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTED,
+                    link = DeviceLinkState.LIVE,
                     batteryPct = 78,
                     firmwareRev = "6.70",
                 )
@@ -111,7 +109,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTING,
+                    link = DeviceLinkState.CONNECTING,
                     batteryPct = null,
                 )
             }
@@ -127,7 +125,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.NOT_IN_RANGE,
+                    link = DeviceLinkState.NO_SIGNAL,
                     batteryPct = null,
                 )
             }
@@ -143,7 +141,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = emptyList(),
                     chosenMac = null,
                     activeName = null,
-                    status = RadarConnStatus.NOT_IN_RANGE,
+                    link = DeviceLinkState.NOT_PAIRED,
                     batteryPct = null,
                 )
             }
@@ -161,12 +159,34 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA),
                     chosenMac = null,
                     activeName = radarA.name,
-                    status = RadarConnStatus.NOT_IN_RANGE,
+                    link = DeviceLinkState.NO_SIGNAL,
                     batteryPct = null,
                     others = listOf(
                         RadarSelection.BondedRadar("CC:CC:CC:CC:CC:CC", "Pixel Watch"),
                         RadarSelection.BondedRadar("DD:DD:DD:DD:DD:DD", "OffBrandRadar"),
                     ),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun twoRadarsNonePinned() {
+        // The genuinely ambiguous case, which `ambiguousTwoRadars` below does
+        // NOT render (it pins one). The app streams from a name-matched radar
+        // while no name can be resolved, so the title falls to "Not selected"
+        // over a live status line. That pair is the visible result of asking
+        // "is there a radar" separately from "which radar", and it appeared
+        // in no golden.
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = listOf(radarA, radarB),
+                    chosenMac = null,
+                    activeName = null,
+                    link = DeviceLinkState.LIVE,
+                    batteryPct = 82,
                 )
             }
         }
@@ -181,7 +201,7 @@ class SettingsRadarDeviceSnapshotTest {
                     bonded = listOf(radarA, radarB),
                     chosenMac = radarA.mac,
                     activeName = radarA.name,
-                    status = RadarConnStatus.CONNECTED,
+                    link = DeviceLinkState.LIVE,
                     batteryPct = 82,
                 )
             }

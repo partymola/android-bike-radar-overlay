@@ -279,7 +279,6 @@ internal fun SystemCard(
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
     dashcamPaired: Boolean,
-    dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
@@ -302,13 +301,21 @@ internal fun SystemCard(
 ) {
     val br = LocalBrColors.current
 
-    // Three-state device vocabulary (from the UX converger):
-    //   Not paired      - grey hollow ring
-    //   No signal       - amber
-    //   Live            - green, solid
-    // Plus: BT off shown ONCE as a card-level banner, never per-row.
+    // `linked` means bonded AND the transport is up, per deviceLinkState's
+    // own contract. Bluetooth off therefore reads NOT_PAIRED, and the reason
+    // is named exactly once above this card - by the banner, or by the hero
+    // when the hero is already the Bluetooth-off card - never per-row.
     //
-    // Battery chip hides outside Live to avoid surfacing stale numbers.
+    // The radar gets the transport half for free and cannot be given anything
+    // else: `getBondedDevices` returns an EMPTY SET with the adapter off, so
+    // with the radio down the app genuinely cannot tell whether a radar is
+    // bonded. The camera's state comes from stored prefs, which survive the
+    // radio, so its conjunct is spelled out to keep the two rows agreeing
+    // rather than splitting into "Not paired" and "No signal" at the same
+    // instant for the same cause.
+    //
+    // Battery chip follows isDelivering, so a range-only radar still shows a
+    // percentage: it is a fact about the device, not a claim about cover.
     val radarLink = deviceLinkState(
         linked = btEnabled && hasBond,
         fresh = radarFresh,
@@ -318,15 +325,9 @@ internal fun SystemCard(
     val radarRow = SystemRow(
         icon = Icons.Default.Sensors,
         label = stringResource(R.string.main_system_rear_radar),
-        value = when (radarLink) {
-            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_not_paired)
-            DeviceLinkState.LIVE -> stringResource(R.string.main_system_value_live)
-            DeviceLinkState.LIMITED -> stringResource(R.string.main_system_value_limited)
-            DeviceLinkState.CONNECTING -> stringResource(R.string.main_system_value_connecting)
-            DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
-        },
+        value = stringResource(radarLinkLabel(radarLink)),
         muted = radarLink.muted,
-        battery = if (radarFresh) radarBattery?.pct else null,
+        battery = if (radarLink.isDelivering) radarBattery?.pct else null,
         dot = when (radarLink) {
             DeviceLinkState.NOT_PAIRED -> br.fgDim
             DeviceLinkState.LIVE -> br.safe
@@ -340,25 +341,20 @@ internal fun SystemCard(
         target = SystemRowTarget.RADAR,
     )
 
-    val dashcamLink = deviceLinkState(linked = dashcamOwned && dashcamPaired, fresh = dashcamFresh)
+    val dashcamLink = deviceLinkState(
+        linked = btEnabled && dashcamOwned && dashcamPaired,
+        fresh = dashcamFresh,
+    )
     val dashcamRow = SystemRow(
         icon = Icons.Default.Videocam,
         label = stringResource(R.string.main_system_front_dashcam),
-        value = when (dashcamLink) {
-            // Camera-specific keys: this row is labelled "Cámara" in Spanish
-            // and the shared values agree with the masculine radar row.
-            DeviceLinkState.NOT_PAIRED -> stringResource(R.string.main_system_value_cam_not_paired)
-            DeviceLinkState.LIVE -> dashcamDisplayName ?: stringResource(R.string.main_system_value_cam_live)
-            // The camera row derives from battery adverts only, so it never
-            // asks for these two today. Mapped rather than defaulted so that
-            // adding a light-link signal here is a deliberate edit, not an
-            // else-branch silently absorbing a new state.
-            DeviceLinkState.LIMITED -> stringResource(R.string.main_system_value_limited)
-            DeviceLinkState.CONNECTING -> stringResource(R.string.main_system_value_connecting)
-            DeviceLinkState.NO_SIGNAL -> stringResource(R.string.main_system_value_no_signal)
-        },
+        // The state, not the device's name. Every other row in this card
+        // answers "is it working", and a row that answered "Front cam"
+        // instead was the odd one out - the radar row never named its device
+        // either, and the rider has only one camera to be told about.
+        value = stringResource(dashcamLinkLabel(dashcamLink)),
         muted = dashcamLink.muted,
-        battery = if (dashcamFresh) dashcamBattery?.pct else null,
+        battery = if (dashcamLink.isDelivering) dashcamBattery?.pct else null,
         dot = when (dashcamLink) {
             DeviceLinkState.NOT_PAIRED -> br.fgDim
             DeviceLinkState.LIVE -> br.safe
@@ -374,20 +370,7 @@ internal fun SystemCard(
     val ebikeRow = SystemRow(
         icon = Icons.AutoMirrored.Filled.DirectionsBike,
         label = stringResource(R.string.main_system_ebike),
-        value =
-        if (ebikeReceiving) {
-            stringResource(R.string.main_system_value_live)
-        } else {
-            // "Waiting for Flow" is only true when the app is actually
-            // subscribed and nothing is arriving. The two precondition
-            // failures below are ours, not Flow's, and sending the rider to
-            // open Flow for them sends them where nothing can help.
-            when (ebikeStage) {
-                EBikeStage.NOT_PERMITTED -> stringResource(R.string.main_system_value_ebike_no_permission)
-                EBikeStage.NO_BONDED_BIKE -> stringResource(R.string.main_system_value_ebike_not_bonded)
-                else -> stringResource(R.string.main_system_value_waiting_flow)
-            }
-        },
+        value = stringResource(ebikeStatusLabel(ebikeReceiving, ebikeStage)),
         muted = !ebikeReceiving,
         battery = ebikeBatteryChipSoc(ebikeReceiving, ebikeBatterySoc),
         dot = if (ebikeReceiving) br.safe else br.caution,
@@ -400,12 +383,7 @@ internal fun SystemCard(
     val haRow = SystemRow(
         icon = Icons.Default.Home,
         label = stringResource(R.string.main_system_home_assistant),
-        value = when (haStatus) {
-            HaStatus.NOT_CONFIGURED -> stringResource(R.string.main_system_value_not_configured)
-            HaStatus.CONFIGURED -> stringResource(R.string.main_system_value_configured)
-            HaStatus.READY -> stringResource(R.string.main_system_value_mqtt_ready)
-            HaStatus.UNREACHABLE -> stringResource(R.string.main_system_value_unreachable)
-        },
+        value = stringResource(haStatusLabel(haStatus)),
         muted = haStatus.isMuted,
         battery = null,
         dot = when (haStatus) {

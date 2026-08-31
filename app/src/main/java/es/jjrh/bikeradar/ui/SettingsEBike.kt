@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.ServiceNotifications
@@ -87,6 +88,7 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         }
     }
     val receiving = eBikeDataIsFresh(lastUpdated, tickNowMs)
+    val stage by EBikeStateBus.stage.collectAsState()
     val dataOnMsg = stringResource(R.string.settings_ebike_data_on_toast)
     val dataOffMsg = stringResource(R.string.settings_ebike_data_off_toast)
     var forgotToLock by rememberSaveable { mutableStateOf(prefs.forgotToLockAlertEnabled) }
@@ -103,6 +105,7 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         ownership = prefsSnap.eBikeOwnership,
         eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
         receiving = receiving,
+        stage = stage,
         forgotToLockEnabled = forgotToLock,
         canBypassDnd = canBypassDnd,
         onOwnershipYes = {
@@ -143,6 +146,11 @@ internal fun SettingsEBikeContent(
     ownership: EBikeOwnership,
     eBikeDataEnabled: Boolean,
     receiving: Boolean,
+    /** Why nothing is arriving, when nothing is. Deliberately not defaulted:
+     *  a caller that forgets it renders NOT_STARTED, which reads as "Waiting
+     *  for Flow" and sends a rider missing a Bluetooth grant to open an app
+     *  that cannot help them. */
+    stage: EBikeStage,
     forgotToLockEnabled: Boolean,
     canBypassDnd: Boolean,
     onOwnershipYes: () -> Unit,
@@ -210,15 +218,20 @@ internal fun SettingsEBikeContent(
                     SettingsRow(
                         icon = Icons.AutoMirrored.Filled.DirectionsBike,
                         iconTint = if (receiving) br.safe else br.fgMuted,
-                        title = if (receiving) {
-                            stringResource(R.string.settings_ebike_receiving)
-                        } else {
-                            stringResource(R.string.settings_ebike_waiting)
-                        },
-                        subtitle = if (receiving) {
-                            stringResource(R.string.settings_ebike_receiving_subtitle)
-                        } else {
-                            stringResource(R.string.settings_ebike_waiting_subtitle)
+                        // The same word the home System row uses, so a rider
+                        // who taps that row is not met with a synonym. The
+                        // subtitle carries what to do about it, which is why
+                        // the two precondition failures need their own: the
+                        // "open Flow and ride" line is wrong advice for a
+                        // missing permission or an unpaired bike.
+                        title = stringResource(ebikeStatusLabel(receiving, stage)),
+                        subtitle = when {
+                            receiving -> stringResource(R.string.settings_ebike_receiving_subtitle)
+                            stage == EBikeStage.NOT_PERMITTED ->
+                                stringResource(R.string.settings_ebike_no_permission_subtitle)
+                            stage == EBikeStage.NO_BONDED_BIKE ->
+                                stringResource(R.string.settings_ebike_not_bonded_subtitle)
+                            else -> stringResource(R.string.settings_ebike_waiting_subtitle)
                         },
                         onClick = {},
                         clickable = false,

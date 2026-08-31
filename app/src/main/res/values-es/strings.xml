@@ -116,26 +116,50 @@
     <string name="main_bt_banner_title">Bluetooth apagado</string>
     <string name="main_bt_banner_action">Toca para activarlo</string>
 
-    <!-- Tarjeta SISTEMA: filas por dispositivo y su texto de valor. -->
+    <!-- Tarjeta SISTEMA: etiquetas de fila por dispositivo. El texto de
+         estado sale del vocabulario compartido de abajo. -->
     <string name="main_section_system">Sistema</string>
     <string name="main_system_rear_radar">Radar trasero</string>
     <string name="main_system_front_dashcam">Cámara delantera</string>
     <string name="main_system_ebike">eBike</string>
     <string name="main_system_home_assistant">Home Assistant</string>
-    <string name="main_system_value_not_paired">No emparejado</string>
-    <string name="main_system_value_live">Activo</string>
-    <string name="main_system_value_limited">Limitado</string>
-    <string name="main_system_value_connecting">Conectando…</string>
-    <string name="main_system_value_no_signal">Sin señal</string>
-    <string name="main_system_value_cam_not_paired">No emparejada</string>
-    <string name="main_system_value_cam_live">Activa</string>
-    <string name="main_system_value_ebike_no_permission">Falta permiso de Bluetooth</string>
-    <string name="main_system_value_ebike_not_bonded">eBike sin emparejar</string>
-    <string name="main_system_value_waiting_flow">Esperando a Flow</string>
-    <string name="main_system_value_mqtt_ready">MQTT listo</string>
-    <string name="main_system_value_unreachable">Inaccesible</string>
-    <string name="main_system_value_not_configured">Sin configurar</string>
-    <string name="main_system_value_configured">Configurado</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Vocabulario de estado de dispositivo (DeviceStatusLabels.kt)
+
+         UN solo juego de palabras para "¿este dispositivo está
+         funcionando ahora?", que leen todas las pantallas que responden
+         a eso. Las filas de Sistema navegan, así que quien toca una fila
+         que pone "Sin señal" tiene que aterrizar en una pantalla que
+         ponga lo mismo. Nunca añadas un sinónimo local de pantalla.
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="device_status_not_paired">No emparejado</string>
+    <string name="device_status_live">Activo</string>
+    <string name="device_status_limited">Limitado</string>
+    <string name="device_status_connecting">Conectando…</string>
+    <string name="device_status_no_signal">Sin señal</string>
+    <!-- Formas de la cámara: femenino, para "la Cámara". "Sin señal" y
+         "Conectando…" no llevan género y los comparten ambos. -->
+    <string name="device_status_cam_not_paired">No emparejada</string>
+    <string name="device_status_cam_live">Activa</string>
+    <string name="device_status_cam_limited">Limitada</string>
+    <!-- Formas de la eBike: femenino, para "la eBike". -->
+    <string name="device_status_ebike_live">Activa</string>
+    <string name="device_status_ebike_no_permission">Falta permiso de Bluetooth</string>
+    <!-- Sin "eBike" en el valor: la fila ya se llama "eBike". Y en femenino,
+         como la cámara: un mismo estado no puede tener tres redacciones. -->
+    <string name="device_status_ebike_not_bonded">No emparejada</string>
+    <string name="device_status_waiting_flow">Esperando a Flow</string>
+    <string name="device_status_ha_not_configured">Sin configurar</string>
+    <string name="device_status_ha_configured">Configurado</string>
+    <string name="device_status_ha_ready">MQTT listo</string>
+    <string name="device_status_ha_unreachable">Sin conexión</string>
+    <!-- Las filas de Conexiones en Ajustes responden dos cosas a la vez: si el
+         dispositivo está configurado, y si funciona ahora. La segunda mitad
+         sale del vocabulario de arriba. -->
+    <string name="settings_home_conn_two_part"><xliff:g id="setup" example="Emparejado">%1$s</xliff:g> · <xliff:g id="status" example="Sin señal">%2$s</xliff:g></string>
+    <string name="settings_home_conn_paired">Emparejado</string>
+    <string name="settings_home_conn_paired_cam">Emparejada</string>
 
     <!-- Tarjeta de estadísticas de PASES CERCANOS. -->
     <string name="main_section_close_passes">Adelantamientos ajustados</string>
@@ -268,8 +292,6 @@
     <string name="settings_home_quick_status">De un vistazo</string>
     <string name="settings_home_chip_radar">Radar</string>
     <string name="settings_home_chip_cam">Cámara</string>
-    <string name="settings_home_chip_radar_not_seen">No detectado</string>
-    <string name="settings_home_chip_cam_not_seen">No detectada</string>
     <string name="settings_home_section_ride">Ruta</string>
     <string name="settings_home_section_connections">Conexiones</string>
     <string name="settings_home_section_system">Sistema</string>
@@ -301,21 +323,16 @@
     <string name="settings_home_lights_rear_only">Trasera <xliff:g id="state" example="on">%1$s</xliff:g></string>
     <string name="settings_home_lights_summary">Trasera <xliff:g id="rear" example="on">%1$s</xliff:g> · Delantera <xliff:g id="front" example="off">%2$s</xliff:g></string>
     <string name="settings_home_lights_all_off">Apagadas</string>
-    <string name="settings_home_conn_connected">Conectado · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
-    <string name="settings_home_conn_connected_cam">Conectada · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
-    <string name="settings_home_conn_not_connected">No conectado</string>
+    <!-- Avisos de configuración. Se quedan aquí porque son instrucciones para
+         un dispositivo sin configurar, no un estado de conexión. -->
     <string name="settings_home_ebike_setup">Configura tu eBike</string>
     <string name="settings_home_dont_have_one">No tengo</string>
     <string name="settings_home_ebike_off">Desactivada</string>
-    <string name="settings_home_ebike_on">Activada</string>
+    <!-- "Datos activados", no "Activada": la fila la acompaña el estado del
+         enlace, y "Activada · Activa" se lee como un tartamudeo. -->
+    <string name="settings_home_ebike_on">Datos activados</string>
     <string name="settings_home_dashcam_setup">Configura tu cámara delantera</string>
-    <string name="settings_home_dashcam_paired_named"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · emparejada</string>
-    <string name="settings_home_dashcam_paired">Emparejada</string>
     <string name="settings_home_dashcam_pick">Elige un dispositivo</string>
-    <string name="settings_home_ha_not_configured">Sin configurar</string>
-    <string name="settings_home_ha_issue">Problema de conexión</string>
-    <string name="settings_home_ha_mqtt_ready">Conectado · MQTT listo</string>
-    <string name="settings_home_ha_configured">Configurado</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_all_off">Todo desactivado</string>
     <string name="settings_home_exp_active">Activado: <xliff:g id="features" example="Precog">%1$s</xliff:g></string>
@@ -414,10 +431,6 @@
     <string name="settings_radardev_pair_title">Empareja tu radar</string>
     <string name="settings_radardev_pair_subtitle">Pon el radar en modo de emparejamiento y luego emparéjalo en los ajustes de Bluetooth de Android.</string>
     <string name="settings_radardev_not_selected">No seleccionado</string>
-    <string name="settings_radardev_pick_radar">Elige abajo el radar de esta bici</string>
-    <string name="settings_radardev_connected">Conectado</string>
-    <string name="settings_radardev_not_in_range">Fuera de alcance</string>
-    <string name="settings_radardev_connecting">Conectando…</string>
     <string name="settings_radardev_limited_source">Este radar solo mide la distancia. Tienes pitidos de aproximación y el aviso de vía despejada, y los colores de la superposición muestran distancia en vez de velocidad. Sin aviso urgente, sin registro de adelantamientos ajustados y sin sonido de aviso si el radar se desconecta, salvo que la eBike esté conectada.</string>
     <string name="settings_radardev_choose_radar">Elige el radar de esta bici</string>
     <string name="settings_radardev_selected">Seleccionado</string>
@@ -452,10 +465,6 @@
     <string name="settings_ha_chip_mqtt_ready">MQTT: listo</string>
     <string name="settings_ha_chip_mqtt_error">MQTT: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_published_entities">Tus entidades</string>
-    <string name="settings_ha_connected">Conectado</string>
-    <string name="settings_ha_not_configured">Sin configurar</string>
-    <string name="settings_ha_configured">Configurado</string>
-    <string name="settings_ha_unreachable">Problema de conexión</string>
     <string name="settings_ha_entities_look_up_in_ha">Tus ID de entidad están en HA: Ajustes → Dispositivos y servicios → Entidades.</string>
     <string name="settings_ha_entities_after_publishing">Aparecen en HA cuando la app haya publicado: Ajustes → Dispositivos y servicios → Entidades.</string>
     <string name="settings_ha_nothing_published_yet">Guardado. Aún no se ha publicado nada.</string>
@@ -477,10 +486,11 @@
     <string name="settings_ebike_use_data_subtitle_off">Actívalo para mostrar la batería y el estado de la eBike en la pantalla de inicio.</string>
     <string name="settings_ebike_use_data_subtitle_on">Batería y estado - se muestran mientras Bosch Flow se ejecuta en segundo plano.</string>
     <string name="settings_ebike_status_label">Estado</string>
-    <string name="settings_ebike_receiving">Recibiendo datos en tiempo real</string>
-    <string name="settings_ebike_waiting">Esperando a Bosch Flow</string>
+    <!-- Los títulos salen del vocabulario compartido; esto dice qué hacer. -->
     <string name="settings_ebike_receiving_subtitle">Batería y estado de la ruta de tu bici.</string>
     <string name="settings_ebike_waiting_subtitle">Abre Flow y rueda - los datos aparecen aquí automáticamente.</string>
+    <string name="settings_ebike_no_permission_subtitle">Concede acceso a Bluetooth en Ajustes → Permisos.</string>
+    <string name="settings_ebike_not_bonded_subtitle">Empareja tu eBike en los ajustes de Bluetooth de Android.</string>
     <string name="settings_ebike_alerts_label">Avisos</string>
     <string name="settings_ebike_forgot_lock_title">Aviso de olvido de bloqueo</string>
     <string name="settings_ebike_forgot_lock_subtitle">Hace vibrar tu reloj si te alejas sin haber bloqueado la bici.</string>

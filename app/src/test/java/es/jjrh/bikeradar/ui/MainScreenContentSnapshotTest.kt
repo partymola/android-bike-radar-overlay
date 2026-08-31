@@ -96,7 +96,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -140,7 +139,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -184,7 +182,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -230,7 +227,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -272,7 +268,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -312,7 +307,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -354,7 +348,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -401,13 +394,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        // A device name, not the row's own label: these two
-                        // fixtures feed the public es store screenshots, and
-                        // repeating the label made the row read as a
-                        // duplication bug. Mirrors the en pair, "Front
-                        // dashcam" / "Front cam". Not a real product name -
-                        // these images are published.
-                        dashcamDisplayName = "Cam frontal",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -454,7 +440,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -499,13 +484,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        // A device name, not the row's own label: these two
-                        // fixtures feed the public es store screenshots, and
-                        // repeating the label made the row read as a
-                        // duplication bug. Mirrors the en pair, "Front
-                        // dashcam" / "Front cam". Not a real product name -
-                        // these images are published.
-                        dashcamDisplayName = "Cam frontal",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -547,7 +525,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = true,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = dashcamBattery,
                         haStatus = HaStatus.READY,
@@ -586,7 +563,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = false,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = null,
                         dashcamBattery = null,
                         haStatus = HaStatus.READY,
@@ -625,7 +601,6 @@ class MainScreenContentSnapshotTest {
                         dashcamOwned = true,
                         dashcamFresh = false,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = radarBattery,
                         dashcamBattery = null,
                         haStatus = HaStatus.READY,
@@ -657,14 +632,24 @@ class MainScreenContentSnapshotTest {
                         ),
                         cta = StatusCta(label = "Turn on Bluetooth", onClick = {}),
                         btEnabled = false,
-                        showBtOffBanner = true,
+                        // False, because the hero IS the Bluetooth-off card
+                        // here. Production computes this as `!btEnabled &&
+                        // !heroIsBtOff`, so it never shows both; a fixture
+                        // passing true rendered the message twice, which the
+                        // rider never sees.
+                        showBtOffBanner = false,
                         showDashcamPrompt = false,
                         radarFresh = false,
-                        hasBond = true,
+                        // hasBond FALSE with the radio off, because that is
+                        // the only pair hardware produces: getBondedDevices
+                        // returns an empty set while the adapter is down, so
+                        // the app cannot know a radar is bonded. Robolectric's
+                        // shadow ignores adapter state, so nothing else here
+                        // would have caught the impossible combination.
+                        hasBond = false,
                         dashcamOwned = true,
                         dashcamFresh = false,
                         dashcamPaired = true,
-                        dashcamDisplayName = "Front cam",
                         radarBattery = null,
                         dashcamBattery = null,
                         haStatus = HaStatus.UNREACHABLE,

@@ -113,6 +113,11 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
         dashcamConnected = dashcamConnected,
+        // Re-read on the same tick as the freshness above. Without it this
+        // screen calls the camera paired while the row that opened it calls
+        // it not paired, which is the disagreement the shared vocabulary
+        // exists to remove.
+        btEnabled = remember(tickNowMs) { bluetoothIsOn(ctx) },
         dashcamBatteryPct = if (dashcamConnected) dashcamBattery.pct else null,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
@@ -156,6 +161,10 @@ internal fun SettingsDashcamContent(
     dashcamDisplayName: String?,
     dashcamWarnWhenOff: Boolean,
     dashcamConnected: Boolean,
+    /** Deliberately no default: a caller that forgets it would render a
+     *  camera as paired while the radio is off, which is the exact
+     *  disagreement with the home row this parameter exists to prevent. */
+    btEnabled: Boolean,
     dashcamBatteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     walkAwayAlarmEnabled: Boolean,
@@ -226,23 +235,31 @@ internal fun SettingsDashcamContent(
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            // Dot-only status next to the device name —
-                            // green solid for Live, amber pulse for No
-                            // signal, grey hollow for Not paired. The
-                            // word lives on Main; here it'd duplicate.
+                            // Same vocabulary as the home System row, from the
+                            // same mapping: a rider arrives here by tapping
+                            // that row, so the state must survive the journey
+                            // and must not be carried by colour alone.
+                            val link = deviceLinkState(
+                                linked = btEnabled && dashcamMac != null,
+                                fresh = dashcamConnected,
+                            )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                val notPaired = dashcamMac == null
                                 StatusDot(
-                                    color = when {
-                                        notPaired -> br.fgDim
-                                        dashcamConnected -> br.safe
+                                    color = when (link) {
+                                        DeviceLinkState.NOT_PAIRED -> br.fgDim
+                                        DeviceLinkState.LIVE -> br.safe
                                         else -> br.caution
                                     },
-                                    hollow = notPaired,
+                                    hollow = link.hollow,
                                     size = 6.dp,
+                                )
+                                Text(
+                                    text = stringResource(dashcamLinkLabel(link)),
+                                    color = br.fgMuted,
+                                    fontSize = 12.sp,
                                 )
                                 if (dashcamConnected && dashcamBatteryPct != null) {
                                     BatteryChip(pct = dashcamBatteryPct, lowThresholdPct = batteryLowThresholdPct)

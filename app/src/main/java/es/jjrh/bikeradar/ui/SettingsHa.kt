@@ -408,16 +408,11 @@ private fun ConnectionStateCard(status: HaStatus, health: HaHealth) {
         StatusDot(color = accent, size = 8.dp)
         Column {
             Text(
-                text = when (status) {
-                    HaStatus.READY -> stringResource(R.string.settings_ha_connected)
-                    HaStatus.NOT_CONFIGURED -> stringResource(R.string.settings_ha_not_configured)
-                    HaStatus.CONFIGURED -> stringResource(R.string.settings_ha_configured)
-                    // Its own title. Sharing CONFIGURED's left the failure
-                    // state headed "Configured", with only the accent colour
-                    // and the subtitle to say otherwise; this matches the
-                    // Settings menu's wording for the same state.
-                    HaStatus.UNREACHABLE -> stringResource(R.string.settings_ha_unreachable)
-                },
+                // The same word the home row and the Settings menu use. Each
+                // of these three surfaces once had its own: READY was
+                // "Connected" here, "Connected · MQTT ready" in the menu and
+                // "MQTT ready" on the home card, for one state of one link.
+                text = stringResource(haStatusLabel(status)),
                 color = accent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

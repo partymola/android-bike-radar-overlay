@@ -2,6 +2,9 @@
 package es.jjrh.bikeradar.ui
 
 import android.content.Context
+import android.content.Intent
+import android.os.SystemClock
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -52,7 +57,10 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DeviceNameMatcher
+import es.jjrh.bikeradar.EBikeStage
+import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
@@ -60,12 +68,19 @@ import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.PermissionsSummary
 import es.jjrh.bikeradar.PermissionsSummaryDeriver
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarLinkState
+import es.jjrh.bikeradar.RadarLinkStatus
+import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.eBikeDataIsFresh
+import es.jjrh.bikeradar.radarStreamIsLive
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
+import android.provider.Settings as AndroidSettings
 
 /**
  * Settings home. NavHost-routed home that links to per-section sub-screens,
@@ -131,6 +146,62 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
         ?.takeIf { batteryReadIsFresh(it.readAtMs, tickNowMs) }
 
+    // The radar is scored on decoded frames, not on the battery entry above.
+    // This screen used to answer "is the radar there" from a battery read
+    // alone, which the radar's own screen already refuses to do: the setup
+    // sequence publishes a reading on every attempt that reaches its battery
+    // step, so an aborting radar keeps one permanently fresh while sending no
+    // targets. The battery is still rendered, it just no longer decides.
+    val radarState by RadarStateBus.state.collectAsState()
+    val noRadarLinkFlow = remember { MutableStateFlow(RadarLinkState()) }
+    val radarLinkSnap by (BikeRadarService.radarLinkStateForUi ?: noRadarLinkFlow).collectAsState()
+    // Polled, not read on every recomposition: this body recomposes on each
+    // decoded radar frame, and `bondedDevices` is a binder round-trip to the
+    // Bluetooth process. The 5 s cadence matches the home screen's.
+    var radarSelected by remember { mutableStateOf(radarIsSelected(ctx, prefs.radarMac)) }
+    var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Resume-first, then loop, like the tick above. A delay-first loop
+            // leaves the Bluetooth-off banner and both "Not paired" rows
+            // standing for five seconds after the rider comes back from the
+            // system Bluetooth screen the banner itself sent them to.
+            radarSelected = radarIsSelected(ctx, prefs.radarMac)
+            btEnabled = bluetoothIsOn(ctx)
+            while (true) {
+                delay(5_000)
+                radarSelected = radarIsSelected(ctx, prefs.radarMac)
+                btEnabled = bluetoothIsOn(ctx)
+            }
+        }
+    }
+
+    val radarLink = deviceLinkState(
+        // Bonded AND the transport up, per deviceLinkState's contract. The
+        // radar cannot opt out of the transport half even if we wanted it to:
+        // `getBondedDevices` returns an empty set with the adapter off, so
+        // `radarSelected` is already false there.
+        linked = btEnabled && radarSelected,
+        fresh = radarStreamIsLive(radarState, tickNowMs),
+        limited = radarState.source == DataSource.V1,
+        connecting = RadarLinkStatus.isConnecting(
+            gattActive = radarLinkSnap.radarGattActive,
+            offSinceMs = radarLinkSnap.radarOffSinceMs,
+            nowMs = SystemClock.elapsedRealtime(),
+        ),
+    )
+    val dashcamLink = deviceLinkState(
+        // The camera's pairing lives in prefs, which outlive the radio, so
+        // the transport half is spelled out here to match the radar rather
+        // than letting the two rows give one cause two different words.
+        linked = btEnabled &&
+            prefsSnap.dashcamOwnership == DashcamOwnership.YES &&
+            prefsSnap.dashcamMac != null,
+        fresh = dashcamBattery != null,
+    )
+    val ebikeLastUpdated by EBikeStateBus.lastUpdatedElapsedMs.collectAsState()
+    val ebikeStage by EBikeStateBus.stage.collectAsState()
+
     val grantedCount = PERMISSIONS.count { isSpecGranted(ctx, it) }
     val requiredMissing = PERMISSIONS.count { it.required && !isSpecGranted(ctx, it) }
 
@@ -138,8 +209,13 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         navController = navController,
         devUnlocked = devUnlocked,
         prefsSnap = prefsSnap,
+        btEnabled = btEnabled,
+        radarLink = radarLink,
+        dashcamLink = dashcamLink,
         radarBattery = radarBattery,
         dashcamBattery = dashcamBattery,
+        ebikeReceiving = eBikeDataIsFresh(ebikeLastUpdated, SystemClock.elapsedRealtime()),
+        ebikeStage = ebikeStage,
         haConfigured = haConfigured,
         haHealth = haHealth,
         permissionsGrantedCount = grantedCount,
@@ -158,8 +234,21 @@ internal fun SettingsMenuBody(
     navController: NavController,
     devUnlocked: Boolean,
     prefsSnap: es.jjrh.bikeradar.data.PrefsSnapshot,
+    /** Radio off makes both radio-backed rows read "Not paired", which is what
+     *  `linked` means: bonded AND the transport up. The banner names the cause
+     *  once, so the word is never left unexplained; the home screen shows the
+     *  same one, and suppresses it when its hero already says Bluetooth is
+     *  off. */
+    btEnabled: Boolean,
+    /** Classified by the same [deviceLinkState] the home System card uses, so
+     *  the quick-status chip, the Connections row and the home row cannot
+     *  give one device three different words. */
+    radarLink: DeviceLinkState,
+    dashcamLink: DeviceLinkState,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
+    ebikeReceiving: Boolean,
+    ebikeStage: EBikeStage,
     haConfigured: Boolean,
     haHealth: HaHealth,
     permissionsGrantedCount: Int,
@@ -176,8 +265,27 @@ internal fun SettingsMenuBody(
         ) {
             SettingsHeader(title = stringResource(R.string.common_settings), onBack = { navController.popBackStack() })
 
+            if (!btEnabled) {
+                Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
+                    BluetoothOffBanner(
+                        onTap = {
+                            ctx.startActivity(
+                                Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        },
+                    )
+                }
+            }
+
             // System health card (the small one at the top of Settings)
             SystemHealthBar(
+                radarLink = radarLink,
+                dashcamLink = dashcamLink,
+                // A rider who answered "I don't have one" has nothing to say
+                // about a camera, and "Not paired" invites them to pair a
+                // device they told us does not exist.
+                showDashcam = prefsSnap.dashcamOwnership != DashcamOwnership.NO,
                 radarBattery = radarBattery,
                 dashcamBattery = dashcamBattery,
                 batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
@@ -212,21 +320,40 @@ internal fun SettingsMenuBody(
                     icon = Icons.Default.Sensors,
                     iconTint = br.brand,
                     title = stringResource(R.string.settings_home_radar_title),
-                    subtitle = radarConnectionSubtitle(ctx, radarBattery),
+                    subtitle = connectionSubtitle(
+                        ctx,
+                        setUp = R.string.settings_home_conn_paired
+                            .takeIf { radarLink != DeviceLinkState.NOT_PAIRED },
+                        status = radarLinkLabel(radarLink),
+                    ),
                     onClick = { navController.navigate("settings/radar-device") },
                 )
                 SettingsRow(
                     icon = Icons.Default.Videocam,
                     iconTint = br.dashcam,
                     title = stringResource(R.string.settings_home_dashcam_title),
-                    subtitle = dashcamConnectionSubtitle(ctx, prefsSnap, dashcamBattery),
+                    subtitle = dashcamSetupPrompt(ctx, prefsSnap) ?: connectionSubtitle(
+                        ctx,
+                        // Guarded like the radar row even though the prompt
+                        // above already covers every NOT_PAIRED case today.
+                        // Unguarded, one change to what feeds `linked` yields
+                        // "Paired · Not paired", and the asymmetry is what
+                        // made that reachable once already.
+                        setUp = R.string.settings_home_conn_paired_cam
+                            .takeIf { dashcamLink != DeviceLinkState.NOT_PAIRED },
+                        status = dashcamLinkLabel(dashcamLink),
+                    ),
                     onClick = { navController.navigate("settings/dashcam") },
                 )
                 SettingsRow(
                     icon = Icons.AutoMirrored.Filled.DirectionsBike,
                     iconTint = br.brand,
                     title = stringResource(R.string.settings_home_ebike_title),
-                    subtitle = eBikeSubtitle(ctx, prefsSnap),
+                    subtitle = eBikeSetupPrompt(ctx, prefsSnap) ?: connectionSubtitle(
+                        ctx,
+                        setUp = R.string.settings_home_ebike_on,
+                        status = ebikeStatusLabel(ebikeReceiving, ebikeStage),
+                    ),
                     onClick = { navController.navigate("settings/ebike") },
                 )
                 SettingsRow(
@@ -323,6 +450,9 @@ internal fun SettingsMenuBody(
 
 @Composable
 private fun SystemHealthBar(
+    radarLink: DeviceLinkState,
+    dashcamLink: DeviceLinkState,
+    showDashcam: Boolean,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     batteryLowThresholdPct: Int,
@@ -346,28 +476,44 @@ private fun SystemHealthBar(
         ) {
             SystemHealthChip(
                 label = stringResource(R.string.settings_home_chip_radar),
-                notSeen = stringResource(R.string.settings_home_chip_radar_not_seen),
-                battery = radarBattery,
+                status = stringResource(radarLinkLabel(radarLink)),
+                battery = radarBattery?.takeIf { radarLink.isDelivering },
                 batteryLowThresholdPct = batteryLowThresholdPct,
-                color = if (radarBattery != null) br.safe else br.fgDim,
+                color = chipColour(radarLink, br),
                 modifier = Modifier.weight(1f),
             )
-            SystemHealthChip(
-                label = stringResource(R.string.settings_home_chip_cam),
-                notSeen = stringResource(R.string.settings_home_chip_cam_not_seen),
-                battery = dashcamBattery,
-                batteryLowThresholdPct = batteryLowThresholdPct,
-                color = if (dashcamBattery != null) br.safe else br.fgDim,
-                modifier = Modifier.weight(1f),
-            )
+            if (showDashcam) {
+                SystemHealthChip(
+                    label = stringResource(R.string.settings_home_chip_cam),
+                    status = stringResource(dashcamLinkLabel(dashcamLink)),
+                    battery = dashcamBattery?.takeIf { dashcamLink.isDelivering },
+                    batteryLowThresholdPct = batteryLowThresholdPct,
+                    color = chipColour(dashcamLink, br),
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
     }
+}
+
+/**
+ * Same colour rule as the home System row and the device screens: grey only
+ * for a device that is not set up, amber for one that is set up and not
+ * delivering. The chip used grey for both, so it said "nothing to see here"
+ * about a radar that had dropped mid-ride.
+ */
+private fun chipColour(link: DeviceLinkState, br: BrColors) = when (link) {
+    DeviceLinkState.NOT_PAIRED -> br.fgDim
+    DeviceLinkState.LIVE -> br.safe
+    else -> br.caution
 }
 
 @Composable
 private fun SystemHealthChip(
     label: String,
-    notSeen: String,
+    status: String,
     battery: BatteryEntry?,
     batteryLowThresholdPct: Int,
     color: androidx.compose.ui.graphics.Color,
@@ -381,37 +527,39 @@ private fun SystemHealthChip(
     ) {
         StatusDot(color = color, size = 6.dp)
         Text(text = label, color = br.fgMuted, fontSize = 12.sp)
+        // The state is always named, never left to the dot, and it is the
+        // same word the home row and the device's own screen use. The chip
+        // previously said "Not seen" for what those two called "No signal".
+        Text(
+            text = status,
+            color = br.fgFaint,
+            fontSize = 11.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (battery != null) {
             BatteryChip(pct = battery.pct, lowThresholdPct = batteryLowThresholdPct)
-        } else {
-            Text(
-                text = notSeen,
-                color = br.fgFaint,
-                fontSize = 11.sp,
-            )
         }
     }
 }
 
-// Connections rows carry live connection status in their subtitles (the
-// top card is now just a glanceable "Quick Status"). A recent battery read
-// is the app's proxy for "connected".
-private fun radarConnectionSubtitle(ctx: Context, radarBattery: BatteryEntry?): String = if (radarBattery != null) {
-    ctx.getString(R.string.settings_home_conn_connected, radarBattery.pct)
+/**
+ * A Connections row answers two questions: is this device set up, and is it
+ * working right now. [setUp] is the first half and null when it is not set up
+ * yet, in which case that fact is the whole answer and there is no link to
+ * describe. [status] is the second half, and it is the shared vocabulary, so
+ * the row, the quick-status chip above it and the device's own screen all use
+ * one word.
+ *
+ * Battery is deliberately absent: the quick-status chips at the top of this
+ * same screen already carry it, and the row previously said "Connected · 85%"
+ * a finger's width below a chip saying the same percentage.
+ */
+internal fun connectionSubtitle(ctx: Context, @StringRes setUp: Int?, @StringRes status: Int): String = if (setUp == null) {
+    ctx.getString(status)
 } else {
-    ctx.getString(R.string.settings_home_conn_not_connected)
-}
-
-private fun dashcamConnectionSubtitle(
-    ctx: Context,
-    snap: es.jjrh.bikeradar.data.PrefsSnapshot,
-    dashcamBattery: BatteryEntry?,
-): String = if (dashcamBattery != null) {
-    // Camera-specific key: this row is labelled "Cámara" in Spanish, which
-    // inflects the adjective the radar row's key carries in the masculine.
-    ctx.getString(R.string.settings_home_conn_connected_cam, dashcamBattery.pct)
-} else {
-    dashcamSubtitle(ctx, snap)
+    ctx.getString(R.string.settings_home_conn_two_part, ctx.getString(setUp), ctx.getString(status))
 }
 
 // One row now summarises both lights. Radar-first (matches the consolidated
@@ -433,36 +581,36 @@ internal fun lightsSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnap
     }
 }
 
-private fun eBikeSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.eBikeOwnership) {
+/**
+ * What to do about a device that is not set up yet, or null once it is and a
+ * link state is the honest answer.
+ *
+ * These are instructions, not statuses, which is why they are allowed to
+ * differ from the shared vocabulary. The line they replaced was not: a paired
+ * camera read "Front cam · paired" here while the home row called the same
+ * camera "No signal", so the row answered a question about pairing that the
+ * rider had not asked.
+ */
+private fun eBikeSetupPrompt(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String? = when (snap.eBikeOwnership) {
     es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED -> ctx.getString(R.string.settings_home_ebike_setup)
     es.jjrh.bikeradar.data.EBikeOwnership.NO -> ctx.getString(R.string.settings_home_dont_have_one)
-    es.jjrh.bikeradar.data.EBikeOwnership.YES -> when {
-        !snap.eBikeDataEnabled -> ctx.getString(R.string.settings_home_ebike_off)
-        else -> ctx.getString(R.string.settings_home_ebike_on)
-    }
+    // The feature switch, not the link: with it off nothing is being asked of
+    // the bike, so "Waiting for Flow" would blame Flow for the rider's choice.
+    es.jjrh.bikeradar.data.EBikeOwnership.YES ->
+        if (snap.eBikeDataEnabled) null else ctx.getString(R.string.settings_home_ebike_off)
 }
 
-private fun dashcamSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String = when (snap.dashcamOwnership) {
+private fun dashcamSetupPrompt(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String? = when (snap.dashcamOwnership) {
     DashcamOwnership.UNANSWERED -> ctx.getString(R.string.settings_home_dashcam_setup)
     DashcamOwnership.NO -> ctx.getString(R.string.settings_home_dont_have_one)
-    DashcamOwnership.YES -> when {
-        snap.dashcamDisplayName != null ->
-            ctx.getString(R.string.settings_home_dashcam_paired_named, snap.dashcamDisplayName)
-        snap.dashcamMac != null -> ctx.getString(R.string.settings_home_dashcam_paired)
-        else -> ctx.getString(R.string.settings_home_dashcam_pick)
-    }
+    DashcamOwnership.YES ->
+        if (snap.dashcamMac != null) null else ctx.getString(R.string.settings_home_dashcam_pick)
 }
 
-// Same derivation as the home screen's System row, so the two screens cannot
-// drift again. The old `else` branch said "Connected" for stored credentials
-// that had never published anything, which is the over-claim the deriver
-// exists to refuse.
-private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): String = when (HaStatusDeriver.derive(configured, health)) {
-    HaStatus.NOT_CONFIGURED -> ctx.getString(R.string.settings_home_ha_not_configured)
-    HaStatus.UNREACHABLE -> ctx.getString(R.string.settings_home_ha_issue)
-    HaStatus.READY -> ctx.getString(R.string.settings_home_ha_mqtt_ready)
-    HaStatus.CONFIGURED -> ctx.getString(R.string.settings_home_ha_configured)
-}
+// Same derivation AND the same words as the home screen's System row. The old
+// `else` branch said "Connected" for stored credentials that had never
+// published anything, which is the over-claim the deriver exists to refuse.
+private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): String = ctx.getString(haStatusLabel(HaStatusDeriver.derive(configured, health)))
 
 private fun experimentalSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {
     val on = buildList {

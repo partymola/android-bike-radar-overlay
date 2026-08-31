@@ -129,28 +129,52 @@
     <string name="main_bt_banner_title">Bluetooth off</string>
     <string name="main_bt_banner_action">Tap to enable</string>
 
-    <!-- SYSTEM card: per-device rows and their value text. -->
+    <!-- SYSTEM card: per-device row labels. The value text is the shared
+         device-status vocabulary below. -->
     <string name="main_section_system">System</string>
     <string name="main_system_rear_radar">Rear radar</string>
     <string name="main_system_front_dashcam">Front dashcam</string>
     <string name="main_system_ebike">eBike</string>
     <string name="main_system_home_assistant">Home Assistant</string>
-    <string name="main_system_value_not_paired">Not paired</string>
-    <string name="main_system_value_live">Live</string>
-    <string name="main_system_value_limited">Limited</string>
-    <string name="main_system_value_connecting">Connecting…</string>
-    <string name="main_system_value_no_signal">No signal</string>
-    <!-- Camera row only. Spanish inflects these for the feminine "Cámara";
-         the shared keys above serve the masculine radar and eBike rows. -->
-    <string name="main_system_value_cam_not_paired">Not paired</string>
-    <string name="main_system_value_cam_live">Live</string>
-    <string name="main_system_value_ebike_no_permission">Needs Bluetooth permission</string>
-    <string name="main_system_value_ebike_not_bonded">eBike not paired</string>
-    <string name="main_system_value_waiting_flow">Waiting for Flow</string>
-    <string name="main_system_value_mqtt_ready">MQTT ready</string>
-    <string name="main_system_value_unreachable">Unreachable</string>
-    <string name="main_system_value_not_configured">Not configured</string>
-    <string name="main_system_value_configured">Configured</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         Device status vocabulary (DeviceStatusLabels.kt)
+
+         ONE set of words for "is this device delivering right now",
+         read by every surface that answers it: the home System card,
+         the Settings quick-status chips and Connections subtitles, and
+         each device's own screen. The System rows navigate, so a rider
+         who taps a row saying "No signal" must land on a screen saying
+         "No signal" too. Never add a screen-local synonym.
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="device_status_not_paired">Not paired</string>
+    <string name="device_status_live">Live</string>
+    <string name="device_status_limited">Limited</string>
+    <string name="device_status_connecting">Connecting…</string>
+    <string name="device_status_no_signal">No signal</string>
+    <!-- Camera forms. Spanish inflects these for the feminine "Cámara";
+         the keys above serve the masculine radar. "Sin señal" and
+         "Conectando…" carry no gender, so both devices share them. -->
+    <string name="device_status_cam_not_paired">Not paired</string>
+    <string name="device_status_cam_live">Live</string>
+    <string name="device_status_cam_limited">Limited</string>
+    <!-- eBike forms. Spanish inflects for the feminine "la eBike". -->
+    <string name="device_status_ebike_live">Live</string>
+    <string name="device_status_ebike_no_permission">Needs Bluetooth permission</string>
+    <!-- No "eBike" in the value: every row that shows it is already labelled
+         "eBike", so naming it again reads as a stutter. -->
+    <string name="device_status_ebike_not_bonded">Not paired</string>
+    <string name="device_status_waiting_flow">Waiting for Flow</string>
+    <string name="device_status_ha_not_configured">Not configured</string>
+    <string name="device_status_ha_configured">Configured</string>
+    <string name="device_status_ha_ready">MQTT ready</string>
+    <string name="device_status_ha_unreachable">Unreachable</string>
+    <!-- Settings Connections rows answer two questions at once: is this
+         device set up, and is it working right now. The second half is the
+         shared status word above. -->
+    <string name="settings_home_conn_two_part"><xliff:g id="setup" example="Paired">%1$s</xliff:g> · <xliff:g id="status" example="No signal">%2$s</xliff:g></string>
+    <string name="settings_home_conn_paired">Paired</string>
+    <string name="settings_home_conn_paired_cam">Paired</string>
 
     <!-- CLOSE PASSES stats card. -->
     <string name="main_section_close_passes">Close passes</string>
@@ -286,8 +310,6 @@
     <string name="settings_home_quick_status">Quick Status</string>
     <string name="settings_home_chip_radar">Radar</string>
     <string name="settings_home_chip_cam">Cam</string>
-    <string name="settings_home_chip_radar_not_seen">Not seen</string>
-    <string name="settings_home_chip_cam_not_seen">Not seen</string>
     <string name="settings_home_section_ride">Ride</string>
     <string name="settings_home_section_connections">Connections</string>
     <string name="settings_home_section_system">System</string>
@@ -319,23 +341,14 @@
     <string name="settings_home_lights_rear_only">Rear <xliff:g id="state" example="on">%1$s</xliff:g></string>
     <string name="settings_home_lights_summary">Rear <xliff:g id="rear" example="on">%1$s</xliff:g> · Front <xliff:g id="front" example="off">%2$s</xliff:g></string>
     <string name="settings_home_lights_all_off">Off</string>
-    <string name="settings_home_conn_connected">Connected · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
-    <!-- Camera row only. Spanish inflects "Conectado" for gender; the key
-         above serves the masculine radar row. -->
-    <string name="settings_home_conn_connected_cam">Connected · <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
-    <string name="settings_home_conn_not_connected">Not connected</string>
+    <!-- Setup prompts. These stay screen-local because they are instructions
+         for a device that is not configured yet, not a link state. -->
     <string name="settings_home_ebike_setup">Set up your eBike</string>
     <string name="settings_home_dont_have_one">Don\'t have one</string>
     <string name="settings_home_ebike_off">Off</string>
-    <string name="settings_home_ebike_on">On</string>
+    <string name="settings_home_ebike_on">Data on</string>
     <string name="settings_home_dashcam_setup">Set up your dashcam</string>
-    <string name="settings_home_dashcam_paired_named"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · paired</string>
-    <string name="settings_home_dashcam_paired">Paired</string>
     <string name="settings_home_dashcam_pick">Pick a device</string>
-    <string name="settings_home_ha_not_configured">Not configured</string>
-    <string name="settings_home_ha_issue">Connection issue</string>
-    <string name="settings_home_ha_mqtt_ready">Connected · MQTT ready</string>
-    <string name="settings_home_ha_configured">Configured</string>
     <string name="settings_home_exp_precog">Precog</string>
     <string name="settings_home_exp_all_off">All off</string>
     <string name="settings_home_exp_active"><xliff:g id="features" example="Precog">%1$s</xliff:g> on</string>
@@ -434,10 +447,6 @@
     <string name="settings_radardev_pair_title">Pair your radar</string>
     <string name="settings_radardev_pair_subtitle">Put the radar in pair mode, then pair it in Android\'s Bluetooth settings.</string>
     <string name="settings_radardev_not_selected">Not selected</string>
-    <string name="settings_radardev_pick_radar">Pick this bike\'s radar below</string>
-    <string name="settings_radardev_connected">Connected</string>
-    <string name="settings_radardev_not_in_range">Not in range</string>
-    <string name="settings_radardev_connecting">Connecting…</string>
     <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning, no close-pass logging, and no drop-alert sound unless your eBike is connected.</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
@@ -472,10 +481,6 @@
     <string name="settings_ha_chip_mqtt_ready">MQTT: ready</string>
     <string name="settings_ha_chip_mqtt_error">MQTT: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_published_entities">Your entities</string>
-    <string name="settings_ha_connected">Connected</string>
-    <string name="settings_ha_not_configured">Not configured</string>
-    <string name="settings_ha_configured">Configured</string>
-    <string name="settings_ha_unreachable">Connection issue</string>
     <string name="settings_ha_entities_look_up_in_ha">Your entity ids are in HA: Settings → Devices &amp; services → Entities.</string>
     <string name="settings_ha_entities_after_publishing">They appear in HA once the app has published: Settings → Devices &amp; services → Entities.</string>
     <string name="settings_ha_nothing_published_yet">Saved. Nothing has been published yet.</string>
@@ -497,10 +502,12 @@
     <string name="settings_ebike_use_data_subtitle_off">Turn on to show eBike battery and status on the home screen.</string>
     <string name="settings_ebike_use_data_subtitle_on">Battery and status - shown while Bosch Flow runs in the background.</string>
     <string name="settings_ebike_status_label">Status</string>
-    <string name="settings_ebike_receiving">Receiving live data</string>
-    <string name="settings_ebike_waiting">Waiting for Bosch Flow</string>
+    <!-- Titles come from the shared device-status vocabulary; these say what
+         to do about each state. -->
     <string name="settings_ebike_receiving_subtitle">Battery and ride status from your bike.</string>
     <string name="settings_ebike_waiting_subtitle">Open Flow and ride - data appears here automatically.</string>
+    <string name="settings_ebike_no_permission_subtitle">Grant Bluetooth access in Settings → Permissions.</string>
+    <string name="settings_ebike_not_bonded_subtitle">Pair your eBike in Android\'s Bluetooth settings first.</string>
     <string name="settings_ebike_alerts_label">Alerts</string>
     <string name="settings_ebike_forgot_lock_title">Forgot-to-lock reminder</string>
     <string name="settings_ebike_forgot_lock_subtitle">Buzz your watch if you walk away with the bike still unlocked.</string>

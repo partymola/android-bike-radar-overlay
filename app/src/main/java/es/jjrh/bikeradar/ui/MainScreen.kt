@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
@@ -74,9 +73,9 @@ import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
-import es.jjrh.bikeradar.RadarConnStatus
-import es.jjrh.bikeradar.RadarConnStatusDeriver
 import es.jjrh.bikeradar.RadarLinkState
+import es.jjrh.bikeradar.RadarLinkStatus
+import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -144,14 +143,14 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // ticking the bond check or wall-clock when the user can't see
     // the result, and it lets Doze idle the device cleanly.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasBond by remember { mutableStateOf(hasRearBond(ctx)) }
-    var btEnabled by remember { mutableStateOf(isBluetoothEnabled(ctx)) }
+    var hasBond by remember { mutableStateOf(radarIsSelected(ctx, prefs.radarMac)) }
+    var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 delay(5_000)
-                hasBond = hasRearBond(ctx)
-                btEnabled = isBluetoothEnabled(ctx)
+                hasBond = radarIsSelected(ctx, prefs.radarMac)
+                btEnabled = bluetoothIsOn(ctx)
             }
         }
     }
@@ -184,12 +183,11 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // signal" about the same radar.
     val noRadarLinkFlow = remember { MutableStateFlow(RadarLinkState()) }
     val radarLinkSnap by (BikeRadarService.radarLinkStateForUi ?: noRadarLinkFlow).collectAsState()
-    val radarConnecting = RadarConnStatusDeriver.derive(
-        dataFresh = radarFresh,
+    val radarConnecting = RadarLinkStatus.isConnecting(
         gattActive = radarLinkSnap.radarGattActive,
         offSinceMs = radarLinkSnap.radarOffSinceMs,
         nowMs = SystemClock.elapsedRealtime(),
-    ) == RadarConnStatus.CONNECTING
+    )
     // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
     // migration (AndroidKeyStore work on installs that still hold undecryptable
     // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to
@@ -329,7 +327,6 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
             dashcamPaired = dashcamPaired,
-            dashcamDisplayName = prefsSnap.dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
@@ -376,7 +373,6 @@ internal fun MainScreenContent(
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
     dashcamPaired: Boolean,
-    dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
@@ -411,7 +407,6 @@ internal fun MainScreenContent(
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
             dashcamPaired = dashcamPaired,
-            dashcamDisplayName = dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
@@ -445,7 +440,6 @@ internal fun MainScreenContent(
             dashcamOwned = dashcamOwned,
             dashcamFresh = dashcamFresh,
             dashcamPaired = dashcamPaired,
-            dashcamDisplayName = dashcamDisplayName,
             radarBattery = radarBattery,
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
@@ -514,7 +508,6 @@ private fun MainScreenPortrait(
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
     dashcamPaired: Boolean,
-    dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
@@ -562,7 +555,6 @@ private fun MainScreenPortrait(
                 dashcamOwned = dashcamOwned,
                 dashcamFresh = dashcamFresh,
                 dashcamPaired = dashcamPaired,
-                dashcamDisplayName = dashcamDisplayName,
                 radarBattery = radarBattery,
                 dashcamBattery = dashcamBattery,
                 haStatus = haStatus,
@@ -613,7 +605,6 @@ private fun MainScreenLandscape(
     dashcamOwned: Boolean,
     dashcamFresh: Boolean,
     dashcamPaired: Boolean,
-    dashcamDisplayName: String?,
     radarBattery: BatteryEntry?,
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
@@ -685,7 +676,6 @@ private fun MainScreenLandscape(
                     dashcamOwned = dashcamOwned,
                     dashcamFresh = dashcamFresh,
                     dashcamPaired = dashcamPaired,
-                    dashcamDisplayName = dashcamDisplayName,
                     radarBattery = radarBattery,
                     dashcamBattery = dashcamBattery,
                     haStatus = haStatus,
@@ -791,19 +781,16 @@ private fun SettingsButton(onClick: () -> Unit) {
     }
 }
 
-// ── BLE helpers (mirror V1's hasRearBond) ────────────────────────────
+// ── BLE helpers, shared by the home and Settings screens ─────────────
 
-@SuppressLint("MissingPermission")
-private fun hasRearBond(ctx: Context): Boolean = try {
-    val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    mgr?.adapter?.bondedDevices?.any { dev ->
-        DeviceNameMatcher.isRadarName(dev.name)
-    } == true
-} catch (_: Throwable) {
-    false
-}
+/**
+ * Does this bike have a radar to talk to? The same question
+ * [RadarSelection.shouldLinkRadar] answers when it decides whether to stream,
+ * so no surface can report "Not paired" about a radar that is delivering.
+ */
+internal fun radarIsSelected(ctx: Context, chosenMac: String?): Boolean = RadarSelection.hasLinkableRadar(RadarSelection.bondedDevices(ctx), chosenMac)
 
-private fun isBluetoothEnabled(ctx: Context): Boolean = try {
+internal fun bluetoothIsOn(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     mgr?.adapter?.isEnabled == true
 } catch (_: Throwable) {

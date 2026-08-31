@@ -61,6 +61,50 @@ object RadarSelection {
      *  should prompt the rider to pick which one is on this bike. */
     fun isAmbiguous(bondedRadarMacs: Set<String>): Boolean = bondedRadarMacs.size > 1
 
+    /**
+     * Is there a radar for this bike to talk to at all?
+     *
+     * This is the ONE definition of "the rider has a radar", and every surface
+     * that reports link state must use it, because it is the question
+     * [shouldLinkRadar] answers when it decides whether to stream. Two ways a
+     * narrower test gets it wrong, and both report "Not paired" about a radar
+     * that is delivering targets:
+     *
+     *  - A name-match over the bonded list misses the "my radar isn't listed"
+     *    escape hatch, where the pinned device's name never matches.
+     *  - Requiring a single RESOLVED radar misses the ambiguous case: with two
+     *    bonded and none pinned, [shouldLinkRadar] falls back to name-match and
+     *    links one, so the rider has cover even though nothing says which unit
+     *    it came from.
+     *
+     * This IS adapter-dependent, unavoidably: [bondedDevices] reads
+     * `getBondedDevices`, which returns an empty set while the adapter is off,
+     * so with the radio down the app cannot tell a bondless phone from a
+     * bonded one and this returns false either way. Callers that also gate on
+     * the radio are agreeing with that rather than adding to it. Do not
+     * describe this as radio-independent.
+     */
+    fun hasLinkableRadar(allBonded: List<BondedRadar>, chosenMac: String?): Boolean = allBonded.any { it.mac.equals(chosenMac, ignoreCase = true) } ||
+        allBonded.any { isRadarName(it.name) }
+
+    /**
+     * WHICH radar this bike is pinned to, by name, or null when that is not
+     * settled - none bonded, or several bonded with none pinned.
+     *
+     * Only for naming the device on its own screen, never for deciding whether
+     * the rider has cover: null here means "cannot say which", not "there is
+     * none", and the ambiguous case still streams. [hasLinkableRadar] is the
+     * question every status surface asks.
+     */
+    fun activeRadarName(allBonded: List<BondedRadar>, chosenMac: String?): String? {
+        // The pin resolves against ALL bonded devices, not the name-matched
+        // subset, which is what makes the escape hatch work.
+        val pinned = allBonded.firstOrNull { it.mac.equals(chosenMac, ignoreCase = true) }
+        if (pinned != null) return pinned.name
+        val named = allBonded.filter { isRadarName(it.name) }
+        return if (named.size == 1) named.first().name else null
+    }
+
     /** A bonded radar candidate: its address + readable local name. */
     data class BondedRadar(val mac: String, val name: String)
 

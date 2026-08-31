@@ -5,6 +5,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import es.jjrh.bikeradar.BatteryEntry
+import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.HaHealth
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,13 +36,23 @@ class SettingsScreenSnapshotTest {
                     devUnlocked = true,
                     prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
                         dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        // A camera must be PICKED for its row to describe a
+                        // link: without a mac the row falls to "Pick a device"
+                        // while the chip above still renders dashcamLink, and
+                        // the screen shows a state production cannot produce.
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
                         autoLightModeEnabled = true,
                         radarLightAutoModeEnabled = true,
                         eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
                         eBikeDataEnabled = true,
                     ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIVE,
+                    dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
                     dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    ebikeReceiving = true,
+                    ebikeStage = EBikeStage.RECEIVING,
                     haConfigured = true,
                     haHealth = HaHealth.Unknown,
                     permissionsGrantedCount = 3,
@@ -70,9 +81,181 @@ class SettingsScreenSnapshotTest {
                         eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.NO,
                         eBikeDataEnabled = false,
                     ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIVE,
+                    dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
                     dashcamBattery = null,
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.NOT_STARTED,
                     haConfigured = false,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 3,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 3,
+                )
+            }
+        }
+    }
+
+    /**
+     * Everything set up, nothing delivering: the state a rider is in when
+     * they open Settings from a home card that said "No signal". Every other
+     * golden here renders a working rider, so the words for the failure - the
+     * half of each row a rider reads when something is wrong - had no visual
+     * coverage on the screen where they most disagreed.
+     */
+    @Test
+    fun menuPairedButNothingConnected() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        // A camera must be PICKED for its row to describe a
+                        // link: without a mac the row falls to "Pick a device"
+                        // while the chip above still renders dashcamLink, and
+                        // the screen shows a state production cannot produce.
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
+                        eBikeDataEnabled = true,
+                    ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.NO_SIGNAL,
+                    dashcamLink = DeviceLinkState.NO_SIGNAL,
+                    // PRESENT, not null, and that is the whole point: an
+                    // aborting radar keeps a fresh battery entry while
+                    // sending no targets, so this is the real state in which
+                    // the chip must refuse to show a percentage. Passing null
+                    // would leave the chip's own gate unpinned - remove it and
+                    // nothing would change.
+                    radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
+                    dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.WAITING,
+                    haConfigured = true,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 3,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 3,
+                )
+            }
+        }
+    }
+
+    /**
+     * No radar bonded, and Bluetooth off. Two things nothing else here
+     * renders: the radar row dropping its two-part form (there is no link to
+     * describe until a radar exists, so "Not paired" is the whole answer),
+     * and the Bluetooth-off banner that keeps that word from being read as a
+     * claim about the hardware.
+     */
+    @Test
+    fun menuNoRadarAndBluetoothOff() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.UNANSWERED,
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED,
+                    ),
+                    btEnabled = false,
+                    radarLink = DeviceLinkState.NOT_PAIRED,
+                    dashcamLink = DeviceLinkState.NOT_PAIRED,
+                    radarBattery = null,
+                    dashcamBattery = null,
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.NOT_STARTED,
+                    haConfigured = false,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 1,
+                    permissionsRequiredMissing = 2,
+                    permissionsTotal = 3,
+                )
+            }
+        }
+    }
+
+    /**
+     * The Settings menu in Spanish, in the state whose words are longest.
+     *
+     * This screen had no es golden at all, and the change moved a status word
+     * into the tightest slot in the app: two half-width quick-status chips
+     * side by side. Spanish runs 15-30% longer than English and short labels
+     * expand worst, and the status Text is `softWrap = false` with an
+     * ellipsis, so an overflow truncates silently rather than failing. This
+     * makes it a gate instead of an argument about widths.
+     *
+     * LIMITED, because the worst case is a long word that ALSO renders the
+     * battery chip. "No emparejado" is the longest word (13 glyphs to
+     * "Conectando…"'s 11) but suppresses the chip via `isDelivering`, so it
+     * leaves the row emptier than "Limitado" plus a percentage does.
+     */
+    @Test
+    @Config(qualifiers = "+es")
+    fun menuPairedButNothingConnectedEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
+                        eBikeDataEnabled = true,
+                    ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIMITED,
+                    dashcamLink = DeviceLinkState.LIMITED,
+                    radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
+                    dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.NOT_PERMITTED,
+                    haConfigured = true,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 3,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 3,
+                )
+            }
+        }
+    }
+
+    /**
+     * A range-only radar. Green is the app's "you are covered" signal and
+     * must never appear over a link that cannot raise the urgent cue, and no
+     * fixture on this screen rendered LIMITED at all: inverting the
+     * `source == V1` test that produces it changed nothing anywhere, so the
+     * chip could have gone green over a radar with no urgent warning and no
+     * close-pass logging. The radar's own screen has this state pinned; this
+     * screen did not.
+     */
+    @Test
+    fun menuRadarLimited() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
+                    ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIMITED,
+                    dashcamLink = DeviceLinkState.LIVE,
+                    // Shown on LIMITED: the percentage is a fact about the
+                    // device, not a claim about cover.
+                    radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
+                    dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.NOT_STARTED,
+                    haConfigured = true,
                     haHealth = HaHealth.Unknown,
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
@@ -96,13 +279,23 @@ class SettingsScreenSnapshotTest {
                     devUnlocked = false,
                     prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
                         dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        // A camera must be PICKED for its row to describe a
+                        // link: without a mac the row falls to "Pick a device"
+                        // while the chip above still renders dashcamLink, and
+                        // the screen shows a state production cannot produce.
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
                         batteryLowThresholdPct = 40,
                     ),
                     // 30% is NORMAL at the default 20 and LOW at 40; 18% is
                     // LOW at the default and CRITICAL at 40. Both chips move
                     // only because the threshold was read.
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIVE,
+                    dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 30, readAtMs = 1_000L),
                     dashcamBattery = BatteryEntry("vue", "Vue", 18, readAtMs = 1_000L),
+                    ebikeReceiving = true,
+                    ebikeStage = EBikeStage.RECEIVING,
                     haConfigured = true,
                     haHealth = HaHealth.Unknown,
                     permissionsGrantedCount = 3,
@@ -127,13 +320,23 @@ class SettingsScreenSnapshotTest {
                     devUnlocked = true,
                     prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
                         dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        // A camera must be PICKED for its row to describe a
+                        // link: without a mac the row falls to "Pick a device"
+                        // while the chip above still renders dashcamLink, and
+                        // the screen shows a state production cannot produce.
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
                         autoLightModeEnabled = true,
                         radarLightAutoModeEnabled = true,
                         eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
                         eBikeDataEnabled = true,
                     ),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIVE,
+                    dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
                     dashcamBattery = BatteryEntry("vue", "Vue", 64, readAtMs = 1_000L),
+                    ebikeReceiving = true,
+                    ebikeStage = EBikeStage.RECEIVING,
                     haConfigured = true,
                     haHealth = HaHealth.Unknown,
                     permissionsGrantedCount = 2,

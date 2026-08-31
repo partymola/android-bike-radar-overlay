@@ -2,11 +2,13 @@
 package es.jjrh.bikeradar.ui
 
 /**
- * Pure visibility/state predicates for the home-screen System card, extracted
- * from [SystemCard] so the data-driven "what shows when" contracts are unit-
- * asserted instead of pinned only by Roborazzi golden PNGs. The Composable maps
- * these states to colours and strings; the decisions live here, shared by the
- * rear-radar and front-dashcam rows (previously two identical inline `when`s).
+ * Pure visibility/state predicates for device rows, so the data-driven "what
+ * shows when" contracts are unit-asserted instead of pinned only by Roborazzi
+ * golden PNGs.
+ *
+ * The classification lives here and the words live in `DeviceStatusLabels.kt`;
+ * between them every surface that describes a device link reads the same two
+ * files. The Composables map these states to colours only.
  */
 
 /**
@@ -30,10 +32,9 @@ enum class DeviceLinkState { NOT_PAIRED, LIVE, LIMITED, CONNECTING, NO_SIGNAL }
  * glance.
  *
  * Without [CONNECTING], a radar the app connects to and fails the setup
- * sequence against reads "No signal" - and the report that comes back is
- * "never in range" about a radar being talked to every second or so. That is
- * the same lie [RadarConnStatusDeriver] was written to remove from the Settings
- * card; this row simply never consumed it, so the two surfaces disagreed.
+ * sequence against reads "No signal", and the report that comes back is
+ * "never in range" about a radar being talked to every second or so.
+ * `RadarLinkStatus.isConnecting` supplies that input for the radar.
  *
  * Without [LIMITED], a radar on the range-only legacy stream reads a green
  * "Live" identical to a healthy one, while the urgent warning and close-pass
@@ -41,7 +42,9 @@ enum class DeviceLinkState { NOT_PAIRED, LIVE, LIMITED, CONNECTING, NO_SIGNAL }
  * must not appear over a link that cannot raise the urgent cue.
  *
  * @param linked the device is owned/bonded AND its transport is up - radar:
- *   Bluetooth on and bonded; dashcam: owned and paired.
+ *   Bluetooth on and bonded; dashcam: Bluetooth on, owned and paired. Both
+ *   take the transport conjunct, and a caller that drops it for one device
+ *   makes that device disagree with the other about a single cause.
  * @param fresh a reading arrived inside the row's freshness window.
  * @param limited the source is delivering, but cannot supply the full feature
  *   set. Only meaningful alongside [fresh].
@@ -68,6 +71,16 @@ val DeviceLinkState.muted: Boolean get() = this == DeviceLinkState.NOT_PAIRED
 val DeviceLinkState.hollow: Boolean get() = this == DeviceLinkState.NOT_PAIRED
 
 /**
+ * A reading is arriving right now, whether or not the source can supply
+ * everything. Gates the battery chip on every surface: the percentage is a
+ * fact about the device rather than a claim about cover, so a range-only
+ * radar still shows it, and a surface that hid it there disagreed with the
+ * ones that did not.
+ */
+val DeviceLinkState.isDelivering: Boolean
+    get() = this == DeviceLinkState.LIVE || this == DeviceLinkState.LIMITED
+
+/**
  * The eBike battery chip shows the live state-of-charge only while the
  * proprietary stream is being received. A stale SoC carried over from a prior
  * session is hidden rather than shown as if current. Returns the SoC to display,
@@ -89,8 +102,8 @@ enum class SystemRowTarget { RADAR, DASHCAM, EBIKE, HA }
  * back out of that file.
  *
  * The radar row goes to the DEVICE screen, not the alert-tuning one: a rider
- * tapping a row that says "Not in range" wants the pairing and connection
- * state, not the beep thresholds.
+ * tapping a row that says "No signal" wants the pairing and connection state,
+ * not the beep thresholds.
  */
 fun systemRowRoute(target: SystemRowTarget): String = when (target) {
     SystemRowTarget.RADAR -> "settings/radar-device"

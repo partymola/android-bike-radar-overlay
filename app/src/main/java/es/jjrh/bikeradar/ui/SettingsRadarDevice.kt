@@ -52,9 +52,8 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.R
-import es.jjrh.bikeradar.RadarConnStatus
-import es.jjrh.bikeradar.RadarConnStatusDeriver
 import es.jjrh.bikeradar.RadarLinkState
+import es.jjrh.bikeradar.RadarLinkStatus
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
@@ -89,12 +88,6 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     val lifecycleOwner = LocalLifecycleOwner.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
-    val allBonded = remember(prefsSnap.radarMac) { RadarSelection.bondedDevices(ctx) }
-    val bonded = remember(allBonded) { allBonded.filter { RadarSelection.isRadarName(it.name) } }
-    // Escape hatch: every bonded device the radar heuristic does NOT
-    // recognise, offered behind "My radar isn't listed".
-    val others = remember(allBonded) { allBonded.filterNot { RadarSelection.isRadarName(it.name) } }
-
     // Ticked, not sampled once: the entries flow only emits when a device IS
     // seen, so a screen left open would hold its last verdict indefinitely and
     // keep calling a dead radar connected.
@@ -113,6 +106,18 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
             }
         }
     }
+
+    // Re-enumerated on the tick, not once per radarMac. Bonding happens in
+    // Android's Bluetooth settings, which this screen's only action deep-links
+    // to, and coming back changes no pref - so keyed on radarMac alone this
+    // was the ONE surface that did not notice the rider doing exactly what it
+    // sent them to do. `getBondedDevices` also returns an empty set while the
+    // adapter is off, so this is how the screen tracks the radio at all.
+    val allBonded = remember(prefsSnap.radarMac, tickNowMs) { RadarSelection.bondedDevices(ctx) }
+    val bonded = remember(allBonded) { allBonded.filter { RadarSelection.isRadarName(it.name) } }
+    // Escape hatch: every bonded device the radar heuristic does NOT
+    // recognise, offered behind "My radar isn't listed".
+    val others = remember(allBonded) { allBonded.filterNot { RadarSelection.isRadarName(it.name) } }
 
     // Radar battery is matched by name across the bus (same heuristic the home
     // Quick Status card uses); a recent read is the proxy for connected.
@@ -151,24 +156,30 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // stays wall clock for the battery freshness above.
     val noServiceFlow = remember { MutableStateFlow(RadarLinkState()) }
     val linkSnap by (BikeRadarService.radarLinkStateForUi ?: noServiceFlow).collectAsState()
-    val status = RadarConnStatusDeriver.derive(
-        dataFresh = connected,
-        gattActive = linkSnap.radarGattActive,
-        offSinceMs = linkSnap.radarOffSinceMs,
-        nowMs = SystemClock.elapsedRealtime(),
-    )
 
     val chosen = prefsSnap.radarMac
-    // The chosen unit may live in EITHER list (a pinned odd-name radar is
-    // in `others`), so resolve against the full bonded set.
-    val chosenBonded = allBonded.firstOrNull { it.mac.equals(chosen, ignoreCase = true) }
-    val activeName = when {
-        chosenBonded != null -> chosenBonded.name
-        bonded.size == 1 -> bonded.first().name
-        else -> null // ambiguous (>1, none chosen) or never paired
-    }
+    val activeName = RadarSelection.activeRadarName(allBonded, chosen)
 
     var offsetCm by rememberSaveable { mutableIntStateOf(prefs.radarLateralOffsetCm) }
+
+    // The same classifier the home System row uses, so the two surfaces
+    // cannot describe one radar differently. The deriver's age arithmetic is
+    // elapsedRealtime on BOTH sides; the tick above stays wall clock for the
+    // battery freshness.
+    val link = deviceLinkState(
+        // Whether there IS a radar, not whether we can say WHICH: with two
+        // bonded and none pinned the app still links one, so the card must
+        // not read "Not paired" over a live stream. Naming it is the title's
+        // job, and the picker below is where the rider settles it.
+        linked = RadarSelection.hasLinkableRadar(allBonded, chosen),
+        fresh = connected,
+        limited = radarState.source == DataSource.V1,
+        connecting = RadarLinkStatus.isConnecting(
+            gattActive = linkSnap.radarGattActive,
+            offSinceMs = linkSnap.radarOffSinceMs,
+            nowMs = SystemClock.elapsedRealtime(),
+        ),
+    )
 
     SettingsRadarDeviceContent(
         onBack = { navController.popBackStack() },
@@ -176,8 +187,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         others = others,
         chosenMac = chosen,
         activeName = activeName,
-        status = status,
-        limitedSource = radarState.source == DataSource.V1,
+        link = link,
         batteryPct = freshBattery?.pct,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
@@ -213,7 +223,11 @@ internal fun SettingsRadarDeviceContent(
     bonded: List<RadarSelection.BondedRadar>,
     chosenMac: String?,
     activeName: String?,
-    status: RadarConnStatus,
+    /** Classified by the same [deviceLinkState] the home System row uses.
+     *  [DeviceLinkState.LIMITED] also drives the range-only note below: a
+     *  rider must not mistake a partly-working radar for a fully-working
+     *  one, and nothing else on any screen says so. */
+    link: DeviceLinkState,
     batteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     others: List<RadarSelection.BondedRadar> = emptyList(),
@@ -223,10 +237,6 @@ internal fun SettingsRadarDeviceContent(
     onOffsetChange: (Int) -> Unit = {},
     onOffsetCommit: () -> Unit = {},
     firmwareRev: String? = null,
-    /** True when the live link is running on the range-only legacy stream.
-     *  Drives the limitations note: a rider must not mistake a partly-working
-     *  radar for a fully-working one, and nothing else on any screen says so. */
-    limitedSource: Boolean = false,
 ) {
     val br = LocalBrColors.current
     var othersExpanded by rememberSaveable { mutableStateOf(false) }
@@ -304,25 +314,31 @@ internal fun SettingsRadarDeviceContent(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             StatusDot(
-                                color = when {
-                                    activeName == null -> br.fgDim
-                                    status == RadarConnStatus.CONNECTED -> br.safe
+                                color = when (link) {
+                                    DeviceLinkState.NOT_PAIRED -> br.fgDim
+                                    DeviceLinkState.LIVE -> br.safe
                                     else -> br.caution
                                 },
-                                hollow = activeName == null,
+                                hollow = link.hollow,
                                 size = 6.dp,
                             )
                             Text(
-                                text = when {
-                                    activeName == null -> stringResource(R.string.settings_radardev_pick_radar)
-                                    status == RadarConnStatus.CONNECTED -> stringResource(R.string.settings_radardev_connected)
-                                    status == RadarConnStatus.CONNECTING -> stringResource(R.string.settings_radardev_connecting)
-                                    else -> stringResource(R.string.settings_radardev_not_in_range)
-                                },
+                                // Always the state, even when the title reads
+                                // "Not selected": with several bonded and none
+                                // pinned the app is streaming from one of them,
+                                // and telling the rider to pick instead of
+                                // saying so hides live cover behind an errand.
+                                // The picker section below carries the errand.
+                                text = stringResource(radarLinkLabel(link)),
                                 color = br.fgMuted,
                                 fontSize = 12.sp,
                             )
-                            if (status == RadarConnStatus.CONNECTED && batteryPct != null) {
+                            // Shown on LIMITED too. The battery is a fact about
+                            // the device, not a claim about cover, and a
+                            // range-only radar reports it just as well; hiding
+                            // it there made this screen disagree with the home
+                            // card about the same radar.
+                            if (link.isDelivering && batteryPct != null) {
                                 BatteryChip(pct = batteryPct, lowThresholdPct = batteryLowThresholdPct)
                             }
                         }
@@ -334,7 +350,7 @@ internal fun SettingsRadarDeviceContent(
                                 fontSize = 11.sp,
                             )
                         }
-                        if (limitedSource) {
+                        if (link == DeviceLinkState.LIMITED) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = stringResource(R.string.settings_radardev_limited_source),

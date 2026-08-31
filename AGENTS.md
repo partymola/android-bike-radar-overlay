@@ -258,7 +258,9 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
-| `app/src/main/java/es/jjrh/bikeradar/RadarConnStatusDeriver.kt` | Pure tri-state for the Settings radar card (Connected / Connecting / Not in range), fed by the service-published link state |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
+| `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |

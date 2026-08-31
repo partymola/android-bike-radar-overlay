@@ -100,9 +100,10 @@ strip; the rest of your screen stays yours. (*Image credits
 lateral position, closing speed and size. Garmin announced those as new on
 the RearVue 820. Earlier radars are not expected to send them at all. On
 those the app reads the older range-only stream instead. You get the
-approach beeps and the all-clear. You do not get the urgent warning, the
-speed colours or close-pass counting. That fallback is new in 1.4.0 and
-nobody has confirmed it on real hardware yet.
+approach beeps, the all-clear, and overlay colours that show distance
+instead of speed. You do not get the urgent warning, close-pass counting,
+or a sound when the radar drops unless your eBike is connected. That
+fallback is new in 1.4.0 and nobody has confirmed it on real hardware yet.
 
 Riding anything but an 820? A works or doesn't-work
 [report](../../issues) is the most valuable thing you can send. The Debug
@@ -235,7 +236,8 @@ Assistant integration is the supported path).
 
 Stable. Feature-complete and ridden daily by the author for months,
 tested on a Garmin Varia RearVue 820 and a Pixel 10 Pro XL. Every other
-Garmin Varia radar is expected to work range-only. None of that is
+Garmin Varia radar is expected to work range-only at best, and an
+ANT+-only unit will not connect at all. None of that is
 confirmed on real hardware yet, so if yours works, or doesn't, a quick
 [report](../../issues) is genuinely useful. Behaviour on other phones,
 radars and future firmware may still differ. Bug reports welcome; please

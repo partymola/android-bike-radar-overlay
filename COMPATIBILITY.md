@@ -16,9 +16,10 @@ the range-only subset.
 
 Status legend. **Tested** = the author rides with it daily. **Range only** =
 the app is expected to read the device's V1 stream, which carries range and
-nothing else. You get the approach beeps and the all-clear, but no urgent
-warning, no speed colours and no close-pass logging. **No** = the device
-exposes neither protocol over Bluetooth.
+nothing else. You get the approach beeps, the all-clear, and overlay colours
+that show distance instead of speed. You do not get the urgent warning,
+close-pass logging, or a sound when the radar drops unless your eBike is
+connected. **No** = the device exposes neither protocol over Bluetooth.
 
 Everything below the 820 is unconfirmed on real hardware. A report either way
 is one of the most valuable contributions you can make.

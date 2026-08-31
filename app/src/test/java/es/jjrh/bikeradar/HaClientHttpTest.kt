@@ -8,6 +8,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -192,6 +193,56 @@ class HaClientHttpTest {
         val r = client().probeMqttService()
         assertTrue(r.isFailure)
         assertTrue(r.exceptionOrNull()!!.message!!.contains("MQTT integration is not enabled"))
+    }
+
+    // ── the cause a failed publish leaves behind ────────────────────────────
+    //
+    // Every reader writes `ha.lastFailure ?: HaFailure.UNKNOWN`, so setting
+    // this field to a constant degrades every rider-visible cause to UNKNOWN
+    // with the classifier, the bus and all of HaHealthBusTest still green.
+    // These are what fail instead.
+
+    @Test
+    fun aRejectedTokenLeavesAnAuthCause() = runTest {
+        respondAll(401)
+        val c = client()
+        assertFalse(c.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.AUTH, c.lastFailure)
+    }
+
+    @Test
+    fun aServerErrorLeavesAServerCause() = runTest {
+        respondAll(500)
+        val c = client()
+        assertFalse(c.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.SERVER_ERROR, c.lastFailure)
+    }
+
+    @Test
+    fun aFreshClientHasNoCauseAndSuccessDoesNotClearOne() = runTest {
+        // Both halves of the actual contract, which is narrower than "the
+        // cause reflects the last publish". A fresh instance starts null, and
+        // a success does NOT clear a recorded cause - so a reader must take
+        // the value off the instance that performed the FAILED publish, which
+        // is what the field's KDoc says. Pinned rather than left implicit
+        // because the close-pass path reads a shared, long-lived client.
+        respondAll(200)
+        val c = client()
+        assertNull("a fresh client has nothing to report", c.lastFailure)
+        assertTrue(c.publishMqtt("t", "p", retain = false))
+        assertNull(c.lastFailure)
+
+        respondAll(401)
+        val failing = client()
+        assertFalse(failing.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.AUTH, failing.lastFailure)
+        respondAll(200)
+        assertTrue(failing.publishMqtt("t", "p", retain = false))
+        assertEquals(
+            "a success leaves the cause standing; readers must scope to the failed publish",
+            HaFailure.AUTH,
+            failing.lastFailure,
+        )
     }
 
     @Test

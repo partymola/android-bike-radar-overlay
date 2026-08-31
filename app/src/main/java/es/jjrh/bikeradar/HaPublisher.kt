@@ -81,9 +81,13 @@ internal class HaPublisher(
             if (!ha.isConfigured()) return@launch
             val ok = ha.publishRideEdge(edgeName, timestampIso)
             if (ok) {
-                HaHealthBus.reportOk()
+                HaHealthBus.reportOk(HaFamily.RIDE_EDGE)
             } else {
-                HaHealthBus.reportError("ride-edge publish failed")
+                HaHealthBus.reportError(
+                    HaFamily.RIDE_EDGE,
+                    "ride-edge publish failed",
+                    ha.lastFailure ?: HaFailure.UNKNOWN,
+                )
                 Log.w(TAG, "HA ride-edge publish failed: $edgeName")
             }
         }
@@ -106,6 +110,16 @@ internal class HaPublisher(
             if (!ok) {
                 discoveredSlugs.remove(s)
                 Log.w(TAG, "HA discovery failed for ${HaClient.NS}_${s}_battery")
+                // Reported, not just logged: a token broken from the first
+                // publish makes discovery fail on every attempt, and a family
+                // that never reports reads in the bundle as "not published
+                // this session" - which is the wording for a quiet stream,
+                // not a failing one.
+                HaHealthBus.reportError(
+                    HaFamily.BATTERY,
+                    "battery discovery failed",
+                    ha.lastFailure ?: HaFailure.UNKNOWN,
+                )
                 return false
             }
             Log.i(TAG, "HA discovery published for ${HaClient.NS}_${s}_battery")
@@ -127,9 +141,13 @@ internal class HaPublisher(
             }
         }
         if (ok) {
-            HaHealthBus.reportOk()
+            HaHealthBus.reportOk(HaFamily.BATTERY)
         } else {
-            HaHealthBus.reportError("battery publish failed")
+            HaHealthBus.reportError(
+                HaFamily.BATTERY,
+                "battery publish failed",
+                ha.lastFailure ?: HaFailure.UNKNOWN,
+            )
             Log.w(TAG, "HA state publish failed for ${HaClient.NS}/$s/battery")
         }
         return ok
@@ -173,6 +191,11 @@ internal class HaPublisher(
             if (!ok) {
                 rideSummaryDiscoveredSlugs.remove(slug)
                 Log.w(TAG, "ride-summary discovery publish failed; will retry")
+                HaHealthBus.reportError(
+                    HaFamily.RIDE_SUMMARY,
+                    "ride-summary discovery failed",
+                    ha.lastFailure ?: HaFailure.UNKNOWN,
+                )
                 return
             }
             Log.i(TAG, "ride-summary discovery published for $slug")
@@ -181,8 +204,14 @@ internal class HaPublisher(
         val ok = ha.publishRideSummaryState(slug, stats.snapshot())
         if (ok) {
             stats.markPublished()
+            HaHealthBus.reportOk(HaFamily.RIDE_SUMMARY)
         } else {
             Log.w(TAG, "ride-summary state publish failed")
+            HaHealthBus.reportError(
+                HaFamily.RIDE_SUMMARY,
+                "ride-summary publish failed",
+                ha.lastFailure ?: HaFailure.UNKNOWN,
+            )
         }
     }
 

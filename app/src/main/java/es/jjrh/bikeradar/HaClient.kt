@@ -41,6 +41,30 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
     /**
+     * Why the most recent publish on THIS instance failed, or null if none
+     * has. Read by [HaPublisher] when a publish returns false, so the status
+     * surfaces can say what went wrong rather than only that something did.
+     *
+     * An instance field rather than a return type because every publish
+     * helper here returns Boolean and a dozen call sites read it.
+     *
+     * WHAT ACTUALLY HOLDS, which is narrower than "one client per publish":
+     * a reader must take the value off the instance that performed the
+     * publish. Some callers do build a client per publish; the close-pass
+     * path reads the service's shared, long-lived one, which is also used
+     * concurrently by the front-light publish. Two concurrent publishes on a
+     * shared instance can therefore cross-attribute a cause. They run against
+     * the same host and token, so the classification is the same in practice,
+     * but do not write a comment claiming otherwise.
+     *
+     * Volatile: `publishRideEdge` fires two publishes concurrently, and both
+     * write this before the awaited read.
+     */
+    @Volatile
+    var lastFailure: HaFailure? = null
+        private set
+
+    /**
      * Returns a Throwable describing why the configured URL is unsafe to send
      * the bearer token over, or null if the URL is acceptable. HTTPS is always
      * acceptable; HTTP is acceptable only for LAN hosts. See [HaUrlPolicy].
@@ -56,6 +80,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         if (!isConfigured()) return false
         cleartextRefusal()?.let {
             Log.w(TAG, "HA mqtt/publish $topic refused: ${it.message}")
+            lastFailure = classifyHaFailure(insecureRefusal = true)
             return false
         }
         return withContext(Dispatchers.IO) {
@@ -80,10 +105,12 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 drainAndReturn(conn, code)
                 if (code !in 200..299) {
                     Log.w(TAG, "HA mqtt/publish $topic -> $code")
+                    lastFailure = classifyHaFailure(code = code)
                 }
                 code in 200..299
             } catch (t: Throwable) {
                 Log.w(TAG, "HA mqtt/publish $topic failed: ${t.javaClass.simpleName}: ${t.message}")
+                lastFailure = classifyHaFailure(error = t.javaClass.simpleName)
                 false
             }
         }

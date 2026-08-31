@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.VisibleForTesting
 import es.jjrh.bikeradar.BuildConfig
+import es.jjrh.bikeradar.HaHealthBus
 
 /**
  * Stores the Home Assistant base URL and long-lived bearer token at rest.
@@ -54,11 +55,27 @@ class HaCredentials(context: Context) {
 
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
+    /**
+     * Store the rider's credentials, and forget what the old ones proved.
+     *
+     * The reset lives HERE, not at the four call sites, because a caller that
+     * forgets it leaves the status surfaces asserting an outcome the current
+     * credentials never earned: fix a mistyped host and the row keeps reading
+     * UNREACHABLE, break a working one and it keeps reading READY, in both
+     * cases until something happens to publish.
+     *
+     * Only on an actual change. Re-saving the same values - which the
+     * Settings screen does whenever the rider presses save without editing -
+     * is not new information about them, and wiping a good verdict for it
+     * would put the row back to "nothing observed yet" for no reason.
+     */
     fun save(url: String, token: String) {
+        val changed = url != baseUrl || token != this.token
         sp.edit()
             .putString(KEY_BASE_URL_V3, url)
             .putString(KEY_TOKEN_V3, token)
             .apply()
+        if (changed) HaHealthBus.reset()
     }
 
     /**
@@ -73,6 +90,7 @@ class HaCredentials(context: Context) {
      * quietly resume publishing to a Home Assistant the rider disconnected.
      */
     fun clear() {
+        HaHealthBus.reset()
         sp.edit()
             .remove(KEY_BASE_URL_V3)
             .remove(KEY_TOKEN_V3)

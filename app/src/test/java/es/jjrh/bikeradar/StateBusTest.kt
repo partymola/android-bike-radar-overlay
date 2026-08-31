@@ -25,13 +25,13 @@ class StateBusTest {
 
     @Test
     fun haHealthBusReportsOk() {
-        HaHealthBus.reportOk()
+        HaHealthBus.reportOk(HaFamily.BATTERY)
         assertEquals(HaHealth.Ok, HaHealthBus.state.value)
     }
 
     @Test
     fun haHealthBusReportsErrorWithMessageAndTimestamp() {
-        HaHealthBus.reportError("mqtt down")
+        HaHealthBus.reportError(HaFamily.BATTERY, "mqtt down")
         val s = HaHealthBus.state.value
         assertTrue(s is HaHealth.Error)
         s as HaHealth.Error

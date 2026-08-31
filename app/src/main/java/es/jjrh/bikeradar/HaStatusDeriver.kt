@@ -15,11 +15,12 @@ package es.jjrh.bikeradar
  * touched Home Assistant saw a green "MQTT ready" while Settings said
  * "Not configured".
  *
- * [HaHealthBus] is written only by [HaPublisher], on a ride-edge or battery
- * publish. So [HaHealth.Unknown] is the resting state twice over: for an
- * install that will never use Home Assistant, and for a correctly configured
- * one between app start and its first publish. Neither may be rendered as a
- * working connection - hence [CONFIGURED], which claims setup and nothing more.
+ * [HaHealthBus] is written by the publish paths only - battery, ride edge,
+ * ride summary and close pass. So [HaHealth.Unknown] is the resting state
+ * twice over: for an install that will never use Home Assistant, and for a
+ * correctly configured one between app start and its first publish. Neither
+ * may be rendered as a working connection - hence [CONFIGURED], which claims
+ * setup and nothing more.
  *
  * An [UNREACHABLE] verdict is not time-boxed: it stands until a publish
  * succeeds. Ageing it out would silently promote a failure back to green
@@ -36,9 +37,11 @@ enum class HaStatus {
     /**
      * A publish has succeeded. The only state that may read as working.
      *
-     * Nothing resets [HaHealthBus] when the stored URL or token changes, so
-     * this can outlive the credentials that earned it: edit the host and the
-     * row keeps claiming READY until the next publish resolves it either way.
+     * It cannot outlive the credentials that earned it: `HaCredentials.save`
+     * and `clear` reset the bus on a genuine change, so editing the host puts
+     * this back to [CONFIGURED] rather than leaving a stale claim. A publish
+     * already in flight under the old credentials can still land afterwards
+     * and re-assert a verdict; the next publish resolves it.
      */
     READY,
 

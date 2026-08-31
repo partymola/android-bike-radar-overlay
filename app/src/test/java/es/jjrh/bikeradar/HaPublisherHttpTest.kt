@@ -49,6 +49,7 @@ class HaPublisherHttpTest {
     private val app = ApplicationProvider.getApplicationContext<android.app.Application>()
 
     @Before fun setUp() {
+        HaHealthBus.reset()
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         executor = Executors.newFixedThreadPool(4)
@@ -65,6 +66,7 @@ class HaPublisherHttpTest {
     }
 
     @After fun tearDown() {
+        HaHealthBus.reset()
         server.stop(0)
         executor.shutdownNow()
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
@@ -118,6 +120,11 @@ class HaPublisherHttpTest {
         // in flight, not merely that it happened later - awaiting it after the
         // state write would satisfy an ordering check while reintroducing the
         // stall.
+        assertEquals(
+            "a successful publish must reach the bus, or the row cannot go green",
+            HaHealth.Ok,
+            HaHealthBus.families.value[HaFamily.BATTERY],
+        )
         val retire = "homeassistant/sensor/varia_radar_battery/config"
         assertTrue("the reading is published", topics.contains("bikeradar/radar/battery"))
         assertFalse("the retirement must not have been awaited", topics.contains(retire))
@@ -127,6 +134,13 @@ class HaPublisherHttpTest {
     @Test fun batteryPublishReturnsFalseWhenDiscoveryFails() = runBlocking {
         statusFor = { 500 }
         assertFalse(publisher().publishBatteryToHa("Radar", 80))
+        // Reported, with the cause. A discovery failure used to return here
+        // having only logged, so the family never reported at all and the
+        // diagnostic bundle called a stream failing on every attempt "not
+        // published this session" - the wording for a quiet one.
+        val health = HaHealthBus.families.value[HaFamily.BATTERY]
+        assertTrue("a failed discovery must reach the bus, got $health", health is HaHealth.Error)
+        assertEquals(HaFailure.SERVER_ERROR, (health as HaHealth.Error).cause)
     }
 
     @Test fun batteryStateFailureAfterSuccessfulDiscoveryReportsFalse() = runBlocking {
@@ -136,6 +150,9 @@ class HaPublisherHttpTest {
         assertFalse(publisher().publishBatteryToHa("Radar", 80))
         assertTrue("discovery still went out", topics.any { it.endsWith("/config") })
         assertTrue("state write was attempted", topics.contains("bikeradar/radar/battery"))
+        val health = HaHealthBus.families.value[HaFamily.BATTERY]
+        assertTrue("a failed state write must reach the bus, got $health", health is HaHealth.Error)
+        assertEquals(HaFailure.SERVER_ERROR, (health as HaHealth.Error).cause)
     }
 
     @Test fun discoveryFailureRollsBackSoTheNextCallRetriesDiscovery() = runBlocking {
@@ -177,6 +194,23 @@ class HaPublisherHttpTest {
         awaitTopic { it == "bikeradar/ride/edge" }
     }
 
+    @Test fun rideEdgeReportsItsOutcomeToTheBus() {
+        statusFor = { 401 }
+        publisher().publishRideEdgeIfHa("started", "stamp")
+        awaitTopic { it == "bikeradar/ride/edge" }
+        // Fire-and-forget, so wait for the report rather than assuming it has
+        // landed by the time the topic appears.
+        val deadline = System.currentTimeMillis() + 2_000
+        while (System.currentTimeMillis() < deadline &&
+            HaHealthBus.families.value[HaFamily.RIDE_EDGE] !is HaHealth.Error
+        ) {
+            Thread.sleep(10)
+        }
+        val health = HaHealthBus.families.value[HaFamily.RIDE_EDGE]
+        assertTrue("a failed ride edge must reach the bus, got $health", health is HaHealth.Error)
+        assertEquals(HaFailure.AUTH, (health as HaHealth.Error).cause)
+    }
+
     // ── ride summary ─────────────────────────────────────────────────────────
 
     private fun changedStats() = { RideStatsAccumulator().apply { observeAlertCue("beep") } }
@@ -192,6 +226,12 @@ class HaPublisherHttpTest {
         p.publishRideSummaryIfChanged()
         val afterFirst = topics.size
         assertTrue("a changed ride summary publishes", afterFirst > 0)
+        // This stream reported nothing at all before, so a failing ride
+        // summary was invisible on every surface.
+        assertEquals(
+            HaHealth.Ok,
+            HaHealthBus.families.value[HaFamily.RIDE_SUMMARY],
+        )
         p.publishRideSummaryIfChanged()
         assertEquals("an unchanged summary does not re-publish", afterFirst, topics.size)
     }

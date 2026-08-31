@@ -228,11 +228,17 @@ internal class OverlayPipeline(
                         if (cpCfg.enabled && ha().isConfigured() && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {
                             closePassDiscoveryInFlight = true
                             launch(ioDispatcher) {
-                                val ok = ha().publishClosePassDiscovery(radarSlug, deviceName)
+                                val client = ha()
+                                val ok = client.publishClosePassDiscovery(radarSlug, deviceName)
                                 if (ok) {
                                     closePassDiscoveryPublished = true
                                 } else {
                                     Log.w(TAG, "close-pass discovery publish failed; will retry")
+                                    HaHealthBus.reportError(
+                                        HaFamily.CLOSE_PASS,
+                                        "close-pass discovery failed",
+                                        client.lastFailure ?: HaFailure.UNKNOWN,
+                                    )
                                 }
                                 closePassDiscoveryInFlight = false
                             }
@@ -254,8 +260,24 @@ internal class OverlayPipeline(
                             if (radarSlug != null && ha().isConfigured()) {
                                 launch(ioDispatcher) {
                                     for (ev in cpEvents) {
-                                        val ok = ha().publishClosePassEvent(radarSlug, closePassJson(ev))
-                                        if (!ok) Log.w(TAG, "close-pass publish failed")
+                                        // Hold the instance: ha() returns the
+                                        // service's shared client, and a
+                                        // credential save mid-batch swaps that
+                                        // field. Publishing and reading the
+                                        // failure off the same object is what
+                                        // keeps the cause attributable.
+                                        val client = ha()
+                                        val ok = client.publishClosePassEvent(radarSlug, closePassJson(ev))
+                                        if (ok) {
+                                            HaHealthBus.reportOk(HaFamily.CLOSE_PASS)
+                                        } else {
+                                            Log.w(TAG, "close-pass publish failed")
+                                            HaHealthBus.reportError(
+                                                HaFamily.CLOSE_PASS,
+                                                "close-pass publish failed",
+                                                client.lastFailure ?: HaFailure.UNKNOWN,
+                                            )
+                                        }
                                     }
                                 }
                             }

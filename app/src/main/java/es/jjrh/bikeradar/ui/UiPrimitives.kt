@@ -234,6 +234,11 @@ fun BatteryChip(
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
             fontSize = 11.sp,
+            // A percentage is three characters and must stay on one line. In a
+            // narrow column it otherwise wraps per character - "78%" renders
+            // as a vertical 7/8/% and takes the row's height with it.
+            maxLines = 1,
+            softWrap = false,
         )
         if (label != null) {
             Text(

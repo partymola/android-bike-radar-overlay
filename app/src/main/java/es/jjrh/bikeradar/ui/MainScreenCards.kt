@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Sensors
@@ -287,6 +290,15 @@ internal fun SystemCard(
      *  overlay's low-battery marker shows. Nothing sounds for a low
      *  battery; the threshold drives that marker and these colours only. */
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
+    /** Tapping a row opens the screen that owns that device. One callback
+     *  with a target rather than four, so adding a row does not thread a
+     *  fifth lambda through both orientations.
+     *
+     *  NO DEFAULT, and neither has [SystemRowRender]: with one, a caller that
+     *  forgets it compiles clean and renders rows carrying a chevron that does
+     *  nothing. The chevron is a promise the type system should be made to
+     *  keep. */
+    onRowClick: (SystemRowTarget) -> Unit,
 ) {
     val br = LocalBrColors.current
 
@@ -325,6 +337,7 @@ internal fun SystemCard(
             DeviceLinkState.NO_SIGNAL -> br.caution
         },
         hollow = radarLink.hollow,
+        target = SystemRowTarget.RADAR,
     )
 
     val dashcamLink = deviceLinkState(linked = dashcamOwned && dashcamPaired, fresh = dashcamFresh)
@@ -353,6 +366,7 @@ internal fun SystemCard(
             DeviceLinkState.NO_SIGNAL -> br.caution
         },
         hollow = dashcamLink.hollow,
+        target = SystemRowTarget.DASHCAM,
     )
 
     // eBike live-data status (read from the proprietary channel Flow uses).
@@ -377,6 +391,7 @@ internal fun SystemCard(
         muted = !ebikeReceiving,
         battery = ebikeBatteryChipSoc(ebikeReceiving, ebikeBatterySoc),
         dot = if (ebikeReceiving) br.safe else br.caution,
+        target = SystemRowTarget.EBIKE,
     )
 
     // Four states, same vocabulary as Settings: never claim a working
@@ -400,16 +415,39 @@ internal fun SystemCard(
             HaStatus.UNREACHABLE -> br.caution
         },
         hollow = haStatus.isHollow,
+        target = SystemRowTarget.HA,
     )
 
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             SectionLabel(stringResource(R.string.main_section_system))
             Spacer(modifier = Modifier.height(10.dp))
-            SystemRowRender(radarRow, isFirst = true, batteryLowThresholdPct = batteryLowThresholdPct)
-            SystemRowRender(dashcamRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
-            if (ebikeEnabled) SystemRowRender(ebikeRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
-            SystemRowRender(haRow, isFirst = false, batteryLowThresholdPct = batteryLowThresholdPct)
+            SystemRowRender(
+                row = radarRow,
+                isFirst = true,
+                batteryLowThresholdPct = batteryLowThresholdPct,
+                onClick = onRowClick,
+            )
+            SystemRowRender(
+                row = dashcamRow,
+                isFirst = false,
+                batteryLowThresholdPct = batteryLowThresholdPct,
+                onClick = onRowClick,
+            )
+            if (ebikeEnabled) {
+                SystemRowRender(
+                    row = ebikeRow,
+                    isFirst = false,
+                    batteryLowThresholdPct = batteryLowThresholdPct,
+                    onClick = onRowClick,
+                )
+            }
+            SystemRowRender(
+                row = haRow,
+                isFirst = false,
+                batteryLowThresholdPct = batteryLowThresholdPct,
+                onClick = onRowClick,
+            )
         }
     }
 }
@@ -422,13 +460,17 @@ private data class SystemRow(
     val battery: Int?,
     val dot: Color,
     val hollow: Boolean = false,
+    /** Where tapping the row goes. Null renders a plain, inert row. */
+    val target: SystemRowTarget? = null,
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SystemRowRender(
     row: SystemRow,
     isFirst: Boolean,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
+    onClick: (SystemRowTarget) -> Unit,
 ) {
     val br = LocalBrColors.current
     if (!isFirst) {
@@ -439,9 +481,11 @@ private fun SystemRowRender(
                 .background(br.hairline),
         )
     }
+    val target = row.target
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .let { if (target != null) it.clickable { onClick(target) } else it }
             .padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -459,8 +503,14 @@ private fun SystemRowRender(
                 fontSize = 13.sp,
             )
             Spacer(modifier = Modifier.height(3.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            // FlowRow, not Row: landscape puts this card in a narrow column
+            // where the status word and the battery chip do not both fit
+            // beside the chevron. Wrapping keeps both readable; the
+            // alternative was truncating one of them, and neither is
+            // expendable - "Limited" is the state a rider most needs to read,
+            // and a percentage missing a digit reads as a different number.
+            FlowRow(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
@@ -470,6 +520,13 @@ private fun SystemRowRender(
                     fontWeight = FontWeight.Medium,
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
+                    // One line, so the FlowRow above moves the chip down
+                    // rather than breaking this word across two. Ellipsis
+                    // because the default clips mid-glyph with nothing marking
+                    // it, and the Spanish strings are the long ones.
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (row.battery != null) {
                     BatteryChip(pct = row.battery, lowThresholdPct = batteryLowThresholdPct)
@@ -477,6 +534,16 @@ private fun SystemRowRender(
             }
         }
         StatusDot(color = row.dot, hollow = row.hollow, size = 7.dp)
+        // Same convention as the Settings rows: a chevron means the row
+        // navigates, so it appears only where one actually does.
+        if (target != null) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = br.fgFaint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 

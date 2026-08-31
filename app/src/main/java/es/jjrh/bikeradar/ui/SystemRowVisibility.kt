@@ -74,3 +74,27 @@ val DeviceLinkState.hollow: Boolean get() = this == DeviceLinkState.NOT_PAIRED
  * or null to hide the chip.
  */
 fun ebikeBatteryChipSoc(receiving: Boolean, soc: Int?): Int? = if (receiving) soc else null
+
+/** Which System-card row was tapped. */
+enum class SystemRowTarget { RADAR, DASHCAM, EBIKE, HA }
+
+/**
+ * Where a System-card row navigates.
+ *
+ * A pure function rather than a `navigate("...")` inline in the Composable, so
+ * the destinations are asserted by a unit test instead of only by tapping the
+ * app: a wrong route here sends a rider to the wrong screen and nothing
+ * compiles differently. The strings must match the routes registered in
+ * `MainActivity`, which is what [SystemRowRouteTest] checks by reading them
+ * back out of that file.
+ *
+ * The radar row goes to the DEVICE screen, not the alert-tuning one: a rider
+ * tapping a row that says "Not in range" wants the pairing and connection
+ * state, not the beep thresholds.
+ */
+fun systemRowRoute(target: SystemRowTarget): String = when (target) {
+    SystemRowTarget.RADAR -> "settings/radar-device"
+    SystemRowTarget.DASHCAM -> "settings/dashcam"
+    SystemRowTarget.EBIKE -> "settings/ebike"
+    SystemRowTarget.HA -> "settings/ha"
+}

@@ -105,6 +105,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -148,6 +149,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -156,10 +158,9 @@ class MainScreenContentSnapshotTest {
         }
     }
 
-    // Landscape has its own SystemCard call site and, until this, no golden
-    // at all - so the row states were verified in one orientation only.
-    // The eBike row used to say "Waiting for Flow" here, blaming a
-    // third-party app for a bike this app was never paired with.
+    // The eBike row must name the app's OWN precondition - no bike paired -
+    // rather than blaming a third-party app for it. Portrait; the landscape
+    // variant below is a separate call site and needs its own golden.
     @Test
     fun ebikeNotPaired() {
         captureRoboImage {
@@ -192,6 +193,53 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    // The same state in LANDSCAPE, which is a separate SystemCard call site.
+    // Without this golden the stage can be dropped from that call and nothing
+    // fails: the row falls back to the parameter's default and every other
+    // test renders the default anyway. That is how it came to say "Waiting for
+    // Flow" in one orientation and the truth in the other.
+    @Test
+    fun ebikeNotPairedLandscape() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.CheckCircle,
+                            tone = MainStatusTone.Good,
+                            headline = "Radar live",
+                            subtitle = "Dashcam on",
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        eBikeDataEnabled = true,
+                        ebikeStage = EBikeStage.NO_BONDED_BIKE,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        dashcamDisplayName = "Front cam",
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = false,
+                        isLandscape = true,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -233,6 +281,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -272,6 +321,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -316,6 +366,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -368,6 +419,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -414,6 +466,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -464,6 +517,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -502,6 +556,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -540,6 +595,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -578,6 +634,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )
@@ -616,6 +673,7 @@ class MainScreenContentSnapshotTest {
                         onWordmarkLongPress = {},
                         onBtBannerTap = {},
                         onSettingsClick = {},
+                        onSystemRowClick = {},
                         onDashcamYes = {},
                         onDashcamNo = {},
                     )

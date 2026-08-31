@@ -108,6 +108,7 @@ class MainScreenSnapshotTest {
                         // golden: nothing paired, nothing set up, nothing
                         // claiming to work.
                         haStatus = HaStatus.NOT_CONFIGURED,
+                        onRowClick = {},
                     )
                 }
             }
@@ -134,6 +135,7 @@ class MainScreenSnapshotTest {
                         // first ride-edge publish. Must read as set up, never as
                         // a working connection and never as a failure.
                         haStatus = HaStatus.CONFIGURED,
+                        onRowClick = {},
                     )
                 }
             }
@@ -160,6 +162,7 @@ class MainScreenSnapshotTest {
                         radarBattery = null,
                         dashcamBattery = null,
                         haStatus = HaStatus.NOT_CONFIGURED,
+                        onRowClick = {},
                     )
                 }
             }
@@ -183,6 +186,7 @@ class MainScreenSnapshotTest {
                         radarBattery = null,
                         dashcamBattery = null,
                         haStatus = HaStatus.CONFIGURED,
+                        onRowClick = {},
                     )
                 }
             }
@@ -205,6 +209,7 @@ class MainScreenSnapshotTest {
                         radarBattery = null,
                         dashcamBattery = null,
                         haStatus = HaStatus.UNREACHABLE,
+                        onRowClick = {},
                     )
                 }
             }
@@ -240,6 +245,7 @@ class MainScreenSnapshotTest {
                         ebikeEnabled = true,
                         ebikeReceiving = true,
                         ebikeBatterySoc = 82,
+                        onRowClick = {},
                     )
                 }
             }
@@ -291,6 +297,7 @@ class MainScreenSnapshotTest {
                         ebikeEnabled = true,
                         ebikeReceiving = false,
                         ebikeBatterySoc = 82,
+                        onRowClick = {},
                     )
                 }
             }

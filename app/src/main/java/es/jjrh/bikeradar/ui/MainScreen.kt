@@ -92,25 +92,30 @@ import java.util.Locale
 import android.provider.Settings as AndroidSettings
 
 /**
- * Redesigned home screen, matching the design handoff's main-screen
- * mockup end-to-end.
+ * The home screen.
  *
  * Layout, top to bottom:
- *  1. Top bar: BR mark + "Bike Radar" wordmark only. NO overflow menu —
- *     Debug + About move into Settings → ADVANCED. The triple-tap dev-
- *     mode unlock affordance hides on the wordmark (invisible to non-
- *     dev users).
- *  2. Hero status card: pulsing status dot + headline + subtitle +
- *     optional full-width CTA. Driven by `MainStatusDeriver` exactly as
- *     V1; the new 8th case (Service stopped) renders here too.
- *  3. SYSTEM card: three rows (rear radar / front dashcam / Home
- *     Assistant) with icons, value text, optional battery chip,
- *     trailing status dot. All wired to real state buses.
- *  4. CLOSE PASSES stats card: big number + sub-line + sparkline +
- *     segmented year/month/week control. Synthetic data for now (see
- *     DEC-007 in the overnight decision log) until a persisted store
- *     lands.
- *  5. Full-width Settings button at the bottom.
+ *  1. Top bar: BR mark + "Bike Radar" wordmark only, no overflow menu -
+ *     Debug and About live in Settings -> ADVANCED. The wordmark carries
+ *     the triple-tap dev-mode unlock, invisible to everyone else.
+ *  2. Hero status card: status dot + headline + subtitle + optional
+ *     full-width CTA, driven by [MainStatusDeriver].
+ *  3. SYSTEM card: a row per device - rear radar, front dashcam, eBike
+ *     (only when the feature is on), Home Assistant - each with an icon,
+ *     value text, optional battery chip and a status dot, all fed by the
+ *     real state buses. Every row NAVIGATES to the screen that owns that
+ *     device; the destinations are [systemRowRoute] and are pinned by
+ *     [SystemRowRouteTest] against the graph in `MainActivity`.
+ *  4. CLOSE PASSES card: the session count, and a link to ride history
+ *     that stays inert until there is history to see.
+ *  5. Full-width Settings button.
+ *
+ * Landscape reflows into two columns and renders the same cards. The two
+ * orientations are separate Composables taking the same parameters, so a
+ * parameter WITHOUT a default is a compile error in both if one forgets it.
+ * That guarantee does not extend to parameters that HAVE a default: one
+ * forgotten there renders its default with nothing failing, which is why the
+ * eBike row's stage is pinned in both orientations by a golden.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -263,6 +268,10 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val onBtBannerTap = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) }
     val onSettingsClick = { navController.navigate("settings") }
     val onClosePassCardClick = { navController.navigate("ride-history") }
+    val onSystemRowClick = { target: SystemRowTarget ->
+        navController.navigate(systemRowRoute(target))
+        Unit
+    }
     val onDashcamYes = {
         prefs.dashcamOwnership = DashcamOwnership.YES
         navController.navigate("settings")
@@ -333,6 +342,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
+            onSystemRowClick = onSystemRowClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
             onClosePassCardClick = onClosePassCardClick,
@@ -379,6 +389,7 @@ internal fun MainScreenContent(
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
+    onSystemRowClick: (SystemRowTarget) -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
     onClosePassCardClick: () -> Unit = {},
@@ -412,6 +423,7 @@ internal fun MainScreenContent(
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
+            onSystemRowClick = onSystemRowClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
             onClosePassCardClick = onClosePassCardClick,
@@ -445,6 +457,7 @@ internal fun MainScreenContent(
             onWordmarkLongPress = onWordmarkLongPress,
             onBtBannerTap = onBtBannerTap,
             onSettingsClick = onSettingsClick,
+            onSystemRowClick = onSystemRowClick,
             onDashcamYes = onDashcamYes,
             onDashcamNo = onDashcamNo,
             onClosePassCardClick = onClosePassCardClick,
@@ -513,6 +526,7 @@ private fun MainScreenPortrait(
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
+    onSystemRowClick: (SystemRowTarget) -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
     onClosePassCardClick: () -> Unit,
@@ -556,6 +570,7 @@ private fun MainScreenPortrait(
                 ebikeReceiving = ebikeReceiving,
                 ebikeBatterySoc = ebikeBatterySoc,
                 batteryLowThresholdPct = batteryLowThresholdPct,
+                onRowClick = onSystemRowClick,
             )
             Spacer(modifier = Modifier.height(12.dp))
             ClosePassStatsCard(
@@ -610,6 +625,7 @@ private fun MainScreenLandscape(
     onWordmarkLongPress: () -> Unit,
     onBtBannerTap: () -> Unit,
     onSettingsClick: () -> Unit,
+    onSystemRowClick: (SystemRowTarget) -> Unit,
     onDashcamYes: () -> Unit,
     onDashcamNo: () -> Unit,
     onClosePassCardClick: () -> Unit,
@@ -673,10 +689,12 @@ private fun MainScreenLandscape(
                     radarBattery = radarBattery,
                     dashcamBattery = dashcamBattery,
                     haStatus = haStatus,
+                    ebikeStage = ebikeStage,
                     ebikeEnabled = eBikeDataEnabled,
                     ebikeReceiving = ebikeReceiving,
                     ebikeBatterySoc = ebikeBatterySoc,
                     batteryLowThresholdPct = batteryLowThresholdPct,
+                    onRowClick = onSystemRowClick,
                 )
                 // Push Settings to the bottom of the right column.
                 Spacer(modifier = Modifier.weight(1f))

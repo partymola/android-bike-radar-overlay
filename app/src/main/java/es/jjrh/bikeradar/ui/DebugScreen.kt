@@ -70,6 +70,7 @@ import es.jjrh.bikeradar.CrashLogger
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DebugOverlayService
 import es.jjrh.bikeradar.HaClient
+import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.LinkEventJournal
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarStateBus
@@ -995,52 +996,28 @@ private fun shareFile(ctx: Context, f: File) {
 }
 
 private fun shareDiagnosticBundle(ctx: Context, prefs: Prefs) {
-    val sb = StringBuilder()
-    sb.appendLine("=== Bike Radar Diagnostic Bundle ===")
-    sb.appendLine("Generated: ${Date()}")
-    // Which build produced this. A hand-built APK sent to one reporter carries
-    // no tag and shares its versionCode with every other build between
-    // releases, so without this line a pasted bundle cannot be tied to a tree.
-    // Release builds omit the commit unless deliberately stamped - see
-    // BuildStamp - so the line degrades to version and build type.
-    sb.appendLine(BuildConfigStamp.line().removePrefix("# "))
-    sb.appendLine()
-    sb.appendLine("--- Prefs ---")
-    sb.appendLine(prefs.dumpAll())
-    sb.appendLine("--- LESC bond verification (run on PC) ---")
-    sb.appendLine("adb shell dumpsys bluetooth_manager | grep -E 'PairingAlgorithm|le_encrypted'")
-    sb.appendLine()
+    // Gathering only. The assembly, and every redaction, lives in
+    // DiagnosticBundle so it can be asserted on its output rather than by
+    // reading this function's source for the presence of a call.
     val logFiles = ctx.getExternalFilesDir(null)
         ?.let { File(it, CaptureLogManager.CAPTURE_DIR) }
         ?.listFiles { f -> CaptureLogFiles.isCaptureLog(f) }
         ?.sortedByDescending { it.lastModified() }
         ?: emptyList()
-    sb.appendLine("--- Capture logs (${logFiles.size} on disk) ---")
-    logFiles.take(3).forEach { sb.appendLine("${it.name}  ${it.length() / 1024}KB") }
-    val journal = readLinkJournal(ctx)
-    sb.appendLine("--- Link journal (newest ${journal.size.coerceAtMost(40)}) ---")
-    // Redacted to the same standard as the prefs dump above. These lines
-    // interpolate BLE device names and are appended AFTER dumpAll, so they
-    // used to bypass the only redaction in the bundle - and this bundle is
-    // pasted into public issue threads by reporters we ask for it.
-    journal.take(40).forEach { sb.appendLine(Prefs.redactAddresses(it)) }
     val crashFiles = enumerateCrashLogs(ctx)
-    sb.appendLine()
-    sb.appendLine("--- Crash reports (${crashFiles.size} on disk) ---")
-    crashFiles.take(3).forEach { sb.appendLine(it.name) }
-    crashFiles.firstOrNull()?.let { newest ->
-        sb.appendLine()
-        sb.appendLine("--- Newest crash report ---")
-        // Crash reports are version + thread + stack trace, a few KB at most.
-        // Same redaction: an exception message can carry whatever string threw.
-        sb.append(
-            Prefs.redactAddresses(
-                runCatching { newest.readText() }.getOrDefault("(unreadable)"),
-            ),
-        )
-    }
+    val text = DiagnosticBundle.build(
+        generated = Date().toString(),
+        buildStamp = BuildConfigStamp.line().removePrefix("# "),
+        prefsDump = prefs.dumpAll(),
+        haFamilies = HaHealthBus.families.value,
+        captureLogs = logFiles.map { DiagnosticBundle.FileLine(it.name, it.length() / 1024) },
+        journal = readLinkJournal(ctx),
+        crashLogs = crashFiles.map { DiagnosticBundle.FileLine(it.name, it.length() / 1024) },
+        newestCrashText = crashFiles.firstOrNull()
+            ?.let { runCatching { it.readText() }.getOrDefault("(unreadable)") },
+    )
 
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("diagnostic", sb.toString()))
+    cm.setPrimaryClip(ClipData.newPlainText("diagnostic", text))
     Toast.makeText(ctx, ctx.getString(R.string.debug_toast_diagnostic_copied), Toast.LENGTH_SHORT).show()
 }

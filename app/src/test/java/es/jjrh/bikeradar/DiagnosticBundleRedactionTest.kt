@@ -21,53 +21,40 @@ import org.junit.Test
  * verbatim, both AFTER the redacted section. That made the bundle's weakest
  * part the one nobody was looking at.
  *
- * Source-reading because `shareDiagnosticBundle` is a private function inside
- * a Composable file with no test entry point, and its only side effect is
- * writing the clipboard. The alternative measured here was no check at all.
+ * What remains here is the pair of checks that must read SOURCE, because no
+ * output can show them: that the redactor itself still removes an address,
+ * and that no Composable renders the build stamp. The redaction of the
+ * bundle's own content is now asserted on the built string by
+ * [es.jjrh.bikeradar.ui.DiagnosticBundleTest], which is a stronger check -
+ * a source read passes whenever the call is present and says nothing about
+ * whether an address survives it.
  */
 class DiagnosticBundleRedactionTest {
 
-    private val source = RepoFiles.mainSource("ui/DebugScreen.kt").readText()
-
     @Test
     fun theRedactorActuallyRemovesAnAddress() {
-        // Pin the behaviour the two call sites below depend on, so this file
-        // cannot pass while the redactor itself has become a no-op.
+        // Pinned here because no output test can show it: DiagnosticBundleTest
+        // asserts an address does not survive the bundle, which a redactor
+        // that deleted everything would also satisfy. This says what it does.
         val line = "radar link start MyRadar AA:BB:CC:DD:EE:FF"
         assertEquals("radar link start MyRadar <redacted>", Prefs.redactAddresses(line))
     }
 
     @Test
-    fun journalLinesAreRedactedIntoTheBundle() {
+    fun theScreenHandsTheBundleTheRealBuildStampAndHealth() {
+        // Source-read because these are WIRING, and the bundle's own tests
+        // cannot see them: DiagnosticBundleTest hands `build()` a stamp and
+        // asserts it comes back, which is equally true if the screen passes an
+        // empty string. DebugScreen is also in diffCoverageExcludes, so
+        // nothing else looks at these two lines at all.
+        val src = RepoFiles.mainSource("ui/DebugScreen.kt").readText()
         assertTrue(
-            "link-journal lines carry BLE device names and are pasted into public " +
-                "issues; they must go through the same redaction as the prefs dump",
-            source.contains("journal.take(40).forEach { sb.appendLine(Prefs.redactAddresses(it)) }"),
+            "the bundle must be handed the real build stamp",
+            src.contains("buildStamp = BuildConfigStamp.line().removePrefix(\"# \")"),
         )
-    }
-
-    @Test
-    fun theCrashReportIsRedactedIntoTheBundle() {
-        // An exception message carries whatever string threw, which is not a
-        // fixed vocabulary and cannot be reasoned about in advance.
-        val bundleFn = source.substringAfter("private fun shareDiagnosticBundle")
-        val crashSection = bundleFn.substringAfter("--- Newest crash report ---")
         assertTrue(
-            "the appended crash report must be redacted: $crashSection",
-            crashSection.contains("Prefs.redactAddresses("),
-        )
-    }
-
-    @Test
-    fun theBundleNamesTheBuildItCameFrom() {
-        // A hand-built APK sent to one reporter carries no tag and shares its
-        // versionCode with every build between releases, so without this the
-        // pasted bundle cannot be tied to a tree. It is deliberately here and
-        // not on a rendered screen: a screen would put the commit into every
-        // Roborazzi golden and force a re-record on each commit.
-        assertTrue(
-            "the bundle must state which build produced it",
-            source.contains("BuildConfigStamp.line()"),
+            "the bundle must be handed the real per-family health",
+            src.contains("haFamilies = HaHealthBus.families.value"),
         )
     }
 

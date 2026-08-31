@@ -572,9 +572,11 @@ val diffCoverageExcludes = listOf(
     // Render/wiring leaf: its remaining bodies are Composable lambdas that
     // pass arguments to functions elsewhere, and the harness cannot execute
     // them - a Compose dialog is not reachable in this Robolectric setup, so
-    // a screen-level test cannot drive the confirm paths. Its capture-log
-    // DECISIONS live in ui/CaptureLogActions.kt, which is gated, unit-tested
-    // and mutation-checked. The exclusion is only honest while that stays
+    // a screen-level test cannot drive the confirm paths. Everything it used
+    // to DECIDE now lives beside it and is gated: capture-log actions in
+    // ui/CaptureLogActions.kt, and the diagnostic bundle's assembly and
+    // redaction in ui/DiagnosticBundle.kt, asserted on its output rather
+    // than by reading source. The exclusion is only honest while that stays
     // true: logic added back into the screen file is silently ungated.
     "**/DebugScreen*.*",
 )

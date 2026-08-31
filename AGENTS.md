@@ -208,11 +208,16 @@ summary; the Key files table maps each part to its file.
   reads sit near the end of the sequence, so an abort at an early step
   records neither.
   Independent of it, the discovered-service table and abort token of every
-  attempt that reaches service discovery are stored in
-  `Prefs.radarLinkProbe` (see `LinkProbe`) and printed in the diagnostic
+  attempt are stored per link - `Prefs.radarLinkProbe` and
+  `Prefs.cameraLinkProbe` (see `LinkProbe`) - and printed in the diagnostic
   bundle, so even a bundle without any capture names the failing step. The
-  two earlier exits - a null GATT, and discovery itself failing - do not
-  reach that write and are named by the link journal instead. The slot is
+  two exits before service discovery, a null GATT and discovery itself
+  failing, record an outcome with no table rather than nothing: leaving the
+  slot alone would let a bundle report the PREVIOUS attempt's stopping point
+  as though it were this one. Both links share `LinkProbeRecorder`, which
+  owns the change-debounce and the per-answer `since=` stamps; a separate
+  slot per link is deliberate, so the device that reconnected last cannot
+  erase the other's answer. The slot is
   rewritten only when the answer changes, and the stamp is when that
   answer was first seen. Those stamps are kept per distinct answer in the
   process, and the stored one is read back at start-up, so an alternating

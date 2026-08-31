@@ -132,22 +132,19 @@ internal class RadarLinkController(
     // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
     @Volatile private var lastV2FrameMs: Long = 0L
 
-    // Last answer written, so an unchanged one is not rewritten. Seeded from
-    // the stored value on first use rather than starting null - see
-    // [seedLinkProbeDebounce].
-    @Volatile private var lastLinkProbeBody: String? = null
+    // Owns the change-debounce and the per-answer since= stamps; see
+    // LinkProbeRecorder, which the front camera shares.
+    private val linkProbe = LinkProbeRecorder(
+        load = { prefs.radarLinkProbe },
+        store = { prefs.radarLinkProbe = it },
+        wallClock = { wallClock() },
+    )
 
     // Wall clock of the FIRST sighting of each distinct answer. A single
     // last-answer slot is not enough: a marginal link that stops at one step on
     // one attempt and another on the next differs from the previous answer
     // every time, so it would rewrite every 1.5 s and restamp on every flip -
     // and a flapping link is exactly the case the stamp is meant to describe.
-    // Guarded by [linkProbeLock].
-    private val linkProbeFirstSeen = LinkedHashMap<String, Long>()
-
-    private val linkProbeLock = Any()
-
-    private var linkProbeSeeded = false
 
     // True once this reconnect loop has cleared the GATT cache SUCCESSFULLY,
     // so the next discovery's table came from the device rather than from
@@ -490,6 +487,11 @@ internal class RadarLinkController(
         if (gatt == null) {
             captureLog.clog("# connectGatt returned null")
             journal("radar connectGatt returned null")
+            // Record it too: this and the discovery failure below are the two
+            // exits that reach no GATT table, and leaving the slot holding the
+            // PREVIOUS attempt's answer is worse than saying nothing - a
+            // bundle then names a stopping point this attempt never reached.
+            recordPreDiscoveryExit(NO_GATT)
             return false
         }
 
@@ -505,6 +507,7 @@ internal class RadarLinkController(
             if (!ok) {
                 captureLog.clog("# services discovery failed")
                 journal("radar services discovery failed")
+                recordPreDiscoveryExit(DISCOVERY_FAILED)
                 return false
             }
 
@@ -944,34 +947,38 @@ internal class RadarLinkController(
     }
 
     /**
-     * Persist what this attempt found and where it stopped, for the diagnostic
-     * bundle. Only on a change, because the reconnect loop retries an aborting
-     * handshake every 1.5 s and the answer is usually the same every time.
+     * Persist what this attempt found and where it stopped, for the
+     * diagnostic bundle.
      *
-     * The stamp is when that answer was FIRST seen, which is why it reads
-     * `since=`, and holding that takes more than a last-answer slot. A marginal
-     * link can stop at one step on one attempt and another on the next, and
-     * each answer then differs from the one before it, so a single slot would
-     * restamp on every flip. [linkProbeFirstSeen] keeps each answer's own first
-     * sighting, and [seedLinkProbeDebounce] carries it across a process start.
-     *
-     * The write RATE is deliberately not bounded, and the debounce below does
-     * not bound it: a link alternating between two stopping points differs from
-     * the previous answer every attempt, so it still writes about every 1.5 s.
-     * What it writes is now one of two stable strings rather than a fresh
-     * stamp each time. `apply()` is asynchronous, so the cost is a prefs-XML
-     * rewrite on the writer thread rather than anything on this path.
+     * The debounce, the per-answer `since=` stamps and their eviction all live
+     * in [LinkProbeRecorder], which the front camera shares.
      *
      * [HANDSHAKE_OK] means the sequence completed, NOT that targets will
      * stream: the battery read and subscribe inside the handshake ignore their
-     * own results, and that step is what keeps the radar off its legacy stream.
-     * The discovered table beside it is what shows a missing battery service,
-     * so record the table even on success.
+     * own results, and that step is what keeps the radar off its legacy
+     * stream. The discovered table beside it is what shows a missing battery
+     * service, so record the table even on success.
      *
-     * Not reached at all when the attempt stops before service discovery
-     * completes (a null GATT, or discovery itself failing). Those two leave the
-     * slot holding the previous answer; the link journal is what names them.
+     * The two exits before service discovery reach [recordPreDiscoveryExit].
      */
+    /**
+     * Record an attempt that stopped BEFORE there was a service table to
+     * describe.
+     *
+     * The table is the useful half of a probe, and these two exits have none:
+     * one never opened a GATT, the other never completed discovery. They are
+     * recorded anyway because the alternative is silence, and silence here is
+     * not neutral - the slot keeps the previous attempt's answer, so a bundle
+     * reports a stopping point that this attempt never reached. An outcome
+     * with no table says plainly how far it got.
+     *
+     * It shares the debounce with [recordLinkProbe], so a radar failing this
+     * way every 1.5 s still writes once and keeps its `since=`.
+     */
+    private fun recordPreDiscoveryExit(outcome: String) {
+        linkProbe.record(LinkProbe.format(emptyList(), outcome))
+    }
+
     private fun recordLinkProbe(gatt: BluetoothGatt, outcome: String) {
         val body = try {
             LinkProbe.format(
@@ -988,37 +995,7 @@ internal class RadarLinkController(
             Log.w(TAG, "link probe failed: $t")
             return
         }
-        seedLinkProbeDebounce()
-        if (body == lastLinkProbeBody) return
-        lastLinkProbeBody = body
-        prefs.radarLinkProbe = LinkProbe.render(firstSeenMs(body), body)
-    }
-
-    /** Read the stored answer back into the debounce, once per process. Without
-     *  it the first attempt after a restart rewrites an unchanged answer with a
-     *  fresh stamp, so a radar failing the same way for weeks reads `since=` a
-     *  few seconds ago. */
-    private fun seedLinkProbeDebounce() {
-        synchronized(linkProbeLock) {
-            if (linkProbeSeeded) return
-            linkProbeSeeded = true
-            val stored = LinkProbe.parse(prefs.radarLinkProbe) ?: return
-            linkProbeFirstSeen[stored.body] = stored.sinceMs
-            lastLinkProbeBody = stored.body
-        }
-    }
-
-    /** First time this exact answer was seen, remembering it if it is new.
-     *  Bounded: a given radar produces a handful of distinct answers, and the
-     *  cap stops a pathological one growing the map without limit. */
-    private fun firstSeenMs(body: String): Long = synchronized(linkProbeLock) {
-        linkProbeFirstSeen[body]?.let { return@synchronized it }
-        if (linkProbeFirstSeen.size >= MAX_LINK_PROBE_STAMPS) {
-            linkProbeFirstSeen.remove(linkProbeFirstSeen.keys.first())
-        }
-        val now = wallClock()
-        linkProbeFirstSeen[body] = now
-        now
+        linkProbe.record(body)
     }
 
     /**
@@ -1166,13 +1143,11 @@ internal class RadarLinkController(
          *  completed, not that the radar will stream - see [recordLinkProbe]. */
         const val HANDSHAKE_OK = "handshake-ok"
 
-        /** How many distinct probe answers keep their own first-seen stamp.
-         *  Above the eleven abort tokens plus `handshake-ok`, because eviction
-         *  drops the oldest-first-seen entry and a recurring answer past the
-         *  cap would be restamped as now - the exact lie the stamp exists to
-         *  prevent. One device has one service table, so twelve outcomes is
-         *  the realistic ceiling and this clears it. */
-        const val MAX_LINK_PROBE_STAMPS = 16
+        /** Stopped before a GATT existed. */
+        const val NO_GATT = "no-gatt"
+
+        /** A GATT opened, service discovery did not complete. */
+        const val DISCOVERY_FAILED = "discovery-failed"
 
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
     }

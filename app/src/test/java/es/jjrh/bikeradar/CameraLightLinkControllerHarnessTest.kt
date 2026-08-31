@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -98,10 +99,11 @@ class CameraLightLinkControllerHarnessTest {
         link: Link,
         returnNull: Boolean = false,
         setUp: (BluetoothGatt) -> Unit = ::setUpFrontCameraServices,
+        prefs: Prefs = prefs(),
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
         scope = backgroundScope,
-        prefs = prefs(),
+        prefs = prefs,
         ha = { HaClient("", "") },
         haPublisher = haPublisher(backgroundScope),
         notifications = ServiceNotifications(app) { Prefs(app) },
@@ -332,7 +334,9 @@ class CameraLightLinkControllerHarnessTest {
 
     @Test fun handshakeAbortTakesQuickReconnect() = runTest {
         val link = Link()
-        val controller = controller(link, setUp = ::setUpServicesMissingTx)
+        val p = prefs()
+        p.cameraLinkProbe = null
+        val controller = controller(link, setUp = ::setUpServicesMissingTx, prefs = p)
         startDriver(link)
 
         controller.start("Cam", mac)
@@ -343,6 +347,12 @@ class CameraLightLinkControllerHarnessTest {
             "a missing handshake TX char must abort into the quick-reconnect branch, naming the step",
             pumpUntil { journalHas("camera handshake failed at tx-char-missing (quick reconnect)") },
         )
+        // The slot the diagnostic bundle prints. Without this the probe call
+        // can be deleted and nothing here fails, which is what shipped: the
+        // journal line above proves the branch ran, not that it was recorded.
+        assertTrue(pumpUntil { p.cameraLinkProbe != null })
+        val probe = requireNotNull(p.cameraLinkProbe)
+        assertTrue("expected the stopping point, got: $probe", probe.endsWith(" out=tx-char-missing"))
         controller.stop()
     }
 
@@ -350,13 +360,43 @@ class CameraLightLinkControllerHarnessTest {
 
     @Test fun nullGattIsHandled() = runTest {
         val link = Link()
-        val controller = controller(link, returnNull = true)
+        val p = prefs()
+        // A previous attempt's answer, so this pins the actual defect: the
+        // slot must not go on reporting a stopping point that a later attempt
+        // never reached.
+        p.cameraLinkProbe = LinkProbe.render(1_000L, LinkProbe.format(emptyList(), "handshake-ok"))
+        val controller = controller(link, returnNull = true, prefs = p)
 
         controller.start("Cam", mac)
         assertTrue(
             "a null GATT must be journalled",
             pumpUntil { journalHas("camera connectGatt returned null") },
         )
+        assertTrue(pumpUntil { p.cameraLinkProbe?.endsWith(" out=no-gatt") == true })
+        val probe = requireNotNull(p.cameraLinkProbe)
+        assertFalse("the previous answer must not survive, got: $probe", probe.contains("handshake-ok"))
+        controller.stop()
+    }
+
+    @Test fun handshakeCompletionRecordsTheCameraProbe() = runTest {
+        // The camera's own slot, separate from the radar's: a bundle from a
+        // rider with one working device and one broken one has to name which.
+        val link = Link()
+        val p = prefs()
+        p.cameraLinkProbe = null
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("camera handshake complete") })
+
+        assertTrue(pumpUntil { p.cameraLinkProbe != null })
+        val probe = requireNotNull(p.cameraLinkProbe)
+        assertTrue("a completed handshake records its table too, got: $probe", probe.endsWith(" out=handshake-ok"))
+        assertTrue("the discovered table must be there, got: $probe", probe.contains("2800["))
         controller.stop()
     }
 }

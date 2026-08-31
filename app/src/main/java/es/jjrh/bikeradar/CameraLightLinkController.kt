@@ -60,6 +60,52 @@ internal class CameraLightLinkController(
      *  production keeps the real connect path unchanged. */
     private val openGatt: (Context, BluetoothDevice, Boolean, BluetoothGattCallback) -> BluetoothGatt? = ::connectGattLe,
 ) {
+    private val linkProbe = LinkProbeRecorder(
+        load = { prefs.cameraLinkProbe },
+        store = { prefs.cameraLinkProbe = it },
+    )
+
+    /**
+     * Persist what this attempt found and where it stopped, for the
+     * diagnostic bundle. Same contract as the radar's, and the same reason:
+     * without it a camera that connects and never completes its handshake
+     * produces no capture log at all, so nothing names the failing step.
+     *
+     * The two exits before service discovery reach [recordPreDiscoveryExit]
+     * instead, so the slot never reports a stopping point this attempt did
+     * not reach.
+     */
+    /**
+     * Record an attempt that stopped before there was a service table to
+     * describe, matching the radar's handling.
+     *
+     * Silence is not neutral here: the slot keeps the previous attempt's
+     * answer, so a bundle would report a camera stopping point this attempt
+     * never reached. Shares the debounce with [recordLinkProbe], so a camera
+     * failing this way on every retry still writes once and keeps its stamp.
+     */
+    private fun recordPreDiscoveryExit(outcome: String) {
+        linkProbe.record(LinkProbe.format(emptyList(), outcome))
+    }
+
+    private fun recordLinkProbe(gatt: BluetoothGatt, outcome: String) {
+        val body = try {
+            LinkProbe.format(
+                gatt.services.map { svc ->
+                    svc.uuid.toString().substring(4, 8) to
+                        svc.characteristics.map { it.uuid.toString().substring(4, 8) }
+                },
+                outcome,
+            )
+        } catch (t: Throwable) {
+            // Swallowed on purpose: a diagnostic must not take down a link,
+            // and this coroutine rides a scope with no exception handler.
+            Log.w(TAG, "camera link probe failed: $t")
+            return
+        }
+        linkProbe.record(body)
+    }
+
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var cameraLightJob: Job? = null
 
@@ -207,6 +253,7 @@ internal class CameraLightLinkController(
         if (gatt == null) {
             Log.w(TAG, "connectGatt returned null")
             journal("camera connectGatt returned null")
+            recordPreDiscoveryExit(RadarLinkController.NO_GATT)
             return false
         }
 
@@ -219,6 +266,7 @@ internal class CameraLightLinkController(
             if (!ok) {
                 Log.w(TAG, "service discovery failed")
                 journal("camera services discovery failed")
+                recordPreDiscoveryExit(RadarLinkController.DISCOVERY_FAILED)
                 return false
             }
 
@@ -239,6 +287,8 @@ internal class CameraLightLinkController(
                 // Debug builds only: the script lines carry the raw handshake
                 // exchange with the camera, which no release sink records.
             ) { msg -> if (BuildConfig.DEBUG) Log.d(TAG, msg) }
+
+            recordLinkProbe(gatt, handshakeAbort ?: RadarLinkController.HANDSHAKE_OK)
 
             if (handshakeAbort != null) {
                 Log.w(TAG, "handshake failed; closing for quick reconnect")

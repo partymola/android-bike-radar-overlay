@@ -573,6 +573,22 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_LINK_PROBE, v).apply()
         }
 
+    /** Where the FRONT CAMERA link last stopped, same shape and same reasons
+     *  as [radarLinkProbe] and written by the same recorder.
+     *
+     *  Its own slot rather than a shared one because the two links fail
+     *  independently and for different reasons, and a single slot would let
+     *  whichever reconnected last erase the other's answer - which is exactly
+     *  the report worth having when only one of the two devices is broken.
+     *  Deliberately absent from [PrefsSnapshot] for the same reason as the
+     *  radar's: no screen renders it, and a reconnect loop would otherwise
+     *  recompose the UI on every attempt. */
+    var cameraLinkProbe: String?
+        get() = sp.getString(KEY_CAMERA_LINK_PROBE, null)
+        set(v) {
+            sp.edit().putString(KEY_CAMERA_LINK_PROBE, v).apply()
+        }
+
     /** Packet tally from the last legacy-stream session, printed in the
      *  diagnostic bundle beside [radarLinkProbe].
      *
@@ -870,6 +886,7 @@ class Prefs(context: Context) {
         // Kept readable - it is the whole diagnostic - so it goes through the
         // address strip rather than redactPresence.
         appendLine("radar_link_probe=${redactAddresses(radarLinkProbe)}")
+        appendLine("camera_link_probe=${redactAddresses(cameraLinkProbe)}")
         // Counts only, no identifiers, so it needs no strip - but it goes
         // through the same one anyway rather than relying on that staying true.
         appendLine("radar_legacy_tally=${redactAddresses(radarLegacyTally)}")
@@ -941,6 +958,7 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LATERAL_OFFSET_CM = "radar_lateral_offset_cm"
         const val KEY_RADAR_FIRMWARE_REV = "radar_firmware_rev"
         const val KEY_RADAR_LINK_PROBE = "radar_link_probe"
+        const val KEY_CAMERA_LINK_PROBE = "camera_link_probe"
         const val KEY_RADAR_LEGACY_TALLY = "radar_legacy_tally"
 
         /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0

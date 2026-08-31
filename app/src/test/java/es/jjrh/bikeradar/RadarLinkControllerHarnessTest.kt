@@ -497,7 +497,12 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun serviceDiscoveryFailureEndsAttempt() = runTest {
         val link = Link()
-        val controller = controller(link, setUp = ::setUpNoDiscover)
+        val p = prefs()
+        // Seeded with a previous attempt's answer, because that is the defect:
+        // an exit that records nothing leaves the slot naming a stopping point
+        // this attempt never reached, and a bundle then misdates the failure.
+        p.radarLinkProbe = LinkProbe.render(1_000L, LinkProbe.format(emptyList(), "handshake-ok"))
+        val controller = controller(link, prefs = p, setUp = ::setUpNoDiscover)
 
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -509,6 +514,9 @@ class RadarLinkControllerHarnessTest {
             "a failed discovery must be journalled and end the attempt",
             pumpUntil { journalHas("radar services discovery failed") },
         )
+        assertTrue(pumpUntil { p.radarLinkProbe?.endsWith(" out=discovery-failed") == true })
+        val probe = requireNotNull(p.radarLinkProbe)
+        assertFalse("the previous answer must not survive, got: $probe", probe.contains("handshake-ok"))
         controller.forceReconnect()
     }
 
@@ -1125,13 +1133,18 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun nullGattIsHandled() = runTest {
         val link = Link()
-        val controller = controller(link, returnNull = true)
+        val p = prefs()
+        p.radarLinkProbe = LinkProbe.render(1_000L, LinkProbe.format(emptyList(), "handshake-ok"))
+        val controller = controller(link, prefs = p, returnNull = true)
 
         controller.start("TestRadar", mac)
         assertTrue(
             "a null GATT must be journalled",
             pumpUntil { journalHas("radar connectGatt returned null") },
         )
+        assertTrue(pumpUntil { p.radarLinkProbe?.endsWith(" out=no-gatt") == true })
+        val probe = requireNotNull(p.radarLinkProbe)
+        assertFalse("the previous answer must not survive, got: $probe", probe.contains("handshake-ok"))
         controller.forceReconnect()
     }
 

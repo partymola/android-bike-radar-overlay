@@ -322,6 +322,39 @@ class PrefsTest {
     }
 
     @Test
+    fun cameraLinkProbeIsItsOwnSlotAndIsDumpedReadable() {
+        // Its own slot, not the radar's: a rider with one working device and
+        // one broken one needs the bundle to name which. Writing one must
+        // leave the other alone.
+        assertNull(prefs.cameraLinkProbe)
+        assertTrue(prefs.dumpAll().contains("camera_link_probe=<unset>"))
+
+        prefs.radarLinkProbe = "since=1 svc=3200[3204] out=handshake-ok"
+        prefs.cameraLinkProbe = "since=2 svc=2800[2811] out=tx-char-missing"
+        assertEquals("since=2 svc=2800[2811] out=tx-char-missing", prefs.cameraLinkProbe)
+        assertEquals(
+            "the radar slot must be untouched",
+            "since=1 svc=3200[3204] out=handshake-ok",
+            prefs.radarLinkProbe,
+        )
+        val dump = prefs.dumpAll()
+        assertTrue(dump.contains("camera_link_probe=since=2 svc=2800[2811] out=tx-char-missing"))
+        assertTrue(dump.contains("radar_link_probe=since=1 svc=3200[3204] out=handshake-ok"))
+    }
+
+    @Test
+    fun cameraLinkProbeGoesThroughTheSameRedactionAsTheRadars() {
+        // The bundle is pasted into public issues. The value cannot carry an
+        // address by construction today, which is exactly why this is pinned:
+        // nothing else would notice if the redaction were dropped from the
+        // new line.
+        prefs.cameraLinkProbe = "since=2 dev=AA:BB:CC:DD:EE:FF out=tx-char-missing"
+        val dump = prefs.dumpAll()
+        assertFalse("an address must not reach the dump: $dump", dump.contains("AA:BB:CC:DD:EE:FF"))
+        assertTrue(dump.contains("camera_link_probe=since=2 dev=<redacted> out=tx-char-missing"))
+    }
+
+    @Test
     fun radarLinkProbeDefaultsNullRoundTripsAndIsDumpedReadable() {
         assertNull(prefs.radarLinkProbe)
         assertTrue(prefs.dumpAll().contains("radar_link_probe=<unset>"))

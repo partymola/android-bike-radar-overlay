@@ -15,11 +15,12 @@ other apps, and the only open-source one. No account, no ads, no tracking.
 [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
 
 Built and ridden daily by the author for months on a Garmin Varia RearVue
-820 - a commute tool, not a demo. Works with the Garmin Varia radar family
-over Bluetooth LE (see [device compatibility](#compatibility)); not affiliated
-with or endorsed by Garmin. It also shows more than the official apps do:
-the RearVue 820's per-vehicle lateral position and speed stream feeds the
-overlay and the close-pass detection.
+820 - a commute tool, not a demo. It works with Garmin Varia radars over
+Bluetooth LE: everything on the 820, range only on the earlier models (see
+[device compatibility](#compatibility)). Not affiliated with or endorsed by
+Garmin. On the 820 it shows more than the official apps do, because the
+per-vehicle lateral position and speed feed the overlay and the close-pass
+counting.
 
 <p align="left">
   <img src="screenshots/overlay-live.png" width="700" alt="Live overlay during a ride" />
@@ -87,25 +88,28 @@ strip; the rest of your screen stays yours. (*Image credits
 
 | Your radar | Works? |
 |------------|--------|
-| Garmin Varia RearVue 820 | ✅ Yes - tested daily |
-| Garmin Varia RTL515 / RTL516 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia RVR315 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia RCT715 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia eRTL615 | ⚠️ Should work (unconfirmed) |
-| Garmin Varia RTL510 and older | ⚠️ Limited at best (unconfirmed); see below |
+| Garmin Varia RearVue 820 | ✅ Everything - tested daily |
+| Garmin Varia RTL515 / RTL516 | ⚠️ Range only, expected (one report of no connection before 1.4.0) |
+| Garmin Varia RVR315 | ⚠️ Range only, expected (unconfirmed) |
+| Garmin Varia RCT715 / RCT716 | ⚠️ Range only, expected (unconfirmed) |
+| Garmin Varia eRTL615 | ⚠️ Range only, expected (unconfirmed) |
+| Garmin Varia RTL510 and older | ⚠️ Range only at best (unconfirmed); an ANT+-only unit cannot connect |
 | Non-Garmin radars (Wahoo, Bryton, Magene, Trek, ...) | ❌ No - [why](COMPATIBILITY.md) |
 
-"Limited at best" means the app will try the legacy cleartext stream on a
-radar that exposes no V2 characteristic. That stream carries range only,
-so proximity beeps and the all-clear work while the urgent warning, speed
-colours and close-pass logging cannot. Nobody has confirmed a radar of
-this generation either way, and an ANT+-only unit will not connect at all.
+**Why only the 820 gets everything.** The overlay needs each vehicle's
+lateral position, closing speed and size. Garmin announced those as new on
+the RearVue 820. Earlier radars are not expected to send them at all. On
+those the app reads the older range-only stream instead. You get the
+approach beeps and the all-clear. You do not get the urgent warning, the
+speed colours or close-pass counting. That fallback is new in 1.4.0 and
+nobody has confirmed it on real hardware yet.
 
-Riding an "unconfirmed" one? A quick works / doesn't-work
-[report](../../issues) is the most valuable thing you can send. A manual
-device pick in **Settings → Radar** covers anything auto-detection
-misses. Front camera, eBike, Android versions, and the reasons behind
-each row: [`COMPATIBILITY.md`](COMPATIBILITY.md).
+Riding anything but an 820? A works or doesn't-work
+[report](../../issues) is the most valuable thing you can send. The Debug
+screen records what your radar offered, which makes it far more useful. If
+the app does not spot your radar by name, pick it in **Settings → Radar**.
+Front camera, eBike, Android versions and the reason behind each row are in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
 
 ## App screens
 
@@ -230,12 +234,12 @@ Assistant integration is the supported path).
 ## Status
 
 Stable. Feature-complete and ridden daily by the author for months,
-tested on a Garmin Varia RearVue 820 and a Pixel 10 Pro XL. The wider Garmin Varia
-radar family is expected to work but is unconfirmed - if yours works, or
-doesn't, a quick [report](../../issues) is genuinely useful, and
-behaviour on other phones, radars, and future firmware may still differ.
-Bug reports welcome; please include device, Android version, and radar
-firmware.
+tested on a Garmin Varia RearVue 820 and a Pixel 10 Pro XL. Every other
+Garmin Varia radar is expected to work range-only. None of that is
+confirmed on real hardware yet, so if yours works, or doesn't, a quick
+[report](../../issues) is genuinely useful. Behaviour on other phones,
+radars and future firmware may still differ. Bug reports welcome; please
+include device, Android version and radar firmware.
 
 ## Use at your own risk
 

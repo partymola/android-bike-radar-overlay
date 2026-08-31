@@ -10,25 +10,41 @@ exposes no V2 characteristic at all. Compatibility follows from those two
 protocols, so the matrix below is organised by what each device actually
 speaks, not by marketing family.
 
-Status legend: **Tested** = the author rides with it daily. **Expected** = same
-protocol family and the app's device detection already matches it, but nobody
-has confirmed it yet - a report either way is one of the most valuable
-contributions you can make. **Limited** = the app can read the device's V1
-stream, which carries range and nothing else: proximity beeps and the all-clear
-work, the urgent warning, speed colours and close-pass logging cannot. **No** =
-the device exposes neither protocol over Bluetooth.
+In practice that splits the Varia range in two: the RearVue 820 speaks V2 and
+gets every feature, and everything before it is expected to speak V1 and get
+the range-only subset.
+
+Status legend. **Tested** = the author rides with it daily. **Range only** =
+the app is expected to read the device's V1 stream, which carries range and
+nothing else. You get the approach beeps and the all-clear, but no urgent
+warning, no speed colours and no close-pass logging. **No** = the device
+exposes neither protocol over Bluetooth.
+
+Everything below the 820 is unconfirmed on real hardware. A report either way
+is one of the most valuable contributions you can make.
 
 ## Rear radar
 
 | Device | Status | Why |
 |--------|--------|-----|
-| Garmin Varia RearVue 820 | ✅ Tested | Primary development device |
-| Garmin Varia RTL515 / RTL516 | ⚠️ Expected | Same BLE radar service family; name detection matches |
-| Garmin Varia RVR315 | ⚠️ Expected | Same family (radar-only, no light) |
-| Garmin Varia RCT715 | ⚠️ Expected | Same family (radar side only; the app never touches camera footage) |
-| Garmin Varia eRTL615 | ⚠️ Expected | Same family (eBike-powered variant) |
-| Garmin Varia RTL510 and older | ⚠️ Limited at best | Pre-BLE-V2 era. If the unit exposes the V1 stream over Bluetooth the app reads it, range only; an ANT+-only unit cannot connect. Unconfirmed either way |
+| Garmin Varia RearVue 820 | ✅ Tested | Primary development device, and the only one confirmed to speak V2 |
+| Garmin Varia RTL515 / RTL516 | ⚠️ Range only | Pre-820 generation, so no V2 stream expected. One filed report of a bonded RTL515 that never connected on 1.3.0; the V1 fallback in 1.4.0 is aimed at exactly this |
+| Garmin Varia RVR315 | ⚠️ Range only | Pre-820 generation (radar-only, no light) |
+| Garmin Varia RCT715 / RCT716 | ⚠️ Range only | Pre-820 generation (radar side only; the app never touches camera footage). RCT716 is the StVZO variant |
+| Garmin Varia eRTL615 | ⚠️ Range only | Pre-820 generation (eBike-powered variant) |
+| Garmin Varia RTL510 and older | ⚠️ Range only at best | Older still. If the unit exposes V1 over Bluetooth the app reads it; an ANT+-only unit cannot connect |
 | Non-Garmin radars (Bryton, Magene, Wahoo, Trek, Magicshine, Lezyne, CYCPLUS, Coospo, iGPSPORT, ...) | ❌ No | See below |
+
+**Why the 820 is the only one that gets everything.** V2 carries each vehicle's
+lateral position, closing speed and size. Garmin announced vehicle size
+detection and side-to-side movement as *new* on the RearVue 820. So the earlier
+radars are not expected to send that data at all, whatever their firmware does.
+Their published BLE payload is the older three-bytes-per-threat format, which is
+V1.
+
+This is a reasoned expectation, not a measurement. The only V2 device tested
+here is the 820. A capture from any other model would settle it, and the Debug
+screen records exactly what your radar offered.
 
 **Why non-Garmin radars don't work:** there is no standard Bluetooth profile
 for bike radars. The cross-vendor compatibility you see on bike computers is

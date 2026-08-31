@@ -298,6 +298,12 @@ android {
                 "ExtraTranslation",
                 "StringFormatInvalid",
                 "StringFormatMatches",
+                // The case the comment above describes, and the one that was
+                // missing from this list: a translation carrying a DIFFERENT
+                // NUMBER of format arguments than the source. Lint reports it
+                // by default at warning severity, which this project's gate
+                // does not read, so it was detected and ignored.
+                "StringFormatCount",
                 "ImpliedQuantity",
             )
         abortOnError = true

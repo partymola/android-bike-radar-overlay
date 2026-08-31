@@ -173,18 +173,24 @@ internal class OverlayPipeline(
 
                         rideStats().observeFrame(state)
 
-                        if (!overlayAdded) {
-                            if (overlayHost.canDrawOverlays()) {
-                                val attachErr = overlayHost.attach(view)
-                                if (attachErr == null) {
-                                    overlayAdded = true
-                                    clog("# overlay added")
+                        if (RadarOverlayGate.visible) {
+                            if (!overlayAdded) {
+                                if (overlayHost.canDrawOverlays()) {
+                                    val attachErr = overlayHost.attach(view)
+                                    if (attachErr == null) {
+                                        overlayAdded = true
+                                        clog("# overlay added")
+                                    } else {
+                                        clog("# overlay addView failed: $attachErr")
+                                    }
                                 } else {
-                                    clog("# overlay addView failed: $attachErr")
+                                    clog("# overlay: SYSTEM_ALERT_WINDOW not granted")
                                 }
-                            } else {
-                                clog("# overlay: SYSTEM_ALERT_WINDOW not granted")
                             }
+                        } else if (overlayAdded) {
+                            overlayHost.detach(view)
+                            overlayAdded = false
+                            clog("# overlay hidden by request")
                         }
 
                         view.setVisualMaxM(overlayPrefs.visualMaxDistanceM)

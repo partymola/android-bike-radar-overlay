@@ -387,3 +387,13 @@ does not imply any endorsement.
 ## License
 
 GPL-3.0-or-later. See [`LICENSE`](./LICENSE).
+
+### Cross-app radar contract (dual-licensed)
+
+The rear-radar IPC interface files under
+`app/src/main/aidl/es/jjrh/bikeradar/ipc/` are dual-licensed **Apache-2.0 OR
+0BSD** (originated in
+[Crazy Capy Randonneur](https://github.com/zingo/CrazyCapyRandonneur)).
+This allows any integrating project to adopt them under 0BSD (no obligations)
+or Apache-2.0. The Parcelable and binder implementations in this repo remain
+GPL-3.0-or-later.

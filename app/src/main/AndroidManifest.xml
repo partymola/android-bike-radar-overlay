@@ -43,6 +43,14 @@
         android:name="android.permission.POST_NOTIFICATIONS"
         tools:targetApi="33" />
 
+    <!-- Custom permission gating the rear-radar IPC service:
+         protectionLevel=normal is granted automatically at install. -->
+    <permission
+        android:name="es.jjrh.bikeradar.permission.RADAR"
+        android:protectionLevel="normal"
+        android:label="@string/radar_ipc_permission_label"
+        android:description="@string/radar_ipc_permission_description" />
+
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
@@ -170,6 +178,14 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection"
             tools:targetApi="34" />
+
+        <!-- Cross-app IPC surface: an exported bound service gated by a custom
+             permission so a random installed app cannot subscribe to the rear-radar
+             stream or flip the tail light. -->
+        <service
+            android:name=".RadarIpcService"
+            android:exported="true"
+            android:permission="es.jjrh.bikeradar.permission.RADAR" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -18,8 +18,14 @@ import es.jjrh.bikeradar.data.Prefs
  *
  * Every caller-supplied field is treated as untrusted: the link journal
  * interpolates BLE device names, and a crash report carries whatever string
- * threw. Both are redacted HERE rather than by the caller, so a new caller
- * cannot forget.
+ * threw. Both go through the address strip HERE rather than at the caller, so
+ * a new caller cannot forget.
+ *
+ * What that strip removes is ADDRESSES ONLY - see [Prefs.redactAddresses], a
+ * regex over the colon-separated MAC shape. Device names survive on purpose,
+ * because they are what makes a link journal readable, and
+ * `DiagnosticBundleTest` pins that. Do not describe this bundle as redacted
+ * without saying which half.
  */
 object DiagnosticBundle {
 

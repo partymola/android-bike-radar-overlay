@@ -8,11 +8,17 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 svg="$here/../br-mark.svg"
-out="$here/../../fastlane/metadata/android/en-US/images/icon.png"
+meta="$here/../../fastlane/metadata/android"
 
 tmp="$(mktemp --suffix=.png)"
 trap 'rm -f "$tmp"' EXIT
 rsvg-convert -w 768 -h 768 "$svg" -o "$tmp"
-magick "$tmp" -background white -flatten -gravity center \
-    -crop 512x512+0+0 +repage -strip "$out"
-echo "$out  512x512"
+
+# Every locale that has an icon gets the same render. Writing only en-US left
+# the others holding the previous mark, with nothing reporting the mismatch.
+shopt -s nullglob
+for out in "$meta"/*/images/icon.png; do
+    magick "$tmp" -background white -flatten -gravity center \
+        -crop 512x512+0+0 +repage -strip "$out"
+    echo "$out  512x512"
+done

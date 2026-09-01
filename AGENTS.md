@@ -266,6 +266,10 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, and the projection from `RadarState`/`Vehicle` onto the wire |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
+| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract. Declared only; nothing grants yet |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
 | `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
 | `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |

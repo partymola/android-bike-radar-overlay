@@ -40,6 +40,16 @@ enum class DataSource {
      *  reads this to decide whether it needs a substitute riding signal (see
      *  [RadarDropDecider.isTrackActivity]). */
     val hasRiderSpeed: Boolean get() = this == V2
+
+    /** Per-target vehicle class. False on [V1]: that stream carries no class
+     *  byte, so [Vehicle.size] holds its [VehicleSize.CAR] default for every
+     *  target. In-app that default is harmless rather than wrong: the overlay
+     *  sizes every glyph the same because every target reads CAR, and the only
+     *  other reader is close-pass detection, which [ClosePassDetector] skips on
+     *  a lateral-unknown track. A consumer of the cross-app contract colours by
+     *  class, so it needs this flag to tell "not measured" from "a lane of
+     *  cars". */
+    val hasVehicleSize: Boolean get() = this == V2
 }
 
 data class Vehicle(

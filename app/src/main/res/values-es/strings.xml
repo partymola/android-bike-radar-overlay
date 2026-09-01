@@ -361,6 +361,8 @@
     <string name="settings_exp_intro">Funciones aún en pruebas. Pueden ir a tirones o cambiar sin previo aviso.</string>
     <string name="settings_exp_precog_title">Predecir trayectorias de adelantamiento (1 s de anticipación)</string>
     <string name="settings_exp_precog_subtitle">Dibuja cada vehículo donde estará dentro de 1 s - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
+    <string name="settings_exp_drop_fallback_title">Aviso de desconexión sin velocidad</string>
+    <string name="settings_exp_drop_fallback_subtitle">Escucha el aviso de desconexión aunque el radar no informe de tu velocidad, cuando no tienes eBike conectada. El tráfico detectado poco antes del corte sustituye a la lectura de velocidad. Puede sonar si aparcas cerca de una vía con mucho tráfico.</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>
@@ -431,7 +433,7 @@
     <string name="settings_radardev_pair_title">Empareja tu radar</string>
     <string name="settings_radardev_pair_subtitle">Pon el radar en modo de emparejamiento y luego emparéjalo en los ajustes de Bluetooth de Android.</string>
     <string name="settings_radardev_not_selected">No seleccionado</string>
-    <string name="settings_radardev_limited_source">Este radar solo mide la distancia. Tienes pitidos de aproximación y el aviso de vía despejada, y los colores de la superposición muestran distancia en vez de velocidad. Sin aviso urgente, sin registro de adelantamientos ajustados y sin sonido de aviso si el radar se desconecta, salvo que la eBike esté conectada.</string>
+    <string name="settings_radardev_limited_source">Este radar solo mide la distancia. Tienes pitidos de aproximación y el aviso de vía despejada, y los colores de la superposición muestran distancia en vez de velocidad. Sin aviso urgente y sin registro de adelantamientos ajustados. Con una eBike Bosch el aviso de desconexión funciona desde la bici, como siempre; sin ella, solo suena si el radar seguía viendo tráfico detrás justo antes del corte.</string>
     <string name="settings_radardev_choose_radar">Elige el radar de esta bici</string>
     <string name="settings_radardev_selected">Seleccionado</string>
     <string name="settings_radardev_tap_to_use">Toca para usar este radar</string>
@@ -553,7 +555,7 @@
     <string name="settings_privacy_networking_destination">El único destino de red es la URL de HA que indicas. No hay endpoints de analítica, servicios de informe de fallos, redes publicitarias ni bibliotecas de terceros que envíen datos fuera.</string>
     <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
     <string name="settings_privacy_permissions_label">Permisos</string>
-    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, cámara delantera y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• WAKE_LOCK: dar a tiempo el aviso de radar caído si el radar se corta a mitad de ruta con la pantalla apagada\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
+    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, cámara delantera y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• WAKE_LOCK: dar a tiempo el aviso de radar caído, la alarma al alejarte y el resumen al terminar si el radar se corta a mitad de ruta con la pantalla apagada\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
     <string name="settings_privacy_source_label">Código fuente</string>
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Verifica todo lo anterior leyendo el código.</string>
 

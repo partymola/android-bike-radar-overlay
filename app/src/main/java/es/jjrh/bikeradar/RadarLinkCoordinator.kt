@@ -54,6 +54,18 @@ internal class RadarLinkCoordinator(
     // Sampled at the disconnect instant to confirm a radar-only rider was
     // mid-ride (radar-drop cue) and to decide whether to hold the ride wakelock.
     private val lastRidingActivityMs: () -> Long?,
+    // Monotonic instant of the last frame from a range-only radar that showed a
+    // vehicle, or null if none this session. The track-presence fallback's only
+    // input: it stands in for rider speed on a stream that has none, and only
+    // for a rider with no eBike (see [RadarDropDecider.trackActivityFreshAtDrop]).
+    private val lastTrackActivityMs: () -> Long?,
+    // Drop the track sighting when a reconnect starts a NEW RIDE. Depth rather
+    // than the live guard: a new ride needs a gap of at least
+    // radarLongOfflineThresholdMinutes, which floors at 5 min, so the carried
+    // sighting is already older than both freshness windows (30 s and 120 s)
+    // at any later drop and would be rejected anyway. It earns its line against
+    // a future source that could stamp mid-episode, such as a replayed capture.
+    private val clearTrackActivity: () -> Unit,
     // Wake the walk-away tick loop out of its idle delay so it flips to the
     // fast cadence the instant the radar drops (no up-to-30 s lag on the first
     // dead-radar evaluation).
@@ -67,8 +79,18 @@ internal class RadarLinkCoordinator(
     val radarLinkState: StateFlow<RadarLinkState> = _radarLinkState
 
     // Re-fire latch for the radar-drop cue + a one-shot "suppressed" diagnostic
-    // flag, both scoped to the current off-episode. Single tick-loop writer
-    // ([evaluateRadarDrop]); reset lazily there on radar return.
+    // flag, both scoped to the current off-episode. Reset lazily in
+    // [evaluateRadarDrop] on radar return.
+    //
+    // TWO WRITERS since the new-ride reset landed: the tick loop
+    // ([evaluateRadarDrop]) and the BLE callback thread ([markConnected]). A
+    // tick that computed its decision while the radar was still down can write
+    // its latch back after markConnected nulled it, which resurrects the stale
+    // acknowledgement pulse the reset exists to stop. The window is one method
+    // body and the cost is a single spurious beep, so it is tolerated rather
+    // than locked; the fix is to move the reset onto the tick beside the
+    // explicitParked one, which is where the rider-driven ride-end signal will
+    // put it.
     @Volatile private var radarDropLastCueMs: Long? = null
 
     // Cues fired this off-episode; caps the latch-only confirmation path
@@ -80,11 +102,18 @@ internal class RadarLinkCoordinator(
 
     // Radar-activity riding confirmation, LATCHED at the disconnect instant for
     // the current off-episode: was the rider moving above walking pace within
-    // the freshness window when the radar dropped? The radar stops streaming
-    // after the drop, so unlike the live eBike snapshot this cannot be re-read
-    // per tick - it is sampled once in [markDisconnected] and reset in
-    // [markConnected] on radar return.
+    // the freshness window when the radar dropped, or - on a range-only radar
+    // that cannot report that, for a rider with no eBike - was a vehicle
+    // reported within it? The radar stops streaming after the drop, so unlike
+    // the live eBike snapshot neither can be re-read per tick; both are sampled
+    // once in [markDisconnected] and reset in [markConnected] on radar return.
     @Volatile private var radarActivityFreshAtDrop = false
+
+    // The track-presence half of the same latch, kept SEPARATE so the rider's
+    // Experimental toggle can be applied per tick rather than frozen at the
+    // drop, and so the drop cue knows which signal it is running on. Sampled
+    // and reset on the same edges as [radarActivityFreshAtDrop].
+    @Volatile private var trackFreshAtDrop = false
 
     // Fired-once latch for the forgot-to-lock wrist haptic, scoped to the current
     // off-episode; reset in markConnected on radar return.
@@ -150,8 +179,38 @@ internal class RadarLinkCoordinator(
             // Off-episode over: reset the radar-activity latch so the next drop
             // re-samples freshness, and free the ride wakelock.
             radarActivityFreshAtDrop = false
+            trackFreshAtDrop = false
+            // A reconnect past the app's own parked boundary is a NEW ride, so
+            // close out the previous ride's cue bookkeeping and its traffic
+            // sighting. The reconnect acknowledgement pulse fires only when a
+            // drop cue was raised, and nothing else clears that latch for a
+            // rider with no eBike, so tomorrow's first connect would otherwise
+            // open with a lone beep acknowledging a drop they heard yesterday.
+            // The eBike cohort already gets this from an explicit lock (see
+            // evaluateRadarDrop).
+            //
+            // Scoped to the NEW-RIDE case on purpose. Clearing the sighting on
+            // every reconnect looks tidier and costs a cue: a radar that drops,
+            // returns after the corpus-median 8 s and drops again over an empty
+            // stretch is a genuinely mid-ride drop whose only evidence is the
+            // traffic seen before the first drop. Losing that is a MISSED cue,
+            // the side of the asymmetry this whole gate treats as the worse
+            // error, and it would also make the code stricter than the corpus
+            // figure documenting it, which was replayed without such a wipe.
+            val newRide = RideSummaryNotificationDecider.shouldStartNewRide(
+                nowMs - prev.radarOffSinceMs,
+                prefs.radarLongOfflineThresholdMinutes * 60_000L,
+            )
+            if (newRide) {
+                radarDropLastCueMs = null
+                radarDropCueCount = 0
+                clearTrackActivity()
+            }
             releaseRideWakeLock()
-            clog("# walkaway state=IDLE transition_reason=radar-connected prev_state=$prevState")
+            clog(
+                "# walkaway state=IDLE transition_reason=radar-connected " +
+                    "prev_state=$prevState new_ride=$newRide",
+            )
         }
         // Radar is back: hide the reconnecting banner now rather than waiting
         // for the next (up to 30s idle) tick of evaluateRadarDrop.
@@ -176,7 +235,9 @@ internal class RadarLinkCoordinator(
         // radar stops streaming now, so this can't be re-read per tick. Latched
         // for the whole off-episode; reset in markConnected. Only on the first
         // disconnect of an episode (a stutter must not re-sample against a
-        // now-stale last-activity instant).
+        // now-stale last-activity instant). Both latches are pinned inside this
+        // guard by aBleStutterDoesNotReSampleTheSpeedLatch and its track-latch
+        // twin; hoisting either line out silences a genuine mid-ride cue.
         val lastActivityMs = lastRidingActivityMs()
         if (freshOffEpisode) {
             radarActivityFreshAtDrop = RadarDropDecider.activityFreshAtDrop(
@@ -184,6 +245,24 @@ internal class RadarLinkCoordinator(
                 lastActivityMs,
                 RADAR_DROP_ACTIVITY_FRESH_MS,
             )
+            // Fallback for a range-only radar with no eBike, where the speed
+            // latch above can never be true. Sampled here, in the same instant
+            // and for the same reason - but WITHOUT the rider's toggle, which
+            // [evaluateRadarDrop] applies per tick instead. Folding the toggle
+            // in here would freeze it for the whole off-episode, so a rider
+            // switching it off on hearing an unwanted cue would still get the
+            // rest of the episode's repeats, which is not what the setting
+            // promises.
+            trackFreshAtDrop = !radarActivityFreshAtDrop &&
+                RadarDropDecider.trackActivityFreshAtDrop(
+                    nowMs,
+                    lastTrackActivityMs(),
+                    RADAR_DROP_TRACK_FRESH_MS,
+                    hasEBikeSignal = hasEBikeSignal(),
+                )
+            // Names the latch this drop set, not the signal a cue fired on -
+            // no cue decision has been taken yet at this instant.
+            if (trackFreshAtDrop) clog("# radar_drop_latch source=track-presence")
         }
         _radarLinkState.update { current ->
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
@@ -215,7 +294,40 @@ internal class RadarLinkCoordinator(
             // manifest's old "parked-phone idle" concern - never acquires it. The
             // lock is bounded (RIDE_WAKELOCK_CAP_MS) and released on reconnect /
             // BLANK / ride-summary.
-            if (RadarDropDecider.activityFreshAtDrop(nowMs, lastActivityMs, RIDE_WAKELOCK_ACTIVITY_FRESH_MS)) {
+            // Both confirmation signals, at the wakelock's own wider window.
+            // Gating this on rider speed alone left the range-only cohort with
+            // a confirmed live-ride off-episode and no Doze protection - their
+            // speed latch is structurally null for the whole ride, so the gate
+            // could never open for precisely the rider the sentence above
+            // describes, and the cue would fire late or not at all with the
+            // screen off while looking correct on any bench test.
+            //
+            // What this does NOT deliver, so nobody reads more into it: a rider
+            // with no dashcam loses the lock 20 s into the off-episode, because
+            // tickWalkAwayState disarms to BLANK at dashcamFreshMs when there is
+            // no advert to advance the anchor, and BLANK releases. The first cue
+            // is at 60 s. Their exposure is Doze only - BLANK leaves
+            // radarOffSinceMs set, so the 2 s tick cadence continues and the cue
+            // is on time whenever the CPU is awake. The release path is
+            // unchanged from before this fallback existed.
+            //
+            // Deliberately NOT gated on the drop-cue toggle. This lock protects
+            // every off-episode timer, walk-away and the ride summary included,
+            // and a rider who switched the cue off still has those. Holding it
+            // for them costs a bounded 300 s that reconnect or BLANK ends
+            // sooner; not holding it would break two features to spare one.
+            val liveRideAtDrop = RadarDropDecider.activityFreshAtDrop(
+                nowMs,
+                lastActivityMs,
+                RIDE_WAKELOCK_ACTIVITY_FRESH_MS,
+            ) ||
+                RadarDropDecider.trackActivityFreshAtDrop(
+                    nowMs,
+                    lastTrackActivityMs(),
+                    RIDE_WAKELOCK_ACTIVITY_FRESH_MS,
+                    hasEBikeSignal = hasEBikeSignal(),
+                )
+            if (liveRideAtDrop) {
                 acquireRideWakeLock()
             }
             // ebike_locked + ebike_age_ms make the arming decision tunable: a
@@ -352,7 +464,9 @@ internal class RadarLinkCoordinator(
      *
      * Riding-confirmed via EITHER a fresh eBike `system_locked == false` OR the
      * radar-activity latch ([radarActivityFreshAtDrop], sampled at the drop):
-     * the rider was moving above walking pace just before the link dropped. The
+     * the rider was moving above walking pace just before the link dropped, or
+     * - where the radar cannot report that and no eBike can either - a vehicle
+     * was reported just before it. The
      * eBike path is mutually exclusive with the walk-away alarm; the
      * radar-activity path reaches the radar-only / no-eBike rider without a
      * ride-end false fire (a dismount's speed has been ~0 since the stop, so the
@@ -405,12 +519,16 @@ internal class RadarLinkCoordinator(
         setReconnectBanner(visual)
         if (prefs.isPaused) return
         val ridingFresh = eBikeRidingFresh(nowMs)
+        // The Experimental toggle is read per tick rather than at the drop, so
+        // a rider who switches it off on hearing an unwanted cue silences the
+        // REST of this off-episode, not merely the next one.
+        val trackConfirmed = trackFreshAtDrop && prefs.radarDropTrackFallbackEnabled
         val ridingConfirmed = RadarDropDecider.ridingConfirmed(
             systemLocked = snap?.systemLocked,
             snapshotAgeMs = ebikeAgeMs,
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
             eBikeRidingFresh = ridingFresh,
-            radarActivityFreshAtDrop = radarActivityFreshAtDrop,
+            radarActivityFreshAtDrop = radarActivityFreshAtDrop || trackConfirmed,
         )
         // Latch-only = riding is confirmed, but not by a live eBike signal:
         // only that path gets the per-episode repeat cap (a live "unlocked"
@@ -450,8 +568,11 @@ internal class RadarLinkCoordinator(
         // held because riding isn't confirmed (the snapshot went stale, or the
         // bike is locked). Log once per down-episode so the freshness gate is
         // tunable from ride logs; reset the latch when the radar returns. Gated
-        // on a non-null snapshot so a radar-only rider - whose cue is suppressed
-        // by design, with nothing to tune - never logs it.
+        // on a non-null snapshot: an eBike rider's suppression is the tunable
+        // one. A range-only rider's own gate is tunable too now (the
+        // track-presence window), so widening this to them is worth doing when
+        // there is a report to tune it from; it is left narrow until then
+        // rather than adding a line nobody reads.
         val suppressed = link.sessionRadarConnectedMs > 0L &&
             snap != null &&
             downForMs != null &&
@@ -557,16 +678,31 @@ internal class RadarLinkCoordinator(
          *  radar-only cue to fire. 30 s is the largest window that stays inside
          *  the typical 30-60 s park-then-fiddle spell that precedes a deliberate
          *  power-off, so a dismount stays silent (the hard constraint). Measured
-         *  on the ride-capture corpus: at 30 s this false-fires on 1 of 29
-         *  genuine ride-ends (45 s hit 2, including a real 42 s
+         *  on the ride-capture corpus: at 30 s this false-fires on 4 of 76
+         *  genuine ride-ends (45 s hits 11, including a real 42 s
          *  fiddle-then-power-off), still catches every genuine moving drop, and
-         *  leaves only stopped spells longer than 2 minutes uncovered (~1.3% of
+         *  leaves only stopped spells longer than 2 minutes uncovered (~1.2% of
          *  riding time - beyond any normal traffic light). Latched at the drop
          *  instant (see [RadarDropDecider.activityFreshAtDrop]). */
         const val RADAR_DROP_ACTIVITY_FRESH_MS = 30_000L
 
-        /** Ride-wakelock acquire window: hold the CPU only if the rider was
-         *  moving above walking pace within this window of the drop. Wider than
+        /** Track-presence freshness window for the drop cue's fallback path:
+         *  how recently before the drop a range-only radar must have reported a
+         *  vehicle. Deliberately its own constant rather than a reuse of
+         *  [RADAR_DROP_ACTIVITY_FRESH_MS] - the two happen to agree at 30 s and
+         *  were measured separately, so tuning one must not move the other. At
+         *  30 s the corpus replay opens on 6 of 76 genuine ride-ends against the
+         *  speed gate's 4, and leaves the cue unreachable for 39% of riding
+         *  time; 45 s takes the ride-ends to 13. See the TRACK-PRESENCE FALLBACK
+         *  note in [RadarDropDecider]. */
+        const val RADAR_DROP_TRACK_FRESH_MS = 30_000L
+
+        /** Ride-wakelock acquire window: hold the CPU only if the drop looks
+         *  like a live ride within this window - the rider moving above walking
+         *  pace, or, on a stream with no rider speed for a rider with no eBike,
+         *  a vehicle reported. The drop-cue toggle does not gate it, because
+         *  this lock also protects the walk-away and ride-summary timers of a
+         *  rider who switched that cue off. Wider than
          *  the cue's [RADAR_DROP_ACTIVITY_FRESH_MS] because the wakelock protects
          *  ALL the off-episode timers (walk-away, ride summary), not just the
          *  cue, so it should cover any plausibly-live off-episode; but not so

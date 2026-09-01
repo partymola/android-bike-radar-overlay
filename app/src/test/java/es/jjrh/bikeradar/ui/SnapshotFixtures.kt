@@ -63,6 +63,7 @@ internal object SnapshotFixtures {
         radarSettingsProbeEnabled = false,
         captureLoggingEnabled = false,
         setupTranscriptEnabled = false,
+        radarDropTrackFallbackEnabled = true,
         urgentPassClearanceM = 1.5f,
     )
 }

@@ -510,4 +510,57 @@ class RadarDropDeciderTest {
         // No riding activity this session -> fail closed.
         assertFalse(RadarDropDecider.activityFreshAtDrop(drop, lastActivityMs = null, windowMs = window))
     }
+
+    // ── track-presence fallback (range-only radar, no eBike) ─────────────────
+
+    @Test
+    fun trackActivityCountsOnlyOnASourceThatCannotReportRiderSpeed() {
+        // The whole confinement of the fallback. V2 reports rider speed, so its
+        // frames keep the measured speed gate and must never stamp this latch,
+        // however much traffic is behind the rider.
+        assertTrue(RadarDropDecider.isTrackActivity(DataSource.V1, vehiclesPresent = true))
+        assertFalse(RadarDropDecider.isTrackActivity(DataSource.V2, vehiclesPresent = true))
+        // A clear road is not activity on any source.
+        assertFalse(RadarDropDecider.isTrackActivity(DataSource.V1, vehiclesPresent = false))
+        // NONE is the synthetic / replay source, not a radar: a demo scenario
+        // must not leave a latch a later live drop reads.
+        assertFalse(RadarDropDecider.isTrackActivity(DataSource.NONE, vehiclesPresent = true))
+    }
+
+    @Test
+    fun trackFallbackIsWithdrawnFromAnEBikeRider() {
+        // The rider's toggle is deliberately not a parameter here: the cue
+        // applies it per tick and the wakelock does not apply it at all, so it
+        // is the callers' policy. The eBike gate is this function's own, and it
+        // is what stops the proxy reaching a cohort whose bike answers the
+        // riding question and carries a locked veto the proxy cannot.
+        val window = 30_000L
+        val drop = 1_000_000L
+        val seen = drop - 1_000L
+        assertTrue(
+            "no eBike, track seen inside the window -> confirmed",
+            RadarDropDecider.trackActivityFreshAtDrop(drop, seen, window, hasEBikeSignal = false),
+        )
+        assertFalse(
+            "an eBike answers the riding question, and brings a locked veto this proxy has no equivalent of",
+            RadarDropDecider.trackActivityFreshAtDrop(drop, seen, window, hasEBikeSignal = true),
+        )
+    }
+
+    @Test
+    fun trackFallbackRespectsTheWindowAndFailsClosedOnNull() {
+        val window = 30_000L
+        val drop = 1_000_000L
+        fun open(lastTrackMs: Long?) = RadarDropDecider.trackActivityFreshAtDrop(
+            drop,
+            lastTrackMs,
+            window,
+            hasEBikeSignal = false,
+        )
+        assertTrue(open(drop - (window - 1)))
+        // Boundary: age == window is NOT fresh, matching the speed path.
+        assertFalse(open(drop - window))
+        // A ride that never saw traffic cannot confirm anything.
+        assertFalse(open(null))
+    }
 }

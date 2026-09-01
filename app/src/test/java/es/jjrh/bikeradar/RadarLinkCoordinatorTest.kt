@@ -49,6 +49,12 @@ class RadarLinkCoordinatorTest {
     // the eBike-only tests below asserting their original behaviour.
     private var lastRidingMs: Long? = null
 
+    // Last track sighting from a radar with no speed channel. Default null so the
+    // track-presence fallback is OFF unless a test sets it, leaving every
+    // pre-existing assertion above measuring what it always did.
+    private var lastTrackMs: Long? = null
+    private var trackClearCount = 0
+
     // eBike speed-based riding confirmation (RidingSpeedGate). Default true so the
     // pre-existing eBike tests keep asserting their original behaviour; the garage
     // tests below set it false, which is what a powered-on but unridden bike gives.
@@ -105,6 +111,11 @@ class RadarLinkCoordinatorTest {
             cancelWalkAwaySnooze = { snoozeCancelCount++ },
             clearDashcamBackoff = { dashcamBackoffClearCount++ },
             lastRidingActivityMs = { lastRidingMs },
+            lastTrackActivityMs = { lastTrackMs },
+            clearTrackActivity = {
+                lastTrackMs = null
+                trackClearCount++
+            },
             wakeTick = { wakeTickCount++ },
             acquireRideWakeLock = { wakeLockAcquireCount++ },
             releaseRideWakeLock = { wakeLockReleaseCount++ },
@@ -686,7 +697,9 @@ class RadarLinkCoordinatorTest {
             coordinator.evaluateRadarDrop(t)
             t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
         }
-        assertEquals(RadarDropDecider.MAX_LATCH_ONLY_CUES, clogged("radar_drop_cue"))
+        // Literal 3, not the constant: asserting MAX_LATCH_ONLY_CUES against a
+        // loop bound derived from it passes for any value.
+        assertEquals(3, clogged("radar_drop_cue"))
     }
 
     @Test
@@ -989,6 +1002,368 @@ class RadarLinkCoordinatorTest {
         connectAt(20_000L)
         coordinator.evaluateRadarDrop(21_000L)
         assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    // ── track-presence fallback (range-only radar, no eBike) ─────────────────
+
+    @Test
+    fun dropCueFiresForARangeOnlyRiderConfirmedByTraffic() {
+        // The cohort the fallback exists for: no eBike and a radar that never
+        // reports rider speed, so lastRidingMs stays null for the whole ride and
+        // both original confirmation paths are unreachable. Traffic seen just
+        // before the drop is what opens the cue instead.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L) // track age at drop = 1 s < 30 s -> fresh
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(1, clogged("radar_drop_latch source=track-presence"))
+    }
+
+    @Test
+    fun aSpeedConfirmedDropDoesNotLogATrackLatch() {
+        // The latch line tells a report reader which signal this drop was
+        // sampled on, so it must not appear where rider speed answered. Both
+        // latches are fresh here; speed is the one that took it.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = 3_000L
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_drop_latch source=track-presence"))
+    }
+
+    @Test
+    fun staleTrafficAtTheDropDoesNotConfirmARide() {
+        // The ride-end case: the rider parked, the last traffic passed a while
+        // ago, then they powered the radar off. Ages are LITERAL, not derived
+        // from the window constant - a test that computes its own stale instant
+        // from the production value stays green when that value moves, which is
+        // the one regression this is here to catch. 30.001 s at the drop,
+        // against a 30 s window: with the sibling test's 29.999 s the pair
+        // brackets the constant to the millisecond, so no other value passes
+        // both.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 9_999L
+        connectAt(1_000L)
+        disconnectAt(40_000L)
+        coordinator.evaluateRadarDrop(40_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun trafficJustInsideTheWindowStillConfirmsARide() {
+        // The other side of the same boundary, also on literals: 29.999 s at
+        // the drop is inside the 30 s window. With the sibling's 30.001 s these
+        // two pin the constant to the millisecond in both directions.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 10_001L
+        connectAt(1_000L)
+        disconnectAt(40_000L)
+        coordinator.evaluateRadarDrop(40_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun theTrackFallbackIsOffWhenTheRiderTurnsItOff() {
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackFallbackEnabled = false
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun trafficDoesNotConfirmARideForAnEBikeRider() {
+        // An eBike answers the riding question itself, and carries a locked veto
+        // this proxy has no equivalent of. Here the bike has been seen but its
+        // snapshot says nothing usable, which must stay silent rather than fall
+        // through to traffic.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = true
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aTrackConfirmedDropStopsAtTheLatchOnlyCap() {
+        // Traffic confirmation is latched and can never be un-confirmed, so a
+        // rider who parks beside a busy road would otherwise be beeped at on
+        // cadence for the rest of the evening. Same cap as the speed latch.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(RadarDropDecider.MAX_LATCH_ONLY_CUES + 3) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        // Literal 3, not the constant: asserting MAX_LATCH_ONLY_CUES against a
+        // loop bound derived from it passes for any value.
+        assertEquals(3, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun turningTheFallbackOffSilencesTheRestOfTheEpisode() {
+        // The pref is read per tick, not frozen at the drop. A rider who hears
+        // an unwanted cue after parking and switches the toggle off must not
+        // get the remaining repeats: the setting's own subtitle offers it as
+        // the way out, and a next-episode-only effect would not be one.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+        prefs.radarDropTrackFallbackEnabled = false
+        repeat(3) {
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+            coordinator.evaluateRadarDrop(t)
+        }
+        assertEquals("no repeat may survive the toggle going off", 1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aTrackConfirmedLiveRideHoldsTheWakeLock() {
+        // The cue is driven by delay() timers that deep Doze can sleep past,
+        // and this cohort has no BLE wakeups once the radar dies. Gating the
+        // acquire on rider speed alone left them with a confirmed live-ride
+        // off-episode and no wakelock, which fails only with the screen off and
+        // so passes every bench test.
+        //
+        // 119 s at the drop, one second inside the 120 s window, against the
+        // sibling's 121 s. Literal on both sides so the pair brackets the
+        // window rather than leaving a corridor any value in it would pass.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(120_000L)
+        assertEquals(1, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun aDropLongAfterTheLastTrafficDoesNotHoldTheWakeLock() {
+        // The other half: the wakelock must not be taken by a radar that drops
+        // long after the rider parked, which is what its own window is for.
+        // 121 s at the drop, one second outside it.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(122_000L)
+        assertEquals(0, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun theWakeLockIgnoresTheDropCueToggle() {
+        // The lock protects the walk-away and ride-summary timers as well, and
+        // a rider who switched the drop cue off still has those. So the toggle
+        // silences the cue (asserted separately) and must NOT cost them the
+        // Doze protection those other features depend on.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackFallbackEnabled = false
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        assertEquals(1, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun aTrackConfirmedRideEndLeavesNoReconnectPulseForTomorrow() {
+        // The reconnect acknowledgement fires only when a drop cue was raised
+        // this episode, and nothing else clears that latch for a rider with no
+        // eBike - the eBike cohort gets it from an explicit lock. Without the
+        // new-ride reset, the next morning's first connect opens with a lone
+        // beep acknowledging a drop the rider heard yesterday.
+        //
+        // The boundary is set explicitly and bracketed to the second against
+        // the sibling below, so the pref, its unit and the threshold are all
+        // pinned rather than merely a corridor between 90 s and eight hours.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        // 10 min 1 s after the drop: one second past the boundary.
+        val nextMorning = 4_000L + 601_000L
+        connectAt(nextMorning)
+        coordinator.evaluateRadarDrop(nextMorning + 1_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aMidRideReconnectStillAcknowledgesTheDropForTheTrackCohort() {
+        // The reset above must not swallow the acknowledgement it exists
+        // alongside: a genuine mid-ride return still gets its one pulse. 9 min
+        // 59 s, one second inside the same boundary.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        val backAt = 4_000L + 599_000L
+        connectAt(backAt)
+        coordinator.evaluateRadarDrop(backAt + 1_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aNewRideDropsTheTrackSightingSoItCannotConfirmTomorrowsDrop() {
+        // The call count is the pin here, not the cue count. A new ride needs a
+        // gap of at least radarLongOfflineThresholdMinutes, which floors at
+        // 5 min, so the carried sighting is already far outside the 30 s
+        // freshness window at the second drop and the window would reject it
+        // whether or not the clear ran. The silent cue is the outcome either
+        // way; only trackClearCount goes red if the clear is removed.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val nextRide = 4_000L + 601_000L
+        connectAt(nextRide)
+        assertEquals(1, trackClearCount)
+        disconnectAt(nextRide + 3_000L)
+        coordinator.evaluateRadarDrop(
+            nextRide + 3_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L,
+        )
+        assertEquals("yesterday's traffic must not confirm today's drop", 0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aBleStutterDoesNotReSampleTheTrackLatch() {
+        // The latch is sampled inside the first-disconnect guard on purpose. A
+        // stutter later in the same off-episode must not re-read a sighting the
+        // dead radar cannot have refreshed, or a genuine mid-ride cue is lost.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        disconnectAt(60_000L)
+        coordinator.evaluateRadarDrop(60_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals("a stutter must not re-sample the track latch", 1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aBleStutterDoesNotReSampleTheSpeedLatch() {
+        // Same guard, the pre-existing speed latch.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastTrackMs = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        disconnectAt(60_000L)
+        coordinator.evaluateRadarDrop(60_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals("a stutter must not re-sample the speed latch", 1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aNewRideResetsTheCueCountSoTheFirstDropStillSounds() {
+        // Yesterday's ride exhausted the repeat cap. markConnected must zero the
+        // count, because a new ride's first drop can arrive before any tick runs
+        // with the radar up: markConnected does not call wakeTick.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(6) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("cap reached on the first ride", 3, clogged("radar_drop_cue"))
+        val nextRide = t + 601_000L
+        connectAt(nextRide)
+        lastTrackMs = nextRide + 1_000L
+        disconnectAt(nextRide + 2_000L)
+        coordinator.evaluateRadarDrop(
+            nextRide + 2_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L,
+        )
+        assertEquals("a new ride starts the cap again", 4, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aMidRideReconnectKeepsTheTrackSightingSoAFlappingLinkStillCues() {
+        // The other side of that scope, and the reason the clear is confined to
+        // a new ride. A radar that drops, returns after the corpus-median 8 s
+        // and drops again over an empty stretch is a genuine mid-ride drop
+        // whose only evidence is the traffic seen before the first drop.
+        // Clearing on every reconnect would lose it, and a missed cue is the
+        // worse error.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        connectAt(12_000L)
+        assertEquals("a mid-ride return must not wipe the sighting", 0, trackClearCount)
+        disconnectAt(20_000L) // sighting is 17 s old, inside the 30 s window
+        coordinator.evaluateRadarDrop(20_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
     }
 
     // ── snooze re-arm helper ─────────────────────────────────────────────────

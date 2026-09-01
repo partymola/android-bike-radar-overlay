@@ -73,6 +73,10 @@ class PrefsTest {
         assertTrue(s.adaptiveAlertsEnabled)
         assertTrue(s.turnAwareAlertsEnabled)
         assertFalse(s.precogEnabled)
+        // Default ON, deliberately: a rider whose radar reports no speed and
+        // who has no eBike gets no drop cue at all without it, so a switch
+        // defaulted off would leave that rider exactly where the bug did.
+        assertTrue(s.radarDropTrackFallbackEnabled)
         assertFalse(s.closePassLoggingEnabled)
         assertEquals(1.0f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(15, s.closePassRiderSpeedFloorKmh)
@@ -118,6 +122,7 @@ class PrefsTest {
         prefs.walkAwayAlarmThresholdSec = 60
         prefs.adaptiveAlertsEnabled = false
         prefs.precogEnabled = true
+        prefs.radarDropTrackFallbackEnabled = false
         prefs.closePassLoggingEnabled = true
         prefs.closePassEmitMinRangeXM = 1.5f
         prefs.closePassRiderSpeedFloorKmh = 20
@@ -162,6 +167,7 @@ class PrefsTest {
         assertEquals(60, s.walkAwayAlarmThresholdSec)
         assertFalse(s.adaptiveAlertsEnabled)
         assertTrue(s.precogEnabled)
+        assertFalse(s.radarDropTrackFallbackEnabled)
         assertTrue(s.closePassLoggingEnabled)
         assertEquals(1.5f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(20, s.closePassRiderSpeedFloorKmh)

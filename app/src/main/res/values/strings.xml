@@ -377,6 +377,8 @@
     <string name="settings_exp_intro">Features still being tested. May be jittery or change without notice.</string>
     <string name="settings_exp_precog_title">Predict overtake paths (1 s lookahead)</string>
     <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
+    <string name="settings_exp_drop_fallback_title">Drop alert without a speed reading</string>
+    <string name="settings_exp_drop_fallback_subtitle">Hear the drop sound on a radar that cannot report your speed, when you have no eBike connected. Traffic seen just before the link died stands in for the speed reading. May sound after you park near a busy road.</string>
 
     <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alerts</string>
@@ -447,7 +449,7 @@
     <string name="settings_radardev_pair_title">Pair your radar</string>
     <string name="settings_radardev_pair_subtitle">Put the radar in pair mode, then pair it in Android\'s Bluetooth settings.</string>
     <string name="settings_radardev_not_selected">Not selected</string>
-    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning, no close-pass logging, and no drop-alert sound unless your eBike is connected.</string>
+    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning and no close-pass logging. With a Bosch eBike the drop alert works from the bike as before; without one it sounds only if the radar was still seeing traffic behind you shortly before the link died.</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>
@@ -570,7 +572,7 @@
     <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
     <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the dead-radar alert on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the dead-radar alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 

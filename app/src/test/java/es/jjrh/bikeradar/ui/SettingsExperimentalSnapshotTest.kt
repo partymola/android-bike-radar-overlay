@@ -30,6 +30,8 @@ class SettingsExperimentalSnapshotTest {
                     navController = rememberNavController(),
                     precogEnabled = false,
                     onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = false,
+                    onRadarDropTrackFallbackChange = {},
                 )
             }
         }
@@ -43,6 +45,24 @@ class SettingsExperimentalSnapshotTest {
                     navController = rememberNavController(),
                     precogEnabled = true,
                     onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = false,
+                    onRadarDropTrackFallbackChange = {},
+                )
+            }
+        }
+    }
+
+    /** The state a fresh install is actually in: the drop fallback defaults on. */
+    @Test
+    fun dropFallbackOn() {
+        captureRoboImage {
+            UiTheme {
+                SettingsExperimentalContent(
+                    navController = rememberNavController(),
+                    precogEnabled = false,
+                    onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = true,
+                    onRadarDropTrackFallbackChange = {},
                 )
             }
         }

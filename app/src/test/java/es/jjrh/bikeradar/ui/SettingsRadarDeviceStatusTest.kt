@@ -51,8 +51,10 @@ class SettingsRadarDeviceStatusTest {
     private val limitedSourceNote =
         "This radar reports distance only. You get approach beeps and the " +
             "all-clear, and the overlay colours show distance rather than " +
-            "speed. No urgent warning, no close-pass logging, and no " +
-            "drop-alert sound unless your eBike is connected."
+            "speed. No urgent warning and no close-pass logging. With a Bosch " +
+            "eBike the drop alert works from the bike as before; without one " +
+            "it sounds only if the radar was still seeing traffic behind you " +
+            "shortly before the link died."
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var prefs: Prefs

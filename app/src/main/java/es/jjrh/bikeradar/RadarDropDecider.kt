@@ -53,8 +53,9 @@ package es.jjrh.bikeradar
  *    frame is older than N -> latched freshness is false -> SILENCE. This is
  *    the hard constraint: a cue at every deliberate power-off would train the
  *    rider to ignore it. N = 30 s is the largest window inside that typical
- *    park-then-fiddle spell; on the corpus it false-fires on 1 of 29 genuine
- *    ride-ends, where 45 s hit 2 (including a real 42 s fiddle-then-power-off).
+ *    park-then-fiddle spell; on the corpus it false-fires on 4 of 76 genuine
+ *    ride-ends, where 45 s hits 11 (including a real 42 s
+ *    fiddle-then-power-off).
  *    The residual quick-dismount beep is tolerable, because a MISSED cue
  *    leaves the rider blind, which is the worse error. Residual means A FEW
  *    CUES, not an endless loop: the latch can never be un-confirmed once
@@ -70,27 +71,74 @@ package es.jjrh.bikeradar
  *    genuinely ambiguous on the rider's own speed alone (both are "stopped,
  *    was moving a while ago"), so no window separates them cleanly. At 30 s,
  *    only stopped spells longer than 2 minutes end up uncovered against the
- *    60 s cue threshold - measured at ~1.3% of riding time on the corpus,
- *    beyond any normal traffic light.
+ *    60 s cue threshold - measured at ~1.2% of riding time on the corpus,
+ *    beyond any normal traffic light. The two capture splits this window does
+ *    not catch are both of exactly that shape: the rider had been stationary
+ *    for 158 s and 119 s at the drop, with a peak of 0.0 and 2.0 m/s over the
+ *    preceding 90 s. Every split where the rider was actually moving is
+ *    caught. Read a "mid-ride drop" count against that: the corpus holds 6
+ *    splits, 4 of them with a moving rider.
  *
- * WALK-AWAY EXCLUSIVITY (deliberately weakened for the radar-activity path):
- * the eBike path is mutually exclusive with the walk-away alarm by
- * construction (the alarm arms only when NOT fresh-unlocked). The
- * radar-activity path is NOT: a dashcam-owning, no-eBike rider who was moving
- * at the drop gets riding-confirmed here while `WalkAwayArmingGate` still arms,
- * so in principle both can fire in one off-episode. Left as-is on purpose:
- * suppressing arming on the riding-confirmed latch would remove leave-behind
- * protection for a rider who parks within 30 s of stopping (their latch is
- * still fresh at the disconnect), and the co-fire needs a rare double failure -
- * the radar dying while the rider is moving AND the dashcam going stale in the
- * same off-episode.
+ * WALK-AWAY EXCLUSIVITY (deliberately weakened for the radar-activity and
+ * track-presence paths): the eBike path is mutually exclusive with the
+ * walk-away alarm by construction (the alarm arms only when NOT
+ * fresh-unlocked). The other two are NOT: a dashcam-owning, no-eBike rider
+ * gets riding-confirmed here while `WalkAwayArmingGate` still arms, so both can
+ * fire in one off-episode. Left as-is on purpose: suppressing arming on the
+ * latch would remove leave-behind protection for a rider who parks within 30 s
+ * of stopping, since their latch is still fresh at the disconnect.
  *
- * Deliberately NOT part of the activity signal: the mere PRESENCE of tracked
- * vehicles. A vehicle can be tracked while the rider is standing still (queued
- * traffic in the next lane, cross traffic at a light, a car passing a
- * just-dismounted rider), so counting it as "riding" would re-introduce the
- * exact ride-end false-fire the gate exists to prevent. The rider's own speed
- * is the signal that cleanly falls to ~0 at a dismount.
+ * Do not read the co-fire as rare. It needs the dashcam to stay FRESH, which is
+ * the ordinary state at a ride end before the camera is switched off - a stale
+ * dashcam is what PREVENTS the alarm (`WalkAwayDecider` returns NONE, then
+ * AUTO_DISMISS, on `nowMs - dashcamLastAdvertMs > dashcamFreshMs`). The
+ * track-presence path widens it further: "moving at the drop" becomes "traffic
+ * seen within 30 s of the drop", so a range-only rider with a dashcam who parks
+ * kerbside on a busy road can take both. That is the case the Experimental
+ * toggle exists to switch off.
+ *
+ * Deliberately NOT part of the activity signal on a radar that reports rider
+ * speed: the mere PRESENCE of tracked vehicles. A vehicle can be tracked while
+ * the rider is standing still (queued traffic in the next lane, cross traffic
+ * at a light, a car passing a just-dismounted rider), so counting it as
+ * "riding" would re-introduce the exact ride-end false-fire the gate exists to
+ * prevent. The rider's own speed is the signal that cleanly falls to ~0 at a
+ * dismount.
+ *
+ * TRACK-PRESENCE FALLBACK (the one exception - see [isTrackActivity]). A
+ * range-only radar has no device-status frame, so `bikeSpeedMs` is null for the
+ * entire ride and NEITHER confirmation path above can ever open for a rider
+ * with no eBike. For them the cue is not conservative, it is unreachable. Track
+ * presence is the only riding signal that stream still carries, so it stands in
+ * - but ONLY where the source cannot report rider speed AND no eBike has been
+ * seen this session AND the rider has left the toggle on. A radar that reports
+ * speed keeps the measured speed gate untouched.
+ *
+ * What that substitution costs, measured on the ride-capture corpus (195
+ * captures, 82 rides, 76 genuine ride-ends) by replaying track presence in
+ * place of rider speed at the same instants: at a 30 s window it opens on 6 of
+ * 76 ride-ends where the speed gate opens on 4, catches the same 4 moving
+ * capture splits, and is closed for 39% of riding time because the road behind
+ * is empty. So this is a cue that reaches part of a ride rather than one that
+ * never fires, and it is NOT as good as the speed gate.
+ *
+ * Two limits on that measurement, both of which make it weaker than it looks.
+ * The corpus is one rider's commute, so coverage tracks traffic density along
+ * the route and the ride-end figure tracks how busy that rider's parking spot
+ * is; a rider who parks kerbside on a main road will see more false fires. And
+ * the corpus is V2 captures throughout - track presence was replayed from
+ * their target frames - so the substitute has never been measured on the
+ * stream it actually applies to, and no V1 hardware exists here to measure it
+ * on. The per-episode cap ([MAX_LATCH_ONLY_CUES]) bounds the cost at three
+ * cues, and the toggle is the way out. [RadarDropDeciderTest] pins the gating;
+ * do not widen it to a source that has rider speed.
+ *
+ * Closure rate was evaluated as a way to sharpen it and does not work. It is
+ * `vehicle speed - rider speed`, so a stopped rider should see traffic close
+ * faster; measured over 3,401 moving and 108 stopped windows the distributions
+ * overlap throughout (a threshold keeping 83.5% of moving windows keeps 50% of
+ * stopped ones), because a stopped rider is usually stopped in traffic that is
+ * stopped too. Do not re-derive it.
  *
  * BLE disconnect status code (evaluated, deliberately NOT used): the GATT
  * disconnect reason could in principle separate a deliberate power-off
@@ -201,9 +249,10 @@ object RadarDropDecider {
      *     - [snapshotAgeMs] >= [freshMs] (eBike link dropped, e.g. rider left) -> false,
      *     - bike awake but not recently ridden (garage, rack, bike store) -> false.
      *  - **Radar-activity path**: [radarActivityFreshAtDrop], the caller's
-     *    boolean latched at the disconnect instant from [activityFreshAtDrop].
-     *    Defaults to false so the eBike-only call sites and their existing tests
-     *    are unaffected.
+     *    boolean latched at the disconnect instant from [activityFreshAtDrop],
+     *    OR - on a stream with no rider speed - from
+     *    [trackActivityFreshAtDrop]. Defaults to false so the eBike-only call
+     *    sites and their existing tests are unaffected.
      *
      * LOCKED VETO (overrides BOTH paths): a last-known `system_locked == true`
      * means the rider explicitly parked, so no drop cue - even when the
@@ -242,6 +291,58 @@ object RadarDropDecider {
      * excluded (see the class KDoc).
      */
     fun isRidingActivity(bikeSpeedMs: Float?, walkingPaceMs: Float): Boolean = bikeSpeedMs != null && bikeSpeedMs > walkingPaceMs
+
+    /**
+     * Whether a single decoded frame counts as riding activity for the
+     * TRACK-PRESENCE FALLBACK: a real radar reported a vehicle, on a stream
+     * that cannot report the rider's own speed. See the class KDoc for what
+     * this substitution costs and why it is confined to that stream.
+     *
+     * Asked of the SOURCE's capability rather than of a null speed value, so a
+     * V2 radar that has not yet sent its first device-status frame cannot fall
+     * down this path.
+     *
+     * [DataSource.NONE] is excluded as depth rather than as the live guard:
+     * it is the bus's cleared/default state, which always carries an empty
+     * vehicle list, so `vehiclesPresent` already rejects every state that can
+     * hold it today. It earns its line against a source that does not exist
+     * yet - a legacy-capture replay would publish [DataSource.V1] WITH
+     * vehicles, and would then stamp a latch a later live drop reads. Do not
+     * read this as demo protection: both scripted paths publish
+     * [DataSource.V2] today, and [RadarState.scenarioTimeMs] is the field that
+     * actually means "scripted, not a live link".
+     */
+    fun isTrackActivity(source: DataSource, vehiclesPresent: Boolean): Boolean = vehiclesPresent && source != DataSource.NONE && !source.hasRiderSpeed
+
+    /**
+     * The track-presence fallback's answer at the drop, latched by the caller
+     * exactly like [activityFreshAtDrop] and for the same reason: the radar
+     * stops streaming the instant it drops.
+     *
+     * [hasEBikeSignal] fails closed and withdraws the fallback from anyone
+     * whose eBike already answers the riding question - that cohort keeps the
+     * eBike path and its locked veto, which this proxy has no equivalent of.
+     * It is sticky for the session, so an eBike whose Flow link dies mid-ride
+     * withholds the fallback for the rest of that ride and leaves the rider
+     * with neither path. Known and deliberate pending evidence that the cohort
+     * (an eBike AND a range-only radar) exists at all; do not read the sentence
+     * above as covering it.
+     *
+     * The rider's Experimental toggle is deliberately NOT a parameter here.
+     * The cue applies it per tick in `RadarLinkCoordinator.evaluateRadarDrop`,
+     * so switching it off silences the rest of an off-episode rather than only
+     * the next one, and the ride wakelock does not apply it at all because it
+     * protects the walk-away and ride-summary timers too. A parameter would
+     * have to be passed one way by one caller and the other way by the other,
+     * which is a policy the callers own rather than one this function can hold.
+     */
+    fun trackActivityFreshAtDrop(
+        dropInstantMs: Long,
+        lastTrackMs: Long?,
+        windowMs: Long,
+        hasEBikeSignal: Boolean,
+    ): Boolean = !hasEBikeSignal &&
+        activityFreshAtDrop(dropInstantMs, lastTrackMs, windowMs)
 
     /**
      * Whether the last riding-activity instant is fresh enough at the drop to

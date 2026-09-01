@@ -32,6 +32,14 @@ enum class DataSource {
     /** Per-target lateral offset. False on [V1]: no lateral channel exists,
      *  so every target can only be drawn on the centreline. */
     val hasLateral: Boolean get() = this == V2
+
+    /** The RIDER's own ground speed, which arrives in a device-status frame
+     *  rather than a target. False on [V1]: that stream has no device-status
+     *  frame, so [RadarState.bikeSpeedMs] stays null for the whole ride and
+     *  every gate defined on rider speed is unreachable. The radar-drop cue
+     *  reads this to decide whether it needs a substitute riding signal (see
+     *  [RadarDropDecider.isTrackActivity]). */
+    val hasRiderSpeed: Boolean get() = this == V2
 }
 
 data class Vehicle(

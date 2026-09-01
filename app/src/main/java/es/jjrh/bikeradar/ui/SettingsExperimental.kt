@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,8 @@ private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs)
         navController = navController,
         precogEnabled = prefsSnap.precogEnabled,
         onPrecogChange = { prefs.precogEnabled = it },
+        radarDropTrackFallbackEnabled = prefsSnap.radarDropTrackFallbackEnabled,
+        onRadarDropTrackFallbackChange = { prefs.radarDropTrackFallbackEnabled = it },
     )
 }
 
@@ -51,6 +54,8 @@ internal fun SettingsExperimentalContent(
     navController: NavController,
     precogEnabled: Boolean,
     onPrecogChange: (Boolean) -> Unit,
+    radarDropTrackFallbackEnabled: Boolean,
+    onRadarDropTrackFallbackChange: (Boolean) -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -75,6 +80,15 @@ internal fun SettingsExperimentalContent(
                     subtitle = stringResource(R.string.settings_exp_precog_subtitle),
                     checked = precogEnabled,
                     onCheckedChange = onPrecogChange,
+                    isLast = false,
+                )
+                SettingsToggleRow(
+                    leadingIcon = Icons.AutoMirrored.Filled.VolumeUp,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_exp_drop_fallback_title),
+                    subtitle = stringResource(R.string.settings_exp_drop_fallback_subtitle),
+                    checked = radarDropTrackFallbackEnabled,
+                    onCheckedChange = onRadarDropTrackFallbackChange,
                 )
             }
 

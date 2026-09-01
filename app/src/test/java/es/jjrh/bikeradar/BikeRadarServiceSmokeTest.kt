@@ -19,7 +19,9 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
 import java.io.File
+import java.time.Duration
 
 /**
  * Smoke tests for [BikeRadarService] lifecycle entrypoints under
@@ -252,6 +254,80 @@ class BikeRadarServiceSmokeTest {
             "a frame above walking pace must stamp the riding-activity instant",
             service.lastRidingActivityMs != null,
         )
+        controller.destroy()
+    }
+
+    @Test
+    fun onlyASpeedlessRadarsTracksStampTheFallbackInstant() {
+        // Wiring pin for the second half of that collector. A range-only frame
+        // showing traffic must stamp lastTrackActivityMs - it is the only riding
+        // signal that cohort has - and a V2 frame must NOT, or the fallback
+        // leaks into the cohort whose speed gate was actually measured.
+        RadarStateBus.clear()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertEquals(null, service.lastTrackActivityMs)
+
+        val traffic = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f))
+
+        RadarStateBus.publish(RadarState(vehicles = traffic, source = DataSource.V1))
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (service.lastTrackActivityMs == null && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+        }
+        assertTrue(
+            "a range-only frame showing traffic must stamp the fallback instant",
+            service.lastTrackActivityMs != null,
+        )
+
+        // Both negatives are proved against a SENTINEL rather than by watching
+        // the stamp fail to advance: the monotonic clock does not necessarily
+        // move under Robolectric, so a re-stamp could write back the same value
+        // and read as untouched. A stamp writes elapsedRealtime, which is not
+        // going to be this number.
+        val sentinel = 424_242L
+
+        // A clear road is not riding activity. This is the case the whole
+        // window measurement rests on: stamping on every V1 frame instead would
+        // leave the latch fresh at every ride end.
+        service.lastTrackActivityMs = sentinel
+        RadarStateBus.publish(RadarState(vehicles = emptyList(), source = DataSource.V1))
+        Thread.sleep(300)
+        assertEquals(
+            "an empty road must not stamp the fallback instant",
+            sentinel,
+            service.lastTrackActivityMs,
+        )
+
+        // A radar that reports rider speed keeps the measured speed gate.
+        service.lastTrackActivityMs = sentinel
+        RadarStateBus.publish(RadarState(vehicles = traffic, source = DataSource.V2))
+        Thread.sleep(300)
+        assertEquals(
+            "a radar that reports rider speed must not stamp the fallback instant",
+            sentinel,
+            service.lastTrackActivityMs,
+        )
+
+        // The service's OWN clearTrackActivity lambda, driven through the real
+        // coordinator across a new-ride gap. The coordinator-side test asserts
+        // a test double, so without this the production wiring could be an
+        // empty lambda and one ride's traffic would survive into the next with
+        // nothing red.
+        service.lastTrackActivityMs = sentinel
+        Prefs(ApplicationProvider.getApplicationContext<Application>())
+            .radarLongOfflineThresholdMinutes = 5
+        service.radarLinkCoordinator.markConnected()
+        service.radarLinkCoordinator.markDisconnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(6))
+        service.radarLinkCoordinator.markConnected()
+        assertEquals(
+            "a reconnect that starts a new ride must clear the sighting",
+            null,
+            service.lastTrackActivityMs,
+        )
+
         controller.destroy()
     }
 

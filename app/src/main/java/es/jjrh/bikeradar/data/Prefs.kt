@@ -54,6 +54,7 @@ data class PrefsSnapshot(
     val adaptiveAlertsEnabled: Boolean,
     val urgentLowSpeedEnabled: Boolean,
     val precogEnabled: Boolean,
+    val radarDropTrackFallbackEnabled: Boolean,
     val turnAwareAlertsEnabled: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
@@ -150,7 +151,13 @@ class Prefs(context: Context) {
     /** After the radar has been offline this many minutes, the reconnect
      *  loop relaxes its backoff cap to [radarLongOfflineCapSec]. Lets
      *  the BLE stack idle during overnight parking instead of hammering
-     *  GATT opens at the steady-state 8 s ceiling. */
+     *  GATT opens at the steady-state 8 s ceiling.
+     *
+     *  It is also the app's "a new ride has started" boundary, so it has two
+     *  more consumers than the name suggests: the ride-stats reset, and the
+     *  radar-drop cue's bookkeeping reset on reconnect. Lowering it therefore
+     *  also shortens how long a mid-ride return still earns the reconnect
+     *  acknowledgement beep. The Settings copy describes the backoff only. */
     var radarLongOfflineThresholdMinutes: Int
         get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, 30).coerceIn(5, 120)
         set(v) {
@@ -242,6 +249,23 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_RECONNECT_BANNER_PERSISTENT, false)
         set(v) {
             sp.edit().putBoolean(KEY_RECONNECT_BANNER_PERSISTENT, v).apply()
+        }
+
+    /** Experimental. Let the dead-radar audio cue confirm a ride from traffic
+     *  the radar reported, on a radar that cannot report the rider's own speed
+     *  and for a rider with no eBike. Without it that rider's cue is not
+     *  cautious, it is unreachable: both confirmation paths are defined on a
+     *  speed nothing in their setup produces. Default on for that reason - a
+     *  switch defaulted off would leave the bug in place for anyone who never
+     *  finds it - and it is the way out for a rider who parks somewhere busy,
+     *  where traffic near the ride's end can read as still riding. Reaches no
+     *  other cohort: a radar with a speed channel keeps the measured speed
+     *  gate. See the TRACK-PRESENCE FALLBACK note in
+     *  [es.jjrh.bikeradar.RadarDropDecider] for what it costs. */
+    var radarDropTrackFallbackEnabled: Boolean
+        get() = sp.getBoolean(KEY_RADAR_DROP_TRACK_FALLBACK, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_RADAR_DROP_TRACK_FALLBACK, v).apply()
         }
 
     /** Wrist-haptic reminder when you walk off without locking the eBike (the
@@ -808,6 +832,7 @@ class Prefs(context: Context) {
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
         urgentLowSpeedEnabled = urgentLowSpeedEnabled,
         precogEnabled = precogEnabled,
+        radarDropTrackFallbackEnabled = radarDropTrackFallbackEnabled,
         turnAwareAlertsEnabled = turnAwareAlertsEnabled,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
@@ -868,6 +893,7 @@ class Prefs(context: Context) {
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("precog_enabled=$precogEnabled")
+        appendLine("radar_drop_track_fallback_enabled=$radarDropTrackFallbackEnabled")
         appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
@@ -929,6 +955,7 @@ class Prefs(context: Context) {
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_PRECOG = "precog_enabled"
+        const val KEY_RADAR_DROP_TRACK_FALLBACK = "radar_drop_track_fallback_enabled"
         const val KEY_TURN_AWARE_ALERTS = "turn_aware_alerts_enabled"
 
         // Two keys are deliberately absent: `experimental_lateral_panning` and

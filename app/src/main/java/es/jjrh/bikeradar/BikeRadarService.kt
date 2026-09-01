@@ -156,6 +156,19 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     @Volatile internal var lastRidingActivityMs: Long? = null
 
+    // Monotonic instant of the last frame from a radar that CANNOT report rider
+    // speed and showed a vehicle; null until the first such frame. The
+    // track-presence fallback's input, read by the coordinator at the disconnect
+    // instant. Stamped from a source that has no speed channel only, so a radar
+    // which does keeps the measured speed gate above. See RadarDropDecider.
+    // Two writers: this collector stamps it, and the coordinator's
+    // clearTrackActivity nulls it from the BLE callback thread when a reconnect
+    // starts a new ride. A stamp landing after that clear needs the collector
+    // suspended across a whole disconnect and reconnect, and the bus publishes
+    // a cleared state in between, so it is left unlocked.
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var lastTrackActivityMs: Long? = null
+
     // Bounded PARTIAL_WAKE_LOCK held only during a live-ride off-episode so the
     // walk-away tick's delay() timers do not sleep past their deadlines in deep
     // Doze for a rider with no BLE wakeups. Allocated in onCreate. See RideWakeLock.
@@ -293,6 +306,9 @@ class BikeRadarService : Service() {
                 if (RadarDropDecider.isRidingActivity(it.bikeSpeedMs, RadarLinkCoordinator.RADAR_DROP_WALKING_PACE_MS)) {
                     lastRidingActivityMs = SystemClock.elapsedRealtime()
                 }
+                if (RadarDropDecider.isTrackActivity(it.source, it.vehicles.isNotEmpty())) {
+                    lastTrackActivityMs = SystemClock.elapsedRealtime()
+                }
             }
         }
         creds = HaCredentials(this)
@@ -419,6 +435,8 @@ class BikeRadarService : Service() {
                 }
             },
             lastRidingActivityMs = { lastRidingActivityMs },
+            lastTrackActivityMs = { lastTrackActivityMs },
+            clearTrackActivity = { lastTrackActivityMs = null },
             wakeTick = { walkAwayKick.trySend(Unit) },
             acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
             releaseRideWakeLock = { rideWakeLock.release() },

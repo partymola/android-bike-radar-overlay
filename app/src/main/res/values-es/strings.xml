@@ -757,4 +757,8 @@
     <string name="svc_synthetic_channel_name">Escenario sintético</string>
     <string name="svc_synthetic_notif_title">Escenario sintético de Bike Radar</string>
 
+    <!-- RadarIpcService.kt permission -->
+    <string name="radar_ipc_permission_label">Radar trasero</string>
+    <string name="radar_ipc_permission_description">Permite que otra app lea el flujo del radar trasero y controle la luz trasera.</string>
+
 </resources>

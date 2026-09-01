@@ -284,6 +284,7 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+        aidl = true
     }
 
     lint {
@@ -545,6 +546,8 @@ val coverageExcludes = listOf(
     "**/ReplayService*.*",
     "**/SyntheticScenarioService*.*",
     "**/ScreenshotCaptureService*.*",
+    "**/RadarIpcService*.*", // cross-app IPC glue - binder-bound, not line-coverable
+    "**/RadarIpcBridge*.*",
 )
 // The diff-coverage gate's WIDER scope. It is per-diff, so there is nothing to
 // dilute: a new inline `when` over app state in a Composable body lands as
@@ -579,6 +582,8 @@ val diffCoverageExcludes = listOf(
     // than by reading source. The exclusion is only honest while that stays
     // true: logic added back into the screen file is silently ungated.
     "**/DebugScreen*.*",
+    "**/RadarIpcService*.*", // cross-app IPC glue - binder-bound, not line-coverable
+    "**/RadarIpcBridge*.*",
 )
 
 // AGP 9.3 emits Kotlin classes under built_in_kotlinc; if a future AGP moves

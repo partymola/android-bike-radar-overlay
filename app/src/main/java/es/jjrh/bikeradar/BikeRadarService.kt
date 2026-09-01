@@ -470,6 +470,18 @@ class BikeRadarService : Service() {
             journal = linkJournal::log,
             clock = { SystemClock.elapsedRealtime() },
         )
+        // Expose live radar state to the IPC service (usedable by other apps).
+        RadarIpcBridge.isRadarConnected = { radarLinkCoordinator.snapshot().radarGattActive }
+        RadarIpcBridge.radarBatteryPercent = {
+            val slug = radarLink.currentRadarMac?.let { mac ->
+                macToSlug[mac] ?: macToSlug[mac.uppercase(Locale.ROOT)]
+            }
+            slug?.let { BatteryStateBus.entries.value[it]?.pct }
+        }
+        RadarIpcBridge.setRadarLightMode = { mode ->
+            RadarLightController.fromType(mode)?.let { radarLink.setTailLightMode(it) }
+        }
+        RadarIpcBridge.setOverlayVisible = { visible -> RadarOverlayGate.visible = visible }
         batteryReader = BatteryReader(
             context = this,
             scope = scope,

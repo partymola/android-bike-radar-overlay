@@ -774,4 +774,8 @@
     <string name="svc_synthetic_channel_name">Synthetic scenario</string>
     <string name="svc_synthetic_notif_title">Bike Radar synthetic scenario</string>
 
+    <!-- RadarIpcService.kt permission -->
+    <string name="radar_ipc_permission_label">Rear radar</string>
+    <string name="radar_ipc_permission_description">Allows another app to read your rear-radar stream and control the tail light.</string>
+
 </resources>

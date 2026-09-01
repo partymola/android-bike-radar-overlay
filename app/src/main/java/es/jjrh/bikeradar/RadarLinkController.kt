@@ -1107,6 +1107,25 @@ internal class RadarLinkController(
         probeWriteRadar(bytes)
     }
 
+    /** Write a tail-light mode on the live radar connection, if one is open.
+     *  Consumed by the IPC service for remote light control. */
+    fun setTailLightMode(mode: RadarLightMode) {
+        val gatt = liveRadarGatt
+        if (gatt == null) {
+            Log.i(TAG, "radar_light set ${mode.name} skipped (no live gatt)")
+            return
+        }
+        val queue = liveRadarQueue
+        if (queue == null) {
+            Log.i(TAG, "radar_light set ${mode.name} skipped (no live queue)")
+            return
+        }
+        scope.launch {
+            val ok = runCatching { RadarLightController(gatt, queue).setMode(mode) }.getOrDefault(false)
+            Log.i(TAG, "radar_light set ${mode.name} ok=$ok")
+        }
+    }
+
     private fun probeWriteRadar(payload: ByteArray) {
         val label = payload.joinToString(" ") { "%02x".format(it) }
         if (!prefs.radarSettingsProbeEnabled) {

@@ -17,9 +17,12 @@ the range-only subset.
 Status legend. **Tested** = the author rides with it daily. **Range only** =
 the app is expected to read the device's V1 stream, which carries range and
 nothing else. You get the approach beeps, the all-clear, and overlay colours
-that show distance instead of speed. You do not get the urgent warning,
-close-pass logging, or a sound when the radar drops unless your eBike is
-connected. **No** = the device exposes neither protocol over Bluetooth.
+that show distance instead of speed. You do not get the urgent warning or
+close-pass logging. With a Bosch eBike the sound when the radar drops works
+from the bike, as before; without one it is expected to fire only if the radar
+was still seeing traffic behind you shortly before the link died, because it
+cannot report your own speed. On an empty road it stays silent.
+**No** = the device exposes neither protocol over Bluetooth.
 
 Everything below the 820 is unconfirmed on real hardware. A report either way
 is one of the most valuable contributions you can make.

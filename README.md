@@ -101,9 +101,15 @@ lateral position, closing speed and size. Garmin announced those as new on
 the RearVue 820. Earlier radars are not expected to send them at all. On
 those the app reads the older range-only stream instead. You get the
 approach beeps, the all-clear, and overlay colours that show distance
-instead of speed. You do not get the urgent warning, close-pass counting,
-or a sound when the radar drops unless your eBike is connected. That
-fallback is new in 1.4.0 and nobody has confirmed it on real hardware yet.
+instead of speed. You do not get the urgent warning or close-pass counting.
+With a Bosch eBike the sound when the radar drops works from the bike, as
+before. Without one it is expected to fire only if the radar was still seeing
+traffic behind you shortly before the link died, because the radar cannot
+report your own speed and recent traffic is what tells the app you are still
+riding; on an
+empty road it stays silent. You can turn that substitute off in
+**Settings → Experimental**. That fallback is new in 1.4.0 and nobody has
+confirmed it on real hardware yet.
 
 Riding anything but an 820? A works or doesn't-work
 [report](../../issues) is the most valuable thing you can send. The Debug

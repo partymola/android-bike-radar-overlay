@@ -1,18 +1,20 @@
 # Changelog
 
-## v1.4.0 - 2026-08-31
+## v1.4.0 - 2026-09-01
 
 ### Features
 
-- **Experimental support for older Varia radars.** If your radar is not a RearVue 820, this release is aimed at you. The app used to connect, find nothing it recognised, and give up, leaving the overlay empty for the whole ride. It now falls back to the older stream, with the same battery reading and reconnect handling the newer path has. You get the approach beeps, the all-clear, and overlay colours that show distance instead of speed. You do not get the urgent warning, close-pass counting, or a sound when the radar drops unless your eBike is connected, as those are exclusive to the newer protocol the 820 uses. An 820 can never reach this path, so the fallback is on automatically. Nobody has confirmed it on real hardware yet, so a works or doesn't-work report is the most useful thing you can send.
-- **You can now record a radar that never finishes connecting.** Capture logs only started after a successful handshake, so the one case worth reporting produced no file. A new Debug switch records the connection itself: the states, the services the radar offers, and the step it stopped at. One file covers the whole retry loop, and you can share it while it is still recording.
+- **Experimental support for older Varia radars.** If your radar is not a RearVue 820, this release is aimed at you. The app used to connect, find nothing it recognised, and give up, leaving the overlay empty for the whole ride. It now falls back to the older stream, with the same battery reading and reconnect handling the newer path has. You get the approach beeps, the all-clear, and overlay colours that show distance instead of speed. You do not get the urgent warning or close-pass counting, as those are exclusive to the newer protocol the 820 uses. Switching to the older stream needs no setting: an 820 never takes that path, so there is nothing to turn on or off. Nobody has confirmed it on real hardware yet, so a works or doesn't-work report is the most useful thing you can send.
+- **The dead-radar sound now reaches a range-only radar.** With a Bosch eBike it works from the bike as before. Without one it fires only if the radar was still seeing traffic behind you shortly before the link died, because the radar cannot report your own speed and recent traffic is what tells the app you are still riding. On an empty road it stays silent. It is on by default and can be turned off in Settings -> Experimental, which is worth doing if it sounds after you park somewhere busy.
+- **The RTL510 and older move from a flat no to range-only at best.** They were listed as not working at all. If the unit speaks the older stream over Bluetooth the app can now read it; an ANT+-only unit still cannot connect.
+- **You can now record a radar that never finishes connecting.** Capture logs only started after a successful handshake, so the one case worth reporting produced no file. A new Debug switch records the connection itself: the states, the services the radar offers, and the step it stopped at. One file covers the whole retry loop, and you can share it while it is still recording. It can include your radar's model, firmware and serial number, and it keeps recording across later rides until you switch it off.
 - **You can share a capture log without ending the ride.** The log being written was held back, so getting one meant stopping the service and starting again. You can now share the current one. It is flushed first, so nothing is missing from the copy.
 - **Tap a device on the home screen to open its settings.** The rows already told you what was working. Now you can act on it.
 - **Builds between releases say which commit they came from.** They all share a version number, so a capture log could not be traced back to one. Release builds still carry no commit, so two built from the same source stay identical.
 
 ### Security
 
-- **The whole diagnostic bundle is redacted now.** You are asked to paste it into a public issue, but only the settings part was being cleaned. The connection journal carries device names, and the crash report was added raw. Both sat after the cleaned section.
+- **Addresses are stripped from the whole diagnostic bundle now.** You are asked to paste it into a public issue, but only the settings part was being cleaned. The connection journal and the crash report both sat after that section, so a Bluetooth address in either went out untouched. Device names are not stripped and are not meant to be: they are what makes a link journal readable.
 - **Raw radar replies stay out of release logs.** The handshake replies include your radar's ID. Printing them would undo the consent the setup recording asks for. Decoded values are unaffected, so a live test keeps its signal.
 
 ### Fix
@@ -26,6 +28,7 @@
 
 ### UX
 
+- **New app icon.** The BR logo has been redrawn: two separate letters instead of one joined shape, a wider B, and the radar sweep following the curve of the R. It reads more clearly at launcher size, where the old one tended to close up into a blob.
 - **Every screen uses the same words for your devices.** One camera could read four different things. "No signal" on the home card, "Not seen" in Settings, "Front cam · paired" on its own row, and nothing at all on its own screen, where a coloured dot was your only clue. The radar and Home Assistant did the same. The Settings rows now answer both questions in one line: is it set up, and is it working.
 - **Spanish called the eBike "Activo".** It is "Activa". The same slip was waiting in every state the camera and the eBike share, because English uses one word for both genders and nothing in the English app could show it.
 
@@ -42,7 +45,7 @@
 
 ### Internal
 
-- CI keeps the release APK from each build, so a hardware report can point at a named commit instead of a build from a laptop. It is debug-signed, and two of them will not install over each other.
+- CI keeps the release APK from each push to the main branch, so a hardware report can point at a named commit instead of a build from a laptop. It is debug-signed, and two of them will not install over each other.
 
 ## v1.3.0 - 2026-08-28
 

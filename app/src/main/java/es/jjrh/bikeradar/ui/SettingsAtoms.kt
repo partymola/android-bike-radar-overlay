@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -403,6 +405,9 @@ fun SettingsActionRow(
     onAction: () -> Unit,
     subtitle: String? = null,
     isLast: Boolean = true,
+    actionIcon: ImageVector? = null,
+    actionTint: Color? = null,
+    titleMaxLines: Int = Int.MAX_VALUE,
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -428,7 +433,13 @@ fun SettingsActionRow(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, color = br.fg, fontSize = 14.sp)
+                Text(
+                    text = title,
+                    color = br.fg,
+                    fontSize = 14.sp,
+                    maxLines = titleMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (subtitle != null) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -442,8 +453,20 @@ fun SettingsActionRow(
             // BrOutlinedButton's fill-width layout - the row already has a
             // leading icon and a title block; the action lives on the right
             // edge like a chevron would.
+            //
+            // minimumInteractiveComponentSize takes the touch bounds to the
+            // 48dp minimum while the drawn box stays 34dp, so the affordance
+            // stays visually compact without becoming a target a gloved rider
+            // misses. A miss produces no dialog and no feedback at all, which
+            // is the failure a confirmation cannot catch.
+            // It reports a 48dp minimum to the parent, so it also makes this
+            // ROW taller on all three callers. Measured: only the radar-access
+            // goldens move, because the other two screens' action rows sit
+            // below the captured viewport - so their 14dp is real and unseen.
+            // `theBinIsBigEnoughToHit` pins the bounds; nothing pins theirs.
             Box(
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .height(34.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
@@ -452,15 +475,29 @@ fun SettingsActionRow(
                         role = Role.Button,
                         onClick = onAction,
                     )
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = if (actionIcon != null) 8.dp else 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = actionLabel,
-                    color = br.fg,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+                if (actionIcon != null) {
+                    // The label still reaches a screen reader through the
+                    // icon's description and the click label above, so the
+                    // affordance loses width rather than meaning. Worth it
+                    // where the title beside it is an app name that would
+                    // otherwise be squeezed to a few characters.
+                    Icon(
+                        imageVector = actionIcon,
+                        contentDescription = actionLabel,
+                        tint = actionTint ?: br.fg,
+                        modifier = Modifier.size(18.dp),
+                    )
+                } else {
+                    Text(
+                        text = actionLabel,
+                        color = br.fg,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
         if (!isLast) {

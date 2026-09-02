@@ -5,10 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,7 +31,7 @@ import es.jjrh.bikeradar.ui.SettingsLights
 import es.jjrh.bikeradar.ui.SettingsPermissions
 import es.jjrh.bikeradar.ui.SettingsPrivacy
 import es.jjrh.bikeradar.ui.SettingsRadar
-import es.jjrh.bikeradar.ui.SettingsRadarAccessContent
+import es.jjrh.bikeradar.ui.SettingsRadarAccessRoute
 import es.jjrh.bikeradar.ui.SettingsRadarDevice
 import es.jjrh.bikeradar.ui.SettingsScreen
 import es.jjrh.bikeradar.ui.UiTheme
@@ -120,13 +117,8 @@ class MainActivity : ComponentActivity() {
                                 getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, MODE_PRIVATE),
                             )
                         }
-                        var grants by remember { mutableStateOf(store.all()) }
-                        SettingsRadarAccessContent(
-                            grants = grants,
-                            onRevoke = { pkg ->
-                                store.revoke(pkg)
-                                grants = store.all()
-                            },
+                        SettingsRadarAccessRoute(
+                            store = store,
                             onBack = { navController.popBackStack() },
                         )
                     }

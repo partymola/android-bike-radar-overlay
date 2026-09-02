@@ -782,6 +782,7 @@
     <string name="radar_consent_read_detail">Vehicles behind you, how far away they are and how fast they are closing, what type they are, your own speed, and your radar\'s battery.</string>
     <string name="radar_consent_control">Change your tail light and overlay</string>
     <string name="radar_consent_control_detail">Switch the radar\'s light mode and hide the on-screen radar.</string>
+    <string name="radar_consent_choose_something">Choose at least one to allow.</string>
     <string name="radar_consent_save">Allow</string>
     <string name="radar_consent_cancel">Don\'t allow</string>
     <string name="radar_consent_backup_note">Your choice is kept on this phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
@@ -803,6 +804,8 @@
     <string name="settings_radar_access_last_used">Last used <xliff:g id="when" example="3 days ago">%1$s</xliff:g></string>
     <string name="settings_radar_access_never_used">Not used yet</string>
     <string name="settings_radar_access_revoke">Stop sharing</string>
+    <string name="settings_radar_access_revoke_title">Stop sharing with <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>?</string>
+    <string name="settings_radar_access_revoke_body">It will no longer see your radar. You can allow it again from the app itself.</string>
     <string name="settings_radar_access_backup_note">This list is kept on your phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
 
 </resources>

@@ -17,6 +17,30 @@ sealed interface ConsentRequest {
     data class Refuse(val resultCode: Int) : ConsentRequest
 }
 
+/** What the consent screen's confirm button does with the toggles as they stand. */
+enum class ConsentPrimaryAction {
+    /** Store what the toggles say. */
+    ALLOW,
+
+    /** Both off over an existing grant: saving removes it. */
+    REVOKE,
+
+    /** Both off with nothing granted. There is no answer to store. */
+    NOTHING,
+}
+
+/**
+ * Both toggles off is not a grant, so a button reading "Allow" would store
+ * nothing and say it had allowed something. Over an existing grant the same
+ * answer is a revoke, and that is worth keeping reachable: a rider who wants
+ * an app to stop is in the OTHER app, not in these Settings.
+ */
+fun consentPrimaryAction(hasGrant: Boolean, read: Boolean, control: Boolean): ConsentPrimaryAction = when {
+    read || control -> ConsentPrimaryAction.ALLOW
+    hasGrant -> ConsentPrimaryAction.REVOKE
+    else -> ConsentPrimaryAction.NOTHING
+}
+
 /**
  * The consent screen's rules, without the screen.
  *

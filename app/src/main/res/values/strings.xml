@@ -561,7 +561,7 @@
 
     <!-- Settings → Privacy (SettingsPrivacy.kt) -->
     <string name="settings_privacy_title">Privacy</string>
-    <string name="settings_privacy_intro">Bike Radar collects no telemetry and runs no analytics. Your data goes only to the Home Assistant you set up - nowhere else.</string>
+    <string name="settings_privacy_intro">Bike Radar collects no telemetry and runs no analytics. Your data goes only to the Home Assistant you set up, and to any app on this phone you have allowed.</string>
     <string name="settings_privacy_on_phone_label">What stays on your phone</string>
     <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage, which no other app can read. They travel in your Android backup when you have it turned on, and in a direct phone-to-phone transfer, so they move with you to a new phone.</string>
     <string name="settings_privacy_on_phone_location">If you enter a manual location for the light auto-switch (instead of granting location access), those coordinates are saved in Android\'s app-private storage, which no other app can read. They are used only to compute your local sunrise and sunset: they are never published to Home Assistant and never appear in any log or diagnostic report. Like your other settings they travel in your Android backup when you have it turned on, and in a direct phone-to-phone transfer.</string>

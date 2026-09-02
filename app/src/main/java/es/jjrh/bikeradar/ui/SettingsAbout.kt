@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Text
@@ -36,16 +36,32 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BuildConfig
 import es.jjrh.bikeradar.R
 
+internal const val REPO_URL = "https://github.com/partymola/android-bike-radar-overlay"
+internal const val RELEASES_URL = "$REPO_URL/releases"
+
+/** The licence text itself, which is the thing a reader of "GPL-3.0" wants. */
+internal const val GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
+
 @Composable
 fun SettingsAbout(navController: NavController) {
+    val ctx = LocalContext.current
     UiTheme {
-        SettingsAboutBody(navController)
+        SettingsAboutBody(navController) { openLink(ctx, it) }
     }
 }
 
+/**
+ * [onOpenUrl] is injected so which address each row opens can be pinned.
+ * Reading it off a launched intent cannot be done from a Compose test here,
+ * and the goldens see only the labels, so swapping two of these arguments
+ * would otherwise pass every gate while "This app's licence" opened the
+ * release notes.
+ */
 @Composable
-private fun SettingsAboutBody(navController: NavController) {
-    val ctx = LocalContext.current
+internal fun SettingsAboutBody(
+    navController: NavController,
+    onOpenUrl: (String) -> Unit,
+) {
     val br = LocalBrColors.current
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -91,21 +107,31 @@ private fun SettingsAboutBody(navController: NavController) {
                         .clip(RoundedCornerShape(999.dp))
                         .background(br.bgElev1)
                         .border(1.dp, br.hairline, RoundedCornerShape(999.dp))
-                        .clickable {
-                            ctx.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/partymola/android-bike-radar-overlay")),
-                            )
-                        }
+                        .clickable { onOpenUrl(REPO_URL) }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     Text(
-                        text = "github.com/partymola/android-bike-radar-overlay",
+                        text = REPO_URL.removePrefix("https://"),
                         color = br.fgMuted,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.sp,
                     )
                 }
+            }
+
+            SettingsSectionLabel(stringResource(R.string.settings_about_section_release))
+            SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.Article,
+                    iconTint = br.fgMuted,
+                    title = stringResource(R.string.settings_about_changelog_title),
+                    subtitle = stringResource(R.string.settings_about_changelog_subtitle),
+                    onClick = { onOpenUrl(RELEASES_URL) },
+                    chevron = false,
+                    rightContent = { LeavesAppGlyph() },
+                    isLast = true,
+                )
             }
 
             SettingsSectionLabel(stringResource(R.string.settings_about_section_legal))
@@ -116,6 +142,15 @@ private fun SettingsAboutBody(navController: NavController) {
                     title = stringResource(R.string.settings_about_licences_title),
                     subtitle = stringResource(R.string.settings_about_licences_subtitle),
                     onClick = { navController.navigate("settings/licenses") },
+                )
+                SettingsRow(
+                    icon = Icons.Default.Description,
+                    iconTint = br.fgMuted,
+                    title = stringResource(R.string.settings_about_licence_title),
+                    subtitle = stringResource(R.string.settings_about_licence_subtitle),
+                    onClick = { onOpenUrl(GPL_URL) },
+                    chevron = false,
+                    rightContent = { LeavesAppGlyph() },
                 )
                 SettingsRow(
                     icon = Icons.Default.Lock,

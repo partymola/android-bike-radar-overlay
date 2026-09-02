@@ -361,15 +361,21 @@
     <!-- Settings → About (SettingsAbout.kt) -->
     <string name="settings_about_title">About</string>
     <string name="settings_about_app_name">Bike Radar</string>
-    <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g> · GPL-3.0</string>
+    <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g></string>
     <string name="settings_about_tagline">Rear-radar alerts, on screen and with sound.</string>
     <string name="settings_about_section_legal">Legal</string>
     <string name="settings_about_licences_title">Open source licences</string>
     <string name="settings_about_licences_subtitle">The app\'s direct dependencies</string>
     <string name="settings_about_privacy_title">Privacy</string>
     <string name="settings_about_privacy_subtitle">What stays on the phone, what doesn\'t</string>
+    <string name="settings_about_section_release">Releases</string>
+    <string name="settings_about_licence_title">This app\'s licence</string>
+    <string name="settings_about_licence_subtitle">GPL-3.0-or-later</string>
+    <string name="settings_about_changelog_title">What\'s new</string>
+    <string name="settings_about_changelog_subtitle">What changed in each version</string>
     <string name="settings_about_unaffiliated_title">Not affiliated with Garmin or Bosch</string>
     <string name="settings_about_unaffiliated_subtitle">This is an independent tool</string>
+    <string name="link_no_browser">Nothing on this phone can open web links.</string>
 
     <!-- Settings → Experimental (SettingsExperimental.kt) -->
     <string name="settings_exp_title">Experimental</string>
@@ -607,6 +613,7 @@
     <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
          authors and SPDX licence names stay hardcoded as legal attribution. -->
     <string name="settings_licenses_title">Open source licences</string>
+    <string name="settings_licenses_open_action">Open the licence</string>
     <string name="settings_licenses_intro">Bike Radar is itself GPL-3.0-or-later. Every third-party library it depends on directly is listed below with its licence, and all of them are compatible with GPL-3.0.</string>
     <string name="settings_licenses_section_language_runtime">Language &amp; runtime</string>
     <string name="settings_licenses_section_android_platform">Android platform</string>

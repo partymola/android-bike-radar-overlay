@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -386,6 +387,23 @@ fun BrOutlinedButton(
             )
         }
     }
+}
+
+/**
+ * The trailing mark on a row that leaves the app for a browser.
+ *
+ * A chevron says "this navigates somewhere in here". A row that hands off to
+ * another app has to say something different, or the rider taps expecting a
+ * screen and loses their place. One definition so every such row agrees.
+ */
+@Composable
+fun LeavesAppGlyph() {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+        contentDescription = null,
+        tint = LocalBrColors.current.fgDim,
+        modifier = Modifier.size(14.dp),
+    )
 }
 
 /**

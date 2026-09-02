@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -93,27 +96,49 @@ private fun SettingsLicensesBody(navController: NavController) {
     }
 }
 
-internal data class LicenseEntry(val name: String, val author: String, val licence: String)
+/**
+ * [url] is the licence text, so a row can answer "what am I agreeing to".
+ *
+ * It has no default deliberately. A default would be one licence's text, and
+ * an entry added under a different licence without its own url would then link
+ * the rider to the wrong text on the one screen where that is a legal
+ * statement, with nothing failing.
+ */
+internal data class LicenseEntry(
+    val name: String,
+    val author: String,
+    val licence: String,
+    val url: String,
+)
+
+internal const val APACHE_2_URL = "https://www.apache.org/licenses/LICENSE-2.0"
 
 internal val LANGUAGE_RUNTIME_LICENCES = listOf(
-    LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0"),
-    LicenseEntry("Kotlinx Coroutines", "JetBrains s.r.o. and contributors", "Apache 2.0"),
+    LicenseEntry("Kotlin", "JetBrains s.r.o. and contributors", "Apache 2.0", APACHE_2_URL),
+    LicenseEntry("Kotlinx Coroutines", "JetBrains s.r.o. and contributors", "Apache 2.0", APACHE_2_URL),
 )
 
 internal val ANDROID_PLATFORM_LICENCES = listOf(
-    LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0"),
-    LicenseEntry("Activity Compose", "The Android Open Source Project", "Apache 2.0"),
-    LicenseEntry("Navigation Compose", "The Android Open Source Project", "Apache 2.0"),
-    LicenseEntry("Material Components for Android", "Google", "Apache 2.0"),
+    LicenseEntry("AndroidX Core / AppCompat / Lifecycle", "The Android Open Source Project", "Apache 2.0", APACHE_2_URL),
+    LicenseEntry("Activity Compose", "The Android Open Source Project", "Apache 2.0", APACHE_2_URL),
+    LicenseEntry("Navigation Compose", "The Android Open Source Project", "Apache 2.0", APACHE_2_URL),
+    LicenseEntry("Material Components for Android", "Google", "Apache 2.0", APACHE_2_URL),
 )
 
 internal val UI_LICENCES = listOf(
-    LicenseEntry("Jetpack Compose UI / Material 3 / Material Icons Extended", "The Android Open Source Project", "Apache 2.0"),
+    LicenseEntry(
+        "Jetpack Compose UI / Material 3 / Material Icons Extended",
+        "The Android Open Source Project",
+        "Apache 2.0",
+        APACHE_2_URL,
+    ),
 )
 
 @Composable
 private fun LicenseGroup(entries: List<LicenseEntry>) {
     val br = LocalBrColors.current
+    val ctx = LocalContext.current
+    val openLabel = stringResource(R.string.settings_licenses_open_action)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -125,6 +150,10 @@ private fun LicenseGroup(entries: List<LicenseEntry>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // The label is the ACTION, not the destination: TalkBack
+                    // reads it as "double tap to <label>", so the licence name
+                    // alone announces as "double tap to Apache 2.0".
+                    .clickable(onClickLabel = openLabel) { openLink(ctx, entry.url) }
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -144,6 +173,10 @@ private fun LicenseGroup(entries: List<LicenseEntry>) {
                     fontWeight = FontWeight.Medium,
                     fontSize = 11.sp,
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                // Without this the row responds to a tap that nothing invited,
+                // which reads as a misfire rather than a link.
+                LeavesAppGlyph()
             }
             if (i < entries.lastIndex) {
                 Box(

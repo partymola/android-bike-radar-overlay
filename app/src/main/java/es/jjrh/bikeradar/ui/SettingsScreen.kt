@@ -662,13 +662,15 @@ private fun dashcamSetupPrompt(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsS
 // published anything, which is the over-claim the deriver exists to refuse.
 private fun haSubtitle(ctx: Context, configured: Boolean, health: HaHealth): String = ctx.getString(haStatusLabel(HaStatusDeriver.derive(configured, health)))
 
+// A count rather than the names: naming them meant maintaining a second list
+// of what the Experimental screen holds, and that list fell behind by one.
+// Zero keeps its own wording, matching the Permissions row above, which also
+// gives its settled state a sentence rather than a score.
 private fun experimentalSubtitle(ctx: Context, snap: es.jjrh.bikeradar.data.PrefsSnapshot): String {
-    val on = buildList {
-        if (snap.precogEnabled) add(ctx.getString(R.string.settings_home_exp_precog))
-    }
-    return if (on.isEmpty()) {
+    val on = ExperimentalFeatures.onCount(snap)
+    return if (on == 0) {
         ctx.getString(R.string.settings_home_exp_all_off)
     } else {
-        ctx.getString(R.string.settings_home_exp_active, on.joinToString(" + "))
+        ctx.getString(R.string.settings_home_exp_count, on, ExperimentalFeatures.total)
     }
 }

@@ -349,9 +349,8 @@
     <string name="settings_home_ebike_on">Data on</string>
     <string name="settings_home_dashcam_setup">Set up your dashcam</string>
     <string name="settings_home_dashcam_pick">Pick a device</string>
-    <string name="settings_home_exp_precog">Precog</string>
+    <string name="settings_home_exp_count">On (<xliff:g id="on" example="1">%1$d</xliff:g> of <xliff:g id="total" example="2">%2$d</xliff:g>)</string>
     <string name="settings_home_exp_all_off">All off</string>
-    <string name="settings_home_exp_active"><xliff:g id="features" example="Precog">%1$s</xliff:g> on</string>
 
     <!-- Settings → Permissions chrome (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permissions</string>

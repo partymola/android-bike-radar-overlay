@@ -5,12 +5,17 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import es.jjrh.bikeradar.access.PrefsRadarGrantStore
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ui.DashcamPickerSheet
@@ -29,6 +34,7 @@ import es.jjrh.bikeradar.ui.SettingsLights
 import es.jjrh.bikeradar.ui.SettingsPermissions
 import es.jjrh.bikeradar.ui.SettingsPrivacy
 import es.jjrh.bikeradar.ui.SettingsRadar
+import es.jjrh.bikeradar.ui.SettingsRadarAccessContent
 import es.jjrh.bikeradar.ui.SettingsRadarDevice
 import es.jjrh.bikeradar.ui.SettingsScreen
 import es.jjrh.bikeradar.ui.UiTheme
@@ -107,6 +113,22 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/ha") {
                         SettingsHa(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/radar-access") {
+                        val store = remember {
+                            PrefsRadarGrantStore(
+                                getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, MODE_PRIVATE),
+                            )
+                        }
+                        var grants by remember { mutableStateOf(store.all()) }
+                        SettingsRadarAccessContent(
+                            grants = grants,
+                            onRevoke = { pkg ->
+                                store.revoke(pkg)
+                                grants = store.all()
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable("settings/permissions") {
                         SettingsPermissions(navController = navController, prefs = prefs)

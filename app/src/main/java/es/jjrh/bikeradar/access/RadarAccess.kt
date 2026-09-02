@@ -93,4 +93,10 @@ object RadarConsent {
 
     /** No calling package, or a shared UID. Not retryable. */
     const val RESULT_CALLER_UNKNOWN = Activity.RESULT_FIRST_USER + 1
+
+    /**
+     * The rider answered, but the answer could not be saved. Do not treat this
+     * as a grant: nothing was stored and every later call will refuse.
+     */
+    const val RESULT_NOT_STORED = Activity.RESULT_FIRST_USER + 2
 }

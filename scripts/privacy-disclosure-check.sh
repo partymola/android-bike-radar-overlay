@@ -80,6 +80,45 @@ for p in "${perm_arr[@]}"; do
         || blocker "manifest permission '$p' is not named in the Privacy copy (strings.xml)"
 done
 
+# 2b. Permissions this app DECLARES, not only ones it uses. A custom permission
+#     is how another app is let at the radar, and it is not in the
+#     android.permission namespace, so check 2 above cannot see it at all.
+#     Inert until one is declared, which is the point: it fires on the commit
+#     that adds one.
+# `<uses-permission` does not contain the substring `<permission`, so no guard
+# against it is needed and one keyed on trailing whitespace missed the wrapped
+# multi-line form the manifest actually uses.
+declared="$(awk '/<permission/,/\/>/' "$MANIFEST" \
+    | grep -oE 'android:name="[^"]+"' | sed 's/android:name="//; s/"//')"
+if [ -n "$declared" ]; then
+    mapfile -t decl_arr <<<"$declared"
+    for d in "${decl_arr[@]}"; do
+        [ -z "$d" ] && continue
+        # By name, so adding a second permission cannot ride in on the first
+        # one's disclosure.
+        grep -qF "$d" "$STRINGS" \
+            || blocker "this app declares '$d', which lets another app in, and the Privacy copy never names it"
+    done
+fi
+
+# 2c. A cross-app data path is a second outbound channel. The anchor in
+#     HaClient models MQTT only, so nothing above can see this one.
+#
+#     Scoped to the paragraph, not the file: two other paragraphs already
+#     contain "never leaves the phone", so a file-wide grep matched one of
+#     those and passed with this section deleted.
+if [ -f "app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt" ]; then
+    apps_para=$(sed -n 's/.*<string name="settings_privacy_to_apps_body">\(.*\)<\/string>.*/\1/p' "$STRINGS")
+    if [ -z "$apps_para" ]; then
+        blocker "the radar can be shared with other apps but the Privacy copy has no sharing paragraph"
+    else
+        for kw in "not over the network" "up to that app" "Apps allowed to use your radar" "say yes"; do
+            printf '%s' "$apps_para" | grep -qF "$kw" \
+                || blocker "the sharing paragraph is missing '$kw'"
+        done
+    fi
+fi
+
 # 3. Posture claims must still appear in the user-facing copy, and the
 #    backup claim must match the manifest: credentials-in-backup is a
 #    deliberate, disclosed posture (settings + HA creds transfer to a new
@@ -114,6 +153,19 @@ case "$loc" in
 esac
 printf '%s' "$loc" | grep -qF "backup" \
     || blocker "the manual-coordinate paragraph must say the coordinates are included in the Android backup"
+
+# The granted-app list is SharedPreferences, so it rides the backup exactly as
+# the manual coordinates do. Same failure, same shape: a paragraph that says it
+# stays on the device would be false.
+apps=$(sed -n 's/.*<string name="settings_privacy_to_apps_body">\(.*\)<\/string>.*/\1/p' "$STRINGS")
+if [ -n "$apps" ]; then
+    case "$apps" in
+        *"this phone only"*|*"never sent anywhere"*|*"never leaves this phone"*)
+            blocker "the sharing paragraph claims the granted-app list stays on the device, but it is SharedPreferences and travels in the Android backup" ;;
+    esac
+    printf '%s' "$apps" | grep -qF "backup" \
+        || blocker "the sharing paragraph must say the granted-app list is included in the Android backup"
+fi
 
 grep -qF "HTTPS" "$STRINGS" || blocker "network claim 'HTTPS' missing from the Privacy copy (strings.xml)"
 grep -qF "Not affiliated" "$STRINGS" || blocker "'Not affiliated' disclaimer missing from the About copy (strings.xml)"

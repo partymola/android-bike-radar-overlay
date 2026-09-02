@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Videocam
@@ -71,6 +72,9 @@ import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
 import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.access.PrefsRadarGrantStore
+import es.jjrh.bikeradar.access.RadarAccessSummary
+import es.jjrh.bikeradar.access.RadarGrant
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
@@ -130,6 +134,14 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
                 tickNowMs = System.currentTimeMillis()
             }
         }
+    }
+
+    // Re-read on resume rather than held in state: a grant can be added by the
+    // consent screen in another task while this one sits in the backstack.
+    val radarGrants = remember(tickNowMs) {
+        PrefsRadarGrantStore(
+            ctx.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, android.content.Context.MODE_PRIVATE),
+        ).all()
     }
 
     // Stale entries are dropped rather than rendered: BatteryStateBus is never
@@ -221,6 +233,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         permissionsGrantedCount = grantedCount,
         permissionsRequiredMissing = requiredMissing,
         permissionsTotal = PERMISSIONS.size,
+        radarGrants = radarGrants,
     )
 }
 
@@ -254,7 +267,9 @@ internal fun SettingsMenuBody(
     permissionsGrantedCount: Int,
     permissionsRequiredMissing: Int,
     permissionsTotal: Int,
+    radarGrants: List<RadarGrant>,
 ) {
+    val radarAccessSummary = RadarAccessSummary.of(radarGrants)
     val br = LocalBrColors.current
     val ctx = LocalContext.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -413,6 +428,41 @@ internal fun SettingsMenuBody(
                         )
                     },
                     onClick = { navController.navigate("settings/permissions") },
+                )
+                SettingsRow(
+                    icon = Icons.Default.Share,
+                    // The tint follows the highest trust given, so an app that
+                    // can switch the tail light off does not look like one that
+                    // can only watch.
+                    iconTint = when (radarAccessSummary) {
+                        RadarAccessSummary.CONTROLLING -> br.caution
+                        RadarAccessSummary.READING -> br.brand
+                        RadarAccessSummary.NONE -> br.fgDim
+                    },
+                    title = stringResource(R.string.settings_home_radar_access_title),
+                    // Both counts when any app can control, because reporting
+                    // only the controlling one hides every app that can watch.
+                    subtitle = when (radarAccessSummary) {
+                        RadarAccessSummary.CONTROLLING -> {
+                            val controlling = radarGrants.count { it.control }
+                            val reading = radarGrants.count { it.read }
+                            pluralStringResource(
+                                R.plurals.settings_radar_access_reading,
+                                reading,
+                                reading,
+                            ) + " · " + pluralStringResource(
+                                R.plurals.settings_radar_access_controlling,
+                                controlling,
+                                controlling,
+                            )
+                        }
+                        RadarAccessSummary.READING -> {
+                            val reading = radarGrants.count { it.read }
+                            pluralStringResource(R.plurals.settings_radar_access_reading, reading, reading)
+                        }
+                        RadarAccessSummary.NONE -> stringResource(R.string.settings_radar_access_none)
+                    },
+                    onClick = { navController.navigate("settings/radar-access") },
                 )
                 SettingsRow(
                     icon = Icons.Default.FlashOn,

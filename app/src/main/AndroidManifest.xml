@@ -83,6 +83,19 @@
              never leaves over HTTP to the WAN. -->
 
 
+        <!-- Started by a consumer app with startActivityForResult, so that
+             getCallingPackage identifies it. Never launched by this app: a
+             consent screen over a moving map is what that would mean. -->
+        <activity
+            android:name=".access.RadarConsentActivity"
+            android:exported="true"
+            android:theme="@style/Theme.BikeRadar">
+            <intent-filter>
+                <action android:name="es.jjrh.bikeradar.action.REQUEST_RADAR_ACCESS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

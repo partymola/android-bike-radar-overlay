@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+package es.jjrh.bikeradar.access
+
+import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * One app's standing permission, as the rider granted it.
+ *
+ * [certDigest] pins the grant to the app that was approved: a package name
+ * survives an uninstall and a reinstall from another source, a signing key does
+ * not. [lastUsedAtMs] exists so the settings list can show what has gone quiet,
+ * since grants do not expire on their own.
+ */
+data class RadarGrant(
+    val packageName: String,
+    val certDigest: String,
+    val label: String,
+    val grantedAtMs: Long,
+    val lastUsedAtMs: Long,
+    val read: Boolean,
+    val control: Boolean,
+)
+
+/**
+ * The rider's standing grants, keyed by package.
+ *
+ * An interface because the gate's rules are worth testing without Android.
+ */
+interface RadarGrantStore {
+
+    fun grantFor(packageName: String): RadarGrant?
+
+    fun all(): List<RadarGrant>
+
+    /** False when the store could not be read, so nothing was written. */
+    fun put(grant: RadarGrant): Boolean
+
+    /** False when the store could not be read, so nothing was removed. */
+    fun revoke(packageName: String): Boolean
+
+    fun markUsed(packageName: String, atMs: Long)
+}
+
+/**
+ * Grants in SharedPreferences, as one JSON array under a single key.
+ *
+ * SharedPreferences rather than a file because internal storage is already in
+ * the Android backup and the device transfer, so a rider's approvals follow
+ * them to a new phone. The Privacy screen says so; they are not device-local.
+ *
+ * Every method holds one monitor across its read and its write. The gate
+ * answers binder calls on a pool thread while the settings screen writes on the
+ * main one, so an unsynchronised read-modify-write lets a stale copy resurrect
+ * a grant the rider has just revoked.
+ *
+ * The monitor is shared by every instance rather than held per object, because
+ * two instances over the same file are two writers and a per-object lock would
+ * serialise neither against the other.
+ */
+class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantStore {
+
+    override fun grantFor(packageName: String): RadarGrant? = all().firstOrNull { it.packageName == packageName }
+
+    override fun all(): List<RadarGrant> = synchronized(LOCK) { read() ?: emptyList() }
+
+    override fun put(grant: RadarGrant): Boolean {
+        synchronized(LOCK) {
+            val current = read() ?: return false
+            write(current.filterNot { it.packageName == grant.packageName } + grant, durable = true)
+            return true
+        }
+    }
+
+    override fun revoke(packageName: String): Boolean {
+        synchronized(LOCK) {
+            val current = read() ?: return false
+            // Durable, because a revoke lost to process death before the flush
+            // is the one write here whose loss is a security event.
+            write(current.filterNot { it.packageName == packageName }, durable = true)
+            return true
+        }
+    }
+
+    override fun markUsed(packageName: String, atMs: Long) {
+        synchronized(LOCK) {
+            val current = read() ?: return
+            val existing = current.firstOrNull { it.packageName == packageName } ?: return
+            // The settings list shows how long ago an app last read, so a finer
+            // stamp changes nothing on screen. Without the floor this is a
+            // whole-file rewrite on every allowed call, which is a radar frame.
+            if (atMs - existing.lastUsedAtMs < USE_STAMP_RESOLUTION_MS) return
+            write(
+                current.map { if (it.packageName == packageName) it.copy(lastUsedAtMs = atMs) else it },
+                durable = false,
+            )
+        }
+    }
+
+    /**
+     * Null when the stored value is present but unreadable, as distinct from
+     * absent. A write must not proceed from that: every method here rewrites
+     * the whole array, so writing what could be read would silently discard
+     * every grant that could not be.
+     */
+    private fun read(): List<RadarGrant>? {
+        val raw = prefs.getString(KEY, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                RadarGrant(
+                    packageName = o.getString("pkg"),
+                    certDigest = o.getString("cert"),
+                    label = o.optString("label", o.getString("pkg")),
+                    grantedAtMs = o.optLong("granted", 0L),
+                    lastUsedAtMs = o.optLong("used", 0L),
+                    read = o.optBoolean("read", false),
+                    control = o.optBoolean("control", false),
+                )
+            }
+        }.getOrNull()
+    }
+
+    private fun write(grants: List<RadarGrant>, durable: Boolean) {
+        val arr = JSONArray()
+        for (g in grants) {
+            arr.put(
+                JSONObject()
+                    .put("pkg", g.packageName)
+                    .put("cert", g.certDigest)
+                    .put("label", g.label)
+                    .put("granted", g.grantedAtMs)
+                    .put("used", g.lastUsedAtMs)
+                    .put("read", g.read)
+                    .put("control", g.control),
+            )
+        }
+        val editor = prefs.edit().putString(KEY, arr.toString())
+        if (durable) editor.commit() else editor.apply()
+    }
+
+    companion object {
+        /** Its own file, like the other stores here, so a clear of one is not a clear of all. */
+        const val PREFS_NAME = "radar-access"
+
+        private val LOCK = Any()
+        private const val KEY = "radar_access_grants"
+        private const val USE_STAMP_RESOLUTION_MS = 60_000L
+    }
+}

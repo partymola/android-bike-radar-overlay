@@ -566,6 +566,8 @@
     <string name="settings_privacy_to_ha_label">What goes to your Home Assistant</string>
     <string name="settings_privacy_to_ha_publish">If you set up HA, the app publishes over MQTT, straight to your HA URL - nothing routed through the developer or any third party:\n• radar and dashcam battery\n• front-light mode\n• ride start/end events\n• an end-of-ride summary (distance, close-pass counts, closing speeds, clearances)\n• a per-event close-pass log, if you turn it on</string>
     <string name="settings_privacy_to_ha_stop">You can stop publishing at any time by tapping Clear HA configuration in Settings → Home Assistant. Stored credentials are removed from the phone immediately.</string>
+    <string name="settings_privacy_to_apps_label">Sharing with other apps</string>
+    <string name="settings_privacy_to_apps_body">Another app on this phone can ask to use your rear radar, and nothing reaches it until you say yes on a screen naming the app. What it can then read is what the radar reports: vehicles behind you, how far away and how fast they are closing, your own speed, what type each vehicle is, and the radar\'s battery. If you also allow it, it can change your tail light mode and hide the on-screen radar.\n\nThe handover happens on this device, app to app, not over the network and not through the developer. What the other app does with it afterwards is up to that app, so only allow one you trust.\n\nSee Settings, Apps allowed to use your radar, for what you have allowed and to stop any of it. That list is kept in Android\'s app-private storage, and like your other settings it travels in your Android backup when you have it turned on, and in a direct phone-to-phone transfer.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">Pairing happens in Android\'s system Bluetooth flow, not in this app. The app reads your bonded-device list to identify the radar, the dashcam, and your Bosch eBike. Bluetooth permissions are declared with `usesPermissionFlags=\"neverForLocation\"`, so Bluetooth scanning never derives location.</string>
     <string name="settings_privacy_networking_label">Networking</string>
@@ -773,5 +775,35 @@
     <!-- SyntheticScenarioService.kt -->
     <string name="svc_synthetic_channel_name">Synthetic scenario</string>
     <string name="svc_synthetic_notif_title">Bike Radar synthetic scenario</string>
+
+    <!-- RadarConsentActivity.kt -->
+    <string name="radar_consent_title">Share your radar?</string>
+    <string name="radar_consent_body"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> is asking to use your rear radar.</string>
+    <string name="radar_consent_read">See what the radar sees</string>
+    <string name="radar_consent_read_detail">Vehicles behind you, how far away they are and how fast they are closing, what type they are, your own speed, and your radar\'s battery.</string>
+    <string name="radar_consent_control">Change your tail light and overlay</string>
+    <string name="radar_consent_control_detail">Switch the radar\'s light mode and hide the on-screen radar.</string>
+    <string name="radar_consent_save">Allow</string>
+    <string name="radar_consent_cancel">Don\'t allow</string>
+    <string name="radar_consent_backup_note">Your choice is kept on this phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
+
+    <!-- Settings -> apps allowed to use the radar -->
+    <string name="settings_home_radar_access_title">Apps allowed to use your radar</string>
+    <string name="settings_radar_access_none">No other app is using it</string>
+    <plurals name="settings_radar_access_reading">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app can see what the radar sees</item>
+        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps can see what the radar sees</item>
+    </plurals>
+    <plurals name="settings_radar_access_controlling">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app can change your tail light</item>
+        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps can change your tail light</item>
+    </plurals>
+    <string name="settings_radar_access_empty">When another app asks to use your radar, it will appear here.</string>
+    <string name="settings_radar_access_can_read">Sees the radar</string>
+    <string name="settings_radar_access_can_control">Changes your tail light</string>
+    <string name="settings_radar_access_last_used">Last used <xliff:g id="when" example="3 days ago">%1$s</xliff:g></string>
+    <string name="settings_radar_access_never_used">Not used yet</string>
+    <string name="settings_radar_access_revoke">Stop sharing</string>
+    <string name="settings_radar_access_backup_note">This list is kept on your phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
 
 </resources>

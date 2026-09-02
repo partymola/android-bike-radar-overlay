@@ -60,6 +60,9 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 PrivacyP(stringResource(R.string.settings_privacy_to_ha_publish))
                 PrivacyP(stringResource(R.string.settings_privacy_to_ha_stop))
 
+                PrivacySectionLabel(stringResource(R.string.settings_privacy_to_apps_label))
+                PrivacyP(stringResource(R.string.settings_privacy_to_apps_body))
+
                 PrivacySectionLabel(stringResource(R.string.settings_privacy_bluetooth_label))
                 PrivacyP(stringResource(R.string.settings_privacy_bluetooth_body))
 

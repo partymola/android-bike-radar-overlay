@@ -58,6 +58,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -93,6 +94,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -140,6 +142,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -175,6 +178,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 1,
                     permissionsRequiredMissing = 2,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -221,6 +225,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -260,6 +265,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -301,6 +307,7 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 3,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 3,
+                    radarGrants = emptyList(),
                 )
             }
         }
@@ -342,6 +349,43 @@ class SettingsScreenSnapshotTest {
                     permissionsGrantedCount = 2,
                     permissionsRequiredMissing = 0,
                     permissionsTotal = 4,
+                    radarGrants = emptyList(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun menuWithAppsUsingTheRadar() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot(),
+                    btEnabled = true,
+                    radarLink = DeviceLinkState.LIVE,
+                    dashcamLink = DeviceLinkState.NOT_PAIRED,
+                    radarBattery = null,
+                    dashcamBattery = null,
+                    ebikeReceiving = false,
+                    ebikeStage = EBikeStage.NO_BONDED_BIKE,
+                    haConfigured = false,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 4,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 4,
+                    radarGrants = listOf(
+                        es.jjrh.bikeradar.access.RadarGrant(
+                            "com.example.trailbuddy",
+                            "aa11",
+                            "Trail Buddy",
+                            0L,
+                            0L,
+                            read = true,
+                            control = true,
+                        ),
+                    ),
                 )
             }
         }

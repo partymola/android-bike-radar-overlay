@@ -73,6 +73,11 @@ strip; the rest of your screen stays yours. (*Image credits
   assist mode while Bosch Flow is connected. Never writes to the bike.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
+- Radar sharing (off until you allow it): another app on the phone can ask
+  to read your radar stream, and to change your tail light and hide the
+  overlay. It gets nothing until you say yes on a screen naming it. Stop it
+  any time in **Settings → Apps allowed to use your radar**. Nothing leaves
+  the phone for this.
 - Optional per-ride capture log (off by default; enable on the Debug
   screen) written to app-private storage: radar packets, BLE
   characteristic notifications, eBike telemetry from Bosch Flow,
@@ -394,3 +399,39 @@ does not imply any endorsement.
 ## License
 
 GPL-3.0-or-later. See [`LICENSE`](./LICENSE).
+
+### Building an app on top of the radar
+
+Another app on the phone can bind to Bike Radar and, once the rider grants it,
+read the radar stream. Two things make that practical, and they answer
+different questions.
+
+**The contract is permissively licensed.** Six files are **Apache-2.0**:
+`IRadarService.aidl`, `IRadarListener.aidl` and `RadarStateParcel.aidl` under
+`app/src/main/aidl/es/jjrh/bikeradar/ipc/`, and `RadarContract.kt`,
+`RadarStateParcel.kt` and `RadarVehicleParcel.kt` in the matching package under
+`app/src/main/java/`. Copy them into your project and keep your own licence on
+the result. They are self-contained on purpose:
+nothing in them reaches back into the app, so together they are a complete
+client contract, including the consent screen you send the rider to. Everything
+that implements them, and the rest of the app, stays GPL-3.0-or-later.
+
+**Keep them in the `es.jjrh.bikeradar.ipc` package.** AIDL bakes the
+fully-qualified interface name into the generated stub and checks it on every
+call, so a repackaged copy fails at run time rather than at build time. Calls
+you make come back refused with a `SecurityException`. Frames we deliver to your
+listener are worse: that interface is `oneway`, so the mismatch throws inside
+your process and nothing reaches us, leaving you with a registration that
+succeeded and a stream that never arrives. This is the one mistake that survives
+your build.
+
+**And on the copyleft question, we grant rather than argue.** An app that
+communicates with Bike Radar solely through that interface, and incorporates no
+other part of it, is covered by an additional permission under section 7 of the
+GPL, set out in
+[`additional-permission.txt`](./additional-permission.txt). Write it, ship it
+and license it as you please. Nothing about this app requires you to publish
+its source.
+
+Reaching past the interface into the rest of the code is a different matter,
+and the GPL applies there as it normally would.

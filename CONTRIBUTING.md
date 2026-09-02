@@ -97,3 +97,17 @@ log and copy a diagnostic bundle to help.
   `test:`, `build:`, `ci:`, `docs:`, plus area scopes like `ble:`, `ha:`,
   `protocol:`).
 - GPL-3.0-or-later. Don't paste in code under an incompatible licence.
+- **Six files are the exception and are Apache-2.0**: the `.aidl` definitions
+  under `app/src/main/aidl/es/jjrh/bikeradar/ipc/`, plus `RadarContract.kt`,
+  `RadarStateParcel.kt` and `RadarVehicleParcel.kt`. They are the cross-app
+  contract, and another project has to be able to copy them whatever its own
+  licence. Two things follow if you touch them. Leave the headers alone, and
+  keep those files free of any reference to the rest of the app, or the
+  permission stops meaning anything. A test fails on both.
+- Writing an app that talks to Bike Radar rather than changing it? See
+  [`additional-permission.txt`](additional-permission.txt). An app that
+  communicates solely through that interface, and incorporates no other part of
+  this one, does not need to be licensed under the GPL. Keep the copied files in
+  the `es.jjrh.bikeradar.ipc` package: AIDL checks the interface name at run
+  time, and on the listener half a mismatch throws inside your own process
+  rather than reporting anything back.

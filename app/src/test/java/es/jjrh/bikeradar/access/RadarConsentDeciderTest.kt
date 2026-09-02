@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.access
 
 import android.app.Activity
+import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -58,7 +59,7 @@ class RadarConsentDeciderTest {
     @Test
     fun aCallerThatDidNotStartThisForAResultCannotBeIdentified() {
         assertEquals(
-            ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN),
+            ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN),
             decider().open(null),
         )
         assertEquals("nothing may be stored for a caller with no name", 0, store.items.size)
@@ -67,7 +68,7 @@ class RadarConsentDeciderTest {
     @Test
     fun anAppThatIsNotInstalledIsRefused() {
         assertEquals(
-            ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN),
+            ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN),
             decider(FakeIdentity(installed = emptyMap())).open(PKG),
         )
     }
@@ -78,7 +79,7 @@ class RadarConsentDeciderTest {
         // used. Refusing now says so rather than leaving a dead grant behind.
         val shared = FakeIdentity(installed = mapOf(PKG to 42), owners = mapOf(42 to null))
         assertEquals(
-            ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN),
+            ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN),
             decider(shared).open(PKG),
         )
     }
@@ -87,7 +88,7 @@ class RadarConsentDeciderTest {
     fun anAppWhoseSignatureCannotBeReadIsRefused() {
         val unreadable = FakeIdentity(certs = emptySet())
         assertEquals(
-            ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN),
+            ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN),
             decider(unreadable).open(PKG),
         )
     }
@@ -95,7 +96,7 @@ class RadarConsentDeciderTest {
     @Test
     fun aRideInProgressIsRefusedAsRetryable() {
         assertEquals(
-            ConsentRequest.Refuse(RadarConsent.RESULT_RIDE_IN_PROGRESS),
+            ConsentRequest.Refuse(Consent.RESULT_RIDE_IN_PROGRESS),
             decider(riding = true).open(PKG),
         )
         assertEquals("a refusal mid-ride stores nothing", 0, store.items.size)
@@ -172,12 +173,12 @@ class RadarConsentDeciderTest {
             now = { 5_000L },
         )
         assertEquals(
-            RadarConsent.RESULT_NOT_STORED,
+            Consent.RESULT_NOT_STORED,
             refusing.decide(PKG, "Trail Buddy", read = true, control = false),
         )
         assertEquals(
             "revoking through the screen must report the same way",
-            RadarConsent.RESULT_NOT_STORED,
+            Consent.RESULT_NOT_STORED,
             refusing.decide(PKG, "Trail Buddy", read = false, control = false),
         )
     }
@@ -195,7 +196,7 @@ class RadarConsentDeciderTest {
     fun anAppThatCannotProveAKeyIsNotGranted() {
         val unreadable = FakeIdentity(certs = emptySet())
         assertEquals(
-            RadarConsent.RESULT_CALLER_UNKNOWN,
+            Consent.RESULT_CALLER_UNKNOWN,
             decider(unreadable).decide(PKG, "Trail Buddy", read = true, control = true),
         )
         assertNull(store.grantFor(PKG))

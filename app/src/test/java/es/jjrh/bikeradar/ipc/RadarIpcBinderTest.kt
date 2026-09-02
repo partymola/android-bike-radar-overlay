@@ -28,8 +28,8 @@ import org.robolectric.shadows.ShadowLog
 @RunWith(RobolectricTestRunner::class)
 class RadarIpcBinderTest {
 
-    // The wire values a shipped consumer sends, as literals. See
-    // `theWireValueOfEveryLightModeIsFixed`.
+    // The wire values a shipped consumer sends, as literals rather than
+    // RadarContract's constants, which are the thing under test.
     private val wireNightFlash = 0
     private val wireDayFlash = 1
     private val wireSolid = 2
@@ -210,12 +210,9 @@ class RadarIpcBinderTest {
 
     @Test
     fun theWireValueOfEveryLightModeIsFixed() {
-        // The int on this contract is the enum's ORDINAL, so the declaration
-        // order in RadarLightController is a public wire format. Asserting
-        // `RadarLightMode.X.ordinal` produces `RadarLightMode.X` would restate
-        // the enum against itself and move with any reorder, silently changing
-        // what an already-installed consumer sets on the rider's tail light.
-        // Literals are what make a reorder fail here instead of on a bike.
+        // Literals on both sides. Writing `RadarLightMode.X.ordinal` would
+        // restate the enum against itself and move with any reorder, which is
+        // the coupling the wire constants exist to break.
         uid = trailBuddyUid
         val b = binder(control = setOf(trailBuddyUid))
 
@@ -233,10 +230,29 @@ class RadarIpcBinderTest {
     }
 
     @Test
+    fun everyLightModeIsReachableOverTheContract() {
+        // The `when` is over an Int, so it is not exhaustiveness-checked: a
+        // sixth RadarLightMode with no wire value compiles, and is simply
+        // unsettable by any consumer for ever, with nothing failing. That is
+        // the safe direction and still a decision somebody should take
+        // deliberately, so this is what makes them take it.
+        uid = trailBuddyUid
+        val b = binder(control = setOf(trailBuddyUid))
+
+        val reached = buildSet {
+            for (wire in -1..64) {
+                lightModeSet = null
+                if (b.setRadarLightMode(wire)) add(lightModeSet)
+            }
+        }
+        assertEquals(RadarLightMode.entries.toSet(), reached)
+    }
+
+    @Test
     fun anOutOfRangeLightModeIsRefusedRatherThanCoerced() {
-        // The int is an ordinal on the wire, so a consumer built against a
-        // later version can send one this build has no meaning for. Writing
-        // an arbitrary mode to the rider's tail light is the wrong answer.
+        // A consumer built against a later version can send a value this build
+        // has no meaning for. Writing an arbitrary mode to the rider's tail
+        // light is the wrong answer.
         uid = trailBuddyUid
         val b = binder(control = setOf(trailBuddyUid))
 

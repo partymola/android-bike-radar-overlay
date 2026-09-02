@@ -12,4 +12,5 @@ How you verified it (unit tests, and a ride-test if it touches
 - [ ] `:app:testDebugUnitTest`, `:app:lintDebug`, and `:app:ktlintCheck` pass
 - [ ] decoder/behaviour changes add or update unit tests
 - [ ] no vendor names in class/package/file names (see AGENTS.md)
-- [ ] licensed GPL-3.0-or-later; no incompatible code copied
+- [ ] licensed GPL-3.0-or-later, or Apache-2.0 for the six cross-app contract
+      files that carry that header; no incompatible code copied

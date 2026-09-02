@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package es.jjrh.bikeradar.access
 
-import android.app.Activity
-
 /**
  * Who may read the radar stream, and who may act on the hardware.
  *
  * This is the seam between the cross-app IPC surface and the rider's consent.
- * The bound service asks; nothing here knows what binder is.
+ * The bound service asks; nothing in this file knows what binder is.
  *
  * A UID rather than a package, because [android.os.Binder.getCallingUid] is the
  * only caller identity a service can trust. Resolving it to a package, and
@@ -72,36 +70,6 @@ object NoSharingReporter : RadarSharingReporter {
     override fun onActiveConsumersChanged(packageNames: Set<String>) = Unit
 }
 
-/**
- * The consent screen's contract, for a consumer app to build against.
- *
- * The consumer starts this from its own foreground with
- * `startActivityForResult` at the moment its user asks to connect. Bike Radar
- * never launches it: a consent screen thrown over a moving map is the failure
- * this shape avoids.
- *
- * Launching grants nothing. The rider's answer is the grant, and calling again
- * when a grant exists shows its current state, so one screen covers connecting
- * and changing your mind.
- */
-object RadarConsent {
-
-    /** Explicit component is safer, but the action is what a consumer matches on. */
-    const val ACTION = "es.jjrh.bikeradar.action.REQUEST_RADAR_ACCESS"
-
-    /** Booleans on a RESULT_OK intent. Read them; either may be false. */
-    const val EXTRA_READ = "es.jjrh.bikeradar.extra.READ"
-    const val EXTRA_CONTROL = "es.jjrh.bikeradar.extra.CONTROL"
-
-    /** A ride is in progress. Retryable once it ends. */
-    const val RESULT_RIDE_IN_PROGRESS = Activity.RESULT_FIRST_USER
-
-    /** No calling package, or a shared UID. Not retryable. */
-    const val RESULT_CALLER_UNKNOWN = Activity.RESULT_FIRST_USER + 1
-
-    /**
-     * The rider answered, but the answer could not be saved. Do not treat this
-     * as a grant: nothing was stored and every later call will refuse.
-     */
-    const val RESULT_NOT_STORED = Activity.RESULT_FIRST_USER + 2
-}
+// The consent screen's wire, which a consumer copies, lives in
+// RadarContract.Consent so that it travels under the permissive licence with
+// the rest of the contract. Everything here stays GPL.

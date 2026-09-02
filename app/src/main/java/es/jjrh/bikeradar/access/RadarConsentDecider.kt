@@ -2,6 +2,7 @@
 package es.jjrh.bikeradar.access
 
 import android.app.Activity
+import es.jjrh.bikeradar.ipc.RadarContract.Consent
 
 /** What the consent screen should do about the app that opened it. */
 sealed interface ConsentRequest {
@@ -62,22 +63,22 @@ class RadarConsentDecider(
      */
     fun open(callingPackage: String?): ConsentRequest {
         val packageName = callingPackage
-            ?: return ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN)
+            ?: return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
 
         // The gate refuses a shared UID, so a grant made here could never be
         // used. Refusing now says so, instead of leaving a dead grant behind.
         val uid = identity.uidOf(packageName)
-            ?: return ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN)
+            ?: return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
         val caller = identity.resolve(uid)
         if (caller?.packageName != packageName) {
-            return ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN)
+            return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
         }
         if (identity.digests(packageName).isEmpty()) {
-            return ConsentRequest.Refuse(RadarConsent.RESULT_CALLER_UNKNOWN)
+            return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
         }
 
         // A rider mid-ride is looking at the road, not at a permission screen.
-        if (rideInProgress()) return ConsentRequest.Refuse(RadarConsent.RESULT_RIDE_IN_PROGRESS)
+        if (rideInProgress()) return ConsentRequest.Refuse(Consent.RESULT_RIDE_IN_PROGRESS)
 
         return ConsentRequest.Ask(packageName, caller.label, store.grantFor(packageName))
     }
@@ -95,13 +96,13 @@ class RadarConsentDecider(
         // damaged to read refuses every write, and a consumer told OK would
         // believe it had standing access while every later call denied.
         if (!read && !control) {
-            return if (store.revoke(packageName)) Activity.RESULT_OK else RadarConsent.RESULT_NOT_STORED
+            return if (store.revoke(packageName)) Activity.RESULT_OK else Consent.RESULT_NOT_STORED
         }
         // Any of the app's keys will do, because the gate checks membership in
         // the set rather than equality with one. Taking the lowest just makes
         // the stored value the same across two grants of the same app.
         val digest = identity.digests(packageName).minOrNull()
-            ?: return RadarConsent.RESULT_CALLER_UNKNOWN
+            ?: return Consent.RESULT_CALLER_UNKNOWN
         val stored = store.put(
             RadarGrant(
                 packageName = packageName,
@@ -113,6 +114,6 @@ class RadarConsentDecider(
                 control = control,
             ),
         )
-        return if (stored) Activity.RESULT_OK else RadarConsent.RESULT_NOT_STORED
+        return if (stored) Activity.RESULT_OK else Consent.RESULT_NOT_STORED
     }
 }

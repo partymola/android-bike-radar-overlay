@@ -109,7 +109,7 @@ class RadarIpcServiceTest {
     fun bindingReturnsAWorkingBinder() {
         val service = controller.create().get()
 
-        val binder = service.onBind(Intent(RadarIpcService.ACTION))
+        val binder = service.onBind(Intent(RadarContract.ACTION))
 
         assertNotNull("nothing to bind to", binder)
         assertTrue(binder is RadarIpcBinder)
@@ -126,8 +126,8 @@ class RadarIpcServiceTest {
         // would live on an object the next bind cannot see.
         val service = controller.create().get()
 
-        val first = service.onBind(Intent(RadarIpcService.ACTION))
-        val second = service.onBind(Intent(RadarIpcService.ACTION))
+        val first = service.onBind(Intent(RadarContract.ACTION))
+        val second = service.onBind(Intent(RadarContract.ACTION))
 
         assertTrue(first === second)
     }
@@ -135,10 +135,10 @@ class RadarIpcServiceTest {
     @Test
     fun everyConsumerLeavingRestoresTheOverlay() {
         val service = controller.create().get()
-        service.onBind(Intent(RadarIpcService.ACTION))
+        service.onBind(Intent(RadarContract.ACTION))
         RadarOverlayGate.hide("com.example.trailbuddy")
 
-        service.onUnbind(Intent(RadarIpcService.ACTION))
+        service.onUnbind(Intent(RadarContract.ACTION))
 
         assertFalse("nobody is left to lift the hold themselves", RadarOverlayGate.hidden)
     }
@@ -191,11 +191,11 @@ class RadarIpcServiceTest {
         val service = controller.create().get()
         val binder = service.binder
         grantSelf()
-        service.onBind(Intent(RadarIpcService.ACTION))
+        service.onBind(Intent(RadarContract.ACTION))
         binder.registerTargetListener(RecordingListener())
 
-        service.onUnbind(Intent(RadarIpcService.ACTION))
-        service.onBind(Intent(RadarIpcService.ACTION))
+        service.onUnbind(Intent(RadarContract.ACTION))
+        service.onBind(Intent(RadarContract.ACTION))
 
         assertTrue(
             "a rebind must be able to register again",
@@ -285,19 +285,10 @@ class RadarIpcServiceTest {
         // registration held. The stop is the half that closes the live case.
         val service = controller.create().get()
 
-        val mode = service.onStartCommand(Intent(RadarIpcService.ACTION), 0, 7)
+        val mode = service.onStartCommand(Intent(RadarContract.ACTION), 0, 7)
 
         assertEquals(Service.START_NOT_STICKY, mode)
         assertTrue("a start with no client must not pin the service", shadowOf(service).isStoppedBySelf)
-    }
-
-    @Test
-    fun theBindActionIsTheStringEveryConsumerHasAlreadyCopied() {
-        // A literal, not the constant: a consumer's manifest and intent carry
-        // this text, so a rename that moved the constant and the manifest
-        // together would pass a comparison between them and silently stop every
-        // installed app from binding at all.
-        assertEquals("es.jjrh.bikeradar.action.RADAR_SERVICE", RadarIpcService.ACTION)
     }
 
     private fun liveState() = RadarState(

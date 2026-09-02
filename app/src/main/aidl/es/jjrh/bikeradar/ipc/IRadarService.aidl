@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) 2026 JJ del Rio
+// Permissive so another app can copy this contract into its own build.
+// Licence text: LICENSES/Apache-2.0.txt. Consumers: additional-permission.txt
 package es.jjrh.bikeradar.ipc;
 
 import es.jjrh.bikeradar.ipc.IRadarListener;
@@ -58,8 +61,9 @@ interface IRadarService {
      * Set the radar's tail-light mode. Needs the control grant, which read
      * never implies. Returns false when refused or when no radar is linked.
      *
-     * The int is RadarLightMode's ordinal on this contract's version; read
-     * getContractVersion first.
+     * The int is one of RadarContract's LIGHT_MODE_ values, which are fixed
+     * for a contract version; read getContractVersion first. Anything else is
+     * refused rather than coerced to a mode.
      *
      * CALL THIS OFF YOUR MAIN THREAD. It is synchronous and reaches the radio:
      * it waits for the radar to acknowledge the write and gives up after a few

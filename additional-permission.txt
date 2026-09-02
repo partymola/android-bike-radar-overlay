@@ -1,0 +1,62 @@
+ADDITIONAL PERMISSION UNDER SECTION 7 OF THE GNU GPL
+
+Bike Radar is licensed under the GNU General Public License, version 3 or
+later, as set out in LICENSE. The copyright holder grants the following
+additional permission under section 7 of that licence.
+
+
+THE GRANT
+
+You may write an application that communicates with this program solely
+through the cross-app radar interface described below, and that incorporates no
+part of this program other than the interface files themselves. You may
+distribute that application and license it on any terms you choose, and nothing
+in the GNU GPL requires you to publish its source on account of this program.
+
+Copying those interface files is expressly contemplated here, and does not cost
+you this permission. They carry their own permissive licence for that purpose.
+
+The copyright holder will not treat such an application as a work based on this
+program, and will not treat installing the two on one device, or running them
+together, as combining them into a single work.
+
+
+WHAT THE INTERFACE IS
+
+Six files, all separately licensed Apache-2.0, so you may copy them into your
+own project and keep your own licence on the result:
+
+    app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl
+    app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarListener.aidl
+    app/src/main/aidl/es/jjrh/bikeradar/ipc/RadarStateParcel.aidl
+    app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt
+    app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt
+    app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt
+
+Together they carry the service interface, the wire layout, the package, intent
+action and permission you bind with, and the consent screen you send the rider
+to. This permission covers the application you build around them.
+
+Keep them in the es.jjrh.bikeradar.ipc package. AIDL checks the fully-qualified
+interface name on every call, so a repackaged copy fails at run time. On the
+listener interface that failure is silent in our direction, because delivery is
+oneway and the mismatch throws inside your own process.
+
+
+WHAT IT DOES NOT COVER
+
+It does not extend to an application that incorporates, links to, or is derived
+from any other part of this program. If you reach past those six files, the GNU
+GPL applies to your work as it otherwise would.
+
+It grants no trademark rights, and no permission to present your application as
+this one.
+
+
+IF YOU DID NOT GET THIS FROM THE ORIGINAL REPOSITORY
+
+Section 7 lets anyone who conveys a copy of a covered work remove additional
+permissions from that copy, whether or not they changed anything else. This
+permission therefore travels with the copies the copyright holder publishes,
+and a copy you obtained elsewhere may not carry it. Check for this file in the
+source you actually received.

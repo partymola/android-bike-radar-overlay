@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Additional permission for cross-app consumers: additional-permission.txt
 package es.jjrh.bikeradar.ipc
 
 import android.os.Binder
@@ -14,21 +15,17 @@ import kotlinx.coroutines.CancellationException
  * The cross-app contract, implemented.
  *
  * This IS the binder the framework hands to another app, not a testable core
- * behind one: the checks that matter live in the same object that answers the
- * call, so a test that constructs this exercises what ships. [callingUid] is
- * injected only because [Binder.getCallingUid] answers about the real caller,
- * which a unit test has no way to be.
+ * behind one, so a test that constructs this exercises what ships.
+ * [callingUid] is injected only because [Binder.getCallingUid] answers about
+ * the real caller, which a unit test has no way to be.
  *
  * Every GATED method recomputes the rider's grant, so a revocation takes effect
- * on the next call rather than at the next bind. Three are ungated by design
- * and the AIDL names them: the version, unregistering, and showing the overlay
- * again. None returns radar data or touches the hardware.
+ * on the next call. Three are ungated by design and the AIDL names them: the
+ * version, unregistering, and showing the overlay again.
  *
- * The streaming path is the exception, and it is the highest-volume one: a
- * registration's grant is checked once and then held, because resolving a
- * package through the PackageManager at radar cadence is not free. [revalidate]
- * is what makes that safe, driven by every write to the grant store. Deleting
- * it would restore "a revoked app keeps receiving frames until it unbinds".
+ * The streaming path is the exception: a registration's grant is checked once
+ * and then held, because resolving a package through the PackageManager at
+ * radar cadence is not free. [revalidate] is what makes that safe.
  */
 class RadarIpcBinder(
     private val gate: RadarAccessGate,
@@ -48,85 +45,64 @@ class RadarIpcBinder(
     }
 
     /**
-     * A consumer's process went away without unregistering.
+     * A consumer's process went away without unregistering, which is the
+     * likeliest way a hold gets left behind: a crash is the one exit where the
+     * consumer runs no code of its own.
      *
-     * A crash is the likeliest way a hold gets left behind, since it is the one
-     * exit where the consumer runs no code of its own.
-     *
-     * The death recipient fires only for a REMOTE binder, and a unit test's
-     * listener is a local object that never dies - so the tests drive
-     * [listeners]`.onCallbackDied` directly rather than calling this. That way
-     * the two-argument override and the cookie cast are exercised too: the
-     * one-argument overload also compiles, silently loses the cookie, and would
-     * leave every crashed consumer's hold in place.
+     * The death recipient fires only for a REMOTE binder, so the tests drive
+     * [listeners]`.onCallbackDied` directly. That also exercises the
+     * two-argument override, whose one-argument sibling compiles, silently
+     * loses the cookie, and leaves every crashed consumer's hold in place.
      */
     internal fun onConsumerDied(packageName: String) = synchronized(broadcastLock) {
-        // Under the same lock as the other two drop-and-show paths. Without it
-        // a `setOverlayVisible(false)` that has already passed its registration
-        // check can install a hold AFTER this lifts nothing, leaving one owned
-        // by a process that is already gone and has no death recipient left.
-        // Safe against the other paths, which all take this lock and then the
-        // callback list's: read off `RemoteCallbackList`, whose `binderDied`
-        // removes the callback inside its own monitor and calls here after
-        // that block closes, so nothing holds it while waiting for this.
+        // Under the same lock as the other drop-and-show paths, or a
+        // `setOverlayVisible(false)` that has already passed its registration
+        // check can install a hold after this lifts nothing.
+        //
+        // This is the one path that takes the lock in the opposite order: every
+        // other takes broadcastLock and then enters RemoteCallbackList's own
+        // monitor, while this is reached from inside it. Safe because
+        // `binderDied` removes the callback inside that monitor and calls here
+        // after the block closes, so nothing holds it while waiting for this.
+        // That is framework behaviour, not ours, and no test drives it.
         RadarOverlayGate.show(packageName)
     }
 
     /**
-     * `RemoteCallbackList` is thread-safe for register and unregister, but it
-     * permits ONE broadcast at a time and throws on an overlapping
-     * `beginBroadcast`. Every `beginBroadcast` in this file is inside this
-     * lock, and they run on two thread classes at once: the frame feed and the
-     * revalidation collector on Dispatchers.Default, and every interface method
-     * on a binder pool thread. A consumer connecting mid-ride is the ordinary
-     * case, not an exotic one.
+     * `RemoteCallbackList` permits ONE broadcast at a time and throws on an
+     * overlapping `beginBroadcast`. Every `beginBroadcast` here is inside this
+     * lock, and they run on binder pool threads and Dispatchers.Default at
+     * once, which a consumer connecting mid-ride reaches ordinarily.
      *
-     * The throw would be silent and permanent: it escapes `collectLatest` and
-     * cancels that collector, and the SupervisorJob keeps the scope alive so
-     * nothing restarts it. The feed would stop for every consumer, or
-     * revalidation would stop and a revoked app would keep receiving frames -
-     * which is the mechanism the grant store's KDoc cites to justify holding a
-     * decision rather than re-checking it per frame.
+     * The throw would be silent and permanent: it cancels the collector and the
+     * SupervisorJob keeps the scope alive, so the feed stops for every consumer,
+     * or revalidation stops and a revoked app keeps receiving frames.
      *
-     * Delivery is `oneway`, so holding this across a broadcast does not wait on
-     * any consumer.
+     * [failing], [lastStamped] and [consumerIndices] are read and written under
+     * it too, and every function touching them takes it itself rather than
+     * trusting its caller, which is what makes that a property of those fields
+     * instead of a habit. Delivery is `oneway`, so holding this across a
+     * broadcast waits on nobody.
      */
     private val broadcastLock = Any()
 
     /**
      * Packages whose delivery is currently throwing, so [failed] logs the start
      * of a bad spell rather than every frame of it. Cleared on the next
-     * delivery that succeeds and when a registration goes, so a second spell is
-     * reported as its own.
-     *
-     * Read and written under [broadcastLock], like the two below. Every
-     * function that touches it takes the lock itself rather than trusting its
-     * caller to hold one, which is what makes that a property of the field
-     * instead of a habit; reentrancy makes it free where a caller already does.
+     * delivery that succeeds and when a registration goes.
      */
     private val failing = mutableSetOf<String>()
 
     /**
      * When each package was last stamped as having read, so the frame feed does
      * not re-enter the grant store on every frame.
-     *
-     * Read and written under [broadcastLock], like the one above and the one
-     * below. Confinement to the feed coroutine would be enough today and is not
-     * what this relies on: a second `broadcast` caller - a snapshot pushed on
-     * registration, say, from a binder thread - would then be two threads in
-     * one plain map with nothing failing to say so. The lock makes that
-     * impossible rather than unlikely, and costs nothing, since only the
-     * [markUsed] calls it decides on are kept outside.
      */
     private val lastStamped = mutableMapOf<String, Long>()
 
     /**
-     * Small stable numbers standing in for package names in the log lines.
-     *
-     * Read and written under [broadcastLock], like the two above, and for a
-     * sharper reason than either: the value is derived from the map's own size,
-     * so a racing read-then-write hands two packages one number and destroys
-     * the only thing the index is for.
+     * Small stable numbers standing in for package names in the log lines. The
+     * value derives from the map's own size, so a racing read-then-write hands
+     * two packages one number and destroys the only thing it is for.
      */
     private val consumerIndices = mutableMapOf<String, Int>()
 
@@ -141,15 +117,10 @@ class RadarIpcBinder(
         // crash would otherwise believe it had a stream and receive nothing.
         dropRegistrations(pkg)
         val registered = listeners.register(listener, pkg)
-        // linkToDeath throws on an already-dead binder, so this can fail in
-        // exactly the reconnect-after-a-crash flow the replacement above is
-        // for. The old listener is gone and the new one never linked, so a
-        // surviving hold would have nothing left to lift it.
-        //
-        // NOT pinned by any test, and it cannot be from here: a unit test's
-        // listener is a local binder in this process, which never fails
-        // linkToDeath, so `register` always returns true and this branch is
-        // unreachable. Stated rather than left looking covered.
+        // linkToDeath throws on an already-dead binder, so this fails in exactly
+        // the reconnect-after-a-crash flow the replacement above is for, leaving
+        // a hold with nothing to lift it. NOT pinned by any test and cannot be:
+        // a unit test's listener is a local binder that never fails linkToDeath.
         if (!registered) RadarOverlayGate.show(pkg)
         return registered
     }
@@ -157,31 +128,21 @@ class RadarIpcBinder(
     override fun unregisterTargetListener(listener: IRadarListener?) {
         if (listener == null) return
         val pkg = callerPackage() ?: return
-        // Ungated as to the GRANT: a caller must always be able to stop, even
-        // after the rider revokes, or a revoked consumer keeps a registration
-        // it has no way to withdraw.
-        //
-        // Scoped to its OWN registration, and unconditionally - a caller with no
-        // registration of its own must not be able to deregister someone else's
-        // by presenting their token, and a caller that no-ops is what the
-        // interface promises anyway.
+        // Ungated as to the GRANT, or a revoked consumer keeps a registration it
+        // has no way to withdraw. Scoped to its OWN registration, so presenting
+        // someone else's token deregisters nothing.
         //
         // IDENTITY IS THE BINDER, NEVER THE INTERFACE OBJECT. `asInterface`
-        // mints a fresh `Stub.Proxy` on every transaction for a remote caller,
-        // so the object handed to this method is never the object the registry
-        // holds and a reference comparison can only ever fail. It would fail
-        // silently, too: unregister would no-op, the stream would run on and
-        // the overlay hold below would never lift. `RemoteCallbackList` keys on
-        // `asBinder()` for the same reason, so this matches what the unregister
-        // one line down actually does. `IdentityOnlyListener` in the tests is
-        // what makes that failure reachable from a unit test, where a local
-        // listener is otherwise passed straight through as the same object.
+        // mints a fresh `Stub.Proxy` per transaction, so a reference comparison
+        // can only ever fail, and silently: unregister no-ops, the stream runs
+        // on and the hold below never lifts. `IdentityOnlyListener` in the tests
+        // is what makes that reachable, since a local listener is otherwise
+        // passed straight through as the same object.
         //
-        // The whole thing under one lock, not just the lookup. Releasing it
+        // The whole thing under one lock, not just the lookup: releasing it
         // between the ownership read and the unregister lets a concurrent
-        // `setOverlayVisible(false)` see a registration this call is about to
-        // remove, so its hold would be anchored to a listener that no longer
-        // exists and no death recipient would ever lift it.
+        // `setOverlayVisible(false)` anchor its hold to a listener that is
+        // already gone.
         val token = listener.asBinder()
         synchronized(broadcastLock) {
             val n = listeners.beginBroadcast()
@@ -204,12 +165,22 @@ class RadarIpcBinder(
 
     override fun isConnected(): Boolean {
         if (callerPackageIfAllowedToRead() == null) return false
-        return RadarContract.toParcel(radarState()).streamLive
+        return RadarStateProjection.toParcel(radarState()).streamLive
     }
 
     override fun setRadarLightMode(mode: Int): Boolean {
         if (callerPackageIfAllowedToControl() == null) return false
-        val wanted = RadarLightMode.entries.getOrNull(mode) ?: return false
+        // Spelled out rather than an ordinal into RadarLightMode, so the enum
+        // can be reordered without changing the wire. A mode with no value here
+        // is unsettable rather than silently wrong.
+        val wanted = when (mode) {
+            RadarContract.LIGHT_MODE_NIGHT_FLASH -> RadarLightMode.NIGHT_FLASH
+            RadarContract.LIGHT_MODE_DAY_FLASH -> RadarLightMode.DAY_FLASH
+            RadarContract.LIGHT_MODE_SOLID -> RadarLightMode.SOLID
+            RadarContract.LIGHT_MODE_PELOTON -> RadarLightMode.PELOTON
+            RadarContract.LIGHT_MODE_OFF -> RadarLightMode.OFF
+            else -> return false
+        }
         return setLightMode(wanted)
     }
 
@@ -224,23 +195,16 @@ class RadarIpcBinder(
             return true
         }
         val pkg = callerPackageIfAllowedToControl() ?: return false
-        // Hiding requires a live registration, and that is a safety rule rather
-        // than a convenience. The hold has to be anchored to something that
-        // dies: a registered listener has a death recipient, so every way the
-        // consumer can go away already lifts the hold. Without the anchor, a
-        // consumer that hid our display and never registered could crash, or be
-        // revoked, and leave the rider with no collision warning and nothing to
-        // restore it. Hiding our display only makes sense while drawing your
-        // own from our stream, which means reading it.
+        // Hiding requires a live registration, as a safety rule rather than a
+        // convenience: the hold must be anchored to something that dies, and a
+        // registered listener has a death recipient. Without it a consumer that
+        // hid our display could crash and leave the rider with no collision
+        // warning and nothing to restore it.
         //
-        // The check and the hide are one step under the lock. The gate is
-        // atomic on its own, so what this orders is the REGISTRATION check
-        // against the hide: a revoke landing between them would drop the
-        // registration, lift nothing (there is no hold yet), and then let this
-        // hide install one owned by a package with neither a grant nor a
-        // registration - the stranded state the anchor exists to prevent.
-        // `revoke` and `unregisterTargetListener` take the same lock across
-        // their own drop and show, so none of the three can interleave.
+        // The check and the hide are one step under the lock, which orders the
+        // REGISTRATION check against the hide: a revoke landing between them
+        // would drop the registration, lift nothing, and let this install a hold
+        // owned by a package with neither grant nor registration.
         return synchronized(broadcastLock) {
             if (pkg !in registeredPackagesLocked()) {
                 false
@@ -264,7 +228,7 @@ class RadarIpcBinder(
                 // consumer the rider never granted costs a whole snapshot per
                 // frame otherwise, for the length of a ride.
                 if (n == 0) return
-                val parcel = RadarContract.toParcel(state)
+                val parcel = RadarStateProjection.toParcel(state)
                 val now = clock()
                 buildSet {
                     for (i in 0 until n) {
@@ -292,17 +256,12 @@ class RadarIpcBinder(
                 listeners.finishBroadcast()
             }
         }
-        // The stream is the loudest thing a granted app does and the only one
-        // that never re-enters the gate, so without this the settings list
-        // reports the consumer receiving most as the one gone quietest.
-        //
-        // The store's own throttle is applied AFTER it has read and parsed the
-        // whole grant file, which on this path would be once per consumer per
-        // frame for the length of a ride. Deciding here keeps the hot path off
-        // it; the store's floor is still the durable one.
-        //
-        // Only the calls themselves are outside the lock, because the store
-        // takes its own and there is no reason to hold both.
+        // The stream never re-enters the gate, so without this the settings list
+        // reports the consumer receiving most as the one gone quietest. The
+        // store's own throttle applies only after it has parsed the whole grant
+        // file, which here would be once per consumer per frame, so the decision
+        // is taken above and the store's floor stays the durable one. Outside
+        // the lock, because the store takes its own.
         delivered.forEach(markUsed)
     }
 
@@ -310,45 +269,32 @@ class RadarIpcBinder(
      * A consumer's delivery threw. Logged once per spell, not once per frame.
      *
      * A dead binder is expected and `onCallbackDied` cleans it up. What is not
-     * is a consumer that stays registered and keeps throwing - a `oneway`
-     * buffer that has filled raises without killing the binder, so the consumer
-     * holds its registration and its overlay hold while receiving nothing for
-     * the rest of the ride.
+     * is a consumer that stays registered and keeps throwing: a filled `oneway`
+     * buffer raises without killing the binder, so it holds its registration
+     * and its overlay hold while receiving nothing for the rest of the ride.
      *
-     * The package is NOT printed, deliberately. Which third-party apps a rider
-     * has is theirs, and the grant store already refuses to journal these names
-     * for the same reason. The realistic channel here is a rider pasting a few
-     * lines of logcat into an issue, where they are disclosing those lines and
-     * have not agreed to an inventory of what they have installed.
-     *
-     * What is printed instead is a per-process index, which is the same trade
-     * the overlay pipeline already makes when it logs a device's slug and not
-     * its address: enough to tell two consumers apart and to link these two
-     * lines to the same one, and nothing that means anything off the phone.
+     * The package is NOT printed. Which third-party apps a rider has is theirs,
+     * and the grant store refuses to journal these names for the same reason. A
+     * rider pasting logcat into an issue is disclosing those lines, not an
+     * inventory of what they have installed. A per-process index goes out
+     * instead, which tells two consumers apart and means nothing off the phone.
      */
     private fun failed(packageName: String?, cause: Throwable) {
-        // Takes the lock itself rather than relying on its caller holding it.
-        // Reentrancy makes that free from `broadcast`, and it is what lets
-        // `failing`'s KDoc claim the lock as a property of the field rather
-        // than a habit of whoever reaches it.
+        // Takes the lock itself rather than relying on its caller, which is what
+        // makes the lock a property of the fields rather than a habit.
         val first = synchronized(broadcastLock) { failing.add(packageName ?: UNKNOWN_CONSUMER) }
         if (!first) return
         Log.w(TAG, "consumer ${consumerIndex(packageName)} stopped taking frames: $cause")
     }
 
     /**
-     * A stable small number for a package, for the log lines.
-     *
-     * Assigned in first-seen order and never reused, so two lines about the
-     * same consumer carry the same number for the life of the process and a
-     * maintainer can tell "one app is wedged" from "both are". It carries no
-     * name off the phone: the mapping is in memory only, so the number means
-     * nothing to a reader who does not already know the rider's grants.
+     * A stable small number for a package, for the log lines. First-seen order,
+     * never reused, so a maintainer can tell "one app is wedged" from "both
+     * are". The mapping is in memory only, so it means nothing off the phone.
      *
      * Under the lock because `getOrPut` on a size-derived value is a
-     * read-then-write, and this is reached both from the feed inside the lock
-     * and from revalidation's failure branch outside it. A race would hand two
-     * packages the same number, which is exactly the property above.
+     * read-then-write, reached from the feed inside the lock and from
+     * revalidation's failure branch outside it.
      */
     private fun consumerIndex(packageName: String?): Int = synchronized(broadcastLock) {
         consumerIndices.getOrPut(packageName ?: UNKNOWN_CONSUMER) { consumerIndices.size + 1 }
@@ -377,27 +323,21 @@ class RadarIpcBinder(
      * that no longer hold read.
      *
      * The grant is checked once at registration and then held, because
-     * re-resolving a package through the PackageManager at radar cadence is
-     * not free. That is only safe if something invalidates the held decision,
-     * and this is it: the rider revoking in Settings is a write to the grant
-     * store, and the service calls this on every such write.
-     *
-     * Without it a revoked app keeps receiving frames until it unbinds, which
-     * is the one case where "revoke" has to mean now rather than eventually.
+     * re-resolving a package through the PackageManager at radar cadence is not
+     * free. This is what makes that safe: the service calls it on every write to
+     * the grant store. Without it a revoked app keeps receiving frames until it
+     * unbinds, which is the one case where "revoke" has to mean now.
      */
     fun revalidate() {
-        // Holders as well as listeners. Taking a hold requires a live
-        // registration, so today every holder is already in the registry and
-        // this union adds nothing - it is here because the rider's revoke is
-        // the only remedy for a stranded hold, and a future path that takes one
-        // without a registration would otherwise leave that remedy silently
-        // unable to reach it. `revalidateLiftsAHoldWithNoRegistration` pins it.
+        // Holders as well as listeners. Every holder is already in the registry
+        // today, so the union adds nothing; it is here because a future path
+        // taking a hold without a registration would otherwise put it beyond the
+        // rider's only remedy. `revalidateLiftsAHoldWithNoRegistration` pins it.
         val live = synchronized(broadcastLock) { registeredPackagesLocked() }
         for (pkg in live + RadarOverlayGate.hiddenBy.value) {
-            // Per package, so one that throws cannot skip the rest. The outer
-            // wrapper in the service keeps the collector alive, but a turn
-            // abandoned half way is a rider's revoke that did not take effect
-            // and does not run again until the next write to the store.
+            // Per package, so one that throws cannot skip the rest: a turn
+            // abandoned half way is a revoke that did not take effect and does
+            // not run again until the next write to the store.
             runCatching {
                 val uid = identity.uidOf(pkg)
                 when {
@@ -429,11 +369,10 @@ class RadarIpcBinder(
      * Every consumer has unbound: drop the registrations and the holds, but
      * keep the list usable.
      *
-     * `kill()` is deliberately NOT used here. It is permanent - `register`
-     * refuses for the life of the object afterwards - and this binder is built
-     * lazily and reused, so a consumer that binds in `onStart` and unbinds in
-     * `onStop` would find its stream permanently refused after one rotation,
-     * with no way to distinguish that from having no grant.
+     * `kill()` is deliberately NOT used here: it is permanent, and this binder
+     * is reused, so a consumer that binds in `onStart` and unbinds in `onStop`
+     * would find its stream refused after one rotation with no way to tell that
+     * from having no grant.
      */
     fun releaseRegistrations() {
         val all = synchronized(broadcastLock) {
@@ -466,11 +405,9 @@ class RadarIpcBinder(
      * Forget what we were suppressing and throttling for a package that is no
      * longer registered.
      *
-     * Without this the "once per spell" above is only true while a consumer
-     * stays registered: one that wedges, is dropped, comes back and wedges
-     * again without a single good frame in between would be silent the second
-     * time. The index is deliberately NOT cleared, so a consumer that comes and
-     * goes keeps the same number across a whole ride's logs.
+     * Without this a consumer that wedges, is dropped, comes back and wedges
+     * again with no good frame in between is silent the second time. The index
+     * is deliberately NOT cleared, so it stays the same across a ride's logs.
      */
     private fun forgetPerRegistrationState(packageName: String) = synchronized(broadcastLock) {
         failing.remove(packageName)
@@ -479,11 +416,10 @@ class RadarIpcBinder(
 
     private fun dropRegistrations(packageName: String) {
         val doomed = synchronized(broadcastLock) {
-            // INSIDE the lock, not before it. `revoke` already holds it and
-            // reentrancy makes this free there, but `registerTargetListener`
-            // calls this on a binder pool thread holding nothing - the ordinary
-            // connect path - and the frame feed is in these same two
-            // collections under the lock at that moment.
+            // INSIDE the lock, not before it: `registerTargetListener` calls
+            // this on a binder pool thread holding nothing, which is the
+            // ordinary connect path, and the frame feed is in these same two
+            // collections at that moment.
             forgetPerRegistrationState(packageName)
             val n = listeners.beginBroadcast()
             try {
@@ -502,12 +438,11 @@ class RadarIpcBinder(
     /**
      * Every package currently registered, read under [broadcastLock].
      *
-     * Holding the lock ACROSS the answer and what a caller does with it is the
-     * caller's business, not this function's: [setOverlayVisible] does, because
-     * a registration that vanishes between the two would strand its hold.
-     * [revalidate] deliberately does not - it takes a snapshot and works
-     * outside the lock, where a registration arriving late has already checked
-     * its own grant and one leaving late gets a harmless second revoke.
+     * Whether to hold the lock ACROSS the answer is the caller's business.
+     * [setOverlayVisible] does, or a registration vanishing between the two
+     * strands its hold. [revalidate] deliberately does not: a registration
+     * arriving late has already checked its own grant, and one leaving late
+     * gets a harmless second revoke.
      */
     private fun registeredPackagesLocked(): Set<String> {
         val n = listeners.beginBroadcast()

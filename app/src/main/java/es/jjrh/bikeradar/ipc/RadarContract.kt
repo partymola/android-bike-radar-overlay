@@ -1,25 +1,43 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) 2026 JJ del Rio
+// Permissive so another app can copy this contract into its own build.
+// Licence text: LICENSES/Apache-2.0.txt. Consumers: additional-permission.txt
 package es.jjrh.bikeradar.ipc
 
-import es.jjrh.bikeradar.DataSource
-import es.jjrh.bikeradar.RadarState
-import es.jjrh.bikeradar.Vehicle
-import es.jjrh.bikeradar.VehicleSize
+import android.app.Activity
 
 /**
- * The cross-app radar contract's constants and the projection from the app's
- * internal model onto it.
+ * The cross-app radar contract: what a consumer needs, and nothing else.
  *
- * The wire deliberately carries provenance alongside the numbers. A range-only
- * radar reports no closing speed, no lateral offset, no rider speed and no
- * vehicle class, and the decoder fills those with defaults; without
- * [capabilitiesOf] a consumer cannot tell a default from a reading and will
- * draw a fabricated lane position as though it were measured.
+ * Copy this, [RadarStateParcel], [RadarVehicleParcel] and the `.aidl`
+ * definitions and you have a complete client under your own licence. It
+ * references nothing in the app so that it can be copied at all;
+ * `ContractIsSelfContainedTest` pins that.
+ *
+ * The capability bits separate a measurement from a default. A range-only radar
+ * reports no closing speed, lateral offset, rider speed or vehicle class, and
+ * the decoder fills those in, so without the bits a consumer draws a fabricated
+ * lane position as though it were measured.
  */
 object RadarContract {
 
     /** Bumped only when the wire layout changes. Written first on every parcel. */
     const val VERSION = 1
+
+    /**
+     * The app to bind to, as the release build installs. Side-by-side test
+     * variants carry a suffix and are not what a consumer binds.
+     */
+    const val PACKAGE = "es.jjrh.bikeradar"
+
+    /** The intent action the bound service answers to. */
+    const val ACTION = "es.jjrh.bikeradar.action.RADAR_SERVICE"
+
+    /**
+     * The permission a consumer declares to bind at all. Install granted, so it
+     * filters stray binds; the rider's per-app grant is what gates every answer.
+     */
+    const val PERMISSION = "es.jjrh.bikeradar.permission.RADAR"
 
     const val HAS_CLOSING_SPEED = 1
     const val HAS_LATERAL = 2
@@ -37,70 +55,47 @@ object RadarContract {
     const val RADAR_SIZE_BIKE = 2
 
     /**
-     * What the stream behind this state can actually measure, as a bitfield.
+     * Tail-light modes, as the ints `IRadarService.setRadarLightMode` takes.
      *
-     * Read off [DataSource]'s own capability properties rather than matching on
-     * the enum here: the source of truth for "what can V1 do" is that enum, and
-     * a second copy of the answer is a second thing to keep in step.
+     * These values are the wire, not an enum's ordinals. They must not move
+     * with the enum, and changing one is a [VERSION] bump.
      */
-    fun capabilitiesOf(source: DataSource): Int {
-        var bits = 0
-        if (source.hasClosingSpeed) bits = bits or HAS_CLOSING_SPEED
-        if (source.hasLateral) bits = bits or HAS_LATERAL
-        if (source.hasRiderSpeed) bits = bits or HAS_RIDER_SPEED
-        if (source.hasVehicleSize) bits = bits or HAS_VEHICLE_SIZE
-        return bits
+    const val LIGHT_MODE_NIGHT_FLASH = 0
+    const val LIGHT_MODE_DAY_FLASH = 1
+    const val LIGHT_MODE_SOLID = 2
+    const val LIGHT_MODE_PELOTON = 3
+    const val LIGHT_MODE_OFF = 4
+
+    /**
+     * Asking the rider for a grant. Binding gets you nothing until they answer,
+     * so a client needs this as much as it needs the interface.
+     *
+     * The consumer starts this from its own foreground with
+     * `startActivityForResult` when its user asks to connect. Bike Radar never
+     * launches it: a consent screen thrown over a moving map is the failure
+     * this shape avoids. Launching grants nothing, and calling again when a
+     * grant exists shows its current state, so one screen covers connecting and
+     * changing your mind.
+     */
+    object Consent {
+
+        /** Explicit component is safer, but the action is what a consumer matches on. */
+        const val ACTION = "es.jjrh.bikeradar.action.REQUEST_RADAR_ACCESS"
+
+        /** Booleans on a RESULT_OK intent. Read them; either may be false. */
+        const val EXTRA_READ = "es.jjrh.bikeradar.extra.READ"
+        const val EXTRA_CONTROL = "es.jjrh.bikeradar.extra.CONTROL"
+
+        /** A ride is in progress. Retryable once it ends. */
+        const val RESULT_RIDE_IN_PROGRESS = Activity.RESULT_FIRST_USER
+
+        /** No calling package, or a shared UID. Not retryable. */
+        const val RESULT_CALLER_UNKNOWN = Activity.RESULT_FIRST_USER + 1
+
+        /**
+         * The rider answered, but the answer could not be saved. Do not treat
+         * this as a grant: nothing was stored and every later call refuses.
+         */
+        const val RESULT_NOT_STORED = Activity.RESULT_FIRST_USER + 2
     }
-
-    /**
-     * Project a whole snapshot onto the wire.
-     *
-     * This exists so the two collapses are decided once, here, rather than by
-     * each caller.
-     *
-     * [RadarState.bikeSpeedMs] is null until the radar's first device-status
-     * frame of the session, and a zero reaching a consumer unflagged reads as a
-     * stationary rider.
-     *
-     * A state with no source at all carries no targets, which is the same shape
-     * as a radar reporting an empty road. Without
-     * [RadarStateParcel.streamLive] a consumer would read an all-clear off an
-     * app that has never seen a radar.
-     */
-    fun toParcel(state: RadarState): RadarStateParcel = RadarStateParcel(
-        timestamp = state.timestamp,
-        vehicles = state.vehicles.map { toParcel(it, state.source) },
-        bikeSpeedMs = state.bikeSpeedMs ?: 0f,
-        // Both conditions, so the flag cannot contradict HAS_RIDER_SPEED. A
-        // value without the capability behind it would leave a consumer with
-        // two answers and no rule for which wins. The cost is that a rider
-        // speed sourced from somewhere other than the radar reports as not
-        // known, which is the conservative direction.
-        riderSpeedKnown = state.source.hasRiderSpeed && state.bikeSpeedMs != null,
-        streamLive = state.source != DataSource.NONE,
-        isClear = state.isClear,
-        capabilities = capabilitiesOf(state.source),
-    )
-
-    /**
-     * The internal [Vehicle.isBehind] means "has overtaken the rider and is now
-     * ahead", so it maps onto the contract's [RadarVehicleParcel.isAhead]
-     * unchanged. The names read as opposites; the meanings are the same.
-     */
-    fun toParcel(vehicle: Vehicle, source: DataSource): RadarVehicleParcel = RadarVehicleParcel(
-        id = vehicle.id,
-        distanceM = vehicle.distanceM,
-        closingKmh = vehicle.closingKmh,
-        size = when (vehicle.size) {
-            VehicleSize.CAR -> RADAR_SIZE_CAR
-            VehicleSize.TRUCK -> RADAR_SIZE_TRUCK
-        },
-        lateralPos = vehicle.lateralPos,
-        rangeXm = vehicle.rangeXm,
-        isAhead = vehicle.isBehind,
-        // ANDed here rather than left to the consumer, so one rule covers every
-        // flag on this wire: trust a field when its own flag says so. A stream
-        // with no lateral channel can never report a usable lateral frame.
-        lateralKnown = source.hasLateral && !vehicle.lateralUnknown,
-    )
 }

@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import es.jjrh.bikeradar.radarStreamIsLive
 import es.jjrh.bikeradar.ui.UiTheme
 
@@ -58,8 +59,8 @@ class RadarConsentActivity : ComponentActivity() {
         setResult(
             resultCode,
             Intent()
-                .putExtra(RadarConsent.EXTRA_READ, read)
-                .putExtra(RadarConsent.EXTRA_CONTROL, control),
+                .putExtra(Consent.EXTRA_READ, read)
+                .putExtra(Consent.EXTRA_CONTROL, control),
         )
         finish()
     }

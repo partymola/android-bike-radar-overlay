@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Additional permission for cross-app consumers: additional-permission.txt
 package es.jjrh.bikeradar.ipc
 
 import android.app.Service
@@ -28,19 +29,15 @@ import java.util.Locale
  *
  * A shell: it owns the binder's lifetime and the loop that feeds it, and
  * nothing else. Every decision about who may read or act lives in
- * [RadarIpcBinder] and the access gate behind it, and is tested there;
- * `RadarIpcServiceTest` and `RadarIpcServiceManifestTest` cover only what is
- * true here, which is the lifecycle and the exported surface.
+ * [RadarIpcBinder] and the access gate behind it, and is tested there.
  *
- * Binding is not authorisation. Any app holding the manifest permission can
- * bind - it is `normal`, so it is granted at install to anything that asks -
- * and will then be refused by every method that returns data or touches
- * hardware until the rider grants it on the consent screen. The permission is
- * a coarse filter, never the gate.
+ * Binding is not authorisation. The manifest permission is `normal`, so any app
+ * that asks holds it, and every method returning data or touching hardware
+ * still refuses until the rider grants it on the consent screen.
  *
- * Independent of the foreground ride service on purpose: a consumer binding
- * here must not start a ride, and a ride ending must not disconnect a consumer
- * that is only asking whether a radar is connected.
+ * Independent of the foreground ride service on purpose: binding here must not
+ * start a ride, and a ride ending must not disconnect a consumer that is only
+ * asking whether a radar is connected.
  */
 class RadarIpcService : Service() {
 
@@ -97,28 +94,21 @@ class RadarIpcService : Service() {
     }
 
     /**
-     * Run one turn of a collector so that a throw cannot end the collector.
+     * Run one turn of a collector so a throw cannot end the collector.
      *
-     * A throw escaping a `collect` body cancels that coroutine, and the
-     * SupervisorJob then keeps the service alive with nothing to restart it.
-     * The two outcomes are the ones this whole surface is built to prevent:
-     * every consumer's stream stops for good, or revalidation stops and an app
-     * the rider revoked carries on receiving frames. Neither raises anything -
-     * the exception dies with the Job, so a rider reports "it just stopped" and
-     * the log holds nothing.
+     * A throw escaping a `collect` body cancels that coroutine and the
+     * SupervisorJob keeps the service alive with nothing to restart it, so
+     * every consumer's stream stops for good, or revalidation stops and a
+     * revoked app keeps receiving frames. Neither raises anything.
      *
-     * Caught here rather than at the scope, because a `CoroutineExceptionHandler`
-     * reports the failure and still leaves the collector dead.
+     * Caught here rather than at the scope, where a `CoroutineExceptionHandler`
+     * would report the failure and still leave the collector dead. `Throwable`
+     * on purpose: narrowing it restores the silent death for whatever is not
+     * named.
      *
-     * Deliberately catching `Throwable`: the point is that the loop outlives
-     * whatever went wrong, and narrowing it to the causes we can currently name
-     * would restore the silent death for the ones we cannot.
-     *
-     * `internal` so a test can drive a throw through it directly. Nothing that
-     * a Robolectric test can reach makes `broadcast` or `revalidate` throw, so
-     * the alternative was a fix with no failing test behind it.
-     * `RadarIpcServiceCollectorsSurviveTest` covers both halves: that this
-     * swallows and logs, and that both collectors are wrapped in it.
+     * `internal` so a test can drive a throw through it;
+     * `RadarIpcServiceCollectorsSurviveTest` pins that and that both collectors
+     * are wrapped.
      */
     internal fun survive(what: String, block: () -> Unit) {
         try {
@@ -134,14 +124,10 @@ class RadarIpcService : Service() {
     /**
      * Bind-only, so a start is answered by ending it.
      *
-     * This service is exported behind an install-granted permission, so any app
-     * can call `startService` on it. The default `START_STICKY` would then have
-     * Android bring it back after a kill with no client at all - collectors
-     * running, `onUnbind` never firing, registrations never released. The
-     * `stopSelf` is the other half and the one that closes the live case rather
-     * than the restart: without it a single start pins the service for as long
-     * as the process lives. A bound client keeps it alive regardless, which is
-     * why stopping here is safe.
+     * Exported behind an install-granted permission, so any app can call
+     * `startService`. `START_STICKY` would bring it back after a kill with no
+     * client at all, and without the `stopSelf` a single start pins it for the
+     * life of the process. A bound client keeps it alive regardless.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         stopSelf(startId)
@@ -149,14 +135,10 @@ class RadarIpcService : Service() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        // Every consumer has gone. Nobody is left to lift an overlay hold, and
-        // a rider left without their overlay has no way to work out why.
-        //
-        // Released, not killed. The instance survives an unbind, and a consumer
-        // that binds in onStart and unbinds in onStop rebinds on every rotation
-        // to the same lazily-built binder. `kill()` is permanent, so killing
-        // here would refuse every later registration for the life of the
-        // instance, with the consumer unable to tell that from "no grant".
+        // Every consumer has gone, so nobody is left to lift an overlay hold.
+        // Released, not killed: the instance survives an unbind, and `kill()`
+        // is permanent, so a consumer rebinding on rotation would be refused
+        // for the life of the instance and could not tell that from "no grant".
         binder.releaseRegistrations()
         return false
     }
@@ -169,9 +151,6 @@ class RadarIpcService : Service() {
     }
 
     companion object {
-        /** What a consumer binds to. Kept here so the manifest and the docs agree. */
-        const val ACTION = "es.jjrh.bikeradar.action.RADAR_SERVICE"
-
         private const val TAG = "BikeRadar.Ipc"
     }
 }

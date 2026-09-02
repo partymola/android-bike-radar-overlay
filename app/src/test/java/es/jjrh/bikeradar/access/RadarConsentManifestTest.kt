@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.access
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -23,9 +24,9 @@ class RadarConsentManifestTest {
 
     @Test
     fun theDeclaredActionIsTheOneAConsumerSends() {
-        val resolved = context.packageManager.resolveActivity(Intent(RadarConsent.ACTION), 0)
+        val resolved = context.packageManager.resolveActivity(Intent(Consent.ACTION), 0)
         assertNotNull(
-            "no activity answers ${RadarConsent.ACTION}, so a consumer's request goes nowhere",
+            "no activity answers ${Consent.ACTION}, so a consumer's request goes nowhere",
             resolved,
         )
         assertEquals(

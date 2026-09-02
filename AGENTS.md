@@ -276,10 +276,11 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
 | `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, and the projection from `RadarState`/`Vehicle` onto the wire |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, light-mode values, bind strings, and the consent screen's action, extras and result codes. Permissive, and references nothing in the app |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateProjection.kt` | The projection from `RadarState`/`Vehicle` onto that wire; the half a consumer cannot use, which is why it is not in the contract |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
-| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract |
+| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware. The consent screen's WIRE is not here; it is `RadarContract.Consent`, so a consumer can copy it |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcService.kt` | The exported bound service. A shell: binder lifetime, the frame feed, and re-checking grants when the store changes |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcBinder.kt` | The contract implemented, and where every grant check lives. Listener registry, one live registration per package, revocation |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarOverlayGate.kt` | Which apps are asking for our overlay to be hidden. Held per package so a crashed consumer cannot leave the rider without it |
@@ -598,17 +599,22 @@ enforces them, and CONTRIBUTING.md points contributors here:
     wire value is `ordinal + 1`, so reordering its constants breaks the device
     protocol and passes this gate green. Different hazard, different guard: R8
     does not reorder, a maintainer does.
-  - **`RadarLightMode` joined that class when the cross-app service shipped.**
-    `IRadarService.setRadarLightMode` takes the ordinal, so reordering its
-    constants silently changes what every already-installed consumer sets on a
-    rider's tail light. The DEX gate cannot see it, because it reads names.
-    What does is `RadarIpcBinderTest.theWireValueOfEveryLightModeIsFixed`, which
-    maps each constant to a literal int, and
-    `anOutOfRangeLightModeIsRefusedRatherThanCoerced`, which pins the
-    cardinality. Do not refactor either toward `RadarLightMode.X.ordinal` - that
-    is what makes them agree with the code by construction and stop failing.
-    Append new modes at the END, and if the order ever has to move, that is a
-    `RadarContract.VERSION` bump.
+  - **`RadarLightMode`'s ORDER is not a wire format, and must not become one.**
+    The wire values are `RadarContract.LIGHT_MODE_*`, and `RadarIpcBinder` maps
+    them to the enum case by case, so the two move independently. Do NOT
+    refactor that `when` toward `RadarLightMode.entries.getOrNull(mode)`: an
+    ordinal makes reordering the constants change what every already-installed
+    consumer sets on a rider's tail light, with no compile error, no failing
+    test, the DEX gate blind to it because it reads names, and the consumer a
+    different APK.
+    `RadarIpcBinderTest.theWireValueOfEveryLightModeIsFixed` maps each
+    constant to a literal int and `anOutOfRangeLightModeIsRefusedRatherThanCoerced`
+    pins the boundary; `RadarContractTest.everyLightModeWireValueIsFixedAndDistinct`
+    pins the constants themselves. Do not restate any of them as
+    `RadarLightMode.X.ordinal`, which is what would make them agree with the
+    code by construction and stop failing. Changing a `LIGHT_MODE_*` value is a
+    `RadarContract.VERSION` bump; a new mode needs a value and a `when` branch,
+    and until it has both it is simply unsettable over the contract.
 - **Transitive licence check** (`scripts/check-transitive-licences.py`, fed by
   `:app:writeReleaseRuntimeCoordinates`): reports the licence of every artifact
   on the release runtime classpath, resolved from each artifact's own POM.
@@ -803,6 +809,58 @@ a behaviour spec to keep in sync.
 ## Contributing
 
 - GPL-3.0-or-later. Don't copy non-GPL-compatible code.
+- **Two files carry the cross-app licensing, and they cover different halves.**
+  Change either only on purpose.
+  - **Six files are Apache-2.0**: the three `.aidl`, plus `RadarContract.kt`,
+    `RadarStateParcel.kt` and `RadarVehicleParcel.kt`. Together they are a
+    complete client contract; the `.aidl` alone are not, since
+    `RadarStateParcel.aidl` is a forward declaration and the constants are not
+    in them. Licence text is `LICENSES/Apache-2.0.txt`. Everything implementing
+    them stays GPL-3.0-or-later, and Apache-2.0 combines into a GPL-3.0 whole,
+    so the app's own licence is untouched. Do NOT normalise those headers, and
+    keep those files free of any reference to the app behind them, or the
+    permission means nothing. `InterfaceIsPermissiveImplementationIsNotTest`
+    pins the list and `ContractIsSelfContainedTest` pins the self-containment.
+    A new `.aidl` fails until someone puts it on a side; a new `.kt` lands in
+    the copyleft bucket and passes quietly, so decide deliberately.
+  - **`additional-permission.txt` covers writing a consumer** rather than
+    copying our files: a section 7 grant that an app communicating solely
+    through the interface is not, by virtue of that communication, a work based
+    on this one. That qualifier is load-bearing and must survive any rewrite;
+    without it the grant reaches an app that also embeds our GPL code. Do not
+    argue in public docs that two apps over Binder are separate programs. The
+    grant settles the question rather than taking a position on it.
+  - **A permissive file's imports stay platform-only** (`android.`, `java.`,
+    `kotlin.`). Nothing enforces that, deliberately: every other check on this
+    surface exists because its failure is SILENT, and this one's is not. A
+    third-party import fails at build time on the copier's side, naming what
+    they lack; an `androidx` one usually just resolves, because virtually every
+    Android project already carries androidx. Neither is a licence problem
+    while every artifact on the release runtime classpath is Apache-2.0, which
+    `scripts/check-transitive-licences.py` reports on rather than gates. An
+    import here necessarily lands on that classpath. Do not read the absence of
+    a test as the absence of the rule.
+  - **A NEW FIELD ON `RadarStateParcel` IS A DISCLOSURE CHANGE.** Whatever
+    crosses that wire reaches any app the rider has granted, and
+    `settings_privacy_to_apps_body` is where they read what that is, in BOTH
+    locales. `HaClientDataDisclosureTest` forces this for the MQTT side; there
+    is no equivalent for the cross-app side, so a field added here ships
+    undisclosed with every gate green. Update the disclosure in the same commit.
+- **A comment keeps the fact a maintainer could undo, and the test that pins
+  it. Everything else goes.** Cut the argument for the fact, the second example,
+  the consequence restated, and any sentence whose job is to show that the
+  reasoning happened. This is a public repo, so volume is exposure as well as
+  noise; the exception is the files a consumer copies, where the KDoc is the API
+  documentation they read.
+  **Cutting has its own failure mode, and it is worse than verbosity: keeping a
+  claim while deleting what enforces it.** Before deleting a sentence, ask
+  whether anything else in the repo still says it. Two here are load-bearing
+  and easy to mistake for padding: `RadarControlBridge`'s "no two connection
+  attempts overlap", whose three enforcing properties live in
+  `RadarLinkController`, and `onConsumerDied`'s lock-ordering argument, which
+  rests on AOSP behaviour no test here drives. An external assumption about
+  framework behaviour, and any invariant no test drives, both stay whatever
+  the length.
 - Protocol corrections go to the `bike-radar-docs` repo, not this one.
 - Decoder behaviour changes must add or update unit tests.
 - Commit subjects use the conventional-commits prefixes already

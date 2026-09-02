@@ -114,6 +114,12 @@ class RadarLightWriteForGrantedAppTest {
         assertTrue("nothing installs a tail-light handler any more", install != null)
 
         val body = install!!.groupValues[1]
+        // Named, because it is the function that catches. Without this the
+        // three shape checks below all pass over an inlined rewrite that drops
+        // the `runCatching`, leaving the tested function dead code with its own
+        // throw test still green, and letting a GATT throw cross the bridge to
+        // a third-party consumer where the contract promises a boolean.
+        assertTrue("the handler has to go through the function that catches: $body", body.contains("writeLightForGrantedApp"))
         assertTrue("the handler has to reach the live light: $body", body.contains("light::setMode"))
         assertTrue("and pass the mode it was asked for: $body", body.contains(", mode,"))
         assertTrue("and the ceiling this file reasons about: $body", body.contains("BRIDGE_WRITE_TIMEOUT_MS"))

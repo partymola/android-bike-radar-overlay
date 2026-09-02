@@ -28,9 +28,9 @@ class RadarIpcServiceManifestTest {
 
     @Test
     fun theDeclaredActionIsTheOneAConsumerBindsTo() {
-        val resolved = context.packageManager.queryIntentServices(Intent(RadarIpcService.ACTION), 0)
+        val resolved = context.packageManager.queryIntentServices(Intent(RadarContract.ACTION), 0)
         assertEquals(
-            "exactly one service must answer ${RadarIpcService.ACTION}",
+            "exactly one service must answer ${RadarContract.ACTION}",
             1,
             resolved.size,
         )
@@ -46,7 +46,7 @@ class RadarIpcServiceManifestTest {
         assertTrue("an unexported service cannot be reached by any consumer", info.exported)
         assertEquals(
             "the coarse filter must be the permission this app declares",
-            "es.jjrh.bikeradar.permission.RADAR",
+            RadarContract.PERMISSION,
             info.permission,
         )
     }
@@ -61,7 +61,7 @@ class RadarIpcServiceManifestTest {
             PackageManager.GET_PERMISSIONS,
         ).permissions.orEmpty()
 
-        val radar = declared.firstOrNull { it.name == "es.jjrh.bikeradar.permission.RADAR" }
+        val radar = declared.firstOrNull { it.name == RadarContract.PERMISSION }
         assertNotNull("the service demands a permission this app never declares", radar)
         assertEquals(
             "signature level would need every consumer's certificate named here " +
@@ -80,7 +80,7 @@ class RadarIpcServiceManifestTest {
         val radar = context.packageManager.getPackageInfo(
             context.packageName,
             PackageManager.GET_PERMISSIONS,
-        ).permissions.orEmpty().single { it.name == "es.jjrh.bikeradar.permission.RADAR" }
+        ).permissions.orEmpty().single { it.name == RadarContract.PERMISSION }
 
         assertTrue("no label", radar.labelRes != 0)
         assertTrue("no description", radar.descriptionRes != 0)

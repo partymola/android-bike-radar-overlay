@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.access
 import android.app.Activity
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,7 +22,8 @@ import org.robolectric.annotation.GraphicsMode
  * The decisions live in [RadarConsentDecider] and are tested there. What this
  * covers is the part a consumer depends on and the decider cannot see: which
  * result code and extras come back, and that a caller with no name gets one at
- * all rather than a screen.
+ * all rather than a screen. The codes' literal values are pinned in
+ * `RadarContractTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,21 +63,21 @@ class RadarConsentActivityTest {
     fun aCallerWithNoNameIsToldSoRatherThanShownAScreen() {
         val activity = launch(null)
         val shadow = shadowOf(activity)
-        assertEquals(RadarConsent.RESULT_CALLER_UNKNOWN, shadow.resultCode)
+        assertEquals(Consent.RESULT_CALLER_UNKNOWN, shadow.resultCode)
         assertTrue("the screen must not stay open for a caller it cannot name", activity.isFinishing)
     }
 
     @Test
     fun aRefusalCarriesNoGrantInItsExtras() {
         val intent = shadowOf(launch(null)).resultIntent
-        assertFalse(intent.getBooleanExtra(RadarConsent.EXTRA_READ, true))
-        assertFalse(intent.getBooleanExtra(RadarConsent.EXTRA_CONTROL, true))
+        assertFalse(intent.getBooleanExtra(Consent.EXTRA_READ, true))
+        assertFalse(intent.getBooleanExtra(Consent.EXTRA_CONTROL, true))
     }
 
     @Test
     fun anAppThatIsNotInstalledIsRefusedRatherThanAsked() {
         val activity = launch("com.example.never.installed")
-        assertEquals(RadarConsent.RESULT_CALLER_UNKNOWN, shadowOf(activity).resultCode)
+        assertEquals(Consent.RESULT_CALLER_UNKNOWN, shadowOf(activity).resultCode)
         assertTrue(activity.isFinishing)
     }
 
@@ -88,13 +90,5 @@ class RadarConsentActivityTest {
             activity.isFinishing,
         )
         assertEquals(Activity.RESULT_CANCELED, shadowOf(activity).resultCode)
-    }
-
-    @Test
-    fun theResultCodesAreTheOnesAConsumerHardcodes() {
-        // A separately built app copies these numbers rather than importing
-        // them, so the value is the contract, not the constant's name.
-        assertEquals(1, RadarConsent.RESULT_RIDE_IN_PROGRESS)
-        assertEquals(2, RadarConsent.RESULT_CALLER_UNKNOWN)
     }
 }

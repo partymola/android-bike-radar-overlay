@@ -24,15 +24,15 @@ interface RadarAccessGate {
 }
 
 /**
- * The gate until a rider can grant anything.
+ * The gate for a build with nothing to consult.
  *
- * There is no consent screen and no grant store yet, so there is no answer this
- * could give but no. It denies by construction rather than behind a flag,
- * because a placeholder answering `true` would ship an ungated radar stream and
- * read as finished work.
+ * [StoredRadarAccessGate] is the real one, over the rider's stored grants. This
+ * denies by construction rather than behind a flag, because a placeholder
+ * answering `true` would ship an ungated radar stream and read as finished
+ * work.
  *
- * `RadarAccessGateStubTest` pins that it refuses, so replacing it is a
- * deliberate act rather than an edit that quietly opens the surface.
+ * `RadarAccessGateStubTest` pins that it refuses, so replacing it at a call
+ * site is a deliberate act rather than an edit that quietly opens the surface.
  */
 object DeniedAccessGate : RadarAccessGate {
     override fun canRead(uid: Int): Boolean = false

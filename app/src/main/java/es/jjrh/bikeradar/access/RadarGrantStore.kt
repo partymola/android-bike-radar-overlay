@@ -58,6 +58,14 @@ interface RadarGrantStore {
  * The monitor is shared by every instance rather than held per object, because
  * two instances over the same file are two writers and a per-object lock would
  * serialise neither against the other.
+ *
+ * **Granting and revoking are deliberately not journalled.** Nothing here
+ * writes to the capture log, the link journal or a crash report. The names in
+ * this file are the rider's installed third-party apps, and a capture is a file
+ * riders attach to hardware reports, so recording consent events would put a
+ * list of what they have installed into an artefact meant to be shared. The
+ * store itself is the record: it carries `grantedAtMs` and `lastUsedAtMs`, and
+ * the Settings screen reads both.
  */
 class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantStore {
 

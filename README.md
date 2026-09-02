@@ -228,7 +228,8 @@ or the camera's USB/SD storage directly. Camera clocks can drift a few
 seconds from the phone's; scrub around the timestamp.
 
 **What happens to my data on a new phone?** Your settings - including
-the Home Assistant URL and token - are part of your Android backup
+the Home Assistant URL and token, and the list of apps you have allowed
+to use your radar - are part of your Android backup
 (encrypted by Android with your screen lock) and the new-phone transfer
 wizard (a direct phone-to-phone copy that never touches a server), so
 the app comes up configured on the new phone. Two things don't

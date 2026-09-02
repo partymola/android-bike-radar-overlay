@@ -52,6 +52,15 @@ Canvas goldens via Robolectric Native Graphics, so they run inside
 Regenerate goldens with `:app:recordRoborazziDebug` and commit the PNGs
 under `app/src/test/snapshots/images/`.
 
+**A golden cannot see a system-bar inset.** Robolectric renders no status or
+navigation bar, so a screen missing `systemBarsPadding()` produces a byte-identical
+golden to one that has it, and every gate stays green while the title sits under
+the phone's clock. Every full-screen surface here carries
+`Modifier.fillMaxSize().background(br.bg).systemBarsPadding()` on its outermost
+container - a `Box` on most, a `Column` on `OnboardingScreen`, which is what the
+five `Onboarding*Step` files render inside and why they carry none of their own.
+A new surface that does not is only catchable on a device.
+
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the
 headings already in use - Breaking, Features, Fix, Security, UX,
@@ -269,7 +278,7 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, and the projection from `RadarState`/`Vehicle` onto the wire |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
-| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract. Declared only; nothing grants yet |
+| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract. A rider can grant and revoke; no bound service consumes the gate yet, so no radar data leaves the app |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
 | `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
 | `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
@@ -356,6 +365,18 @@ enforces them, and CONTRIBUTING.md points contributors here:
   `scripts/privacy-disclosure-check.sh` pins: permission names, the backup
   disclosure + manifest/backup-rules pairing, HTTPS, the DataDisclosure
   keywords). Trim it to bullets, never gut it.
+  **That script reads `values/strings.xml` only, so every Spanish disclosure gap
+  is invisible to it** - it has already let the es sharing paragraph enumerate
+  one fewer data category than the en one. Be precise about which half is
+  guarded: a disclosure string PRESENT in one locale and missing from the other
+  is caught by lint, since `MissingTranslation` and `ExtraTranslation` are
+  errors with `abortOnError` (measured - deleting one es string fails
+  `:app:lintDebug`). What nothing catches is the half that actually bit: a
+  string that keeps its key in both locales while one of them says something
+  narrower. When a disclosure changes, read both locales side by side.
+  It also never opens `SettingsPrivacy.kt`, so it cannot see a string that
+  exists but is no longer rendered. `SettingsPrivacyRendersEveryDisclosureTest`
+  is what covers that half.
 - **Review with screen context, not a flat string list.** Verbosity and
   gender-in-context bugs only show on the screen: use the English Roborazzi
   goldens or map each string to its Composable referent before judging it.

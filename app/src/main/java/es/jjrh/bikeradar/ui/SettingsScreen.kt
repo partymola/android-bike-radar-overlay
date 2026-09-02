@@ -451,7 +451,18 @@ internal fun SettingsMenuBody(
                                 reading,
                                 reading,
                             ) + " · " + pluralStringResource(
-                                R.plurals.settings_radar_access_controlling,
+                                // The overlay half needs read too. `all`, not
+                                // `any`: this one line covers every grant it
+                                // counts, so a mixed population would otherwise
+                                // claim the overlay for a control-only app
+                                // alongside one that really can take it. The
+                                // weaker wording is the safe direction here,
+                                // and the per-app screen below is exact.
+                                if (radarGrants.all { !it.control || it.read }) {
+                                    R.plurals.settings_radar_access_controlling
+                                } else {
+                                    R.plurals.settings_radar_access_controlling_light_only
+                                },
                                 controlling,
                                 controlling,
                             )

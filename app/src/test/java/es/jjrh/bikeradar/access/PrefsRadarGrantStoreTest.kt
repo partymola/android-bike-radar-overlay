@@ -44,6 +44,37 @@ class PrefsRadarGrantStoreTest {
     }
 
     @Test
+    fun narrowingAGrantInvalidatesHeldDecisions() {
+        // A registration holds its answer rather than re-asking per frame, so
+        // only this counter can retire it. Revoking is the obvious case and was
+        // already covered; a rider re-running consent to turn CONTROL off is a
+        // put, and without a bump here the overlay hold that narrowing is meant
+        // to lift stays up for the rest of the ride.
+        store.put(grant(read = true, control = true))
+        val before = PrefsRadarGrantStore.writes.value
+
+        store.put(grant(read = true, control = false))
+
+        assertTrue("narrowing a grant has to reach a live consumer", PrefsRadarGrantStore.writes.value > before)
+    }
+
+    @Test
+    fun markUsedDoesNotTriggerRevalidation() {
+        // The exclusion is load-bearing, not an oversight. Revalidation asks
+        // the gate, the gate stamps, and a stamp that bumped would schedule the
+        // next revalidation - leaving the service revalidating every consumer
+        // once a minute for the length of a ride. A use stamp cannot change who
+        // is allowed what, so there is nothing to invalidate.
+        store.put(grant(lastUsedAtMs = 0L))
+        val before = PrefsRadarGrantStore.writes.value
+
+        store.markUsed("com.example.trailbuddy", 9_000_000L)
+
+        assertEquals(9_000_000L, store.grantFor("com.example.trailbuddy")!!.lastUsedAtMs)
+        assertEquals("a use stamp must not invalidate anything", before, PrefsRadarGrantStore.writes.value)
+    }
+
+    @Test
     fun everyFieldSurvivesAWriteAndRead() {
         val g = RadarGrant("com.example.trailbuddy", "ff00", "Trail Buddy", 42L, 7L, read = true, control = true)
         store.put(g)

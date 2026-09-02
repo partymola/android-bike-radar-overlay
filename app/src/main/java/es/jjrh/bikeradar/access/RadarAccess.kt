@@ -57,7 +57,12 @@ interface RadarSharingReporter {
 }
 
 /**
- * The reporter until the notification work lands. Drops what it is told.
+ * The reporter until the reading half lands. Drops what it is told.
+ *
+ * The ongoing notification already names any app HOLDING THE OVERLAY, which is
+ * the case where the rider loses something and has to be told why. What is
+ * still missing is the quieter one: an app reading the stream while the overlay
+ * is up, where nothing on screen changes and only this would say so.
  *
  * Discarding is safe in a way that a permissive [DeniedAccessGate] would not
  * be: the cost is that the rider is not yet shown something, never that

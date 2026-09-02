@@ -275,10 +275,15 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
+| `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, and the projection from `RadarState`/`Vehicle` onto the wire |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
-| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract. A rider can grant and revoke; no bound service consumes the gate yet, so no radar data leaves the app |
+| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware, plus the consent screen's contract |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcService.kt` | The exported bound service. A shell: binder lifetime, the frame feed, and re-checking grants when the store changes |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcBinder.kt` | The contract implemented, and where every grant check lives. Listener registry, one live registration per package, revocation |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarOverlayGate.kt` | Which apps are asking for our overlay to be hidden. Held per package so a crashed consumer cannot leave the rider without it |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarControlBridge.kt` | How the service reaches the live radar link for a tail-light write; install on connect, reset on teardown |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
 | `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
 | `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
@@ -491,6 +496,14 @@ enforces them, and CONTRIBUTING.md points contributors here:
     lines are exempt (one untested line shouldn't fail CI), and an
     unreachable base ref skips rather than fails. It fires on PRs and direct
     pushes to `main` alike; a contributor PR is the case it most guards.
+  - **The script READS `jacocoDiffReport.xml` and does not build it, so run
+    `:app:jacocoDiffReport` immediately before it, every time.** In CI the task
+    dependency makes that automatic; by hand it reports on whatever XML is on
+    disk, which is indistinguishable from a real measurement and can be many
+    edits stale. The gap is large enough to change a decision: one tree read
+    85% against an 85% floor from a stale report and 96% from a fresh one.
+    Same family as the corpus gate's "confirm it ran rather than trusting the
+    exit code".
 - **Release DEX keep gate** (`scripts/check-release-dex-keeps.py`, run by
   `:app:verifyReleaseDexKeeps`): the only check that reads the artifact riders
   install. Every gate above runs the debug variant, which R8 never touches, so
@@ -585,6 +598,17 @@ enforces them, and CONTRIBUTING.md points contributors here:
     wire value is `ordinal + 1`, so reordering its constants breaks the device
     protocol and passes this gate green. Different hazard, different guard: R8
     does not reorder, a maintainer does.
+  - **`RadarLightMode` joined that class when the cross-app service shipped.**
+    `IRadarService.setRadarLightMode` takes the ordinal, so reordering its
+    constants silently changes what every already-installed consumer sets on a
+    rider's tail light. The DEX gate cannot see it, because it reads names.
+    What does is `RadarIpcBinderTest.theWireValueOfEveryLightModeIsFixed`, which
+    maps each constant to a literal int, and
+    `anOutOfRangeLightModeIsRefusedRatherThanCoerced`, which pins the
+    cardinality. Do not refactor either toward `RadarLightMode.X.ordinal` - that
+    is what makes them agree with the code by construction and stop failing.
+    Append new modes at the END, and if the order ever has to move, that is a
+    `RadarContract.VERSION` bump.
 - **Transitive licence check** (`scripts/check-transitive-licences.py`, fed by
   `:app:writeReleaseRuntimeCoordinates`): reports the licence of every artifact
   on the release runtime classpath, resolved from each artifact's own POM.

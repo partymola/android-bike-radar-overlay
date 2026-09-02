@@ -12,6 +12,7 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ipc.RadarControlBridge
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -77,6 +78,9 @@ class RadarLinkControllerHarnessTest {
         beeper.release()
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
+        // Process-global, and a connected test leaves a handler holding this
+        // test's GATT. Left behind it would answer a later test's questions.
+        RadarControlBridge.reset()
     }
 
     // ── construction ───────────────────────────────────────────────────────────
@@ -416,7 +420,36 @@ class RadarLinkControllerHarnessTest {
         )
         assertEquals(80, BatteryStateBus.entries.value["testradar"]?.pct)
 
+        // A live link is what lets a granted app set the tail light, and the
+        // install is the whole of that wiring. Without this the block could be
+        // deleted and every consumer would silently be told "no radar" for the
+        // life of the app, with the suite green.
+        assertTrue("a connected radar must be reachable by a granted app", RadarControlBridge.available)
+
         controller.forceReconnect()
+    }
+
+    @Test fun theRadarGoingAwayTakesTheGrantedAppsReachWithIt() = runTest {
+        // The handler captures this GATT, so one left installed after teardown
+        // either writes to a dead link or holds it from being collected. The
+        // honest answer once the radar has gone is that there is nothing to
+        // talk to.
+        val link = Link()
+        val controller = controller(link, prefs = prefs(), gateway = FakeGateway())
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("handshake must complete; journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        assertTrue(RadarControlBridge.available)
+
+        // Cancels the connection coroutine, whose `finally` runs the same
+        // teardown a service stop does.
+        controller.forceReconnect()
+
+        assertTrue("teardown must take the handler with it", pumpUntil { !RadarControlBridge.available })
     }
 
     // ── radar-light auto-mode set + 2f14 override branch ────────────────────────

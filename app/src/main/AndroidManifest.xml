@@ -2,6 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- The coarse filter on the cross-app radar service, and deliberately NOT
+         the authorisation. protectionLevel="normal" is granted at install to
+         any app that names it, so this keeps a stray bind out of the logs and
+         nothing more. What decides whether a caller gets data is the rider's
+         per-app grant, checked inside every method. A signature permission
+         would mean naming each consumer's signing certificate in this manifest
+         before that app exists, which is why the real gate is ours rather than
+         the platform's. -->
+    <permission
+        android:name="es.jjrh.bikeradar.permission.RADAR"
+        android:description="@string/permission_radar_ipc_description"
+        android:label="@string/permission_radar_ipc_label"
+        android:protectionLevel="normal" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -193,5 +207,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- The cross-app radar interface. Exported on purpose: another app on
+             the rider's phone is the only caller there can be. Binding grants
+             nothing, and every method that returns radar data or touches the
+             hardware checks the rider's per-app grant first. -->
+        <service
+            android:name=".ipc.RadarIpcService"
+            android:exported="true"
+            android:permission="es.jjrh.bikeradar.permission.RADAR">
+            <intent-filter>
+                <action android:name="es.jjrh.bikeradar.action.RADAR_SERVICE" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

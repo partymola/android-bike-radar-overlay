@@ -90,6 +90,17 @@ class BleOpQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         }
     }
 
+    /**
+     * Tear the queue down on disconnect.
+     *
+     * Only the IN-FLIGHT op is completed. Anything still buffered in the
+     * channel is dropped with its `CompletableDeferred` never completed, so a
+     * caller awaiting one waits forever unless something else cancels it.
+     * Harmless today because every caller is a coroutine on the link
+     * controller's scope, which is cancelled on the same teardown - but a
+     * caller from outside that scope (a binder thread, say) would hang, so
+     * give it its own timeout.
+     */
     fun cancel() {
         channel.close()
         pending?.let { completeAny(it, timedOut = true) }

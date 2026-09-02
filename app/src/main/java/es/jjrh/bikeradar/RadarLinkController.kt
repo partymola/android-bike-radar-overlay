@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ipc.RadarControlBridge
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 /**
@@ -389,6 +392,10 @@ internal class RadarLinkController(
         fun closeOnce() {
             if (gattClosed) return
             gattClosed = true
+            // Before the GATT goes: the handler installed below captures this
+            // connection, and a stale one would write to a dead link. Absence
+            // is the honest "no radar to talk to" a consumer should see.
+            RadarControlBridge.reset()
             val g = gatt ?: return
             try {
                 g.disconnect()
@@ -688,8 +695,23 @@ internal class RadarLinkController(
                 radarLightUserOverride = false
             }
             radarLightOffSinceMs = null
-            if (prefs.radarLightAutoModeEnabled && controlSvc != null) {
-                val controller = RadarLightController(gatt, queue)
+
+            // Let a granted consumer set the tail light, independently of the
+            // rider's own auto-mode preference: the two are different askers,
+            // and a rider who runs the light manually has not thereby refused
+            // an app they went on to grant control to. Reset in closeOnce, so
+            // the handler never outlives this GATT. Writes go through the same
+            // queue as ours, so a consumer's request cannot interleave with a
+            // mode set already in flight.
+            val light = if (controlSvc != null) RadarLightController(gatt, queue) else null
+            if (light != null) {
+                RadarControlBridge.install { mode ->
+                    writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
+                }
+            }
+
+            if (prefs.radarLightAutoModeEnabled && light != null) {
+                val controller = light
                 val nowMs = System.currentTimeMillis()
                 val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
                 // Manual coordinates (if set) -> GPS last-known -> London. Log the
@@ -1131,6 +1153,49 @@ internal class RadarLinkController(
     }
 
     companion object {
+
+        /**
+         * Answer a granted app's tail-light request on the binder thread it is
+         * blocking.
+         *
+         * A named function rather than a lambda, because this is the only path in
+         * the app that writes to the rider's hardware because a third-party app
+         * asked. Inside `install { }` no test can reach it: a connection harness
+         * can prove a handler was installed and never that the handler does what
+         * it says, so a handler that ignored the requested mode and wrote a
+         * constant would look the same from there.
+         * `RadarLightWriteForGrantedAppTest` drives it.
+         *
+         * Blocking, because the AIDL call is synchronous and the consumer is
+         * waiting on the answer.
+         *
+         * The timeout is the load-bearing part. This runs on a binder pool thread,
+         * OUTSIDE the controller's scope, so nothing here is cancelled when the
+         * link tears down. `BleOpQueue.cancel()` completes only the op already
+         * pending: one still sitting in the channel buffer is never completed, and
+         * its `await()` would suspend forever, burning one of the process's ~16
+         * binder threads permanently. Enough of those and the app answers no
+         * transactions at all.
+         *
+         * Both failures are logged, because this is the only place a maintainer can
+         * learn whether a consumer was told no by the clock or by the radio, and
+         * the two want different fixes. The throw is caught for a second reason:
+         * `runBlocking` rethrows on the binder thread, which the consumer sees as
+         * an exception where the contract promises false.
+         */
+        internal fun writeLightForGrantedApp(
+            setMode: suspend (RadarLightMode) -> Boolean,
+            mode: RadarLightMode,
+            timeoutMs: Long,
+        ): Boolean = runCatching {
+            runBlocking {
+                withTimeoutOrNull(timeoutMs) { setMode(mode) }
+                    ?: false.also { Log.w(TAG, "tail-light write for a granted app gave up after ${timeoutMs}ms") }
+            }
+        }.getOrElse {
+            Log.w(TAG, "tail-light write for a granted app threw: $it")
+            false
+        }
         private const val TAG = "BikeRadar.Radar"
 
         // V2 data-flow watchdog: if no V2 notification arrives for
@@ -1148,6 +1213,28 @@ internal class RadarLinkController(
 
         /** A GATT opened, service discovery did not complete. */
         const val DISCOVERY_FAILED = "discovery-failed"
+
+        /**
+         * Ceiling on a granted app's tail-light write, measured on the binder
+         * thread it blocks.
+         *
+         * Above `BleOpQueue.DEFAULT_TIMEOUT_MS` so a write that reaches the
+         * radio has room to answer. That is a claim about an IDLE queue only:
+         * the queue is single in-flight, our own auto-mode flips and battery
+         * reads use it too, and one op already timing out ahead leaves this
+         * one about a second. So a consumer can be told false about a write
+         * that later lands - `withTimeoutOrNull` abandons the wait, not the
+         * queued op. [writeLightForGrantedApp] logs which of the two happened.
+         *
+         * It is NOT under every ANR window: it stays under the 20 s service and
+         * 10 s broadcast ones and exceeds the 5 s input-dispatch one, so a
+         * consumer calling this from its main thread while handling a tap can
+         * still ANR. That is a consumer-side bug we cannot fix from here - a
+         * radio write to a device that may be asleep has no fast failure - so
+         * the AIDL tells consumer authors to call it off the main thread
+         * rather than this timeout pretending to make it safe.
+         */
+        internal const val BRIDGE_WRITE_TIMEOUT_MS = 6_000L
 
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
     }

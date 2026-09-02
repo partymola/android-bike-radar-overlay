@@ -119,7 +119,18 @@ fun SettingsRadarAccessContent(
                         subtitle = listOfNotNull(
                             grant.packageName,
                             stringResource(R.string.settings_radar_access_can_read).takeIf { grant.read },
-                            stringResource(R.string.settings_radar_access_can_control).takeIf { grant.control },
+                            // Hiding the overlay needs a live registration and
+                            // so needs READ as well, which the consent screen
+                            // now says. A control-only grant here would be told
+                            // it can do something that always fails, on the one
+                            // screen the rider audits.
+                            stringResource(
+                                if (grant.read) {
+                                    R.string.settings_radar_access_can_control
+                                } else {
+                                    R.string.settings_radar_access_can_control_light_only
+                                },
+                            ).takeIf { grant.control },
                             if (grant.lastUsedAtMs == 0L) {
                                 stringResource(R.string.settings_radar_access_never_used)
                             } else {

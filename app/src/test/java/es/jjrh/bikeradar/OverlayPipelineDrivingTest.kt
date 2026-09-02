@@ -60,6 +60,7 @@ class OverlayPipelineDrivingTest {
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
         ClosePassStateBus.reset()
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.reset()
     }
 
     @After
@@ -69,6 +70,10 @@ class OverlayPipelineDrivingTest {
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
         ClosePassStateBus.reset()
+        // Process-global, and this file deliberately leaves a hold set in one
+        // test. Classes share JVMs under parallel forks, so not resetting here
+        // is an order-dependent failure in whatever runs next.
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.reset()
     }
 
     @Test
@@ -98,6 +103,96 @@ class OverlayPipelineDrivingTest {
         job.cancel()
         job.join()
     }
+
+    @Test
+    fun aGrantedAppCanHideTheOverlayAndReleasingRestoresIt() = runTest {
+        // The gate object has its own tests; this is the wiring. Without it
+        // `setOverlayVisible` records a hold that nothing on screen reads,
+        // and every one of those tests still passes.
+        val pipeline = buildPipeline()
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+
+        RadarStateBus.publish(liveFrame(100L))
+        withTimeoutOrNull(1_000) {
+            while (fakeHost.attachCount == 0) {
+                runCurrent()
+                kotlinx.coroutines.delay(10)
+            }
+            true
+        }
+        assertEquals(1, fakeHost.attachCount)
+
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        RadarStateBus.publish(liveFrame(200L))
+        withTimeoutOrNull(1_000) {
+            while (fakeHost.detachCount == 0) {
+                runCurrent()
+                kotlinx.coroutines.delay(10)
+            }
+            true
+        }
+        assertEquals("a hold must take the overlay off screen", 1, fakeHost.detachCount)
+
+        // The rider gets it back without the consumer doing anything further,
+        // which is what an unbind, a crash or a revoke all reduce to.
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.reset()
+        RadarStateBus.publish(liveFrame(300L))
+        withTimeoutOrNull(1_000) {
+            while (fakeHost.attachCount < 2) {
+                runCurrent()
+                kotlinx.coroutines.delay(10)
+            }
+            true
+        }
+        assertEquals("releasing the hold must put it back", 2, fakeHost.attachCount)
+
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aHoldHeldFromTheStartNeverAttachesTheOverlay() = runTest {
+        // The consumer asked before the ride began. Attaching and immediately
+        // detaching would flash the overlay over their map.
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        val pipeline = buildPipeline()
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+
+        RadarStateBus.publish(liveFrame(100L))
+        repeat(5) {
+            runCurrent()
+            kotlinx.coroutines.delay(10)
+        }
+
+        assertEquals("must never have attached", 0, fakeHost.attachCount)
+
+        // The positive control, and it is what makes the zero above mean
+        // anything: a pipeline that had simply not processed the frame yet
+        // would also report zero. Dropping the hold has to produce an attach
+        // from the same pump, so the zero was the gate and not the clock.
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.show("com.example.trailbuddy")
+        RadarStateBus.publish(liveFrame(200L))
+        val attached = kotlinx.coroutines.withTimeoutOrNull(1_000) {
+            while (fakeHost.attachCount == 0) {
+                runCurrent()
+                kotlinx.coroutines.delay(10)
+            }
+            true
+        }
+
+        assertEquals("the frames were reaching the pipeline all along", true, attached)
+        job.cancel()
+        job.join()
+    }
+
+    private fun liveFrame(ts: Long) = RadarState(
+        source = DataSource.V2,
+        timestamp = ts,
+        vehicles = emptyList(),
+        bikeSpeedMs = 5f,
+    )
 
     @Test
     fun nonNoneSourceStateAttachesOverlayAndForwardsToHost() = runTest {

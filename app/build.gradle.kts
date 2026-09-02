@@ -284,6 +284,10 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+        // The cross-app radar interface. Off by default since AGP 8, and the
+        // contract in `ipc/` is useless without it: an interface another app
+        // can bind to has to be AIDL.
+        aidl = true
     }
 
     lint {

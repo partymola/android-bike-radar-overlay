@@ -10,6 +10,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -150,12 +151,52 @@ internal class ServiceNotifications(
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(context.getString(R.string.svc_main_notif_title))
             .setContentText(contentText)
+            .setSubText(overlayHolderNote())
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .addAction(0, actionLabel, actionPi)
             .build()
+    }
+
+    /**
+     * Who has taken the overlay away, or null while nobody has.
+     *
+     * A granted app can ask for our display to make way for its own, and the
+     * rider then has a screen with no radar on it. Until this line, the only
+     * record of why was a capture-log entry that is off by default, so the
+     * answer to "where did my radar go" was not on the phone at all. The
+     * ongoing notification is the surface a rider already looks at during a
+     * ride, which is why the answer goes here rather than on a new screen.
+     *
+     * Named, not counted: "an app is using your screen" tells the rider
+     * nothing they can act on. The label is preferred because it is what they
+     * are most likely to recognise - though it is read live, so an app that
+     * renames itself after consent shows its new name. The package is the
+     * fallback and is also the part an impostor cannot duplicate on this
+     * device, since a label is whatever its developer typed.
+     *
+     * ONE name, plus a count of any others. Android renders this in the
+     * collapsed header beside the app name and the time, so a joined list is
+     * truncated - and Spanish is a third longer again, where the truncation
+     * would take the name and leave the prefix. Settings carries the full list.
+     *
+     * [setSubText] takes null as "no sub-text", so a lifted hold clears the
+     * line on the next post without a second code path.
+     */
+    private fun overlayHolderNote(): String? {
+        val holders = RadarOverlayGate.hiddenBy.value.sorted()
+        val first = holders.firstOrNull() ?: return null
+        val pm = context.packageManager
+        val name = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(first, 0)).toString() }
+            .getOrDefault(first)
+        val shown = if (holders.size > 1) {
+            context.getString(R.string.svc_main_notif_overlay_hidden_more, name, holders.size - 1)
+        } else {
+            name
+        }
+        return context.getString(R.string.svc_main_notif_overlay_hidden_by, shown)
     }
 
     /** Re-post the foreground notification in place (pause/resume toggle,

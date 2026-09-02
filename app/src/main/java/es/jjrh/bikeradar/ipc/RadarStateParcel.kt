@@ -138,7 +138,11 @@ class RadarStateParcel(
             override fun createFromParcel(parcel: Parcel): RadarStateParcel {
                 val version = parcel.readInt()
                 if (version !in 1..RadarContract.VERSION) {
-                    // Consume the rest so an enclosing read stays aligned.
+                    // Skip anything a newer writer appended that this build has no meaning
+                    // for. This jumps to the end of the WHOLE parcel, so it is only correct
+                    // while this is the last thing in it - true today because it is the
+                    // sole argument of a one-way call. A second argument would need the
+                    // reader to stop at its own end instead.
                     parcel.setDataPosition(parcel.dataSize())
                     return notLive(version)
                 }

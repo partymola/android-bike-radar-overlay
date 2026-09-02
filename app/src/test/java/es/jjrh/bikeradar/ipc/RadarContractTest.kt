@@ -266,4 +266,14 @@ class RadarContractTest {
         assertEquals(-0.5f, p.lateralPos, 0f)
         assertEquals(-2.25f, p.rangeXm, 0f)
     }
+
+    @Test
+    fun theContractVersionIsALiteral() {
+        // Every other assertion in the suite compares VERSION against itself,
+        // so bumping it is green everywhere. It is a negotiated wire value: a
+        // consumer reads it, decides it understands us, and then trusts the
+        // layout. Bump this literal deliberately, alongside the layout change
+        // that earned it.
+        assertEquals(1, RadarContract.VERSION)
+    }
 }

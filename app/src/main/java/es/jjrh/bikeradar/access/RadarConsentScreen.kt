@@ -90,19 +90,27 @@ fun RadarConsentAsk(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val action = consentPrimaryAction(request.current != null, read, control)
-                if (action == ConsentPrimaryAction.NOTHING) {
-                    // A first ask LANDS here with both switches off, so the
-                    // button is dimmed before the rider has touched anything.
-                    // Without a line saying why, the disabled state reads as
-                    // secondary emphasis and the tap goes nowhere.
-                    Text(
-                        stringResource(R.string.radar_consent_choose_something),
-                        // Not fgDim: that is the colour of the disabled button
-                        // right below it, so the instruction would read as part
-                        // of the thing it is explaining.
-                        color = br.fgMuted,
-                    )
-                }
+                // A first ask LANDS here with both switches off, so the button
+                // is dimmed before the rider has touched anything. Without a
+                // line saying why, the disabled state reads as secondary
+                // emphasis and the tap goes nowhere.
+                //
+                // Emptied rather than removed, so the line keeps its height.
+                // Dropping it moves both buttons up as the rider flips a
+                // switch, which is the exact moment their finger is already
+                // travelling towards where Allow used to be - and where it
+                // lands is the gap above Don't allow.
+                Text(
+                    text = if (action == ConsentPrimaryAction.NOTHING) {
+                        stringResource(R.string.radar_consent_choose_something)
+                    } else {
+                        ""
+                    },
+                    // Not fgDim: that is the colour of the disabled button right
+                    // below it, so the instruction would read as part of the
+                    // thing it is explaining.
+                    color = br.fgMuted,
+                )
                 BrOutlinedButton(
                     label = when (action) {
                         ConsentPrimaryAction.REVOKE -> stringResource(R.string.settings_radar_access_revoke)

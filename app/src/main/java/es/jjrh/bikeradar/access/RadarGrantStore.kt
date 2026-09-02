@@ -2,6 +2,8 @@
 package es.jjrh.bikeradar.access
 
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,7 +12,11 @@ import org.json.JSONObject
  *
  * [certDigest] pins the grant to the app that was approved: a package name
  * survives an uninstall and a reinstall from another source, a signing key does
- * not. [lastUsedAtMs] exists so the settings list can show what has gone quiet,
+ * not. [lastUsedAtMs] is approximate in two directions and is meant to be:
+ * it is stamped whenever the gate answers yes, which includes a revalidation
+ * triggered by an unrelated app, and the write is throttled to a minute. It
+ * answers "has this app been near the radar lately", never "exactly when".
+ * It exists so the settings list can show what has gone quiet,
  * since grants do not expire on their own.
  */
 data class RadarGrant(
@@ -77,6 +83,7 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
         synchronized(LOCK) {
             val current = read() ?: return false
             write(current.filterNot { it.packageName == grant.packageName } + grant, durable = true)
+            _writes.value += 1
             return true
         }
     }
@@ -87,6 +94,7 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
             // Durable, because a revoke lost to process death before the flush
             // is the one write here whose loss is a security event.
             write(current.filterNot { it.packageName == packageName }, durable = true)
+            _writes.value += 1
             return true
         }
     }
@@ -152,6 +160,29 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
     companion object {
         /** Its own file, like the other stores here, so a clear of one is not a clear of all. */
         const val PREFS_NAME = "radar-access"
+
+        private val _writes = MutableStateFlow(0L)
+
+        /**
+         * Bumped on every write that CHANGES A GRANT, so a live consumer's held
+         * decision is invalidated the moment the rider changes their mind.
+         *
+         * The bound service checks a grant once per registration rather than
+         * per frame, because resolving a package through the PackageManager at
+         * radar cadence is not free. That trade is only honest while something
+         * revokes the held answer, and this is that something. A counter
+         * rather than the grants themselves: every reader re-reads the store,
+         * so shipping the contents here would be a second copy to keep in step.
+         *
+         * [markUsed] writes and deliberately does NOT bump, and that exclusion
+         * is load-bearing rather than an oversight: revalidation consults the
+         * gate, the gate stamps, and a stamp that bumped would schedule the
+         * next revalidation, leaving the service revalidating every consumer
+         * once a minute for the length of a ride. A use stamp cannot change who
+         * is allowed what, so there is nothing to invalidate.
+         * `markUsedDoesNotTriggerRevalidation` pins it.
+         */
+        val writes: StateFlow<Long> = _writes
 
         private val LOCK = Any()
         private const val KEY = "radar_access_grants"

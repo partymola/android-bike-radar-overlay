@@ -57,4 +57,19 @@ class RadarConsentSnapshotTest {
             }
         }
     }
+
+    /**
+     * Spanish, where every string on this screen is longer than its English
+     * original and the two toggle subtitles are the longest text the app puts
+     * inside a row. This is the decision screen for handing another app the
+     * rider's radar, so a subtitle that clips here costs them the sentence
+     * saying what they are agreeing to.
+     */
+    @Test
+    @Config(qualifiers = "+es")
+    fun firstAskEs() {
+        captureRoboImage {
+            UiTheme { RadarConsentAsk(request = ask(), onCancel = {}, onSave = { _, _ -> }) }
+        }
+    }
 }

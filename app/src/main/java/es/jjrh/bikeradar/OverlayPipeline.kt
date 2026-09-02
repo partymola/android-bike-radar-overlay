@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.data.PrefsSnapshot
+import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -173,7 +174,19 @@ internal class OverlayPipeline(
 
                         rideStats().observeFrame(state)
 
-                        if (!overlayAdded) {
+                        // A granted app drawing its own map can ask for ours to
+                        // get out of the way. Checked every frame rather than
+                        // latched, so the hold being dropped - by an unbind, a
+                        // crash, or the rider revoking - puts the overlay back
+                        // without anything having to notice.
+                        val hiddenForConsumer = RadarOverlayGate.hidden
+                        if (hiddenForConsumer && overlayAdded) {
+                            overlayHost.detach(view)
+                            overlayAdded = false
+                            clog("# overlay hidden for a granted app")
+                        }
+
+                        if (!overlayAdded && !hiddenForConsumer) {
                             if (overlayHost.canDrawOverlays()) {
                                 val attachErr = overlayHost.attach(view)
                                 if (attachErr == null) {

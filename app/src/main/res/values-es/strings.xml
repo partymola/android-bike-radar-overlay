@@ -359,6 +359,8 @@
     <string name="settings_about_changelog_subtitle">Cada versión y qué cambió</string>
     <string name="settings_about_unaffiliated_title">Sin relación con Garmin ni Bosch</string>
     <string name="settings_about_unaffiliated_subtitle">Esta es una app independiente</string>
+    <string name="permission_radar_ipc_label">Usar tu radar</string>
+    <string name="permission_radar_ipc_description">Permite que una app pida leer tu radar, cambiar tu luz trasera y ocultar la barra lateral. No recibe nada hasta que digas que sí en una pantalla que la nombra.</string>
     <string name="link_no_browser">Nada en este móvil puede abrir enlaces web.</string>
 
     <!-- Ajustes → Experimental (SettingsExperimental.kt) -->
@@ -555,14 +557,14 @@
     <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la cámara delantera\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de adelantamientos ajustados, velocidades de aproximación, holguras)\n• un registro de adelantamientos ajustados por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del teléfono de inmediato.</string>
     <string name="settings_privacy_to_apps_label">Compartir con otras apps</string>
-    <string name="settings_privacy_to_apps_body">Otra app de este móvil puede pedir usar tu radar trasero, y no le llega nada hasta que dices que sí en una pantalla que la nombra. Lo que puede leer entonces es lo que informa el radar: vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, tu propia velocidad, de qué tipo es cada vehículo y la batería del radar. Si además se lo permites, puede cambiar el modo de tu luz trasera y ocultar el radar en pantalla.\n\nEl traspaso ocurre en este dispositivo, de app a app, no por la red y sin pasar por el desarrollador. Lo que esa app haga después con ello depende de ella, así que permite solo apps en las que confíes.\n\nMira Ajustes, Apps con permiso para tu radar, para ver qué has permitido y para pararlo. Esa lista se guarda en el almacenamiento privado de la app en Android y, como el resto de tus ajustes, viaja en la copia de seguridad de Android cuando la tienes activada, y en una transferencia directa entre móviles.</string>
+    <string name="settings_privacy_to_apps_body">Otra app de este móvil puede pedir usar tu radar trasero, y no le llega nada hasta que digas que sí en una pantalla que la nombra. Lo que puede leer entonces es lo que informa el radar: vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, tu propia velocidad, de qué tipo es cada vehículo, si tu radar está conectado y su batería. Si además se lo permites, puede cambiar el modo de tu luz trasera y ocultar la barra lateral, y una barra lateral oculta sigue oculta, estés en esa app o en cualquier otra. Mientras se lo permitas, una app recibe todo esto de forma continua mientras ruedas, así que puede saber cuándo estás en la bici y cómo has rodado.\n\nEl traspaso ocurre en este dispositivo, de app a app, no por la red y sin pasar por el desarrollador. Lo que esa app haga después con ello depende de ella, así que permite solo apps en las que confíes.\n\nMira Ajustes, Apps con permiso para tu radar, para ver qué has permitido y para dejar de compartir. Esa lista se guarda en el almacenamiento privado de la app en Android y, como el resto de tus ajustes, viaja en la copia de seguridad de Android cuando la tienes activada, y en una transferencia directa entre móviles.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">El emparejamiento se hace en el flujo de Bluetooth del sistema Android, no en esta app. La app lee tu lista de dispositivos vinculados para identificar el radar, la cámara delantera y tu eBike Bosch. Los permisos de Bluetooth se declaran con `usesPermissionFlags=\"neverForLocation\"`, de modo que la búsqueda por Bluetooth nunca deduce la ubicación.</string>
     <string name="settings_privacy_networking_label">Red</string>
     <string name="settings_privacy_networking_destination">El único destino de red es la URL de HA que indicas. No hay endpoints de analítica, servicios de informe de fallos, redes publicitarias ni bibliotecas de terceros que envíen datos fuera.</string>
     <string name="settings_privacy_networking_https">Si tu URL de HA apunta fuera de tu red doméstica, la app exige HTTPS y se niega a enviar tu token en texto plano. Solo se acepta HTTP sin cifrar para destinos de la LAN: rangos IPv4 privados (10.x, 172.16-31.x, 192.168.x), bucle local, IPv6 unique-local y link-local, y nombres de host `.local` / `.lan`.</string>
     <string name="settings_privacy_permissions_label">Permisos</string>
-    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, cámara delantera y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• WAKE_LOCK: dar a tiempo el aviso de radar caído, la alarma al alejarte y el resumen al terminar si el radar se corta a mitad de ruta con la pantalla apagada\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
+    <string name="settings_privacy_permissions_body">La app usa estos permisos de Android:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: encontrar y conectar tu radar, cámara delantera y eBike\n• POST_NOTIFICATIONS: estado de la ruta, avisos y el resumen al terminar\n• SYSTEM_ALERT_WINDOW: dibujar la barra lateral sobre tu mapa\n• FOREGROUND_SERVICE: seguir activo durante las rutas\n• WAKE_LOCK: dar a tiempo el aviso de radar caído, la alarma al alejarte y el resumen al terminar si el radar se corta a mitad de ruta con la pantalla apagada\n• ACCESS_COARSE_LOCATION: se lee una vez por ruta para ajustar tus luces según el atardecer local; nunca te rastrea ni sale del teléfono\n\nBike Radar también declara un permiso propio, es.jjrh.bikeradar.permission.RADAR. Otra app lo nombra para conectarse a Bike Radar. Se concede al instalar, como cualquier permiso normal, así que por sí solo no decide nada: una app que lo tenga no recibe nada hasta que digas que sí en una pantalla que la nombra, y puedes dejar de compartir cuando quieras en Ajustes.\n\nLa captura de pantalla (desactivada por defecto) pide consentimiento de MediaProjection cada vez y graba toda la pantalla, incluido lo que haya detrás de la barra lateral.</string>
     <string name="settings_privacy_source_label">Código fuente</string>
     <string name="settings_privacy_source_body">La app es de código abierto bajo GPL-3.0-or-later. El código fuente completo está en github.com/partymola/android-bike-radar-overlay. Verifica todo lo anterior leyendo el código.</string>
 
@@ -707,6 +709,8 @@
     <string name="svc_main_channel_name">Bike Radar</string>
     <string name="svc_main_notif_title">Bike Radar</string>
     <string name="svc_main_notif_active">Activo</string>
+    <string name="svc_main_notif_overlay_hidden_by">Barra lateral oculta: <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g></string>
+    <string name="svc_main_notif_overlay_hidden_more"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> +<xliff:g id="others" example="1">%2$d</xliff:g></string>
     <string name="svc_main_notif_paused_until">En pausa hasta las <xliff:g id="time" example="14:30">%1$s</xliff:g></string>
     <string name="svc_main_notif_action_resume">Reanudar</string>
     <string name="svc_main_notif_action_pause">Pausar 1 h</string>
@@ -769,33 +773,38 @@
     <string name="radar_consent_title">¿Compartir tu radar?</string>
     <string name="radar_consent_body"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> pide usar tu radar trasero.</string>
     <string name="radar_consent_read">Ver lo que ve el radar</string>
-    <string name="radar_consent_read_detail">Vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, de qué tipo son, tu propia velocidad y la batería del radar.</string>
+    <string name="radar_consent_read_detail">Vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, de qué tipo son, tu propia velocidad, si tu radar está conectado y su batería.</string>
     <string name="radar_consent_control">Cambiar tu luz trasera y la barra lateral</string>
-    <string name="radar_consent_control_detail">Cambiar el modo de luz del radar y ocultar el radar en pantalla.</string>
+    <string name="radar_consent_control_detail">Cambiar el modo de luz del radar. Si además permites ver el radar, puede ocultar la barra lateral: eso no apaga los avisos sonoros, y sigue oculta aunque estés en otra app. Vuelve cuando esa app la devuelve, cuando deja de ejecutarse o cuando dejas de compartir.</string>
     <string name="radar_consent_choose_something">Elige al menos una opción.</string>
     <string name="radar_consent_save">Permitir</string>
     <string name="radar_consent_cancel">No permitir</string>
-    <string name="radar_consent_backup_note">Tu elección se guarda en este móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas.</string>
+    <string name="radar_consent_backup_note">Tu elección se guarda en este móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas. Puedes dejar de compartir cuando quieras en Ajustes, Apps con permiso para tu radar.</string>
 
     <!-- Ajustes -> apps que usan el radar -->
     <string name="settings_home_radar_access_title">Apps con permiso para tu radar</string>
     <string name="settings_radar_access_none">Ninguna otra app lo usa</string>
     <plurals name="settings_radar_access_reading">
-        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app ve lo que ve el radar</item>
-        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps ven lo que ve el radar</item>
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app puede ver lo que ve el radar</item>
+        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps pueden ver lo que ve el radar</item>
     </plurals>
     <plurals name="settings_radar_access_controlling">
-        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app puede cambiar tu luz trasera</item>
-        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps pueden cambiar tu luz trasera</item>
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app puede cambiar luz trasera y barra lateral</item>
+        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps pueden cambiar luz trasera y barra lateral</item>
+    </plurals>
+    <plurals name="settings_radar_access_controlling_light_only">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> app puede cambiar luz trasera</item>
+        <item quantity="other"><xliff:g id="count" example="2">%1$d</xliff:g> apps pueden cambiar luz trasera</item>
     </plurals>
     <string name="settings_radar_access_empty">Cuando otra app pida usar tu radar, aparecerá aquí.</string>
     <string name="settings_radar_access_can_read">Ve el radar</string>
-    <string name="settings_radar_access_can_control">Cambia tu luz trasera</string>
+    <string name="settings_radar_access_can_control">Cambia luz trasera y barra lateral</string>
+    <string name="settings_radar_access_can_control_light_only">Cambia luz trasera</string>
     <string name="settings_radar_access_last_used">Último uso <xliff:g id="when" example="hace 3 días">%1$s</xliff:g></string>
     <string name="settings_radar_access_never_used">Sin usar todavía</string>
     <string name="settings_radar_access_revoke">Dejar de compartir</string>
     <string name="settings_radar_access_revoke_title">¿Dejar de compartir con <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>?</string>
-    <string name="settings_radar_access_revoke_body">Dejará de ver tu radar. Puedes volver a darle permiso desde la propia app.</string>
+    <string name="settings_radar_access_revoke_body">Dejará de ver tu radar, de cambiar tu luz trasera y de ocultar la barra lateral. Lo que ya tenga se queda con ella. Puedes volver a darle permiso desde la propia app.</string>
     <string name="settings_radar_access_backup_note">Esta lista se guarda en tu móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas.</string>
 
 </resources>

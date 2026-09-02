@@ -60,4 +60,27 @@ class SettingsRadarAccessSnapshotTest {
             }
         }
     }
+
+    /**
+     * Spanish, on the row that is already the tightest here: a package name,
+     * both capability phrases and a last-used stamp joined into one 12sp
+     * subtitle. The Spanish capability phrase is the longest of the four, so
+     * this is where the joined line runs out of width first.
+     */
+    @Test
+    @Config(qualifiers = "+es")
+    fun mixedEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarAccessContent(
+                    grants = listOf(
+                        grant("com.example.trailbuddy", "Trail Buddy", read = true, control = false),
+                        grant("com.example.other", "Another Navigator", read = true, control = true),
+                    ),
+                    onRevoke = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
 }

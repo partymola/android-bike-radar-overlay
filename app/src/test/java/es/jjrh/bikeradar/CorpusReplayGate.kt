@@ -180,10 +180,14 @@ class CorpusReplayGate {
         // past it. No capture in the corpus carries this line yet, so the
         // input is inert today and correct when one does.
         var climbing = false
-        // The rider-speed signal the URGENT path is gated on. Without it every
-        // urgent gate is shut, so a capture whose speed came from the bonded
-        // eBike replayed as `urgent=0` however the decider behaved - a
-        // confident wrong answer on exactly the rides that raise urgent cues.
+        // The rider-speed signal the URGENT path is gated on. The gate always
+        // read the radar's own device-status field, which about half the
+        // corpus carries; what it never read was the bonded eBike's wheel
+        // speed, which is the only source on the rest. On those rides every
+        // urgent gate was shut and the replay answered `urgent=0` however the
+        // decider behaved, which is a confident wrong answer rather than a
+        // missing one. Feeding both moved the corpus from 65 urgent cues to
+        // 55 and changed 34 of 176 captures.
         // Sourced the way `OverlayPipeline.fireAlertCue` does: the eBike's
         // wheel speed wins outright, the radar's device-status field is the
         // fallback. `ebike` lines carry no timestamp of their own, so the

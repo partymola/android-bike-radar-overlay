@@ -166,9 +166,9 @@ class ClosePassDetector {
 
             // Skip frames where the decoder couldn't determine lateral
             // position reliably. The decoder's lateralUnknown flag fires
-            // on far-range frames where the radar emits its rangeXBits=0
-            // sentinel; without this skip those frames pull min-rangeX
-            // to zero artificially.
+            // wherever the radar emits its rangeXBits=0 sentinel, close range
+            // included once a run has started; without this skip those frames
+            // pull min-rangeX to zero artificially.
             if (v.lateralUnknown) continue
 
             // Arm the track if all gates pass.

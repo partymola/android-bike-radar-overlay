@@ -107,9 +107,10 @@ data class Vehicle(
      */
     val isAlongsideStationary: Boolean = false,
     /**
-     * True when the radar's lateral channel reported `rangeXBits = 0`
-     * for a far track (rangeY >= 10 m) whose previous frame had a
-     * non-centred lateral position. This is the radar's
+     * True when the radar's lateral channel reported `rangeXBits = 0` for a
+     * track whose previous frame had a non-centred lateral position. A run
+     * STARTS only on a far track; once started it continues at any range,
+     * because the radar keeps sending zero bits as the target closes. This is the radar's
      * "lateral-unknown" sentinel: instead of a real lateral reading
      * the firmware emits a hard zero. The decoder carries forward the
      * previous frame's [lateralPos] so visual consumers see continuity,

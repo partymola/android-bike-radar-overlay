@@ -200,10 +200,19 @@ class RadarV2Decoder(
         // held-over saturated lateralPos becomes the next frame's
         // `prev`, so the detection propagates across the entire run
         // of zero readings without a per-track state machine.
+        // The range test guards where a run BEGINS, not where it continues. A
+        // track already carrying a held-over offset does not become centred by
+        // crossing the threshold, and the radar keeps sending zero bits all
+        // the way in: a captured track sent them from 76 m to 5 m, and reading
+        // the last two as dead-centre measurements handed the predicted-pass
+        // fit a line converging on the rider. That scores a predicted hit,
+        // which is never vetoed, and fired the imminent-impact cue on a radar
+        // sitting indoors.
+        val continuingRun = prev != null && prev.vehicle.lateralUnknown
         val lateralUnknown = rxBits == 0 &&
-            rangeY >= LATERAL_UNKNOWN_MIN_RANGE_Y_M &&
             prev != null &&
-            abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD
+            abs(prev.vehicle.lateralPos) >= LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD &&
+            (continuingRun || rangeY >= LATERAL_UNKNOWN_MIN_RANGE_Y_M)
 
         // On a lateral-unknown frame carry the previous RAW metres, not the
         // clamped lateralPos re-expanded: for a track beyond the +/-3 m
@@ -455,11 +464,13 @@ class RadarV2Decoder(
         const val ALONGSIDE_MIN_DURATION_MS = 3000L
 
         // ── Lateral-unknown sentinel ─────────────────────────────────────
-        /** rangeY (m) at or above which `rangeXBits = 0` is treated as
-         *  the radar's "lateral-unknown" signal rather than a real
-         *  centred target. Below this distance a literal zero is
-         *  plausible (target directly behind), so the sentinel doesn't
-         *  apply. */
+        /** rangeY (m) at or above which `rangeXBits = 0` STARTS a
+         *  lateral-unknown run rather than reading as a real centred target.
+         *  Below it a literal zero is plausible (target directly behind), so a
+         *  run cannot begin there. It can CONTINUE there: a run already
+         *  carrying a held-over offset does not end because its target came
+         *  close, and the radar keeps sending zero bits all the way in.
+         *  `RadarV2DecoderSentinelRunTest` pins both directions. */
         const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
 
         /** Previous frame's |lateralPos| floor for the lateral-unknown

@@ -307,11 +307,15 @@ class AlertDecider(
      *  and alert lines. Fires at most once per corner (the anchor-once
      *  guard), so there is no flood risk. */
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
-    /** Diagnostic hook for the ghost-beep filter: one line per
-     *  gate decision (suppress / re-fire / off-axis veto), written to the
-     *  capture log so every silenced or re-armed cue is auditable
-     *  post-ride. Fires only on would-have-beeped frames, so volume is
-     *  bounded by the beep rate, not the frame rate. */
+    /** Diagnostic hook for the gate decisions, written to the capture log so
+     *  every silenced or re-armed cue is auditable post-ride. Covers the
+     *  born-close suppress and re-fire, the rx veto, the four urgent-pass
+     *  verdicts, and the fit expiry.
+     *
+     *  Volume is bounded per TRACK, not per frame, though the hook is reached
+     *  on every frame: each verdict is deduped per track ([logPassGate],
+     *  [passGateOkLogged]) and an expiry can fire once per fit because the
+     *  fit is removed as it is reported. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
      *  filter's state machine); injectable for tests. */
@@ -1154,12 +1158,13 @@ class AlertDecider(
         // Drop whole tracks the radar has stopped reporting, so a recycled tid
         // can never be judged on another car's history.
         // A fit the radar has stopped refreshing stops being evidence, however
-        // present the track still is. Without this the veto freezes for the
-        // whole of a long blind approach, so a car measured wide that then
-        // changes lane into the rider is silenced the entire way in - a
-        // suppressed warning, which is the direction that matters. Bounded by
-        // observation: across the ride corpus no run of zero-lateral frames
-        // reaches three seconds.
+        // present the track still is. Why the bound is where it is, and what it
+        // widened: [URGENT_PASS_UNMEASURED_MAX_MS].
+        // The empty-deque arm is unreachable rather than dead: an entry is only
+        // ever created immediately before a sample is appended, and the sole
+        // in-place removal clears then appends. It is kept because an empty fit
+        // IS stale by definition, so if that ever stops holding this drops the
+        // entry rather than carrying a fit with nothing in it.
         val staleFits = lateralHistory.entries
             .filter { (_, deque) ->
                 val newest = deque.lastOrNull()
@@ -1715,10 +1720,13 @@ class AlertDecider(
          *  **Two replays, two populations, and the figures above are
          *  historical.** They were measured by the sweep, which reads both
          *  `.log` and `.log.gz`, against a [CorpusReplayGate] that then read
-         *  only `.log`, fed the decider no rider speed, forced the turn state
-         *  idle and dropped the mount offset. With no speed the urgent gates
-         *  cannot arm at all on an eBike ride, so the gate could not see this
-         *  decision. It now feeds the rider speed, turn state and mount offset
+         *  only `.log`, took rider speed from the radar's device-status field
+         *  alone, forced the turn state idle and dropped the mount offset.
+         *  About half the corpus carries that field; on the rest the speed
+         *  came from the bonded eBike, so there the urgent gates could not arm
+         *  at all and the gate could not see this decision. Feeding both
+         *  sources moved the corpus from 65 urgent cues to 55 and changed 34
+         *  of 176 captures. It now feeds the rider speed, turn state and mount offset
          *  the live path passes, and replays two alert distances. Two inputs
          *  stay at their defaults, `urgentLowSpeedEnabled` and this constant,
          *  because no capture header records either; both defaults are the
@@ -1789,12 +1797,25 @@ class AlertDecider(
          *  alone has to keep the history alive - but a frozen fit that never
          *  expires vetoes a car swinging into the rider for its whole approach.
          *
+         *  **This WIDENED the fail-closed window rather than narrowing it, and
+         *  that is the number to know before touching it.** The fit used to
+         *  expire [URGENT_PASS_HISTORY_RESET_MS] after its newest measured
+         *  sample whatever the track was doing, so a car measured wide that
+         *  then converges unmeasured was vetoed for at most 1.5 s. It is now
+         *  vetoed for up to 3 s. Lowering this back toward 1.5 s is therefore
+         *  reverting, not tightening.
+         *
          *  What refreshes it is a sample reaching the deque, and a repeat of an
          *  unchanged measured value does that too (see [updateLateralHistory]'s
          *  dedupe), so a track the decoder is re-emitting from held values can
          *  outlive the cap. No such track can clear the urgent closing floors,
-         *  so that is a limit on what this constant can promise rather than a
-         *  way for the veto to freeze. Measured over
+         *  and the reason is two constants in another class rather than
+         *  anything here: [RadarV2Decoder.STALE_MOVING_MS] prunes a track
+         *  closing faster than [RadarV2Decoder.MOVING_SPEED_MS] after 800 ms,
+         *  far inside this cap, so only a track at or below 1 m/s can survive
+         *  on repeats, and 1 m/s clears neither the 6 m/s nor the 10 m/s floor.
+         *  Raise either of those and this sentence becomes false with nothing
+         *  red. Measured over
          *  the ride corpus, counting a run as consecutive zero-lateral frames
          *  on one live track and treating a track absent past the decoder's
          *  moving-stale window as a new one: the ninety-ninth percentile is

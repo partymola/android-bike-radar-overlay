@@ -197,11 +197,8 @@ class RadarV2Decoder(
         // The range test guards where a run BEGINS, not where it continues: a
         // first zero inside the threshold is a plausible dead-behind
         // measurement, while a track already carrying a held-over offset does
-        // not become centred by crossing it. One captured track sent zero bits
-        // continuously from 76 m down to 5 m, and reading the last two as
-        // dead-centre measurements handed the predicted-pass fit a line
-        // converging on the rider. That scores a predicted hit, which is never
-        // vetoed, and fired the imminent-impact cue on a radar sitting indoors.
+        // not become centred by crossing it. Evidence and the run it was
+        // measured on: [LATERAL_UNKNOWN_MIN_RANGE_Y_M].
         // RadarV2DecoderSentinelRunTest pins both directions.
         val continuingRun = prev != null && prev.vehicle.lateralUnknown
         val lateralUnknown = rxBits == 0 &&
@@ -465,7 +462,14 @@ class RadarV2Decoder(
          *  run cannot begin there. It can CONTINUE there: a run already
          *  carrying a held-over offset does not end because its target came
          *  close, and one captured track kept sending zero bits from 76 m down
-         *  to 5 m. `RadarV2DecoderSentinelRunTest` pins both directions. */
+         *  to 5 m.
+         *
+         *  That 71 m does not contradict the seconds-scale run lengths quoted
+         *  at [AlertDecider.URGENT_PASS_UNMEASURED_MAX_MS]. It was a bench
+         *  capture, radar indoors reporting 47 m/s, so the run is about a
+         *  second of frames and sits well inside that cap. Read the two
+         *  together before concluding either is wrong.
+         *  `RadarV2DecoderSentinelRunTest` pins both directions. */
         const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
 
         /** Previous frame's |lateralPos| floor for the lateral-unknown

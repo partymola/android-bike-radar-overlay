@@ -73,6 +73,26 @@ class RadarV2DecoderSentinelRunTest {
         assertEquals("the held offset must survive, not collapse to centre", 3f, v.rangeXm, 0.001f)
     }
 
+    @Test fun `a real lateral reading ends the run and the value comes back`() {
+        // The run must END. Widening the entry test to "zero bits OR already in
+        // a run" reads identically on every frame above, and would hold a stale
+        // offset for the track's whole life: close-pass detection skips it, the
+        // overlay draws it off to the side, and the off-axis veto stands down
+        // for good. Asserting the flag alone does not catch that - assert the
+        // measured value returns.
+        val v = vehicleAfter(
+            listOf(
+                frame(4, 40f, 3f, 20f),
+                frame(4, 30f, null, 20f),
+                frame(4, 20f, null, 20f),
+                frame(4, 15f, 0.5f, 20f), // lateral is back
+            ),
+            tid = 4,
+        )!!
+        assertFalse("a real reading must end the run", v.lateralUnknown)
+        assertEquals("the new measurement must replace the held offset", 0.5f, v.rangeXm, 0.001f)
+    }
+
     @Test fun `a track genuinely near centre still reads a close zero as a measurement`() {
         // The other side of the same rule: this track was never off-axis, so
         // its previous lateral is inside the threshold and a zero at close

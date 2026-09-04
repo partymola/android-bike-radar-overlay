@@ -1766,9 +1766,13 @@ class AlertDecider(
          *  outlast [URGENT_PASS_HISTORY_RESET_MS], so presence alone has to
          *  keep the history alive - but a frozen fit that never expires vetoes
          *  a car swinging into the rider for its whole approach. Measured over
-         *  the ride corpus: of ~3000 zero-lateral runs the ninety-ninth
-         *  percentile is 1.9 s and the longest is 2.5 s, so a fit unrefreshed
-         *  past this is stale by observation rather than by guess. */
+         *  the ride corpus, counting a run as consecutive zero-lateral frames
+         *  on one live track and treating a track absent past the decoder's
+         *  moving-stale window as a new one: the ninety-ninth percentile is
+         *  1.9 s and the longest is 2.5 s, so a fit unrefreshed past this is
+         *  stale by observation rather than by guess. Both sides of the bound
+         *  are pinned, because a cap between the durations the other tests
+         *  drive would fail open on the longest real runs with nothing red. */
         const val URGENT_PASS_UNMEASURED_MAX_MS = 3_000L
 
         /** Quiet gap (ms, no urgent-qualifying target) after which the

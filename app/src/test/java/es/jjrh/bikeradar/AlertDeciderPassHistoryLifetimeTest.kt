@@ -24,7 +24,7 @@ class AlertDeciderPassHistoryLifetimeTest {
 
     private val alertMax = 21
 
-    private fun sideCar(distanceM: Int, speedMs: Float, rangeXm: Float, lateralUnknown: Boolean = false, bornAtMs: Long = 0L) = Vehicle(id = 1, distanceM = distanceM, speedMs = speedMs, rangeXm = rangeXm, lateralUnknown = lateralUnknown, bornAtMs = bornAtMs)
+    private fun sideCar(distanceM: Int, speedMs: Float, rangeXm: Float, lateralUnknown: Boolean = false, bornAtMs: Long = 0L, isBehind: Boolean = false) = Vehicle(id = 1, distanceM = distanceM, speedMs = speedMs, rangeXm = rangeXm, lateralUnknown = lateralUnknown, bornAtMs = bornAtMs, isBehind = isBehind)
 
     private class Clock(var now: Long = 0L, val dtMs: Long = 100L) {
         fun tick(): Long {
@@ -96,9 +96,11 @@ class AlertDeciderPassHistoryLifetimeTest {
 
     @Test fun `a car swinging in after a long unknown run still fires`() {
         // The over-suppression guard, and the direction that matters: keeping
-        // the history alive must not make the veto permanent. The freshest
-        // MEASURED sample places this car inside the rider's line, so it
-        // refuses to corroborate the stale side-pass fit and the cue fires.
+        // the history alive must not make the veto permanent. The measured
+        // frame joins the fit and pulls it inside the rider's margin, so the
+        // verdict flips on the confident recent window. It does NOT exercise
+        // the corroboration fail-open, which needs a span-starved window; that
+        // path under a long unknown run has no test anywhere.
         val c = Clock()
         val d = stationaryDecider(c)
         measuredSidePassApproach(c, d)
@@ -136,6 +138,43 @@ class AlertDeciderPassHistoryLifetimeTest {
         assertTrue("a fit left unrefreshed past the cap must stop vetoing", fired)
     }
 
+    @Test fun `the cap is measured from the last MEASURED frame, on both sides of it`() {
+        // Pinned from both sides, because a cap anywhere between the two
+        // durations the other tests drive would pass while failing open on the
+        // longest runs the radar actually produces - which is the artefact
+        // this change removes, reinstated with nothing red.
+        val c = Clock()
+        val d = stationaryDecider(c)
+        measuredSidePassApproach(c, d)
+        // Last measured sample sits at t=2500; the cap fires once a frame is
+        // more than three seconds past it, so t=5500 is the last vetoed frame.
+        val before = mutableListOf<AlertDecider.Event>()
+        repeat(30) {
+            val ev = d.decide(listOf(sideCar(12, -8f, 3f, lateralUnknown = true)), alertMax, c.tick(), bikeSpeedMs = 0f)
+            if (ev is AlertDecider.Event.UrgentApproach) before += ev
+        }
+        assertEquals("inside the cap the committed side pass stays vetoed, got $before", 0, before.size)
+        val after = d.decide(listOf(sideCar(12, -8f, 3f, lateralUnknown = true)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue("the first frame past the cap must fail open, got $after", after is AlertDecider.Event.UrgentApproach)
+    }
+
+    @Test fun `a track that sat behind the rider past the window loses its fit`() {
+        // An overtaken track is past the rider and its geometry says nothing
+        // about a later approach, so those frames must not keep its history
+        // alive. Refreshing on them instead leaves a returning track judged on
+        // a wide-pass fit built before it overtook, and its cue vetoed.
+        val c = Clock()
+        val d = stationaryDecider(c)
+        measuredSidePassApproach(c, d)
+        // Overtakes and sits ahead well past the presence window.
+        repeat(20) {
+            d.decide(listOf(sideCar(4, -8f, 3f, isBehind = true)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        d.decide(listOf(sideCar(15, -8f, 0f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val ev = d.decide(listOf(sideCar(14, -8f, 0f)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertTrue("a track returning in front must not inherit its pre-overtake fit, got $ev", ev is AlertDecider.Event.UrgentApproach)
+    }
+
     @Test fun `a recycled tid does not inherit the old car's fit inside the presence window`() {
         // The gap that identifies a recycled tid is short: the decoder prunes a
         // moving track after 800 ms, so the new car can arrive well inside the
@@ -154,9 +193,9 @@ class AlertDeciderPassHistoryLifetimeTest {
         assertTrue("the new car must not be judged on the old one's geometry, got $ev", ev is AlertDecider.Event.UrgentApproach)
     }
 
-    // The other half of this contract - a tid ABSENT past the window losing
-    // its history to a recycled car - is pinned by `AlertDeciderTest`'s
-    // `recycled tid after a dead gap does not inherit the old fit` and the two
-    // verdict-memo tests beside it. Those drive a frameless gap, which is what
-    // the lifetime now counts, so they are this change's regression witnesses.
+    // `AlertDeciderTest`'s recycled-tid tests drive a FRAMELESS gap, so
+    // `updateLateralHistory` never runs during it and both the old and the new
+    // lifetime read the same number. They are not witnesses for this change -
+    // they must keep passing, which is all. Every property here is pinned in
+    // this file.
 }

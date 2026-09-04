@@ -491,6 +491,26 @@ class AlertDecider(
      *  window are dropped wholesale each frame for the same reason. */
     private val lateralHistory = HashMap<Int, ArrayDeque<LateralSample>>()
 
+    /** tid -> when the track was last PRESENT in a frame, measured lateral or
+     *  not. This is what [lateralHistory]'s lifetime is counted from, and the
+     *  distinction is load-bearing: the radar stops reporting lateral for a
+     *  track it is still reporting, and those runs routinely outlast
+     *  [URGENT_PASS_HISTORY_RESET_MS]. Counted from the newest measured SAMPLE
+     *  instead, a live track's history expires under it and the predicted-pass
+     *  veto fails open on a candidate it had already judged a wide pass -
+     *  `AlertDeciderPassHistoryLifetimeTest` pins both exits. `isBehind` frames
+     *  do not refresh it: those tracks are past the rider and their history is
+     *  no longer evidence about anything. */
+    private val lastSightingMs = HashMap<Int, Long>()
+
+    /** tid -> the [Vehicle.bornAtMs] the stored history was collected under.
+     *  Presence alone cannot separate a recycled id from a continuing track:
+     *  the decoder prunes a moving track after its own short stale window, so
+     *  the next car can take the id well inside the presence window and be
+     *  judged on the previous car's geometry. The birth stamp separates them
+     *  exactly, and the decoder already carries it. */
+    private val historyBornAtMs = HashMap<Int, Long>()
+
     /** tid -> the last pass-gate VERDICT recorded for that track (a coarse
      *  tag, never the formatted line: see [logPassGate]). The gate is
      *  evaluated inside the urgent-candidate search on every frame, so only
@@ -1072,6 +1092,8 @@ class AlertDecider(
         prevBehindRaw = emptySet()
         lastNotStationaryAtMs = NOT_INITIALIZED
         lateralHistory.clear()
+        lastSightingMs.clear()
+        historyBornAtMs.clear()
         passGateLogged.clear()
         passGateOkLogged.clear()
         urgentLastQualifyingSeenMs = NOT_INITIALIZED
@@ -1081,10 +1103,11 @@ class AlertDecider(
     }
 
     /** Append this frame's usable lateral sightings to the per-track fit
-     *  history and drop stale runs. `isBehind` tracks are useless for the
-     *  pass prediction (already past the rider); `lateralUnknown` frames
-     *  carry a held-over lateral value, not a measurement, and would bias
-     *  the fit toward a stale offset.
+     *  history and drop the runs whose tracks have gone. `isBehind` tracks are
+     *  useless for the pass prediction (already past the rider);
+     *  `lateralUnknown` frames carry a held-over lateral value, not a
+     *  measurement, and would bias the fit toward a stale offset - but they
+     *  DO keep the track alive, see [lastSightingMs].
      *
      *  A sighting identical to the deque tail refreshes the tail's
      *  timestamp instead of appending. The decoder snapshot repeats a
@@ -1101,18 +1124,23 @@ class AlertDecider(
      *  timestamp keeps the gap-reset semantics for hovering tracks. */
     private fun updateLateralHistory(vehicles: List<Vehicle>, nowMs: Long) {
         for (v in vehicles) {
-            if (v.isBehind || v.lateralUnknown) continue
+            if (v.isBehind) continue
+            // Read before stamping: the gap that identifies a recycled tid is
+            // the one BEFORE this frame.
+            val previouslySeenMs = lastSightingMs[v.id]
+            lastSightingMs[v.id] = nowMs
+            if (v.lateralUnknown) continue
             val h = lateralHistory.getOrPut(v.id) { ArrayDeque() }
-            val last = h.lastOrNull()
-            if (last != null && nowMs - last.atMs > URGENT_PASS_HISTORY_RESET_MS) {
+            val recycled = historyBornAtMs.put(v.id, v.bornAtMs)?.let { it != v.bornAtMs } ?: false
+            if (recycled || (previouslySeenMs != null && nowMs - previouslySeenMs > URGENT_PASS_HISTORY_RESET_MS)) {
                 // Same tid after a dead gap = a recycled track id. A fit
                 // seeded with the previous car's geometry would be lying.
                 h.clear()
                 // Drop the logged-verdict memo HERE, not in the stale sweep
-                // below: this frame re-stamps the deque to nowMs, so by the
-                // time the sweep runs the track no longer looks stale and
-                // the new car would inherit the old one's verdict - and its
-                // own first decision would be deduped into silence.
+                // below: this frame re-stamps the track to nowMs, so by the
+                // time the sweep runs it no longer looks stale and the new
+                // car would inherit the old one's verdict - and its own first
+                // decision would be deduped into silence.
                 passGateLogged.remove(v.id)
                 passGateOkLogged.remove(v.id)
             }
@@ -1123,19 +1151,30 @@ class AlertDecider(
             h.addLast(LateralSample(nowMs, v.distanceM, v.rangeXm))
             while (h.size > URGENT_PASS_HISTORY_MAX) h.removeFirst()
         }
-        // Drop whole tracks whose newest sample has gone stale, so a
-        // recycled tid that reappears only as isBehind/lateralUnknown can
-        // never be judged on another car's history.
-        lateralHistory.entries.removeAll { (tid, deque) ->
+        // Drop whole tracks the radar has stopped reporting, so a recycled tid
+        // can never be judged on another car's history.
+        // A fit the radar has stopped refreshing stops being evidence, however
+        // present the track still is. Without this the veto freezes for the
+        // whole of a long blind approach, so a car measured wide that then
+        // changes lane into the rider is silenced the entire way in - a
+        // suppressed warning, which is the direction that matters. Bounded by
+        // observation: across the ride corpus no run of zero-lateral frames
+        // reaches three seconds.
+        lateralHistory.entries.removeAll { (_, deque) ->
             val newest = deque.lastOrNull()
-            val stale = newest == null || nowMs - newest.atMs > URGENT_PASS_HISTORY_RESET_MS
-            // The logged-verdict memo shadows the history: a recycled tid
-            // must not inherit the previous car's line and so go unlogged.
-            if (stale) {
+            newest == null || nowMs - newest.atMs > URGENT_PASS_UNMEASURED_MAX_MS
+        }
+        lastSightingMs.entries.removeAll { (tid, seenMs) ->
+            val gone = nowMs - seenMs > URGENT_PASS_HISTORY_RESET_MS
+            if (gone) {
+                lateralHistory.remove(tid)
+                historyBornAtMs.remove(tid)
+                // The logged-verdict memos shadow the history: a recycled tid
+                // must not inherit the previous car's line and so go unlogged.
                 passGateLogged.remove(tid)
                 passGateOkLogged.remove(tid)
             }
-            stale
+            gone
         }
     }
 
@@ -1654,17 +1693,18 @@ class AlertDecider(
          *  measured close to the radar across the line on those rides, not
          *  that it cannot.
          *
-         *  **Two replays, two populations - do not read one as reproducing
-         *  the other.** The sweep above reads both `.log` and `.log.gz` and
-         *  covers the whole corpus. [CorpusReplayGate] is `.log`-only and
-         *  compares against a stored baseline, so it sees a subset: measured
-         *  against the PRE-CHANGE baseline this value moved 9 captures,
-         *  removed 10 urgent cues, and left every beep and all-clear tally
-         *  identical. That baseline has since been re-recorded, so running
-         *  the gate today reproduces no diff - the figures above are the
-         *  evidence for the change, not something the gate will re-derive.
-         *  The gate is the runnable check; the sweep is where 16 of 100
-         *  comes from.
+         *  **Two replays, two populations, and the figures above are
+         *  historical.** They were measured by the sweep, which reads both
+         *  `.log` and `.log.gz`, against a [CorpusReplayGate] that then read
+         *  only `.log`, fed the decider no rider speed, forced the turn state
+         *  idle and dropped the mount offset. With no speed the urgent gates
+         *  cannot arm at all on an eBike ride, so the gate could not see this
+         *  decision. It now feeds what the live path passes and replays two
+         *  alert distances, and the two instruments have never been
+         *  reconciled: re-derived on the current gate, this scoring change is
+         *  worth roughly a tenth of urgent cues rather than the sixth quoted
+         *  above. The gate is the runnable check; the sweep is where 16 of
+         *  100 came from.
          *
          *  **Do not lower the default without re-running both.** The corpus
          *  is private ride data, so neither replay is in this tree and CI
@@ -1719,6 +1759,17 @@ class AlertDecider(
          *  would corrupt the fit. Matches the segment-split heuristic
          *  used in the offline capture analysis. */
         const val URGENT_PASS_HISTORY_RESET_MS = 1_500L
+
+        /** How long a fit may go without a fresh MEASURED lateral before it
+         *  stops being trusted, however continuously the track is reported.
+         *  The radar drops lateral for a track it still reports, and those runs
+         *  outlast [URGENT_PASS_HISTORY_RESET_MS], so presence alone has to
+         *  keep the history alive - but a frozen fit that never expires vetoes
+         *  a car swinging into the rider for its whole approach. Measured over
+         *  the ride corpus: of ~3000 zero-lateral runs the ninety-ninth
+         *  percentile is 1.9 s and the longest is 2.5 s, so a fit unrefreshed
+         *  past this is stale by observation rather than by guess. */
+        const val URGENT_PASS_UNMEASURED_MAX_MS = 3_000L
 
         /** Quiet gap (ms, no urgent-qualifying target) after which the
          *  urgent episode lapses and the next fire is a fresh first

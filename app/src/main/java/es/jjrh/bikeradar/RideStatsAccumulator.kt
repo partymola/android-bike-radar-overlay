@@ -126,6 +126,19 @@ class RideStatsAccumulator(
             // not an entire source. The lateral-derived extrema below are
             // separately guarded, so a source with no lateral still gets its
             // vehicle count and its ride row.
+            //
+            // This skip reaches further than it used to, and nobody has ruled
+            // on whether it should. A sentinel run now continues to close range
+            // rather than ending at 10 m, so a track can be flagged for its
+            // whole life and drop out of the overtake count, peakClosingKmh and
+            // exposureMs as well as the lateral extremum. Only rangeX is stale
+            // on such a frame: speedY and distanceM are measured, so the case
+            // for narrowing this to the lateral extremum alone is real. It is
+            // NOT narrowed here because the current behaviour is deliberate and
+            // pinned - see `overtakesTotalSkipsBehindAndLateralUnknownTracks`
+            // and `exposureSkipsLateralUnknownFrames`, whose comment calls a
+            // sentinel frame "not real traffic" - and reversing it changes
+            // numbers riders read and Home Assistant automations consume.
             if (v.isBehind || (v.lateralUnknown && state.source.hasLateral)) continue
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 

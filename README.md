@@ -47,7 +47,8 @@ strip; the rest of your screen stays yours. (*Image credits
   closest car nears, a distinct urgent tone fires if an impact looks
   imminent, and a clear chime sounds when the road behind is empty.
 - **Close-pass counting and ride history, all on your phone.** Counts
-  the overtakes that pass close, notifies a post-ride summary, and
+  overtakes the radar measured passing close, notifies a post-ride
+  summary, and
   keeps per-ride stats - distance, overtakes, close passes, how close
   and how fast the closest came - in app-private storage. No account,
   no location, no route.
@@ -295,7 +296,8 @@ Funciones principales:
   distinto para impacto inminente.
 - Recuento de pases cercanos e historial de rutas en el teléfono, sin
   necesidad de Home Assistant: cuenta en la pantalla de inicio los
-  adelantamientos que pasan cerca y guarda un historial por ruta (distancia,
+  adelantamientos que el radar mide pasando cerca y guarda un historial por
+  ruta (distancia,
   adelantamientos, pases cercanos, y a qué distancia y velocidad pasaron los
   más cercanos), sin ubicación ni recorrido.
 - Integración opcional con Home Assistant por MQTT: batería del radar y de la

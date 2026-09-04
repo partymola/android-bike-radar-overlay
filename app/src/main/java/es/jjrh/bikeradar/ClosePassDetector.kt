@@ -5,10 +5,17 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Pure-JVM per-track state machine that emits a single event for every
+ * Pure-JVM per-track state machine that emits at most one event per
  * genuinely-close vehicle pass. Fed one frame (vehicles + rider bike
  * speed + timestamp) at a time; returns the list of events that fired
  * on that frame.
+ *
+ * NOT every close pass: a pass the radar never measured laterally emits
+ * nothing at all, because every one of its frames is skipped (see the
+ * `lateralUnknown` skip below). `a pass made entirely of lateral-unknown
+ * frames emits nothing` pins that, and it is deliberate. A held-over
+ * offset is not a measurement, so the count under-reports rather than
+ * inventing a clearance it never saw.
  *
  * Design target: signal, not volume. London commuting produces a steady
  * trickle of "over 1.5 m but not by much" passes — logging those is

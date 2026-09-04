@@ -252,6 +252,28 @@ class ClosePassDetectorTest {
         assertTrue("lateral-unknown frame must not pollute min tracking", events.isEmpty())
     }
 
+    @Test fun `a pass made entirely of lateral-unknown frames emits nothing`() {
+        // The blast radius of that skip, pinned rather than left to be
+        // rediscovered. The decoder holds a sentinel run open all the way in,
+        // so a whole overtake can arrive with every frame flagged. The
+        // detector never arms, and the pass goes uncounted instead of being
+        // counted at a fabricated 0.0 m. Under-reporting is the deliberate
+        // direction; see the skip's comment in ClosePassDetector.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            listOf(veh(distanceM = 25, lateralPos = 0f, lateralUnknown = true)) to 0L,
+            listOf(veh(distanceM = 18, lateralPos = 0f, lateralUnknown = true)) to 100L,
+            listOf(veh(distanceM = 12, lateralPos = 0f, lateralUnknown = true)) to 200L,
+            listOf(veh(distanceM = 6, lateralPos = 0f, lateralUnknown = true)) to 300L,
+            listOf(veh(distanceM = 2, lateralPos = 0f, lateralUnknown = true)) to 400L,
+            emptyList<Vehicle>() to 500L,
+        )
+        assertTrue(
+            "an unmeasured pass must be uncounted, never counted at a fabricated zero",
+            drive(d, frames).isEmpty(),
+        )
+    }
+
     // ── disabled ─────────────────────────────────────────────────────────────
 
     @Test fun `disabled config never emits`() {

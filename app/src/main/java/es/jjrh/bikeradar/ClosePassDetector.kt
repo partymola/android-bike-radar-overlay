@@ -168,7 +168,12 @@ class ClosePassDetector {
             // position reliably. The decoder's lateralUnknown flag fires
             // wherever the radar emits its rangeXBits=0 sentinel, close range
             // included once a run has started; without this skip those frames
-            // pull min-rangeX to zero artificially.
+            // pull min-rangeX to zero artificially. A pass whose every frame is
+            // flagged therefore emits NOTHING and goes uncounted, rather than
+            // being counted at a fabricated 0.0 m. That is the deliberate
+            // direction: a held-over offset is not a measurement, and the ride
+            // record must not carry one as though it were. `a pass made
+            // entirely of lateral-unknown frames emits nothing` pins it.
             if (v.lateralUnknown) continue
 
             // Arm the track if all gates pass.

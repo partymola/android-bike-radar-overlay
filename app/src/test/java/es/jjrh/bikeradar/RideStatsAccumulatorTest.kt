@@ -175,7 +175,12 @@ class RideStatsAccumulatorTest {
     }
 
     @Test
-    fun overtakesTotalSkipsBehindAndLateralUnknownTracks() {
+    fun overtakesTotalSkipsBehindButCountsLateralUnknownTracks() {
+        // A lateral-unknown frame is a stale CHANNEL, not a bad frame: the
+        // track's presence and distance are measured on it, and those are what
+        // an overtake count rests on. Only a track already past the rider is
+        // skipped. Counting it was the point of narrowing the skip; the
+        // decoder's longer sentinel runs mean a whole track can carry the flag.
         val a = acc()
         a.observeFrame(
             radarState(
@@ -186,7 +191,19 @@ class RideStatsAccumulatorTest {
                 ),
             ),
         )
-        assertEquals(1, a.snapshot().overtakesTotal)
+        assertEquals(2, a.snapshot().overtakesTotal)
+    }
+
+    @Test
+    fun aWhollyUnmeasuredTrackStillCountsAndSetsThePeakClosingSpeed() {
+        // The case the narrowing exists for: the radar reports the track for
+        // its whole life without ever measuring its lateral position. Its
+        // closing speed is a real reading, so it must reach peakClosingKmh.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, speedMs = -12f, lateralUnknown = true))))
+        val s = a.snapshot()
+        assertEquals(1, s.overtakesTotal)
+        assertEquals(43, s.peakClosingKmh)
     }
 
     @Test
@@ -586,15 +603,36 @@ class RideStatsAccumulatorTest {
 
     // covers RideStatsAccumulator.kt:88
     @Test
-    fun exposureSkipsLateralUnknownFrames() {
-        // A lateral-unknown sentinel frame is not real traffic. Kills a mutant
-        // that drops the `!v.lateralUnknown` term from anyTraffic.
+    fun exposureCountsLateralUnknownFrames() {
+        // A sentinel frame IS real traffic: the car is there and its distance
+        // is measured, which is all this gate asks. Skipping it stopped "in
+        // traffic" time accruing while the radar was actively reporting a
+        // vehicle behind the rider.
         val clock = FakeClock(start = 0L)
         val a = acc(clock)
         a.observeFrame(radarState(emptyList())) // seed prev
         clock.advance(2_000L)
         a.observeFrame(radarState(listOf(veh(1, lateralUnknown = true))))
-        assertEquals(0L, a.snapshot().exposureSeconds)
+        assertEquals(2L, a.snapshot().exposureSeconds)
+    }
+
+    @Test
+    fun theLateralClearanceIsTheOneFigureASentinelFrameStillVetoes() {
+        // The other half of the narrowing, and the reason it is not simply
+        // deleted: the offset on such a frame is held over from an earlier
+        // measurement, so recording it would publish a clearance the radar
+        // never saw. Null is the honest value.
+        val clock = FakeClock(start = 0L)
+        val a = acc(clock)
+        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f, lateralUnknown = true))))
+        assertNull(
+            "a held offset must not become a measured clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+
+        // A measured frame on the same ride does set it.
+        a.observeFrame(radarState(listOf(veh(2, lateralPos = 0.5f))))
+        assertEquals(1.5f, a.snapshot().minLateralClearanceM!!, 0.001f)
     }
 
     // covers RideStatsAccumulator.kt:89

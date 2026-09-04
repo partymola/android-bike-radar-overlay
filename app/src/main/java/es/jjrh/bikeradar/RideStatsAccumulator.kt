@@ -95,18 +95,18 @@ class RideStatsAccumulator(
                 distanceRiddenM += speedForInterval.toDouble() * dtMs / 1000.0
                 generation++
             }
-            // Exposure: any tracked vehicle (excluding alongside-stationary
-            // and lateralUnknown sentinel frames) means the rider is in
-            // traffic for this interval.
-            // The lateralUnknown skip is about a BAD FRAME on a source that
-            // has lateral, so it must not apply to a source that has none:
-            // that would make every frame of a legacy ride look bad and leave
-            // the rider a ride record of all zeroes, which reads as "quiet
-            // ride" rather than "not measured".
+            // Exposure: any tracked vehicle (excluding alongside-stationary)
+            // means the rider is in traffic for this interval.
+            //
+            // A lateral-unknown frame counts. The sentinel says one CHANNEL is
+            // stale, not that the frame is bad: the vehicle's presence and its
+            // distance are measured on it either way, and presence is the only
+            // thing this gate asks about. Skipping it stopped "in traffic" time
+            // accruing while a car the radar was actively reporting sat behind
+            // the rider, which the decoder's longer sentinel runs made common.
             val anyTraffic = state.vehicles.any { v ->
                 !v.isBehind &&
                     !v.isAlongsideStationary &&
-                    (!v.lateralUnknown || !state.source.hasLateral) &&
                     v.distanceM in 0..MAX_TRACK_DISTANCE_M
             }
             if (anyTraffic) {
@@ -122,20 +122,7 @@ class RideStatsAccumulator(
 
         // Per-frame extrema and overtake-id dedup.
         for (v in state.vehicles) {
-            // Same distinction as the exposure gate above: skip a bad frame,
-            // not an entire source. The lateral-derived extrema below are
-            // separately guarded, so a source with no lateral still gets its
-            // vehicle count and its ride row.
-            //
-            // This skip reaches further than it used to: a sentinel run now
-            // continues to close range, so a track can be flagged for its whole
-            // life and drop out of the overtake count, peakClosingKmh and
-            // exposureMs as well as the lateral extremum. That is deliberate
-            // and pinned by `overtakesTotalSkipsBehindAndLateralUnknownTracks`
-            // and `exposureSkipsLateralUnknownFrames`, whose comment calls a
-            // sentinel frame "not real traffic". Narrowing it changes numbers
-            // riders read and Home Assistant automations consume.
-            if (v.isBehind || (v.lateralUnknown && state.source.hasLateral)) continue
+            if (v.isBehind) continue
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
             if (seenTrackIds.add(v.id)) generation++
@@ -150,12 +137,19 @@ class RideStatsAccumulator(
                 }
             }
 
-            // Source capability, not just the alongside gate: on a source with
-            // no lateral channel every lateralPos is 0f, and recording that
-            // would write a 0.0 m clearance into the ride record and publish it
-            // to Home Assistant as though it had been measured. Null is the
-            // honest value for "never measured"; the counts above still accrue.
-            if (!v.isAlongsideStationary && state.source.hasLateral) {
+            // The ONLY figure the lateral sentinel is allowed to veto, and the
+            // reason the skip is here rather than at the top of the loop: a
+            // held-over offset is not a measurement, so recording it would
+            // write a clearance into the ride record and publish it to Home
+            // Assistant as though the radar had seen it. Null is the honest
+            // value for "never measured"; the count, the closing peak and the
+            // exposure gate above all read the frame regardless, because they
+            // rest on channels that ARE measured.
+            //
+            // Source capability guards the same figure for a different reason:
+            // on a stream with no lateral channel every lateralPos is 0f, which
+            // would record a 0.0 m clearance on every track.
+            if (!v.isAlongsideStationary && state.source.hasLateral && !v.lateralUnknown) {
                 val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
                 val current = minLateralM
                 if (current == null || lateralM < current) {

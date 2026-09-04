@@ -15,13 +15,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The End ride control's offer rule, driven through the real [ctaFor].
+ * The End ride control, driven through the real [ctaFor]: when it is offered
+ * and when it is withheld.
  *
  * [es.jjrh.bikeradar.RadarLinkStatus.canEndRide] already pins WHEN the offer is
- * allowed. This pins that the screen actually asks it, and that a true answer
- * produces a control rather than the null the live-and-well branch returns.
- * Without it the predicate could be correct while nothing on screen used it,
- * which is the shape the repo's "pin the wiring, not the pure core" rule names.
+ * allowed. This pins that the screen actually asks it, and that the answer
+ * survives the branch's own freshness term. Without them the predicate could be
+ * correct while nothing on screen used it.
+ *
+ * The four states of the two terms the branch reads are covered one test each:
+ * either alone answering every case would leave the other unpinned.
  */
 @RunWith(AndroidJUnit4::class)
 class MainScreenEndRideCtaTest {
@@ -30,37 +33,35 @@ class MainScreenEndRideCtaTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
 
-    /** The live-and-well inputs, which on their own yield no CTA. Every earlier
-     *  branch in [ctaFor] is deliberately satisfied so the End ride branch is
-     *  the only one that can fire. */
-    private fun liveInputs() = MainStatusInputs(
-        firstRunComplete = true,
-        pausedUntilEpochMs = 0L,
-        hasBond = true,
-        radarFresh = true,
-        haErrorRecent = false,
-        dashcamOwned = false,
-        dashcamWarnWhenOff = false,
-        dashcamFresh = false,
-        dashcamDisplayName = null,
-        serviceEnabled = true,
-        bluetoothEnabled = true,
-    )
-
+    /** Inputs with every branch of [ctaFor] ABOVE End ride deliberately
+     *  satisfied, so that branch is the only one that can fire. Both terms it
+     *  reads are passed explicitly: the state under test is the pair. */
     @Composable
-    private fun ctaWith(canEndRide: Boolean): StatusCta? = ctaFor(
-        inputs = liveInputs(),
+    private fun ctaWith(rideEndOfferable: Boolean, radarFresh: Boolean): StatusCta? = ctaFor(
+        inputs = MainStatusInputs(
+            firstRunComplete = true,
+            pausedUntilEpochMs = 0L,
+            hasBond = true,
+            radarFresh = radarFresh,
+            haErrorRecent = false,
+            dashcamOwned = false,
+            dashcamWarnWhenOff = false,
+            dashcamFresh = false,
+            dashcamDisplayName = null,
+            serviceEnabled = true,
+            bluetoothEnabled = true,
+            rideEndOfferable = rideEndOfferable,
+        ),
         nowMs = 1_000L,
         navController = rememberNavController(),
         ctx = app,
         prefs = Prefs(app),
-        canEndRide = canEndRide,
     )
 
     @Test
     fun aDownRadarAfterARideOffersTheControl() {
         var label: String? = null
-        compose.setContent { label = ctaWith(canEndRide = true)?.label }
+        compose.setContent { label = ctaWith(rideEndOfferable = true, radarFresh = false)?.label }
         compose.waitForIdle()
         // The literal, not the resource: the label is the whole rider-facing
         // contract of this control, and it must not silently become something
@@ -76,11 +77,47 @@ class MainScreenEndRideCtaTest {
         var cta: StatusCta? = null
         var evaluated = false
         compose.setContent {
-            cta = ctaWith(canEndRide = false)
+            cta = ctaWith(rideEndOfferable = false, radarFresh = true)
             evaluated = true
         }
         compose.waitForIdle()
         assertEquals("the branch must have been reached", true, evaluated)
         assertNull("no CTA while the radar is live", cta)
+    }
+
+    @Test
+    fun aBriefMidRideDropOffersNothing() {
+        // The fourth state, and the one the offer threshold exists for: a
+        // routine BLE blip leaves the radar stale but under the gate. Without
+        // this the offer term itself is unpinned, since the freshness term
+        // alone answers every other case, and a full-width control that
+        // silences the drop cue would appear at every mid-ride drop.
+        var cta: StatusCta? = null
+        var evaluated = false
+        compose.setContent {
+            cta = ctaWith(rideEndOfferable = false, radarFresh = false)
+            evaluated = true
+        }
+        compose.waitForIdle()
+        assertEquals("the branch must have been reached", true, evaluated)
+        assertNull("a sub-threshold drop must not be offered the control", cta)
+    }
+
+    @Test
+    fun aRadarStillReadingLiveIsNeverOfferedTheControl() {
+        // The congruence pin: an offer the hero would not make must not reach
+        // the button, or a green "Radar live" card carries an "I've parked"
+        // control. A release build reaches this once dev mode is unlocked,
+        // because Replay and Synthetic publish frames with no link, so the
+        // radar reads live while the off-instant still stands.
+        var cta: StatusCta? = null
+        var evaluated = false
+        compose.setContent {
+            cta = ctaWith(rideEndOfferable = true, radarFresh = true)
+            evaluated = true
+        }
+        compose.waitForIdle()
+        assertEquals("the branch must have been reached", true, evaluated)
+        assertNull("a live radar must not be offered the parked control", cta)
     }
 }

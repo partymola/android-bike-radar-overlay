@@ -214,7 +214,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val dashcamOwned = prefsSnap.dashcamOwnership == DashcamOwnership.YES
 
     // Computed before the inputs so the hero copy and the button are decided
-    // by one predicate. Split, the card can ask a question no button answers.
+    // from the same ones. Split, the card can ask a question no button answers.
     val canEndRide = RadarLinkStatus.canEndRide(
         radarEverLive = radarLinkSnap.sessionRadarConnectedMs > 0L,
         downForMs = radarLinkSnap.radarOffSinceMs?.let { SystemClock.elapsedRealtime() - it },
@@ -252,7 +252,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             stringResource(it, *statusModel.subtitleArgs.toTypedArray())
         },
     )
-    val cta = ctaFor(inputs, now, navController, ctx, prefs, canEndRide)
+    val cta = ctaFor(inputs, now, navController, ctx, prefs)
 
     val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
         status.tone == MainStatusTone.Warn
@@ -720,7 +720,6 @@ internal fun ctaFor(
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
-    canEndRide: Boolean,
 ): StatusCta? {
     // Hoisted out of the onClick lambda below: stringResource is
     // @Composable-only and cannot be called from the click handler.
@@ -765,7 +764,14 @@ internal fun ctaFor(
         // comes, the control withholds itself once used, and there is no undo,
         // so the drop alert stays off for the rest of the session. Do not widen
         // the gate on the strength of the cheap case.
-        canEndRide -> StatusCta(
+        //
+        // The freshness term is what makes this branch agree with the hero,
+        // which offers the parked question only from its stale-radar block.
+        // Stated here so neither surface depends on the link controller's
+        // connect and teardown ordering, nor on two unrelated constants in
+        // separate files agreeing. Pinned by
+        // MainScreenEndRideCtaTest.aRadarStillReadingLiveIsNeverOfferedTheControl.
+        inputs.rideEndOfferable && !inputs.radarFresh -> StatusCta(
             label = stringResource(R.string.main_cta_parked),
             onClick = {
                 ContextCompat.startForegroundService(ctx, BikeRadarService.endRideIntent(ctx))

@@ -532,8 +532,8 @@ class AlertDecider(
      *  reset the slot; the off-axis and corroboration halves hold by the
      *  same construction but have no test, because a track cannot be both
      *  inside the margin and beyond the off-axis bar on one frame. Pruned
-     *  wherever [passGateLogged] is - all three sites, two of which sit
-     *  inside [updateLateralHistory]. */
+     *  wherever [passGateLogged] is, which is [reset] plus every prune inside
+     *  [updateLateralHistory]. */
     private val passGateOkLogged = HashMap<Int, MutableSet<String>>()
 
     /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
@@ -1160,9 +1160,28 @@ class AlertDecider(
         // suppressed warning, which is the direction that matters. Bounded by
         // observation: across the ride corpus no run of zero-lateral frames
         // reaches three seconds.
-        lateralHistory.entries.removeAll { (_, deque) ->
-            val newest = deque.lastOrNull()
-            newest == null || nowMs - newest.atMs > URGENT_PASS_UNMEASURED_MAX_MS
+        val staleFits = lateralHistory.entries
+            .filter { (_, deque) ->
+                val newest = deque.lastOrNull()
+                newest == null || nowMs - newest.atMs > URGENT_PASS_UNMEASURED_MAX_MS
+            }
+            .map { it.key }
+        for (tid in staleFits) {
+            val newest = lateralHistory.remove(tid)?.lastOrNull()
+            // The memos shadow the history. A fit rebuilt after this is a new
+            // fit, so its first verdict has to reach the log rather than being
+            // deduped against the one the discarded history earned.
+            passGateLogged.remove(tid)
+            passGateOkLogged.remove(tid)
+            // Only worth a line while the radar is still reporting the track:
+            // that is the case where a live candidate silently stops being
+            // judged, and it is what a capture has to show to be readable.
+            if (newest != null && lastSightingMs[tid] == nowMs) {
+                onGateEvent(
+                    "# gate urgent-pass-stale tid=$tid" +
+                        " unmeasured_ms=${nowMs - newest.atMs}",
+                )
+            }
         }
         lastSightingMs.entries.removeAll { (tid, seenMs) ->
             val gone = nowMs - seenMs > URGENT_PASS_HISTORY_RESET_MS
@@ -1699,8 +1718,12 @@ class AlertDecider(
          *  only `.log`, fed the decider no rider speed, forced the turn state
          *  idle and dropped the mount offset. With no speed the urgent gates
          *  cannot arm at all on an eBike ride, so the gate could not see this
-         *  decision. It now feeds what the live path passes and replays two
-         *  alert distances, and the two instruments have never been
+         *  decision. It now feeds the rider speed, turn state and mount offset
+         *  the live path passes, and replays two alert distances. Two inputs
+         *  stay at their defaults, `urgentLowSpeedEnabled` and this constant,
+         *  because no capture header records either; both defaults are the
+         *  shipped ones, so the replay judges the configuration riders run
+         *  rather than an arbitrary one. The two instruments have never been
          *  reconciled: re-derived on the current gate, this scoring change is
          *  worth roughly a tenth of urgent cues rather than the sixth quoted
          *  above. The gate is the runnable check; the sweep is where 16 of
@@ -1760,12 +1783,18 @@ class AlertDecider(
          *  used in the offline capture analysis. */
         const val URGENT_PASS_HISTORY_RESET_MS = 1_500L
 
-        /** How long a fit may go without a fresh MEASURED lateral before it
-         *  stops being trusted, however continuously the track is reported.
-         *  The radar drops lateral for a track it still reports, and those runs
-         *  outlast [URGENT_PASS_HISTORY_RESET_MS], so presence alone has to
-         *  keep the history alive - but a frozen fit that never expires vetoes
-         *  a car swinging into the rider for its whole approach. Measured over
+        /** How long a fit may go without a fresh lateral SAMPLE before it stops
+         *  being trusted. The radar drops lateral for a track it still reports,
+         *  and those runs outlast [URGENT_PASS_HISTORY_RESET_MS], so presence
+         *  alone has to keep the history alive - but a frozen fit that never
+         *  expires vetoes a car swinging into the rider for its whole approach.
+         *
+         *  What refreshes it is a sample reaching the deque, and a repeat of an
+         *  unchanged measured value does that too (see [updateLateralHistory]'s
+         *  dedupe), so a track the decoder is re-emitting from held values can
+         *  outlive the cap. No such track can clear the urgent closing floors,
+         *  so that is a limit on what this constant can promise rather than a
+         *  way for the veto to freeze. Measured over
          *  the ride corpus, counting a run as consecutive zero-lateral frames
          *  on one live track and treating a track absent past the decoder's
          *  moving-stale window as a new one: the ninety-ninth percentile is

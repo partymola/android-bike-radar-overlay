@@ -84,6 +84,21 @@ class RadarStateProjectionTest {
     }
 
     @Test
+    fun aSentinelRunCrossesTheWireCarryingAHeldOffset() {
+        // What the decoder produces mid-run: the flag is set, and rangeXm holds
+        // the offset from the last MEASURED frame, so the number on the wire is
+        // plausible rather than empty. A consumer reading rangeXm without
+        // checking lateralKnown draws the target where it last was, not where
+        // it is. The run continues to close range, so this reaches a consumer
+        // on exactly the frames where a target is nearest.
+        val held = vehicle(distanceM = 6, lateralPos = 1f, rangeXm = 3f, lateralUnknown = true)
+        val p = RadarStateProjection.toParcel(held, DataSource.V2)
+        assertFalse("the flag is the only marker that this is not a measurement", p.lateralKnown)
+        assertEquals("the held value still crosses, so the flag has to be read", 3f, p.rangeXm, 0f)
+        assertEquals(6, p.distanceM)
+    }
+
+    @Test
     fun everyVehicleClassMapsToItsOwnWireCode() {
         assertEquals(0, RadarStateProjection.toParcel(vehicle(size = VehicleSize.CAR), DataSource.V2).size)
         assertEquals(1, RadarStateProjection.toParcel(vehicle(size = VehicleSize.TRUCK), DataSource.V2).size)

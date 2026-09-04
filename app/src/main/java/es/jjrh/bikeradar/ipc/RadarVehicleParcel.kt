@@ -35,6 +35,12 @@ data class RadarVehicleParcel(
     val lateralPos: Float,
     val rangeXm: Float,
     val isAhead: Boolean,
-    /** False when this frame's lateral read was not usable, whatever the source can do. */
+    /** False when this frame's lateral read was not usable, whatever the source
+     *  can do. [lateralPos] and [rangeXm] still carry a value on such a frame:
+     *  from a stream with a lateral channel it is the offset the target last
+     *  measured at, held forward so a drawing consumer sees continuity; from one
+     *  without, it is a zero default. Neither is a measurement, so read this
+     *  flag before trusting either. It can stay false for a long run of
+     *  consecutive frames, the closest ones included. */
     val lateralKnown: Boolean,
 )

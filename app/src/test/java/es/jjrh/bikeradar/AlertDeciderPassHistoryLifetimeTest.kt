@@ -193,6 +193,67 @@ class AlertDeciderPassHistoryLifetimeTest {
         assertTrue("the new car must not be judged on the old one's geometry, got $ev", ev is AlertDecider.Event.UrgentApproach)
     }
 
+    @Test fun `a fit rebuilt after the cap expires logs its verdict again`() {
+        // The memos that dedupe gate lines are keyed per track, so they have to
+        // go when the history does. Left behind, a rebuilt fit's first verdict
+        // is deduped against one the DISCARDED history earned, and the capture
+        // stops saying why a live candidate is being vetoed - which is the one
+        // question a capture of this artefact has to answer.
+        val c = Clock()
+        val lines = mutableListOf<String>()
+        val d = AlertDecider(
+            stationaryDwellMs = 2000L,
+            minBeepGapMs = 700L,
+            onGateEvent = { lines += it },
+        )
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        fun vetoLines() = lines.count { it.startsWith("# gate urgent-pass-veto") }
+
+        // The approach frames sit beyond alertMax and close too slowly to
+        // qualify, so they build the fit without reaching the gate. Two frames
+        // inside the envelope then: the first only earns the sustain, the
+        // second is judged.
+        measuredSidePassApproach(c, d)
+        repeat(2) { d.decide(listOf(sideCar(12, -8f, 3f)), alertMax, c.tick(), bikeSpeedMs = 0f) }
+        assertEquals("the first veto must be logged, got $lines", 1, vetoLines())
+
+        // The radar keeps reporting the track but stops measuring lateral,
+        // past the cap, so the fit is discarded.
+        repeat(40) {
+            d.decide(listOf(sideCar(12, -8f, 3f, lateralUnknown = true)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        // Lateral returns and a fresh fit is built from nothing. The approach
+        // takes the track back out of the envelope, so the sustain is re-earned
+        // the same way.
+        measuredSidePassApproach(c, d)
+        repeat(2) { d.decide(listOf(sideCar(12, -8f, 3f)), alertMax, c.tick(), bikeSpeedMs = 0f) }
+        assertEquals("a rebuilt fit's verdict must reach the log, got $lines", 2, vetoLines())
+    }
+
+    @Test fun `an expiring fit says so while the radar is still reporting the track`() {
+        // The other half: without a line at the moment the fit is dropped, a
+        // capture shows a veto, then silence, then a cue, with nothing saying
+        // the veto stopped applying. Only logged while the track is present,
+        // because a fit expiring because its track left is not news.
+        val c = Clock()
+        val lines = mutableListOf<String>()
+        val d = AlertDecider(
+            stationaryDwellMs = 2000L,
+            minBeepGapMs = 700L,
+            onGateEvent = { lines += it },
+        )
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(2000)
+        measuredSidePassApproach(c, d)
+        repeat(40) {
+            d.decide(listOf(sideCar(12, -8f, 3f, lateralUnknown = true)), alertMax, c.tick(), bikeSpeedMs = 0f)
+        }
+        val stale = lines.filter { it.startsWith("# gate urgent-pass-stale") }
+        assertEquals("exactly one line per expiry, got $lines", 1, stale.size)
+        assertTrue("the line must carry the track and the age, got $stale", stale[0].contains("tid=1") && stale[0].contains("unmeasured_ms="))
+    }
+
     // `AlertDeciderTest`'s recycled-tid tests drive a FRAMELESS gap, so
     // `updateLateralHistory` never runs during it and both the old and the new
     // lifetime read the same number. They are not witnesses for this change -

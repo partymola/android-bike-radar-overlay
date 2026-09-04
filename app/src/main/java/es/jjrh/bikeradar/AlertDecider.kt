@@ -1722,11 +1722,15 @@ class AlertDecider(
          *  `.log` and `.log.gz`, against a [CorpusReplayGate] that then read
          *  only `.log`, took rider speed from the radar's device-status field
          *  alone, forced the turn state idle and dropped the mount offset.
-         *  About half the corpus carries that field; on the rest the speed
-         *  came from the bonded eBike, so there the urgent gates could not arm
-         *  at all and the gate could not see this decision. Feeding both
-         *  sources moved the corpus from 65 urgent cues to 55 and changed 34
-         *  of 176 captures. It now feeds the rider speed, turn state and mount offset
+         *  It never read the eBike's wheel speed, which the live path prefers
+         *  and which carries the not-driving flag. Of 201 distinct captures 94
+         *  carry the radar's field, 72 of those carry eBike lines too, and 105
+         *  carry no rider speed at all; on that last group the urgent gates
+         *  could not arm and the gate could not see this decision. Feeding
+         *  both sources moved the corpus from 65 urgent cues to 55 and changed
+         *  34 of 176 captures.
+         *
+         *  It now feeds the rider speed, turn state and mount offset
          *  the live path passes, and replays two alert distances. Two inputs
          *  stay at their defaults, `urgentLowSpeedEnabled` and this constant,
          *  because no capture header records either; both defaults are the
@@ -1814,8 +1818,9 @@ class AlertDecider(
          *  closing faster than [RadarV2Decoder.MOVING_SPEED_MS] after 800 ms,
          *  far inside this cap, so only a track at or below 1 m/s can survive
          *  on repeats, and 1 m/s clears neither the 6 m/s nor the 10 m/s floor.
-         *  Raise either of those and this sentence becomes false with nothing
-         *  red. Measured over
+         *  Raise either of those and this sentence silently becomes false.
+         *
+         *  Measured over
          *  the ride corpus, counting a run as consecutive zero-lateral frames
          *  on one live track and treating a track absent past the decoder's
          *  moving-stale window as a new one: the ninety-ninth percentile is

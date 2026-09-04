@@ -47,9 +47,8 @@ strip; the rest of your screen stays yours. (*Image credits
   closest car nears, a distinct urgent tone fires if an impact looks
   imminent, and a clear chime sounds when the road behind is empty.
 - **Close-pass counting and ride history, all on your phone.** Counts
-  overtakes the radar measured passing close, notifies a post-ride
-  summary, and
-  keeps per-ride stats - distance, overtakes, close passes, how close
+  the close overtakes the radar actually measured, notifies a post-ride
+  summary, and keeps per-ride stats - distance, overtakes, close passes, how close
   and how fast the closest came - in app-private storage. No account,
   no location, no route.
 
@@ -112,7 +111,7 @@ With a Bosch eBike the sound when the radar drops works from the bike, as
 before. Without one it is expected to fire only if the radar was still seeing
 traffic behind you shortly before the link died, because the radar cannot
 report your own speed and recent traffic is what tells the app you are still
-riding; on an empty road it stays silent. You can turn that substitute off in
+riding; on an empty road it stays silent. You can turn that stand-in off in
 **Settings → Experimental**. That fallback is new in 1.4.0 and nobody has
 confirmed it on real hardware yet.
 
@@ -296,9 +295,8 @@ Funciones principales:
   distinto para impacto inminente.
 - Recuento de pases cercanos e historial de rutas en el teléfono, sin
   necesidad de Home Assistant: cuenta en la pantalla de inicio los
-  adelantamientos que el radar mide pasando cerca y guarda un historial por
-  ruta (distancia,
-  adelantamientos, pases cercanos, y a qué distancia y velocidad pasaron los
+  adelantamientos cercanos que el radar llega a medir y guarda un historial
+  por ruta (distancia, adelantamientos, pases cercanos, y a qué distancia y velocidad pasaron los
   más cercanos), sin ubicación ni recorrido.
 - Integración opcional con Home Assistant por MQTT: batería del radar y de la
   cámara delantera, modo de la luz delantera, eventos de pase cercano y resumen

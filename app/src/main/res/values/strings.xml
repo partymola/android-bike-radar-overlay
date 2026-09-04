@@ -427,8 +427,8 @@
     <string name="settings_radar_idle_after_helper">Once the radar\'s been out of range this long, retries slow to the interval below so Bluetooth can rest while the bike is parked.</string>
     <string name="settings_radar_idle_interval_title">Idle reconnect interval</string>
     <string name="settings_radar_idle_interval_helper">How often to retry the connection while the radar is idled out. Longer values save battery overnight; shorter values pick up the radar faster when you come back.</string>
-    <string name="settings_radar_banner_persistent_title">Keep the drop banner on screen</string>
-    <string name="settings_radar_banner_persistent_subtitle">Without a Bosch eBike: keep the rear-radar warning on screen until the radar reconnects, instead of hiding it after a few seconds.</string>
+    <string name="settings_radar_banner_persistent_title">Keep the drop warning on screen</string>
+    <string name="settings_radar_banner_persistent_subtitle">Without a Bosch eBike: it stays up until the radar reconnects, instead of hiding after a few seconds.</string>
     <string name="settings_radar_low_battery_title">Low-battery threshold</string>
     <string name="settings_radar_low_battery_helper">Show an amber warning beside the rider when any paired device drops below this level.</string>
     <string name="settings_radar_show_labels_title">Show device labels</string>

@@ -465,10 +465,11 @@ class RadarV2Decoder(
          *  to 5 m.
          *
          *  That 71 m does not contradict the seconds-scale run lengths quoted
-         *  at [AlertDecider.URGENT_PASS_UNMEASURED_MAX_MS]. It was a bench
-         *  capture, radar indoors reporting 47 m/s, so the run is about a
-         *  second of frames and sits well inside that cap. Read the two
-         *  together before concluding either is wrong.
+         *  at [AlertDecider.URGENT_PASS_UNMEASURED_MAX_MS]. The run is thirteen
+         *  frames at the radar's target cadence, so about a second, and sits
+         *  well inside that cap; the distance is large because the track's
+         *  reported closing speed was absurd. Read the two together before
+         *  concluding either is wrong.
          *  `RadarV2DecoderSentinelRunTest` pins both directions. */
         const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
 

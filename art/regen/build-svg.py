@@ -359,7 +359,7 @@ def main():
         svg = build(font, tmpdir)
     with open(args.out, "w") as fh:
         fh.write(svg)
-    print(f"{os.path.normpath(args.out)}  {len(svg)} bytes")
+    print(f"{os.path.normpath(args.out)}  {len(svg.encode('utf-8'))} bytes")
 
 
 if __name__ == "__main__":

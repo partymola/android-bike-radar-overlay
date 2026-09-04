@@ -613,6 +613,27 @@ class RadarV2DecoderTest {
         assertTrue("dwell+slow+lateral+close+stationary must set flag", v.isAlongsideStationary)
     }
 
+    @Test fun alongsideStationaryCanBeReachedByASentinelRunAndThatIsIntended() {
+        // A run started off-axis holds an offset of at least
+        // LATERAL_UNKNOWN_PREV_LATERAL_THRESHOLD * LATERAL_FULL_M = 1.5 m, which
+        // clears ALONGSIDE_MIN_LATERAL_M. Before a run was allowed to continue
+        // inside the range gate, a close zero read as dead centre and the dock
+        // could not engage. Queue traffic beside a crawling rider is what the
+        // dock is for, so a held offset reaching it is the right reading and
+        // not a side effect to remove. It does mean such a track leaves the
+        // beep close-set, which is the cost.
+        decoder.feed(byteArrayOf(0x04, 0x00, 8)) // rider 2.0 m/s
+        // Off-axis and far, so the run can begin.
+        decoder.feed(packet(target(tid = 1, rangeY = 250, rangeX = 20)))
+        now += 100
+        decoder.feed(packet(target(tid = 1, rangeY = 150, rangeX = 0)))
+        now += RadarV2Decoder.ALONGSIDE_MIN_DURATION_MS + 1
+        val v = decoder.feed(packet(target(tid = 1, rangeY = 60, rangeX = 0)))!!
+            .vehicles.single { it.id == 1 }
+        assertTrue("the run must still read as unknown inside the gate", v.lateralUnknown)
+        assertTrue("a held offset is what lets queue traffic dock", v.isAlongsideStationary)
+    }
+
     @Test fun alongsideStationaryRequiresMinDuration() {
         decoder.feed(byteArrayOf(0x04, 0x00, 8)) // 2 m/s
         // Single-frame appearance -> dwell gate must reject.

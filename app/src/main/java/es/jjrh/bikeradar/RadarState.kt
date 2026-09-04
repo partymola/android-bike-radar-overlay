@@ -104,6 +104,13 @@ data class Vehicle(
      * Recomputed every snapshot - flips back to false the moment any
      * gate breaks (e.g. the target starts closing), and the resulting
      * pop back to a normal filled box is the rider's attention cue.
+     *
+     * A [lateralUnknown] run can reach this dock, because it holds an offset
+     * wide enough to clear the lateral gate, and that is intended: queue
+     * traffic beside a crawling rider is the case the dock exists for. The
+     * cost is that such a track leaves the beep close-set. The all-clear is
+     * unaffected, since its presence gate counts alongside tracks.
+     * `alongsideStationaryCanBeReachedByASentinelRunAndThatIsIntended` pins it.
      */
     val isAlongsideStationary: Boolean = false,
     /**

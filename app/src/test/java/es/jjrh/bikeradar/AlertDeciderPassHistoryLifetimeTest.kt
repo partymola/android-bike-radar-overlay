@@ -251,7 +251,10 @@ class AlertDeciderPassHistoryLifetimeTest {
         }
         val stale = lines.filter { it.startsWith("# gate urgent-pass-stale") }
         assertEquals("exactly one line per expiry, got $lines", 1, stale.size)
-        assertTrue("the line must carry the track and the age, got $stale", stale[0].contains("tid=1") && stale[0].contains("unmeasured_ms="))
+        // The literal age, not just the key: the last measured sample sits at
+        // t=2500 and the first frame past the cap at t=5600, so a constant
+        // substituted for the subtraction has to fail here.
+        assertEquals("# gate urgent-pass-stale tid=1 unmeasured_ms=3100", stale[0])
     }
 
     // `AlertDeciderTest`'s recycled-tid tests drive a FRAMELESS gap, so

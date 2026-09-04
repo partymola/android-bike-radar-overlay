@@ -690,7 +690,11 @@ internal class RadarLinkCoordinator(
          *  how recently before the drop a range-only radar must have reported a
          *  vehicle. Deliberately its own constant rather than a reuse of
          *  [RADAR_DROP_ACTIVITY_FRESH_MS] - the two happen to agree at 30 s and
-         *  were measured separately, so tuning one must not move the other. At
+         *  were measured separately, so tuning one must not move the other.
+         *  NOTHING PINS THAT while the values agree: both are passed as a
+         *  window argument to a pure function, so swapping them at the call
+         *  site is undetectable by any test until one of them moves. Treat
+         *  this as a maintenance instruction, not an invariant. At
          *  30 s the corpus replay opens on 6 of 76 genuine ride-ends against the
          *  speed gate's 4, and leaves the cue unreachable for 39% of riding
          *  time; 45 s takes the ride-ends to 13. See the TRACK-PRESENCE FALLBACK

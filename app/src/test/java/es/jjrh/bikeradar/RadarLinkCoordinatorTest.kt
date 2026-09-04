@@ -1107,6 +1107,10 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L)
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
         assertEquals(0, clogged("radar_drop_cue"))
+        // The cue count alone leaves the eBike gate unpinned: hardcoding it
+        // false keeps this silent for a different reason while still taking a
+        // wakelock for a cohort that answers the riding question itself.
+        assertEquals(0, wakeLockAcquireCount)
     }
 
     @Test

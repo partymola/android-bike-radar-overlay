@@ -28,6 +28,6 @@ done
 # loop is silent, which is the same failure the loop was added to fix one
 # level up: a success that wrote nothing.
 if [ "$rendered" -eq 0 ]; then
-    echo "no icon.png under $meta - nothing rendered" >&2
+    echo "no icon.png under $meta: nothing rendered" >&2
     exit 1
 fi

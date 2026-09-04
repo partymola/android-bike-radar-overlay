@@ -73,6 +73,7 @@ import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarLinkCoordinator
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
 import es.jjrh.bikeradar.RadarSelection
@@ -212,6 +213,15 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val dashcamPaired = prefsSnap.dashcamMac != null
     val dashcamOwned = prefsSnap.dashcamOwnership == DashcamOwnership.YES
 
+    // Computed before the inputs so the hero copy and the button are decided
+    // by one predicate. Split, the card can ask a question no button answers.
+    val canEndRide = RadarLinkStatus.canEndRide(
+        radarEverLive = radarLinkSnap.sessionRadarConnectedMs > 0L,
+        downForMs = radarLinkSnap.radarOffSinceMs?.let { SystemClock.elapsedRealtime() - it },
+        alreadyEnded = radarLinkSnap.rideEndedByRider,
+        visualThresholdMs = RadarLinkCoordinator.RADAR_DROP_VISUAL_THRESHOLD_MS,
+    )
+
     val inputs = MainStatusInputs(
         firstRunComplete = prefsSnap.firstRunComplete,
         pausedUntilEpochMs = prefsSnap.pausedUntilEpochMs,
@@ -225,6 +235,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         serviceEnabled = prefsSnap.serviceEnabled,
         bluetoothEnabled = btEnabled,
+        rideEndOfferable = canEndRide,
     )
     val statusModel = MainStatusDeriver.derive(
         inputs,
@@ -241,7 +252,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             stringResource(it, *statusModel.subtitleArgs.toTypedArray())
         },
     )
-    val cta = ctaFor(inputs, now, navController, ctx, prefs)
+    val cta = ctaFor(inputs, now, navController, ctx, prefs, canEndRide)
 
     val heroIsBtOff = status.icon == MainStatusIcon.BluetoothDisabled &&
         status.tone == MainStatusTone.Warn
@@ -699,13 +710,17 @@ private fun MainScreenLandscape(
 
 internal data class StatusCta(val label: String, val onClick: () -> Unit)
 
+/** Internal rather than private so the branch that offers End ride can be
+ *  driven directly: it is a wiring decision, and the only alternative is
+ *  standing up the whole screen with its buses and lifecycle pollers. */
 @Composable
-private fun ctaFor(
+internal fun ctaFor(
     inputs: MainStatusInputs,
     nowMs: Long,
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
+    canEndRide: Boolean,
 ): StatusCta? {
     // Hoisted out of the onClick lambda below: stringResource is
     // @Composable-only and cannot be called from the click handler.
@@ -738,6 +753,23 @@ private fun ctaFor(
         !inputs.hasBond -> StatusCta(
             label = stringResource(R.string.main_cta_pair),
             onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+        )
+
+        // The radar is down in a session that had one, so the app cannot tell
+        // "off because I finished" from "off because it broke". This is the
+        // rider saying which, and it is the same declaration a Bosch lock
+        // makes for an eBike rider.
+        //
+        // A mis-tap is cheap ONLY where the radar comes back, because that is
+        // what spends the declaration. On a flat radar battery no reconnect
+        // comes, the control withholds itself once used, and there is no undo,
+        // so the drop alert stays off for the rest of the session. Do not widen
+        // the gate on the strength of the cheap case.
+        canEndRide -> StatusCta(
+            label = stringResource(R.string.main_cta_parked),
+            onClick = {
+                ContextCompat.startForegroundService(ctx, BikeRadarService.endRideIntent(ctx))
+            },
         )
 
         // Dashcam-off Warn: no CTA per DEC-002.

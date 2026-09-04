@@ -368,6 +368,37 @@ class RadarDropDeciderTest {
         )
     }
 
+    @Test
+    fun ridingConfirmedParkedVetoAlsoTakesTheRidersOwnDeclaration() {
+        // The second source of the same veto, and the only one a rider without
+        // an eBike has. It must veto HERE rather than only at the banner: the
+        // cue's repeat cap is reset for a parked ride, so a declaration that
+        // reaches the reset without reaching this predicate uncaps the cue and
+        // it fires every tick. Measured at 6 cues where 0 was expected before
+        // this argument existed.
+        assertFalse(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = null, // no eBike, so the latch is the only confirmation
+                snapshotAgeMs = 1_000L,
+                freshMs = fresh,
+                eBikeRidingFresh = true,
+                radarActivityFreshAtDrop = true,
+                riderEndedRide = true,
+            ),
+        )
+        // And the other direction, so the veto cannot widen into always-off.
+        assertTrue(
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = null,
+                snapshotAgeMs = 1_000L,
+                freshMs = fresh,
+                eBikeRidingFresh = true,
+                radarActivityFreshAtDrop = true,
+                riderEndedRide = false,
+            ),
+        )
+    }
+
     /** The eBike confirmation path with the speed gate SATISFIED - i.e. what the
      *  old two-argument gate meant. Keeps the pre-existing cases readable while
      *  the garage cases below vary the speed term explicitly. */

@@ -109,9 +109,14 @@ object RadarLinkVisualDecider {
         if (paused || !radarEverLive || !everSawTrack || radarDownForMs == null || radarDownForMs < visualThresholdMs) {
             return LinkVisual.LIVE
         }
+        // Hoisted above the cohort split: the ride is over because the bike
+        // said so OR because the rider did, and neither wants a "rear radar
+        // disconnected" banner. It used to sit inside the eBike branch, which
+        // was correct while an eBike lock was the only way to say it and left
+        // a radar-only rider staring at the banner after ending their ride.
+        if (explicitParked) return LinkVisual.LIVE
         return if (hasEBikeSignal) {
             when {
-                explicitParked -> LinkVisual.LIVE
                 radarDownForMs >= ebikeMaxMs -> LinkVisual.LIVE
                 else -> LinkVisual.RECONNECTING_UNLOCKED
             }

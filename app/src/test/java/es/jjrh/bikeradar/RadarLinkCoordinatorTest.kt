@@ -386,6 +386,71 @@ class RadarLinkCoordinatorTest {
         assertEquals(0, alarmStartCount)
     }
 
+    // ── End ride, the rider's own parked declaration ─────────────────────────
+
+    @Test
+    fun endRideHidesTheBannerTheSameWayAnEbikeLockDoes() {
+        // One concept, two sources. A radar-only rider had no way to say "I
+        // finished", so the app was left inferring it from traffic. This is the
+        // same declaration `systemLocked` already makes, and it must reach the
+        // same effects rather than opening a second path.
+        prefs.pausedUntilEpochMs = 0L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.markRideEndedByRider()
+        bannerStates.clear()
+        coordinator.evaluateRadarDrop(4_000L + 11_000L)
+        assertEquals(listOf(live), bannerStates)
+    }
+
+    @Test
+    fun endRideSuppressesTheDropCue() {
+        // The point of the control, driven in the state it is actually offered
+        // in: a radar-only rider who was moving right up to the drop, past the
+        // 60 s threshold, ticking at the service's cadence. All three matter.
+        // A single evaluation under the threshold, or one with no riding
+        // activity latched at the drop, cannot fail however the cue behaves,
+        // because the cue is unreachable in that fixture either way.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L // moving right up to the disconnect
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.markRideEndedByRider()
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(6) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("the rider said the ride is over", 0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun theNextRadarConnectSpendsTheDeclaration() {
+        // Why a mis-tap is cheap, and why the flag cannot leak into tomorrow's
+        // ride. The re-arm edge is the same one the eBike lock already uses.
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.markRideEndedByRider()
+        assertTrue("the rider has declared the ride over", snap().rideEndedByRider)
+        connectAt(20_000L)
+        assertFalse("a new radar link re-arms the cue", snap().rideEndedByRider)
+    }
+
+    @Test
+    fun aDeclarationMadeWhileTheRadarIsUpIsAlsoSpent() {
+        // The other branch of markConnected, and the window it closes: the
+        // control is offered while the radar is down, but the radar can come
+        // back between the tap and the intent arriving. Cleared only on the
+        // was-down branch, the flag would then sit armed through the NEXT
+        // genuine mid-ride drop and silence it.
+        connectAt(1_000L)
+        coordinator.markRideEndedByRider()
+        assertTrue(snap().rideEndedByRider)
+        connectAt(2_000L) // already up: the else branch
+        assertFalse("a connect must spend it whichever branch runs", snap().rideEndedByRider)
+    }
+
     // ── evaluateRadarDrop banner ordering + cue ──────────────────────────────
 
     @Test

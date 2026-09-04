@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -633,6 +634,10 @@ class BikeRadarService : Service() {
                 notifications.cancelWalkAway()
                 walkAwayAlarm.stop()
             }
+            ACTION_END_RIDE -> {
+                Log.i(TAG, "ride ended by rider")
+                radarLinkCoordinator.markRideEndedByRider()
+            }
             ACTION_START_EBIKE_READER -> {
                 // Onboarding eBike step just enabled the feature; bring up the
                 // read-only status reader now. Idempotent: maybeStartEBikeReader
@@ -1191,6 +1196,22 @@ class BikeRadarService : Service() {
         const val CUE_URGENT = "urgent"
         const val CUE_DROPPED = "dropped"
         const val CUE_RECONNECTED = "reconnected"
+
+        /**
+         * The rider says this off-episode is the end of a ride.
+         *
+         * The radar-only equivalent of a Bosch eBike reporting itself locked,
+         * and routed to the same state, so it vetoes the dead-radar cue,
+         * closes out its latch and retires the banner. Scoped to one
+         * off-episode: the next radar connect spends it.
+         */
+        const val ACTION_END_RIDE = "es.jjrh.bikeradar.END_RIDE"
+
+        /** The intent the main screen's End ride control sends. Built beside
+         *  the action it names so the two cannot drift, and so the wire can be
+         *  asserted without standing the service up. */
+        fun endRideIntent(ctx: Context): Intent = Intent(ctx, BikeRadarService::class.java).setAction(ACTION_END_RIDE)
+
         const val ACTION_WALKAWAY_DISMISS = "es.jjrh.bikeradar.WALKAWAY_DISMISS"
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
 

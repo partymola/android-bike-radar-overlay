@@ -79,6 +79,11 @@ data class MainStatusInputs(
      *  Defaults to true so existing call-sites and tests keep their
      *  pre-existing behaviour. */
     val bluetoothEnabled: Boolean = true,
+    /** True when the radar has been down long enough for the parked
+     *  declaration to be offered, which changes the headline from an
+     *  instruction to a question. Defaults false so every existing call site
+     *  and test keeps the plain waiting copy. */
+    val rideEndOfferable: Boolean = false,
 )
 
 object MainStatusDeriver {
@@ -206,6 +211,22 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Good,
                 headlineRes = R.string.main_status_live_title,
                 subtitleRes = subtitleRes,
+            )
+        }
+        // Same state, different question. Once the radar has been down long
+        // enough to offer the parked declaration, "Turn on your radar" is one
+        // of two instructions on a card whose other one invites the rider to
+        // say the ride is over. Asking instead lets the button be the answer.
+        // Icon and tone are deliberately unchanged: nothing about the radar
+        // has changed, only what the app can offer, and painting a probably
+        // normal end of ride amber would put the loudest colour on the card at
+        // the moment the app is least sure anything is wrong.
+        if (inputs.rideEndOfferable) {
+            return MainStatusModel(
+                icon = MainStatusIcon.Sensors,
+                tone = MainStatusTone.Neutral,
+                headlineRes = R.string.main_status_ride_over_title,
+                subtitleRes = R.string.main_status_ride_over_sub,
             )
         }
         return MainStatusModel(

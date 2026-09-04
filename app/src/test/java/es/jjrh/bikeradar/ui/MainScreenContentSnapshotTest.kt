@@ -581,6 +581,94 @@ class MainScreenContentSnapshotTest {
     }
 
     @Test
+    fun radarDownWithParkedOffered() {
+        // The only state the parked declaration is offered in: the radar has
+        // been down past the banner threshold in a session that had one.
+        // Rendered because the control suppresses a safety cue.
+        //
+        // The deriver never returns Warning/Warn here, so a fixture that builds
+        // one is a picture of a screen the app cannot render. What pins the
+        // icon and tone is `offeringParkedDoesNotRepaintTheCard`, not this
+        // golden, which only shows what the chosen values look like.
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Sensors,
+                            tone = MainStatusTone.Neutral,
+                            headline = stringResource(R.string.main_status_ride_over_title),
+                            subtitle = stringResource(R.string.main_status_ride_over_sub),
+                        ),
+                        cta = StatusCta(label = stringResource(R.string.main_cta_parked), onClick = {}),
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = false,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = false,
+                        dashcamPaired = true,
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = true,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onSystemRowClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun radarDownWithParkedOfferedEs() {
+        // The Spanish layout of the same card. The es title runs longer than
+        // the English, and the repo rule is to verify a new es label against
+        // the golden rather than reasoning about its width.
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Sensors,
+                            tone = MainStatusTone.Neutral,
+                            headline = stringResource(R.string.main_status_ride_over_title),
+                            subtitle = stringResource(R.string.main_status_ride_over_sub),
+                        ),
+                        cta = StatusCta(label = stringResource(R.string.main_cta_parked), onClick = {}),
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = false,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = false,
+                        dashcamPaired = true,
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = true,
+                        isLandscape = false,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onSystemRowClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun dashcamWarning() {
         captureRoboImage {
             SnapshotTheme {

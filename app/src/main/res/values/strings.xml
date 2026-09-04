@@ -112,6 +112,14 @@
     <string name="main_status_live_dashcam_on_sub">Dashcam on</string>
     <string name="main_status_waiting_title">Waiting for radar</string>
     <string name="main_status_waiting_sub">Turn on your radar</string>
+    <!-- Shown instead of the pair above once the radar has been down long
+         enough to offer the parked declaration. A question, because at that
+         point the app genuinely cannot tell a finished ride from a failed
+         radar, and telling a rider whose radar just died that their ride is
+         over would be false at the worst moment. The subtitle takes the "no"
+         branch; the button takes the "yes". -->
+    <string name="main_status_ride_over_title">Finished your ride?</string>
+    <string name="main_status_ride_over_sub">If not, turn your radar back on</string>
 
     <!-- Hero status-card call-to-action buttons. -->
     <string name="main_cta_set_up">Set up</string>
@@ -119,6 +127,10 @@
     <string name="main_cta_resume">Resume</string>
     <string name="main_cta_turn_on_bluetooth">Turn on Bluetooth</string>
     <string name="main_cta_pair">Pair</string>
+    <!-- Not "End ride": it ends no ride. The summary and history still close
+         on their own timer. What it declares is that the radar being off is
+         expected, which is the rider-side twin of a Bosch lock. -->
+    <string name="main_cta_parked">I\'ve parked</string>
 
     <!-- Home-screen toasts. -->
     <string name="main_toast_dev_enabled">Developer options enabled</string>

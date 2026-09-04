@@ -21,7 +21,9 @@ class MainStatusDeriverTest {
         dashcamDisplayName: String? = null,
         serviceEnabled: Boolean = true,
         bluetoothEnabled: Boolean = true,
+        rideEndOfferable: Boolean = false,
     ) = MainStatusInputs(
+        rideEndOfferable = rideEndOfferable,
         firstRunComplete = firstRunComplete,
         pausedUntilEpochMs = pausedUntilEpochMs,
         hasBond = hasBond,
@@ -266,5 +268,34 @@ class MainStatusDeriverTest {
         // answer is the waiting state, not a limitation claim.
         val model = derive(baseInputs(radarFresh = false, radarLimited = true))
         assertEquals(R.string.main_status_waiting_title, model.headlineRes)
+    }
+
+    @Test fun theWaitingCardAsksInsteadOfInstructingOnceParkedIsOffered() {
+        // The card would otherwise carry two opposite instructions: "Turn on
+        // your radar" above a button saying the ride is over. Asking makes the
+        // button the answer.
+        val model = derive(baseInputs(radarFresh = false, rideEndOfferable = true))
+        assertEquals(R.string.main_status_ride_over_title, model.headlineRes)
+        assertEquals(R.string.main_status_ride_over_sub, model.subtitleRes)
+    }
+
+    @Test fun theWaitingCardStillInstructsWhenParkedIsNotOffered() {
+        // Before the threshold, and for a session that never had a radar, the
+        // instruction is still the right thing to show.
+        val model = derive(baseInputs(radarFresh = false, rideEndOfferable = false))
+        assertEquals(R.string.main_status_waiting_title, model.headlineRes)
+        assertEquals(R.string.main_status_waiting_sub, model.subtitleRes)
+    }
+
+    @Test fun offeringParkedDoesNotRepaintTheCard() {
+        // Icon and tone must not move: nothing about the radar changed, only
+        // what the app can offer. Amber here would put the loudest colour on
+        // the card at the moment the app is least sure anything is wrong.
+        val asking = derive(baseInputs(radarFresh = false, rideEndOfferable = true))
+        val waiting = derive(baseInputs(radarFresh = false, rideEndOfferable = false))
+        assertEquals(MainStatusIcon.Sensors, asking.icon)
+        assertEquals(MainStatusTone.Neutral, asking.tone)
+        assertEquals(waiting.icon, asking.icon)
+        assertEquals(waiting.tone, asking.tone)
     }
 }

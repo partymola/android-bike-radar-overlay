@@ -254,12 +254,21 @@ object RadarDropDecider {
      *    [trackActivityFreshAtDrop]. Defaults to false so the eBike-only call
      *    sites and their existing tests are unaffected.
      *
-     * LOCKED VETO (overrides BOTH paths): a last-known `system_locked == true`
-     * means the rider explicitly parked, so no drop cue - even when the
-     * radar-activity latch is true. Without it, a rider who locks up within
-     * the latch's freshness window of still moving keeps "riding confirmed"
-     * for the whole off-episode and the cue repeats against a parked, locked
-     * bike (observed in the field). Sticky regardless of snapshot freshness,
+     * PARKED VETO (overrides BOTH paths), from either of two sources that mean
+     * the same thing. A last-known `system_locked == true` is the bike saying
+     * the rider parked; [riderEndedRide] is the rider saying it on the main
+     * screen, which is the only way a rider without an eBike can. Both must
+     * veto HERE and not only at the banner: the cue's repeat cap is reset for a
+     * parked ride, so a veto that reaches the reset without reaching this
+     * predicate uncaps the cue instead of silencing it, and it fires every
+     * tick. `endRideSuppressesTheDropCue` pins that.
+     *
+     * So no drop cue even when the radar-activity latch is true. Without the
+     * veto, a rider who locks up within the latch's freshness window of still
+     * moving keeps "riding confirmed" for the whole off-episode and the cue
+     * repeats against a parked, locked bike (observed in the field).
+     *
+     * The lock source is sticky regardless of snapshot freshness,
      * for the same reason the reconnect banner treats locked as sticky:
      * locking is what makes the bike sleep and drop the eBike link, so the
      * lock reading inevitably ages out - and a riding rider is never
@@ -275,8 +284,9 @@ object RadarDropDecider {
         freshMs: Long,
         eBikeRidingFresh: Boolean,
         radarActivityFreshAtDrop: Boolean = false,
+        riderEndedRide: Boolean = false,
     ): Boolean {
-        if (systemLocked == true) return false
+        if (riderEndedRide || systemLocked == true) return false
         val eBikePath = systemLocked == false && snapshotAgeMs < freshMs && eBikeRidingFresh
         return eBikePath || radarActivityFreshAtDrop
     }

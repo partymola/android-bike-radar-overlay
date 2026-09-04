@@ -99,6 +99,8 @@
     <string name="main_status_live_dashcam_on_sub">Cámara delantera encendida</string>
     <string name="main_status_waiting_title">Esperando al radar</string>
     <string name="main_status_waiting_sub">Enciende tu radar</string>
+    <string name="main_status_ride_over_title">¿Has terminado la ruta?</string>
+    <string name="main_status_ride_over_sub">Si no, enciende tu radar</string>
 
     <!-- Botones de acción de la tarjeta de estado principal. -->
     <string name="main_cta_set_up">Configurar</string>
@@ -106,6 +108,7 @@
     <string name="main_cta_resume">Reanudar</string>
     <string name="main_cta_turn_on_bluetooth">Activar Bluetooth</string>
     <string name="main_cta_pair">Emparejar</string>
+    <string name="main_cta_parked">He aparcado</string>
 
     <!-- Avisos (toast) de la pantalla de inicio. -->
     <string name="main_toast_dev_enabled">Opciones de desarrollador activadas</string>

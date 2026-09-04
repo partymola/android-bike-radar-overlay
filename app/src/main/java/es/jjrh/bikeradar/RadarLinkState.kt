@@ -45,4 +45,25 @@ data class RadarLinkState(
     /** Monotonic (elapsedRealtime) ms of the most recent walk-away alarm fire,
      *  or null if none has fired this episode. */
     val lastWalkAwayFireMs: Long? = null,
+    /** True once the rider has said this off-episode is the end of a ride.
+     *
+     *  The radar-only equivalent of a Bosch eBike reporting `system_locked ==
+     *  true`, and read through the same `explicitParked` path, so it carries
+     *  the same effects: the drop cue is vetoed, its latch closed out, and the
+     *  dead-radar banner retired. Without it the app has to INFER a ride end
+     *  from traffic, which is the guessing the whole gate exists to bound.
+     *
+     *  Cleared on the next radar connect, the same re-arm edge the eBike lock
+     *  uses, so it can never silence a later ride. */
+    val rideEndedByRider: Boolean = false,
+    /** True on the tick after a reconnect that started a NEW RIDE (the radar
+     *  was off longer than the app's parked boundary).
+     *
+     *  Exists so the drop cue's bookkeeping reset runs on the tick loop, which
+     *  is that latch's only writer, rather than on the BLE callback thread. A
+     *  reset there raced a tick that had computed its decision while the radar
+     *  was still down and wrote the latch straight back, resurrecting the stale
+     *  acknowledgement pulse the reset exists to stop. Consumed and cleared in
+     *  `RadarLinkCoordinator.evaluateRadarDrop`. */
+    val newRideAtConnect: Boolean = false,
 )

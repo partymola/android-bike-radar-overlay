@@ -56,4 +56,28 @@ object RadarLinkStatus {
         offSinceMs: Long?,
         nowMs: Long,
     ): Boolean = gattActive || (offSinceMs != null && nowMs - offSinceMs < RECENT_OFF_MS)
+
+    /**
+     * Whether to offer the rider the "ride is over" control.
+     *
+     * The control silences a safety cue, so it is offered only once the radar
+     * has been down long enough that the rider has already been shown the
+     * disconnected banner. An ordinary mid-ride reconnect runs to a corpus
+     * median of 8.4 s, so a gate on "down at all" would put a full-width
+     * control that suppresses a warning on screen during routine blips, which
+     * is the mis-tap this bounds. [downForMs] is compared against the banner's
+     * own threshold so the two surfaces appear together.
+     *
+     * [radarEverLive] keeps it off a bench session that never rode.
+     * [alreadyEnded] stops it being offered twice for one off-episode.
+     */
+    fun canEndRide(
+        radarEverLive: Boolean,
+        downForMs: Long?,
+        alreadyEnded: Boolean,
+        visualThresholdMs: Long,
+    ): Boolean = radarEverLive &&
+        downForMs != null &&
+        downForMs >= visualThresholdMs &&
+        !alreadyEnded
 }

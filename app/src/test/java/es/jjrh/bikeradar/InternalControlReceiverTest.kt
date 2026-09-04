@@ -69,4 +69,17 @@ class InternalControlReceiverTest {
         assertEquals(BikeRadarService.ACTION_WALKAWAY_SNOOZE, started?.action)
         assertEquals(BikeRadarService::class.java.name, started?.component?.className)
     }
+
+    @Test
+    fun theEndRideIntentCarriesTheActionTheServiceDispatchesOn() {
+        // Not a receiver action: the main screen builds this one directly. It
+        // is pinned the same way because it is the same kind of wire, and the
+        // failure is the same - a renamed action leaves a control that looks
+        // live and does nothing when tapped. The literal is asserted rather
+        // than the constant, so the constant cannot agree with itself.
+        val intent = BikeRadarService.endRideIntent(app)
+        assertEquals("es.jjrh.bikeradar.END_RIDE", intent.action)
+        assertEquals("es.jjrh.bikeradar.END_RIDE", BikeRadarService.ACTION_END_RIDE)
+        assertEquals(BikeRadarService::class.java.name, intent.component?.className)
+    }
 }

@@ -79,18 +79,16 @@ internal class RadarLinkCoordinator(
     val radarLinkState: StateFlow<RadarLinkState> = _radarLinkState
 
     // Re-fire latch for the radar-drop cue + a one-shot "suppressed" diagnostic
-    // flag, both scoped to the current off-episode. Reset lazily in
-    // [evaluateRadarDrop] on radar return.
+    // flag, both scoped to the current off-episode. Single tick-loop writer
+    // ([evaluateRadarDrop]); reset lazily there on radar return.
     //
-    // TWO WRITERS since the new-ride reset landed: the tick loop
-    // ([evaluateRadarDrop]) and the BLE callback thread ([markConnected]). A
-    // tick that computed its decision while the radar was still down can write
-    // its latch back after markConnected nulled it, which resurrects the stale
-    // acknowledgement pulse the reset exists to stop. The window is one method
-    // body and the cost is a single spurious beep, so it is tolerated rather
-    // than locked; the fix is to move the reset onto the tick beside the
-    // explicitParked one, which is where the rider-driven ride-end signal will
-    // put it.
+    // The single-writer property is load-bearing rather than incidental. A
+    // reset written from the BLE callback thread instead raced a tick that had
+    // computed its decision while the radar was still down and then wrote the
+    // latch straight back, resurrecting the stale acknowledgement pulse the
+    // reset exists to stop. Connect edges therefore reach this latch as flags
+    // on [RadarLinkState] ([RadarLinkState.newRideAtConnect],
+    // [RadarLinkState.rideEndedByRider]) that the tick consumes.
     @Volatile private var radarDropLastCueMs: Long? = null
 
     // Cues fired this off-episode; caps the latch-only confirmation path
@@ -126,6 +124,23 @@ internal class RadarLinkCoordinator(
         _radarLinkState.update { it.copy(walkAwayDismissed = true) }
     }
 
+    /** The rider said this off-episode is the end of a ride.
+     *
+     *  Everything it does follows from [RadarLinkState.rideEndedByRider]
+     *  reaching BOTH `explicitParked` and the cue gate in [evaluateRadarDrop],
+     *  so it carries the effects a Bosch lock already carries and no separate
+     *  path of its own. Reaching only the first uncaps the cue rather than
+     *  silencing it; `endRideSuppressesTheDropCue` pins that.
+     *
+     *  The tick is woken so the banner and the veto land on the next frame
+     *  rather than up to one tick later. That is at most 2 s here, since the
+     *  loop is already at its active cadence while the radar is off. */
+    fun markRideEndedByRider() {
+        _radarLinkState.update { it.copy(rideEndedByRider = true) }
+        clog("# ride_end source=rider")
+        wakeTick()
+    }
+
     /** Snooze window elapsed: clear both gates so the decider re-evaluates the
      *  episode cleanly rather than re-firing immediately. */
     fun clearWalkAwayDismissalForReArm() {
@@ -146,10 +161,19 @@ internal class RadarLinkCoordinator(
     override fun markConnected() {
         val nowMs = clock()
         val prev = _radarLinkState.value
+        // Computed from prev once, so a CAS retry cannot re-evaluate it against
+        // a state this connect has already changed.
+        val startsNewRide = prev.radarOffSinceMs != null &&
+            RideSummaryNotificationDecider.shouldStartNewRide(
+                nowMs - prev.radarOffSinceMs,
+                prefs.radarLongOfflineThresholdMinutes * 60_000L,
+            )
         _radarLinkState.update { current ->
             if (current.radarOffSinceMs != null) {
                 // Any → IDLE: radar is back, leave-behind tracking off.
-                // Re-arming requires the next radar disconnect.
+                // Re-arming requires the next radar disconnect. The rider's
+                // ride-end declaration is spent here too: it scopes to one
+                // off-episode, so it can never silence a later ride.
                 current.copy(
                     radarOffSinceMs = null,
                     walkAwayArmed = false,
@@ -157,11 +181,19 @@ internal class RadarLinkCoordinator(
                     lastWalkAwayFireMs = null,
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    rideEndedByRider = false,
+                    newRideAtConnect = startsNewRide,
                 )
             } else {
+                // Cleared on BOTH branches. A declaration made in the window
+                // between a reconnect and the intent being dispatched would
+                // otherwise be set while the radar is live, and nothing would
+                // clear it until the NEXT off-episode's reconnect, so it would
+                // silence one genuine mid-ride drop.
                 current.copy(
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    rideEndedByRider = false,
                 )
             }
         }
@@ -181,13 +213,10 @@ internal class RadarLinkCoordinator(
             radarActivityFreshAtDrop = false
             trackFreshAtDrop = false
             // A reconnect past the app's own parked boundary is a NEW ride, so
-            // close out the previous ride's cue bookkeeping and its traffic
-            // sighting. The reconnect acknowledgement pulse fires only when a
-            // drop cue was raised, and nothing else clears that latch for a
-            // rider with no eBike, so tomorrow's first connect would otherwise
-            // open with a lone beep acknowledging a drop they heard yesterday.
-            // The eBike cohort already gets this from an explicit lock (see
-            // evaluateRadarDrop).
+            // the previous ride's traffic sighting goes with it: one ride's
+            // traffic must not confirm a later ride's drop. The cue bookkeeping
+            // is closed out on the tick instead, off [newRideAtConnect], to
+            // keep that latch's single writer.
             //
             // Scoped to the NEW-RIDE case on purpose. Clearing the sighting on
             // every reconnect looks tidier and costs a cue: a radar that drops,
@@ -197,19 +226,11 @@ internal class RadarLinkCoordinator(
             // the side of the asymmetry this whole gate treats as the worse
             // error, and it would also make the code stricter than the corpus
             // figure documenting it, which was replayed without such a wipe.
-            val newRide = RideSummaryNotificationDecider.shouldStartNewRide(
-                nowMs - prev.radarOffSinceMs,
-                prefs.radarLongOfflineThresholdMinutes * 60_000L,
-            )
-            if (newRide) {
-                radarDropLastCueMs = null
-                radarDropCueCount = 0
-                clearTrackActivity()
-            }
+            if (startsNewRide) clearTrackActivity()
             releaseRideWakeLock()
             clog(
                 "# walkaway state=IDLE transition_reason=radar-connected " +
-                    "prev_state=$prevState new_ride=$newRide",
+                    "prev_state=$prevState new_ride=$startsNewRide",
             )
         }
         // Radar is back: hide the reconnecting banner now rather than waiting
@@ -493,7 +514,18 @@ internal class RadarLinkCoordinator(
         // dropout the banner must survive. Must run before the isPaused
         // early-return so a pause HIDES the banner (decide() returns LIVE when
         // paused); the eager hide on reconnect lives in markConnected.
-        val explicitParked = snap?.systemLocked == true
+        // Two sources, one meaning: the bike says it is locked, or the rider
+        // said so on the main screen. A radar-only rider had no way to say it,
+        // which is why the app was left inferring a ride end from traffic.
+        val explicitParked = snap?.systemLocked == true || link.rideEndedByRider
+        // New-ride edge, handed over by markConnected so this latch keeps one
+        // writer. Consumed here: clearing the flag from the tick is safe
+        // because `update` is a CAS loop, unlike a bare volatile write.
+        if (link.newRideAtConnect) {
+            radarDropLastCueMs = null
+            radarDropCueCount = 0
+            _radarLinkState.update { it.copy(newRideAtConnect = false) }
+        }
         // Ride-over reset. An explicit lock ends the ride, so this off-episode's
         // cue latch must not survive into the next power-on: the latch is what
         // arms the reconnect acknowledgement pulse, and a stale one would fire it
@@ -523,12 +555,15 @@ internal class RadarLinkCoordinator(
         // a rider who switches it off on hearing an unwanted cue silences the
         // REST of this off-episode, not merely the next one.
         val trackConfirmed = trackFreshAtDrop && prefs.radarDropTrackFallbackEnabled
+        // The rider's declaration must reach the CUE gate, not just the banner.
+        // Reaching only the reset above uncaps the cue instead of silencing it.
         val ridingConfirmed = RadarDropDecider.ridingConfirmed(
             systemLocked = snap?.systemLocked,
             snapshotAgeMs = ebikeAgeMs,
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
             eBikeRidingFresh = ridingFresh,
             radarActivityFreshAtDrop = radarActivityFreshAtDrop || trackConfirmed,
+            riderEndedRide = link.rideEndedByRider,
         )
         // Latch-only = riding is confirmed, but not by a live eBike signal:
         // only that path gets the per-episode repeat cap (a live "unlocked"

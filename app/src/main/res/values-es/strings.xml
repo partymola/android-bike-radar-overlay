@@ -246,7 +246,7 @@
     <string name="onboarding_pair_dashcam_yes_subtitle">Te avisa si está apagada</string>
     <string name="onboarding_pair_dashcam_picked_fallback">Elegida</string>
     <string name="onboarding_pair_dashcam_picked_detail"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g></string>
-    <string name="onboarding_pair_dashcam_pick_detail">Elige la cámara delantera con la que ruedas para activar los avisos de apagado.</string>
+    <string name="onboarding_pair_dashcam_pick_detail">Elige la cámara delantera que usas para activar los avisos de apagado.</string>
     <string name="onboarding_pair_dashcam_unanswered_detail">¿Tienes una cámara delantera con Bluetooth? La barra lateral muestra su batería y avisa cuando deja de emitir.</string>
     <string name="onboarding_pair_change_device">Cambiar dispositivo</string>
     <string name="onboarding_pair_pick_device">Elegir dispositivo</string>
@@ -255,7 +255,7 @@
     <string name="onboarding_pair_comeback">Puedes volver a esto más tarde en <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
     <string name="onboarding_pair_privacy_heading">A qué puede acceder</string>
     <string name="onboarding_pair_bullet_devices">Lee tu lista de dispositivos emparejados para encontrar el radar y la cámara delantera</string>
-    <string name="onboarding_pair_bullet_saves">Guarda en tu teléfono con qué cámara delantera ruedas</string>
+    <string name="onboarding_pair_bullet_saves">Guarda en tu teléfono qué cámara delantera usas</string>
     <string name="onboarding_pair_bullet_nothing_sent">Nada del emparejamiento se envía a ningún sitio</string>
     <string name="onboarding_pair_more_features">Más funciones en Ajustes → Experimental cuando termines la configuración.</string>
     <string name="onboarding_pair_radar_later">Puedes emparejar el radar más tarde desde los ajustes de Bluetooth.</string>
@@ -263,7 +263,7 @@
 
     <!-- Paso 4: eBike -->
     <string name="onboarding_ebike_title">El estado de tu eBike</string>
-    <string name="onboarding_ebike_sub">Muestra la batería y el estado de conexión de tu eBike mientras ruedas - funciona junto con la app Bosch Flow.</string>
+    <string name="onboarding_ebike_sub">Muestra la batería y el estado de conexión de tu eBike durante la ruta - funciona junto con la app Bosch Flow.</string>
     <string name="onboarding_ebike_bullet_status">Batería y estado de la eBike en la pantalla de inicio</string>
     <string name="onboarding_ebike_bullet_climb">Los pitidos de adelantamiento ajustado siguen activos en una subida lenta</string>
     <string name="onboarding_ebike_bullet_timing">El ritmo de los pitidos se ajusta a la velocidad de tu rueda</string>
@@ -275,7 +275,7 @@
     <string name="onboarding_ebike_allset">Todo listo</string>
     <string name="onboarding_ebike_almost">Casi está</string>
     <string name="onboarding_ebike_sub_receiving">Podemos leer tu eBike - no tienes que hacer nada.</string>
-    <string name="onboarding_ebike_sub_open">Abre Bosch Flow y déjala en marcha mientras ruedas.</string>
+    <string name="onboarding_ebike_sub_open">Abre Bosch Flow y déjala en marcha durante la ruta.</string>
     <string name="onboarding_ebike_sub_install">Instala Bosch Flow para obtener los datos de tu eBike en tiempo real.</string>
     <string name="onboarding_ebike_open_flow">Abrir Bosch Flow</string>
     <string name="onboarding_ebike_install_flow">Instalar Bosch Flow</string>
@@ -488,7 +488,7 @@
 
     <!-- Ajustes → eBike (SettingsEBike.kt) -->
     <string name="settings_ebike_title">eBike</string>
-    <string name="settings_ebike_data_on_toast">Los datos en tiempo real de la eBike están activados. Deja Bosch Flow en segundo plano mientras ruedas.</string>
+    <string name="settings_ebike_data_on_toast">Los datos en tiempo real de la eBike están activados. Deja Bosch Flow en segundo plano durante la ruta.</string>
     <string name="settings_ebike_data_off_toast">Los datos en tiempo real de la eBike están desactivados.</string>
     <string name="settings_ebike_intro">Muestra la batería y el estado de conexión de tu eBike en la pantalla de inicio, mientras Bosch Flow se ejecuta en segundo plano en este teléfono.</string>
     <string name="settings_ebike_requirements">Necesita una eBike Bosch Smart System y la app Bosch Flow.</string>
@@ -500,7 +500,7 @@
     <string name="settings_ebike_status_label">Estado</string>
     <!-- Los títulos salen del vocabulario compartido; esto dice qué hacer. -->
     <string name="settings_ebike_receiving_subtitle">Batería y estado de la ruta de tu bici.</string>
-    <string name="settings_ebike_waiting_subtitle">Abre Flow y rueda - los datos aparecen aquí automáticamente.</string>
+    <string name="settings_ebike_waiting_subtitle">Abre Flow y ponte en marcha: los datos aparecen aquí automáticamente.</string>
     <string name="settings_ebike_no_permission_subtitle">Concede acceso a Bluetooth en Ajustes → Permisos.</string>
     <string name="settings_ebike_not_bonded_subtitle">Empareja tu eBike en los ajustes de Bluetooth de Android.</string>
     <string name="settings_ebike_alerts_label">Avisos</string>
@@ -511,7 +511,7 @@
     <string name="settings_ebike_override_dnd_subtitle_tap">Toca para que el aviso vibre en tu reloj con No molestar activado.</string>
     <string name="settings_ebike_actions_label">Acciones</string>
     <string name="settings_ebike_open_flow">Abrir Bosch Flow</string>
-    <string name="settings_ebike_open_flow_subtitle">Los datos en tiempo real necesitan que Flow se ejecute en segundo plano mientras ruedas.</string>
+    <string name="settings_ebike_open_flow_subtitle">Los datos en tiempo real necesitan que Flow se ejecute en segundo plano durante la ruta.</string>
     <string name="settings_ebike_open">Abrir</string>
     <string name="settings_ebike_what_it_does_label">Qué hace</string>
     <string name="settings_ebike_does_item_battery">Muestra la batería y el estado de conexión de la eBike en la pantalla de inicio</string>
@@ -560,7 +560,7 @@
     <string name="settings_privacy_to_ha_publish">Si configuras HA, la app publica por MQTT, directamente a la URL de tu HA - nada pasa por el desarrollador ni por ningún tercero:\n• batería del radar y de la cámara delantera\n• modo de la luz delantera\n• eventos de inicio/fin de ruta\n• un resumen de fin de ruta (distancia, recuento de adelantamientos ajustados, velocidades de aproximación, holguras)\n• un registro de adelantamientos ajustados por evento, si lo activas</string>
     <string name="settings_privacy_to_ha_stop">Puedes dejar de publicar en cualquier momento tocando Borrar la configuración de HA en Ajustes → Home Assistant. Las credenciales guardadas se eliminan del teléfono de inmediato.</string>
     <string name="settings_privacy_to_apps_label">Compartir con otras apps</string>
-    <string name="settings_privacy_to_apps_body">Otra app de este móvil puede pedir usar tu radar trasero, y no le llega nada hasta que digas que sí en una pantalla que la nombra. Lo que puede leer entonces es lo que informa el radar: vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, tu propia velocidad, de qué tipo es cada vehículo, si tu radar está conectado y su batería. Si además se lo permites, puede cambiar el modo de tu luz trasera y ocultar la barra lateral, y una barra lateral oculta sigue oculta, estés en esa app o en cualquier otra. Mientras se lo permitas, una app recibe todo esto de forma continua mientras ruedas, así que puede saber cuándo estás en la bici y cómo has rodado.\n\nEl traspaso ocurre en este dispositivo, de app a app, no por la red y sin pasar por el desarrollador. Lo que esa app haga después con ello depende de ella, así que permite solo apps en las que confíes.\n\nMira Ajustes, Apps con permiso para tu radar, para ver qué has permitido y para dejar de compartir. Esa lista se guarda en el almacenamiento privado de la app en Android y, como el resto de tus ajustes, viaja en la copia de seguridad de Android cuando la tienes activada, y en una transferencia directa entre móviles.</string>
+    <string name="settings_privacy_to_apps_body">Otra app de este móvil puede pedir usar tu radar trasero, y no le llega nada hasta que digas que sí en una pantalla que la nombra. Lo que puede leer entonces es lo que informa el radar: vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, tu propia velocidad, de qué tipo es cada vehículo, si tu radar está conectado y su batería. Si además se lo permites, puede cambiar el modo de tu luz trasera y ocultar la barra lateral, y una barra lateral oculta sigue oculta, estés en esa app o en cualquier otra. Mientras se lo permitas, una app recibe todo esto de forma continua durante la ruta, así que puede saber cuándo estás en la bici y cómo has pedaleado.\n\nEl traspaso ocurre en este dispositivo, de app a app, no por la red y sin pasar por el desarrollador. Lo que esa app haga después con ello depende de ella, así que permite solo apps en las que confíes.\n\nMira Ajustes, Apps con permiso para tu radar, para ver qué has permitido y para dejar de compartir. Esa lista se guarda en el almacenamiento privado de la app en Android y, como el resto de tus ajustes, viaja en la copia de seguridad de Android cuando la tienes activada, y en una transferencia directa entre móviles.</string>
     <string name="settings_privacy_bluetooth_label">Bluetooth</string>
     <string name="settings_privacy_bluetooth_body">El emparejamiento se hace en el flujo de Bluetooth del sistema Android, no en esta app. La app lee tu lista de dispositivos vinculados para identificar el radar, la cámara delantera y tu eBike Bosch. Los permisos de Bluetooth se declaran con `usesPermissionFlags=\"neverForLocation\"`, de modo que la búsqueda por Bluetooth nunca deduce la ubicación.</string>
     <string name="settings_privacy_networking_label">Red</string>

@@ -369,6 +369,13 @@ enforces them, and CONTRIBUTING.md points contributors here:
     regression rather than a correction. Ordinary abbreviations keep the dot
     and accent ("máx.", "mín.", "núm."). Reuse the Android-es words riders
     know ("Ajustes", "No molestar").
+  - **"Riding" is "montar en bicicleta". "Conducir" is used too. NEVER
+    "rodar".** Not a register preference: in the DLE every sense of `rodar`
+    that involves wheels takes the VEHICLE as its subject ("El automóvil rodó
+    lentamente"), so "mientras ruedas" says "while you roll". `montar` carries
+    the rider sense (DLE 3, `cabalgar`, used transitively too). Cycling
+    glossaries do use `rodar`, but as peloton jargon, which is the wrong
+    register for a commuter. Do not reintroduce it.
   - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
   - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
     "Seguir Mi Luz").

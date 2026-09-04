@@ -154,6 +154,38 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun theEndRideActionReachesTheCoordinator() {
+        // The service half of the End ride chain: the main screen's control
+        // starts the service with exactly this intent (pinned on the other side
+        // by MainScreenEndRideCtaTest.tappingTheControlAsksTheServiceToEndTheRide),
+        // and this is what the dispatch arm does with it. Deleting the handler
+        // body leaves a control that looks live and silences nothing.
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertTrue(
+            "a fresh service carries no rider declaration",
+            !service.radarLinkCoordinator.radarLinkState.value.rideEndedByRider,
+        )
+
+        // Another action first. Without this the call could be hoisted out of
+        // the when arm, and every start - the notification refresh included -
+        // would silence the dead-radar cue with nothing here going red.
+        service.onStartCommand(Intent().apply { action = BikeRadarService.ACTION_UPDATE_NOTIF }, 0, 1)
+        assertTrue(
+            "only the END_RIDE action may end the ride",
+            !service.radarLinkCoordinator.radarLinkState.value.rideEndedByRider,
+        )
+
+        service.onStartCommand(BikeRadarService.endRideIntent(app), 0, 2)
+        assertTrue(
+            "the END_RIDE action must mark the ride ended on the coordinator",
+            service.radarLinkCoordinator.radarLinkState.value.rideEndedByRider,
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun onCreateFlushesALeftoverRideCheckpointIntoHistory() {
         // A checkpoint slot found at service start means the previous process
         // died before the post-ride summary could append the ride - onCreate

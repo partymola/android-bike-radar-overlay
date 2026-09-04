@@ -7,21 +7,24 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows.shadowOf
 
 /**
- * The End ride control, driven through the real [ctaFor]: when it is offered
- * and when it is withheld.
+ * The End ride control, driven through the real [ctaFor]: when it is offered,
+ * when it is withheld, and what a tap on it does.
  *
  * [es.jjrh.bikeradar.RadarLinkStatus.canEndRide] already pins WHEN the offer is
- * allowed. This pins that the screen actually asks it, and that the answer
- * survives the branch's own freshness term. Without them the predicate could be
- * correct while nothing on screen used it.
+ * allowed. This pins that the screen actually asks it, that the answer survives
+ * the branch's own freshness term, and that the click reaches the service.
+ * Without them the predicate could be correct while nothing on screen used it.
  *
  * The four states of the two terms the branch reads are covered one test each:
  * either alone answering every case would leave the other unpinned.
@@ -67,6 +70,25 @@ class MainScreenEndRideCtaTest {
         // contract of this control, and it must not silently become something
         // that promises to save or close the ride record.
         assertEquals("I've parked", label)
+    }
+
+    @Test
+    fun tappingTheControlAsksTheServiceToEndTheRide() {
+        // The only test that runs the click body. Replacing it with a no-op
+        // leaves a control that renders, reads live and declares nothing; the
+        // service side of the chain is pinned by
+        // BikeRadarServiceSmokeTest.theEndRideActionReachesTheCoordinator.
+        var cta: StatusCta? = null
+        compose.setContent { cta = ctaWith(rideEndOfferable = true, radarFresh = false) }
+        compose.waitForIdle()
+        assertNotNull("the End ride branch must have fired", cta)
+        cta!!.onClick()
+
+        // The literal rather than the constant, so the action cannot agree
+        // with itself while naming something the service never dispatches on.
+        val started = shadowOf(app).peekNextStartedService()
+        assertEquals("es.jjrh.bikeradar.END_RIDE", started?.action)
+        assertEquals(BikeRadarService::class.java.name, started?.component?.className)
     }
 
     @Test

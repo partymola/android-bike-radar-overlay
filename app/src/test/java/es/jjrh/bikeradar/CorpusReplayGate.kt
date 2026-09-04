@@ -71,6 +71,15 @@ class CorpusReplayGate {
         // field would otherwise degrade every input to "absent" and leave the
         // gate green forever, which is the one failure this harness must not
         // have. Counted here, a format change surfaces as CHANGED everywhere.
+        //
+        // Read the scope exactly, because these cover less than they look
+        // like they do. `ebikeLines` counts the LINE PREFIX, so renaming the
+        // prefix is caught while renaming `spd_raw` or `notdrv` inside it is
+        // not: the count holds and every speed silently falls back to the
+        // radar's own field. The climb parser has no counter at all. Both are
+        // fixable only at a deliberate baseline re-record, since each counter
+        // is part of the compared line and adding one invalidates every
+        // existing entry.
         var ebikeLines: Int = 0,
         var turnLines: Int = 0,
         var offsetCm: Int = 0,

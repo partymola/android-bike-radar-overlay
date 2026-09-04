@@ -186,28 +186,23 @@ class RadarV2Decoder(
         val rangeY = abs(rangeYSigned)
         val effectiveDistance = rangeY.roundToInt()
 
-        // Lateral-unknown sentinel: the radar emits rxBits = 0 on a
-        // far track when it briefly loses lateral confidence. At
-        // rangeY < 10 m a literal 0 is plausible (target dead
-        // behind), so the sentinel only applies at rangeY >= 10 m.
-        // Requiring the previous frame to have a non-centred lateral
-        // position confirms this is a discontinuity, not a target
-        // that has actually been centred throughout. When detected,
-        // carry the previous lateralPos forward so visual consumers
-        // see continuity; the flag tells downstream gates
-        // (close-pass detector) that the lateral data on this frame
-        // isn't usable. Once the flag fires for a track, the
-        // held-over saturated lateralPos becomes the next frame's
-        // `prev`, so the detection propagates across the entire run
-        // of zero readings without a per-track state machine.
-        // The range test guards where a run BEGINS, not where it continues. A
-        // track already carrying a held-over offset does not become centred by
-        // crossing the threshold, and the radar keeps sending zero bits all
-        // the way in: a captured track sent them from 76 m to 5 m, and reading
-        // the last two as dead-centre measurements handed the predicted-pass
-        // fit a line converging on the rider. That scores a predicted hit,
-        // which is never vetoed, and fired the imminent-impact cue on a radar
-        // sitting indoors.
+        // Lateral-unknown sentinel: the radar emits rxBits = 0 on a track when
+        // it loses lateral confidence. Requiring the previous frame to have a
+        // non-centred lateral position confirms this is a discontinuity, not a
+        // target that has actually been centred throughout. When detected,
+        // carry the previous lateralPos forward so visual consumers see
+        // continuity; the flag tells downstream gates (close-pass detector)
+        // that the lateral data on this frame isn't usable.
+        //
+        // The range test guards where a run BEGINS, not where it continues: a
+        // first zero inside the threshold is a plausible dead-behind
+        // measurement, while a track already carrying a held-over offset does
+        // not become centred by crossing it. One captured track sent zero bits
+        // continuously from 76 m down to 5 m, and reading the last two as
+        // dead-centre measurements handed the predicted-pass fit a line
+        // converging on the rider. That scores a predicted hit, which is never
+        // vetoed, and fired the imminent-impact cue on a radar sitting indoors.
+        // RadarV2DecoderSentinelRunTest pins both directions.
         val continuingRun = prev != null && prev.vehicle.lateralUnknown
         val lateralUnknown = rxBits == 0 &&
             prev != null &&
@@ -469,8 +464,8 @@ class RadarV2Decoder(
          *  Below it a literal zero is plausible (target directly behind), so a
          *  run cannot begin there. It can CONTINUE there: a run already
          *  carrying a held-over offset does not end because its target came
-         *  close, and the radar keeps sending zero bits all the way in.
-         *  `RadarV2DecoderSentinelRunTest` pins both directions. */
+         *  close, and one captured track kept sending zero bits from 76 m down
+         *  to 5 m. `RadarV2DecoderSentinelRunTest` pins both directions. */
         const val LATERAL_UNKNOWN_MIN_RANGE_Y_M = 10f
 
         /** Previous frame's |lateralPos| floor for the lateral-unknown

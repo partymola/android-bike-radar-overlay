@@ -82,6 +82,14 @@ which builds a release-signed APK and publishes a GitHub release.
 The workflow sets `prerelease: false`, because the app has been stable
 since 1.0.0. Cutting a pre-release means flipping that for the tag.
 
+**A released section is published history, and its wording is never
+revised.** The tag was cut from it and the workflow has already copied it
+verbatim into the GitHub release body, so editing it here changes the
+repo's copy and not the one riders read. When a later measurement shows a
+shipped claim was wrong, correct the source the claim came from (the
+KDoc, the notes, the test) and state the corrected fact in the next
+version's section. Never rewrite the old entry, and never annotate it.
+
 **The store and README screenshots are Roborazzi goldens, copied.** Every
 PORTRAIT image under `screenshots/` and `fastlane/.../phoneScreenshots/` is a
 byte copy of a golden from `app/src/test/snapshots/images/` at 1344x2991, which

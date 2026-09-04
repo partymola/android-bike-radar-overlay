@@ -21,7 +21,8 @@ that show distance instead of speed. You do not get the urgent warning or
 close-pass logging. With a Bosch eBike the sound when the radar drops works
 from the bike, as before; without one it is expected to fire only if the radar
 was still seeing traffic behind you shortly before the link died, because it
-cannot report your own speed. On an empty road it stays silent.
+cannot report your own speed. On an empty road it stays silent. That
+substitute can be turned off in **Settings → Experimental**.
 **No** = the device exposes neither protocol over Bluetooth.
 
 Everything below the 820 is unconfirmed on real hardware. A report either way

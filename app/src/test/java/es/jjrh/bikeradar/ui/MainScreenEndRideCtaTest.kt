@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -27,7 +28,9 @@ import org.robolectric.Shadows.shadowOf
  * Without them the predicate could be correct while nothing on screen used it.
  *
  * The four states of the two terms the branch reads are covered one test each:
- * either alone answering every case would leave the other unpinned.
+ * either alone answering every case would leave the other unpinned. The
+ * biconditional over every gate is asserted separately, because the point
+ * tests all satisfy the arms above End ride and so cannot see a reorder.
  */
 @RunWith(AndroidJUnit4::class)
 class MainScreenEndRideCtaTest {
@@ -35,6 +38,10 @@ class MainScreenEndRideCtaTest {
     @get:Rule val compose = createComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
+
+    /** Any instant past the unpaused epoch; the paused arm is driven by
+     *  moving [MainStatusInputs.pausedUntilEpochMs] rather than this. */
+    private val now = 1_000L
 
     /** Inputs with every branch of [ctaFor] ABOVE End ride deliberately
      *  satisfied, so that branch is the only one that can fire. Both terms it
@@ -55,11 +62,75 @@ class MainScreenEndRideCtaTest {
             bluetoothEnabled = true,
             rideEndOfferable = rideEndOfferable,
         ),
-        nowMs = 1_000L,
+        nowMs = now,
         navController = rememberNavController(),
         ctx = app,
         prefs = Prefs(app),
     )
+
+    @Test
+    fun theHeroAndTheButtonAgreeInEveryState() {
+        // The congruence as a biconditional rather than as points. Both
+        // surfaces keep their own copy of the five gates above End ride, so a
+        // reorder in either re-opens the defect in a state no point test
+        // visits: lifted above the Bluetooth arm, a rider whose adapter
+        // dropped is offered "I've parked" under a card telling them to turn
+        // Bluetooth on, and the tap spends the declaration on a ride that has
+        // not ended.
+        val both = listOf(false, true)
+        var disagreed = listOf<String>()
+        var visited = 0
+        compose.setContent {
+            val nav = rememberNavController()
+            val prefs = Prefs(app)
+            val found = mutableListOf<String>()
+            var n = 0
+            for (firstRun in both) {
+                for (serviceOn in both) {
+                    for (paused in both) {
+                        for (bt in both) {
+                            for (bond in both) {
+                                for (fresh in both) {
+                                    for (offerable in both) {
+                                        val inputs = MainStatusInputs(
+                                            firstRunComplete = firstRun,
+                                            pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
+                                            hasBond = bond,
+                                            radarFresh = fresh,
+                                            haErrorRecent = false,
+                                            dashcamOwned = false,
+                                            dashcamWarnWhenOff = false,
+                                            dashcamFresh = false,
+                                            dashcamDisplayName = null,
+                                            serviceEnabled = serviceOn,
+                                            bluetoothEnabled = bt,
+                                            rideEndOfferable = offerable,
+                                        )
+                                        val asks = MainStatusDeriver.derive(inputs, now) { "" }
+                                            .headlineRes == R.string.main_status_ride_over_title
+                                        val offers = ctaFor(inputs, now, nav, app, prefs)?.label == "I've parked"
+                                        if (asks != offers) {
+                                            found += "firstRun=$firstRun service=$serviceOn paused=$paused " +
+                                                "bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
+                                                "(hero asks=$asks, button offers=$offers)"
+                                        }
+                                        n++
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            disagreed = found
+            visited = n
+        }
+        compose.waitForIdle()
+        // Anti-vacuity: a loop that never ran would satisfy the emptiness
+        // assertion below without checking anything.
+        assertEquals("every combination of the seven gates must be visited", 128, visited)
+        assertEquals("the card must never ask what the button cannot answer", emptyList<String>(), disagreed)
+    }
 
     @Test
     fun aDownRadarAfterARideOffersTheControl() {

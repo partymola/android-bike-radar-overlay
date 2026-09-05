@@ -2,7 +2,7 @@ Bike Radar shows and sounds what your rear bike radar sees, on top of whatever a
 
 A thin strip down the edge of the screen shows each approaching vehicle's distance, closing speed and lateral position over your map or navigation app. Tiered beeps rise as the closest vehicle gets nearer, and a distinct urgent tone fires when an impact looks imminent - including while you are rolling slowly toward a junction with a fast vehicle behind. A clear chime sounds when the radar no longer sees vehicles behind.
 
-Everything runs on your phone: no account, no cloud, no analytics. The optional Home Assistant integration publishes ride stats to your own server and nowhere else.
+Everything runs on your phone: no account, no cloud, no analytics. The optional Home Assistant integration publishes ride stats to your own server and nowhere else. Another app on your phone can ask to use your radar, and nothing reaches it until you allow it on a screen naming the app; that handover happens on the device, app to app.
 
 Features:
 
@@ -13,10 +13,13 @@ Features:
 - Bosch Smart System eBike telemetry, strictly read-only
 - Walk-away and forgot-to-lock reminders
 - Optional Home Assistant publishing: batteries, close passes, ride summaries
+- Sharing with another app on your phone (with your permission): the radar feed, and if you also allow it control of your tail light and hiding the overlay
 - Optional on-device capture log for diagnostics, off by default and never uploaded
 - English and Spanish
 
-Requires a rear radar that speaks the V2 BLE protocol (pair it once in system Settings) and Android 12 or newer. The radar, camera and eBike integrations degrade gracefully: each works without the others.
+Requires a supported rear radar paired over Bluetooth (pair it once in system Settings) and Android 12 or newer. There is no standard Bluetooth profile for bike radars, so support is per model; the compatibility list on the project's source page says which units work, and the list is short.
+
+A radar that reports distance only is expected to get the approach beeps, the all-clear and an overlay coloured by distance; the per-vehicle speed and side readouts, the urgent tone and close-pass counting need one that also reports closing speed and lateral position. The radar, camera and eBike integrations degrade gracefully: each works without the others.
 
 Bike Radar is a riding aid, not a safety guarantee. It supplements your own attention and mirrors - it never replaces them.
 

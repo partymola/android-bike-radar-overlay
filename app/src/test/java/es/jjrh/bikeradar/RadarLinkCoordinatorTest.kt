@@ -1452,6 +1452,24 @@ class RadarLinkCoordinatorTest {
     // ── snooze re-arm helper ─────────────────────────────────────────────────
 
     @Test
+    fun silencingTheDismountAlarmAndItsReArmBothReachTheJournal() {
+        // Same class as the ride-end declaration: the rider silences a safety
+        // cue and, without this, only logcat said so - nothing on a release
+        // build. The re-arm is journalled too, or a snooze reads afterwards as
+        // a dismissal that was never taken back.
+        ebike = null
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        coordinator.markWalkAwayDismissed()
+        coordinator.clearWalkAwayDismissalForReArm()
+        assertEquals(
+            listOf("walk-away alarm silenced by rider", "walk-away snooze over, alarm re-armed"),
+            journalLines.drop(before),
+        )
+    }
+
+    @Test
     fun clearWalkAwayDismissalForReArmResetsBothGates() {
         ebike = null
         connectAt(1_000L)

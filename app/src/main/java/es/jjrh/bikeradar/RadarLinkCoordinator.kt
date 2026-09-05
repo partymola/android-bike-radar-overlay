@@ -123,6 +123,7 @@ internal class RadarLinkCoordinator(
     /** Rider dismissed the walk-away alarm for this off-episode. */
     fun markWalkAwayDismissed() {
         _radarLinkState.update { it.copy(walkAwayDismissed = true) }
+        journal("walk-away alarm silenced by rider")
     }
 
     /** The rider said this off-episode is the end of a ride.
@@ -152,6 +153,7 @@ internal class RadarLinkCoordinator(
      *  episode cleanly rather than re-firing immediately. */
     fun clearWalkAwayDismissalForReArm() {
         _radarLinkState.update { it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null) }
+        journal("walk-away snooze over, alarm re-armed")
     }
 
     /** Off-instant is stamped at the actual disconnect callback so it

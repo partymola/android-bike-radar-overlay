@@ -35,6 +35,7 @@ internal class RadarLinkCoordinator(
     private val stopWalkAwayAlarm: () -> Unit,
     private val alertBeeper: () -> AlertBeeper?,
     private val clog: (String) -> Unit,
+    private val journal: (String) -> Unit,
     private val setReconnectBanner: (RadarLinkVisualDecider.LinkVisual) -> Unit,
     private val resolveDashcamSlug: () -> String?,
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
@@ -126,11 +127,12 @@ internal class RadarLinkCoordinator(
 
     /** The rider said this off-episode is the end of a ride.
      *
-     *  Everything it does follows from [RadarLinkState.rideEndedByRider]
+     *  Every rider-facing effect follows from [RadarLinkState.rideEndedByRider]
      *  reaching BOTH `explicitParked` and the cue gate in [evaluateRadarDrop],
      *  so it carries the effects a Bosch lock already carries and no separate
-     *  path of its own. Reaching only the first uncaps the cue rather than
-     *  silencing it; `endRideSuppressesTheDropCue` pins that.
+     *  path of its own; only the trace below is its alone. Reaching only the
+     *  first uncaps the cue rather than silencing it;
+     *  `endRideSuppressesTheDropCue` pins that.
      *
      *  The tick is woken so the banner and the veto land on the next frame
      *  rather than up to one tick later. That is at most 2 s here, since the
@@ -138,6 +140,11 @@ internal class RadarLinkCoordinator(
     fun markRideEndedByRider() {
         _radarLinkState.update { it.copy(rideEndedByRider = true) }
         clog("# ride_end source=rider")
+        // The line above lands in a file only in setup-transcript mode: the
+        // capture writer is closed by the link teardown long before the control
+        // can be offered. The journal is always on, and it is what a report
+        // reads (BikeRadarServiceSmokeTest.theEndRideActionReachesTheCoordinator).
+        journal("ride ended by rider")
         wakeTick()
     }
 

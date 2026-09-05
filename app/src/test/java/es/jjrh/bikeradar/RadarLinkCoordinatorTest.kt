@@ -82,6 +82,7 @@ class RadarLinkCoordinatorTest {
     private var beeper: AlertBeeper? = null
     private val bannerStates = mutableListOf<RadarLinkVisualDecider.LinkVisual>()
     private val clogLines = mutableListOf<String>()
+    private val journalLines = mutableListOf<String>()
 
     private lateinit var coordinator: RadarLinkCoordinator
 
@@ -99,6 +100,7 @@ class RadarLinkCoordinatorTest {
             stopWalkAwayAlarm = { alarmStopCount++ },
             alertBeeper = { beeper },
             clog = { clogLines += it },
+            journal = { journalLines += it },
             setReconnectBanner = { bannerStates += it },
             resolveDashcamSlug = { dashcamSlug },
             eBikeSnapshot = { ebike },
@@ -449,6 +451,18 @@ class RadarLinkCoordinatorTest {
         assertTrue(snap().rideEndedByRider)
         connectAt(2_000L) // already up: the else branch
         assertFalse("a connect must spend it whichever branch runs", snap().rideEndedByRider)
+    }
+
+    @Test
+    fun theRidersDeclarationReachesTheAlwaysOnJournal() {
+        // Scoped to what the TAP wrote: asserting the whole list would also pass
+        // with the line moved onto the connect or disconnect edge, which records
+        // the wrong thing while looking identical here.
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        coordinator.markRideEndedByRider()
+        assertEquals(listOf("ride ended by rider"), journalLines.drop(before))
     }
 
     // ── evaluateRadarDrop banner ordering + cue ──────────────────────────────

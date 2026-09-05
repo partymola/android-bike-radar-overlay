@@ -160,6 +160,8 @@ class BikeRadarServiceSmokeTest {
         // by MainScreenEndRideCtaTest.tappingTheControlAsksTheServiceToEndTheRide),
         // and this is what the dispatch arm does with it. Deleting the handler
         // body leaves a control that looks live and silences nothing.
+        val root = app.getExternalFilesDir(null)!!
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
         val service = controller.get()
@@ -181,6 +183,15 @@ class BikeRadarServiceSmokeTest {
         assertTrue(
             "the END_RIDE action must mark the ride ended on the coordinator",
             service.radarLinkCoordinator.radarLinkState.value.rideEndedByRider,
+        )
+        // The declaration silences a safety cue, so it has to leave a trace a
+        // report can read. The coordinator-side test asserts a test double, so
+        // without this the production journal lambda could be empty and the
+        // default install would be back to recording nothing.
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertTrue(
+            "the rider's declaration must reach the always-on journal, got:\n$journal",
+            journal.contains("ride ended by rider"),
         )
         controller.destroy()
     }

@@ -20,8 +20,13 @@ import java.util.Locale
  * per link transition - and survives across rides, so a "why didn't it
  * reconnect yesterday?" question has an answer on the Debug screen.
  *
- * Not a capture log: no radar packets, no movement data, no location -
- * just link lifecycle with device names. Capped at [MAX_BYTES] /
+ * Not a capture log: no radar packets, no movement data, no location.
+ * Link lifecycle with device names, plus the handful of app events that
+ * explain a link's behaviour and would otherwise reach logcat alone - a
+ * service start, a recovered ride, the rider declaring a ride over.
+ * The Privacy screen's connection-log paragraph describes this scope in
+ * both locales; widening it again means editing that copy too.
+ * Capped at [MAX_BYTES] /
  * trimmed to [KEEP_LINES], so it can't grow unbounded under a flapping
  * link.
  *

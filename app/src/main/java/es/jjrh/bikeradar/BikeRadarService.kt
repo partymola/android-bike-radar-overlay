@@ -444,6 +444,7 @@ class BikeRadarService : Service() {
             stopWalkAwayAlarm = walkAwayAlarm::stop,
             alertBeeper = { alertBeeper },
             clog = ::clog,
+            journal = linkJournal::log,
             setReconnectBanner = ::setReconnectBanner,
             resolveDashcamSlug = ::resolveDashcamSlug,
             eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },

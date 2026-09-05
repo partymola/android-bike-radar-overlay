@@ -373,6 +373,10 @@
     <string name="settings_exp_precog_subtitle">Dibuja cada vehículo donde estará dentro de 1 s - mira hacia dónde se dirigen los que adelantan, no solo dónde están. Puede verse a tirones con tráfico denso.</string>
     <string name="settings_exp_drop_fallback_title">Aviso de desconexión sin velocidad</string>
     <string name="settings_exp_drop_fallback_subtitle">Escucha el aviso de desconexión aunque el radar no informe de tu velocidad, cuando no tienes eBike conectada. El tráfico detectado poco antes del corte sustituye a la lectura de velocidad. Puede sonar si aparcas cerca de una vía con mucho tráfico.</string>
+    <string name="settings_exp_drop_window_title">Búsqueda de tráfico</string>
+    <string name="settings_exp_drop_window_helper">Cuánto tiempo atrás busca tráfico el aviso de desconexión. En una carretera tranquila el último vehículo puede quedar a minutos de ti, así que ampliar la búsqueda lo mantiene útil ahí; también puede sonar si aparcas en una zona concurrida. Toca \"He aparcado\" para silenciarlo.</string>
+    <string name="settings_exp_drop_window_seconds_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_exp_drop_window_minutes_value"><xliff:g id="minutes" example="10">%1$d</xliff:g> min</string>
 
     <!-- Ajustes → Alertas/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alertas</string>

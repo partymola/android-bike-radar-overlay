@@ -398,6 +398,10 @@
     <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
     <string name="settings_exp_drop_fallback_title">Drop alert without a speed reading</string>
     <string name="settings_exp_drop_fallback_subtitle">Hear the drop alert on a radar that cannot report your speed, when you have no eBike connected. Traffic seen just before the link died stands in for the speed reading. May sound after you park near a busy road.</string>
+    <string name="settings_exp_drop_window_title">Traffic look-back</string>
+    <string name="settings_exp_drop_window_helper">How far back the drop alert looks for traffic. On a quiet road the last vehicle can be minutes back, so a longer window keeps the alert working there; it can also beep when you park somewhere busy. Tap \"I\'ve parked\" to stop it.</string>
+    <string name="settings_exp_drop_window_seconds_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_exp_drop_window_minutes_value"><xliff:g id="minutes" example="10">%1$d</xliff:g> min</string>
 
     <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
     <string name="settings_radar_header">Alerts</string>

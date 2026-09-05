@@ -60,12 +60,19 @@ internal class RadarLinkCoordinator(
     // input: it stands in for rider speed on a stream that has none, and only
     // for a rider with no eBike (see [RadarDropDecider.trackActivityFreshAtDrop]).
     private val lastTrackActivityMs: () -> Long?,
-    // Drop the track sighting when a reconnect starts a NEW RIDE. Depth rather
-    // than the live guard: a new ride needs a gap of at least
-    // radarLongOfflineThresholdMinutes, which floors at 5 min, so the carried
-    // sighting is already older than both freshness windows (30 s and 120 s)
-    // at any later drop and would be rejected anyway. It earns its line against
-    // a future source that could stamp mid-episode, such as a replayed capture.
+    // Drop the track sighting when a reconnect starts a NEW RIDE. Load-bearing
+    // once the rider stretches their traffic window past the new-ride gap
+    // (which floors at 5 min): beyond that it is what keeps the last vehicle of
+    // one ride from confirming a drop on the next, and
+    // `aNewRideDropsTheSightingEvenAtTheLongestWindow` pins it there. At the
+    // default window it is depth, since the carried sighting is already outside
+    // both freshness windows at any later drop.
+    //
+    // It does not close the case, and the residual is deliberate: a window
+    // longer than radarLongOfflineThresholdMinutes leaves a band where a stop
+    // is too short to count as a new ride and long enough that pre-stop traffic
+    // still confirms. The 3-cue cap and the rider's own park declaration bound
+    // that, which is the same bargain the whole fallback is on.
     private val clearTrackActivity: () -> Unit,
     // Wake the walk-away tick loop out of its idle delay so it flips to the
     // fast cadence the instant the radar drops (no up-to-30 s lag on the first
@@ -269,6 +276,11 @@ internal class RadarLinkCoordinator(
         // guard by aBleStutterDoesNotReSampleTheSpeedLatch and its track-latch
         // twin; hoisting either line out silences a genuine mid-ride cue.
         val lastActivityMs = lastRidingActivityMs()
+        // The rider's window, sampled here with the latch it governs. Widening
+        // it later in the off-episode must not make an old sighting evidence
+        // that THIS drop happened mid-ride; the on/off toggle is read per tick
+        // instead, because that one only ever silences.
+        val trackWindowMs = prefs.radarDropTrackWindowSec * 1000L
         if (freshOffEpisode) {
             radarActivityFreshAtDrop = RadarDropDecider.activityFreshAtDrop(
                 nowMs,
@@ -287,12 +299,20 @@ internal class RadarLinkCoordinator(
                 RadarDropDecider.trackActivityFreshAtDrop(
                     nowMs,
                     lastTrackActivityMs(),
-                    RADAR_DROP_TRACK_FRESH_MS,
+                    trackWindowMs,
                     hasEBikeSignal = hasEBikeSignal(),
                 )
             // Names the latch this drop set, not the signal a cue fired on -
-            // no cue decision has been taken yet at this instant.
-            if (trackFreshAtDrop) clog("# radar_drop_latch source=track-presence")
+            // no cue decision has been taken yet at this instant. The window
+            // goes with it: the same tally means different things at 30 s and
+            // at an hour, and a report cannot ask the phone which it was on.
+            // The SAMPLED window, not a second read: a rider moving the slider
+            // between these two statements would otherwise make the line name a
+            // window this drop was not judged on, which is the one thing it
+            // exists to rule out.
+            if (trackFreshAtDrop) {
+                clog("# radar_drop_latch source=track-presence window_s=${trackWindowMs / 1000}")
+            }
         }
         _radarLinkState.update { current ->
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
@@ -319,11 +339,13 @@ internal class RadarLinkCoordinator(
             // Hold the CPU through a live-ride off-episode so the delay() timers
             // (dead-radar cue, walk-away alarm, ride summary) don't sleep past
             // their deadlines in deep Doze for a rider with no BLE wakeups. Gated
-            // on recent riding activity (a separate, wider window than the cue's
-            // own gate) so a radar that drops long after the rider parked - the
-            // manifest's old "parked-phone idle" concern - never acquires it. The
-            // lock is bounded (RIDE_WAKELOCK_CAP_MS) and released on reconnect /
-            // BLANK / ride-summary.
+            // on recent riding activity, at the LARGER of this window and the
+            // rider's own traffic window: at the default that is wider than the
+            // cue's gate, which is what keeps the "parked-phone idle" concern in
+            // the manifest answered, and a rider who stretches their window past
+            // 120 s deliberately trades some of that away. The hold itself is
+            // bounded by RIDE_WAKELOCK_CAP_MS at any setting, and released on
+            // reconnect / BLANK / ride-summary.
             // Both confirmation signals, at the wakelock's own wider window.
             // Gating this on rider speed alone left the range-only cohort with
             // a confirmed live-ride off-episode and no Doze protection - their
@@ -354,7 +376,23 @@ internal class RadarLinkCoordinator(
                 RadarDropDecider.trackActivityFreshAtDrop(
                     nowMs,
                     lastTrackActivityMs(),
-                    RIDE_WAKELOCK_ACTIVITY_FRESH_MS,
+                    // The lock's own window is a floor, not a mirror: a rider
+                    // who stretches the cue's look-back must not end up with a
+                    // confirmed live-ride off-episode whose timers Doze can
+                    // still sleep through. Bounded by RIDE_WAKELOCK_CAP_MS
+                    // whatever they choose.
+                    //
+                    // The WIDENING is gated on the cue's toggle even though the
+                    // base window is not, and the two are not in tension: the
+                    // base protects the walk-away and ride-summary timers a
+                    // rider keeps after switching the cue off, while everything
+                    // past it exists for the cue alone and has nothing to serve
+                    // once that is off.
+                    if (prefs.radarDropTrackFallbackEnabled) {
+                        maxOf(RIDE_WAKELOCK_ACTIVITY_FRESH_MS, trackWindowMs)
+                    } else {
+                        RIDE_WAKELOCK_ACTIVITY_FRESH_MS
+                    },
                     hasEBikeSignal = hasEBikeSignal(),
                 )
             if (liveRideAtDrop) {
@@ -730,31 +768,35 @@ internal class RadarLinkCoordinator(
          *  instant (see [RadarDropDecider.activityFreshAtDrop]). */
         const val RADAR_DROP_ACTIVITY_FRESH_MS = 30_000L
 
-        /** Track-presence freshness window for the drop cue's fallback path:
-         *  how recently before the drop a range-only radar must have reported a
-         *  vehicle. Deliberately its own constant rather than a reuse of
-         *  [RADAR_DROP_ACTIVITY_FRESH_MS] - the two happen to agree at 30 s and
-         *  were measured separately, so tuning one must not move the other.
-         *  NOTHING PINS THAT while the values agree: both are passed as a
-         *  window argument to a pure function, so swapping them at the call
-         *  site is undetectable by any test until one of them moves. Treat
-         *  this as a maintenance instruction, not an invariant. At
-         *  30 s the corpus replay opens on 6 of 76 genuine ride-ends against the
-         *  speed gate's 4, and leaves the cue unreachable for 39% of riding
-         *  time; 45 s takes the ride-ends to 13. See the TRACK-PRESENCE FALLBACK
-         *  note in [RadarDropDecider]. */
-        const val RADAR_DROP_TRACK_FRESH_MS = 30_000L
+        /* The track-presence window is the rider's own
+         * ([es.jjrh.bikeradar.data.Prefs.radarDropTrackWindowSec]), read at the
+         * drop in [markDisconnected]. It defaults to the same 30 s
+         * [RADAR_DROP_ACTIVITY_FRESH_MS] uses and is a separate quantity: the
+         * two were measured against different questions, and a rider stretching
+         * one must not move the other. That separation used to rest on nothing,
+         * since both are window arguments to the same pure function and the
+         * values agreed; `theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses`
+         * now pins it. */
 
-        /** Ride-wakelock acquire window: hold the CPU only if the drop looks
-         *  like a live ride within this window - the rider moving above walking
-         *  pace, or, on a stream with no rider speed for a rider with no eBike,
-         *  a vehicle reported. The drop-cue toggle does not gate it, because
-         *  this lock also protects the walk-away and ride-summary timers of a
-         *  rider who switched that cue off. Wider than
-         *  the cue's [RADAR_DROP_ACTIVITY_FRESH_MS] because the wakelock protects
-         *  ALL the off-episode timers (walk-away, ride summary), not just the
-         *  cue, so it should cover any plausibly-live off-episode; but not so
-         *  wide that a radar dropping long after the rider parked acquires it. */
+        /** Ride-wakelock acquire FLOOR: hold the CPU if the drop looks like a
+         *  live ride within this window - the rider moving above walking pace,
+         *  or, on a stream with no rider speed for a rider with no eBike, a
+         *  vehicle reported. A floor rather than the whole rule, because the
+         *  effective track window is the larger of this and the rider's own
+         *  ([es.jjrh.bikeradar.data.Prefs.radarDropTrackWindowSec]); at the
+         *  default 30 s that is this constant, and a rider who stretches theirs
+         *  past 120 s widens the acquire with it
+         *  (`aLongWindowWidensTheRideWakeLockWithIt`). So the "a radar dropping
+         *  long after the rider parked does not acquire it" property holds at
+         *  the default window and is a trade the rider makes above it; the hold
+         *  is capped at [RIDE_WAKELOCK_CAP_MS] either way.
+         *
+         *  The drop-cue toggle does not gate this floor, because the lock also
+         *  protects the walk-away and ride-summary timers of a rider who
+         *  switched that cue off. It does gate the widening above it, which
+         *  serves the cue alone. Wider than the cue's
+         *  [RADAR_DROP_ACTIVITY_FRESH_MS] for the same reason: the wakelock
+         *  covers every off-episode timer, not just the cue. */
         const val RIDE_WAKELOCK_ACTIVITY_FRESH_MS = 120_000L
 
         /** Hard cap on the ride wakelock (PowerManager auto-releases at this

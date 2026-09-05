@@ -55,6 +55,7 @@ data class PrefsSnapshot(
     val urgentLowSpeedEnabled: Boolean,
     val precogEnabled: Boolean,
     val radarDropTrackFallbackEnabled: Boolean,
+    val radarDropTrackWindowSec: Int,
     val turnAwareAlertsEnabled: Boolean,
     val closePassLoggingEnabled: Boolean,
     val closePassEmitMinRangeXM: Float,
@@ -266,6 +267,46 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_RADAR_DROP_TRACK_FALLBACK, true)
         set(v) {
             sp.edit().putBoolean(KEY_RADAR_DROP_TRACK_FALLBACK, v).apply()
+        }
+
+    /** How far back [radarDropTrackFallbackEnabled] looks for traffic when it
+     *  decides whether the rider was still out on the bike at the moment the
+     *  radar died. Sampled at the drop; the rider's own toggle above is read
+     *  per tick, this is not.
+     *
+     *  The default of 30 s is the measured one: on the capture corpus it opens
+     *  on 6 of 76 genuine ride-ends against the speed gate's 4, catches the
+     *  same moving drops, and leaves the cue unreachable for 39% of riding time
+     *  because the road behind is empty. The only other point ever measured on
+     *  this gate is 45 s, which takes the ride-ends to 13 of 76 - so the cost
+     *  of widening climbs steeply, and every rung above the first sits past
+     *  anything measured. Do not confuse that with the SPEED gate's own "45 s
+     *  hits 11", which is a different gate and a different question. The 39%
+     *  is why it is a setting: on a quiet route the cue needs a longer
+     *  look-back to fire at all, and the reason a longer one used to be
+     *  unaffordable, the last traffic of the ride still reading as fresh when
+     *  the radar goes off, is what the End ride control now answers. A rider
+     *  who buys coverage this way keeps a beep at some parks; the control is
+     *  how they end it.
+     *
+     *  It reaches the track path only. The speed gate keeps its own measured
+     *  30 s ([es.jjrh.bikeradar.RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS])
+     *  whatever this says, which
+     *  `RadarLinkCoordinatorTest.theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses`
+     *  pins.
+     *  Widening it also widens the ride wakelock's track term, or a drop this
+     *  confirms could be left without the Doze protection its own timers need.
+     *  That widening goes with [radarDropTrackFallbackEnabled]: the lock's own
+     *  120 s floor holds either way, and only the part this setting adds is
+     *  switched off with the cue it was added for. */
+    var radarDropTrackWindowSec: Int
+        get() = sp.getInt(KEY_RADAR_DROP_TRACK_WINDOW_SEC, RADAR_DROP_TRACK_WINDOW_DEFAULT_SEC)
+            .coerceIn(RADAR_DROP_TRACK_WINDOW_MIN_SEC, RADAR_DROP_TRACK_WINDOW_MAX_SEC)
+        set(v) {
+            sp.edit().putInt(
+                KEY_RADAR_DROP_TRACK_WINDOW_SEC,
+                v.coerceIn(RADAR_DROP_TRACK_WINDOW_MIN_SEC, RADAR_DROP_TRACK_WINDOW_MAX_SEC),
+            ).apply()
         }
 
     /** Wrist-haptic reminder when you walk off without locking the eBike (the
@@ -833,6 +874,7 @@ class Prefs(context: Context) {
         urgentLowSpeedEnabled = urgentLowSpeedEnabled,
         precogEnabled = precogEnabled,
         radarDropTrackFallbackEnabled = radarDropTrackFallbackEnabled,
+        radarDropTrackWindowSec = radarDropTrackWindowSec,
         turnAwareAlertsEnabled = turnAwareAlertsEnabled,
         closePassLoggingEnabled = closePassLoggingEnabled,
         closePassEmitMinRangeXM = closePassEmitMinRangeXM,
@@ -894,6 +936,7 @@ class Prefs(context: Context) {
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("precog_enabled=$precogEnabled")
         appendLine("radar_drop_track_fallback_enabled=$radarDropTrackFallbackEnabled")
+        appendLine("radar_drop_track_window_sec=$radarDropTrackWindowSec")
         appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
         appendLine("close_pass_logging_enabled=$closePassLoggingEnabled")
         appendLine("close_pass_emit_min_x_m=$closePassEmitMinRangeXM")
@@ -956,6 +999,14 @@ class Prefs(context: Context) {
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_RADAR_DROP_TRACK_FALLBACK = "radar_drop_track_fallback_enabled"
+        const val KEY_RADAR_DROP_TRACK_WINDOW_SEC = "radar_drop_track_window_sec"
+
+        /** Bounds and default for [radarDropTrackWindowSec]. The ladder the
+         *  Settings slider offers starts at the default and ends at the max, so
+         *  every value the rider can reach is one the clamp already allows. */
+        const val RADAR_DROP_TRACK_WINDOW_DEFAULT_SEC = 30
+        const val RADAR_DROP_TRACK_WINDOW_MIN_SEC = 30
+        const val RADAR_DROP_TRACK_WINDOW_MAX_SEC = 3600
         const val KEY_TURN_AWARE_ALERTS = "turn_aware_alerts_enabled"
 
         // Two keys are deliberately absent: `experimental_lateral_panning` and

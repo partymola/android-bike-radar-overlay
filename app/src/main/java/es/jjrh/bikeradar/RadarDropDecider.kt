@@ -93,9 +93,10 @@ package es.jjrh.bikeradar
  * dashcam is what PREVENTS the alarm (`WalkAwayDecider` returns NONE, then
  * AUTO_DISMISS, on `nowMs - dashcamLastAdvertMs > dashcamFreshMs`). The
  * track-presence path widens it further: "moving at the drop" becomes "traffic
- * seen within 30 s of the drop", so a range-only rider with a dashcam who parks
- * kerbside on a busy road can take both. That is the case the Experimental
- * toggle exists to switch off.
+ * seen within the rider's traffic window of the drop", 30 s by default and up
+ * to an hour, so a range-only rider with a dashcam who parks kerbside on a busy
+ * road can take both, and the wider their window the likelier that is. That is
+ * the case the Experimental toggle exists to switch off.
  *
  * Deliberately NOT part of the activity signal on a radar that reports rider
  * speed: the mere PRESENCE of tracked vehicles. A vehicle can be tracked while
@@ -129,8 +130,10 @@ package es.jjrh.bikeradar
  * the corpus is V2 captures throughout - track presence was replayed from
  * their target frames - so the substitute has never been measured on the
  * stream it actually applies to, and no V1 hardware exists here to measure it
- * on. The per-episode cap ([MAX_LATCH_ONLY_CUES]) bounds the cost at three
- * cues, and the toggle is the way out. [RadarDropDeciderTest] pins the gating;
+ * on. Those figures describe the DEFAULT window: the rider can widen it (see
+ * [es.jjrh.bikeradar.data.Prefs.radarDropTrackWindowSec]), and nothing has been
+ * measured above 45 s. The per-episode cap ([MAX_LATCH_ONLY_CUES]) bounds the
+ * cost at three cues, and the toggle is the way out. [RadarDropDeciderTest] pins the gating;
  * do not widen it to a source that has rider speed.
  *
  * Closure rate was evaluated as a way to sharpen it and does not work. It is
@@ -341,10 +344,12 @@ object RadarDropDecider {
      * The rider's Experimental toggle is deliberately NOT a parameter here.
      * The cue applies it per tick in `RadarLinkCoordinator.evaluateRadarDrop`,
      * so switching it off silences the rest of an off-episode rather than only
-     * the next one, and the ride wakelock does not apply it at all because it
-     * protects the walk-away and ride-summary timers too. A parameter would
-     * have to be passed one way by one caller and the other way by the other,
-     * which is a policy the callers own rather than one this function can hold.
+     * the next one. The ride wakelock applies it to HALF its window: the
+     * 120 s floor holds whatever the toggle says, because it protects the
+     * walk-away and ride-summary timers too, while the part that only exists
+     * because the rider stretched the cue's own look-back goes with the cue.
+     * Each caller passes the window its own policy produces, which is why this
+     * function holds no policy of its own.
      */
     fun trackActivityFreshAtDrop(
         dropInstantMs: Long,

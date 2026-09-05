@@ -1261,9 +1261,10 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun aDropLongAfterTheLastTrafficDoesNotHoldTheWakeLock() {
-        // The other half: the wakelock must not be taken by a radar that drops
-        // long after the rider parked, which is what its own window is for.
-        // 121 s at the drop, one second outside it.
+        // The other half: at the DEFAULT window the wakelock must not be taken
+        // by a radar that drops long after the rider parked, which is what its
+        // own window is for. 121 s at the drop, one second outside it. The
+        // stretched window's own bracket is aDropOutsideEvenTheStretchedWindow.
         prefs.pausedUntilEpochMs = 0L
         ebike = null
         hasEBike = false
@@ -1447,6 +1448,206 @@ class RadarLinkCoordinatorTest {
         disconnectAt(20_000L) // sighting is 17 s old, inside the 30 s window
         coordinator.evaluateRadarDrop(20_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
         assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    // ── the rider's own traffic window ───────────────────────────────────────
+
+    @Test
+    fun aLongerWindowConfirmsTrafficTheDefaultWouldHaveRejected() {
+        // The point of the setting: on a quiet road the last vehicle can be
+        // minutes back, and at the default window the cue is simply unreachable
+        // for that rider. Literals on both sides here and in the sibling below,
+        // so the pair brackets the CHOSEN window rather than any value above 30 s.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 300
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(300_000L) // 299 s since the sighting, inside the 300 s window
+        coordinator.evaluateRadarDrop(300_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        // The line a report reads has to name the window the drop was judged
+        // on, or the same tally means different things on two phones. Asserted
+        // as the WHOLE line: a substring would pass on window_s=300000, which
+        // is the units mistake this field invites.
+        assertEquals(
+            listOf("# radar_drop_latch source=track-presence window_s=300"),
+            clogLines.filter { it.startsWith("# radar_drop_latch") },
+        )
+    }
+
+    @Test
+    fun trafficOlderThanTheChosenWindowStillDoesNotConfirm() {
+        // 301 s against the same 300 s window: the setting moves the boundary,
+        // it does not remove it.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 300
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(302_000L)
+        coordinator.evaluateRadarDrop(302_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses() {
+        // The two windows were measured separately and happened to agree at
+        // 30 s, so until now nothing could tell them apart. A rider stretching
+        // the traffic window must not also stretch the speed gate: that gate's
+        // 30 s is what keeps a dismount silent, and it was measured against
+        // ride-ends, not against empty roads.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 300
+        ebike = null
+        hasEBike = false
+        lastTrackMs = null
+        lastRidingMs = 9_999L // 31 s before the drop: stale for the speed gate
+        connectAt(500L)
+        disconnectAt(41_000L)
+        coordinator.evaluateRadarDrop(41_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun theWindowIsReadAtTheDropNotEveryTick() {
+        // Sampled with the latch it belongs to. Widening the window after the
+        // radar has died cannot retroactively make an old sighting evidence
+        // that this drop happened mid-ride.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(101_000L) // 100 s back: outside the default window
+        prefs.radarDropTrackWindowSec = 300 // ...widened after the drop
+        coordinator.evaluateRadarDrop(101_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun narrowingTheWindowMidEpisodeDoesNotSilenceTheCue() {
+        // The positive half of the same sampling rule, and the one that can
+        // fail: a drop that qualified keeps qualifying even though the rider
+        // has since narrowed the window under it. Asserted rather than left
+        // implied, because it is the asymmetry against the on/off toggle - that
+        // one IS read per tick, since silencing an unwanted cue is safe and
+        // opening one after the fact is not. A rider who wants this episode
+        // quiet has the toggle and the park declaration; the slider is not a
+        // third route, deliberately.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 300
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(101_000L) // 100 s back: inside the 300 s window at the drop
+        prefs.radarDropTrackWindowSec = 30 // ...narrowed after it
+        coordinator.evaluateRadarDrop(101_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aNewRideDropsTheSightingEvenAtTheLongestWindow() {
+        // At the default window the sighting-clear is depth: a new ride needs
+        // at least 5 minutes, so yesterday's traffic is already outside 30 s
+        // and the window would reject it anyway. At an hour it is the only
+        // thing standing between the last vehicle of one ride and a cue on the
+        // next, so this is where that clear starts carrying weight.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 3600
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val nextRide = 4_000L + 601_000L // one second past the new-ride boundary
+        connectAt(nextRide)
+        assertEquals(1, trackClearCount)
+        disconnectAt(nextRide + 3_000L)
+        coordinator.evaluateRadarDrop(
+            nextRide + 3_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L,
+        )
+        assertEquals("yesterday's traffic must not confirm today's drop", 0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aLongWindowWidensTheRideWakeLockWithIt() {
+        // The cue is driven by delay() timers that deep Doze sleeps through,
+        // and this cohort has no BLE wakeups once the radar dies. Leaving the
+        // lock on its own 120 s while the cue looks back 10 minutes would
+        // confirm a live-ride off-episode and then not protect its timers -
+        // which fails only with the screen off, so every bench test passes.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 600
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(300_000L) // 299 s back: outside 120 s, inside the chosen 600 s
+        assertEquals(1, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun aShortWindowDoesNotNarrowTheRideWakeLock() {
+        // The other direction: the lock's own 120 s is a floor, not a mirror.
+        // At the default 30 s window a drop 60 s after the last vehicle gets no
+        // cue, and the walk-away and ride-summary timers still get their lock.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(61_000L) // 60 s back: outside the 30 s window, inside 120 s
+        assertEquals(1, wakeLockAcquireCount)
+        coordinator.evaluateRadarDrop(61_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aDropOutsideEvenTheStretchedWindowHoldsNothing() {
+        // The upper bracket the widening needs: without it, a mutant that
+        // acquires unconditionally once the window is stretched passes, since
+        // the sibling above only brackets the DEFAULT window. 601 s against a
+        // chosen 600 s.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 600
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(602_000L)
+        assertEquals(0, wakeLockAcquireCount)
+    }
+
+    @Test
+    fun theStretchedWakeLockGoesWithTheCueItServes() {
+        // The base 120 s ignores the drop-cue toggle on purpose - it protects
+        // the walk-away and ride-summary timers a rider keeps after switching
+        // the cue off. Everything past it exists for the cue alone, so with the
+        // cue off there is nothing for it to serve: a 299 s-old sighting must
+        // hold nothing, exactly as it did before the window was configurable.
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarDropTrackWindowSec = 600
+        prefs.radarDropTrackFallbackEnabled = false
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 1_000L
+        connectAt(500L)
+        disconnectAt(300_000L)
+        assertEquals(0, wakeLockAcquireCount)
     }
 
     // ── snooze re-arm helper ─────────────────────────────────────────────────

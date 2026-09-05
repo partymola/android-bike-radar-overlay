@@ -77,6 +77,10 @@ class PrefsTest {
         // who has no eBike gets no drop cue at all without it, so a switch
         // defaulted off would leave that rider exactly where the bug did.
         assertTrue(s.radarDropTrackFallbackEnabled)
+        // The measured window, and the one the corpus figures in the fallback's
+        // own documentation describe. A rider who never opens the slider must
+        // keep it, or those figures stop describing the shipped behaviour.
+        assertEquals(30, s.radarDropTrackWindowSec)
         assertFalse(s.closePassLoggingEnabled)
         assertEquals(1.0f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(15, s.closePassRiderSpeedFloorKmh)
@@ -123,6 +127,7 @@ class PrefsTest {
         prefs.adaptiveAlertsEnabled = false
         prefs.precogEnabled = true
         prefs.radarDropTrackFallbackEnabled = false
+        prefs.radarDropTrackWindowSec = 600
         prefs.closePassLoggingEnabled = true
         prefs.closePassEmitMinRangeXM = 1.5f
         prefs.closePassRiderSpeedFloorKmh = 20
@@ -168,6 +173,7 @@ class PrefsTest {
         assertFalse(s.adaptiveAlertsEnabled)
         assertTrue(s.precogEnabled)
         assertFalse(s.radarDropTrackFallbackEnabled)
+        assertEquals(600, s.radarDropTrackWindowSec)
         assertTrue(s.closePassLoggingEnabled)
         assertEquals(1.5f, s.closePassEmitMinRangeXM, 0f)
         assertEquals(20, s.closePassRiderSpeedFloorKmh)
@@ -278,6 +284,19 @@ class PrefsTest {
         prefs.closePassClosingSpeedFloorMs = 99 // ceiling 15
         assertEquals(15, prefs.closePassClosingSpeedFloorMs)
 
+        // Literal bounds: a hand-edited or backed-up value outside the ladder
+        // the slider offers still has to reach the drop gate as a window it
+        // was measured against.
+        prefs.radarDropTrackWindowSec = 1 // floor 30
+        assertEquals(30, prefs.radarDropTrackWindowSec)
+        prefs.radarDropTrackWindowSec = 99_999 // ceiling 3600
+        assertEquals(3600, prefs.radarDropTrackWindowSec)
+        prefs.radarDropTrackWindowSec = 600 // in-range round-trip
+        assertEquals(600, prefs.radarDropTrackWindowSec)
+        // The bundle is where a hardware report shows which window a drop was
+        // judged on, so the setting has to reach it.
+        assertTrue(prefs.dumpAll().contains("radar_drop_track_window_sec=600"))
+
         // Signed clamp to +/-MAX (mount offset; 0 = centred stays valid).
         prefs.radarLateralOffsetCm = 999
         assertEquals(Prefs.RADAR_LATERAL_OFFSET_MAX_CM, prefs.radarLateralOffsetCm)
@@ -298,6 +317,21 @@ class PrefsTest {
         assertEquals(0.3f, prefs.closePassEmitMinRangeXM, 0f)
         prefs.closePassEmitMinRangeXM = 9f // ceiling 2.0
         assertEquals(2.0f, prefs.closePassEmitMinRangeXM, 0f)
+    }
+
+    @Test
+    fun anOutOfRangeTrafficWindowWrittenPastTheSetterIsStillClamped() {
+        // The clamp lives on both sides, so a test that writes through the
+        // setter cannot see the getter's half at all - a mutation pass proved
+        // exactly that, with the whole suite green. This writes straight into
+        // the backing file, which is the route a value actually arrives by:
+        // an Android backup restored from a build whose ladder ended somewhere
+        // else. An hour is the widest window measured against the drop gate.
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        raw.edit().putInt(Prefs.KEY_RADAR_DROP_TRACK_WINDOW_SEC, 86_400).commit()
+        assertEquals(3600, Prefs(context).radarDropTrackWindowSec)
+        raw.edit().putInt(Prefs.KEY_RADAR_DROP_TRACK_WINDOW_SEC, 0).commit()
+        assertEquals(30, Prefs(context).radarDropTrackWindowSec)
     }
 
     @Test

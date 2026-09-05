@@ -32,6 +32,9 @@ class SettingsExperimentalSnapshotTest {
                     onPrecogChange = {},
                     radarDropTrackFallbackEnabled = false,
                     onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 30,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
                 )
             }
         }
@@ -47,6 +50,9 @@ class SettingsExperimentalSnapshotTest {
                     onPrecogChange = {},
                     radarDropTrackFallbackEnabled = false,
                     onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 30,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
                 )
             }
         }
@@ -63,6 +69,71 @@ class SettingsExperimentalSnapshotTest {
                     onPrecogChange = {},
                     radarDropTrackFallbackEnabled = true,
                     onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 30,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
+                )
+            }
+        }
+    }
+
+    /** The minutes form of the window label, and the slider away from its
+     *  first stop. The seconds form is covered by every other case here. */
+    @Test
+    fun dropWindowStretched() {
+        captureRoboImage {
+            UiTheme {
+                SettingsExperimentalContent(
+                    navController = rememberNavController(),
+                    precogEnabled = false,
+                    onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = true,
+                    onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 600,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
+                )
+            }
+        }
+    }
+
+    /** The rung the label switches form on. Seconds below a minute, whole
+     *  minutes above it, and 60 s is the first value on the minutes side. */
+    @Test
+    fun dropWindowAtTheMinuteBoundary() {
+        captureRoboImage {
+            UiTheme {
+                SettingsExperimentalContent(
+                    navController = rememberNavController(),
+                    precogEnabled = false,
+                    onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = true,
+                    onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 60,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
+                )
+            }
+        }
+    }
+
+    /** Spanish, at the width the layout is tightest: this screen's titles and
+     *  helper text are where es runs longest, and a golden is the only thing
+     *  that shows clipping or a wrap the English never hits. */
+    @Test
+    @Config(qualifiers = "+es")
+    fun dropWindowStretchedEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsExperimentalContent(
+                    navController = rememberNavController(),
+                    precogEnabled = false,
+                    onPrecogChange = {},
+                    radarDropTrackFallbackEnabled = true,
+                    onRadarDropTrackFallbackChange = {},
+                    radarDropTrackWindowSec = 600,
+                    onRadarDropTrackWindowChange = {},
+                    onRadarDropTrackWindowFinished = {},
                 )
             }
         }

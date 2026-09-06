@@ -413,6 +413,15 @@ enforces them, and CONTRIBUTING.md points contributors here:
   constants between test and production"). Mutation testing is the detector: if
   unsure a test pins a value, mutate the constant to a degenerate value and
   confirm a test goes red.
+- **A consequence: never conclude "nothing pins this" from grepping for the
+  constant.** The tests that pin one hardest deliberately do not name it, and
+  the hit the grep does return can be the test that cannot fail. Grep
+  `RADAR_DROP_ACTIVITY_FRESH_MS` and the one test naming it is
+  `noRadarDropCueForRadarOnlyDismount`, which derives its stale instant from
+  the constant and so stays green whatever the value becomes. The test holding
+  that window apart from the rider's configurable one is
+  `theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses`, on a literal
+  `9_999L`. Read the test file, or search for the behaviour, not the symbol.
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
   (Robolectric). CI runs this alongside `:app:lintDebug`,
   `:app:ktlintCheck`, `:app:verifyRoborazziDebug`, and

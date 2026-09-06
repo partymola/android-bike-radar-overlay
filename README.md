@@ -111,9 +111,13 @@ With a Bosch eBike the sound when the radar drops works from the bike, as
 before. Without one it is expected to fire only if the radar was still seeing
 traffic behind you shortly before the link died, because the radar cannot
 report your own speed and recent traffic is what tells the app you are still
-riding; on an empty road it stays silent. You can turn that stand-in off in
-**Settings → Experimental**. That fallback is new in 1.4.0 and nobody has
-confirmed it on real hardware yet.
+riding; on an empty road it stays silent. **Settings → Experimental** is where
+you set how far back it looks for that traffic, from 30 seconds out to an hour,
+or turn the stand-in off. A longer look-back is what makes the sound reachable
+on a quiet road, and it also makes it likelier to sound when you park somewhere
+busy. No setting above the 30-second default has been measured against real
+rides. That fallback is new in 1.4.0 and nobody has confirmed it on real
+hardware yet.
 
 Riding anything but an 820? A works or doesn't-work
 [report](../../issues) is the most valuable thing you can send. The Debug

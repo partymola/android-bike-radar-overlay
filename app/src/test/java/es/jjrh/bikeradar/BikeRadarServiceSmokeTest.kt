@@ -160,7 +160,7 @@ class BikeRadarServiceSmokeTest {
         // by MainScreenEndRideCtaTest.tappingTheControlAsksTheServiceToEndTheRide),
         // and this is what the dispatch arm does with it. Deleting the handler
         // body leaves a control that looks live and silences nothing.
-        val root = app.getExternalFilesDir(null)!!
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
         File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
@@ -193,6 +193,28 @@ class BikeRadarServiceSmokeTest {
             "the rider's declaration must reach the always-on journal, got:\n$journal",
             journal.contains("ride ended by rider"),
         )
+        controller.destroy()
+    }
+
+    @Test
+    fun theSnoozeActionSaysItWasASnoozeAndTheDismissActionDoesNot() {
+        // The coordinator tests call both branches directly, so they cannot see
+        // which one each service action picks. Drop the argument at the snooze
+        // dispatch and the default would apply, journalling a plain dismissal
+        // for a rider who only asked for two minutes of quiet - the confusion
+        // the two lines exist to remove, reinstated with every test green.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+
+        service.onStartCommand(Intent().apply { action = BikeRadarService.ACTION_WALKAWAY_SNOOZE }, 0, 1)
+        service.onStartCommand(Intent().apply { action = BikeRadarService.ACTION_WALKAWAY_DISMISS }, 0, 2)
+
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertTrue("the snooze must record itself as one, got:\n$journal", journal.contains("snoozed by rider"))
+        assertTrue("the dismissal must record itself as one, got:\n$journal", journal.contains("dismissed by rider"))
         controller.destroy()
     }
 

@@ -630,7 +630,7 @@ class BikeRadarService : Service() {
             }
             ACTION_WALKAWAY_DISMISS -> {
                 Log.i(TAG, "walk-away dismissed")
-                radarLinkCoordinator.markWalkAwayDismissed()
+                radarLinkCoordinator.markWalkAwayDismissed(snoozed = false)
                 walkAwaySnoozeJob.getAndSet(null)?.cancel()
                 notifications.cancelWalkAway()
                 walkAwayAlarm.stop()
@@ -656,7 +656,7 @@ class BikeRadarService : Service() {
             }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
-                radarLinkCoordinator.markWalkAwayDismissed()
+                radarLinkCoordinator.markWalkAwayDismissed(snoozed = true)
                 notifications.cancelWalkAway()
                 walkAwayAlarm.stop()
                 val newJob = scope.launch {

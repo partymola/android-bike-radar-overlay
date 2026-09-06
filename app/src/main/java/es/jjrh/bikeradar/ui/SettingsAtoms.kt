@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -331,14 +332,19 @@ fun SettingsSliderRow(
             onValueChange = onValueChange,
             onValueChangeFinished = onValueChangeFinished,
             steps = steps,
-            // Say the value the row is already showing. Left alone, the node
-            // carries only the slider's position in its range, which is the
-            // value while a scale is linear and is not once one is not: the
-            // traffic look-back's positions index a ladder from 30 s to an
-            // hour, so two thirds along is 10 min rather than 40. The title is
-            // deliberately not repeated here - it is its own node one step
-            // earlier in the traversal.
-            modifier = Modifier.semantics { stateDescription = valueDisplay },
+            // Name the control and say the value the row is already showing.
+            // Left alone the node carries only the slider's position in its
+            // range, which is the value while a scale is linear and is not once
+            // one is not: the traffic look-back's positions index a ladder from
+            // 30 s to an hour, so two thirds along is 10 min rather than 40.
+            // The two properties are not interchangeable - the state is
+            // re-announced on every step of an adjustment and the name is not,
+            // so the title goes in the name or a rider stepping through a
+            // ladder hears it seven times.
+            modifier = Modifier.semantics {
+                contentDescription = title
+                stateDescription = valueDisplay
+            },
         )
     }
 }

@@ -127,10 +127,26 @@ internal class RadarLinkCoordinator(
 
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
-    /** Rider dismissed the walk-away alarm for this off-episode. */
-    fun markWalkAwayDismissed() {
+    /** Rider dismissed the walk-away alarm for this off-episode.
+     *
+     *  [snoozed] only names which way they did it. The two are the same
+     *  state change and must stay so, but they are not the same rider
+     *  intent, and the re-arm line cannot tell them apart afterwards: a
+     *  reconnect inside the snooze window cancels that job, so a snooze
+     *  would otherwise read back as a dismissal nobody took back.
+     *
+     *  Required rather than defaulted: a default is the silently wrong value at
+     *  whichever call site forgets it, and the two call sites are the two
+     *  answers. */
+    fun markWalkAwayDismissed(snoozed: Boolean) {
         _radarLinkState.update { it.copy(walkAwayDismissed = true) }
-        journal("walk-away alarm silenced by rider")
+        // Two calls rather than one with a conditional argument, so each event
+        // is a literal a reader (and JournalScopeIsDisclosedTest) can see.
+        if (snoozed) {
+            journal("walk-away alarm snoozed by rider")
+        } else {
+            journal("walk-away alarm dismissed by rider")
+        }
     }
 
     /** The rider said this off-episode is the end of a ride.
@@ -346,7 +362,7 @@ internal class RadarLinkCoordinator(
             // 120 s deliberately trades some of that away. The hold itself is
             // bounded by RIDE_WAKELOCK_CAP_MS at any setting, and released on
             // reconnect / BLANK / ride-summary.
-            // Both confirmation signals, at the wakelock's own wider window.
+            //
             // Gating this on rider speed alone left the range-only cohort with
             // a confirmed live-ride off-episode and no Doze protection - their
             // speed latch is structurally null for the whole ride, so the gate
@@ -363,11 +379,13 @@ internal class RadarLinkCoordinator(
             // is on time whenever the CPU is awake. The release path is
             // unchanged from before this fallback existed.
             //
-            // Deliberately NOT gated on the drop-cue toggle. This lock protects
-            // every off-episode timer, walk-away and the ride summary included,
-            // and a rider who switched the cue off still has those. Holding it
-            // for them costs a bounded 300 s that reconnect or BLANK ends
-            // sooner; not holding it would break two features to spare one.
+            // The FLOOR below is deliberately not gated on the drop-cue toggle.
+            // This lock protects every off-episode timer, walk-away and the ride
+            // summary included, and a rider who switched the cue off still has
+            // those. Holding it for them costs a bounded 300 s that reconnect or
+            // BLANK ends sooner; not holding it would break two features to
+            // spare one. What the rider's own window adds ON TOP of that floor
+            // does go with the toggle, at the track term below.
             val liveRideAtDrop = RadarDropDecider.activityFreshAtDrop(
                 nowMs,
                 lastActivityMs,
@@ -376,18 +394,7 @@ internal class RadarLinkCoordinator(
                 RadarDropDecider.trackActivityFreshAtDrop(
                     nowMs,
                     lastTrackActivityMs(),
-                    // The lock's own window is a floor, not a mirror: a rider
-                    // who stretches the cue's look-back must not end up with a
-                    // confirmed live-ride off-episode whose timers Doze can
-                    // still sleep through. Bounded by RIDE_WAKELOCK_CAP_MS
-                    // whatever they choose.
-                    //
-                    // The WIDENING is gated on the cue's toggle even though the
-                    // base window is not, and the two are not in tension: the
-                    // base protects the walk-away and ride-summary timers a
-                    // rider keeps after switching the cue off, while everything
-                    // past it exists for the cue alone and has nothing to serve
-                    // once that is off.
+                    // A floor, not a mirror. See RIDE_WAKELOCK_ACTIVITY_FRESH_MS.
                     if (prefs.radarDropTrackFallbackEnabled) {
                         maxOf(RIDE_WAKELOCK_ACTIVITY_FRESH_MS, trackWindowMs)
                     } else {
@@ -621,6 +628,9 @@ internal class RadarLinkCoordinator(
             freshMs = RADAR_DROP_EBIKE_FRESH_MS,
             eBikeRidingFresh = ridingFresh,
         )
+        // Hoisted: the journal below needs the same answer, and the two must
+        // not drift.
+        val latchOnly = ridingConfirmed && !liveEBikeConfirmed
         val decision = RadarDropDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
@@ -629,7 +639,7 @@ internal class RadarLinkCoordinator(
             thresholdMs = RADAR_DROP_THRESHOLD_MS,
             cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
             lastCueMs = radarDropLastCueMs,
-            latchOnlyConfirmation = ridingConfirmed && !liveEBikeConfirmed,
+            latchOnlyConfirmation = latchOnly,
             cueCount = radarDropCueCount,
         )
         // The latch resets lazily here on the next tick that sees the radar
@@ -645,6 +655,23 @@ internal class RadarLinkCoordinator(
                     "system_locked=${snap?.systemLocked} ebike_age_ms=$ebikeAgeMs " +
                     "cue_count=${decision.cueCount}",
             )
+            // The line above reaches a file on almost no install: the capture
+            // writer is closed by the link teardown before the first cue is due
+            // at RADAR_DROP_THRESHOLD_MS. Without this the app records a rider
+            // silencing the alert and not the alert itself, which reads as the
+            // rider silencing nothing.
+            // Every cue on the latch-only path, the first only on the live
+            // eBike one. The asymmetry is the point: the latch-only path is
+            // bounded at MAX_LATCH_ONLY_CUES by construction, and whether a
+            // stop ran that cap to completion is the diagnostic the cap itself
+            // was added from - the more so now the window is a rider setting
+            // with nothing measured past 45 s. The live-eBike path has no cap
+            // at all: it re-fires every RADAR_DROP_CUE_INTERVAL_MS for as long
+            // as the bike reports unlocked, so a bike parked in range with the
+            // radar off would fill the journal's trim in about a day.
+            if (decision.cueCount == 1 || latchOnly) {
+                journal("dead-radar alert sounded (cue ${decision.cueCount})")
+            }
         }
         // Near-miss diagnostics: an eBike IS present but the radar-down cue is
         // held because riding isn't confirmed (the snapshot went stale, or the
@@ -773,10 +800,10 @@ internal class RadarLinkCoordinator(
          * drop in [markDisconnected]. It defaults to the same 30 s
          * [RADAR_DROP_ACTIVITY_FRESH_MS] uses and is a separate quantity: the
          * two were measured against different questions, and a rider stretching
-         * one must not move the other. That separation used to rest on nothing,
-         * since both are window arguments to the same pure function and the
-         * values agreed; `theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses`
-         * now pins it. */
+         * one must not move the other. Both are window arguments to the same
+         * pure function, so nothing but
+         * `theSpeedGateKeepsItsOwnWindowWhateverTheRiderChooses` keeps them
+         * apart. */
 
         /** Ride-wakelock acquire FLOOR: hold the CPU if the drop looks like a
          *  live ride within this window - the rider moving above walking pace,

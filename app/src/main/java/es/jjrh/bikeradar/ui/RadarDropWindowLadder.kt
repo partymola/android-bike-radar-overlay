@@ -30,10 +30,7 @@ internal object RadarDropWindowLadder {
      *  or carried in from a backup) renders on the closest rung rather than
      *  snapping the rider's setting to an end; a tie takes the shorter window,
      *  which is the one that cues less. */
-    fun indexOf(sec: Int): Int {
-        val nearest = RUNGS_SEC.minByOrNull { abs(it - sec) } ?: RUNGS_SEC.first()
-        return RUNGS_SEC.indexOf(nearest)
-    }
+    fun indexOf(sec: Int): Int = RUNGS_SEC.indices.minBy { abs(RUNGS_SEC[it] - sec) }
 
     fun secondsAt(index: Int): Int = RUNGS_SEC[index.coerceIn(RUNGS_SEC.indices)]
 }

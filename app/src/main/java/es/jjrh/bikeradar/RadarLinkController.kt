@@ -132,6 +132,13 @@ internal class RadarLinkController(
     // lifts, so the next bond loss records again.
     @Volatile private var bondRefusalJournalled = false
 
+    // Same latch for the reconnect line. Cleared at BOTH ends like the bond one
+    // above: at the top of each reconnect loop, and again once a session
+    // decodes. Clearing only on decode looks equivalent and is not - a second
+    // loop that never decodes would then record no backoff line at all, which
+    // is precisely the absent-radar case the journal is read for.
+    @Volatile private var reconnectJournalled = false
+
     // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
     @Volatile private var lastV2FrameMs: Long = 0L
 
@@ -334,6 +341,10 @@ internal class RadarLinkController(
         currentRadarMac = mac
         legacyTableVerified = false
         var backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+        // Beside the backoff it guards, and for the same reason: this loop's
+        // state starts fresh, so a restart that never decodes still records
+        // its first backoff.
+        reconnectJournalled = false
         try {
             while (true) {
                 if (bondLost) {
@@ -350,8 +361,10 @@ internal class RadarLinkController(
                 }
                 if (lastConnectionReachedDecode) {
                     // Healthy session - reset the backoff so the next reconnect
-                    // is fast.
+                    // is fast, and let the next off-episode record its own
+                    // first backoff line.
                     backoffMs = RADAR_RECONNECT_BACKOFF_INITIAL_MS
+                    reconnectJournalled = false
                 }
                 val delayMs = ReconnectLoopPlanner.nextDelayMs(backoffMs, quickReconnect)
                 val tag = when {
@@ -359,7 +372,17 @@ internal class RadarLinkController(
                     else -> " (backoff=${backoffMs}ms)"
                 }
                 Log.i(TAG, "reconnecting in ${delayMs}ms$tag")
-                journal("radar reconnect in ${delayMs}ms$tag")
+                // Once per reconnect loop, like the bond refusal above and for
+                // the same reason: against a radar that is simply absent this
+                // loop turns over about twice a minute, so a line per attempt
+                // fills the journal's 600-line trim in a few hours and pushes
+                // out the ride that a report is about. Cleared at the top of
+                // the loop and on decode, so a flapping link still records each
+                // fresh episode's backoff.
+                if (!reconnectJournalled) {
+                    journal("radar reconnect in ${delayMs}ms$tag")
+                    reconnectJournalled = true
+                }
                 kotlinx.coroutines.delay(delayMs)
                 if (!quickReconnect) {
                     backoffMs = ReconnectLoopPlanner.grow(

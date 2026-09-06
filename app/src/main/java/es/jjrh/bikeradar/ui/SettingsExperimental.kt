@@ -37,8 +37,11 @@ fun SettingsExperimental(navController: NavController, prefs: Prefs) {
     }
 }
 
+/** Internal rather than private so `SettingsExperimentalWindowTest` can compose
+ *  the shipped screen: everything between the slider and [Prefs] lives here, and
+ *  the snapshot tests render the stateless leaf below with literal values. */
 @Composable
-private fun SettingsExperimentalBody(navController: NavController, prefs: Prefs) {
+internal fun SettingsExperimentalBody(navController: NavController, prefs: Prefs) {
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     // The drag lives here and only the release commits, matching the other
     // slider screens. Writing per frame would rewrite the prefs file on every
@@ -108,31 +111,35 @@ internal fun SettingsExperimentalContent(
                 )
             }
 
-            // 6 dp, matching the two screens that already nest a slider under
-            // the toggle it configures. At 16 the card reads as a sibling of
-            // the group above rather than as part of it.
-            Spacer(modifier = Modifier.height(6.dp))
-            // Nested under the toggle it configures, which is how the other two
-            // screens show that relationship rather than asserting it in words.
-            // Readable while that toggle is off, deliberately: the helper is the
-            // only place on this screen that states what the alert costs, and a
-            // rider deciding whether to switch it on needs to read it first.
-            // `allOff` pins that it renders there.
-            NestedCard {
-                SettingsSliderRow(
-                    title = stringResource(R.string.settings_exp_drop_window_title),
-                    valueDisplay = dropWindowLabel(radarDropTrackWindowSec),
-                    helper = stringResource(R.string.settings_exp_drop_window_helper),
-                    value = RadarDropWindowLadder.indexOf(radarDropTrackWindowSec).toFloat(),
-                    valueRange = 0f..(RadarDropWindowLadder.RUNGS_SEC.size - 1).toFloat(),
-                    steps = RadarDropWindowLadder.sliderSteps,
-                    onValueChange = {
-                        onRadarDropTrackWindowChange(RadarDropWindowLadder.secondsAt(it.roundToInt()))
-                    },
-                    onValueChangeFinished = onRadarDropTrackWindowFinished,
-                    paddingHorizontal = 0.dp,
-                    paddingBottom = 0.dp,
-                )
+            // Shown only while the toggle above it is on, matching the two
+            // screens that already nest a slider under the switch it
+            // configures. The setting reaches that one path and nothing else,
+            // so with the toggle off this is a live control writing a value
+            // nothing reads. The cost it warns about is stated on the toggle's
+            // own subtitle, so hiding it costs the rider nothing they need
+            // before opting in.
+            if (radarDropTrackFallbackEnabled) {
+                Spacer(modifier = Modifier.height(6.dp))
+                NestedCard {
+                    val rung = RadarDropWindowLadder.indexOf(radarDropTrackWindowSec)
+                    SettingsSliderRow(
+                        title = stringResource(R.string.settings_exp_drop_window_title),
+                        // The rung the thumb is on, not the stored seconds. A
+                        // value off the ladder would otherwise label itself one
+                        // window while the thumb sat on another.
+                        valueDisplay = dropWindowLabel(RadarDropWindowLadder.secondsAt(rung)),
+                        helper = stringResource(R.string.settings_exp_drop_window_helper),
+                        value = rung.toFloat(),
+                        valueRange = 0f..(RadarDropWindowLadder.RUNGS_SEC.size - 1).toFloat(),
+                        steps = RadarDropWindowLadder.sliderSteps,
+                        onValueChange = {
+                            onRadarDropTrackWindowChange(RadarDropWindowLadder.secondsAt(it.roundToInt()))
+                        },
+                        onValueChangeFinished = onRadarDropTrackWindowFinished,
+                        paddingHorizontal = 0.dp,
+                        paddingBottom = 0.dp,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -140,12 +147,14 @@ internal fun SettingsExperimentalContent(
     }
 }
 
-/** Seconds below a minute, whole minutes above it. Both forms use the unit
- *  symbol with a space and no plural, which is what the Spanish copy needs and
- *  what the English reads fine as. */
+/** Seconds below a minute, whole minutes above it. Reuses the unit formats the
+ *  radar screen already ships rather than adding a fourth byte-identical copy:
+ *  a change to how this app writes units should be one edit per locale, not
+ *  four. Every rung above the first is a whole number of minutes, which
+ *  `theRungsAreTheLadderThatShipped` pins, so the division is exact. */
 @Composable
 private fun dropWindowLabel(sec: Int): String = if (sec < 60) {
-    stringResource(R.string.settings_exp_drop_window_seconds_value, sec)
+    stringResource(R.string.settings_radar_seconds_value, sec)
 } else {
-    stringResource(R.string.settings_exp_drop_window_minutes_value, sec / 60)
+    stringResource(R.string.settings_radar_minutes_value, sec / 60)
 }

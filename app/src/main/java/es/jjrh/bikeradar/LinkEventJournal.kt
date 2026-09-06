@@ -21,14 +21,17 @@ import java.util.Locale
  * reconnect yesterday?" question has an answer on the Debug screen.
  *
  * Not a capture log: no radar packets, no movement data, no location.
- * Link lifecycle with device names, plus the handful of app events that
- * explain a link's behaviour and would otherwise reach logcat alone - a
- * service start, a recovered ride, the rider declaring a ride over.
- * The Privacy screen's connection-log paragraph describes this scope in
- * both locales; widening it again means editing that copy too.
- * Capped at [MAX_BYTES] /
- * trimmed to [KEEP_LINES], so it can't grow unbounded under a flapping
- * link.
+ * Link lifecycle with device names, plus the app events that explain a
+ * link's behaviour and would otherwise reach logcat alone - a service
+ * start, a recovered ride, the dead-radar alert sounding, and the rider
+ * silencing it by declaring the ride over or dismissing or snoozing the
+ * walk-away alarm. Treat that as a description rather than a
+ * register: `JournalScopeIsDisclosedTest` holds the writers in
+ * [RadarLinkCoordinator] to the Privacy screen's connection-log
+ * paragraph, in both languages, and nothing holds the other five writer
+ * files, which is why that paragraph is written illustratively.
+ * Capped at [MAX_BYTES] / trimmed to [KEEP_LINES], so it can't grow
+ * unbounded under a flapping link.
  *
  * Thread-safety: [log] is called from GATT callback threads and IO
  * coroutines; [readTail] from the Debug screen. The lock is on the

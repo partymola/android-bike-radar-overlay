@@ -322,8 +322,7 @@ class PrefsTest {
     @Test
     fun anOutOfRangeTrafficWindowWrittenPastTheSetterIsStillClamped() {
         // The clamp lives on both sides, so a test that writes through the
-        // setter cannot see the getter's half at all - a mutation pass proved
-        // exactly that, with the whole suite green. This writes straight into
+        // setter cannot see the getter's half at all. This writes straight into
         // the backing file, which is the route a value actually arrives by:
         // an Android backup restored from a build whose ladder ended somewhere
         // else. An hour is the widest window measured against the drop gate.

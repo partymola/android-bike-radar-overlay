@@ -236,7 +236,7 @@ class RadarLinkCoordinatorTest {
         ebike = null
         connectAt(1_000L)
         disconnectAt(4_000L) // armed
-        coordinator.markWalkAwayDismissed() // dismissed
+        coordinator.markWalkAwayDismissed(snoozed = false) // dismissed
         assertTrue(snap().walkAwayArmed)
         assertTrue(snap().walkAwayDismissed)
 
@@ -1656,16 +1656,104 @@ class RadarLinkCoordinatorTest {
     fun silencingTheDismountAlarmAndItsReArmBothReachTheJournal() {
         // Same class as the ride-end declaration: the rider silences a safety
         // cue and, without this, only logcat said so - nothing on a release
-        // build. The re-arm is journalled too, or a snooze reads afterwards as
-        // a dismissal that was never taken back.
+        // build.
         ebike = null
         connectAt(1_000L)
         disconnectAt(4_000L)
         val before = journalLines.size
-        coordinator.markWalkAwayDismissed()
+        coordinator.markWalkAwayDismissed(snoozed = false)
         coordinator.clearWalkAwayDismissalForReArm()
         assertEquals(
-            listOf("walk-away alarm silenced by rider", "walk-away snooze over, alarm re-armed"),
+            listOf("walk-away alarm dismissed by rider", "walk-away snooze over, alarm re-armed"),
+            journalLines.drop(before),
+        )
+    }
+
+    @Test
+    fun aSnoozeIsDistinguishableFromADismissalAtTheMomentItHappens() {
+        // The re-arm line cannot carry this on its own: a reconnect inside the
+        // snooze window cancels the job that writes it, and a later dismissal
+        // cancels it too, so a snooze would read back afterwards as a
+        // dismissal nobody took back. The two are the same state change and
+        // must stay so; only the record distinguishes them.
+        ebike = null
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        coordinator.markWalkAwayDismissed(snoozed = true)
+        connectAt(20_000L) // radar back inside the window: no re-arm line follows
+        assertEquals(listOf("walk-away alarm snoozed by rider"), journalLines.drop(before))
+    }
+
+    @Test
+    fun theAlertSoundingReachesTheJournalAndNotOnlyTheCaptureLog() {
+        // Without this the app records a rider silencing the alert and never
+        // the alert itself, so a report reads as the rider silencing nothing.
+        // The capture line beside it is written after the link teardown has
+        // closed the writer, which is every install bar a transcript session.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(listOf("dead-radar alert sounded (cue 1)"), journalLines.drop(before))
+    }
+
+    @Test
+    fun onlyTheFirstCueOfAnEpisodeReachesTheJournal() {
+        // The live-eBike path never caps, so it re-fires every cadence for as
+        // long as the bike says unlocked - a bike parked in range with the
+        // radar off writes a line every three minutes indefinitely, filling
+        // the journal's trim in about a day and taking the ride a report is
+        // about with it. That the alert fired, and when, is what a report
+        // needs; the repeats are the capture log's job.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(5) {
+            ebikeAtMs = t - 1_000L
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("five cues sounded", 5, clogged("radar_drop_cue"))
+        assertEquals(listOf("dead-radar alert sounded (cue 1)"), journalLines.drop(before))
+    }
+
+    @Test
+    fun everyCueOfACappedEpisodeReachesTheJournal() {
+        // The other cohort, and the opposite answer. A range-only rider's cue
+        // is bounded at MAX_LATCH_ONLY_CUES by construction, so it cannot flood
+        // - and whether a stop ran that cap to completion is the diagnostic the
+        // cap was added from, which matters more now the window is a rider
+        // setting with nothing measured past 45 s.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        lastRidingMs = null
+        lastTrackMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = journalLines.size
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(5) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("the cap holds the cue at three", 3, clogged("radar_drop_cue"))
+        assertEquals(
+            listOf(
+                "dead-radar alert sounded (cue 1)",
+                "dead-radar alert sounded (cue 2)",
+                "dead-radar alert sounded (cue 3)",
+            ),
             journalLines.drop(before),
         )
     }
@@ -1675,7 +1763,7 @@ class RadarLinkCoordinatorTest {
         ebike = null
         connectAt(1_000L)
         disconnectAt(4_000L)
-        coordinator.markWalkAwayDismissed()
+        coordinator.markWalkAwayDismissed(snoozed = false)
         assertTrue(snap().walkAwayDismissed)
         coordinator.clearWalkAwayDismissalForReArm()
         assertFalse(snap().walkAwayDismissed)

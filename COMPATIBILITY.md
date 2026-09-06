@@ -22,8 +22,10 @@ close-pass logging. With a Bosch eBike the sound when the radar drops works
 from the bike, as before; without one it is expected to fire only if the radar
 was still seeing traffic behind you shortly before the link died, because it
 cannot report your own speed and recent traffic is what tells the app you are
-still riding. On an empty road it stays silent. You can turn that stand-in off
-in **Settings → Experimental**.
+still riding. On an empty road it stays silent. **Settings → Experimental** is
+where you set how far back it looks for that traffic, from 30 seconds out to an
+hour, or turn the stand-in off. No setting above the 30-second default has been
+measured against real rides.
 **No** = the device exposes neither protocol over Bluetooth.
 
 Everything below the 820 is unconfirmed on real hardware. A report either way

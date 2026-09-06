@@ -48,10 +48,13 @@ class RadarDropWindowLadderTest {
         // A hand-edited pref, or one restored from a backup written by a build
         // with different rungs. Snapping such a value to an end would silently
         // change a setting the rider never touched.
-        assertEquals(RadarDropWindowLadder.RUNGS_SEC.indexOf(600), RadarDropWindowLadder.indexOf(700))
-        assertEquals(RadarDropWindowLadder.RUNGS_SEC.indexOf(1800), RadarDropWindowLadder.indexOf(1500))
+        // Literal positions, not a lookup on the list under test: comparing
+        // production output against `RUNGS_SEC.indexOf(...)` asks the same list
+        // both questions.
+        assertEquals(4, RadarDropWindowLadder.indexOf(700))
+        assertEquals(5, RadarDropWindowLadder.indexOf(1500))
         // A tie takes the shorter window, which is the one that cues less.
-        assertEquals(RadarDropWindowLadder.RUNGS_SEC.indexOf(30), RadarDropWindowLadder.indexOf(45))
+        assertEquals(0, RadarDropWindowLadder.indexOf(45))
     }
 
     @Test

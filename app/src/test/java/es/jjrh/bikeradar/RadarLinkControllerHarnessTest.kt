@@ -553,6 +553,49 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun theReconnectLineIsWrittenOncePerLoopNotOncePerAttempt() = runTest {
+        // Against a radar that is simply absent this loop turns over roughly
+        // twice a minute forever. Unlatched it fills the journal's own trim in
+        // a few hours and the diagnostic bundle's tail in about twenty minutes,
+        // so the ride a report is about is gone by the time anyone reads it -
+        // which costs far more than the repeated line is worth. The bond
+        // refusal above is latched for the same reason.
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpServicesMissingTx)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journal.any { it.startsWith("radar reconnect in") } })
+
+        // Let the loop turn over several more times. The count must not move.
+        val after = journal.count { it.startsWith("radar reconnect in") }
+        pumpUntil { journal.count { it.startsWith("radar reconnect in") } > after }
+        assertEquals(
+            "one line per off-episode, however many attempts it makes; journal=$journal",
+            1,
+            journal.count { it.startsWith("radar reconnect in") },
+        )
+
+        // A SECOND loop must record its own first backoff. Clearing the latch
+        // only on a successful decode looks equivalent and is not: a restart
+        // against a radar that never decodes would then journal no backoff line
+        // at all, which is the absent-radar case the journal is read for. The
+        // single-loop assertion above cannot see this.
+        controller.forceReconnect()
+        // start() returns early while the previous job is still active, and
+        // cancel() is not synchronous, so wait for the loop to actually stop
+        // rather than relying on the cancellation having landed.
+        assertTrue(pumpUntil { !controller.isActive() })
+        controller.start("TestRadar", mac)
+        assertTrue(
+            "a restarted loop must record its own backoff; journal=$journal",
+            pumpUntil { journal.count { it.startsWith("radar reconnect in") } >= 2 },
+        )
+        controller.forceReconnect()
+    }
+
     // ── handshake abort takes the quick-reconnect branch ────────────────────────
 
     @Test fun handshakeAbortTakesQuickReconnect() = runTest {

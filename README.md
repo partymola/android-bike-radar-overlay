@@ -438,3 +438,10 @@ its source.
 
 Reaching past the interface into the rest of the code is a different matter,
 and the GPL applies there as it normally would.
+
+**An app already does this.**
+[Crazy Capy Randonneur](https://github.com/zingo/Crazy_Capy_Randonneur) is a
+route-following app built for long battery life. It draws the vehicles behind
+you as dots on its map, and its status bar carries the radar battery, the
+overlay toggle and the tail light. It was the first app built on this
+interface.

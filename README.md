@@ -76,8 +76,10 @@ strip; the rest of your screen stays yours. (*Image credits
 - Radar sharing (off until you allow it): another app on the phone can ask
   to read your radar stream, and to change your tail light and hide the
   overlay. It gets nothing until you say yes on a screen naming it. Stop it
-  any time in **Settings → Apps allowed to use your radar**. Nothing leaves
-  the phone for this.
+  any time in **Settings → Apps allowed to use your radar**. The handover
+  happens on this device, app to app, not over the network and not through
+  the developer. What the other app does with it afterwards is up to that
+  app, so only allow one you trust.
 - Optional per-ride capture log (off by default; enable on the Debug
   screen) written to app-private storage: radar packets, BLE
   characteristic notifications, eBike telemetry from Bosch Flow,

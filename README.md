@@ -230,12 +230,12 @@ stopped working - open the app once, and if Android asks, disable
 Bike Radar**.
 
 **The app logged a close pass at 08:14:32 - how do I get the camera
-clip?** The app never touches the camera's footage; video stays on the
-camera's own storage. Use the timestamp from the ride history (or the
-close-pass event in Home Assistant) to find the moment, then pull the
-clip the way your camera vendor supports - their app's media gallery,
-or the camera's USB/SD storage directly. Camera clocks can drift a few
-seconds from the phone's; scrub around the timestamp.
+clip?** The app never touches the camera's footage. Use the timestamp
+from the ride history (or the close-pass event in Home Assistant) to find
+the moment, then pull the clip the way your camera vendor supports - their
+app's media gallery, or the camera's USB/SD storage directly. Camera
+clocks can drift a few seconds from the phone's; scrub around the
+timestamp.
 
 **What happens to my data on a new phone?** Your settings - including
 the Home Assistant URL and token, and the list of apps you have allowed

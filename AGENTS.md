@@ -65,8 +65,11 @@ Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the
 headings already in use - Breaking, Features, Fix, Security, UX,
 Compatibility, Reliability, Stability, Power, Diagnostics, Internal -
-matching the tone of existing entries). `Breaking` goes first in a
-section and says what the rider has to change by hand. The section
+matching the tone of existing entries). `Breaking` says what the rider
+has to change by hand. Order the headings by how many riders they reach:
+`Breaking` leads when it reaches everyone, and `Features` leads when the
+breakage only reaches a subset, as in 1.5.0, where it lands on Home
+Assistant users alone. The section
 covers everything since the last tag, not just what is unpushed - read
 the range as `v<last>..HEAD`. Write each bullet on a SINGLE line, no
 hard wrapping: the release workflow copies the section verbatim into the

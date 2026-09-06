@@ -1,5 +1,54 @@
 # Changelog
 
+## v1.5.0 - 2026-09-06
+
+### Features
+
+- **Another app on your phone can use your radar, if you let it.** A cycling app or bike computer on the same phone can now read what your radar sees, and with a second tick on the same screen it can switch your tail light. An app you have allowed both can also hide the overlay. Nothing reaches an app until you say yes on a screen that names it, and Settings shows what you have allowed and takes it back. A hidden overlay stays hidden even when you leave that app; it comes back when the app restores it, when it stops running, or when you stop sharing. The handover happens on the device, app to app, not over the network.
+- **Tell the app the ride is over.** When the radar goes quiet the app cannot tell "off because I finished" from "off because it broke", so it guessed from traffic and could sound the drop alert while you were locking up. The home screen now asks, and "I've parked" answers it. It appears only after the radar has been down about ten seconds, so a brief reconnect blip does not put it on screen. Tapping it silences the alert for the rest of the stop, so only tap it when you have actually finished.
+- **Choose how far back the drop alert looks for traffic.** On a range-only radar with no eBike, that alert confirms you are still riding from traffic seen just before the link died, which on the developer's own rides left it unreachable for 39% of riding time, because the road behind was empty. Settings -> Experimental now sets that look-back under the "Drop alert without a speed reading" switch, from 30 seconds out to an hour. A longer window makes the alert reachable on empty roads and likelier to sound when you park somewhere busy, and "I've parked" is how you stop it. Only one other window has ever been measured against real rides, 45 seconds, and it more than doubled the genuine ride-ends the alert fired at. No value you can actually select above the 30-second default has been measured at all.
+- **Licence names on the About and Licences screens now open the licence text**, and About has a "What's new" row that opens the release notes.
+
+### Breaking
+
+- **Home Assistant automations keyed on the close-pass count will fire less often.** A pass the radar never measured sideways used to be counted at a made-up clearance of 0.0 m. It is now not counted at all. Everything derived from those passes moves with it: `close_pass_count`, `close_pass_conversion_rate`, `grazing_count` and `hgv_close_pass_count` all read lower, `min_lateral_clearance_m` reads looser because the 0.0 m readings are gone, and the tightest-pass record and the closing-speed percentile are drawn from a smaller set. Nothing is wrong with your setup; the old numbers were counting passes the radar could not measure. If an automation triggers on a threshold, check it still fires where you want.
+- **Your overtake count, peak closing speed and time in traffic move the other way and will read higher.** The same missing sideways reading made the ride statistics drop the whole frame rather than the one value, so a vehicle tracked that way was left out of the totals entirely. It now counts. This reaches you whether or not you use Home Assistant: the same three figures feed the ride history on your phone and the post-ride summary, as well as the `overtakes_total`, `peak_closing_kmh` and `exposure_seconds` entities. Same riding, higher numbers, and the same advice: if an automation triggers on a threshold, check it still fires where you want.
+
+### Fix
+
+- **False urgent warnings when the radar stopped reporting a vehicle's sideways position.** The radar sends a "no reading" value for a track it is still following. Once a vehicle came inside ten metres the app read that value as "dead behind you", enough to predict a collision with a car that was never on that line; one capture fired the urgent cue on a radar sitting indoors with nobody riding. Separately, when those readings stopped for a second or so, the app forgot what it had already worked out about that vehicle's path, so the check that vetoes a warning for a wide pass stopped applying. That was reported twice. It now holds both for as long as the radar is still reporting the vehicle. That second fix cuts both ways, and the cost is real: holding the path estimate longer also holds the veto longer, so a car measured as passing wide that then turns towards you without being measured again can have its warning withheld for up to three seconds rather than one and a half. That is the deliberate trade.
+- **A ride that only just missed a post-ride summary may now get one.** The ride statistics above are what the summary notification's exposure floor is measured against, so a ride carried over it by a track that used to be dropped now qualifies. A very short ride that only cleared the floor because of one such pass may now fall short instead.
+- **Every screen uses one name for the drop alert**, in both languages. It was variously the dead-radar alert, the drop sound and the dead-radar warning. In Spanish "aviso de radar" reads as a speed-camera warning, so it says "aviso de desconexión".
+- **Spanish no longer tells you that you roll.** Eight strings used a verb whose subject is the vehicle, not the rider.
+
+### Security
+
+- **The Privacy screen no longer claims radar data goes nowhere but Home Assistant.** With app sharing it can also go to an app you have allowed, and both languages now say so, along with what that app can read and what it can change.
+- **The connection log's disclosure says what it holds and that it can leave the phone.** It travels in the diagnostic report you paste into a bug report, and the crash-report disclosure said "only if you tap Share" when the same report carries it too.
+- **The app declares one permission of its own and exposes a service another app can bind to.** The permission is `es.jjrh.bikeradar.permission.RADAR`. It is granted at install like any ordinary one and decides nothing by itself: an app that binds gets no data until you allow it by name.
+
+### Diagnostics
+
+- **The app records the drop alert sounding, and you silencing it.** Telling the app a ride is over, or dismissing the walk-away alarm, ends an alert for the rest of the stop; snoozing it holds off for two minutes. None of that survived a ride: one went to a log the app closes before the alert is due, the rest only to the system log, which a release build discards. All of it now goes to the connection log, which is always on, so a report can tell an alert you silenced from one that never fired.
+- **A capture log records when a vehicle's stale path estimate is thrown away.** The estimate outlived the track history it was built from, so a log gave no sign of the moment the wide-pass veto stopped applying. A 1.5.0 capture reads differently from a 1.4.0 one at that point.
+
+### UX
+
+- **Sliders tell a screen reader their value, not their position.** On the new look-back setting the two are not the same thing: two thirds along its scale is ten minutes, not forty.
+- **The Experimental row counts what you have switched on.** It named one toggle and nothing else, so a rider who had turned the other one on still read "All off".
+- **The Privacy screen is laid out to be read.** It keeps its full text rather than bullets, because it is what you check the app against, and that had made it a wall: body text at the size of a label, headings smaller still, and subjects running together. Each subject now sits in its own card. No wording changed.
+
+### Compatibility
+
+- Nothing changed about which radars work. The older-radar fallback added in 1.4.0 is still unconfirmed on real hardware.
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the Home Assistant topics or entity names. The entities are the same ones; what has changed is the numbers several of them report, in both directions, and both Breaking notes above say which and which way.
+
+### Internal
+
+- **The cross-app interface is now something you can copy.** Six files are Apache-2.0 rather than GPL-3.0: the three `.aidl` and the three Kotlin files carrying the constants and the parcels. Together they are a complete client contract, and they reference nothing in the app behind them, so an author writing a consumer can take them as they are. Everything implementing them stays GPL-3.0-or-later. `additional-permission.txt` adds a GPL section 7 grant covering the other half of the question: an app that communicates solely through the interface is not, by virtue of that communication, a work based on this one. The README gains a section for that author.
+- The Android Gradle plugin moves to 9.4.0 and navigation-compose to 2.10.0. The store-icon render now fails when it writes nothing, instead of reporting success over an empty file.
+- The store listing no longer says the app requires a radar speaking the newer protocol, which stopped being true when 1.4.0 shipped the older-stream fallback, and it now says an app on your phone can ask to use your radar.
+
 ## v1.4.0 - 2026-09-01
 
 ### Features

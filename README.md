@@ -403,7 +403,7 @@ does not imply any endorsement.
 
 ## License
 
-GPL-3.0-or-later. See [`LICENSE`](./LICENSE).
+Copyright (C) 2026 JJ del Rio. GPL-3.0-or-later, see [`LICENSE`](./LICENSE).
 
 ### Building an app on top of the radar
 

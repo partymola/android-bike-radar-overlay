@@ -1,5 +1,7 @@
 ADDITIONAL PERMISSION UNDER SECTION 7 OF THE GNU GPL
 
+Copyright (C) 2026 JJ del Rio.
+
 Bike Radar is licensed under the GNU General Public License, version 3 or
 later, as set out in LICENSE. The copyright holder grants the following
 additional permission under section 7 of that licence.

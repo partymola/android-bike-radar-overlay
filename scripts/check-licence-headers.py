@@ -99,6 +99,30 @@ ANCHORS = {
     "scripts/dev": "scripts/dev",
 }
 
+# `tracked_files` is the universe every other guard is expressed against, so
+# narrowing IT narrows `examined` and `declared_scope` together, they still
+# agree, and nothing above notices. That cannot be closed from inside: you
+# cannot validate a universe using only what the universe returned.
+#
+# What these do is remove the silence. ANCHORS pins one file per declared KIND
+# and every one of them sits in app/src/main or scripts, so a filter excluding
+# the test tree or the ui package used to pass. These pin one file per SUBTREE
+# instead, keyed by the prefix so an anchor cannot be retargeted out of the
+# subtree it stands for. A pathspec or substring filter in `tracked_files` now
+# reds naming the subtree it removed.
+#
+# Still not a closed class: a filter narrow enough to miss all six passes. It
+# is a smaller target than "anything", which is what it was.
+SUBTREE_ANCHORS = {
+    "app/src/main/": "app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt",
+    "app/src/test/": "app/src/test/java/es/jjrh/bikeradar/AlertBeeperCueShapeTest.kt",
+    "app/src/main/java/es/jjrh/bikeradar/ui/": "app/src/main/java/es/jjrh/bikeradar/ui/DebugScreen.kt",
+    "app/src/main/aidl/": "app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl",
+    "scripts/": "scripts/check-licence-headers.py",
+    "art/": "art/br-mark.svg",
+    "tools/": "tools/bike-radar-test.sh",
+}
+
 SPDX_RE = re.compile(r"SPDX-License-Identifier:\s*(\S+)")
 COPYRIGHT_RE = re.compile(r"Copyright \(C\) (\d{4}) (.+?)\.?\s*(?:-->)?\s*$")
 
@@ -163,10 +187,19 @@ def inspect(text: str) -> tuple[str | None, str | None]:
     return spdx, holder
 
 
-def scope_findings(root: Path) -> list[tuple[str, str]]:
-    """Refuse to report a clean tree when the check barely looked at it."""
+def scoped(root: Path) -> tuple[set[str], set[str]]:
+    """(tracked, examined), computed ONCE and passed to everything below.
+
+    The scope used to be recomputed at three call sites, so `scope_findings`
+    validated a set the other two did not use, and extending one of their
+    filters narrowed the check with every gate green. One filter, one result.
+    """
     tracked = set(tracked_files(root))
-    examined = {p for p in tracked if in_scope(p)}
+    return tracked, {p for p in tracked if in_scope(p)}
+
+
+def scope_findings(tracked: set[str], examined: set[str]) -> list[tuple[str, str]]:
+    """Refuse to report a clean tree when the check barely looked at it."""
     out = []
 
     # The anchors pin one file per declared KIND; they say nothing about the
@@ -189,16 +222,25 @@ def scope_findings(root: Path) -> list[tuple[str, str]]:
     # narrowing the check by a SINGLE edit now reds on that edit, whether it
     # touches SUFFIX_COMMENT, EXTRA_FILES or the anchors themselves.
     #
-    # The regress stops here deliberately. Dropping a kind AND its anchor
-    # together still passes, and no further level would change that: any guard
-    # can be removed by removing the guard. What that costs is two deliberate
-    # edits in one diff, which is what review is for.
+    # The regress stops deliberately, and the floor is now three coordinated
+    # edits: a kind, its entry here, and the subtree anchor that covers the
+    # same files from the other direction. No further level would change that,
+    # because any guard can be removed by removing the guard. What it costs is
+    # three edits in one diff, which is what the review gate is for.
     declared = set(SUFFIX_COMMENT) | set(EXTRA_FILES)
     if set(ANCHORS) != declared:
         out.append((
             "ANCHORS",
             f"covers {sorted(ANCHORS)}, but the declared scope is {sorted(declared)}",
         ))
+    for prefix, anchor in sorted(SUBTREE_ANCHORS.items()):
+        if not anchor.startswith(prefix):
+            out.append(("SUBTREE_ANCHORS", f"the {prefix} anchor is {anchor}, which is not under it"))
+        if anchor not in tracked:
+            out.append(("SUBTREE_ANCHORS", f"{prefix} is not represented: {anchor} is not tracked"))
+        elif anchor not in examined:
+            out.append((anchor, f"tracked but not examined, so {prefix} has been dropped"))
+
     for kind, anchor in sorted(ANCHORS.items()):
         wanted = kind if kind in EXTRA_FILES else None
         if wanted is not None and anchor != wanted:
@@ -222,15 +264,26 @@ def scope_findings(root: Path) -> list[tuple[str, str]]:
     return out
 
 
-def findings(root: Path, holder: str) -> list[tuple[str, str]]:
+def findings(root: Path, examined: set[str], holder: str) -> list[tuple[str, str]]:
     out = []
-    for path in tracked_files(root):
-        if not in_scope(path):
-            continue
+    # Iterates the set `scope_findings` validates, rather than re-deriving it,
+    # and counts every path it HANDLED. Two weaker versions were tried and both
+    # let a filter through. Counting at the loop head tallies paths visited, so
+    # a filter beside the is_file skip or just before the read passes. Tallying
+    # the skip separately is worse: widening the skip's own condition then
+    # routes filtered files into that tally and it still passes.
+    # So there is no separate tally. A tracked in-scope path that is not a
+    # readable file is a finding in its own right, which is true anyway, and
+    # every path therefore either increments `seen` or reports.
+    seen = 0
+    for path in sorted(examined):
         f = root / path
         if not f.is_file():
+            out.append((path, "in scope but not a readable file"))
+            seen += 1
             continue
         spdx, found = inspect(f.read_text(errors="replace"))
+        seen += 1
         want = expected_identifier(path)
         if spdx is None:
             out.append((path, "no SPDX identifier"))
@@ -240,6 +293,8 @@ def findings(root: Path, holder: str) -> list[tuple[str, str]]:
             out.append((path, "no copyright line"))
         elif found != holder:
             out.append((path, f"copyright names {found!r}, expected {holder!r}"))
+    if seen != len(examined):
+        out.append(("findings", f"handled {seen} of the {len(examined)} files in scope"))
     return out
 
 
@@ -283,12 +338,12 @@ def doc_findings(root: Path, notice: str) -> list[tuple[str, str]]:
     return out
 
 
-def fix(root: Path, notice: str) -> list[str]:
+def fix(root: Path, examined: set[str], notice: str) -> list[str]:
     """Insert a missing SPDX or copyright line. Never rewrites an existing one."""
     changed = []
-    for path in tracked_files(root):
-        if not in_scope(path):
-            continue
+    # Same validated set as the check, so `--fix` and the check cannot disagree
+    # about what is in scope.
+    for path in sorted(examined):
         f = root / path
         if not f.is_file():
             continue
@@ -369,7 +424,7 @@ def self_test(notice: str, holder: str) -> int:
         for label, body in cases:
             (root / "Probe.kt").write_text(body)
             subprocess.run(["git", "-C", d, "add", "Probe.kt"], check=True)
-            if not findings(root, holder):
+            if not findings(root, scoped(root)[1], holder):
                 print(f"SELF-TEST FAILED: '{label}' was not caught")
                 failures += 1
             else:
@@ -377,7 +432,7 @@ def self_test(notice: str, holder: str) -> int:
         # And the conforming case must pass, or the check is simply always red.
         (root / "Probe.kt").write_text(good)
         subprocess.run(["git", "-C", d, "add", "Probe.kt"], check=True)
-        if findings(root, holder):
+        if findings(root, scoped(root)[1], holder):
             print("SELF-TEST FAILED: a conforming file was reported")
             failures += 1
         else:
@@ -414,9 +469,9 @@ def self_test(notice: str, holder: str) -> int:
             probe = root / f"probe.{ext}"
             probe.write_text(body)
             subprocess.run(["git", "-C", d, "add", probe.name], check=True)
-            fix(root, notice)
+            fix(root, scoped(root)[1], notice)
             after = probe.read_text().splitlines()
-            problems = [w for p, w in findings(root, holder) if p == probe.name]
+            problems = [w for p, w in findings(root, scoped(root)[1], holder) if p == probe.name]
             if problems or not holds(after):
                 print(f"SELF-TEST FAILED: --fix left '{label}' broken: {problems or after!r}")
                 failures += 1
@@ -432,8 +487,8 @@ def self_test(notice: str, holder: str) -> int:
         probe = root / "deep.py"
         probe.write_text(deep)
         subprocess.run(["git", "-C", d, "add", probe.name], check=True)
-        fix(root, notice)
-        fix(root, notice)
+        fix(root, scoped(root)[1], notice)
+        fix(root, scoped(root)[1], notice)
         if probe.read_text().count(notice) > 1:
             print("SELF-TEST FAILED: --fix accumulated duplicate notices")
             failures += 1
@@ -472,7 +527,7 @@ def self_test(notice: str, holder: str) -> int:
         # none of the anchors, so it must report. A regression to `return []`
         # would otherwise leave the tree and this self-test both green, which
         # is the vacuity the function exists to prevent.
-        if not scope_findings(root):
+        if not scope_findings(*scoped(root)):
             print("SELF-TEST FAILED: scope_findings reported nothing on a tree with no anchors")
             failures += 1
         else:
@@ -507,15 +562,21 @@ def main(argv: list[str]) -> int:
     if args.self_test:
         return self_test(notice, holder)
 
+    tracked, examined = scoped(root)
+
     if args.fix:
-        changed = fix(root, notice)
+        changed = fix(root, examined, notice)
         print(f"{len(changed)} files updated")
         for p in changed[:20]:
             print(f"  {p}")
         if len(changed) > 20:
             print(f"  ... and {len(changed) - 20} more")
 
-    problems = scope_findings(root) + findings(root, holder) + doc_findings(root, notice)
+    problems = (
+        scope_findings(tracked, examined)
+        + findings(root, examined, holder)
+        + doc_findings(root, notice)
+    )
     if problems:
         # Capped like the --fix list above: a real narrowing of the scope emits
         # one line per file, which is hundreds, and the count plus a sample is

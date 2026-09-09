@@ -666,9 +666,22 @@ enforces them, and CONTRIBUTING.md points contributors here:
     entry looked like trimming a list and disarmed that kind on its own, and
     the matching `SUFFIX_COMMENT` edit could land months later, so the pair
     never appeared in one diff.
-    What still passes is dropping a kind AND its anchor together. That floor is
+    **`SUBTREE_ANCHORS` covers the other axis**: `ANCHORS` pins a file per
+    KIND and every one sits in `app/src/main` or `scripts`, so a filter
+    excluding the test tree or the ui package passed. These pin a file per
+    SUBTREE, keyed by the prefix so an anchor cannot be retargeted out of the
+    subtree it stands for. That is also the only thing that makes narrowing
+    `tracked_files` audible: it is the universe every other guard is expressed
+    against, so filtering it narrows both sides of every comparison at once and
+    cannot be caught from inside.
+    **One scope, computed once.** `scoped()` returns it and `findings()` and
+    `fix()` are handed it rather than re-deriving it, so there is a single
+    filter in the file. `findings()` additionally counts what it read and reds
+    if that is fewer than the set it was given.
+    What still passes is removing a guard together with the data it guards, in
+    one of three shapes listed in the mutation harness. That floor is
     deliberate: any guard can be removed by removing the guard, so no further
-    level would change it. What it costs is two deliberate edits in one diff,
+    level would change it. What it costs is coordinated edits in one diff,
     which is what the review gate is for.
   - `--fix` only ever INSERTS, and refuses a symlink, a non-UTF-8 file, or a
     header too deep to insert under. Changing the holder or the year in the

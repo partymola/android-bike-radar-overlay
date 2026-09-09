@@ -642,6 +642,45 @@ enforces them, and CONTRIBUTING.md points contributors here:
     code by construction and stop failing. Changing a `LIGHT_MODE_*` value is a
     `RadarContract.VERSION` bump; a new mode needs a value and a `when` branch,
     and until it has both it is simply unsettable over the contract.
+- **Licence headers** (`scripts/check-licence-headers.py`): every Kotlin, AIDL,
+  first-party Python and shell file, plus the SVG master, must carry an SPDX
+  identifier AND a copyright line, and the six cross-app contract files must
+  carry `Apache-2.0` where everything else carries `GPL-3.0-or-later`.
+  **Blocking in `ci.yml`**, unlike the two script gates around it: it reads only
+  the working tree, so it cannot red on a CDN blip or on a re-recorded golden.
+  - The expected holder is read from `additional-permission.txt`, the operative
+    legal document, so the name is declared in exactly one place. The check also
+    asserts README carries that same notice and names the same six files, since
+    both facts otherwise exist as unpinned second copies.
+  - `--self-test` runs first and is fatal, and covers three surfaces rather
+    than one: the check, the README seam, and `--fix` itself. The last matters
+    most, because the two shapes a naive splice damages are exactly the ones
+    the check cannot see afterwards.
+  - **Anti-vacuity, and it is the half a self-test cannot reach.** Narrowing
+    `SUFFIX_COMMENT` would shrink the check in silence: dropping `.aidl` alone
+    stops it looking at three of the six permissive files, and both the tree
+    and the self-test stay green. `ANCHORS` names a real tracked path per
+    declared kind, **keyed by that kind and asserted against the declared
+    scope**, so every way of narrowing the check by a single edit reds on that
+    edit. The keying is the load-bearing part: as a bare set, removing one
+    entry looked like trimming a list and disarmed that kind on its own, and
+    the matching `SUFFIX_COMMENT` edit could land months later, so the pair
+    never appeared in one diff.
+    What still passes is dropping a kind AND its anchor together. That floor is
+    deliberate: any guard can be removed by removing the guard, so no further
+    level would change it. What it costs is two deliberate edits in one diff,
+    which is what the review gate is for.
+  - `--fix` only ever INSERTS, and refuses a symlink, a non-UTF-8 file, or a
+    header too deep to insert under. Changing the holder or the year in the
+    grant therefore produces a finding per file that `--fix` cannot clear.
+  - **The year is read but deliberately not compared, and the reason is not
+    that it would red every January.** Comparing a header's year against the
+    GRANT's year would never do that. It is not compared because a notice
+    carries the year of that file's own first publication, so a file added in a
+    later year will legitimately differ from the grant. Do not "fix" this with
+    a comparison against the current year, which is the one design that really
+    would red every January. The consequence is that a header year is not
+    checked at all, only its presence, so `Copyright (C) 2062` passes.
 - **Transitive licence check** (`scripts/check-transitive-licences.py`, fed by
   `:app:writeReleaseRuntimeCoordinates`): reports the licence of every artifact
   on the release runtime classpath, resolved from each artifact's own POM.
@@ -850,6 +889,10 @@ a behaviour spec to keep in sync.
     pins the list and `ContractIsSelfContainedTest` pins the self-containment.
     A new `.aidl` fails until someone puts it on a side; a new `.kt` lands in
     the copyleft bucket and passes quietly, so decide deliberately.
+    **The list exists in three places and all three must move together**: that
+    test, `PERMISSIVE_FILES` in `scripts/check-licence-headers.py`, and the
+    README section the same check pins. Updating only the test reds CI worded as
+    an SPDX mismatch, which is loud but names the wrong cause.
   - **`additional-permission.txt` covers writing a consumer** rather than
     copying our files: a section 7 grant that an app communicating solely
     through the interface is not, by virtue of that communication, a work based

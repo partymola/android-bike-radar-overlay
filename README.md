@@ -403,7 +403,8 @@ does not imply any endorsement.
 
 ## License
 
-Copyright (C) 2026 JJ del Rio. GPL-3.0-or-later, see [`LICENSE`](./LICENSE).
+Copyright (C) 2026 JJ del Rio. GPL-3.0-or-later, see [`LICENSE`](./LICENSE). Six
+cross-app contract files are Apache-2.0 instead, listed below.
 
 ### Building an app on top of the radar
 
@@ -416,7 +417,10 @@ different questions.
 `app/src/main/aidl/es/jjrh/bikeradar/ipc/`, and `RadarContract.kt`,
 `RadarStateParcel.kt` and `RadarVehicleParcel.kt` in the matching package under
 `app/src/main/java/`. Copy them into your project and keep your own licence on
-the result. They are self-contained on purpose:
+the result. Two things travel with them: keep the copyright line, which
+Apache-2.0 section 4(c) requires in the source you distribute, and ship
+[`LICENSES/Apache-2.0.txt`](./LICENSES/Apache-2.0.txt), which section 4(a)
+requires recipients to get. They are self-contained on purpose:
 nothing in them reaches back into the app, so together they are a complete
 client contract, including the consent screen you send the rider to. Everything
 that implements them, and the rest of the app, stays GPL-3.0-or-later.

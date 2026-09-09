@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Render the launcher-foreground density PNGs from the SVG master.
 # Requires rsvg-convert (librsvg). Run from the repo root or anywhere.
 set -euo pipefail

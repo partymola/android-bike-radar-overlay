@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 """Report the licence of every artifact on the release runtime classpath.
 
 The app is GPL-3.0-or-later. The Settings licences screen lists DIRECT

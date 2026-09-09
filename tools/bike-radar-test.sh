@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # bike-radar-test.sh — live-testing helper for the bike radar overlay app.
 #
 # Single tool that gets you from "code change" to "ready to test step N"

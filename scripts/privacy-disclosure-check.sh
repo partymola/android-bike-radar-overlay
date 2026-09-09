@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Privacy-disclosure freshness gate.
 #
 # Asserts the user-facing privacy copy stays consistent with the code:

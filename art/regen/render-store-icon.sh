@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Render the 512 px store-listing icon (fastlane images/icon.png) from the
 # SVG master: the mark on a white field, cropped to the inner 2/3 of the
 # adaptive-icon canvas so it matches what launchers show. Requires

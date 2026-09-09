@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Are the screenshots in the README and the store listing still copies of a
 # current Roborazzi golden?
 #

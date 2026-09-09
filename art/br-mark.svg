@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later
+Copyright (C) 2026 JJ del Rio
      BR mark - vector master. Regenerate with art/regen/build-svg.py; render the
      launcher foregrounds with art/regen/render-densities.sh (rsvg-convert to
      108/162/216/324/432 px = mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi) and the store

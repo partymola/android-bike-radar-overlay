@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Wrapper around the Docker build environment that keeps the Gradle
 # daemon alive between invocations. A long-running container hosts the
 # JVM + Gradle daemon + Kotlin daemon; each `gradle` invocation is a

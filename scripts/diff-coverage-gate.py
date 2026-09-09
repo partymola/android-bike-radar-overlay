@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Diff-coverage gate: do the changed executable production lines in this range
 # meet the coverage floor?
 #

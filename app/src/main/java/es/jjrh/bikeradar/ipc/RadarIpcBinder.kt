@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JJ del Rio
 // Additional permission for cross-app consumers: additional-permission.txt
 package es.jjrh.bikeradar.ipc
 

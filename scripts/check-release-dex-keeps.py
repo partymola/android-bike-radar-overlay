@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 # Release DEX keep gate: do the symbols whose NAMES are a data contract still
 # carry those exact names in the APK that ships?
 #

@@ -118,6 +118,16 @@ jobs:
         continue-on-error: true
         run: python3 scripts/check-screenshot-freshness.py
 
+      # Blocking, unlike the two steps around it. This one only reads the
+      # working tree, so it cannot red on a CDN blip or on a golden that
+      # re-records, and a missing notice is a licence defect rather than drift.
+      # The self-test runs first and is fatal: a checker that cannot fail would
+      # report a clean tree whatever the tree actually held.
+      - name: Licence headers
+        run: |
+          python3 scripts/check-licence-headers.py --self-test
+          python3 scripts/check-licence-headers.py
+
       # Findings here are non-blocking, for a different reason to the step
       # above: this one reaches the network to read each artifact's POM, so a
       # CDN blip would red a build that has nothing wrong with it, and a check

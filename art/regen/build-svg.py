@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JJ del Rio
 """Regenerate art/br-mark.svg.
 
 The mark is two letters set in Inter Display Black, with a slot cut through the
@@ -58,7 +59,11 @@ SWEEP_DEPTH = 56.0      # thickness of the sweep, measured in from the bowl's ou
 SWEEP_INSET = 6.0       # canvas units held back from the bowl's edges, so the sweep
                         # does not spill over the letter's own outline
 
+# The copyright line is deliberately unindented. `scripts/check-licence-headers.py`
+# reads it out of the generated SVG, and the pre-commit name guard exempts a
+# copyright notice only where it starts the line.
 HEADER = """<!-- SPDX-License-Identifier: GPL-3.0-or-later
+Copyright (C) 2026 JJ del Rio
      BR mark - vector master. Regenerate with art/regen/build-svg.py; render the
      launcher foregrounds with art/regen/render-densities.sh (rsvg-convert to
      108/162/216/324/432 px = mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi) and the store

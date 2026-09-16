@@ -49,6 +49,10 @@ jobs:
       - name: Set up Android SDK
         if: matrix.build-mode == 'manual'
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+        with:
+          # The action's default also installs the legacy `tools` package,
+          # which Google no longer serves; nothing here uses it.
+          packages: platform-tools
 
       - name: Install Android SDK platform 37
         if: matrix.build-mode == 'manual'

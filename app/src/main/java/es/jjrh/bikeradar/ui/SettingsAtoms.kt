@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -230,8 +231,17 @@ fun SettingsToggleRow(
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
+            // The row is the toggleable node, not the pill inside it: merging
+            // puts the title on the switch node and makes the whole row the
+            // tap target. SettingsToggleRowSemanticsTest pins it.
             modifier = Modifier
                 .fillMaxWidth()
+                .toggleable(
+                    value = checked,
+                    enabled = enabled,
+                    role = Role.Switch,
+                    onValueChange = onCheckedChange,
+                )
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -263,7 +273,7 @@ fun SettingsToggleRow(
                     )
                 }
             }
-            BrToggle(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+            BrToggle(checked = checked, enabled = enabled)
         }
         if (!isLast) {
             Box(
@@ -341,7 +351,9 @@ fun SettingsSliderRow(
             // The two properties are not interchangeable - the state is
             // re-announced on every step of an adjustment and the name is not,
             // so the title goes in the name or a rider stepping through a
-            // ladder hears it seven times.
+            // ladder hears it seven times. Pinned on one of this atom's callers
+            // only: SettingsExperimentalWindowTest's
+            // theSliderAnnouncesTheWindowItIsOnAndNotItsPositionInTheRange.
             modifier = Modifier.semantics {
                 contentDescription = title
                 stateDescription = valueDisplay

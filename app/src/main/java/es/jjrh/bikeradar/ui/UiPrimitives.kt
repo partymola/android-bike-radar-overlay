@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
@@ -37,7 +36,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -318,10 +316,17 @@ fun SectionLabel(
 // Prefixed `Br` to avoid colliding with any future `material3` toggle
 // API on auto-import.
 
+/**
+ * Visual only. The switch semantics and the tap live on the ROW that hosts
+ * it ([SettingsToggleRow]), so TalkBack reads the title with the state and
+ * the whole row is the target; a toggleable pill inside a toggleable row
+ * would be announced twice. `SettingsToggleRowSemanticsTest` pins the row.
+ * That row is deliberately the only caller: a bare BrToggle elsewhere is a
+ * switch a screen reader cannot name, and the same test pins the caller count.
+ */
 @Composable
 fun BrToggle(
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -332,18 +337,10 @@ fun BrToggle(
         else -> br.bgElev3
     }
     Box(
-        // toggleable wires up Role.Switch + on/off state for TalkBack;
-        // a plain clickable box gets announced as a generic button.
         modifier = modifier
             .size(width = 40.dp, height = 24.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            )
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
     ) {

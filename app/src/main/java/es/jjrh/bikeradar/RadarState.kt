@@ -134,9 +134,9 @@ data class Vehicle(
      * 0f when no lateral data exists for the source, and also what the radar
      * reports when it has no lateral answer. The absurdity gate in
      * [AlertDecider] fails open on it, matching the [rangeXm] convention; the
-     * clearance measurement in [ClosePassDetector] fails CLOSED and skips the
-     * frame, because neither reading of a zero is a clearance. A fixture
-     * leaving this at its default is invisible to it.
+     * clearance measurements in [ClosePassDetector] and [RideStatsAccumulator]
+     * fail CLOSED and skip the frame, because neither reading of a zero is a
+     * clearance. A fixture leaving this at its default is invisible to both.
      */
     val rangeXmRaw: Float = 0f,
     /**

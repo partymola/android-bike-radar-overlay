@@ -29,6 +29,12 @@ class RideStatsAccumulatorTest {
         isBehind: Boolean = false,
         isAlongsideStationary: Boolean = false,
         lateralUnknown: Boolean = false,
+        /** The sensor's own reading, which for a measured frame agrees with
+         *  [lateralPos]. Defaulted rather than left at the data class's 0f,
+         *  which carries no usable clearance: every fixture here would hold it,
+         *  and the clearance rule that reads it would be satisfied by the
+         *  fixtures rather than by the code. */
+        rangeXmRaw: Float = lateralPos * RadarV2Decoder.LATERAL_FULL_M,
     ) = Vehicle(
         id = id,
         distanceM = distanceM,
@@ -38,6 +44,25 @@ class RideStatsAccumulatorTest {
         isBehind = isBehind,
         isAlongsideStationary = isAlongsideStationary,
         lateralUnknown = lateralUnknown,
+        rangeXmRaw = rangeXmRaw,
+    )
+
+    /** Alongside, which is the only place a clearance is measured. The default
+     *  distance suits the range and exposure gates and is far too far for
+     *  this one. */
+    private fun alongside(
+        id: Int,
+        lateralPos: Float = 0.5f,
+        isAlongsideStationary: Boolean = false,
+        lateralUnknown: Boolean = false,
+        rangeXmRaw: Float = lateralPos * RadarV2Decoder.LATERAL_FULL_M,
+    ) = veh(
+        id = id,
+        distanceM = 2,
+        lateralPos = lateralPos,
+        isAlongsideStationary = isAlongsideStationary,
+        lateralUnknown = lateralUnknown,
+        rangeXmRaw = rangeXmRaw,
     )
 
     private fun radarState(
@@ -83,6 +108,24 @@ class RideStatsAccumulatorTest {
 
         assertNull(
             "a source with no lateral channel must record no clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+    }
+
+    @Test
+    fun theSourceRuleHoldsWithoutHelpFromThePerFrameFlag() {
+        // The fixture above is the shape a legacy ride really has, and every
+        // rule refuses it at once, so it cannot say which one is working: the
+        // alongside window alone accounts for it. This strips the others away.
+        // Alongside, a measured raw reading, no sentinel flag, leaving the
+        // source as the only thing that can refuse. The V1 decoder does not
+        // emit this frame, and that is the point: source capability is
+        // permanent while the flag is per-frame, so a source rule that works
+        // only when the flag agrees is not a source rule.
+        val a = acc()
+        a.observeFrame(legacyState(listOf(alongside(1, lateralPos = 0.5f))))
+        assertNull(
+            "a source that measures no lateral records nothing, flag or no flag",
             a.snapshot().minLateralClearanceM,
         )
     }
@@ -245,9 +288,9 @@ class RideStatsAccumulatorTest {
     @Test
     fun minLateralTrackedAcrossFrames() {
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f)))) // 1.5 m
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.3f)))) // 0.9 m
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.4f)))) // 1.2 m
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.5f)))) // 1.5 m
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.3f)))) // 0.9 m
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.4f)))) // 1.2 m
         val m = a.snapshot().minLateralClearanceM
         assertNotNull(m)
         assertTrue("expected ~0.9 m, got $m", m!! in 0.85f..0.95f)
@@ -275,8 +318,8 @@ class RideStatsAccumulatorTest {
         a.observeFrame(
             radarState(
                 listOf(
-                    veh(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
-                    veh(2, lateralPos = 0.4f), // 1.2 m
+                    alongside(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
+                    alongside(2, lateralPos = 0.4f), // 1.2 m
                 ),
             ),
         )
@@ -625,15 +668,92 @@ class RideStatsAccumulatorTest {
         // never saw. Null is the honest value.
         val clock = FakeClock(start = 0L)
         val a = acc(clock)
-        a.observeFrame(radarState(listOf(veh(1, lateralPos = 0.5f, lateralUnknown = true))))
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.5f, lateralUnknown = true))))
         assertNull(
             "a held offset must not become a measured clearance",
             a.snapshot().minLateralClearanceM,
         )
 
         // A measured frame on the same ride does set it.
-        a.observeFrame(radarState(listOf(veh(2, lateralPos = 0.5f))))
+        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.5f))))
         assertEquals(1.5f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun theClearanceIsMeasuredOnlyWhileTheVehicleIsAlongside() {
+        // The same rule the close-pass clearance follows, and for the same
+        // reason: a vehicle following directly behind reads as centred, so a
+        // clearance taken from back there is centimetres that never happened.
+        // Without this the ride record and the close-pass events disagreed.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, distanceM = 20, lateralPos = 0.02f)))) // 0.06 m, far behind
+        assertNull(
+            "a reading from 20 m back must not become this ride's clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+
+        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.3f)))) // 0.9 m alongside
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun theWindowBoundaryIsThreeMetresInclusive() {
+        // The boundary itself, from both sides, on literal distances. The test
+        // above only rules out a window wider than 19 m, so every value from 2
+        // to 19 survives it, and so does an exclusive comparison. This is the
+        // pair that fixes the figure, matching the two the detector has.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, distanceM = 4, lateralPos = 0.1f)))) // 0.3 m, outside
+        assertNull(
+            "a reading from 4 m back is not alongside",
+            a.snapshot().minLateralClearanceM,
+        )
+
+        a.observeFrame(radarState(listOf(veh(2, distanceM = 3, lateralPos = 0.2f)))) // 0.6 m, the boundary
+        assertEquals(
+            "the boundary frame itself must count",
+            0.6f,
+            a.snapshot().minLateralClearanceM!!,
+            0.001f,
+        )
+    }
+
+    @Test
+    fun anUnresolvedReadingIsRecognisedOnARadarMountedOffCentre() {
+        // The only fixture where raw and corrected disagree, and so the only
+        // one that can tell which value this gate reads. A rider with a 20 cm
+        // mount offset has every zero corrected to 0.20 m, so reading the
+        // corrected value would publish 0.20 m as the ride's tightest
+        // clearance. lateralPos here is what the decoder produces after that
+        // correction (0.0667 * 3.0 = 0.20 m).
+        val a = acc()
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.0667f, rangeXmRaw = 0f))))
+        assertNull(
+            "a zero under a mount offset must not become a clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+    }
+
+    @Test
+    fun anExactZeroLateralReadingIsNotAClearanceOfZero() {
+        // A raw lateral of exactly zero is either the radar's no-answer value
+        // or a target dead behind the bike, and the decoder's own sentinel flag
+        // does not cover every one of them. Taken as a measurement it publishes
+        // a tightest clearance of 0.00 m, which would describe a collision.
+        val a = acc()
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0f, rangeXmRaw = 0f))))
+        assertNull(
+            "an unresolved reading must not become a clearance",
+            a.snapshot().minLateralClearanceM,
+        )
+
+        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.05f)))) // 0.15 m, measured
+        assertEquals(
+            "a genuinely tight measured reading must still count",
+            0.15f,
+            a.snapshot().minLateralClearanceM!!,
+            0.001f,
+        )
     }
 
     // covers RideStatsAccumulator.kt:89
@@ -658,8 +778,9 @@ class RideStatsAccumulatorTest {
         // A vehicle beyond MAX_TRACK_DISTANCE_M is `continue`d before the
         // peak-closing and min-lateral updates, so both extrema stay null even
         // though this vehicle is fast-closing and very tight laterally.
-        // Kills a mutant that drops the `distanceM !in 0..MAX_TRACK_DISTANCE_M`
-        // continue (peak/min would pick up the out-of-range reading).
+        // The kill is the PEAK half alone: with that `continue` dropped, the
+        // alongside window refuses the min-lateral half anyway at 50 m, so that
+        // assertion holds either way and discriminates nothing here.
         val a = acc()
         a.observeFrame(
             radarState(listOf(veh(1, distanceM = 50, speedMs = -20f, lateralPos = 0.05f))),

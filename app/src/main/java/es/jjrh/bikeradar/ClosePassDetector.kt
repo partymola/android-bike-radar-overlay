@@ -305,7 +305,10 @@ class ClosePassDetector {
 
         /** Below this a raw lateral reading IS the radar's zero, not a small
          *  measurement: the channel is quantised well above it, so nothing
-         *  real lands here. Float comparison, not equality. */
-        private const val RAW_LATERAL_EPSILON = 0.001f
+         *  real lands here. Float comparison, not equality.
+         *
+         *  Not private: the ride record's tightest-clearance figure has to
+         *  reject the same readings, and two copies of the rule would drift. */
+        internal const val RAW_LATERAL_EPSILON = 0.001f
     }
 }

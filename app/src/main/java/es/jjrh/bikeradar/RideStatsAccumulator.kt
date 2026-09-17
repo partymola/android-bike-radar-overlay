@@ -150,7 +150,21 @@ class RideStatsAccumulator(
             // Source capability guards the same figure for a different reason:
             // on a stream with no lateral channel every lateralPos is 0f, which
             // would record a 0.0 m clearance on every track.
-            if (!v.isAlongsideStationary && state.source.hasLateral && !v.lateralUnknown) {
+            //
+            // The last two conditions are [ClosePassDetector]'s geometry rules,
+            // reading that class's constants rather than a second copy: a
+            // vehicle following directly behind reads as centred, and a raw
+            // reading of exactly zero carries no usable clearance. The GATES
+            // still differ. This figure has no closing-speed floor, no
+            // rider-speed floor and no arming, so a car pacing the rider
+            // alongside sets it with no close-pass event anywhere, which is why
+            // it is not simply the tightest emitted pass.
+            if (!v.isAlongsideStationary &&
+                state.source.hasLateral &&
+                !v.lateralUnknown &&
+                v.distanceM <= ClosePassDetector.ALONGSIDE_MAX_RANGE_Y_M &&
+                abs(v.rangeXmRaw) >= ClosePassDetector.RAW_LATERAL_EPSILON
+            ) {
                 val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
                 val current = minLateralM
                 if (current == null || lateralM < current) {
@@ -280,7 +294,10 @@ data class RideStatsSnapshot(
     val peakClosingKmh: Int?,
     /** Null until the first close-pass event fires. */
     val closingSpeedP90Kmh: Int?,
-    /** Null until the first vehicle is observed. */
+    /**
+     * The tightest clearance measured while a vehicle was alongside. Null until
+     * one is, which a ride of following traffic alone never reaches.
+     */
     val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,
     val exposureSeconds: Long,

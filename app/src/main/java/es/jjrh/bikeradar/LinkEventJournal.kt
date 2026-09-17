@@ -26,11 +26,15 @@ import java.util.Locale
  * link's behaviour and would otherwise reach logcat alone - a service
  * start, a recovered ride, the dead-radar alert sounding, and the rider
  * silencing it by declaring the ride over or dismissing or snoozing the
- * walk-away alarm. Treat that as a description rather than a
- * register: `JournalScopeIsDisclosedTest` holds the writers in
- * [RadarLinkCoordinator] to the Privacy screen's connection-log
- * paragraph, in both languages, and nothing holds the other five writer
- * files, which is why that paragraph is written illustratively.
+ * walk-away alarm. `JournalScopeIsDisclosedTest` holds every writer it
+ * can see, which is any file that constructs the journal, names the
+ * service's field, or takes a `journal` or `log` lambda, to the Privacy
+ * screen's connection-log paragraph, in both languages: a
+ * new line is either machinery, which that paragraph covers as a class,
+ * or a rider-facing event, which needs its words in both locales. The
+ * classification itself is the author's call, which is why the
+ * paragraph is written as a class with examples rather than a closed
+ * list.
  * Capped at [MAX_BYTES] / trimmed to [KEEP_LINES], so it can't grow
  * unbounded under a flapping link.
  *

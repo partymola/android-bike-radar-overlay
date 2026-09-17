@@ -125,12 +125,10 @@ class BatteryScanReceiver : BroadcastReceiver() {
         // No exception text - it is boilerplate.
         Log.i(TAG, "device read denied, Bluetooth permission revoked")
         if (revocationThrottle.shouldLog(SystemClock.elapsedRealtime())) {
-            LinkEventJournal({ ctx.getExternalFilesDir(null) })
-                .log(
-                    "scan wake ignored: Bluetooth permission revoked since the scan started" +
-                        " - re-grant ${ctx.getString(R.string.permission_nearby_title)}" +
-                        " to restore the radar link",
-                )
+            val permission = ctx.getString(R.string.permission_nearby_title)
+            LinkEventJournal({ ctx.getExternalFilesDir(null) }).log(
+                "scan wake ignored: Bluetooth permission revoked since the scan started - re-grant $permission to restore the radar link",
+            )
         }
         null
     }

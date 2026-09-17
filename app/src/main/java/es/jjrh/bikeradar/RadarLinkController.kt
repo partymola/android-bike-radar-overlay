@@ -595,13 +595,11 @@ internal class RadarLinkController(
                     val refreshed = refreshGattCache(gatt)
                     legacyTableVerified = refreshed
                     captureLog.clog("# legacy candidate; refreshing gatt cache first, refresh=$refreshed")
-                    journal(
-                        if (refreshed) {
-                            "radar legacy candidate; cache refresh=true"
-                        } else {
-                            "radar legacy fallback unavailable (cache refresh failed)"
-                        },
-                    )
+                    if (refreshed) {
+                        journal("radar legacy candidate; cache refresh=true")
+                    } else {
+                        journal("radar legacy fallback unavailable (cache refresh failed)")
+                    }
                     gatt.disconnect()
                     return true
                 }

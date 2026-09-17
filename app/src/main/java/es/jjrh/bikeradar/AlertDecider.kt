@@ -1821,14 +1821,26 @@ class AlertDecider(
          *  on repeats, and 1 m/s clears neither the 6 m/s nor the 10 m/s floor.
          *  Raise either of those and this sentence silently becomes false.
          *
-         *  Measured over
-         *  the ride corpus, counting a run as consecutive zero-lateral frames
-         *  on one live track and treating a track absent past the decoder's
-         *  moving-stale window as a new one: the ninety-ninth percentile is
-         *  1.9 s and the longest is 2.5 s, so a fit unrefreshed past this is
-         *  stale by observation rather than by guess. Both sides of the bound
-         *  are pinned, because a cap between the durations the other tests
-         *  drive would fail open on the longest real runs with nothing red. */
+         *  Measured over the ride corpus, with the decoder letting a
+         *  lateral-unknown run continue past the range gate, two run lengths
+         *  exist and only one of them is what this cap sees. Consecutive raw
+         *  zero-lateral frames on one track, with a track absent past the
+         *  decoder's moving-stale window counted as a new one: ninety-ninth
+         *  percentile 1.7 s, longest 2.8 s. The decoder's own
+         *  [Vehicle.lateralUnknown] run, which is what actually ages a fit
+         *  here, ran to 7 s on those rides and has no ceiling, because a slow
+         *  track survives [RadarV2Decoder.STALE_PARKED_MS] between sightings
+         *  and the flag carries across the gaps. Every run past this cap in
+         *  that corpus,
+         *  208 of 1341 over 207 captures, was a track closing at 1 m/s or
+         *  less, never nearer than 70 m, with no frame that could arm either
+         *  urgent gate. So on those rides the cap expiring mid-run lifted no
+         *  veto on a car that could fire, and the number is defended by the
+         *  paragraph above rather than by run length alone. Both sides of the
+         *  bound are pinned by `AlertDeciderPassHistoryLifetimeTest` ("the cap
+         *  is measured from the last MEASURED frame, on both sides of it"),
+         *  because a cap between the durations the other tests drive would
+         *  fail open on the longest measured raw runs with nothing red. */
         const val URGENT_PASS_UNMEASURED_MAX_MS = 3_000L
 
         /** Quiet gap (ms, no urgent-qualifying target) after which the

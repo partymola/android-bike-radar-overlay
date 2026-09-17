@@ -117,9 +117,8 @@ class AlertDeciderPassHistoryLifetimeTest {
         // permanent. A car measured wide, that then loses lateral and changes
         // lane into the rider, would otherwise be vetoed by a frozen fit for
         // the whole approach - a suppressed warning, which is the direction
-        // that matters. The radar's own blind runs top out around 2.5 s across
-        // the ride corpus, so a fit unrefreshed beyond that is stale by
-        // observation rather than by guess.
+        // that matters. Why the cap sits where it does, and what the corpus
+        // shows about runs that outlast it: `URGENT_PASS_UNMEASURED_MAX_MS`.
         val c = Clock()
         val d = stationaryDecider(c)
         measuredSidePassApproach(c, d)
@@ -142,8 +141,8 @@ class AlertDeciderPassHistoryLifetimeTest {
     @Test fun `the cap is measured from the last MEASURED frame, on both sides of it`() {
         // Pinned from both sides, because a cap anywhere between the two
         // durations the other tests drive would pass while failing open on the
-        // longest runs the radar actually produces - which is the artefact
-        // this change removes, reinstated with nothing red.
+        // longest raw zero-lateral runs the corpus holds, with nothing red.
+        // The measurement: `URGENT_PASS_UNMEASURED_MAX_MS`.
         val c = Clock()
         val d = stationaryDecider(c)
         measuredSidePassApproach(c, d)

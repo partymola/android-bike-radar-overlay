@@ -241,7 +241,8 @@ class OverlayPipelineDrivingTest {
             // Drive an arming overtake: approaching fast (-8 m/s), inside
             // the urban 1.5 m arm threshold and the 1.0 m emit threshold
             // (lateralPos 0.25 * LATERAL_FULL_M 3.0 = 0.75 m), rider
-            // moving, >= minFramesToArm frames.
+            // moving, >= minFramesToArm frames, and coming alongside so the
+            // clearance is measured at all.
             val base = System.currentTimeMillis()
             repeat(4) { i ->
                 RadarStateBus.publish(
@@ -249,7 +250,7 @@ class OverlayPipelineDrivingTest {
                         source = DataSource.V2,
                         timestamp = base + i * 100L,
                         vehicles = listOf(
-                            Vehicle(id = 7, distanceM = 20 - i * 3, speedMs = -8f, lateralPos = 0.25f),
+                            Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f),
                         ),
                         bikeSpeedMs = 5f,
                     ),
@@ -517,7 +518,8 @@ class OverlayPipelineDrivingTest {
      *  [RadarStateBus] and pump the test scheduler. Mirrors the geometry of
      *  [closePassCountingWorksWithoutHomeAssistant]: lateralPos 0.25 *
      *  LATERAL_FULL_M 3.0 = 0.75 m (< 1.0 m emit), -8 m/s closing, rider
-     *  moving, >= minFramesToArm frames. */
+     *  moving, >= minFramesToArm frames, and drawing level so the clearance
+     *  is measured alongside. */
     private fun kotlinx.coroutines.test.TestScope.driveOneOvertake() {
         val base = System.currentTimeMillis()
         repeat(4) { i ->
@@ -526,7 +528,7 @@ class OverlayPipelineDrivingTest {
                     source = DataSource.V2,
                     timestamp = base + i * 100L,
                     vehicles = listOf(
-                        Vehicle(id = 7, distanceM = 20 - i * 3, speedMs = -8f, lateralPos = 0.25f),
+                        Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f),
                     ),
                     bikeSpeedMs = 5f,
                 ),

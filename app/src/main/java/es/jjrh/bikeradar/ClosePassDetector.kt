@@ -11,24 +11,29 @@ import kotlin.math.roundToInt
  * speed + timestamp) at a time; returns the list of events that fired
  * on that frame.
  *
- * NOT every close pass: a pass the radar never measured laterally emits
- * nothing at all, because every one of its frames is skipped (see the
- * `lateralUnknown` skip below). `a pass made entirely of lateral-unknown
- * frames emits nothing` pins that, and it is deliberate. A held-over
- * offset is not a measurement, so the count under-reports rather than
- * inventing a clearance it never saw.
+ * NOT every close pass, for two reasons, both deliberate and both in the
+ * same direction: under-report rather than invent a clearance the radar
+ * never saw. A pass it never measured laterally emits nothing, because
+ * every one of its frames is skipped (see the `lateralUnknown` skip
+ * below); `a pass made entirely of lateral-unknown frames emits nothing`
+ * pins that. A pass where the vehicle never came alongside emits nothing
+ * either, because the clearance is taken only from the frames inside
+ * [ALONGSIDE_MAX_RANGE_Y_M]; `a vehicle that never comes alongside
+ * emits nothing` pins that.
  *
  * Design target: signal, not volume. London commuting produces a steady
  * trickle of "over 1.5 m but not by much" passes — logging those is
  * noise. This detector only fires for passes where the minimum lateral
- * clearance the radar ever saw drops below [Config.emitMinRangeX] AND
- * the vehicle was actually overtaking (closing-speed floor) AND the
- * rider was actually riding (rider-speed floor).
+ * clearance measured while the vehicle was alongside drops below
+ * [Config.emitMinRangeX] AND the vehicle was actually overtaking
+ * (closing-speed floor) AND the rider was actually riding (rider-speed
+ * floor).
  *
  * Per-track state machine:
  *   WATCHING   - track not yet armed
  *   ARMED      - armed once all gates passed at least once; min-rangeX
- *                tracked until the track ends
+ *                tracked on the alongside frames only, so an armed track
+ *                can reach termination having sampled nothing at all
  *   (terminal) - track ends -> maybe emit depending on tracked minimum
  *
  * One emit per track lifecycle. A global [Config.cooldownMs] cooldown
@@ -102,8 +107,9 @@ class ClosePassDetector {
         var framesSeen: Int = 0,
         var armed: Boolean = false,
         var armedThresholdM: Float = 0f,
-        /** Minimum |rangeX| observed since arming. Float.MAX_VALUE
-         *  until first armed sample. */
+        /** Minimum |rangeX| observed on an alongside frame since arming.
+         *  Float.MAX_VALUE until the first such sample, which is what a
+         *  track that never came alongside keeps. */
         var minAbsRangeXM: Float = Float.MAX_VALUE,
         var minRangeXSignedM: Float = 0f,
         var minRangeYM: Float = 0f,
@@ -197,8 +203,7 @@ class ClosePassDetector {
                 }
             }
 
-            // Once armed, update the min tracking each frame.
-            if (state.armed) {
+            if (state.armed && v.distanceM <= ALONGSIDE_MAX_RANGE_Y_M) {
                 val rangeXAbsM = abs(v.lateralPos * LATERAL_FULL_M)
                 if (rangeXAbsM < state.minAbsRangeXM) {
                     state.minAbsRangeXM = rangeXAbsM
@@ -223,9 +228,11 @@ class ClosePassDetector {
         for ((tid, state) in tracks) {
             val presentVehicle = vehicles.firstOrNull { it.id == tid }
             val dropped = tid !in currentTids
-            val justCrossedAhead = presentVehicle?.isBehind == true &&
-                state.armed &&
-                state.minAbsRangeXM < Float.MAX_VALUE
+            // No "has a sample" conjunct: an armed track that never came
+            // alongside has none, and holding it open leaves a stale armed
+            // state for the decoder to hand to the next vehicle on the same
+            // tid. maybeEmit already refuses a track with no sample.
+            val justCrossedAhead = presentVehicle?.isBehind == true && state.armed
             if (dropped || justCrossedAhead) {
                 val event = maybeEmit(state, nowMs, config)
                 if (event != null) emitted.add(event)
@@ -271,5 +278,19 @@ class ClosePassDetector {
         /** Decoder's ±lateralPos 1.0 maps to this metres each side.
          *  Kept in sync with [RadarV2Decoder.LATERAL_FULL_M]. */
         private const val LATERAL_FULL_M = RadarV2Decoder.LATERAL_FULL_M
+
+        /** Take the clearance only from frames at or inside this rangeY: the
+         *  vehicle alongside the rider, or about to be. A vehicle following
+         *  directly behind reads as laterally centred, so a minimum taken from
+         *  back there is a clearance that never happened. Arming is
+         *  deliberately NOT windowed, so a pass is recognised from far back and
+         *  only measured up close; `a track that arms far away still reports
+         *  its alongside pass` pins that. Metres, on the same rounded scale as
+         *  [Vehicle.distanceM].
+         *
+         *  A constant rather than a [Config] field: nothing configures the
+         *  window, so a configurable would be a second copy of the value with
+         *  nothing comparing the two. */
+        internal const val ALONGSIDE_MAX_RANGE_Y_M = 3
     }
 }

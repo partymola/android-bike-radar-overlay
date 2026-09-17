@@ -121,9 +121,11 @@ class RadarV1SafetyTest {
     fun closePassStaysClosedEvenIfRiderSpeedIsSuppliedFromElsewhere() {
         // The load-bearing one. The test above passes for a reason that could
         // evaporate: if rider speed ever arrives from another source (a phone
-        // GPS, an eBike), decide() would no longer short-circuit and the only
-        // things left holding the line are the closing-speed floor and the
-        // lateral-unknown skip. Prove those hold on their own.
+        // GPS, an eBike), decide() would no longer short-circuit. Three things
+        // then hold the line, each sufficient alone: the closing-speed floor,
+        // the lateral-unknown skip, and the raw-zero skip, which a legacy track
+        // also trips since its rangeXmRaw is 0f. No legacy input can separate
+        // them, so this proves them together rather than one at a time.
         assertEquals(
             "close-pass must stay closed on range-only data even with a rider speed",
             0,

@@ -242,7 +242,9 @@ class OverlayPipelineDrivingTest {
             // the urban 1.5 m arm threshold and the 1.0 m emit threshold
             // (lateralPos 0.25 * LATERAL_FULL_M 3.0 = 0.75 m), rider
             // moving, >= minFramesToArm frames, and coming alongside so the
-            // clearance is measured at all.
+            // clearance is measured at all. rangeXmRaw is the sensor's own
+            // reading: left at 0 it is the radar's declined-to-answer value and
+            // the detector skips every frame.
             val base = System.currentTimeMillis()
             repeat(4) { i ->
                 RadarStateBus.publish(
@@ -250,7 +252,7 @@ class OverlayPipelineDrivingTest {
                         source = DataSource.V2,
                         timestamp = base + i * 100L,
                         vehicles = listOf(
-                            Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f),
+                            Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f, rangeXmRaw = 0.75f),
                         ),
                         bikeSpeedMs = 5f,
                     ),
@@ -519,7 +521,8 @@ class OverlayPipelineDrivingTest {
      *  [closePassCountingWorksWithoutHomeAssistant]: lateralPos 0.25 *
      *  LATERAL_FULL_M 3.0 = 0.75 m (< 1.0 m emit), -8 m/s closing, rider
      *  moving, >= minFramesToArm frames, and drawing level so the clearance
-     *  is measured alongside. */
+     *  is measured alongside. rangeXmRaw is the sensor's own reading: left at
+     *  0 it means "no reading" and the detector skips the frame. */
     private fun kotlinx.coroutines.test.TestScope.driveOneOvertake() {
         val base = System.currentTimeMillis()
         repeat(4) { i ->
@@ -528,7 +531,7 @@ class OverlayPipelineDrivingTest {
                     source = DataSource.V2,
                     timestamp = base + i * 100L,
                     vehicles = listOf(
-                        Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f),
+                        Vehicle(id = 7, distanceM = listOf(20, 14, 3, 2)[i], speedMs = -8f, lateralPos = 0.25f, rangeXmRaw = 0.75f),
                     ),
                     bikeSpeedMs = 5f,
                 ),

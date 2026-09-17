@@ -19,6 +19,12 @@ class ClosePassDetectorTest {
         isBehind: Boolean = false,
         isAlongsideStationary: Boolean = false,
         lateralUnknown: Boolean = false,
+        /** The sensor's own reading, which for a measured frame agrees with
+         *  [lateralPos]. Defaulted rather than left at the data class's 0f:
+         *  every frame in this file would otherwise carry a zero, which the
+         *  skip that reads it treats as no usable clearance, blanking the whole
+         *  suite while looking correct. Pass 0f to mean an unresolved frame. */
+        rangeXmRaw: Float = lateralPos * RadarV2Decoder.LATERAL_FULL_M,
     ) = Vehicle(
         id = id,
         distanceM = distanceM,
@@ -28,6 +34,7 @@ class ClosePassDetectorTest {
         isBehind = isBehind,
         isAlongsideStationary = isAlongsideStationary,
         lateralUnknown = lateralUnknown,
+        rangeXmRaw = rangeXmRaw,
     )
 
     private fun drive(
@@ -498,6 +505,90 @@ class ClosePassDetectorTest {
         )
         val events = drive(d, frames) + terminate(d, 700L)
         assertTrue("a dead track must not lend its arming to the next vehicle, got $events", events.isEmpty())
+    }
+
+    // ── an unresolved lateral reading ────────────────────────────────────────
+
+    @Test fun `an exact-zero lateral reading is not a clearance of zero`() {
+        // Alongside and inside every gate, but the raw lateral is exactly 0.
+        // That is either the radar's no-answer value or a target dead behind
+        // the bike, and neither is a clearance. Taken as one it logs a pass at
+        // 0.00 m, which would describe a collision.
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 3, lateralPos = 0.28f) to 300L, // 0.84 m, measured
+            veh(distanceM = 2, lateralPos = 0f, rangeXmRaw = 0f) to 400L, // unresolved
+        )
+        val events = drive(d, frames) + terminate(d, 500L)
+        assertEquals(1, events.size)
+        assertTrue("must report the measured 0.84 m, got ${events[0].minRangeXM}", events[0].minRangeXM in 0.82f..0.86f)
+    }
+
+    @Test fun `a pass the radar never resolved sideways emits nothing`() {
+        // Every alongside frame read zero, so nothing about this vehicle's
+        // clearance was ever measured. Replaying the ride corpus put this
+        // shape behind most reported passes of a few centimetres: a track that
+        // read dead centre its whole life and was never seen to overtake.
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 3, lateralPos = 0f, rangeXmRaw = 0f) to 300L,
+            veh(distanceM = 2, lateralPos = 0f, rangeXmRaw = 0f) to 400L,
+            veh(distanceM = 1, lateralPos = 0f, rangeXmRaw = 0f) to 500L,
+        )
+        val events = drive(d, frames) + terminate(d, 600L)
+        assertTrue("an unresolved pass must be uncounted, got $events", events.isEmpty())
+    }
+
+    @Test fun `the sentinel is recognised on a radar mounted off centre`() {
+        // The only fixtures where raw and corrected disagree, and so the only
+        // ones that can tell which the skip reads. A rider with a 20 cm mount
+        // offset has every sentinel frame corrected to 0.20 m: reading the
+        // corrected value would take it as a measurement and log a pass at
+        // 0.20 m. lateralPos here is the corrected value the decoder produces
+        // (0.0667 * 3.0 = 0.20 m), with the raw reading still the radar's zero.
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 3, lateralPos = 0.28f) to 300L, // 0.84 m, measured
+            veh(distanceM = 2, lateralPos = 0.0667f, rangeXmRaw = 0f) to 400L, // unresolved
+        )
+        val events = drive(d, frames) + terminate(d, 500L)
+        assertEquals(1, events.size)
+        assertTrue(
+            "a sentinel under a mount offset must still be skipped, got ${events[0].minRangeXM}",
+            events[0].minRangeXM in 0.82f..0.86f,
+        )
+    }
+
+    @Test fun `a measured reading corrected onto the riders line is still a measurement`() {
+        // The converse, and the reason the skip cannot simply test the
+        // corrected value: a real 0.20 m reading that the mount offset
+        // corrects onto the rider's own line is a measurement of a genuinely
+        // tight pass, not an unresolved frame.
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 2, lateralPos = 0f, rangeXmRaw = -0.20f) to 300L,
+        )
+        val events = drive(d, frames) + terminate(d, 400L)
+        assertEquals(1, events.size)
+        assertEquals(ClosePassDetector.Severity.GRAZING, events[0].severity)
+        // The value itself, because this is the one fixture where the app does
+        // report 0.00 m: a real reading the rider's own mount offset puts on
+        // their line. Severity alone passes for anything under 0.5 m.
+        assertEquals("the corrected reading is what is reported", 0f, events[0].minRangeXM, 0.001f)
+    }
+
+    @Test fun `a genuinely tight pass the radar did measure still emits`() {
+        // The bound on that skip: a real reading near zero is not the sentinel
+        // and must survive, or the feature stops reporting the passes it exists
+        // for.
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 2, lateralPos = 0.05f) to 300L, // 0.15 m, measured
+        )
+        val events = drive(d, frames) + terminate(d, 400L)
+        assertEquals(1, events.size)
+        assertEquals(ClosePassDetector.Severity.GRAZING, events[0].severity)
+        assertTrue("must keep the measured 0.15 m, got ${events[0].minRangeXM}", events[0].minRangeXM in 0.13f..0.17f)
     }
 
     @Test fun `a track that arms far away still reports its alongside pass`() {

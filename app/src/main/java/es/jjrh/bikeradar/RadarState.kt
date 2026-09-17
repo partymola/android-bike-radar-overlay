@@ -131,8 +131,12 @@ data class Vehicle(
      * rider's mount-offset translation ([rangeXm] applies it).
      * Physical-plausibility gates use this so a configuration error can
      * never move a target on or off the road.
-     * 0f when no lateral data exists for the source; consumers fail
-     * open on 0f, matching the [rangeXm] convention.
+     * 0f when no lateral data exists for the source, and also what the radar
+     * reports when it has no lateral answer. The absurdity gate in
+     * [AlertDecider] fails open on it, matching the [rangeXm] convention; the
+     * clearance measurement in [ClosePassDetector] fails CLOSED and skips the
+     * frame, because neither reading of a zero is a clearance. A fixture
+     * leaving this at its default is invisible to it.
      */
     val rangeXmRaw: Float = 0f,
     /**

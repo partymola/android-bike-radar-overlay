@@ -11,15 +11,18 @@ import kotlin.math.roundToInt
  * speed + timestamp) at a time; returns the list of events that fired
  * on that frame.
  *
- * NOT every close pass, for two reasons, both deliberate and both in the
+ * NOT every close pass, for three reasons, all deliberate and all in the
  * same direction: under-report rather than invent a clearance the radar
  * never saw. A pass it never measured laterally emits nothing, because
  * every one of its frames is skipped (see the `lateralUnknown` skip
  * below); `a pass made entirely of lateral-unknown frames emits nothing`
- * pins that. A pass where the vehicle never came alongside emits nothing
- * either, because the clearance is taken only from the frames inside
- * [ALONGSIDE_MAX_RANGE_Y_M]; `a vehicle that never comes alongside
- * emits nothing` pins that.
+ * pins that. A pass whose sideways readings are all the radar's exact
+ * zero emits nothing, which also silences a genuine pass within half a
+ * quantum of boresight; `a pass the radar never resolved sideways emits
+ * nothing` pins it. And a pass where the vehicle never came alongside
+ * emits nothing, because the clearance is taken only from the frames
+ * inside [ALONGSIDE_MAX_RANGE_Y_M]; `a vehicle that never comes
+ * alongside emits nothing` pins that.
  *
  * Design target: signal, not volume. London commuting produces a steady
  * trickle of "over 1.5 m but not by much" passes — logging those is
@@ -186,6 +189,13 @@ class ClosePassDetector {
             // pass is flagged is in this class's KDoc.
             if (v.lateralUnknown) continue
 
+            // [Vehicle.lateralUnknown] does not cover every exact zero: it
+            // starts a run only on a far, non-centred track, since within 10 m
+            // the decoder reads a zero as a plausible dead-behind target. Read
+            // RAW, because the mount-offset correction moves a zero off zero
+            // and would hide it from a rider who has set one.
+            if (abs(v.rangeXmRaw) < RAW_LATERAL_EPSILON) continue
+
             // Arm the track if all gates pass.
             if (!state.armed) {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM
@@ -292,5 +302,10 @@ class ClosePassDetector {
          *  window, so a configurable would be a second copy of the value with
          *  nothing comparing the two. */
         internal const val ALONGSIDE_MAX_RANGE_Y_M = 3
+
+        /** Below this a raw lateral reading IS the radar's zero, not a small
+         *  measurement: the channel is quantised well above it, so nothing
+         *  real lands here. Float comparison, not equality. */
+        private const val RAW_LATERAL_EPSILON = 0.001f
     }
 }

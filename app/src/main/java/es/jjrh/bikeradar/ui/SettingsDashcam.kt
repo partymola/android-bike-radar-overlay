@@ -73,7 +73,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
 
-    val dashcamSlug = prefsSnap.dashcamMac?.let { mac ->
+    val dashcamSlug = prefsSnap.activeDashcamMac?.let { mac ->
         BikeRadarService.macToSlug[mac]
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefsSnap.dashcamDisplayName?.let { BikeRadarService.slug(it) }
@@ -124,13 +124,11 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
         walkAwayThreshold = walkAwayThreshold,
         canBypassDnd = canBypassDnd,
+        // Deliberately keeps the pick: off then on is an undo, and
+        // Prefs.activeDashcamMac is what stops it being used meanwhile.
+        // Pinned by SettingsDashcamOwnershipUndoTest.
         onOwnershipChange = { on ->
             prefs.dashcamOwnership = if (on) DashcamOwnership.YES else DashcamOwnership.NO
-            if (!on) {
-                prefs.dashcamMac = null
-                prefs.dashcamDisplayName = null
-                prefs.dashcamWarnWhenOff = false
-            }
         },
         onPickDeviceClick = { navController.navigate("dashcam-picker") },
         onWarnWhenOffChange = { prefs.dashcamWarnWhenOff = it },

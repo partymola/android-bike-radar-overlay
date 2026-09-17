@@ -101,7 +101,7 @@ internal class BatteryReader(
             // probe off. Scoped to the dashcam mac (the only one the ticker reads)
             // so this stays in sync with the map's name; only the readBattery==null
             // branch counts - an HA publish failure below is not a read failure.
-            if (prefs.dashcamMac.equals(mac, ignoreCase = true)) {
+            if (prefs.activeDashcamMac.equals(mac, ignoreCase = true)) {
                 dashcamProbeFailures[mac] = (dashcamProbeFailures[mac] ?: 0) + 1
             }
             return
@@ -111,7 +111,7 @@ internal class BatteryReader(
         Log.i(TAG, "battery $name: $pct%")
         val s = slug(name)
         macToSlug[mac] = s
-        if (prefs.dashcamMac.equals(mac, ignoreCase = true) && prefs.dashcamDisplayName != name) {
+        if (prefs.activeDashcamMac.equals(mac, ignoreCase = true) && prefs.dashcamDisplayName != name) {
             prefs.dashcamDisplayName = name
         }
         BatteryStateBus.update(BatteryEntry(s, name, pct))

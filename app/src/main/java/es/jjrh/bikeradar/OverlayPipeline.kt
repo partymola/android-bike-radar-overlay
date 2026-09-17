@@ -325,7 +325,7 @@ internal class OverlayPipeline(
         lastPhoneBatteryLogMs = nowWallMs
     }
 
-    private fun resolveDashcamSlug(): String? = prefs.dashcamMac?.let { mac ->
+    private fun resolveDashcamSlug(): String? = prefs.activeDashcamMac?.let { mac ->
         val table = macToSlug()
         table[mac]
             ?: table[mac.uppercase(Locale.ROOT)]

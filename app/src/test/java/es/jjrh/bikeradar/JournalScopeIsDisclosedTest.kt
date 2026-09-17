@@ -120,6 +120,9 @@ class JournalScopeIsDisclosedTest {
         "radar legacy stream live",
         "radar legacy stream ended \$tally",
         "camera link start \$name",
+        // Machinery: the rider's switch is the event, and this is the link
+        // noticing it. No cue sounded and no device named.
+        "camera link exit: no longer the selected camera",
         "camera conn state status=\$status newState=\$newState",
         "camera connectGatt returned null",
         "camera services discovery failed",

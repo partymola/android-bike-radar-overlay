@@ -5,6 +5,7 @@ package es.jjrh.bikeradar
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -58,10 +59,18 @@ class BatteryReaderTest {
 
     private fun knownStore(name: String = "kd") = KnownDevices(app.getSharedPreferences(name, Context.MODE_PRIVATE))
 
-    /** A Prefs whose dashcam is [camAddr] (the device under test in dashcam cases). */
-    private fun prefsWithDashcam(displayName: String? = null) = Prefs(app).apply {
+    /** A Prefs whose dashcam is [camAddr] (the device under test in dashcam
+     *  cases). The ownership switch is part of the fixture: the reader reads
+     *  `activeDashcamMac`, so a pick without it is a camera the app may not
+     *  touch, which is what [readFailureOnADisownedDashcamTouchesNoBackoff]
+     *  covers. */
+    private fun prefsWithDashcam(
+        displayName: String? = null,
+        ownership: DashcamOwnership = DashcamOwnership.YES,
+    ) = Prefs(app).apply {
         dashcamMac = camAddr
         dashcamDisplayName = displayName
+        dashcamOwnership = ownership
     }
 
     private fun reader(
@@ -148,6 +157,28 @@ class BatteryReaderTest {
         assertEquals("consecutive dashcam read failures must accumulate", 3, failures[camAddr])
         assertNull("a failed read must not push a bus entry", BatteryStateBus.entries.value["cam"])
         assertFalse("a failed read must not arm the throttle", throttleArmed("cam"))
+    }
+
+    @Test
+    fun readFailureOnADisownedDashcamTouchesNoBackoff() = runTest {
+        // The rider's ownership switch is off, so the remembered camera is not
+        // one the app may act on. It keeps the pick for when the switch comes
+        // back on; until then nothing here may treat it as the dashcam.
+        val prefs = prefsWithDashcam(displayName = "Old Cam", ownership = DashcamOwnership.NO)
+        val failures = mutableMapOf<String, Int>()
+        reader(prefs = prefs, dashcamProbeFailures = failures, readBatteryFn = { null })
+            .doReadBattery("Cam", camAddr)
+
+        assertTrue("a camera the rider switched off must not drive the backoff", failures.isEmpty())
+        assertEquals("the remembered pick must survive the switch", camAddr, prefs.dashcamMac)
+    }
+
+    @Test
+    fun successOnADisownedDashcamDoesNotSyncItsName() = runTest {
+        val prefs = prefsWithDashcam(displayName = "Old Cam", ownership = DashcamOwnership.NO)
+        reader(prefs = prefs, readBatteryFn = { 50 }).doReadBattery("New Cam", camAddr)
+
+        assertEquals("the app must not write to a camera it may not use", "Old Cam", prefs.dashcamDisplayName)
     }
 
     @Test

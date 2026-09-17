@@ -78,7 +78,17 @@ data class PrefsSnapshot(
     val radarSettingsProbeEnabled: Boolean,
     val captureLoggingEnabled: Boolean,
     val setupTranscriptEnabled: Boolean,
-)
+) {
+    /** See [Prefs.activeDashcamMac]. */
+    val activeDashcamMac: String?
+        get() = activeDashcam(dashcamMac, dashcamOwnership)
+}
+
+/** The dashcam the app may act on: the remembered pick, but only while the
+ *  rider's ownership switch is on. Turning that switch off keeps the pick so
+ *  that turning it back on restores it, which is why the switch state has to
+ *  be consulted at every point of use rather than once at the switch. */
+private fun activeDashcam(mac: String?, ownership: DashcamOwnership): String? = mac.takeIf { ownership == DashcamOwnership.YES }
 
 class Prefs(context: Context) {
 
@@ -234,6 +244,14 @@ class Prefs(context: Context) {
         set(v) {
             sp.edit().putString(KEY_DASHCAM_DISPLAY_NAME, v).apply()
         }
+
+    /** The dashcam every consumer that LINKS to the camera or READS it must
+     *  go through: [dashcamMac] gated on the ownership switch. The raw value
+     *  stays for the screens that show the remembered device and the picker
+     *  that writes it; `theDashcamIsOnlyReachedThroughTheOwnershipGate` pins
+     *  which files may read it. */
+    val activeDashcamMac: String?
+        get() = activeDashcam(dashcamMac, dashcamOwnership)
 
     var dashcamWarnWhenOff: Boolean
         get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)

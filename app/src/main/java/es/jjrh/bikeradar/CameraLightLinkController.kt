@@ -67,16 +67,6 @@ internal class CameraLightLinkController(
     )
 
     /**
-     * Persist what this attempt found and where it stopped, for the
-     * diagnostic bundle. Same contract as the radar's, and the same reason:
-     * without it a camera that connects and never completes its handshake
-     * produces no capture log at all, so nothing names the failing step.
-     *
-     * The two exits before service discovery reach [recordPreDiscoveryExit]
-     * instead, so the slot never reports a stopping point this attempt did
-     * not reach.
-     */
-    /**
      * Record an attempt that stopped before there was a service table to
      * describe, matching the radar's handling.
      *
@@ -89,6 +79,16 @@ internal class CameraLightLinkController(
         linkProbe.record(LinkProbe.format(emptyList(), outcome))
     }
 
+    /**
+     * Persist what this attempt found and where it stopped, for the
+     * diagnostic bundle. Same contract as the radar's, and the same reason:
+     * without it a camera that connects and never completes its handshake
+     * produces no capture log at all, so nothing names the failing step.
+     *
+     * The two exits before service discovery reach [recordPreDiscoveryExit]
+     * instead, so the slot never reports a stopping point this attempt did
+     * not reach.
+     */
     private fun recordLinkProbe(gatt: BluetoothGatt, outcome: String) {
         val body = try {
             LinkProbe.format(
@@ -154,6 +154,19 @@ internal class CameraLightLinkController(
             while (true) {
                 if (!prefs.autoLightModeEnabled) {
                     Log.i(TAG, "auto light mode disabled; exiting link")
+                    return
+                }
+                // The captured mac, not merely a non-null one: a rider who turns
+                // the ownership switch off mid-session, or picks a different
+                // camera, must not leave this loop reconnecting to the old one.
+                // Between sessions, like the toggle above it, so a camera that
+                // is already connected keeps that session until it drops.
+                // `aCameraTheRiderSwitchedOffIsNeverConnectedTo` and
+                // `aLiveLinkDropsWhenItIsNoLongerTheSelectedCamera` pin the two
+                // entries; nothing reaches the live teardown, which needs a ride.
+                if (prefs.activeDashcamMac?.equals(mac, ignoreCase = true) != true) {
+                    Log.i(TAG, "camera is no longer the selected one; exiting link")
+                    journal("camera link exit: no longer the selected camera")
                     return
                 }
                 Log.i(TAG, "connect attempt to $name ${LogRedaction.mac(mac)}")

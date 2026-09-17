@@ -457,7 +457,7 @@ class BikeRadarService : Service() {
             cancelForgotToLock = notifications::cancelForgotToLock,
             cancelWalkAwaySnooze = { walkAwaySnoozeJob.getAndSet(null)?.cancel() },
             clearDashcamBackoff = {
-                prefs.dashcamMac?.let {
+                prefs.activeDashcamMac?.let {
                     dashcamProbeFailures.remove(it)
                     lastDashcamProbeMs.remove(it)
                 }
@@ -785,7 +785,7 @@ class BikeRadarService : Service() {
         }
 
         // Start or gate the camera light link when this is the configured dashcam.
-        val isDashcam = prefs.dashcamMac?.equals(mac, ignoreCase = true) == true
+        val isDashcam = prefs.activeDashcamMac?.equals(mac, ignoreCase = true) == true
         if (isDashcam && prefs.autoLightModeEnabled) cameraLink.start(name, mac)
         if (isDashcam && (cameraLink.isGattActive() || cameraLink.isActive())) {
             BatteryStateBus.markSeen(slug(name), System.currentTimeMillis(), SystemClock.elapsedRealtime())
@@ -934,7 +934,7 @@ class BikeRadarService : Service() {
     private fun launchDashcamRefresh() {
         scope.launch {
             while (true) {
-                val mac = prefs.dashcamMac
+                val mac = prefs.activeDashcamMac
                 val name = prefs.dashcamDisplayName
                 val link = radarLinkCoordinator.snapshot()
                 val gateOpen = IdleGate.shouldRefreshDashcam(
@@ -1110,7 +1110,7 @@ class BikeRadarService : Service() {
     }
 
     private fun resolveDashcamSlug(): String? {
-        val mac = prefs.dashcamMac ?: return null
+        val mac = prefs.activeDashcamMac ?: return null
         return macToSlug[mac]
             ?: macToSlug[mac.uppercase(Locale.ROOT)]
             ?: prefs.dashcamDisplayName?.let { slug(it) }
@@ -1131,7 +1131,7 @@ class BikeRadarService : Service() {
         return AttentionItemsDeriver.derive(
             AttentionItemsDeriver.Inputs(
                 radarBatteryPct = radarSlug?.let { batteries[it]?.pct },
-                dashcamConfigured = prefs.dashcamMac != null,
+                dashcamConfigured = prefs.activeDashcamMac != null,
                 dashcamBatteryPct = dashcamSlug?.let { batteries[it]?.pct },
                 ebikeSeen = ebikeSnapshotCoordinator.hasEverSeenSnapshot(),
                 ebikeSoc = ebikeSnapshotCoordinator.snapshot()?.batterySoc,

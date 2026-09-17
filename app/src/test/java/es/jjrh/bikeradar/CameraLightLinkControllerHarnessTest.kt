@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
+import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
@@ -73,6 +74,13 @@ class CameraLightLinkControllerHarnessTest {
 
     private fun prefs() = Prefs(app).apply {
         autoLightModeEnabled = true
+        // The camera under test has to BE the rider's. The loop reads
+        // activeDashcamMac on every attempt, so a fixture that leaves the
+        // ownership switch unanswered describes a camera the app must not link
+        // to at all, and every test below would be asserting against a loop
+        // that exited immediately.
+        dashcamOwnership = DashcamOwnership.YES
+        dashcamMac = this@CameraLightLinkControllerHarnessTest.mac
         // Paused: skips the HA battery-publish branch in the notify loop so the
         // assertion is the local BatteryStateBus update only.
         pausedUntilEpochMs = Long.MAX_VALUE
@@ -376,6 +384,53 @@ class CameraLightLinkControllerHarnessTest {
         assertTrue(pumpUntil { p.cameraLinkProbe?.endsWith(" out=no-gatt") == true })
         val probe = requireNotNull(p.cameraLinkProbe)
         assertFalse("the previous answer must not survive, got: $probe", probe.contains("handshake-ok"))
+        controller.stop()
+    }
+
+    // ── the rider's ownership switch ───────────────────────────────────────────
+
+    @Test fun aCameraTheRiderSwitchedOffIsNeverConnectedTo() = runTest {
+        // The pick survives the switch, so the mac alone no longer says the app
+        // may use it. Without the loop's own check this connects and goes on
+        // writing light modes to a camera the rider said they do not have.
+        val link = Link()
+        val p = prefs().apply { dashcamOwnership = DashcamOwnership.NO }
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        assertTrue(
+            "the loop must say why it stopped; journal=$journal",
+            pumpUntil { journalHas("camera link exit: no longer the selected camera") },
+        )
+        assertEquals("and must never have opened a connection", 0, link.openCount)
+        controller.stop()
+    }
+
+    @Test fun aLiveLinkDropsWhenItIsNoLongerTheSelectedCamera() = runTest {
+        // Mid-session, so the captured mac is what matters: a non-null check
+        // would keep this link alive against the camera it was started for.
+        val link = Link()
+        val p = prefs()
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("camera handshake complete") })
+
+        p.dashcamMac = "bb:bb:bb:11:22:33"
+        val cb = requireNotNull(link.cb)
+        val gatt = requireNotNull(link.gatt)
+        cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+
+        assertTrue(
+            "the reconnect loop must not come back for the old camera",
+            pumpUntil { journalHas("camera link exit: no longer the selected camera") },
+        )
+        assertEquals("and must not have reconnected to it", 1, link.openCount)
         controller.stop()
     }
 

@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import es.jjrh.bikeradar.data.DashcamOwnership
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,16 +78,26 @@ class SyntheticScenarioService : Service() {
         // dashcam so the MAC-based matching in the overlay composer fires.
         // Falls back to a well-known slug + temporarily pointing the pref at
         // a synthetic MAC if the user hasn't selected one.
-        val dashcamSlug = prefs.dashcamMac?.let { BikeRadarService.macToSlug[it] } ?: "vue_synth"
         val savedMac = prefs.dashcamMac
         val savedName = prefs.dashcamDisplayName
         val savedWarn = prefs.dashcamWarnWhenOff
-        val usingSyntheticPref = savedMac == null
-        if (usingSyntheticPref) {
+        val savedOwnership = prefs.dashcamOwnership
+        // Borrow all of it or none of it, and only when there is no pick to
+        // write over. A rider who picked a camera and then switched it off has
+        // a null activeDashcamMac, so borrowing on THAT would force their
+        // switch back on and leave the app linking to and probing the camera
+        // they turned off, for the length of the run. The demo shows no camera
+        // in that state instead, which is what their real ride looks like.
+        val borrowing = savedMac == null
+        val dashcamSlug = savedMac?.let { BikeRadarService.macToSlug[it] } ?: "vue_synth"
+        if (borrowing) {
             BikeRadarService.macToSlug[SYNTHETIC_MAC] = dashcamSlug
             prefs.dashcamMac = SYNTHETIC_MAC
             prefs.dashcamDisplayName = "Vue Synthetic"
             prefs.dashcamWarnWhenOff = true
+            // The switch too, or nothing resolves the synthetic camera:
+            // every reader goes through Prefs.activeDashcamMac.
+            prefs.dashcamOwnership = DashcamOwnership.YES
         }
 
         val start = SystemClock.elapsedRealtime()
@@ -120,10 +131,11 @@ class SyntheticScenarioService : Service() {
             }
             delay(1000)
         } finally {
-            if (usingSyntheticPref) {
+            if (borrowing) {
                 prefs.dashcamMac = savedMac
                 prefs.dashcamDisplayName = savedName
                 prefs.dashcamWarnWhenOff = savedWarn
+                prefs.dashcamOwnership = savedOwnership
                 BikeRadarService.macToSlug.remove(SYNTHETIC_MAC)
             }
             RadarStateBus.clear()

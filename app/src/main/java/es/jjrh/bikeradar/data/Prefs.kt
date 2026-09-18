@@ -267,6 +267,18 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, v).apply()
         }
 
+    /** Stop remembering the picked camera, and the warn-when-off choice made
+     *  about it. One edit, so no observer sees a name with no device behind
+     *  it, and the ownership switch is left alone: both pinned by
+     *  `clearingTheDashcamPickIsOneChangeNotThree`. */
+    fun clearDashcamPick() {
+        sp.edit()
+            .remove(KEY_DASHCAM_MAC)
+            .remove(KEY_DASHCAM_DISPLAY_NAME)
+            .putBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
+            .apply()
+    }
+
     /** Keep the dead-radar overlay banner up until the radar reconnects, instead
      *  of retiring it after the short cap. Only affects riders with NO Bosch
      *  eBike (eBike riders' banner is already gated on the lock state); for them

@@ -54,6 +54,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
 import android.provider.Settings as AndroidSettings
@@ -72,9 +73,7 @@ import android.provider.Settings as AndroidSettings
  *      - Optional "Pair a new device" CTA
  *  - Sticky footer: Cancel (ghost) + Save (brand)
  *
- * Selection writes prefs.dashcamMac/.dashcamDisplayName and
- * (when fromOnboarding) prefs.dashcamWarnWhenOff = true on a
- * non-null pick.
+ * What Save writes is pinned by `DashcamPickerSaveTest`.
  */
 @Composable
 fun DashcamPickerSheet(
@@ -131,16 +130,16 @@ private fun DashcamPickerSheetBody(
             },
             onCancel = { navController.popBackStack() },
             onSave = {
-                val name = devices.firstOrNull { it.mac.equals(selectedMac, ignoreCase = true) }?.name
-                prefs.dashcamMac = selectedMac
-                prefs.dashcamDisplayName = name
                 if (selectedMac == null) {
-                    prefs.dashcamWarnWhenOff = false
+                    prefs.clearDashcamPick()
                 } else {
+                    val name = devices.firstOrNull { it.mac.equals(selectedMac, ignoreCase = true) }?.name
+                    prefs.dashcamMac = selectedMac
+                    prefs.dashcamDisplayName = name
                     // Picking a real device implies ownership; this lets
                     // onboarding flip from the UNANSWERED card to the
                     // picked DeviceRow without a flicker on entry.
-                    prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
+                    prefs.dashcamOwnership = DashcamOwnership.YES
                     if (fromOnboarding) prefs.dashcamWarnWhenOff = true
                 }
                 navController.popBackStack()

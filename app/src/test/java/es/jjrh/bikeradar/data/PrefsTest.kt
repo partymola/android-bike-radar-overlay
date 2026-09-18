@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.RadarLightMode
@@ -466,6 +467,29 @@ class PrefsTest {
         runCurrent()
         assertEquals(2, seen.size)
         job.cancel()
+    }
+
+    @Test
+    fun clearingTheDashcamPickIsOneChangeNotThree() {
+        prefs.dashcamOwnership = DashcamOwnership.NO
+        prefs.dashcamMac = "AA:BB:CC:DD:EE:FF"
+        prefs.dashcamDisplayName = "Front cam"
+        prefs.dashcamWarnWhenOff = true
+        val sp = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        val seen = mutableListOf<PrefsSnapshot>()
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> seen += prefs.snapshot() }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+
+        prefs.clearDashcamPick()
+
+        // The FIRST thing any observer sees: written one key at a time, this
+        // is a screen showing the camera's name beside a Pick button.
+        val first = seen.first()
+        assertNull(first.dashcamMac)
+        assertNull(first.dashcamDisplayName)
+        assertFalse(first.dashcamWarnWhenOff)
+        assertEquals("whether there is a camera is a separate answer", DashcamOwnership.NO, first.dashcamOwnership)
+        sp.unregisterOnSharedPreferenceChangeListener(listener)
     }
 
     @Test

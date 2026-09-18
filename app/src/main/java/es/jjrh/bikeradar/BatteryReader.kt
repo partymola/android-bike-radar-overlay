@@ -85,6 +85,16 @@ internal class BatteryReader(
 
     @SuppressLint("MissingPermission")
     internal suspend fun doReadBattery(name: String, mac: String) {
+        // A camera the rider switched off. Devices reach this path by advert
+        // NAME, so nothing upstream has consulted the pick and the refusal has
+        // to be here. Before the GATT read, not after: the point is that the
+        // app stops touching the device, not that it stops reporting what it
+        // found.
+        if (prefs.isDisownedDashcam(mac)) {
+            Log.d(TAG, "skip $name (camera is not the rider's right now)")
+            return
+        }
+
         val sp = context.getSharedPreferences(PREFS_THROTTLE, Context.MODE_PRIVATE)
 
         val known = knownDevices.load().toMutableList()

@@ -60,10 +60,9 @@ class BatteryReaderTest {
     private fun knownStore(name: String = "kd") = KnownDevices(app.getSharedPreferences(name, Context.MODE_PRIVATE))
 
     /** A Prefs whose dashcam is [camAddr] (the device under test in dashcam
-     *  cases). The ownership switch is part of the fixture: the reader reads
-     *  `activeDashcamMac`, so a pick without it is a camera the app may not
-     *  touch, which is what [readFailureOnADisownedDashcamTouchesNoBackoff]
-     *  covers. */
+     *  cases). The ownership switch is part of the fixture: a pick without it
+     *  is a camera the app may not touch at all, which
+     *  [aDisownedDashcamIsNeverConnectedTo] covers. */
     private fun prefsWithDashcam(
         displayName: String? = null,
         ownership: DashcamOwnership = DashcamOwnership.YES,
@@ -160,25 +159,53 @@ class BatteryReaderTest {
     }
 
     @Test
-    fun readFailureOnADisownedDashcamTouchesNoBackoff() = runTest {
-        // The rider's ownership switch is off, so the remembered camera is not
-        // one the app may act on. It keeps the pick for when the switch comes
-        // back on; until then nothing here may treat it as the dashcam.
+    fun aDisownedDashcamIsNeverConnectedTo() = runTest {
+        // The gap the ownership gate could not close on its own: a device
+        // reaches this path by its advert name, so nothing upstream consulted
+        // the rider's pick. The read itself has to decline, or "switched off"
+        // means "hidden from every screen while the app keeps connecting".
         val prefs = prefsWithDashcam(displayName = "Old Cam", ownership = DashcamOwnership.NO)
-        val failures = mutableMapOf<String, Int>()
-        reader(prefs = prefs, dashcamProbeFailures = failures, readBatteryFn = { null })
-            .doReadBattery("Cam", camAddr)
+        var reads = 0
+        val countingRead: suspend (String) -> Int? = {
+            reads++
+            80
+        }
+        reader(prefs = prefs, readBatteryFn = countingRead).doReadBattery("Cam", camAddr)
 
-        assertTrue("a camera the rider switched off must not drive the backoff", failures.isEmpty())
-        assertEquals("the remembered pick must survive the switch", camAddr, prefs.dashcamMac)
+        assertEquals("the app must not connect to a camera the rider switched off", 0, reads)
+        assertNull("and must publish nothing about it", BatteryStateBus.entries.value["cam"])
     }
 
     @Test
-    fun successOnADisownedDashcamDoesNotSyncItsName() = runTest {
-        val prefs = prefsWithDashcam(displayName = "Old Cam", ownership = DashcamOwnership.NO)
-        reader(prefs = prefs, readBatteryFn = { 50 }).doReadBattery("New Cam", camAddr)
+    fun anOwnedDashcamIsStillRead() = runTest {
+        // The bound: the refusal must be about the switch, not about cameras.
+        val prefs = prefsWithDashcam(displayName = "Cam")
+        var reads = 0
+        val countingRead: suspend (String) -> Int? = {
+            reads++
+            80
+        }
+        reader(prefs = prefs, readBatteryFn = countingRead).doReadBattery("Cam", camAddr)
 
-        assertEquals("the app must not write to a camera it may not use", "Old Cam", prefs.dashcamDisplayName)
+        assertEquals(1, reads)
+        assertEquals(80, BatteryStateBus.entries.value["cam"]?.pct)
+    }
+
+    @Test
+    fun aDisownedDashcamLeavesEveryRecordOfItAlone() = runTest {
+        // What the refusal above means downstream: no backoff bookkeeping, no
+        // display-name resync, and the pick still there for when the switch
+        // comes back. A CONSEQUENCE test, not a second pin: the refusal returns
+        // before either of those sites, so no mutation of them can be told
+        // apart from here.
+        val prefs = prefsWithDashcam(displayName = "Old Cam", ownership = DashcamOwnership.NO)
+        val failures = mutableMapOf<String, Int>()
+        reader(prefs = prefs, dashcamProbeFailures = failures, readBatteryFn = { null })
+            .doReadBattery("New Cam", camAddr)
+
+        assertTrue("a camera the rider switched off must not drive the backoff", failures.isEmpty())
+        assertEquals("nor have its name resynced", "Old Cam", prefs.dashcamDisplayName)
+        assertEquals("and the remembered pick must survive the switch", camAddr, prefs.dashcamMac)
     }
 
     @Test

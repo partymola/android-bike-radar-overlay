@@ -531,6 +531,13 @@
     <string name="settings_dashcam_have_dashcam">Tengo una cámara delantera</string>
     <string name="settings_dashcam_have_dashcam_subtitle_on">Configura tu cámara delantera abajo.</string>
     <string name="settings_dashcam_have_dashcam_subtitle_off">Actívalo si quieres seguir una cámara delantera con Bluetooth junto al radar.</string>
+    <!-- La fila que aparece con el interruptor de arriba apagado y una cámara
+         aún recordada. "Borrar", nunca "Olvidar":
+         settings_radardev_pair_different_subtitle usa "Olvida" para desemparejar
+         en los ajustes de Bluetooth de Android, y esto no lo hace. -->
+    <string name="settings_dashcam_saved_label">Cámara guardada</string>
+    <string name="settings_dashcam_clear">Borrar</string>
+    <string name="settings_dashcam_cleared_toast">Cámara borrada</string>
     <string name="settings_dashcam_not_selected">No seleccionada</string>
     <string name="settings_dashcam_pick">Elegir</string>
     <string name="settings_dashcam_change">Cambiar</string>

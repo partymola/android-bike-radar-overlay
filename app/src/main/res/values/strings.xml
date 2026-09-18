@@ -557,6 +557,13 @@
     <string name="settings_dashcam_have_dashcam">I have a front dashcam</string>
     <string name="settings_dashcam_have_dashcam_subtitle_on">Set up your dashcam below.</string>
     <string name="settings_dashcam_have_dashcam_subtitle_off">Turn this on if you want to track a Bluetooth dashcam alongside the radar.</string>
+    <!-- The row shown while the switch above is off and a camera is still
+         remembered. "Clear", never "Forget": settings_radardev_pair_different_subtitle
+         uses Forget for unpairing in Android's Bluetooth settings, which this
+         does not do. -->
+    <string name="settings_dashcam_saved_label">Saved dashcam</string>
+    <string name="settings_dashcam_clear">Clear</string>
+    <string name="settings_dashcam_cleared_toast">Saved dashcam cleared</string>
     <string name="settings_dashcam_not_selected">Not selected</string>
     <string name="settings_dashcam_pick">Pick</string>
     <string name="settings_dashcam_change">Change</string>

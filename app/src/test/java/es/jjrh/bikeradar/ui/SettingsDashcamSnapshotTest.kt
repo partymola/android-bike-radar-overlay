@@ -16,8 +16,9 @@ import org.robolectric.annotation.GraphicsMode
  * stateless [SettingsDashcamContent] leaf so the test does not depend
  * on Prefs, the battery bus, or `NotificationManager`.
  *
- * Variants cover the three ownership states the screen renders: NO
- * (top toggle only), YES with no device picked (toggle + Pick card),
+ * Variants cover the ownership states the screen renders: NO (top
+ * toggle only), NO with a camera still remembered (toggle + the Clear
+ * row, in both locales), YES with no device picked (toggle + Pick card),
  * and YES with a device picked (full set: device card, Behaviour
  * toggle, Walk-away alarm + DnD row + threshold slider). A picked
  * camera that is not advertising gets its own golden: it is the state
@@ -49,6 +50,42 @@ class SettingsDashcamSnapshotTest {
                     walkAwayThreshold = 30,
                     canBypassDnd = false,
                     onOwnershipChange = {},
+                    onClearSavedClick = {},
+                    onPickDeviceClick = {},
+                    onWarnWhenOffChange = {},
+                    onWalkAwayEnabledChange = {},
+                    onWalkAwayThresholdChange = {},
+                    onWalkAwayThresholdFinished = {},
+                    onOverrideDndClick = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun ownershipNoRemembered() = switchedOffWithACameraRemembered()
+
+    @Test
+    @Config(qualifiers = "es-w448dp-h997dp-xxhdpi")
+    fun ownershipNoRememberedEs() = switchedOffWithACameraRemembered()
+
+    private fun switchedOffWithACameraRemembered() {
+        captureRoboImage {
+            UiTheme {
+                SettingsDashcamContent(
+                    navController = rememberNavController(),
+                    ownership = DashcamOwnership.NO,
+                    dashcamMac = "00:11:22:33:44:55",
+                    dashcamDisplayName = "Front cam",
+                    dashcamWarnWhenOff = true,
+                    dashcamConnected = false,
+                    btEnabled = true,
+                    dashcamBatteryPct = null,
+                    walkAwayAlarmEnabled = true,
+                    walkAwayThreshold = 30,
+                    canBypassDnd = false,
+                    onOwnershipChange = {},
+                    onClearSavedClick = {},
                     onPickDeviceClick = {},
                     onWarnWhenOffChange = {},
                     onWalkAwayEnabledChange = {},
@@ -77,6 +114,7 @@ class SettingsDashcamSnapshotTest {
                     walkAwayThreshold = 30,
                     canBypassDnd = false,
                     onOwnershipChange = {},
+                    onClearSavedClick = {},
                     onPickDeviceClick = {},
                     onWarnWhenOffChange = {},
                     onWalkAwayEnabledChange = {},
@@ -105,6 +143,7 @@ class SettingsDashcamSnapshotTest {
                     walkAwayThreshold = 30,
                     canBypassDnd = false,
                     onOwnershipChange = {},
+                    onClearSavedClick = {},
                     onPickDeviceClick = {},
                     onWarnWhenOffChange = {},
                     onWalkAwayEnabledChange = {},
@@ -133,6 +172,7 @@ class SettingsDashcamSnapshotTest {
                     walkAwayThreshold = 30,
                     canBypassDnd = false,
                     onOwnershipChange = {},
+                    onClearSavedClick = {},
                     onPickDeviceClick = {},
                     onWarnWhenOffChange = {},
                     onWalkAwayEnabledChange = {},

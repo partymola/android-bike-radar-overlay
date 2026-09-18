@@ -5,6 +5,7 @@ package es.jjrh.bikeradar.ui
 import android.app.NotificationManager
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -130,6 +131,12 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         onOwnershipChange = { on ->
             prefs.dashcamOwnership = if (on) DashcamOwnership.YES else DashcamOwnership.NO
         },
+        onClearSavedClick = {
+            prefs.clearDashcamPick()
+            // The row removes itself, so the tap otherwise lands with no
+            // confirmation. Pinned by clearingSaysSoBecauseTheRowItselfDisappears.
+            Toast.makeText(ctx, R.string.settings_dashcam_cleared_toast, Toast.LENGTH_SHORT).show()
+        },
         onPickDeviceClick = { navController.navigate("dashcam-picker") },
         onWarnWhenOffChange = { prefs.dashcamWarnWhenOff = it },
         onWalkAwayEnabledChange = { prefs.walkAwayAlarmEnabled = it },
@@ -150,7 +157,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
  * Stateless leaf — renders the Dashcam settings screen from
  * already-derived state. No `LocalContext`, no `Prefs`, no
  * `NotificationManager`. Visible to snapshot tests so the visual
- * contract can be locked across the three ownership states.
+ * contract can be locked across the ownership states.
  */
 @Composable
 internal fun SettingsDashcamContent(
@@ -170,6 +177,7 @@ internal fun SettingsDashcamContent(
     walkAwayThreshold: Int,
     canBypassDnd: Boolean,
     onOwnershipChange: (Boolean) -> Unit,
+    onClearSavedClick: () -> Unit,
     onPickDeviceClick: () -> Unit,
     onWarnWhenOffChange: (Boolean) -> Unit,
     onWalkAwayEnabledChange: (Boolean) -> Unit,
@@ -184,6 +192,11 @@ internal fun SettingsDashcamContent(
         ) {
             SettingsHeader(stringResource(R.string.settings_dashcam_title), onBack = { navController.popBackStack() })
 
+            // Not `== NO`: a rider who took back an onboarding decline is
+            // UNANSWERED with a pick.
+            // Pinned by aRiderWhoNeverAnsweredCanStillClearTheirPick.
+            val rememberedButUnused = ownership != DashcamOwnership.YES && dashcamMac != null
+
             // Ownership toggle (top section before any device card)
             SettingsRowGroup {
                 SettingsToggleRow(
@@ -195,7 +208,20 @@ internal fun SettingsDashcamContent(
                     },
                     checked = ownership == DashcamOwnership.YES,
                     onCheckedChange = onOwnershipChange,
+                    isLast = !rememberedButUnused,
                 )
+                if (rememberedButUnused) {
+                    SettingsActionRow(
+                        leadingIcon = Icons.Default.Videocam,
+                        leadingTint = br.dashcam,
+                        title = stringResource(R.string.settings_dashcam_saved_label),
+                        // A pick saved while Android had no name for the
+                        // device: the address is all there is to tell it by.
+                        subtitle = dashcamDisplayName ?: dashcamMac,
+                        actionLabel = stringResource(R.string.settings_dashcam_clear),
+                        onAction = onClearSavedClick,
+                    )
+                }
             }
 
             if (ownership == DashcamOwnership.YES) {

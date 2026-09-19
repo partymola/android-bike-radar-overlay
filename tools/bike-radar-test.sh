@@ -445,11 +445,12 @@ APK defaults to: $DEFAULT_APK
 EOF
 }
 
-# Run the gradle build via the Docker builder image. Mirrors AGENTS.md's
-# documented command. Falls back to a clear error if the image is missing.
+# Run the gradle build via the Docker builder image, with the same image and
+# Gradle cache as AGENTS.md's one-shot command. Falls back to a clear error if
+# the image is missing.
 build_apk_in_docker() {
     if ! command -v docker >/dev/null 2>&1; then
-        err "docker not found in PATH; build with 'gradle :app:assembleDebug' manually or pass --no-build"
+        err "docker not found in PATH; build with './gradlew :app:assembleDebug' manually or pass --no-build"
         return 1
     fi
     if ! docker image inspect "$BUILDER_IMAGE" >/dev/null 2>&1; then
@@ -468,7 +469,7 @@ build_apk_in_docker() {
         -v "${cache}:/gradle-cache" \
         -e GRADLE_USER_HOME=/gradle-cache \
         -w /workspace "$BUILDER_IMAGE" \
-        gradle :app:assembleDebug --console=plain --no-daemon
+        ./gradlew :app:assembleDebug --console=plain --no-daemon
 }
 
 cmd_clean_install() {

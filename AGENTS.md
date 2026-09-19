@@ -20,9 +20,12 @@ scripts/dev down                                            # when finished
 # veth pairs on this host: export DEV_DOCKER_NETWORK=host.
 
 # Or the one-shot pattern (no daemon, slower; safe to use without `dev up`):
+mkdir -p "$HOME/.cache/bike-radar-gradle" "$HOME/.cache/bike-radar-m2"
 docker run --rm -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \
   -e GRADLE_USER_HOME=/gradle-cache \
+  -v "$HOME/.cache/bike-radar-m2:/m2" \
+  -e JAVA_TOOL_OPTIONS=-Dmaven.repo.local=/m2 \
   -w /workspace bike-radar-builder \
   ./gradlew :app:testDebugUnitTest --console=plain --no-daemon
 
@@ -44,7 +47,9 @@ write the version is the whole defect, and nothing checks the two agree.
 
 One consequence worth knowing: the distribution is no longer baked into the
 image, so the first `./gradlew` against a cold `~/.cache/bike-radar-gradle`
-downloads it and needs network.
+downloads it and needs network. The same goes for Robolectric's SDK jars,
+cached separately in `~/.cache/bike-radar-m2`: the first unit-test run on a
+cold cache downloads them.
 
 Screenshot tests: `:app:verifyRoborazziDebug` renders the Compose and
 Canvas goldens via Robolectric Native Graphics, so they run inside

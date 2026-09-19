@@ -27,6 +27,16 @@ CONTAINER_NAME="bike-radar-builder-dev"
 IMAGE_NAME="bike-radar-builder"
 WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GRADLE_CACHE="${HOME}/.cache/bike-radar-gradle"
+# Robolectric fetches its android-all jars into a Maven repository of its
+# own, outside the Gradle cache, so without this mount every fresh container
+# downloads them again, and a stalled download can hang the suite.
+M2_CACHE="${HOME}/.cache/bike-radar-m2"
+CACHE_ARGS=(
+    -v "${GRADLE_CACHE}:/gradle-cache"
+    -e GRADLE_USER_HOME=/gradle-cache
+    -v "${M2_CACHE}:/m2"
+    -e JAVA_TOOL_OPTIONS=-Dmaven.repo.local=/m2
+)
 
 is_running() {
     docker ps --filter "name=^/${CONTAINER_NAME}$" \
@@ -38,10 +48,10 @@ is_running() {
 # before Gradle even starts. Left unset, the daemon's default is used and
 # nothing about container isolation changes.
 #
-# Never set it to `none`: Gradle resolves Robolectric's
-# android-all-instrumented artifacts on demand, and without a network every
-# Robolectric class fails as "classMethod FAILED", which reads like a code
-# defect and is not one.
+# Do not set it to `none` on a cold cache: Robolectric fetches any
+# android-all-instrumented jar missing from the /m2 cache on demand, and
+# without a network every Robolectric class fails as "classMethod FAILED",
+# which reads like a code defect and is not one.
 NETWORK_ARGS=()
 if [ -n "${DEV_DOCKER_NETWORK:-}" ]; then
     NETWORK_ARGS=(--network "${DEV_DOCKER_NETWORK}")
@@ -53,6 +63,8 @@ ensure_image() {
         echo "  docker build -t ${IMAGE_NAME} ." >&2
         exit 1
     fi
+    # Created here, not by docker, which would make a missing one root-owned.
+    mkdir -p "${GRADLE_CACHE}" "${M2_CACHE}"
 }
 
 up() {
@@ -68,8 +80,7 @@ up() {
         ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
         -v "${WORKSPACE}:/workspace" \
         -u "$(id -u):$(id -g)" \
-        -v "${GRADLE_CACHE}:/gradle-cache" \
-        -e GRADLE_USER_HOME=/gradle-cache \
+        "${CACHE_ARGS[@]}" \
         -w /workspace \
         "${IMAGE_NAME}" \
         sleep infinity >/dev/null
@@ -110,8 +121,7 @@ gradle_cmd() {
             ${NETWORK_ARGS[@]+"${NETWORK_ARGS[@]}"} \
             -v "${WORKSPACE}:/workspace" \
             -u "$(id -u):$(id -g)" \
-            -v "${GRADLE_CACHE}:/gradle-cache" \
-            -e GRADLE_USER_HOME=/gradle-cache \
+            "${CACHE_ARGS[@]}" \
             -w /workspace \
             "${IMAGE_NAME}" \
             ./gradlew --no-daemon "$@"

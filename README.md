@@ -325,6 +325,7 @@ Builds run in Docker so the host only needs `adb`:
 
 ```bash
 docker build -t bike-radar-builder .
+mkdir -p "$HOME/.cache/bike-radar-gradle"
 docker run --rm \
   -v "$PWD:/workspace" -u "$(id -u):$(id -g)" \
   -v "$HOME/.cache/bike-radar-gradle:/gradle-cache" \

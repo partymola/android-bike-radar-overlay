@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.5.1 - 2026-09-19
+
+### Fix
+
+- **Close passes are measured where the vehicle is actually beside you.** The clearance used to be taken from any moment after the radar started following a vehicle, and a car sitting directly behind you reads as dead centre, so a pass was often logged at a few centimetres that never happened. It is now taken only while the vehicle is within 3 m of you along the road. A pass is still recognised from far back, but one the radar stops following before the vehicle gets that close is no longer logged at all.
+- **A sideways reading of exactly zero is no longer taken as a clearance.** It means either that the radar gave no answer or that the vehicle was dead behind the bike, and neither is a pass at 0.00 m. Together, on the developer's own rides, the two changes cut logged close passes from 106 to 18 and those under 0.10 m from 70 to 2, and the typical clearance rose from 0.06 m to 0.54 m.
+- **The minimum clearance sent to Home Assistant follows the same two rules.** `min_lateral_clearance_m` took the narrowest sideways reading at any distance, so it kept reporting centimetres on rides whose close passes no longer did, and the two figures disagreed.
+- **Turning the dashcam switch off keeps the camera you picked.** One tap on the switch used to cost you the pick. Off now means the app stops using the camera, and on brings the same one back.
+
+### Security
+
+- **The app only connects to read the battery of a radar or the dashcam you are using.** It used to connect to any paired accessory whose name it recognised, picked or not, read its battery, and publish it to Home Assistant if you use that. A camera you had switched off, replaced or never chosen was included. It now leaves those alone.
+
+### Breaking
+
+- **Home Assistant automations keyed on close passes will fire less often.** `close_pass_count`, `grazing_count` and `hgv_close_pass_count` read lower and `min_lateral_clearance_m` reads looser, for the reasons under Fix. The close-pass counter and the tightest pass in the ride history on your phone move the same way, with or without Home Assistant. The drop comes from this change, not from your setup. If an automation triggers on a threshold, check it still fires where you want.
+- **`min_lateral_clearance_m` now reads Unknown on more rides.** It has no value on a ride with no usable sideways reading while a vehicle was within 3 m, and Home Assistant then shows the sensor as Unknown for that ride. The ride history on your phone shows no tightest pass for such a ride either, and rides recorded before this version keep the old, tighter figure with nothing to mark the difference.
+- **A Home Assistant battery sensor for an accessory that is neither a radar nor the dashcam in use stops updating.** It keeps its last value instead of going unavailable, so it can look live when it is not. Delete that entity in Home Assistant, or pick the device as your dashcam to start the updates again.
+
+### UX
+
+- **With the dashcam switch off, Settings shows which camera is still saved and lets you clear it.** Clearing only makes the app stop remembering it. It stays paired in Android's Bluetooth settings.
+- **A settings switch is one thing to a screen reader.** TalkBack announced the text and then a nameless switch beside it, and only the small pill took the tap. The whole row is now the switch, announced with its title and description.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the Home Assistant topics or entity names. What has changed is the numbers some of them report, and how often one has no value. The Breaking notes above say which.
+
+### Internal
+
+- **Every push to main now boots the stripped release build.** The automated boot check ran the debug build, which skips the step that strips unused code from a release. It now installs the stripped build, debug-signed, on an emulator and fails if the app dies in its first seconds. It cannot reach Bluetooth or the overlay, so it shows that the release starts, not that it works on a ride.
+- Every Kotlin, AIDL, Python and shell file carries a licence identifier and a copyright line, checked on every push, and the grant for apps built on the radar interface now names its copyright holder.
+- Dependency updates: the Kotlin Compose plugin 2.4.20, Compose 2026.09, navigation-compose 2.10.1 and Robolectric 4.17.
+
 ## v1.5.0 - 2026-09-06
 
 ### Features

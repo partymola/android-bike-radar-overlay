@@ -14,8 +14,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.SensorBuilder
 import org.robolectric.shadows.SensorEventBuilder
-import org.robolectric.shadows.ShadowSensor
 import org.robolectric.shadows.ShadowSensorManager
 import java.util.Locale
 
@@ -41,16 +41,15 @@ class TurnSensorControllerTest {
             .getSystemService(Context.SENSOR_SERVICE) as SensorManager
         if (withSensors) {
             val shadow: ShadowSensorManager = shadowOf(sm)
-            shadow.addSensor(ShadowSensor.newInstance(Sensor.TYPE_GYROSCOPE))
-            shadow.addSensor(ShadowSensor.newInstance(Sensor.TYPE_GRAVITY))
+            shadow.addSensor(SensorBuilder.newBuilder().setType(Sensor.TYPE_GYROSCOPE).build())
+            shadow.addSensor(SensorBuilder.newBuilder().setType(Sensor.TYPE_GRAVITY).build())
         }
         return sm
     }
 
-    private fun event(sm: SensorManager, type: Int, values: FloatArray, tNs: Long) = SensorEventBuilder.newBuilder()
-        .setSensor(requireNotNull(sm.getDefaultSensor(type)))
+    private fun event(sm: SensorManager, type: Int, values: FloatArray, tNs: Long) = SensorEventBuilder
+        .newBuilder(requireNotNull(sm.getDefaultSensor(type)), values)
         .setTimestamp(tNs)
-        .setValues(values)
         .build()
 
     @Test

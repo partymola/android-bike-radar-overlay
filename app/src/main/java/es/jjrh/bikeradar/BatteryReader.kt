@@ -83,15 +83,30 @@ internal class BatteryReader(
         }
     }
 
+    /** A radar, or the camera the rider is using. Nothing else the name matcher
+     *  lets through is read here: a camera switched off, cleared, replaced or
+     *  never chosen, or any other accessory with a name the app recognises.
+     *  Stated as what MAY be read so that a new way of not choosing a camera
+     *  is refused by default.
+     *
+     *  The radar test is [DeviceNameMatcher.isUnambiguousRadar] and no wider,
+     *  because that is the test the dashcam picker excludes on, so no name
+     *  both passes here and is offered there. The wider `isRearAdvert` would
+     *  read a switched-off camera called "RearView". Pinned by
+     *  aSwitchedOffCameraWithARadarLikeNameIsNotRead here and by
+     *  noNameIsBothOfferedAsTheCameraAndReadAsARadar across the two files. */
+    private fun mayRead(name: String, mac: String): Boolean = DeviceNameMatcher.isUnambiguousRadar(name) ||
+        prefs.radarMac.equals(mac, ignoreCase = true) ||
+        prefs.activeDashcamMac.equals(mac, ignoreCase = true)
+
     @SuppressLint("MissingPermission")
     internal suspend fun doReadBattery(name: String, mac: String) {
-        // A camera the rider switched off. Devices reach this path by advert
-        // NAME, so nothing upstream has consulted the pick and the refusal has
-        // to be here. Before the GATT read, not after: the point is that the
-        // app stops touching the device, not that it stops reporting what it
-        // found.
-        if (prefs.isDisownedDashcam(mac)) {
-            Log.d(TAG, "skip $name (camera is not the rider's right now)")
+        // Devices reach this path by advert NAME, so nothing upstream has
+        // consulted what the rider chose and the refusal has to be here. Before
+        // the GATT read, not after: the point is that this read stops touching
+        // the device, not that it stops reporting what it found.
+        if (!mayRead(name, mac)) {
+            Log.d(TAG, "skip $name (not a radar, and not the camera in use)")
             return
         }
 

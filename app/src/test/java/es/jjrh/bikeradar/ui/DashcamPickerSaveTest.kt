@@ -76,6 +76,18 @@ class DashcamPickerSaveTest {
     }
 
     @Test
+    fun aRadarIsNotOfferedAsTheCamera() {
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        shadowOf(radar).setName("RearVue8")
+        shadowOf(adapter).setBondedDevices(setOf(radar, adapter.getRemoteDevice(mac)))
+        showThePicker()
+
+        composeRule.onNodeWithText("VUE-12345").assertExists()
+        composeRule.onNodeWithText("RearVue8").assertDoesNotExist()
+    }
+
+    @Test
     fun aCameraPickedDuringOnboardingStartsWithTheWarningOn() {
         showThePicker(fromOnboarding = true)
 

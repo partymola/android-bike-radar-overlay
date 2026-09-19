@@ -23,7 +23,9 @@ package es.jjrh.bikeradar
  *    safe here - the worst case is a stray green dot, not a wrong link.
  *  - [isUnambiguousRadar] excludes rear units from the DASHCAM picker
  *    without excluding the front cameras that share the same vendor
- *    word ("Varia Vue" must stay offerable as a dashcam).
+ *    word ("Varia Vue" must stay offerable as a dashcam). The battery
+ *    read uses the same predicate to decide what counts as a radar, so
+ *    that no name passes both: widening it for one widens it for both.
  *  - [isKnownAccessory] is the widest: which advert sightings wake the
  *    battery-read path at all (radar or dashcam). A pinned radar MAC
  *    bypasses it (see [BatteryScanReceiver]).

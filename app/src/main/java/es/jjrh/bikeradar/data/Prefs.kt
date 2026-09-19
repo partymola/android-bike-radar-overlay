@@ -253,14 +253,6 @@ class Prefs(context: Context) {
     val activeDashcamMac: String?
         get() = activeDashcam(dashcamMac, dashcamOwnership)
 
-    /** True for the camera the rider picked and then switched off: remembered
-     *  so the switch is an undo, and not to be connected to meanwhile.
-     *
-     *  The question [activeDashcamMac] cannot answer. A device reaches the
-     *  battery-read path by its ADVERT NAME, having never consulted the pick,
-     *  so refusing it needs the remembered value rather than the gated one. */
-    fun isDisownedDashcam(mac: String): Boolean = activeDashcamMac == null && dashcamMac.equals(mac, ignoreCase = true)
-
     var dashcamWarnWhenOff: Boolean
         get() = sp.getBoolean(KEY_DASHCAM_WARN_WHEN_OFF, false)
         set(v) {

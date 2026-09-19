@@ -10,6 +10,7 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -103,13 +104,13 @@ class BatteryReaderTest {
         val kd = knownStore()
         val macToSlug = mutableMapOf<String, String>()
         reader(prefs = prefs, knownDevices = kd, macToSlug = macToSlug, readBatteryFn = { 77 })
-            .doReadBattery("Radar", radarAddr)
+            .doReadBattery("RearVue8", radarAddr)
 
-        assertEquals(setOf("Radar" to radarAddr), kd.load().toSet())
-        assertEquals("radar", macToSlug[radarAddr])
-        assertEquals(77, BatteryStateBus.entries.value["radar"]?.pct)
+        assertEquals(setOf("RearVue8" to radarAddr), kd.load().toSet())
+        assertEquals("rearvue8", macToSlug[radarAddr])
+        assertEquals(77, BatteryStateBus.entries.value["rearvue8"]?.pct)
         assertNull("a non-dashcam read must not touch the dashcam display name", prefs.dashcamDisplayName)
-        assertTrue("publish returned true, so the 5-min throttle must arm", throttleArmed("radar"))
+        assertTrue("publish returned true, so the 5-min throttle must arm", throttleArmed("rearvue8"))
     }
 
     @Test
@@ -127,11 +128,11 @@ class BatteryReaderTest {
     @Test
     fun knownDeviceRemapsNameToTheNewMac() = runTest {
         val kd = knownStore()
-        kd.save(listOf("Radar" to "99:99:99:99:99:99"))
-        reader(knownDevices = kd, readBatteryFn = { 40 }).doReadBattery("Radar", radarAddr)
+        kd.save(listOf("RearVue8" to "99:99:99:99:99:99"))
+        reader(knownDevices = kd, readBatteryFn = { 40 }).doReadBattery("RearVue8", radarAddr)
 
         // The stale name->mac pair is replaced, not duplicated.
-        assertEquals(setOf("Radar" to radarAddr), kd.load().toSet())
+        assertEquals(setOf("RearVue8" to radarAddr), kd.load().toSet())
     }
 
     // ── publish-gated throttle ───────────────────────────────────────────────
@@ -139,10 +140,10 @@ class BatteryReaderTest {
     @Test
     fun publishFailureUpdatesBusButLeavesThrottleUnarmed() = runTest {
         reader(readBatteryFn = { 60 }, publishBattery = { _, _ -> false })
-            .doReadBattery("Radar", radarAddr)
+            .doReadBattery("RearVue8", radarAddr)
 
-        assertEquals("the read still publishes to the bus regardless of HA", 60, BatteryStateBus.entries.value["radar"]?.pct)
-        assertFalse("a failed HA publish must leave the throttle unarmed for retry", throttleArmed("radar"))
+        assertEquals("the read still publishes to the bus regardless of HA", 60, BatteryStateBus.entries.value["rearvue8"]?.pct)
+        assertFalse("a failed HA publish must leave the throttle unarmed for retry", throttleArmed("rearvue8"))
     }
 
     // ── read-failure path ────────────────────────────────────────────────────
@@ -178,7 +179,7 @@ class BatteryReaderTest {
 
     @Test
     fun anOwnedDashcamIsStillRead() = runTest {
-        // The bound: the refusal must be about the switch, not about cameras.
+        // The bound: the camera in use must still be read.
         val prefs = prefsWithDashcam(displayName = "Cam")
         var reads = 0
         val countingRead: suspend (String) -> Int? = {
@@ -189,6 +190,90 @@ class BatteryReaderTest {
 
         assertEquals(1, reads)
         assertEquals(80, BatteryStateBus.entries.value["cam"]?.pct)
+    }
+
+    // ── which devices are read at all ────────────────────────────────────────
+    // Radar names here have the shape real hardware advertises: a device
+    // called "Radar" matches no radar predicate, so it could only be read as a
+    // radar by a rule that read everything.
+
+    private fun readsOf(prefs: Prefs, name: String, mac: String, kd: KnownDevices = knownStore()): Int {
+        var reads = 0
+        val countingRead: suspend (String) -> Int? = {
+            reads++
+            80
+        }
+        runBlocking {
+            reader(prefs = prefs, knownDevices = kd, readBatteryFn = countingRead).doReadBattery(name, mac)
+        }
+        return reads
+    }
+
+    @Test
+    fun aClearedCameraIsNotReadAgain() {
+        // The rider switched the camera off and then cleared it. Nothing
+        // remembers its address any more, so only its name can refuse it.
+        val prefs = Prefs(app).apply { dashcamOwnership = DashcamOwnership.NO }
+        val kd = knownStore("cleared")
+
+        assertEquals(0, readsOf(prefs, "VUE-12345", camAddr, kd))
+        assertNull(BatteryStateBus.entries.value["vue-12345"])
+        assertTrue("and it must not be cached as a device to come back to", kd.load().isEmpty())
+    }
+
+    @Test
+    fun aCameraTheRiderNeverChoseIsNotRead() {
+        val prefs = Prefs(app) // ownership UNANSWERED, no pick
+
+        assertEquals(0, readsOf(prefs, "VUE-12345", camAddr))
+    }
+
+    @Test
+    fun aReplacedCameraIsNotRead() {
+        // The rider picked a different camera. The old one is still paired.
+        val prefs = prefsWithDashcam(displayName = "VUE-99999")
+
+        assertEquals(0, readsOf(prefs, "VUE-12345", "BB:BB:BB:00:00:01"))
+        assertEquals("while the one in use still is", 1, readsOf(prefs, "VUE-99999", camAddr))
+    }
+
+    @Test
+    fun aRadarIsReadWhateverTheCameraAnswerIs() {
+        val prefs = Prefs(app).apply { dashcamOwnership = DashcamOwnership.NO }
+
+        assertEquals(1, readsOf(prefs, "RearVue8", radarAddr))
+        assertEquals(1, readsOf(prefs, "RTL515", "CC:CC:CC:00:00:01"))
+        assertEquals(1, readsOf(prefs, "Varia Radar", "DD:DD:DD:00:00:01"))
+    }
+
+    @Test
+    fun aSwitchedOffCameraWithARadarLikeNameIsNotRead() {
+        // The picker offers this device, because its name is not only a
+        // radar's. So the radar test must not claim it either, or switching
+        // it off would stop nothing.
+        val prefs = prefsWithDashcam(displayName = "Garmin RearView Dash Cam", ownership = DashcamOwnership.NO)
+
+        assertEquals(0, readsOf(prefs, "Garmin RearView Dash Cam", camAddr))
+    }
+
+    @Test
+    fun aPinnedRadarIsReadEvenUnderANameNothingRecognises() {
+        // "My radar isn't listed": the pin is the only thing identifying it.
+        val prefs = Prefs(app).apply { radarMac = radarAddr }
+
+        assertEquals(1, readsOf(prefs, "Bike Thing", radarAddr))
+        assertEquals("the stored pin and the sighting need not agree in case", 1, readsOf(prefs, "Bike Thing", radarAddr.lowercase()))
+        assertEquals("the pin names one device, not the name", 0, readsOf(prefs, "Bike Thing", "AA:AA:AA:00:00:01"))
+    }
+
+    @Test
+    fun theCameraInUseIsReadUnderAnyName() {
+        // The picker offers every paired device, so the pick need not look
+        // like a camera.
+        val prefs = prefsWithDashcam(displayName = "Some Cam").apply { dashcamMac = "AA:BB:CC:00:00:0F" }
+
+        assertEquals(1, readsOf(prefs, "Some Cam", "AA:BB:CC:00:00:0F"))
+        assertEquals("the stored pick and the sighting need not agree in case", 1, readsOf(prefs, "Some Cam", "aa:bb:cc:00:00:0f"))
     }
 
     @Test
@@ -211,9 +296,15 @@ class BatteryReaderTest {
     @Test
     fun readFailureOnNonDashcamDoesNotTouchBackoff() = runTest {
         val failures = mutableMapOf<String, Int>()
-        reader(dashcamProbeFailures = failures, readBatteryFn = { null })
-            .doReadBattery("Radar", radarAddr)
+        var reads = 0
+        val failingRead: suspend (String) -> Int? = {
+            reads++
+            null
+        }
+        reader(dashcamProbeFailures = failures, readBatteryFn = failingRead)
+            .doReadBattery("RearVue8", radarAddr)
 
+        assertEquals("a refused device would leave the counter empty too", 1, reads)
         assertTrue("the backoff counter is dashcam-only", failures.isEmpty())
     }
 

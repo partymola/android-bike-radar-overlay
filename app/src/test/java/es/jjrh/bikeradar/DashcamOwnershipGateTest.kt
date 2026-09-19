@@ -128,7 +128,7 @@ class DashcamOwnershipGateTest {
 
     @Test
     fun thePredicateStillMatchesEverySpellingAReaderUses() {
-        // Each of these is a real line shape from this repo. A predicate
+        // Each of these is a line shape this repo uses or has used. A predicate
         // narrowed to any one of them (`prefs\.dashcamMac`, say) stops seeing
         // the others, and the count above would not notice.
         listOf(
@@ -197,6 +197,29 @@ class DashcamOwnershipGateTest {
         prefs.dashcamOwnership = DashcamOwnership.NO
         assertNull("the snapshot must hide it too", prefs.snapshot().activeDashcamMac)
         assertEquals("while still carrying the raw pick", "11:22:33:44:55:66", prefs.snapshot().dashcamMac)
+    }
+
+    @Test
+    fun noNameIsBothOfferedAsTheCameraAndReadAsARadar() {
+        // The battery read treats a radar's name as permission to connect, and
+        // the rider's switch governs only what they picked as the camera. So no
+        // name should pass both. That holds because both sites ask the same
+        // predicate, which no behaviour test can see: narrow the
+        // picker's exclusion alone and a radar becomes pickable, stays readable
+        // once switched off, and every other test still passes.
+        val picker = RepoFiles.mainSource("ui/DashcamPickerSheet.kt").readText()
+        assertTrue(
+            "the picker must keep out exactly what the battery read calls a radar",
+            "if (DeviceNameMatcher.isUnambiguousRadar(name)) return@mapNotNull null" in picker,
+        )
+        val mayRead = RepoFiles.mainSource("BatteryReader.kt").readText()
+            .substringAfter("private fun mayRead(")
+            .substringBefore("@SuppressLint")
+        assertEquals(
+            "and the battery read must use that predicate and no other name test",
+            listOf("isUnambiguousRadar"),
+            Regex("""DeviceNameMatcher\.(\w+)""").findAll(mayRead).map { it.groupValues[1] }.toList(),
+        )
     }
 
     @Test

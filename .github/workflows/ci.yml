@@ -170,10 +170,11 @@ jobs:
           if [ "$code" = 2 ]; then exit 2; fi
           exit 0
 
-  # The release variant's only coverage. Every other job here builds debug,
-  # which R8 never touches, so without this the first thing that can fail on a
-  # shrunk APK is the tag build - and by then the tag is public and the only
-  # way out is a dead tag and a re-cut.
+  # The release variant's only check on pull requests, and one of two on pushes
+  # (boot-smoke below runs the same APK, pushes only). The test and lint jobs
+  # build debug, which R8 never touches, so without these the first thing that
+  # can fail on a shrunk APK is the tag build - and by then the tag is public
+  # and the only way out is a dead tag and a re-cut.
   #
   # No secrets needed: the release signingConfig falls back to debug signing
   # when the keystore env vars are absent, which is the case here. This job
@@ -258,11 +259,16 @@ jobs:
   # startup, immediate crashes in Application or Activity onCreate that only
   # surface on a real Dalvik/ART VM.
   #
+  # It boots the SHRUNK release APK, not the debug one, because that is the
+  # build riders install and the only one R8 has processed: a class or member
+  # R8 removed surfaces as a crash on first use, which no JVM test and no
+  # debug build can show. release-shrink above reads names out of the
+  # DEX; this runs the thing. Debug-signed, for the reason given on that job.
+  #
   # What this does NOT cover: BLE (scanner is null on the stock emulator),
   # the SYSTEM_ALERT_WINDOW overlay (permission not granted automatically),
-  # or any logic tested by the Robolectric suite. Nor R8 stripping - it
-  # installs app-debug.apk, which R8 never processes. release-shrink above
-  # is what covers that.
+  # any logic tested by the Robolectric suite, or anything past the first
+  # screen. A release that boots here can still fail on a ride.
   boot-smoke:
     name: APK boot smoke (API 34 emulator)
     if: github.event_name == 'push'
@@ -289,8 +295,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --console=plain --no-daemon
+      - name: Build the shrunk release APK
+        run: ./gradlew :app:assembleRelease --console=plain --no-daemon
 
       - name: Enable KVM hardware acceleration
         run: |
@@ -309,8 +315,13 @@ jobs:
           # reactivecircus/android-emulator-runner runs each line of `script`
           # in its own `sh -c` invocation, so multi-line `if/then/fi` doesn't
           # survive. Each step has to stand alone or chain with `&&` / `;`.
+          #
+          # Two checks, because alive at launch is not alive: a member R8
+          # removed fails at first use, a moment after the process was seen.
           script: |
             set -e
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            adb logcat -c || true
             adb shell am start -W -n es.jjrh.bikeradar/.MainActivity
             for i in $(seq 1 15); do pid=$(adb shell pidof es.jjrh.bikeradar || true); [ -n "$pid" ] && break; sleep 1; done; if [ -z "$pid" ]; then echo "::error::App process not alive 15 s after launch - likely a boot crash"; adb logcat -d -s AndroidRuntime:E BikeRadar:E | tail -30; exit 1; fi; echo "OK: app alive at PID $pid"
+            sleep 10; pid=$(adb shell pidof es.jjrh.bikeradar || true); fatal=$(adb logcat -d -s AndroidRuntime:E | grep -c "Process: es.jjrh.bikeradar" || true); if [ -z "$pid" ] || [ "$fatal" != "0" ]; then echo "::error::App died or logged a fatal exception within 10 s of launch"; adb logcat -d -s AndroidRuntime:E BikeRadar:E | tail -40; exit 1; fi; echo "OK: still alive at PID $pid, no fatal exception"

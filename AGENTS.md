@@ -533,9 +533,9 @@ enforces them, and CONTRIBUTING.md points contributors here:
     Same family as the corpus gate's "confirm it ran rather than trusting the
     exit code".
 - **Release DEX keep gate** (`scripts/check-release-dex-keeps.py`, run by
-  `:app:verifyReleaseDexKeeps`): the only check that reads the artifact riders
-  install. Every gate above runs the debug variant, which R8 never touches, so
-  nothing else covers the minified APK. It unzips `classes*.dex`, runs
+  `:app:verifyReleaseDexKeeps`): one of the two checks on the artifact riders
+  install; the other is the `boot-smoke` job, described below. Every gate above
+  runs the debug variant, which R8 never touches. It unzips `classes*.dex`, runs
   `dexdump -f`, and fails if any enum constant in its table is absent under its
   exact name. The `release-shrink` CI job runs it on every push to `main` and
   every PR targeting `main`, so it can go red BEFORE a tag exists rather than
@@ -576,13 +576,21 @@ enforces them, and CONTRIBUTING.md points contributors here:
     reproducible-build verification would establish. Publish through the
     workflow.
   - **What the gate does NOT replace.** It reads names out of the DEX; it never
-    executes the APK. `boot-smoke` installs the DEBUG APK, which R8 never
-    processes, so nothing in CI boots the shrunk artifact. Nothing requires a
-    ride test of a minified build before a tag either, and this gate does not
-    create one: it is narrower than the requirement it replaced and covers a
-    different failure. That is a real reduction in assurance, not an even
-    trade. Do not read a green `verifyReleaseDexKeeps` as evidence the release
-    runs.
+    executes the APK. `boot-smoke` does that half: on every push to `main` it
+    builds the shrunk release APK, installs it on an API 34 emulator, and fails
+    unless the process is alive at launch, still alive ten seconds later, and
+    no fatal exception for the app is in logcat. The second look matters more
+    than the first, because a member R8 removed fails at first use rather than
+    at process start.
+    Its reach ends at the first screen. The emulator has no BLE and the overlay
+    permission is not granted, so the service's link paths, the overlay and
+    every alert path run on no release build in CI. Nothing requires a ride
+    test of a minified build before a tag either. Read a green pair as "the
+    names survived and it starts", never as evidence the release works on a
+    ride.
+    Tag pushes do not trigger `ci.yml`, so the release-SIGNED artifact itself is
+    never booted: what was booted is the same commit's debug-signed build, when
+    it was pushed to `main`.
   - **The table is the set whose NAME crosses a process boundary**, and that
     is the whole scope: six enums persisted by name and read back with
     `valueOf()`, plus `VehicleSize`, `ClosePassDetector.Side` and

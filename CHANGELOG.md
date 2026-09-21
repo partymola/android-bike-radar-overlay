@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.6.0 - 2026-09-21
+
+### Features
+
+- **One screen on your next launch, saying what the radar can and cannot do.** It appears once, the first time you open this version, and not again. A tap is all it asks for. It says the app warns you about traffic behind you and cannot look behind for you, that it can miss a vehicle or warn late, that the radar link or the sound can drop without notice, that "road clear" only means the radar sees nothing, and to always look behind before you move out. The same text sits under Settings, About, Before you ride whenever you want it again. Until you have tapped it, another app asking to use your radar is refused; apps you have already allowed keep working.
+
+### UX
+
+- **The README gains a Known limitations section**, covering the same ground at more length: what the radar and the app can miss, dropped links and audio, alerts going quiet during a call and while you pause them, and what "road clear" does not mean.
+- **The first image on the project page is now the overlay as the app itself draws it**, and the store screenshots change the same way. Nothing about the overlay itself changed.
+- **Wording that described the overlay as sitting over a map or a navigation app now says "the app underneath"**, in both languages, on the overlay dimmer setting and the Privacy screen. It still draws over whatever you are running.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the Home Assistant topics, entity names or the values they report, and no change to any alert.
+
+### Internal
+
+- The README no longer claims to be the only radar app that draws over other apps, or to show more than the official ones.
+- Unit-test runs keep Robolectric's Android jars in a cache outside the build container instead of downloading them into every fresh one, and the live-testing helper script builds through the Gradle wrapper like every other path, so its clean-install step no longer fails before it compiles.
+
 ## v1.5.1 - 2026-09-19
 
 ### Fix

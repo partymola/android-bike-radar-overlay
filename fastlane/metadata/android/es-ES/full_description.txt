@@ -1,6 +1,6 @@
 Bike Radar muestra y hace sonar lo que ve el radar trasero de tu bici, encima de la app que ya estés usando.
 
-Una barra fina en el borde de la pantalla muestra la distancia, velocidad de aproximación y posición lateral de cada vehículo sobre tu mapa o app de navegación. Los pitidos suben de nivel según se acerca el vehículo más próximo, y un tono urgente distinto suena cuando un impacto parece inminente, incluso mientras te acercas despacio a un cruce con un vehículo rápido detrás. Un aviso de vía despejada suena cuando el radar deja de ver vehículos detrás.
+Una barra fina en el borde de la pantalla muestra la distancia, velocidad de aproximación y posición lateral de cada vehículo. Los pitidos suben de nivel según se acerca el vehículo más próximo, y un tono urgente distinto suena cuando un impacto parece inminente, incluso mientras te acercas despacio a un cruce con un vehículo rápido detrás. Un aviso de vía despejada suena cuando el radar deja de ver vehículos detrás.
 
 Todo funciona en tu teléfono: sin cuenta, sin nube, sin analíticas. La integración opcional con Home Assistant publica las estadísticas de tus rutas en tu propio servidor y en ningún otro sitio. Otra app de tu móvil puede pedir usar tu radar, y no le llega nada hasta que se lo permitas en una pantalla que la nombra; el traspaso ocurre en el dispositivo, de app a app.
 

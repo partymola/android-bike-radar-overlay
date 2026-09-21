@@ -1,10 +1,10 @@
 # Bike Radar
 
-**Use any cycling app. Add radar on top.** Bike Radar is a free, open-source
-Android app that draws your rear bike radar as a live overlay and audio alerts
-over whatever you're already running - Strava, Komoot, Google Maps, Bosch
-Flow, your music. As far as we know it's the only radar app that draws over
-other apps, and the only open-source one. No account, no ads, no tracking.
+**Radar alerts you don't have to look for.** Bike Radar is a free,
+open-source Android app that draws your rear bike radar as a live overlay
+with audio alerts, on top of whatever else is on your screen. As far as we
+know it's the only open-source app of its kind. No account, no ads, no
+tracking.
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/partymola/android-bike-radar-overlay?label=release)](../../releases/latest)
@@ -18,34 +18,33 @@ Built and ridden daily by the author for months on a Garmin Varia RearVue
 820 - a commute tool, not a demo. It works with Garmin Varia radars over
 Bluetooth LE: everything on the 820, range only on the earlier models (see
 [device compatibility](#compatibility)). Not affiliated with or endorsed by
-Garmin. On the 820 it shows more than the official apps do, because the
-per-vehicle lateral position and speed feed the overlay and the close-pass
-counting.
+Garmin.
 
 <p align="left">
-  <img src="screenshots/overlay-live.png" width="700" alt="Live overlay during a ride" />
+  <img src="screenshots/overlay-live.png" width="120" alt="The radar overlay strip, rendered: the rider at the top, three vehicles behind, and the alert-distance line" />
 </p>
 
-The app is the faint strip down the right edge of the screenshot above
-- the radar threat ladder, plus small battery indicators for the radar
-itself and the front camera. It beeps when a car closes in behind you;
-the beep tier rises as the closest vehicle gets nearer, and a distinct
-urgent tone fires if an impact looks imminent. Everything else in the
-screenshot - the navigation panel, the assist-mode and battery row - is
-other apps showing through. The overlay only ever draws the right-edge
-strip; the rest of your screen stays yours. (*Image credits
-[below](#credits).*)
+That strip is the whole of what the app draws. You are the arrow at the
+top and each vehicle behind you is a box below it, placed by distance and
+by which side it is on, coloured by how much it needs watching. The
+dashed line is the alert distance you set: a vehicle beyond it is drawn
+and stays silent. The red border marks a vehicle closing fast, and a
+radar that reports range only cannot raise it at all. It beeps as a car
+closes in behind you, the tier rising as the closest gets nearer, and a
+distinct urgent tone fires if an impact looks imminent. The rest of your
+screen stays yours.
 
 *¿Hablas español? Hay un resumen [en español](#en-español) más abajo.*
 
 ## What it does
 
 - **Radar overlay on any app.** A thin strip shows each vehicle behind
-  you - distance, closing speed, and which side it's on - over your
-  map, Bosch Flow, music, anything.
+  you: distance, closing speed, and which side it's on. It stays on
+  screen whatever else you are running.
 - **Alerts you don't have to look at.** Beeps rise in tiers as the
   closest car nears, a distinct urgent tone fires if an impact looks
-  imminent, and a clear chime sounds when the road behind is empty.
+  imminent, and a clear chime sounds when the radar no longer sees
+  vehicles behind.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
   summary, and keeps per-ride stats - distance, overtakes, close passes, how close
@@ -162,10 +161,13 @@ Store-listing metadata lives under `fastlane/metadata/android/`
 
 ## First run
 
-1. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
+1. Read the "Before you ride" screen and tap through it. It appears once,
+   on your first launch, and again under **Settings -> About** whenever you
+   want it.
+2. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
    notifications, overlay).
-2. Enter your Home Assistant base URL and long-lived token (or skip).
-3. Pair your rear radar via Android's **Settings -> Connected devices ->
+3. Enter your Home Assistant base URL and long-lived token (or skip).
+4. Pair your rear radar via Android's **Settings -> Connected devices ->
    Pair new device** while the radar is in pair mode. The app detects
    the bond automatically and starts tracking. If it doesn't recognise
    your radar by name, pick it from your paired devices in **Settings ->
@@ -260,6 +262,35 @@ confirmed on real hardware yet, so if yours works, or doesn't, a quick
 radars and future firmware may still differ. Bug reports welcome; please
 include device, Android version and radar firmware.
 
+## Known limitations
+
+The radar and the app can both miss things. These are the ones worth
+knowing before you rely on it.
+
+- **A vehicle can go unseen.** The radar has a limited field of view and
+  range, and it can lose a vehicle it was following. Nothing further down
+  can report what the radar never saw.
+- **A warning can come late.** Alerts are worked out from what the radar
+  reports moment to moment, so a vehicle that arrives close and fast can be
+  announced with little warning.
+- **The link and the sound can drop without telling you.** Bluetooth can
+  disconnect mid-ride, and another app can take the audio. There is an
+  alert for a dropped radar, and it has limits of its own (see
+  [compatibility](#compatibility)).
+- **The ordinary beeps stop while you are stopped.** After a couple of
+  seconds at a standstill the tier beeps are suppressed, while the urgent
+  tone and the all-clear chime still sound. That is deliberate, so a queue at
+  a red light does not beep at you, but it means a car rolling up behind you
+  while you wait is silent unless it is closing fast enough to count as
+  urgent. It needs a speed reading to know you have stopped, so a range-only
+  radar with no eBike never suppresses anything.
+- **Alerts go quiet during a phone call, and while you pause them.** The
+  overlay keeps drawing through a call. The sound does not.
+- **"Road clear" means the radar sees nothing.** It does not mean the road
+  behind you is empty, and it does not mean it is safe to move out.
+
+Always look behind before you manoeuvre.
+
 ## Use at your own risk
 
 This app displays rear-radar information intended to supplement, not
@@ -280,8 +311,8 @@ Garmin or Bosch.
 
 **Bike Radar** es una app de Android que te avisa del tráfico que tienes
 detrás usando el radar trasero de tu bici. Dibuja una barra lateral en el
-borde de la pantalla, encima de cualquier app que tengas abierta (un mapa,
-Bosch Flow, etc.), y pita cuando se acerca un coche. El número de pitidos
+borde de la pantalla, encima de cualquier app que tengas abierta, y pita
+cuando se acerca un coche. El número de pitidos
 aumenta según se aproxima, y suena un aviso distinto si el impacto parece
 inminente.
 
@@ -392,15 +423,6 @@ characteristic. See
 [`PROTOCOL.md`](https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md)
 in the companion repository for the wire protocol, reference decoder,
 and unit tests.
-
-## Credits
-
-Map tiles in the hero screenshot are rendered by a separate navigation
-app underneath the overlay. Map tiles &copy; Mapbox, map data &copy;
-OpenStreetMap contributors. The visible eBike assist-mode indicator
-("TURBO") is part of the Bosch eBike Flow UI; Bosch and eBike Flow are
-trademarks of Robert Bosch GmbH and their incidental appearance here
-does not imply any endorsement.
 
 ## License
 

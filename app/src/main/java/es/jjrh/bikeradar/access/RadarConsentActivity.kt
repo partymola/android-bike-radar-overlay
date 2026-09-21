@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import es.jjrh.bikeradar.radarStreamIsLive
 import es.jjrh.bikeradar.ui.UiTheme
@@ -25,6 +26,19 @@ class RadarConsentActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // The riding-aid notice gates EVERY screen this app can put in front
+        // of a rider, and this is the only other one. It is exported, so any
+        // installed app can start it, which would otherwise put app UI on
+        // screen for a rider who has never seen the notice and cannot reach it
+        // from here. Refused without a screen, like the decider's own refusals:
+        // an install that has not acknowledged the notice has no business
+        // granting another app its radar either.
+        if (!Prefs(this).safetyNoticeAcknowledged) {
+            finishWith(RESULT_CANCELED, read = false, control = false)
+            return
+        }
+
         val decider = RadarConsentDecider(
             store = PrefsRadarGrantStore(
                 getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, MODE_PRIVATE),

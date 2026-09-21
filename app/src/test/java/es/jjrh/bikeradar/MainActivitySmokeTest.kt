@@ -10,6 +10,7 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -46,11 +47,17 @@ class MainActivitySmokeTest {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
     }
 
+    /**
+     * The riding-aid notice is in front of every other destination, so a test
+     * that leaves it unacknowledged composes THAT rather than the screen it
+     * names. Each test below says which side of the gate it is on.
+     */
     @Test
     fun onboardingStartFreshInstall() {
-        // First-run install: Prefs default. The activity must onCreate
-        // without throwing AND must not enqueue a foreground-service
-        // start (no perms, not past onboarding).
+        // First-run install past the notice: Prefs otherwise default. The
+        // activity must onCreate without throwing AND must not enqueue a
+        // foreground-service start (no perms, not past onboarding).
+        Prefs(app).safetyNoticeAcknowledged = true
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             controller.create().start().resume()
             assertNull(
@@ -60,11 +67,55 @@ class MainActivitySmokeTest {
         }
     }
 
+    /**
+     * Composing an unacknowledged install must not itself acknowledge it. The
+     * ROUTE is pinned by `SafetyNoticeGateTest` and by the on-screen
+     * assertions in `SafetyNoticeAcknowledgeTest`; this only holds the flag
+     * still, which is what a rider's second launch depends on.
+     */
+    @Test
+    fun composingTheNoticeDoesNotAcknowledgeIt() {
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            controller.create().start().resume()
+            assertFalse(Prefs(app).safetyNoticeAcknowledged)
+        }
+    }
+
+    /**
+     * An upgrading rider's first 1.6.0 launch: past onboarding, permissions
+     * granted, notice not yet acknowledged. The radar service STILL starts.
+     *
+     * Deliberate, and worth a test in its own right because the opposite is
+     * the tempting reading of a gate: withholding the service until the tap
+     * would kill the radar of a rider who opens the app mid-ride, which is
+     * exactly when they need it. The notice gates the UI, never the service.
+     */
+    @Test
+    fun theServiceStillStartsWhileTheNoticeIsUp() {
+        Prefs(app).apply {
+            firstRunComplete = true
+            serviceEnabled = true
+        }
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            controller.create().start().resume()
+            val started = shadowOf(app).peekNextStartedService()
+            assertNotNull("the notice must not withhold the radar service", started)
+            assertEquals(BikeRadarService::class.java.name, started?.component?.className)
+            assertFalse("and it must still be unacknowledged", Prefs(app).safetyNoticeAcknowledged)
+        }
+    }
+
     @Test
     fun returningUserStartsServiceWhenAllGatesPass() {
         Prefs(app).apply {
             firstRunComplete = true
             serviceEnabled = true
+            safetyNoticeAcknowledged = true
         }
         shadowOf(app).grantPermissions(
             android.Manifest.permission.BLUETOOTH_SCAN,
@@ -84,6 +135,7 @@ class MainActivitySmokeTest {
         Prefs(app).apply {
             firstRunComplete = true
             serviceEnabled = false
+            safetyNoticeAcknowledged = true
         }
         shadowOf(app).grantPermissions(
             android.Manifest.permission.BLUETOOTH_SCAN,

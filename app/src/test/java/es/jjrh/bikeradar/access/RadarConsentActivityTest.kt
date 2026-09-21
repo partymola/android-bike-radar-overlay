@@ -5,6 +5,7 @@ package es.jjrh.bikeradar.access
 import android.app.Activity
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,11 @@ class RadarConsentActivityTest {
     fun clearGrants() {
         context.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().clear().commit()
+        // Past the riding-aid notice. Before it this activity refuses without
+        // showing anything, so every test below would be answered by that gate
+        // rather than by the rules it is here to exercise. The gate itself is
+        // covered by `NoScreenBeforeTheNoticeTest`.
+        Prefs(context).safetyNoticeAcknowledged = true
     }
 
     private fun installCaller(packageName: String) {

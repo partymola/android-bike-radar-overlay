@@ -205,6 +205,18 @@
     <string name="main_dashcam_prompt_no">I don\'t have one</string>
 
     <!-- ════════════════════════════════════════════════════════════════
+         Riding-aid notice (SafetyNotice.kt) - shown once before the app,
+         and again under Settings → About whenever the rider wants it.
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="safety_notice_title">Before you ride</string>
+    <string name="safety_notice_intro">Bike Radar is a riding aid. It warns you about traffic behind you. It cannot look behind for you.</string>
+    <string name="safety_notice_bullet_miss">It can miss a vehicle, or warn late.</string>
+    <string name="safety_notice_bullet_drop">The radar link or the sound can drop without notice.</string>
+    <string name="safety_notice_bullet_clear">\"Road clear\" only means the radar sees nothing.</string>
+    <string name="safety_notice_closing">Always look behind before you move out.</string>
+    <string name="safety_notice_ack">I understand</string>
+
+    <!-- ════════════════════════════════════════════════════════════════
          Onboarding (OnboardingScreen.kt) - 4-step pager
          ════════════════════════════════════════════════════════════════ -->
     <string name="onboarding_skip">Skip</string>
@@ -385,6 +397,8 @@
     <string name="settings_about_licence_subtitle">GPL-3.0-or-later</string>
     <string name="settings_about_changelog_title">What\'s new</string>
     <string name="settings_about_changelog_subtitle">What changed in each version</string>
+    <string name="settings_about_safety_title">Before you ride</string>
+    <string name="settings_about_safety_subtitle">What the radar can and cannot do</string>
     <string name="settings_about_unaffiliated_title">Not affiliated with Garmin or Bosch</string>
     <string name="settings_about_unaffiliated_subtitle">This is an independent tool</string>
     <string name="permission_radar_ipc_label">Use your bike radar</string>
@@ -430,7 +444,7 @@
     <string name="settings_radar_visual_distance_title">Visual distance</string>
     <string name="settings_radar_visual_distance_helper">Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.</string>
     <string name="settings_radar_overlay_dimmer_title">Overlay dimmer</string>
-    <string name="settings_radar_overlay_dimmer_helper">Fade the overlay so a map or navigation app underneath stays readable. \"Off\" leaves the overlay at its full look.</string>
+    <string name="settings_radar_overlay_dimmer_helper">Fade the overlay so the app underneath stays readable. \"Off\" leaves the overlay at its full look.</string>
     <string name="settings_radar_overlay_dim_off">Off</string>
     <string name="settings_radar_overlay_dim_light">Light</string>
     <string name="settings_radar_overlay_dim_medium">Medium</string>
@@ -602,7 +616,7 @@
     <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
     <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over your map\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the drop alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over the app underneath\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the drop alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 

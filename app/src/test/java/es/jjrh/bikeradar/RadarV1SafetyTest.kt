@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -86,6 +87,58 @@ class RadarV1SafetyTest {
         // urgent cue and close-pass detection actually use.
         assertTrue("must not clear a 6 m/s closing floor", v.speedMs > -6f)
         assertTrue("must not clear a 10 m/s closing floor", v.speedMs > -10f)
+    }
+
+    /**
+     * The full-screen red border cannot appear on this stream.
+     *
+     * The README states that to every non-820 rider as a plain limitation, so
+     * it is a published claim with a test behind it rather than an assertion.
+     * [RadarOverlayView] draws the border on `closingKmh >= bands.redKmh`, and
+     * the comment beside that condition warns off re-keying it on
+     * `ThreatLevel.DANGER` while noting that nothing pins a border meant not
+     * to appear. This is that pin.
+     *
+     * Both sides come from production, and from DIFFERENT places: the left
+     * from the decoder, the right from the band functions the view scores
+     * against. That is not a constant asserted against itself, and it is what
+     * makes the test able to fail - a red band moved to zero reds it here.
+     * Asserting `0 < 50` against a literal could not: once `closingKmh == 0`
+     * is established, no change to production code can move a literal.
+     * `RadarThreatRenderTest` anchors the band values themselves against
+     * literals, so the two tests compose into the whole guarantee.
+     *
+     * The second half reads the view's source, because the first half proves
+     * the PREMISE and not the sentence. Re-keying the border on
+     * `ThreatLevel.DANGER` - the one refactor the comment beside it warns
+     * against by name - leaves every numeric assertion here green while the
+     * README's claim becomes false for every non-820 rider.
+     */
+    @Test
+    fun theDangerBorderCanNeverFireOnLegacyData() {
+        val v = decoderAt { 1_000L }.feed(threat(1 to 3))!!.vehicles.single()
+        assertEquals("a legacy track reports no closing speed", 0, v.closingKmh)
+
+        assertTrue(
+            "must sit below the fixed red band",
+            v.closingKmh < FIXED_SPEED_BANDS.redKmh,
+        )
+        // Red is `30 + bikeKmh` coerced at 20, so a STOPPED rider gives the
+        // lowest value the border is ever scored against. Measured, not read
+        // off the expression: the coerce floor is unreachable for any
+        // non-negative speed, so that lowest value is 30 rather than 20, and
+        // mutating the floor alone leaves this green.
+        assertTrue(
+            "must sit below the adaptive red band for a stopped rider",
+            v.closingKmh < adaptiveSpeedBands(0).redKmh,
+        )
+
+        val view = RepoFiles.mainSource("RadarOverlayView.kt").readText()
+        assertTrue(
+            "the border is no longer scored on closing speed, so a range-only " +
+                "radar could raise it and the README's claim is false",
+            view.contains("it.closingKmh >= bands.redKmh"),
+        )
     }
 
     private val closePassCfg = ClosePassDetector.Config(

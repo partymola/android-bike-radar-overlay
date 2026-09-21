@@ -83,8 +83,7 @@ class RadarOverlayView(context: Context) : View(context) {
      *  (closer than alertMaxM) beeps; anything below is drawn but silent.
      *  Dashed pattern signals "threshold, not boundary"; longer dashes +
      *  higher alpha than the original 1.5dp/150-alpha so it reads against
-     *  light map backgrounds (Flow's beige roads, satellite imagery) at
-     *  a glance. */
+     *  a light app underneath at a glance. */
     private val alertLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(2f)
@@ -533,9 +532,10 @@ class RadarOverlayView(context: Context) : View(context) {
     /** Upward-pointing nav chevron ("self" marker on a top-down radar).
      *  Apex points in the direction of travel; the inverted-V notch on
      *  the base reinforces "forward" and keeps the silhouette distinct
-     *  from the car rectangles drawn elsewhere on the panel. Filled
-     *  Maps-blue with a dark hairline stroke so it survives both bright
-     *  map tiles and dark camera feeds. */
+     *  from the car rectangles drawn elsewhere on the panel. Filled with the
+     *  #4285F4 blue riders already read as "you are here", and given a dark
+     *  hairline stroke so it survives both a bright app underneath and a
+     *  dark one. */
     private fun drawRider(canvas: Canvas, alpha: Int, cx: Float, tipTopY: Float) {
         val halfW = dp(RIDER_WIDTH_DP) / 2f
         val baseY = tipTopY + dp(RIDER_HEIGHT_DP)
@@ -560,8 +560,8 @@ class RadarOverlayView(context: Context) : View(context) {
     /** Box half-widths shrunk ~20 % from the original 4/9/14 dp values.
      *  Two adjacent CAR boxes at the same range now leave headroom inside
      *  the 130 dp panel instead of stacking visually; the smaller footprint
-     *  also leaves more map showing through, which helps orientation when
-     *  the rider glances at the overlay during a turn. */
+     *  also leaves more of the app underneath showing through, which helps
+     *  orientation when the rider glances at the overlay during a turn. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
         VehicleSize.CAR -> dp(7f)
         VehicleSize.TRUCK -> dp(11f)

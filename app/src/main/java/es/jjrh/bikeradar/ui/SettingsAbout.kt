@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -119,6 +120,21 @@ internal fun SettingsAboutBody(
                         fontSize = 11.sp,
                     )
                 }
+            }
+
+            // Above the Legal group, deliberately: it is a fact about riding,
+            // and grouping it under Legal would frame it as a disclaimer.
+            SettingsRowGroup {
+                SettingsRow(
+                    // Not Info: the Legal group below already uses it twice,
+                    // and three identical glyphs on one screen carry nothing.
+                    icon = Icons.Default.Visibility,
+                    iconTint = br.fgMuted,
+                    title = stringResource(R.string.settings_about_safety_title),
+                    subtitle = stringResource(R.string.settings_about_safety_subtitle),
+                    onClick = { navController.navigate("settings/safety") },
+                    isLast = true,
+                )
             }
 
             SettingsSectionLabel(stringResource(R.string.settings_about_section_release))

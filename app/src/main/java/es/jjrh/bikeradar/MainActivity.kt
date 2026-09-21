@@ -22,6 +22,7 @@ import es.jjrh.bikeradar.ui.DevModeState
 import es.jjrh.bikeradar.ui.MainScreen
 import es.jjrh.bikeradar.ui.OnboardingScreen
 import es.jjrh.bikeradar.ui.RideHistoryScreen
+import es.jjrh.bikeradar.ui.SafetyNoticeScreen
 import es.jjrh.bikeradar.ui.SettingsAbout
 import es.jjrh.bikeradar.ui.SettingsDashcam
 import es.jjrh.bikeradar.ui.SettingsEBike
@@ -36,6 +37,7 @@ import es.jjrh.bikeradar.ui.SettingsRadarAccessRoute
 import es.jjrh.bikeradar.ui.SettingsRadarDevice
 import es.jjrh.bikeradar.ui.SettingsScreen
 import es.jjrh.bikeradar.ui.UiTheme
+import es.jjrh.bikeradar.ui.startDestination
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,9 +62,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             UiTheme {
                 val navController = rememberNavController()
-                val startDest = if (prefs.firstRunComplete) "main" else "onboarding"
+                val startDest = startDestination(prefs.safetyNoticeAcknowledged, prefs.firstRunComplete)
 
                 NavHost(navController = navController, startDestination = startDest) {
+                    composable("safety-notice") {
+                        SafetyNoticeScreen(
+                            onAcknowledge = {
+                                prefs.safetyNoticeAcknowledged = true
+                                navController.navigate(startDestination(true, prefs.firstRunComplete)) {
+                                    popUpTo("safety-notice") { inclusive = true }
+                                }
+                            },
+                        )
+                    }
                     composable("onboarding") {
                         val onFinished: () -> Unit = {
                             prefs.firstRunComplete = true
@@ -137,6 +149,14 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/privacy") {
                         SettingsPrivacy(navController = navController)
+                    }
+                    composable("settings/safety") {
+                        // The SAME screen, button and all. Re-reading it from
+                        // About should not be a trimmed variant of what the
+                        // rider saw at first launch. Here the button only
+                        // closes the screen: the flag is already set, and
+                        // setting it again would be a no-op.
+                        SafetyNoticeScreen(onAcknowledge = { navController.popBackStack() })
                     }
                     composable(
                         route = "dashcam-picker?fromOnboarding={fromOnboarding}",

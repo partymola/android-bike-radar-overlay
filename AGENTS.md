@@ -62,9 +62,11 @@ navigation bar, so a screen missing `systemBarsPadding()` produces a byte-identi
 golden to one that has it, and every gate stays green while the title sits under
 the phone's clock. Every full-screen surface here carries
 `Modifier.fillMaxSize().background(br.bg).systemBarsPadding()` on its outermost
-container - a `Box` on most, a `Column` on `OnboardingScreen`, which is what the
-five `Onboarding*Step` files render inside and why they carry none of their own.
-A new surface that does not is only catchable on a device.
+container - a `Box` on most, a `Column` on `OnboardingScreen` and on the
+riding-aid notice's gate form, which pins a footer button below the scrolling
+text. `OnboardingScreen` is what the five `Onboarding*Step` files render inside,
+which is why they carry none of their own. A new surface that does not is only
+catchable on a device.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the
@@ -98,12 +100,22 @@ shipped claim was wrong, correct the source the claim came from (the
 KDoc, the notes, the test) and state the corrected fact in the next
 version's section. Never rewrite the old entry, and never annotate it.
 
-**The store and README screenshots are Roborazzi goldens, copied.** Every
-PORTRAIT image under `screenshots/` and `fastlane/.../phoneScreenshots/` is a
-byte copy of a golden from `app/src/test/snapshots/images/` at 1344x2991, which
-is why they carry the fixture host `homeassistant.local:8123`, a masked token
-and no device names. The landscape ones are genuine device captures of the ride
-overlay, which no golden reproduces.
+**The store and README screenshots are Roborazzi goldens, copied.** EVERY image
+under `screenshots/` and `fastlane/.../phoneScreenshots/` is a byte copy of a
+golden from `app/src/test/snapshots/images/`, which is why they carry the
+fixture host `homeassistant.local:8123`, a masked token and no device names.
+Most are whole screens at 1344x2991. The exception is the overlay strip alone
+at 390x2991, from `RadarOverlayViewTest`, the one golden that is not a whole
+screen: it is the README hero and store slot 2 in both locales. Store slot 1
+is the home screen, so do not re-copy the strip into it.
+
+**No device capture is left in the repo, and that is the point.** Until 1.6.0
+the hero and both store SLOT-1 images were genuine 2992x1344 captures; the
+strip has since taken the hero and moved into slot 2, which is why the slot
+numbers here differ between the two paragraphs. They were the only images that
+could carry a real Home Assistant host, real device names or a real location,
+and the only ones the freshness check could not inspect, so the two properties
+were at their worst on the same three files.
 
 **Re-copy rather than re-capture.** A device capture is 1344x2992, one pixel
 taller, and would carry the rider's real Home Assistant host and device names
@@ -116,12 +128,15 @@ every UI pull request red until the copies were refreshed in the same commit,
 and a check that fires on routine work gets bypassed. Read the log rather than
 the exit status.
 
-Two things it cannot do, both worth knowing before reading a pass as coverage.
-It cannot tell whether a slot holds the RIGHT golden, only that it holds one -
-the README alt text is the only statement of which screen belongs where. And
-it skips the landscape images entirely, which means the only device-captured
-images in the repo are precisely the ones it never inspects; those are the
-class that could carry a real host or real device names, so check them by eye.
+It now reaches every published image, because none is landscape any more: a
+clean run reads `22 match a current golden, 0 landscape skipped`, and a
+non-zero skip count means a device capture has come back. Its landscape branch
+is kept for exactly that.
+
+What it still cannot do: tell whether a slot holds the RIGHT golden, only that
+it holds one. The README alt text is the only statement of which screen belongs
+where, and it is prose. Re-copying is therefore the step to check by eye, not
+the pass.
 
 Why it exists: nothing else can see inside a PNG, and these had drifted far
 enough to advertise a credential-encryption layer the app does not have, an
@@ -159,6 +174,27 @@ summary; the Key files table maps each part to its file.
   dropped-radar cue. The radar controller reaches the state through a
   `RadarLinkStateGateway`, and the camera controller reads the radar off-time
   through an injected lambda for its shared backoff cap.
+- **The riding-aid notice is in front of EVERY other destination, and that
+  ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
+  answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,
+  before it looks at `firstRunComplete` at all. That is what lets ONE flag,
+  defaulting false, serve a fresh install and an install upgrading from a
+  version that never wrote the key, without either seeing the screen twice.
+  Making it an onboarding step instead would skip every existing rider
+  silently, since they are already past onboarding, and no manual test on a
+  set-up phone would show it. `SafetyNoticeGateTest` pins all four
+  combinations plus the fact that `MainActivity` routes through the gate
+  rather than re-deriving the branch; `SafetyNoticeAcknowledgeTest` drives the
+  real button in the real activity as an upgrading rider.
+  It gates ACTIVITIES, never the service: the overlay and the foreground
+  notification still reach an unacknowledged rider, which is what
+  `BootReceiver` produces on `MY_PACKAGE_REPLACED` and what
+  `MainActivitySmokeTest.theServiceStillStartsWhileTheNoticeIsUp` pins.
+  `RadarConsentActivity` is the second reader of the flag and the one that
+  matters most, being exported: it refuses before composing anything, and
+  `NoScreenBeforeTheNoticeTest.anAppThisRiderCouldGrantIsStillRefusedBeforeTheTap`
+  is the only test whose fixture makes that gate do any work, since every
+  other one uses a caller the decider rejects on its own.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
@@ -284,6 +320,8 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see the Architecture note on why that ordering is the feature |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with two routes: the launch gate, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for the second |
 | `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
 | `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
@@ -384,7 +422,13 @@ enforces them, and CONTRIBUTING.md points contributors here:
     the rider sense (DLE 3, `cabalgar`, used transitively too). Cycling
     glossaries do use `rodar`, but as peloton jargon, which is the wrong
     register for a commuter. Do not reintroduce it.
+    **Clipping it to `bici` is standard Spain and is accepted** where the full
+    form does not fit, as in the riding-aid notice's title `Antes de montar en
+    bici`. Settled; do not "correct" such a title back to `bicicleta`.
   - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
+  - **Guillemets are accepted when es quotes one of the app's own labels**
+    («Vía despejada»), even though `values-es` elsewhere escapes straight
+    quotes for the same job. Settled; do not raise it as an inconsistency.
   - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
     "Seguir Mi Luz").
   A term that fits the en layout can overflow es - verify against the es

@@ -101,6 +101,36 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_FIRST_RUN_COMPLETE, v).apply()
         }
 
+    /** Whether the rider has acknowledged the riding-aid notice. Defaults to
+     *  false, which is what makes one flag serve both audiences: a new install
+     *  meets the screen before onboarding, and an install upgrading from a
+     *  version that never wrote the key meets it once on the next launch.
+     *  Two readers, and both gate a screen on it before showing one:
+     *  [es.jjrh.bikeradar.MainActivity] picks the start destination, and
+     *  [es.jjrh.bikeradar.access.RadarConsentActivity] refuses outright. The
+     *  second is the safety-relevant one, because it is exported and any
+     *  installed app can start it; a third reader is a third way in and belongs
+     *  in `NoScreenBeforeTheNoticeTest`. Deliberately absent from [snapshot]
+     *  and [flow] even so. The consent activity reads it in `onCreate`; the
+     *  launcher reads it inside its composition rather than in `onCreate`'s
+     *  body, so that is where to look for it. Neither reads it more than once
+     *  per launch, and neither needs to observe a later change.
+     *
+     *  Absent from [dumpAll] for a stronger reason than that, and the reason
+     *  is what keeps it out: the only way to produce a diagnostic bundle is
+     *  the Debug screen, which is reached through Settings, which sits behind
+     *  the notice. So this can only ever be true in a bundle that exists, and
+     *  a field that can only print one value is not a diagnostic. In the
+     *  session where the write itself failed it would read true as well, since
+     *  the in-memory map already holds it - misreporting the one symptom it
+     *  looks like it would explain. `first_run_complete` is still dumped, so
+     *  "is this rider past onboarding" remains answerable. */
+    var safetyNoticeAcknowledged: Boolean
+        get() = sp.getBoolean(KEY_SAFETY_NOTICE_ACKNOWLEDGED, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_SAFETY_NOTICE_ACKNOWLEDGED, v).apply()
+        }
+
     var serviceEnabled: Boolean
         get() = sp.getBoolean(KEY_SERVICE_ENABLED, true)
         set(v) {
@@ -1006,6 +1036,7 @@ class Prefs(context: Context) {
 
         private const val FILE = "bike_radar_prefs"
         const val KEY_FIRST_RUN_COMPLETE = "first_run_complete"
+        const val KEY_SAFETY_NOTICE_ACKNOWLEDGED = "safety_notice_acknowledged"
         const val KEY_SERVICE_ENABLED = "service_enabled"
         const val KEY_ALERT_VOLUME = "alert_volume"
         const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"

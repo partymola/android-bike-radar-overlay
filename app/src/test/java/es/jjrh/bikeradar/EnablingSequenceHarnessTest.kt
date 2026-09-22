@@ -28,8 +28,8 @@ import org.robolectric.Shadows.shadowOf
 import java.util.UUID
 
 /**
- * Robolectric harness for [RadarUnlock.runHandshake] - the long AMV write/await
- * orchestration that unlocks the V2 radar stream and the front-light control.
+ * Robolectric harness for [EnablingSequence.runHandshake] - the long AMV write/await
+ * orchestration that enables the V2 radar stream and the front-light control.
  *
  * Driving model:
  *  - A forwarding [BluetoothGattCallback] completes write ops automatically:
@@ -48,7 +48,7 @@ import java.util.UUID
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-class RadarUnlockHarnessTest {
+class EnablingSequenceHarnessTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
@@ -179,7 +179,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
         assertEquals("missing TX characteristic must abort", "tx-char-missing", abort)
         assertTrue("abort must be logged", log.any { it.contains("TX characteristic not found") })
@@ -207,7 +207,7 @@ class RadarUnlockHarnessTest {
         val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
         backgroundScope.launch { queue.run() }
 
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
 
         assertEquals("rx-cccd", abort)
         queue.cancel()
@@ -228,7 +228,7 @@ class RadarUnlockHarnessTest {
         val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
         backgroundScope.launch { queue.run() }
 
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
 
         assertEquals("ack-cccd", abort)
         queue.cancel()
@@ -241,7 +241,7 @@ class RadarUnlockHarnessTest {
         val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
         backgroundScope.launch { queue.run() }
 
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {}
         assertEquals("missing config service must abort", "tx-char-missing", abort)
         queue.cancel()
     }
@@ -277,7 +277,7 @@ class RadarUnlockHarnessTest {
 
         val log = mutableListOf<String>()
         val abort = withTimeout(60_000) {
-            RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+            EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
         }
 
         assertEquals("v2-cccd", abort)
@@ -300,7 +300,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
         assertEquals("amv-open", abort)
         assertTrue("must abort on the AMV open reply", log.any { it.contains("AMV open reply never arrived") })
@@ -320,7 +320,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
         assertEquals("amv-04", abort)
         assertTrue("must abort on the cmd-04 reply", log.any { it.contains("AMV 04 reply never arrived") })
@@ -341,7 +341,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
         assertEquals("amv-16", abort)
         assertTrue("must abort on the cmd-16 reply", log.any { it.contains("AMV 16 reply never arrived") })
@@ -363,7 +363,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
 
         assertEquals("submode-2", abort)
         assertTrue("must abort on the second 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 2 reply never arrived") })
@@ -383,7 +383,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
 
         assertEquals("submode-3", abort)
         assertTrue("must abort on the third 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 3 reply never arrived") })
@@ -405,7 +405,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
 
         assertEquals("dev-id", abort)
         assertTrue("must abort on the device-ID frame", log.any { it.contains("device-ID frame never arrived") })
@@ -426,7 +426,7 @@ class RadarUnlockHarnessTest {
         backgroundScope.launch { queue.run() }
 
         val log = mutableListOf<String>()
-        val abort = RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+        val abort = EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
 
         assertEquals("submode-1", abort)
         assertTrue("must abort on the first 0x18 toggle frame", log.any { it.contains("0x18 toggle frame 1 reply never arrived") })
@@ -450,7 +450,7 @@ class RadarUnlockHarnessTest {
 
         val log = mutableListOf<String>()
         val abort = withTimeout(60_000) {
-            RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
+            EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) { log += it }
         }
 
         assertNull("radar handshake should report success; log=$log", abort)
@@ -481,7 +481,7 @@ class RadarUnlockHarnessTest {
 
         val log = mutableListOf<String>()
         val abort = withTimeout(60_000) {
-            RadarUnlock.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
+            EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) { log += it }
         }
 
         assertNull("front camera handshake should report success; log=$log", abort)

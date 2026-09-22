@@ -663,7 +663,7 @@ class Prefs(context: Context) {
         }
 
     /** Firmware revision string last read from the connected radar's standard
-     *  Device Information Service (the unlock sequence reads it on every
+     *  Device Information Service (the enabling sequence reads it on every
      *  connection). Null until the first successful read; kept across
      *  sessions and shows on the Settings radar card and in capture-log
      *  lines.
@@ -801,7 +801,8 @@ class Prefs(context: Context) {
      *  unverified. Turn on, cycle the radar light modes via the button or the
      *  Varia app, diff the logged frames against each mode, then turn off.
      *  Subscribed only post-handshake so it cannot interfere with the V2
-     *  unlock, and gated so production rides never touch these CCCDs. */
+     *  enabling sequence, and gated so production rides never touch these
+     *  CCCDs. */
     var radarSettingsProbeEnabled: Boolean
         get() = sp.getBoolean(KEY_RADAR_SETTINGS_PROBE, false)
         set(v) {

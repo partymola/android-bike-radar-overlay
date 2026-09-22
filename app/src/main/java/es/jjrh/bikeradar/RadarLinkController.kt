@@ -546,12 +546,12 @@ internal class RadarLinkController(
             Log.i(TAG, "connected, running handshake")
             journal("radar connected, running handshake")
 
-            // Firmware revision arrives via the DIS read inside the unlock
+            // Firmware revision arrives via the DIS read inside the enabling
             // sequence (before runHandshake returns). Persisted so the
             // Settings display and the capture-log line survive a session
             // whose read fails.
             var firmwareRev: String? = null
-            val handshakeAbort = RadarUnlock.runHandshake(
+            val handshakeAbort = EnablingSequence.runHandshake(
                 gatt,
                 queue,
                 notifyChannel,
@@ -682,10 +682,10 @@ internal class RadarLinkController(
 
             // Subscribe the radar control-service mode-state notify (6a4e2f14)
             // when EITHER the production light auto-mode OR the debug probe needs
-            // it. Done here, AFTER the V2 handshake, so it cannot interfere with
-            // the unlock (verified safe on-bench). 6a4e2f12 and the live
-            // write-probe handles stay strictly debug-gated - never exposed in a
-            // normal ride. Never touch 6a4e3203 (V1 char) here.
+            // it. Done here, AFTER the V2 handshake, so it cannot interfere
+            // with the enabling sequence (verified safe on-bench). 6a4e2f12 and
+            // the live write-probe handles stay strictly debug-gated, never
+            // exposed in a normal ride. Never touch 6a4e3203 (V1 char) here.
             val controlSvc = gatt.getService(Uuids.SVC_CONTROL)
             val ch2f14 = controlSvc?.getCharacteristic(Uuids.SETTINGS_14)
             if ((prefs.radarSettingsProbeEnabled || prefs.radarLightAutoModeEnabled) && ch2f14 != null) {
@@ -835,11 +835,11 @@ internal class RadarLinkController(
     }
 
     /** One-shot battery read for the legacy path, best-effort. The standard
-     *  service needs no bonding and no unlock on this family, and this is the
-     *  only battery such a radar can report: it aborts before the sequence's
-     *  own battery step, and the one-shot reader stands down while a link is
-     *  live. Swallows failures because a missing battery service must not stop
-     *  the radar streaming. */
+     *  service needs no bonding and no enabling sequence on this family, and
+     *  this is the only battery such a radar can report: it aborts before the
+     *  sequence's own battery step, and the one-shot reader stands down while
+     *  a link is live. Swallows failures because a missing battery service
+     *  must not stop the radar streaming. */
     private suspend fun readLegacyBattery(gatt: BluetoothGatt, queue: BleOpQueue, name: String) {
         try {
             val ch = gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY) ?: return

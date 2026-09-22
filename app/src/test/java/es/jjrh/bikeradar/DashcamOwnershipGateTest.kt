@@ -60,8 +60,8 @@ class DashcamOwnershipGateTest {
     )
 
     private fun mainSourceDir(): File {
-        val anchor = RepoFiles.mainSource("RadarUnlock.kt")
-        return requireNotNull(anchor.parentFile) { "RadarUnlock.kt must sit in a directory" }
+        val anchor = RepoFiles.mainSource("EnablingSequence.kt")
+        return requireNotNull(anchor.parentFile) { "EnablingSequence.kt must sit in a directory" }
     }
 
     private fun mainSources(): List<File> = mainSourceDir().walkTopDown()

@@ -293,7 +293,7 @@ internal class CameraLightLinkController(
             cameraLightOffSinceMs = null
             Log.i(TAG, "connected, running handshake")
 
-            val handshakeAbort = RadarUnlock.runHandshake(
+            val handshakeAbort = EnablingSequence.runHandshake(
                 gatt,
                 queue,
                 notifyChannel,

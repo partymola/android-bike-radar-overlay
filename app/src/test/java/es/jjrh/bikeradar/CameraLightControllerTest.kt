@@ -62,7 +62,7 @@ class CameraLightModeNotifyParserTest {
 
 // ── 0x18 sub-mode toggle frame byte pins ─────────────────────────────────────
 /**
- * Verifies the frame constants in [RadarUnlock] match the wire spec:
+ * Verifies the frame constants in [EnablingSequence] match the wire spec:
  * `00 SS 00 00 00 00 00 00 41 4d 56 18 PP` (13 bytes).
  */
 class SubmodeToggleEncoderTest {
@@ -88,13 +88,13 @@ class SubmodeToggleEncoderTest {
         assertEquals("byte[12] must be PP=0x${"%02x".format(pp)}", pp, b[12])
     }
 
-    @Test fun frame1MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_1, ss = 0x00, pp = 0x02)
+    @Test fun frame1MatchesSpec() = checkFrame(EnablingSequence.SUBMODE_FRAME_1, ss = 0x00, pp = 0x02)
 
-    @Test fun frame2MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_2, ss = 0x02, pp = 0x82.toByte())
+    @Test fun frame2MatchesSpec() = checkFrame(EnablingSequence.SUBMODE_FRAME_2, ss = 0x02, pp = 0x82.toByte())
 
-    @Test fun frame3MatchesSpec() = checkFrame(RadarUnlock.SUBMODE_FRAME_3, ss = 0x00, pp = 0x02)
+    @Test fun frame3MatchesSpec() = checkFrame(EnablingSequence.SUBMODE_FRAME_3, ss = 0x00, pp = 0x02)
 
     // Frame 3 sends the same bytes as frame 1 by design: the device advances
     // internal toggle state based on sequence position, not payload content.
-    @Test fun frame1And3AreIdentical() = assertArrayEquals(RadarUnlock.SUBMODE_FRAME_1.hexToBytes(), RadarUnlock.SUBMODE_FRAME_3.hexToBytes())
+    @Test fun frame1And3AreIdentical() = assertArrayEquals(EnablingSequence.SUBMODE_FRAME_1.hexToBytes(), EnablingSequence.SUBMODE_FRAME_3.hexToBytes())
 }

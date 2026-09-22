@@ -25,7 +25,7 @@ class UuidsTest {
         // Rear radar drives TX=2821 / RX=2811; front camera drives
         // TX=2820 / RX=2810. The two pairs MUST be disjoint: writing the
         // rear pair to the front device (or vice-versa) is accepted but
-        // never answered correctly - a silent failure. RadarUnlock selects
+        // never answered correctly - a silent failure. EnablingSequence selects
         // the pair by DeviceVariant; this guards the table it selects from.
         assertNotEquals(Uuids.HANDSHAKE_TX, Uuids.CHAR_2820)
         assertNotEquals(Uuids.HANDSHAKE_RX, Uuids.CHAR_2810)

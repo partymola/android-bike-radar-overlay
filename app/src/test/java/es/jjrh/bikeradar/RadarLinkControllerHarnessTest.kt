@@ -46,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap
  * alert hot path. The heavier twin of [CameraLightLinkControllerHarnessTest]
  * (adds the V2 decode and the data-flow watchdog).
  *
- * Driving model (see [CameraLightLinkControllerHarnessTest] / [RadarUnlockHarnessTest]):
+ * Driving model (see [CameraLightLinkControllerHarnessTest] / [EnablingSequenceHarnessTest]):
  *  - The controller's [BluetoothGattCallback] is captured through the injected
  *    [openGatt] seam; the test hand-drives connect/discover/notify while a
  *    background driver completes the read/CCCD/MTU ops the shadow does not

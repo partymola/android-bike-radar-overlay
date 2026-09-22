@@ -19,7 +19,7 @@ class BleHandshakeReplyMatchTest {
     @Test fun acceptsCanonicalReplyOnFirmware580() {
         // `00 01 00 00 00 00 00 00 41 4d 56 18 01` — observed on firmware 5.80
         val frame = frameOf(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x4d, 0x56, 0x18, 0x01)
-        assertTrue(RadarUnlock.matchSubmodeReply(frame))
+        assertTrue(EnablingSequence.matchSubmodeReply(frame))
     }
 
     @Test fun acceptsRepliesWithDifferingStatusByte() {
@@ -27,14 +27,14 @@ class BleHandshakeReplyMatchTest {
         // also appears). The matcher must only pin bytes 0-11; trailing
         // bytes are session/frame state and out of scope.
         val frame = frameOf(0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x4d, 0x56, 0x18, 0x82, 0x02)
-        assertTrue(RadarUnlock.matchSubmodeReply(frame))
+        assertTrue(EnablingSequence.matchSubmodeReply(frame))
     }
 
     @Test fun rejectsTooShort() {
         // Anything shorter than 12 bytes can't carry the AMV signature
         // and opcode. Reject without indexing.
         val frame = frameOf(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x4d, 0x56)
-        assertFalse(RadarUnlock.matchSubmodeReply(frame))
+        assertFalse(EnablingSequence.matchSubmodeReply(frame))
     }
 
     /**
@@ -47,14 +47,14 @@ class BleHandshakeReplyMatchTest {
      */
     @Test fun rejectsCoincidentalByte10And11WithoutFullSignature() {
         val frame = frameOf(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x56, 0x18, 0x00)
-        assertFalse(RadarUnlock.matchSubmodeReply(frame))
+        assertFalse(EnablingSequence.matchSubmodeReply(frame))
     }
 
     @Test fun rejectsAmvSignatureWithWrongOpcode() {
         // 41 4d 56 16 — AMV signature for cmd 16 (a different opcode).
         // The 0x18 toggle handshake must not match cmd 16 replies.
         val frame = frameOf(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x4d, 0x56, 0x16, 0x00, 0x01)
-        assertFalse(RadarUnlock.matchSubmodeReply(frame))
+        assertFalse(EnablingSequence.matchSubmodeReply(frame))
     }
 
     @Test fun rejectsPartialSignature() {
@@ -63,6 +63,6 @@ class BleHandshakeReplyMatchTest {
         // ensures a stray notify of length 12+ with byte 8 = `0x41`,
         // byte 10 = `0x56`, byte 11 = `0x18` doesn't slip through.
         val frame = frameOf(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x00, 0x56, 0x18, 0x01)
-        assertFalse(RadarUnlock.matchSubmodeReply(frame))
+        assertFalse(EnablingSequence.matchSubmodeReply(frame))
     }
 }

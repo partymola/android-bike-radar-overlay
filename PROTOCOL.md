@@ -20,8 +20,8 @@ Covers only what the app wires into:
 - Two supported devices: Garmin Varia **RearVue 820** (rear radar + camera)
   and Garmin Varia **Vue** (dashcam, battery only).
 - Verified on Pixel 10 Pro XL, Android 16.
-- The V2 target stream (`6a4e3204`), the AMV 04 unlock handshake that
-  enables it, and the standard BLE battery service on both devices.
+- The V2 target stream (`6a4e3204`), the AMV 04 handshake that enables
+  it, and the standard BLE battery service on both devices.
 
 Not covered here (see the canonical spec): the V1 cleartext stream layout,
 firmware/DIS dumps, settings service semantics, other Varia models
@@ -71,7 +71,7 @@ guards.
 
 ## CCCD subscribe order
 
-Order matters. `RadarUnlock.kt` performs this sequence on every connect:
+Order matters. `EnablingSequence.kt` performs this sequence on every connect:
 
 **Pre-handshake** (required for the handshake itself to work):
 
@@ -92,10 +92,12 @@ below.
 
 ## AMV 04 handshake
 
-The V2 stream is gated behind a scripted challenge-response exchange on
-`2821` (TX) and `2811` (RX). Message prefixes include session-dynamic
-values (`pfxEnum`, `pfxCmd`) derived during the exchange; replies are
-awaited between writes. Full recipe is in `RadarUnlock.UNLOCK`.
+The V2 stream is enabled by a fixed exchange on `2821` (TX) and `2811`
+(RX). A few prefix bytes (`pfxEnum`, `pfxCmd`, and a lead byte from the
+device-ID frame) are echoed from the device's earlier replies, the device-ID
+step carries the phone's make and model, and replies are awaited between
+writes. Full recipe is in
+`EnablingSequence.runHandshake`.
 
 ### APK-reinstall self-heal
 
@@ -105,14 +107,20 @@ fresh process reconnects, discovers services fine, but the AMV 04
 handshake times out with the log line `# script: ABORT: AMV 04 reply never
 arrived`.
 
-On every handshake ABORT, `RadarUnlock.forceReconnect()` closes and
-reopens the GATT and restarts the handshake once. Recovery fingerprint in
-the capture log:
+A handshake ABORT closes the GATT, and the reconnect loop opens a fresh
+one about 1.5 s later without growing its backoff, so it keeps retrying.
+The exception is a radar whose service table carries no `6a4e3204`, which
+takes the range-only fallback below instead. In the capture log the pair
+reads:
 
 ```
-# script: ABORT
-# gatt reopened
+# script: ABORT: <reason>
+# handshake aborted - closing gatt for quick reconnect
 ```
+
+Those lines only reach a file when the Debug screen's **Record connection
+setup** toggle is on. With capture logging on, the file otherwise opens
+after a successful handshake, so an attempt that aborts writes nothing.
 
 Without this self-heal a single APK reinstall wedges the connection until
 the user toggles Bluetooth.
@@ -160,7 +168,7 @@ signal and is smoother, so the delta method was dropped.
 ## V1 stream (`6a4e3203`) - range-only fallback
 
 V1 and V2 are mutually exclusive: the radar streams one or the other, and
-reaching V2 (via the unlock handshake) is what keeps V1 silent. On a radar
+reaching V2 (via the enabling sequence) is what keeps V1 silent. On a radar
 that exposes `6a4e3204`, the app targets V2 only and never subscribes
 `6a4e3203`, so V1 frames are not received and never appear in the capture
 log. A failing handshake on such a radar leaves the overlay empty until V2
@@ -200,9 +208,10 @@ reading current without extra reads.
 
 ## Capture log format
 
-Every session writes a capture log to
-`/sdcard/Android/data/es.jjrh.bikeradar/files/bike-radar-capture-<stamp>.log`.
-Format:
+Capture logging is off by default. With it on (Debug screen), each session
+writes a capture log to
+`/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`,
+gzipped to `.log.gz` once closed. Format:
 
 ```
 <unix_ms> <char_tail_4hex> <hex_bytes_no_spaces>
@@ -221,7 +230,7 @@ never got past "connect attempt") are pruned as no-signal noise.
 - **<https://github.com/partymola/bike-radar-docs/blob/main/PROTOCOL.md>** — full
   vendor-neutral spec with reference decoders and open questions.
 - `app/src/main/java/es/jjrh/bikeradar/Uuids.kt` — the UUID constants.
-- `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` — handshake recipe.
+- `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` - handshake recipe.
 - `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` — V2 decoder.
 - `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` — connection,
   capture log, battery scheduling.

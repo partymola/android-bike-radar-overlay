@@ -42,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap
  * the radar harness (no V2 decode, no data-flow watchdog), built first to
  * establish the fake-GATT driving pattern.
  *
- * Driving model (mirrors [RadarUnlockHarnessTest]):
+ * Driving model (mirrors [EnablingSequenceHarnessTest]):
  *  - The controller's own [BluetoothGattCallback] is captured through the
  *    injected [openGatt] seam, so the test drives connect/discover/notify by
  *    hand and a background driver completes the read/CCCD/MTU ops the shadow

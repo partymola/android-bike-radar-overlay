@@ -34,7 +34,7 @@ class SettingsPrivacyLogcatGuardTest {
      * removing a guard and the payload together would leave it green.
      */
     private val pinnedSites = listOf(
-        "RadarUnlock.kt" to "rx \${charUuid",
+        "EnablingSequence.kt" to "rx \${charUuid",
         "RadarLinkController.kt" to "first V2 frame",
         "CameraLightLinkController.kt" to "msg -> if (BuildConfig.DEBUG) Log.d(TAG, msg)",
         "CameraLightLinkController.kt" to "mode-state notify: \$mode",
@@ -50,8 +50,8 @@ class SettingsPrivacyLogcatGuardTest {
 
     /** The package directory, via a file [RepoFiles] can already resolve. */
     private fun mainSourceDir(): File {
-        val anchor = RepoFiles.mainSource("RadarUnlock.kt")
-        return requireNotNull(anchor.parentFile) { "RadarUnlock.kt must sit in a directory" }
+        val anchor = RepoFiles.mainSource("EnablingSequence.kt")
+        return requireNotNull(anchor.parentFile) { "EnablingSequence.kt must sit in a directory" }
     }
 
     @Test

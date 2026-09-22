@@ -38,7 +38,7 @@ a battery read). Everything else is a **single-responsibility coordinator**
 injected at `onCreate`:
 
 - `RadarLinkController` - the rear-radar BLE link: bond watch, reconnect loop,
-  AMV unlock handshake (`RadarUnlock`), decode (`RadarV2Decoder`) into
+  AMV enabling sequence (`EnablingSequence`), decode (`RadarV2Decoder`) into
   `RadarStateBus`, and the radar tail-light auto-mode.
 - `RadarLinkCoordinator` - owns the rear-radar **link state** (`RadarLinkState`)
   and the walk-away / radar-drop safety state machine that watches it. Holds the
@@ -99,7 +99,7 @@ of recorded rides, and are where any behaviour change must add or update a test.
 
 ## BLE connection lifecycle
 
-Two device classes share the AMV unlock handshake (`RadarUnlock`, with a
+Two device classes share the AMV enabling sequence (`EnablingSequence`, with a
 `DeviceVariant` selecting the rear-radar or front-camera UUID pair): the rear
 radar and the front camera/light. `RadarLinkController` runs the rear link - 
 bond watch → connect → handshake → subscribe to the V2 measurement stream →

@@ -18,10 +18,10 @@ import java.util.UUID
 enum class DeviceVariant { RADAR, FRONT_CAMERA }
 
 /**
- * AMV 04 unlock handshake.
+ * The AMV 04 enabling sequence.
  *
  * Rear radar (RADAR variant): drives 6a4e2800 (TX=2821, RX=2811) and ends with
- * DIS-CCCD-DIS to unlock the 3204 V2 stream.
+ * DIS-CCCD-DIS to enable the 3204 V2 stream.
  *
  * Front camera/light (FRONT_CAMERA variant): drives 6a4e2800 (TX=2820, RX=2810), inserts
  * the 0x18 sub-mode toggle after enum 00..04, and skips the DIS-CCCD-DIS tail
@@ -36,8 +36,7 @@ enum class DeviceVariant { RADAR, FRONT_CAMERA }
  * Returns null on success.
  * Returns a short stable token naming the step it stopped at on any ABORT. The
  * caller must close + reopen GATT (APK-reinstall self-heal: Bluedroid keeps a
- * half-open GATT reference on SIGKILL; reopening clears it). Log fingerprint:
- * "# script: ABORT" then "# gatt reopened".
+ * half-open GATT reference on SIGKILL; reopening clears it).
  *
  * The tokens are what a rider's bug report carries (see [LinkProbe]) and are the
  * only way to tell an unsupported radar model from a flaky link, so treat them
@@ -46,7 +45,7 @@ enum class DeviceVariant { RADAR, FRONT_CAMERA }
  * lines, which stay as they are because captures and the protocol notes quote
  * them.
  */
-object RadarUnlock {
+object EnablingSequence {
 
     // Abort tokens. Stable identifiers, not prose: they reach a public issue
     // tracker through the diagnostic bundle, and telling "this model has no
@@ -91,7 +90,7 @@ object RadarUnlock {
         notifies: Channel<Pair<UUID, ByteArray>>,
         deviceVariant: DeviceVariant = DeviceVariant.RADAR,
         /** Invoked with the device's firmware revision string when the
-         *  RADAR-path DIS read (already part of the unlock sequence)
+         *  RADAR-path DIS read (already part of the enabling sequence)
          *  returns a parseable value. Fires before the handshake returns,
          *  so the caller can persist and log the revision without a
          *  second GATT round trip. */
@@ -111,8 +110,8 @@ object RadarUnlock {
 
         // Abort early if the TX write characteristic is absent. Without this check,
         // writeNoResp calls silently drop when GATT returns a successful but incomplete
-        // service list, causing the handshake to report success while the device never
-        // unlocks.
+        // service list, causing the handshake to report success while the device
+        // never enables the stream.
         if (gatt.getService(Uuids.SVC_CONFIG)?.getCharacteristic(txUuid) == null) {
             clog("ABORT: handshake TX characteristic not found — GATT service list incomplete")
             return ABORT_TX_CHAR_MISSING
@@ -179,7 +178,7 @@ object RadarUnlock {
         // Front camera path ends here: the 0x18 sub-mode toggle is the last handshake
         // step, and mode-set writes can proceed directly on SETTINGS_ACK. The AMV
         // cmd 01+16, device-ID push, and capability exchange below are rear-radar
-        // specific (needed to unlock the V2 measurement stream).
+        // specific (needed to enable the V2 measurement stream).
         if (deviceVariant == DeviceVariant.FRONT_CAMERA) {
             runSubmodeToggle(gatt, queue, notifies, txUuid, rxUuid, clog)?.let { return it }
             clog("front camera handshake complete")
@@ -220,9 +219,9 @@ object RadarUnlock {
         writeNoResp(gatt, queue, Uuids.SVC_CONFIG, txUuid, "${pfxCmd}0119000000")
         delay(15)
 
-        // Capability exchange - minimal common-denominator across 4 captured
-        // sessions (multi-session HCI diff). Single-byte probes inconsistent
-        // across sessions, removed to match the common denominator.
+        // Capability exchange: five frames, fixed apart from a lead byte
+        // taken from the device-ID frame; the first carries the phone's
+        // device-ID fields.
         writeNoResp(
             gatt,
             queue,
@@ -268,8 +267,8 @@ object RadarUnlock {
 
         if (deviceVariant == DeviceVariant.RADAR) {
             // Post-handshake: DIS reads flanking the 3204 CCCD subscribe.
-            // Order as observed from a reference session; DIS-CCCD-DIS
-            // ordering is what the radar expects to unlock V2 reliably.
+            // DIS-CCCD-DIS ordering is what the radar expects to enable V2
+            // reliably.
             clog("handshake complete — observing for 3204")
             delay(80)
             readChar(gatt, queue, Uuids.SVC_DIS, Uuids.DIS_MODEL_NUMBER, clog)
@@ -458,7 +457,7 @@ object RadarUnlock {
                 // Two policies for one payload is the part that is wrong, not
                 // which one; the capture log is the sink that has consent.
                 if (BuildConfig.DEBUG) {
-                    Log.d("BikeRadar.RadarUnlock", "rx ${charUuid.toString().substring(4, 8)}: ${bytes.toHex()}")
+                    Log.d("BikeRadar.EnablingSequence", "rx ${charUuid.toString().substring(4, 8)}: ${bytes.toHex()}")
                 }
                 if (matches(bytes)) return@withTimeoutOrNull bytes
             }

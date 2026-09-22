@@ -25,10 +25,11 @@ object Uuids {
     // V1 cleartext stream. Subscribed ONLY on a radar whose service table has
     // no 6a4e3204 at all - never as a fallback on a radar that has one.
     //
-    // Writing the CCCD before the unlock (fw 6.70) makes the radar unlock into
-    // V1: the handshake still reports success, V1 heartbeats arrive here, and
-    // 3204 never emits. It outlives the connection - later connections that
-    // never touch the CCCD also got no V2, until the radar was power-cycled.
+    // Writing the CCCD before the enabling sequence (fw 6.70) drops the radar
+    // into V1: the handshake still reports success, V1 heartbeats arrive
+    // here, and 3204 never emits. It outlives the connection: later
+    // connections that never touch the CCCD also got no V2, until the radar
+    // was power-cycled.
     // Silent failure: link up, handshake OK, zero targets.
     //
     // So the guard is on the SERVICE TABLE, not on how the handshake went: a

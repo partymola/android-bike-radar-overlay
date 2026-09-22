@@ -70,7 +70,7 @@ object WalkAwayDecider {
         /** Minimum session-total radar connected time before the
          *  decider is allowed to fire. Prevents alarms during the
          *  first few seconds after service start, where the radar is
-         *  still going through the unlock handshake. */
+         *  still going through the enabling sequence. */
         val coldStartRadarMs: Long = 60_000L,
         /** No new fire within this window after a previous fire. */
         val rateLimitMs: Long = 300_000L,
@@ -189,7 +189,7 @@ object WalkAwayDecider {
 
         // Cold-start grace: require a minimum session-connected time
         // before we'll ever fire. Prevents alarms during the initial
-        // unlock handshake or if the app is started with the bike
+        // enabling sequence or if the app is started with the bike
         // already locked up next to a dashcam that's still on.
         if (i.sessionTotalRadarConnectedMs < c.coldStartRadarMs) return Action.NONE
 

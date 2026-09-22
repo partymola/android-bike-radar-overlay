@@ -196,7 +196,7 @@ summary; the Key files table maps each part to its file.
   is the only test whose fixture makes that gate do any work, since every
   other one uses a caller the decider rejects on its own.
 - The app connects to two BLE device classes: the rear radar and the front
-  camera/light. Each has its own AMV unlock UUID pair (see Gotchas).
+  camera/light. Each has its own AMV UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
   bonded can pin this bike's (`Prefs.radarMac`), and a pinned-and-still-bonded
   MAC overrides the name-match in `scheduleRead` so the app never streams from
@@ -327,7 +327,7 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
 | `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
-| `app/src/main/java/es/jjrh/bikeradar/RadarUnlock.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
+| `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
 | `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, light-mode values, bind strings, and the consent screen's action, extras and result codes. Permissive, and references nothing in the app |
@@ -828,10 +828,11 @@ enforces them, and CONTRIBUTING.md points contributors here:
   (~1.5 s). If the reconnect doesn't happen, see live-testing recovery
   below.
 - Never subscribe the CCCD of `6a4e3203` (V1 radar char) on a radar that has
-  `6a4e3204`. Written before the unlock (fw 6.70), the radar unlocks into V1:
-  handshake succeeds, V1 heartbeats arrive on `6a4e3203`, `6a4e3204` never
-  emits - and later connections that never touch the CCCD get no V2 either,
-  until the radar is power-cycled. See `Uuids.RADAR_V1`.
+  `6a4e3204`. Writing that CCCD before the enabling sequence (fw 6.70) drops
+  the radar into V1: the handshake succeeds, V1 heartbeats arrive on
+  `6a4e3203`, and `6a4e3204` never emits. Later connections that never touch
+  the CCCD get no V2 either, until the radar is power-cycled. See
+  `Uuids.RADAR_V1`.
   - **The one sanctioned subscribe is the legacy-stream fallback**, and its
     gate is that whole exception. `RadarLinkController.legacyStreamChar`
     returns the characteristic ONLY when the radar service carries no
@@ -855,8 +856,8 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the
-  writes but never responds correctly. `RadarUnlock.DeviceVariant` selects
-  the right pair (`RADAR` or `FRONT_CAMERA`).
+  writes but never responds correctly. `DeviceVariant` selects the right
+  pair (`RADAR` or `FRONT_CAMERA`).
 - Pairing: Android 16 / Pixel's programmatic `createBond()` is broken for
   LESC; the app never calls it. User must pair once via system Settings.
 - eBike data is READ-ONLY: `EBikeStatusReader` is a GATT client that connects

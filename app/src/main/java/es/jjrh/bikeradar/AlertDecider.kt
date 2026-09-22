@@ -215,11 +215,11 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *  - **Turn-aware clear deferral.** Cornering sweeps the
  *    radar's rear cone off every followed car, so mid-turn the stream
  *    reads empty while the road is not. While [TurnStateDecider] reports
- *    TURNING and a close episode is active, the all-clear is deferred:
- *    the deferral spans the rider's whole transit of the corner, so
- *    corner sharpness and length are accounted for automatically. When
- *    the rider straightens (HOLD) with the road still reading empty, the
- *    deferral extends once by an adaptive tail - the last-seen follower
+ *    TURNING and a close episode is active, the all-clear is deferred for
+ *    as long as TURNING lasts. TURNING gives way to HOLD usually at the end
+ *    of the corner; [TurnStateDecider] names the residual cases where the
+ *    bike can still be turning. If the road still reads empty then, the
+ *    deferral extends once by an adaptive tail: the last-seen follower
  *    distance divided by rider speed, i.e. the time the car needs to
  *    traverse the same corner the rider just did, offset by its
  *    following distance (clamped to [TURN_TAIL_MIN_MS]..
@@ -227,9 +227,10 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    has genuinely turned off, and the deferred Clear then fires after
  *    the normal grace. Beeps are NOT muted: when the radar re-finds the
  *    follower after the corner, the reacquisition beep fires - the
- *    rider wants the re-anchor. Only the false "road clear" mid-corner
- *    is suppressed; a delayed all-clear is deliberately preferred over
- *    a false one.
+ *    rider wants the re-anchor. This deferral holds back only the
+ *    all-clear; [BornCloseGate] discounts closing evidence mid-turn
+ *    separately. A delayed all-clear is deliberately preferred over a
+ *    false one.
  *  - **Low-speed urgent extension.** When `urgentLowSpeedEnabled`
  *    (Settings toggle, default on), the same override is also
  *    evaluated while the rider is MOVING at or below
@@ -937,10 +938,9 @@ class AlertDecider(
         // Turn-aware clear deferral: an empty behind-set mid-corner is a
         // radar blackout, not an empty road - cornering sweeps the rear cone
         // off every followed car. While the rider is TURNING with a live
-        // episode, keep cancelling the pending Clear; the deferral thereby
-        // spans the rider's whole transit of the corner, however sharp or
-        // long. On the first HOLD frame after straightening with the road
-        // still reading empty, anchor an adaptive tail: the follower needs
+        // episode, keep cancelling the pending Clear, for as long as TURNING
+        // lasts. On the first HOLD frame, with the road still reading
+        // empty, anchor an adaptive tail: the follower needs
         // lastBehindDistanceM / riderSpeed more seconds to traverse the same
         // corner (it runs the rider's path offset by its following
         // distance). A car that fails to reappear within the tail has

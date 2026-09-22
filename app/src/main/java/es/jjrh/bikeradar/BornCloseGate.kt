@@ -25,8 +25,10 @@ package es.jjrh.bikeradar
  *    Rotation converts lateral offset into fake radial closing
  *    (dy/dt picks up an omega*x term - 2-3.5 m/s in an urban turn), so
  *    TURNING frames prove nothing at this bar. HOLD counts as clean:
- *    it lasts up to 10 s at near-zero yaw, where no geometric closing
- *    can be manufactured.
+ *    [TurnStateDecider] leaves TURNING when the rotation has gone quiet,
+ *    stopped being sustained, or stopped reaching its entry angle - usually
+ *    the end of the corner, though its KDoc names the residual cases where
+ *    the bike can still be turning.
  *  - URGENT-GRADE: closing >= [urgentClosingMs] on [evidenceFrames]
  *    consecutive frames, in ANY turn state - turn geometry cannot fake
  *    this much closing, and a real fast closer born mid-turn must not

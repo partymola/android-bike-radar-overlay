@@ -31,10 +31,15 @@ import kotlin.math.sqrt
  * squash their spacing.
  *
  * Capture-log lines: `# turn yaw ts_mono=<ms> rate=<rad/s> cum_deg=<deg>`,
- * emitted while a rotation episode runs. A sampled series needs its own
- * time base - a `#` line carries no timestamp prefix of its own, so
- * without one its only time information is its position between packet
- * lines written from other threads.
+ * emitted while a rotation episode runs, where `cum_deg` is the episode
+ * integral; and on each transition `# turn state=TURNING win_deg=<deg>` (the
+ * window net that qualified the turn), `# turn state=HOLD turn_deg=<deg>`
+ * ([TurnStateDecider.lastTurnDeg]) or `# turn state=IDLE`. Captures from
+ * before the windowed detector carry `cum_deg=` and `total_deg=` on the
+ * transition lines instead, and those measured the episode. A sampled
+ * series needs its own time base - a `#` line carries no timestamp prefix
+ * of its own, so without one its only time information is its position
+ * between packet lines written from other threads.
  *
  * The field is `ts_mono`, not `ts`, because `# alert ts=` already means
  * wall clock: these are elapsedRealtime, the sensor's own base, and the
@@ -140,8 +145,8 @@ class TurnSensorController(
                 if (state != lastState) {
                     clog(
                         when (state) {
-                            TurnStateDecider.State.TURNING -> "# turn state=$state cum_deg=${fmt(decider.cumulativeDeg)}"
-                            TurnStateDecider.State.HOLD -> "# turn state=$state total_deg=${fmt(decider.lastEpisodeDeg)}"
+                            TurnStateDecider.State.TURNING -> "# turn state=$state win_deg=${fmt(decider.windowDeg)}"
+                            TurnStateDecider.State.HOLD -> "# turn state=$state turn_deg=${fmt(decider.lastTurnDeg)}"
                             TurnStateDecider.State.IDLE -> "# turn state=$state"
                         },
                     )
@@ -195,7 +200,7 @@ class TurnSensorController(
          *
          *  That the result is a projection, and that its sign survives
          *  integration, are pinned by `yawRateIsGyroProjectedOnGravity`
-         *  and `lastEpisodeDegIsNegativeForTheOtherDirection`.
+         *  and `lastTurnDegIsNegativeForTheOtherDirection`.
          *
          *  Which real-world direction each sign means is NOT pinned by
          *  anything here - it follows from two Android conventions, so a

@@ -119,8 +119,8 @@ class TurnSensorControllerTest {
             )
         }
         assertEquals(TurnStateDecider.State.HOLD, c.state())
-        // ...and returns to IDLE after HOLD_MS.
-        tNs += (TurnStateDecider.HOLD_MS + 1_000) * 1_000_000L
+        // ...and returns to IDLE once the 10 s hold has run out.
+        tNs += 11_000L * 1_000_000L
         shadow.sendSensorEventToListeners(
             event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, 0f), tNs),
         )
@@ -288,24 +288,24 @@ class TurnSensorControllerTest {
     @Test
     fun theCornerEntryIsTracedBeforeTheTurnQualifies() {
         // The hole this gate exists to close. TURNING is only reached once
-        // 60 degrees have accumulated - declared at the 43rd sample,
-        // 3150 ms in at this rate - and the radar starts sweeping tracks
-        // off well before that, so a trace that began at TURNING would
-        // miss the entry entirely.
+        // 42 degrees of net rotation are in the window, at the 31st sample
+        // (stamped 2550 ms, 1.5 s after the first gyro sample). The radar
+        // starts sweeping tracks off well before that, so a trace that began
+        // at TURNING would miss the entry entirely.
         //
         // Counted, not merely ordered: `firstYaw < turning` is satisfied by
         // one line arriving a single sample early, which is not what "the
-        // entry is traced" means. At the 200 ms throttle, 11 precede it.
+        // entry is traced" means. At the 200 ms throttle, 8 precede it.
         val lines = cornerLog(rate = 0.5f, samples = 120)
         val turning = lines.indexOfFirst { it.startsWith("# turn state=TURNING") }
         val yawBefore = lines.take(turning).count { it.startsWith("# turn yaw ") }
-        assertEquals(11, yawBefore)
+        assertEquals(8, yawBefore)
     }
 
     @Test
     fun rotationDuringThePostTurnHoldWindowIsTraced() {
         // A second junction phase right after a corner opens a fresh
-        // episode that never reaches 60 degrees, so stateAt reports HOLD
+        // episode that never reaches the 42-degree entry, so stateAt reports HOLD
         // throughout. Gating on TURNING would drop it; gating on the
         // episode keeps it.
         val sm = sensorManager()
@@ -327,8 +327,8 @@ class TurnSensorControllerTest {
         feed(0f, 20)
         assertEquals(TurnStateDecider.State.HOLD, c.state())
         val before = lines.count { it.startsWith("# turn yaw ") }
-        // 30 degrees of fresh rotation: above the rate floor, below the
-        // qualifying angle.
+        // 29.2 degrees of fresh rotation (34 integrations of 0.015 rad):
+        // above the rate floor, below the qualifying angle.
         feed(0.3f, 35)
         assertEquals(TurnStateDecider.State.HOLD, c.state())
         // The count is deterministic - shadow sensors on fixed timestamps -
@@ -340,13 +340,10 @@ class TurnSensorControllerTest {
 
     @Test
     fun aQualifyingEpisodeInsideTheHoldWindowReportsTurning() {
-        // episodeActive's KDoc says a HOLD-window episode that DOES reach
-        // the angle reports TURNING from that sample, like any other -
-        // stateAt orders `inEpisode && qualified` ahead of the hold branch.
-        // Nothing drove that: the HOLD-window test only ever feeds 29
-        // degrees, so the parenthetical was documentation with no test
-        // behind it, on the branch that decides whether a second corner
-        // taken straight out of a first one defers the all-clear.
+        // A second corner taken straight out of a first must report TURNING
+        // from the sample that qualifies it, ahead of the first corner's
+        // HOLD: this is the branch that decides whether it defers the
+        // all-clear. The HOLD-window test above only feeds 29.2 degrees.
         val sm = sensorManager()
         val shadow = shadowOf(sm)
         val c = TurnSensorController(sm)
@@ -365,9 +362,9 @@ class TurnSensorControllerTest {
         feed(0f, 20)
         assertEquals(TurnStateDecider.State.HOLD, c.state())
         // A fresh episode inside the window. Its opening sample only
-        // starts it, so 42 integrations of 0.025 rad reach 60.16 degrees:
+        // starts it, so 30 integrations of 0.025 rad reach 42.97 degrees:
         // one short of that the state is still the hold.
-        feed(0.5f, 42)
+        feed(0.5f, 30)
         assertEquals(TurnStateDecider.State.HOLD, c.state())
         feed(0.5f, 1)
         assertEquals(TurnStateDecider.State.TURNING, c.state())
@@ -400,25 +397,62 @@ class TurnSensorControllerTest {
     @Test
     fun turnTransitionsCarryTheAngleAndTheCompletedTotal() {
         val lines = cornerLog(rate = -0.5f, samples = 120)
-        // The TURNING line reports the angle that qualified it: the first
-        // integration count past the 60-degree threshold, which is 42 at
-        // 0.025 rad each = 60.16 degrees. The delta is well under one
+        // The TURNING line reports the window net that qualified it: the
+        // first integration count past the 42-degree entry, which is 30 at
+        // 0.025 rad each = 42.97 degrees. The delta is well under one
         // integration step (1.43 degrees), so this cannot be satisfied by
         // qualifying a sample early or late.
         val turning = lines.first { it.startsWith("# turn state=TURNING") }
-        assertEquals(-60.16f, turning.substringAfter("cum_deg=").toFloat(), 0.1f)
-        // The HOLD line reports the whole corner: 120 samples less the one
-        // that opened the episode, 0.025 rad each = 170.46 degrees.
+        assertEquals(-42.97f, turning.substringAfter("win_deg=").toFloat(), 0.1f)
+        // The HOLD line reports the turn's total: the 30 steps in the window
+        // at entry plus the 89 integrated after it, 0.025 rad each = 170.46
+        // degrees. (The corner starts from rest, so here that equals the
+        // episode integral; lastTurnDegCountsFromTheQualifyingWindow is where
+        // the two differ.)
         val hold = lines.first { it.startsWith("# turn state=HOLD") }
-        assertEquals(-170.46f, hold.substringAfter("total_deg=").toFloat(), 0.1f)
+        assertEquals(-170.46f, hold.substringAfter("turn_deg=").toFloat(), 0.1f)
         // Both transition lines go through the same fixed-3-decimal
         // formatter as the yaw lines. `toFloat()` above parses a raw
         // `Float.toString` just as happily, so without this the formatter
         // could be dropped here alone and every assertion would still
         // pass - taking the comma-decimal-locale protection with it on
         // the two lines that carry a completed corner's angle.
-        assertTrue(turning, Regex("^# turn state=TURNING cum_deg=-\\d+\\.\\d{3}$").matches(turning))
-        assertTrue(hold, Regex("^# turn state=HOLD total_deg=-\\d+\\.\\d{3}$").matches(hold))
+        assertTrue(turning, Regex("^# turn state=TURNING win_deg=-\\d+\\.\\d{3}$").matches(turning))
+        assertTrue(hold, Regex("^# turn state=HOLD turn_deg=-\\d+\\.\\d{3}$").matches(hold))
+    }
+
+    @Test
+    fun theTurningLineCarriesTheWindowNetNotTheEpisode() {
+        // Wobble opens the episode 20 s before the corner, so the episode
+        // integral carries wobble residue the window has long since dropped.
+        // The TURNING line must report the quantity the turn was decided on.
+        val sm = sensorManager()
+        val shadow = shadowOf(sm)
+        val lines = mutableListOf<String>()
+        val c = TurnSensorController(sm, clog = { lines += it })
+        c.start()
+        var tNs = 1_000_000_000L
+        shadow.sendSensorEventToListeners(
+            event(sm, Sensor.TYPE_GRAVITY, floatArrayOf(0f, 0f, 9.81f), tNs),
+        )
+        val wobbleStartNs = tNs
+        repeat(400) {
+            tNs += 50_000_000L
+            val phase = 2 * Math.PI * (tNs - wobbleStartNs) / 3_000_000_000.0
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, (0.4 * kotlin.math.sin(phase)).toFloat()), tNs),
+            )
+        }
+        repeat(64) {
+            tNs += 50_000_000L
+            shadow.sendSensorEventToListeners(
+                event(sm, Sensor.TYPE_GYROSCOPE, floatArrayOf(0f, 0f, 0.5f), tNs),
+            )
+        }
+        c.stop()
+        val turning = lines.first { it.startsWith("# turn state=TURNING") }
+        // 42.02: the first window net past the 42-degree entry.
+        assertEquals(42.02f, turning.substringAfter("win_deg=").toFloat(), 0.05f)
     }
 
     @Test

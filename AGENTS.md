@@ -109,13 +109,8 @@ at 390x2991, from `RadarOverlayViewTest`, the one golden that is not a whole
 screen: it is the README hero and store slot 2 in both locales. Store slot 1
 is the home screen, so do not re-copy the strip into it.
 
-**No device capture is left in the repo, and that is the point.** Until 1.6.0
-the hero and both store SLOT-1 images were genuine 2992x1344 captures; the
-strip has since taken the hero and moved into slot 2, which is why the slot
-numbers here differ between the two paragraphs. They were the only images that
-could carry a real Home Assistant host, real device names or a real location,
-and the only ones the freshness check could not inspect, so the two properties
-were at their worst on the same three files.
+**No published image is a device capture, and that is the point.** Every one
+is a golden copy, so the freshness check below can inspect all of them.
 
 **Re-copy rather than re-capture.** A device capture is 1344x2992, one pixel
 taller, and would carry the rider's real Home Assistant host and device names

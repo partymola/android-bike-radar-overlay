@@ -37,7 +37,7 @@ class RadarV2DecoderSentinelRunTest {
         return byteArrayOf(
             0x02, 0x00,
             tid.toByte(),
-            RadarV2Decoder.CLASS_NORMAL.toByte(),
+            RadarV2Decoder.CLASS_MODERATE.toByte(),
             (packed and 0xFF).toByte(),
             ((packed shr 8) and 0xFF).toByte(),
             ((packed shr 16) and 0xFF).toByte(),

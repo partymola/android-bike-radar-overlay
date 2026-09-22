@@ -353,7 +353,7 @@ class RadarLinkControllerHarnessTest {
         notify(link, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_RX, "80000102030405060708090a0b0c0d0e0f1011121314") // devId
     }
 
-    // One 9-byte target struct behind a non-status header: tid 1, CLASS_NORMAL,
+    // One 9-byte target struct behind a non-status header: tid 1, CLASS_MODERATE,
     // rangeX 0.0 m, rangeY 5.0 m, speedY -8.0 m/s, lateral-velocity sentinel.
     private val v2TargetFrame = "000001170090011008f080"
 

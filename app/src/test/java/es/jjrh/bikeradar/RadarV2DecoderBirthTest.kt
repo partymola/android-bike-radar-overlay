@@ -34,7 +34,7 @@ class RadarV2DecoderBirthTest {
         val packed = (ryBits shl 11) or rxBits
         return byteArrayOf(
             tid.toByte(),
-            RadarV2Decoder.CLASS_NORMAL.toByte(),
+            RadarV2Decoder.CLASS_MODERATE.toByte(),
             (packed and 0xFF).toByte(),
             ((packed shr 8) and 0xFF).toByte(),
             ((packed shr 16) and 0xFF).toByte(),

@@ -12,7 +12,7 @@ import org.junit.Test
 /**
  * Unit tests for [RadarV2Decoder]. Packet byte layout (9 bytes per target):
  *   [0]    tid uint8
- *   [1]    class uint8  (36=CLASS_HIGH=TRUCK, else CAR — incl. CLASS_LOW)
+ *   [1]    class uint8  (36=CLASS_LARGE=TRUCK, else CAR, CLASS_FAINT included)
  *   [2..4] 24-bit little-endian packed range field:
  *            bits 0..10  = rangeX (11-bit signed, x0.1 m)
  *            bits 11..23 = rangeY (13-bit signed, x0.1 m)
@@ -35,7 +35,7 @@ class RadarV2DecoderTest {
     // ── basic snapshot ───────────────────────────────────────────────────────
 
     @Test fun singleTargetReturnsSnapshot() {
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE)))
         assertNotNull("target frame should emit a snapshot", state)
         assertEquals(1, state!!.vehicles.size)
         assertEquals(DataSource.V2, state.source)
@@ -61,7 +61,7 @@ class RadarV2DecoderTest {
         // still ages the clock: if a stale track is pruned by the arrival,
         // a snapshot must be emitted so the overlay clears. This is the
         // pruneStale-true branch of the sub-header early return.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, speedYhalf = -50)))
         now += RadarV2Decoder.STALE_MOVING_MS + 200
         val state = decoder.feed(byteArrayOf(0x00)) // 1 byte < HEADER_SIZE
         assertNotNull("runt packet must emit a snapshot when it prunes a stale track", state)
@@ -86,7 +86,7 @@ class RadarV2DecoderTest {
 
     @Test fun statusFramePrunesStaleMovingTrack() {
         // Approaching at -25 m/s (speedYhalf=-50) classifies the track as moving.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, speedYhalf = -50)))
         now += RadarV2Decoder.STALE_MOVING_MS + 200
         val state = decoder.feed(byteArrayOf(0x01, 0x00))
         assertTrue("status frame must age out stale moving tracks", state?.isClear == true)
@@ -96,7 +96,7 @@ class RadarV2DecoderTest {
 
     @Test fun movingTrackDropsAfterShortWindow() {
         // Approaching at -25 m/s (speedYhalf=-50) classifies the track as moving.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, speedYhalf = -50)))
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, speedYhalf = -50)))
 
         now += RadarV2Decoder.STALE_MOVING_MS + 200
         val dropped = decoder.feed(emptyPacket())
@@ -104,7 +104,7 @@ class RadarV2DecoderTest {
     }
 
     @Test fun parkedTrackSurvivesLongDropout() {
-        decoder.feed(packet(target(tid = 7, rangeY = 80, cls = RadarV2Decoder.CLASS_NORMAL)))
+        decoder.feed(packet(target(tid = 7, rangeY = 80, cls = RadarV2Decoder.CLASS_MODERATE)))
         // No frames reference this target for 4 s (Doppler dropout at traffic light).
         // Empty target frame (non-status header + 0 targets) always emits a snapshot
         // for liveness, but the parked vehicle must still be in the snapshot.
@@ -122,13 +122,13 @@ class RadarV2DecoderTest {
 
     @Test fun rangeYMapsToDistanceM() {
         // rangeY raw=50 -> 5.0 m, rounds to 5
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, cls = RadarV2Decoder.CLASS_NORMAL)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 50, cls = RadarV2Decoder.CLASS_MODERATE)))
         assertEquals(5, state!!.vehicles.single().distanceM)
     }
 
     @Test fun positiveRangeXIsPositiveLateral() {
         // rangeX raw=+15 -> +1.5 m, lateral = 1.5/3.0 = 0.5
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 15)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = 15)))
         val lat = state!!.vehicles.single().lateralPos
         assertTrue("positive rangeX should give positive lateralPos", lat > 0f)
         assertEquals(0.5f, lat, 0.01f)
@@ -136,19 +136,19 @@ class RadarV2DecoderTest {
 
     @Test fun negativeRangeXIsNegativeLateral() {
         // rangeX raw=-10 -> -1.0 m, lateral = -1.0/3.0 = -0.333
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -10)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -10)))
         val lat = state!!.vehicles.single().lateralPos
         assertTrue("negative rangeX must give negative lateralPos", lat < 0f)
     }
 
     @Test fun lateralPositionClampsAtPlusOne() {
         // rangeX raw=+40 -> 4.0 m > LATERAL_FULL_M(3.0) -> clamp to +1.0
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 40)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = 40)))
         assertEquals(1f, state!!.vehicles.single().lateralPos, 0.0001f)
     }
 
     @Test fun lateralPositionClampsAtMinusOne() {
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -40)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -40)))
         assertEquals(-1f, state!!.vehicles.single().lateralPos, 0.0001f)
     }
 
@@ -157,7 +157,7 @@ class RadarV2DecoderTest {
         // reads ~20 cm left of the radar (raw rangeX -2 -> -0.2 m). The +20 cm
         // correction brings it back to centre (lateralPos ~0).
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
-        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -2)))
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -2)))
         assertEquals(0f, state!!.vehicles.single().lateralPos, 0.001f)
     }
 
@@ -165,7 +165,7 @@ class RadarV2DecoderTest {
         // Radar 20 cm LEFT of centre: a centred car reads ~20 cm right of the
         // radar (raw +2 -> +0.2 m); the -20 cm correction recentres it.
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = -20)
-        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 2)))
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = 2)))
         assertEquals(0f, state!!.vehicles.single().lateralPos, 0.001f)
     }
 
@@ -174,14 +174,14 @@ class RadarV2DecoderTest {
         // the mount side of the bike; a 15 cm right mount renders it +0.15 m
         // right (lateralPos = 0.15 / 3.0 = 0.05).
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 15)
-        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 0)))
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = 0)))
         assertEquals(0.05f, state!!.vehicles.single().lateralPos, 0.001f)
     }
 
     @Test fun zeroOffsetLeavesLateralUnchanged() {
         // Default (centred) mount: rangeX raw +15 -> +1.5 m -> lateral 0.5, no shift.
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 0)
-        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = 15)))
+        val state = d.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = 15)))
         assertEquals(0.5f, state!!.vehicles.single().lateralPos, 0.001f)
     }
 
@@ -191,10 +191,10 @@ class RadarV2DecoderTest {
         // axis, so it is identical from the radar or the bike centre. Only
         // rangeX shifts. Same target, two mounts, same distanceM.
         val centred = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 0)
-            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -8)))!!
             .vehicles.single().distanceM
         val rightMount = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
-            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+            .feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -8)))!!
             .vehicles.single().distanceM
         assertEquals("lateral mount offset must not change the behind distance", centred, rightMount)
     }
@@ -205,7 +205,7 @@ class RadarV2DecoderTest {
         // restores the bike-frame clearance: -0.8 + 0.2 = -0.6 m -> lateralPos
         // -0.6 / 3.0 = -0.2.
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
-        val lat = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+        val lat = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -8)))!!
             .vehicles.single().lateralPos
         assertEquals(-0.2f, lat, 0.001f)
     }
@@ -227,7 +227,7 @@ class RadarV2DecoderTest {
         // lateralPos saturates at +/-1.0 (+/-3 m); rangeXm must keep the
         // raw magnitude - the urgent lateral gates need to tell one lane
         // over (3 m) from a parallel street (12 m). Raw -120 = -12.0 m.
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -120)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 150, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -120)))
         val v = state!!.vehicles.single()
         assertEquals(-1f, v.lateralPos, 0.0001f)
         assertEquals(-12f, v.rangeXm, 0.001f)
@@ -237,7 +237,7 @@ class RadarV2DecoderTest {
         // Same translation as lateralPos: raw -8 (-0.8 m) + 20 cm right
         // mount = -0.6 m in the bike frame.
         val d = RadarV2Decoder(nowMs = { now }, lateralOffsetCm = 20)
-        val v = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_NORMAL, rangeX = -8)))!!
+        val v = d.feed(packet(target(tid = 1, rangeY = 60, cls = RadarV2Decoder.CLASS_MODERATE, rangeX = -8)))!!
             .vehicles.single()
         assertEquals(-0.6f, v.rangeXm, 0.001f)
     }
@@ -256,28 +256,29 @@ class RadarV2DecoderTest {
         assertEquals(-12f, v.rangeXm, 0.001f)
     }
 
-    @Test fun classLowClassifiesAsCar() {
-        // CLASS_LOW = "low-RCS / low-confidence return", not "is a
-        // bike". Trucks present as CLASS_LOW for several seconds of
-        // approach. Default to CAR when uncertain; the class
-        // promotion + debounce will upgrade to TRUCK as confidence
-        // grows.
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
+    @Test fun classFaintClassifiesAsCar() {
+        // A faint return means low radar cross-section or low confidence,
+        // not a small vehicle. Trucks read faint for several seconds of
+        // approach. Default to CAR when uncertain; the class promotion
+        // plus debounce upgrades to TRUCK as confidence grows.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_FAINT)))
         assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
-    @Test fun classLowStableClassifiesAsCar() {
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW_STABLE)))
+    @Test fun classFaintAltClassifiesAsCar() {
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_FAINT_ALT)))
         assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
-    @Test fun classHighClassifiesAsTruck() {
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_HIGH)))
+    @Test fun classLargeClassifiesAsTruck() {
+        // The wire byte itself, not the constant: every other class maps to
+        // CAR, so a wrong value here would silently lose every TRUCK.
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = 36)))
         assertEquals(VehicleSize.TRUCK, state!!.vehicles.single().size)
     }
 
-    @Test fun classNormalClassifiesAsCar() {
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
+    @Test fun classModerateClassifiesAsCar() {
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE)))
         assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
     }
 
@@ -386,7 +387,7 @@ class RadarV2DecoderTest {
     private fun target(
         tid: Int,
         rangeY: Int,
-        cls: Int = RadarV2Decoder.CLASS_NORMAL,
+        cls: Int = RadarV2Decoder.CLASS_MODERATE,
         rangeX: Int = 0,
         speedYhalf: Int = 0,
         speedXraw: Int = 0x80,
@@ -572,23 +573,26 @@ class RadarV2DecoderTest {
     // ── class debounce (asymmetric) ──────────────────────────────────────────
 
     @Test fun sizeUpgradeAppliesImmediately() {
-        // BIKE -> CAR on the next frame; overlay must reflect it at once.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
-        assertEquals(VehicleSize.CAR, state!!.vehicles.single().size)
+        // CAR -> TRUCK on the very next frame, with no debounce: the class
+        // is promoted as evidence accumulates and the overlay follows at
+        // once. The two classes fed here must land in DIFFERENT buckets or
+        // this asserts nothing.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LARGE)))
+        assertEquals(VehicleSize.TRUCK, state!!.vehicles.single().size)
     }
 
     @Test fun sizeDowngradeHoldsForSeveralFrames() {
         // TRUCK -> CAR: do not downgrade on first frame. Should stay
         // TRUCK until DOWNGRADE_FRAMES consecutive frames at the smaller
-        // size. (CLASS_LOW now maps to CAR, not BIKE — see
-        // classLowClassifiesAsCar.)
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_HIGH)))
+        // size. A faint return maps to CAR rather than to any smaller
+        // bucket; see classFaintClassifiesAsCar.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LARGE)))
         for (i in 1 until RadarV2Decoder.DOWNGRADE_FRAMES) {
-            val s = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
+            val s = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_FAINT)))
             assertEquals("frame $i must still show TRUCK", VehicleSize.TRUCK, s!!.vehicles.single().size)
         }
-        val finalState = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LOW)))
+        val finalState = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_FAINT)))
         assertEquals(VehicleSize.CAR, finalState!!.vehicles.single().size)
     }
 
@@ -741,12 +745,12 @@ class RadarV2DecoderTest {
     }
 
     @Test fun downgradeCounterResetsOnUpgrade() {
-        // HIGH -> NORMAL (downgrade proposal) -> HIGH (cancels proposal) ->
-        // back to HIGH is stable; a single later NORMAL should not commit.
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_HIGH)))
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
-        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_HIGH)))
-        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_NORMAL)))
+        // LARGE -> MODERATE (downgrade proposal) -> LARGE (cancels it) ->
+        // back to LARGE is stable; a single later MODERATE must not commit.
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LARGE)))
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE)))
+        decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_LARGE)))
+        val state = decoder.feed(packet(target(tid = 1, rangeY = 100, cls = RadarV2Decoder.CLASS_MODERATE)))
         assertEquals("must still show TRUCK after interleaved flip", VehicleSize.TRUCK, state!!.vehicles.single().size)
     }
 

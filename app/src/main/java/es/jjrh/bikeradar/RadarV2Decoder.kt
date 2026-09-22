@@ -90,7 +90,7 @@ class RadarV2Decoder(
         /** VehicleSize currently committed to the overlay. Upgrades apply
          *  immediately; downgrades require [DOWNGRADE_FRAMES] consecutive
          *  frames at the smaller size. Prevents mid-overtake box-size flips
-         *  when firmware briefly reclassifies a car as NORMAL_STABLE<->HIGH. */
+         *  when a car is briefly reclassified MODERATE_ALT<->LARGE. */
         val committedSize: VehicleSize,
         val downgradeCandidate: VehicleSize?,
         val downgradeFrames: Int,
@@ -285,8 +285,8 @@ class RadarV2Decoder(
 
     /** Upgrades commit immediately; downgrades need [DOWNGRADE_FRAMES]
      *  consecutive frames at the smaller bucket before committing. Rationale:
-     *  firmware promotes class as evidence accumulates (safe to follow), but
-     *  brief HIGH<->NORMAL flips mid-overtake should not resize the overlay box. */
+     *  the class is promoted as evidence accumulates (safe to follow), but
+     *  brief MODERATE_ALT<->LARGE flips mid-overtake should not resize the box. */
     private fun debounceSize(prev: Track?, raw: VehicleSize): SizeDebounceResult {
         if (prev == null) return SizeDebounceResult(raw, null, 0)
         val committed = prev.committedSize
@@ -357,18 +357,24 @@ class RadarV2Decoder(
     }
 
     /**
-     * Map raw radar class → display/logic enum.
+     * Map the wire's class byte to the size bucket the overlay and the
+     * alert path use.
      *
-     * The radar's class names (CLASS_LOW / CLASS_NORMAL / CLASS_HIGH
-     * and their _STABLE variants) are signal-strength descriptors,
-     * not a vehicle taxonomy. CLASS_LOW means "low-RCS / low-
-     * confidence return"; a real truck reads as CLASS_LOW for the
-     * first seconds of approach until enough returns accumulate to
-     * upgrade. Default to CAR when uncertain — [debounceSize] will
-     * upgrade to TRUCK as the radar promotes the class.
+     * The CLASS_* names describe signal strength rather than a vehicle
+     * taxonomy. A faint return means low radar cross-section or low
+     * confidence, and a real truck reads faint for the first seconds of
+     * approach until enough returns accumulate to promote it. Default to
+     * CAR when uncertain; [debounceSize] upgrades to TRUCK once the class
+     * is promoted.
+     *
+     * The sibling docs repo's reference decoder maps the two faint classes
+     * to a BIKE bucket. Do NOT port that here: a truck on acquisition reads
+     * faint, so a BIKE branch took exactly the vehicles close-pass logging
+     * most needs, and 0.7.0 removed it for that reason.
+     * `classFaintClassifiesAsCar` and `classFaintAltClassifiesAsCar` pin it.
      */
     private fun classifySize(cls: Int): VehicleSize = when (cls) {
-        CLASS_HIGH -> VehicleSize.TRUCK
+        CLASS_LARGE -> VehicleSize.TRUCK
         else -> VehicleSize.CAR
     }
 
@@ -378,12 +384,16 @@ class RadarV2Decoder(
         const val STATUS_FRAME_BIT = 0x0001
         const val DEVICE_STATUS_BIT = 0x0004
 
+        // Named for what the return looks like, not for any vehicle. The
+        // same names and values are in the sibling docs repo's reference
+        // decoder; keep the two spellings identical so a reader can move
+        // between them.
         const val CLASS_UNKNOWN = 4
-        const val CLASS_LOW_STABLE = 13
-        const val CLASS_LOW = 16
-        const val CLASS_NORMAL = 23
-        const val CLASS_NORMAL_STABLE = 26
-        const val CLASS_HIGH = 36
+        const val CLASS_FAINT_ALT = 13
+        const val CLASS_FAINT = 16
+        const val CLASS_MODERATE = 23
+        const val CLASS_MODERATE_ALT = 26
+        const val CLASS_LARGE = 36
 
         const val MOVING_SPEED_MS = 1f
         const val STALE_MOVING_MS = 800L

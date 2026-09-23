@@ -522,14 +522,17 @@ class AlertBeeper(
      * focus EXCLUSIVE, USAGE_ALARM plays can be silenced at the speaker
      * mid-call without indication - and on some OEMs alarm-usage audio
      * behaves unpredictably while a call routes the output. Skipping the
-     * audio path entirely preserves call audio integrity; the visual
-     * overlay and (future) wrist haptic still fire.
+     * audio path entirely preserves call audio integrity. The overlay is then
+     * the only warning the app can give, so [OverlayPipeline] reads this too
+     * and shows the overlay during a call even while another app holds it
+     * hidden.
      *
      * MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP (WhatsApp,
      * Meet, Telegram, SIP) - the same rider situation, so both suppress.
      */
-    private fun suppressForCall(): Boolean = audioManager.mode == AudioManager.MODE_IN_CALL ||
-        audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
+    internal fun suppressForCall(): Boolean = audioManager.mode.let {
+        it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
+    }
 
     private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
         if (!hasFocus) {

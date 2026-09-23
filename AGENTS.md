@@ -892,7 +892,10 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - While a call is active (`audioManager.mode` is `MODE_IN_CALL` for telephony
   or `MODE_IN_COMMUNICATION` for VoIP) the close-pass beeper skips the audio
   path entirely (visual overlay still fires). Non-negotiable, no Settings
-  toggle.
+  toggle. The overlay is also shown over a granted app's hold for the length
+  of the call, since it is then the only warning the app can give, and the
+  hold applies again after (`aCallPutsAHeldOverlayBackAndTheHoldResumesAfter`).
+  `AlertBeeper.suppressForCall` is the one definition of "a call" both read.
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
   in Settings -> Permissions, and via a contextual card in Settings -> Light
   auto-mode (shown whenever either light's auto-mode is on - granted or not,

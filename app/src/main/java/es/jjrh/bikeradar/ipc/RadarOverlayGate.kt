@@ -30,6 +30,10 @@ import kotlinx.coroutines.flow.update
  *
  * Nothing lifts a hold for a consumer that is merely backgrounded, which is why
  * the contract asks it to show the overlay again when it stops drawing.
+ *
+ * A call sets the holds aside without dropping them: the pipeline shows the
+ * overlay while the beeper is silenced for the call, and hides it again after
+ * (`aCallPutsAHeldOverlayBackAndTheHoldResumesAfter`). This object is not told.
  */
 object RadarOverlayGate {
 

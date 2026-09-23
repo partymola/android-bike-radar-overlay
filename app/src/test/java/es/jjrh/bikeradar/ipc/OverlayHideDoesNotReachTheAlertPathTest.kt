@@ -22,11 +22,10 @@ import org.junit.Test
  * would not catch a gate pushed down INTO `fireAlertCue`, and it says nothing
  * about whether a cue ever actually sounds.
  *
- * The behavioural version is not available today: no test in
- * `OverlayPipelineDrivingTest` can make the pipeline emit a cue at all - a
- * single frame is suppressed by the sustain gate and the harness's monotonic
- * clock does not advance across frames, so `AlertDecider` never reaches a beep.
- * Closing that is worth doing and is what would replace this file.
+ * The behavioural half is `OverlayPipelineDrivingTest.aHeldOverlayDoesNotSilenceTheBeeps`,
+ * which drives a close car through the real pipeline with the overlay held
+ * hidden and asserts the beep. This file stays because it names the shape a
+ * maintainer would break, which the behavioural test only reports after the fact.
  */
 class OverlayHideDoesNotReachTheAlertPathTest {
 
@@ -36,7 +35,7 @@ class OverlayHideDoesNotReachTheAlertPathTest {
     fun theAlertCallIsNotInsideTheOverlayGate() {
         val text = pipelineSource()
 
-        val gateAt = text.indexOf("val hiddenForConsumer = RadarOverlayGate.hidden")
+        val gateAt = text.indexOf(GATE)
         assertTrue("the overlay gate is no longer consulted in the pipeline", gateAt >= 0)
 
         val cueAt = text.indexOf(CUE)
@@ -60,13 +59,15 @@ class OverlayHideDoesNotReachTheAlertPathTest {
             }
         }
 
-        // Both spellings: a branch written straight off `RadarOverlayGate.hidden`
-        // rather than through the local reads the same to a rider and would
-        // walk past a check that only knew the local's name.
+        // Every spelling: a branch written straight off `RadarOverlayGate.hidden`
+        // rather than through a local reads the same to a rider and would walk
+        // past a check that only knew the locals' names.
         val guardedByTheGate = open.map { brace ->
             val lineStart = text.lastIndexOf('\n', brace).let { if (it < 0) 0 else it + 1 }
             text.substring(lineStart, brace)
-        }.filter { it.contains("hiddenForConsumer") || it.contains("RadarOverlayGate") }
+        }.filter {
+            it.contains("hiddenForConsumer") || it.contains("RadarOverlayGate") || Regex("\\bheld\\b").containsMatchIn(it)
+        }
 
         assertTrue(
             "fireAlertCue sits inside a block opened by the overlay gate " +
@@ -82,7 +83,7 @@ class OverlayHideDoesNotReachTheAlertPathTest {
         // escapes it entirely. That is the cheap way to write the gate and the
         // wrong one: it would skip the cue along with the view.
         val text = pipelineSource()
-        val gateAt = text.indexOf("val hiddenForConsumer = RadarOverlayGate.hidden")
+        val gateAt = text.indexOf(GATE)
         val cueAt = text.indexOf(CUE)
         val between = text.substring(gateAt, cueAt)
 
@@ -95,5 +96,6 @@ class OverlayHideDoesNotReachTheAlertPathTest {
     private companion object {
         /** One spelling, so the two tests cannot drift onto different call sites. */
         const val CUE = "fireAlertCue("
+        const val GATE = "val held = RadarOverlayGate.hidden"
     }
 }

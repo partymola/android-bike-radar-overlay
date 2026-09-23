@@ -66,6 +66,7 @@ class OverlayPipelineDrivingTest {
 
     @After
     fun tearDown() {
+        context.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
         Dispatchers.resetMain()
         beeper.release()
         RadarStateBus.clear()
@@ -184,6 +185,121 @@ class OverlayPipelineDrivingTest {
         }
 
         assertEquals("the frames were reaching the pipeline all along", true, attached)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aCallPutsAHeldOverlayBackAndTheHoldResumesAfter() = runTest {
+        // During a call the beeper is silent, so an overlay a granted app is
+        // holding hidden would leave the rider with no warning from Bike Radar.
+        val audio = context.getSystemService(AudioManager::class.java)
+        val clogLines = mutableListOf<String>()
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        val pipeline = buildPipeline(clog = { clogLines += it })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+
+        RadarStateBus.publish(liveFrame(100L))
+        runCurrent()
+        assertEquals("held and no call: hidden", 0, fakeHost.attachCount)
+
+        audio.mode = AudioManager.MODE_IN_CALL
+        RadarStateBus.publish(liveFrame(200L))
+        runCurrent()
+        assertEquals("a call shows it", 1, fakeHost.attachCount)
+        assertTrue(clogLines.toString(), clogLines.contains("# overlay shown during a call over a granted app's hold"))
+
+        audio.mode = AudioManager.MODE_NORMAL
+        RadarStateBus.publish(liveFrame(300L))
+        runCurrent()
+        assertEquals("the hold applies again after the call", 1, fakeHost.detachCount)
+
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aVoipCallAlsoPutsAHeldOverlayBack() = runTest {
+        context.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_COMMUNICATION
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        val pipeline = buildPipeline()
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        RadarStateBus.publish(liveFrame(100L))
+        runCurrent()
+        assertEquals(1, fakeHost.attachCount)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aHeldOverlayDoesNotSilenceTheBeeps() = runTest {
+        // The behavioural half of OverlayHideDoesNotReachTheAlertPathTest: a
+        // granted app hiding the overlay takes the display, never the warning.
+        // Asserted at the beeper, so a gate at the play site fails here too.
+        val cues = mutableListOf<String>()
+        beeper.release()
+        beeper = AlertBeeper(
+            audioManager = context.getSystemService(AudioManager::class.java),
+            executor = java.util.concurrent.Executor { it.run() },
+            playTrackOverride = { true },
+            onCue = { cues += it },
+        )
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        var mono = 1_000L
+        val pipeline = buildPipeline(clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        for (t in listOf(1_000L, 1_100L)) {
+            mono = t
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = listOf(car), bikeSpeedMs = 5f))
+            runCurrent()
+        }
+        assertEquals("hidden throughout", 0, fakeHost.attachCount)
+        assertEquals("but the beep plays", listOf("beep count=3"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aFailingAttachIsLoggedOnceNotEveryFrame() = runTest {
+        val clogLines = mutableListOf<String>()
+        fakeHost.canDraw = false
+        val pipeline = buildPipeline(clog = { clogLines += it })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        (1..5).forEach {
+            RadarStateBus.publish(liveFrame(it * 100L))
+            runCurrent()
+        }
+        assertEquals(clogLines.toString(), 1, clogLines.count { it == "# overlay: SYSTEM_ALERT_WINDOW not granted" })
+        fakeHost.canDraw = true
+        RadarStateBus.publish(liveFrame(600L))
+        runCurrent()
+        assertEquals(1, fakeHost.attachCount)
+        assertTrue(clogLines.toString(), clogLines.contains("# overlay added"))
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aFailingAddViewIsLoggedOnceWhateverItsMessage() = runTest {
+        // A refused window names a fresh window in its message on every
+        // attempt, so comparing the text would log every frame.
+        val clogLines = mutableListOf<String>()
+        var attempt = 0
+        fakeHost.attachResult = { IllegalStateException("window ${attempt++} refused") }
+        val pipeline = buildPipeline(clog = { clogLines += it })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        (1..5).forEach {
+            RadarStateBus.publish(liveFrame(it * 100L))
+            runCurrent()
+        }
+        assertTrue("every frame tried: $attempt", attempt >= 5)
+        assertEquals(clogLines.toString(), 1, clogLines.count { it.startsWith("# overlay addView failed") })
         job.cancel()
         job.join()
     }
@@ -870,11 +986,14 @@ class OverlayPipelineDrivingTest {
         var attachCount = 0
         var detachCount = 0
         var configChangedCount = 0
+        var canDraw = true
+        var attachResult: () -> Throwable? = { null }
         override fun createView(): RadarOverlayView = RadarOverlayView(ctx)
-        override fun canDrawOverlays(): Boolean = true
+        override fun canDrawOverlays(): Boolean = canDraw
         override fun attach(view: RadarOverlayView): Throwable? {
-            attachCount++
-            return null
+            val failed = attachResult()
+            if (failed == null) attachCount++
+            return failed
         }
         override fun detach(view: RadarOverlayView) {
             detachCount++

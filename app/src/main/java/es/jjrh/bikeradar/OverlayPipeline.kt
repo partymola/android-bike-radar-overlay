@@ -120,6 +120,7 @@ internal class OverlayPipeline(
             val sessionStartMs = System.currentTimeMillis()
             var seenDashcamThisSession = false
             var lastLoggedDashcamStatus: DashcamStatus? = null
+            var lastAttachFailure: String? = null
             val ticker = flow {
                 while (true) {
                     emit(Unit)
@@ -180,8 +181,12 @@ internal class OverlayPipeline(
                         // get out of the way. Checked every frame rather than
                         // latched, so the hold being dropped - by an unbind, a
                         // crash, or the rider revoking - puts the overlay back
-                        // without anything having to notice.
-                        val hiddenForConsumer = RadarOverlayGate.hidden
+                        // without anything having to notice. A call sets the hold
+                        // aside: the beeper is silent then, so the overlay is the
+                        // only warning Bike Radar can still give. The hold applies
+                        // again after.
+                        val held = RadarOverlayGate.hidden
+                        val hiddenForConsumer = held && !beeper.suppressForCall()
                         if (hiddenForConsumer && overlayAdded) {
                             overlayHost.detach(view)
                             overlayAdded = false
@@ -189,17 +194,27 @@ internal class OverlayPipeline(
                         }
 
                         if (!overlayAdded && !hiddenForConsumer) {
-                            if (overlayHost.canDrawOverlays()) {
-                                val attachErr = overlayHost.attach(view)
-                                if (attachErr == null) {
-                                    overlayAdded = true
-                                    clog("# overlay added")
-                                } else {
-                                    clog("# overlay addView failed: $attachErr")
-                                }
+                            // Logged when the KIND of failure changes: this branch
+                            // runs every frame while the attach keeps failing, and
+                            // an addView message names a new window each attempt.
+                            val failure = if (overlayHost.canDrawOverlays()) {
+                                overlayHost.attach(view)?.let { it.javaClass.name to "# overlay addView failed: $it" }
                             } else {
-                                clog("# overlay: SYSTEM_ALERT_WINDOW not granted")
+                                "no-permission" to "# overlay: SYSTEM_ALERT_WINDOW not granted"
                             }
+                            if (failure == null) {
+                                overlayAdded = true
+                                clog(
+                                    if (held) {
+                                        "# overlay shown during a call over a granted app's hold"
+                                    } else {
+                                        "# overlay added"
+                                    },
+                                )
+                            } else if (failure.first != lastAttachFailure) {
+                                clog(failure.second)
+                            }
+                            lastAttachFailure = failure?.first
                         }
 
                         view.setVisualMaxM(overlayPrefs.visualMaxDistanceM)

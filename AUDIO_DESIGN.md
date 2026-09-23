@@ -195,16 +195,20 @@ Four states quiet or reshape the audio, by design:
   plays) and burst-scoped (lifted once, restored once, and repaired at next start
   if a process death leaks the lift).
 - **In-call suppression.** While a phone or VoIP call is active the cue's audio
-  path is skipped entirely; the visual overlay still fires. This is
-  non-negotiable and has no settings toggle. Alarm-usage audio behaves
-  unpredictably across devices while a call routes the output, and preserving
-  call audio integrity outranks a beep the rider would struggle to act on
-  mid-call anyway.
+  path is skipped entirely; the visual overlay still fires. It is shown even
+  while another app holds it hidden, since it is then the only warning the app
+  can give, and the hold applies again after the call
+  (`aCallPutsAHeldOverlayBackAndTheHoldResumesAfter`,
+  `aVoipCallAlsoPutsAHeldOverlayBack`). This is non-negotiable and has no
+  settings toggle. Alarm-usage audio behaves unpredictably across devices while
+  a call routes the output, and preserving call audio integrity outranks a beep
+  the rider would struggle to act on mid-call anyway.
 
-Audio is the primary channel, so `AlertBeeper` must never fail silently. A cue
-that could not sound is reported through the same hook as one that did, with a
-`cue_failed` marker, so the sounded-alert tally never counts a silent cue as
-heard. A dead audio server (a rare but real mid-ride event) is detected by the
+Audio is the primary channel, so while the service runs `AlertBeeper` must never
+fail silently. (A cue that arrives after the beeper is released at service stop
+is dropped; there is nothing left to play it on.) A cue that could not sound is
+reported through the same hook as one that did, with a `cue_failed` marker, so
+the sounded-alert tally never counts a silent cue as heard. A dead audio server (a rare but real mid-ride event) is detected by the
 play failing, which triggers a throttled rebuild of the cue tracks and a retry,
 so the cue still sounds once the server is back.
 

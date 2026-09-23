@@ -92,6 +92,11 @@ interface IRadarService {
      * Bike Radar's service stops. Every one of those is your process going away
      * or the rider intervening.
      *
+     * During a phone or internet call Bike Radar shows its overlay whatever
+     * you hold, because its alert sounds are off then and the overlay is the
+     * only warning it can still give. Your hold is kept, and applies again
+     * when the call ends.
+     *
      * SHOW IT YOURSELF WHEN YOU STOP DRAWING - in onStop, say. Nothing lifts
      * the hold for a consumer that is merely backgrounded, so a rider who
      * switches away from you keeps a screen with no radar on it. Bike Radar's

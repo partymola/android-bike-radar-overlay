@@ -38,7 +38,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
@@ -243,7 +245,9 @@ class BikeRadarService : Service() {
     // onDestroy. Hoisted out of overlayJob so reconnects do not pay
     // AudioTrack cold-start every time, and so audio focus + the
     // in-call guard survive across radar drops.
-    @Volatile private var alertBeeper: AlertBeeper? = null
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var alertBeeper: AlertBeeper? = null
+        private set
 
     // Capture log: owns the per-ride file lifecycle, buffered append, prune/gzip.
     // mirror echoes to logcat only in debug builds (release keeps BLE/movement
@@ -390,6 +394,14 @@ class BikeRadarService : Service() {
             // walkAwayAlarm is constructed later in onCreate.
             walkAwayOverrideActive = { ::walkAwayAlarm.isInitialized && walkAwayAlarm.overrideActive },
         ).also { it.setVolumePct(prefs.alertVolume) }
+        // After the beeper exists, so no change can land before there is one
+        // to apply it to. Not per radar connection: the drop cue plays while
+        // disconnected.
+        scope.launch {
+            prefs.flow.map { it.alertVolume }.distinctUntilChanged().collect {
+                alertBeeper?.setVolumePct(it)
+            }
+        }
 
         overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
         reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)

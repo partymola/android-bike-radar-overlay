@@ -239,6 +239,10 @@ class AlertBeeper(
 
     @Volatile private var volumePct = DEFAULT_VOLUME_PCT
 
+    /** The gain setting cues play at now, 0..100. */
+    @androidx.annotation.VisibleForTesting
+    internal val currentVolumePct: Int get() = volumePct
+
     // Audio-focus state. One request object reused across plays; gain
     // is GAIN_TRANSIENT_MAY_DUCK so media (podcasts / music) ducks for
     // the cue and restores after. Walk-away alarm uses the stronger
@@ -288,8 +292,8 @@ class AlertBeeper(
         val idx = beeps - 1
         if (idx !in 0..2) return
         val durationMs = beepDurationMs.getOrNull(idx) ?: return
-        executor.execute {
-            if (suppressForCall()) return@execute
+        submit {
+            if (suppressForCall()) return@submit
             report("beep count=$beeps") {
                 beepMono[idx].setVolume(currentMonoGain())
                 playWithFocus(beepMono[idx], durationMs)
@@ -298,8 +302,8 @@ class AlertBeeper(
     }
 
     override fun playClear() {
-        executor.execute {
-            if (suppressForCall()) return@execute
+        submit {
+            if (suppressForCall()) return@submit
             report("clear") {
                 clearTrack.setVolume(currentMonoGain())
                 playWithFocus(clearTrack, clearDurationMs)
@@ -308,8 +312,8 @@ class AlertBeeper(
     }
 
     override fun playUrgent() {
-        executor.execute {
-            if (suppressForCall()) return@execute
+        submit {
+            if (suppressForCall()) return@submit
             silenceBeeps()
             report("urgent") {
                 urgentMono.setVolume(currentMonoGain())
@@ -358,8 +362,8 @@ class AlertBeeper(
      *  distinct count + timbre-class from the sharp/high threat beeps - a
      *  status cue, never a threat. */
     override fun playRadarDropped() {
-        executor.execute {
-            if (suppressForCall()) return@execute
+        submit {
+            if (suppressForCall()) return@submit
             report("radar_drop") {
                 radarDroppedTrack.setVolume(currentMonoGain())
                 playWithFocus(radarDroppedTrack, radarDroppedDurationMs)
@@ -374,8 +378,8 @@ class AlertBeeper(
      *  per down-episode, and only after a drop cue was raised (the caller gates
      *  this via [RadarDropDecider]); a cold-start connect stays silent. */
     override fun playRadarReconnected() {
-        executor.execute {
-            if (suppressForCall()) return@execute
+        submit {
+            if (suppressForCall()) return@submit
             report("radar_reconnect") {
                 radarReconnectedTrack.setVolume(currentMonoGain())
                 playWithFocus(radarReconnectedTrack, radarReconnectedDurationMs)
@@ -455,7 +459,20 @@ class AlertBeeper(
         volumePct = pct.coerceIn(0, 100)
         // Track objects are executor-confined; apply the new gain there so
         // a Settings change can never race a play or a rebuild.
-        executor.execute { applyVolume() }
+        submit { applyVolume() }
+    }
+
+    /** Every cue and gain change goes through here. The service's collectors
+     *  and tick outlive [release] until its scope is cancelled, and a task
+     *  submitted to the shut-down executor throws into a scope with no
+     *  handler, which ends the process; after release there is nothing to
+     *  play, so it is dropped. Pinned by
+     *  `AlertBeeperResilienceTest.callsAfterReleaseOnTheRealExecutorAreDroppedNotThrown`. */
+    private fun submit(task: () -> Unit) {
+        try {
+            executor.execute(task)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+        }
     }
 
     fun release() {
@@ -683,6 +700,7 @@ class AlertBeeper(
     }
 
     private fun applyVolume() {
+        if (released) return
         val g = currentMonoGain()
         beepMono.forEach { it.setVolume(g) }
         urgentMono.setVolume(g)

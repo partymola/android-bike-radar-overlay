@@ -165,6 +165,26 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aVolumeChangeMidRideReachesTheLiveBeeper() {
+        // No radar here, so this is the disconnected case the drop cue plays
+        // in. The collector runs on the service's IO scope, so poll with a
+        // deadline.
+        val prefs = Prefs(app).apply { alertVolume = 40 }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val beeper = requireNotNull(controller.get().alertBeeper)
+        assertEquals(40, beeper.currentVolumePct)
+
+        prefs.alertVolume = 85
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (beeper.currentVolumePct != 85 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+        }
+        assertEquals("the running beeper must take the new volume", 85, beeper.currentVolumePct)
+        controller.destroy()
+    }
+
+    @Test
     fun walkAwayArmingStillSeesAnEBikeSnapshotTooOldForTheAlertPath() {
         // The radar-link coordinator applies its own 30 s window, so it must
         // get the snapshot however old. Handed the alert path's 3 s one

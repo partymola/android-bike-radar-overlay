@@ -225,4 +225,19 @@ class AlertBeeperResilienceTest {
         assertEquals("no play may be attempted after release", 0, playAttempts)
         assertEquals("no rebuild may follow release", 0, b.trackGeneration)
     }
+
+    @Test
+    fun callsAfterReleaseOnTheRealExecutorAreDroppedNotThrown() {
+        // The production executor, not the direct one above: release() shuts
+        // it down, and the service's settings collector and tick can still
+        // call in before its scope is cancelled. A throw there has no handler.
+        val b = AlertBeeper(audioManager = audioManager, onCue = {})
+        b.release()
+        b.setVolumePct(80)
+        b.play(2)
+        b.playUrgent()
+        b.playClear()
+        b.playRadarDropped()
+        b.playRadarReconnected()
+    }
 }

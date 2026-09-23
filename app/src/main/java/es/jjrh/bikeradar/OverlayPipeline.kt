@@ -109,7 +109,6 @@ internal class OverlayPipeline(
         return scope.launch(Dispatchers.Main) {
             var overlayAdded = false
             val view = overlayHost.createView()
-            beeper.setVolumePct(prefs.alertVolume)
             val alerts = AlertDecider(
                 onTurnDefer = { tailMs -> clog("# turn clear-defer tail_ms=$tailMs") },
                 onGateEvent = clog,

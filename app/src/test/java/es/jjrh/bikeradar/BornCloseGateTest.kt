@@ -113,6 +113,18 @@ class BornCloseGateTest {
     }
 
     @Test
+    fun `slow-path evidence does not count while TURNING`() {
+        val g = BornCloseGate()
+        val v = bornClose(speedMs = -1f)
+        var now = 0L
+        repeat(20) {
+            g.update(listOf(v), turning, now)
+            now += 100
+        }
+        assertTrue(g.isGated(v))
+    }
+
+    @Test
     fun `slow-path run is broken by a non-closing frame`() {
         val g = BornCloseGate()
         var now = 0L

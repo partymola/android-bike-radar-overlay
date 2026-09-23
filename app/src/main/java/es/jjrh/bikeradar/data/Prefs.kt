@@ -471,7 +471,13 @@ class Prefs(context: Context) {
      *  sweeps the radar's rear cone off every followed car, so without the
      *  hold each 90-degree turn with a follower produces a spurious all-clear
      *  plus a fresh beep when the same car is reacquired seconds later. Uses
-     *  the gyroscope only while a ride is live. Default on. */
+     *  the gyroscope only while a ride is live. Default on.
+     *
+     *  Off, the decider sees no turn at all, so it also switches off the
+     *  stricter mid-turn bar in [es.jjrh.bikeradar.BornCloseGate]: a vehicle
+     *  first seen close behind can then earn its beep on closing a turn
+     *  produced. Pinned by
+     *  `OverlayPipelineDrivingTest.theCornerSettingAlsoGovernsTheCloseBehindFilter`. */
     var turnAwareAlertsEnabled: Boolean
         get() = sp.getBoolean(KEY_TURN_AWARE_ALERTS, true)
         set(v) {

@@ -516,6 +516,45 @@ class OverlayPipelineDrivingTest {
         assertEquals(1, stops)
     }
 
+    @Test
+    fun theCornerSettingAlsoGovernsTheCloseBehindFilter() = runTest {
+        // A car first seen 8 m behind, closing at 3 m/s, while the sensor
+        // says TURNING. With the setting on, the filter for cars first seen
+        // close holds its beep, because a turn can fake that much closing.
+        // Off, the decider sees no turn and the same frames beep.
+        val on = closeBehindWhileTurning(settingOn = true)
+        assertEquals(on.toString(), 0, on.count { it.contains("event=Beep") })
+        assertTrue(on.toString(), on.any { it.startsWith("# gate suppress tid=5") && it.contains("turn=TURNING") })
+        val off = closeBehindWhileTurning(settingOn = false)
+        assertEquals(off.toString(), 1, off.count { it.contains("event=Beep") })
+        assertEquals(off.toString(), 1, off.count { it.contains("event=Beep(2)") })
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.closeBehindWhileTurning(settingOn: Boolean): List<String> {
+        prefs.turnAwareAlertsEnabled = settingOn
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(
+            clog = { clogLines += it },
+            clockMono = { mono },
+            turnState = { TurnStateDecider.State.TURNING },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 5, distanceM = 8, speedMs = -3f, bornDistanceM = 8, bornInformative = true, bornAtMs = 1_000L)
+        repeat(5) { i ->
+            mono = 1_000L + i * 100L
+            RadarStateBus.publish(
+                RadarState(source = DataSource.V2, timestamp = mono, vehicles = listOf(car), bikeSpeedMs = 5f),
+            )
+            runCurrent()
+        }
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return clogLines
+    }
+
     /** Drive one arming overtake (4 closing frames then track-drop) into
      *  [RadarStateBus] and pump the test scheduler. Mirrors the geometry of
      *  [closePassCountingWorksWithoutHomeAssistant]: lateralPos 0.25 *

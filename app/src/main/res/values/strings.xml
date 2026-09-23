@@ -439,8 +439,8 @@
     <string name="settings_radar_urgent_clearance_helper">The urgent warning stays quiet when a vehicle looks set to clear the middle of your bike by more than this. Raise it to include wider passes too.</string>
     <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
-    <string name="settings_radar_turn_title">No false all-clear in corners</string>
-    <string name="settings_radar_turn_subtitle">Cornering won\'t sound the all-clear while a car may still be behind you.</string>
+    <string name="settings_radar_turn_title">Hold the all-clear in corners</string>
+    <string name="settings_radar_turn_subtitle">Hold back the all-clear while you turn, in case a car is still behind you.</string>
     <string name="settings_radar_visual_distance_title">Visual distance</string>
     <string name="settings_radar_visual_distance_helper">Farthest vehicle drawn on the overlay. Beyond this, approaching traffic is ignored on screen.</string>
     <string name="settings_radar_overlay_dimmer_title">Overlay dimmer</string>

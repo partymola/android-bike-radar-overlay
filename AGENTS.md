@@ -919,8 +919,10 @@ The alert-audio model - close-pass tier beeps, the urgent impact cue, the
 all-clear chime, the radar drop/reconnect cues, and the inactivation states
 (audio-focus ducking + in-call suppression) - is an informal
 implementation of the IEC 60601-1-8 alarm-system pattern: distinct alarm
-*classes* (by timbre, not fine pitch), alarm parsimony, and "paused with
-new-condition override". Design inspiration only; the app is not a medical
+*classes* (by timbre, not fine pitch), alarm parsimony, and an imminent-impact
+cue that cuts through the managed beep channel and its own episode pacing when
+a new condition appears. No in-ride cue overrides a rider's pause (`AUDIO_DESIGN.md`,
+"When the audio steps back"). Design inspiration only; the app is not a medical
 device and makes no compliance claim. The authoritative description of each
 cue and its rationale lives in the `AlertBeeper.kt` / `AlertDecider.kt` KDoc,
 which is kept current with the code - this note is the conceptual frame, not

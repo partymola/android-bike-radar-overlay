@@ -161,8 +161,20 @@ in urgent sightings ends the episode so the next threat fires immediately.
 
 ## When the audio steps back
 
-Three states quiet or reshape the audio, by design:
+Four states quiet or reshape the audio, by design:
 
+- **Pause.** When the rider pauses alerts, every in-ride cue stays silent until
+  the pause expires or they resume: the beeps, the all-clear, the imminent-impact
+  cue, the radar-drop cue and the reconnect pulse. No in-ride cue overrides a
+  pause, the imminent-impact cue included. The overlay still shows traffic, but the
+  dead-radar banner is hidden too. Resuming starts the beep logic afresh, so a
+  car still behind is announced if it would be announced now, rather than held
+  silent by what was heard before the pause. If the radar dropped and came back
+  during the pause, the reconnect pulse plays when the pause ends: late, but
+  true, and it answers the drop cue the rider last heard. The tests are
+  `pausingSilencesTheAlertsAndResumingReannouncesTheCarBehind`,
+  `aPauseSilencesADropCueThatWouldOtherwiseSound` and
+  `aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds`.
 - **Media ducking.** Each cue requests transient audio focus so a podcast or
   music ducks for the cue and restores afterward. Back-to-back cues hold the duck
   across the burst rather than ducking and un-ducking between pulses.
@@ -207,11 +219,12 @@ vehicle is on is carried by the overlay, not by the audio.
 
 ## The alarm-system frame, and the non-claim
 
-The model above - distinct alarm *classes* by timbre rather than fine pitch,
-alarm parsimony, and an override that cuts through a paused or managed channel
-when a new condition appears - is an informal implementation of the IEC 60601-1-8
-medical-alarm pattern. It is design inspiration only; the app is not a medical
-device and makes no compliance claim.
+The model above has three parts: distinct alarm *classes* by timbre rather than
+fine pitch, alarm parsimony, and an imminent-impact cue that cuts through the
+managed beep channel and its own episode pacing when a new condition appears.
+It is an informal implementation of the IEC 60601-1-8 medical-alarm pattern.
+It is design inspiration only; the app is not a medical device and makes no
+compliance claim.
 
 ## How this relates to the code and tests
 

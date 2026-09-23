@@ -446,6 +446,72 @@ class OverlayPipelineDrivingTest {
         job.join()
     }
 
+    @Test
+    fun pausingSilencesTheAlertsAndResumingReannouncesTheCarBehind() = runTest {
+        // While paused the decider is not consulted at all, and its state is
+        // cleared, so resuming describes the road as it is rather than staying
+        // latched on what was heard before.
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        fun frame(t: Long, vehicles: List<Vehicle>, bikeSpeedMs: Float) {
+            mono = t
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = vehicles, bikeSpeedMs = bikeSpeedMs))
+            runCurrent()
+        }
+        fun alerts() = clogLines.count { it.startsWith("# alert") }
+        fun beeps() = clogLines.count { it.contains("event=Beep") }
+        try {
+            frame(1_000L, listOf(car), 5f)
+            frame(1_100L, listOf(car), 5f)
+            assertEquals("the car is announced: $clogLines", 1, beeps())
+
+            // Stopped, with a fast closer arriving: unpaused this is the
+            // imminent-impact cue within a few frames.
+            prefs.pausedUntilEpochMs = Long.MAX_VALUE
+            val before = alerts()
+            (2..20).forEach { frame(1_000L + it * 100L, listOf(car, fastFar), 0f) }
+            assertEquals("nothing is said while paused: $clogLines", before, alerts())
+
+            prefs.pausedUntilEpochMs = 0L
+            frame(3_100L, listOf(car), 5f)
+            frame(3_200L, listOf(car), 5f)
+            assertEquals("resuming announces the car still there: $clogLines", 2, beeps())
+        } finally {
+            prefs.pausedUntilEpochMs = 0L
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun theFramesAPauseSilencesSoundTheUrgentCueUnpaused() = runTest {
+        // The positive control for the pause test above: without it, "nothing
+        // is said while paused" would also pass on frames that say nothing.
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        fun frame(t: Long, vehicles: List<Vehicle>, bikeSpeedMs: Float) {
+            mono = t
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = vehicles, bikeSpeedMs = bikeSpeedMs))
+            runCurrent()
+        }
+        frame(1_000L, listOf(car), 5f)
+        frame(1_100L, listOf(car), 5f)
+        (2..20).forEach { frame(1_000L + it * 100L, listOf(car, fastFar), 0f) }
+        assertTrue(clogLines.toString(), clogLines.any { it.contains("event=UrgentApproach") })
+        job.cancel()
+        job.join()
+    }
+
     // ── turn-aware flag gating (glue) ────────────────────────────────────
     //
     // The KDoc on OverlayPipeline.turnState promises a mid-ride toggle-off

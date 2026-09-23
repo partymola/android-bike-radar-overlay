@@ -604,6 +604,11 @@ internal class RadarLinkCoordinator(
             radarOnlyPersistent = prefs.reconnectBannerPersistent,
         )
         setReconnectBanner(visual)
+        // A radar that came back during a pause keeps its latch, so the "back"
+        // pulse sounds when the pause ends: late, but still true, and it answers
+        // the drop the rider last heard. Deliberate, pinned by
+        // `aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds`; do not clear
+        // the latch here.
         if (prefs.isPaused) return
         val ridingFresh = eBikeRidingFresh(nowMs)
         // The Experimental toggle is read per tick rather than at the drop, so

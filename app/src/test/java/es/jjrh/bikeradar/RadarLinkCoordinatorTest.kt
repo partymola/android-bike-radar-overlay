@@ -478,7 +478,6 @@ class RadarLinkCoordinatorTest {
         bannerStates.clear()
         coordinator.evaluateRadarDrop(4_000L + 11_000L) // down 11 s > 10 s visual
         assertEquals(listOf(live), bannerStates) // hidden, even though paused
-        assertEquals(0, clogged("radar_drop_cue")) // audio path skipped when paused
     }
 
     @Test
@@ -758,6 +757,46 @@ class RadarLinkCoordinatorTest {
         disconnectAt(4_000L) // activity age at drop = 1 s < 30 s -> fresh
         coordinator.evaluateRadarDrop(4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
         assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds() {
+        // A drop cues, the rider pauses, the radar returns during the pause.
+        // The last thing the rider heard was "radar dropped", so "radar back"
+        // plays when the pause ends. Late, but true: a delayed cue is preferred
+        // to a false one, and silence here would leave the drop unanswered.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val cueAt = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        coordinator.evaluateRadarDrop(cueAt)
+        assertEquals(1, clogged("radar_drop_cue"))
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        connectAt(cueAt + 10_000L)
+        coordinator.evaluateRadarDrop(cueAt + 12_000L)
+        assertEquals("silent while paused", 0, clogged("radar_reconnect_cue"))
+        prefs.pausedUntilEpochMs = 0L
+        coordinator.evaluateRadarDrop(cueAt + 600_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aPauseSilencesADropCueThatWouldOtherwiseSound() {
+        // The drive of radarDropCueFiresForRadarOnlyRiderWhenMovingJustBeforeDrop,
+        // which cues.
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals("paused", 0, clogged("radar_drop_cue"))
+        prefs.pausedUntilEpochMs = 0L
+        coordinator.evaluateRadarDrop(t + 1_000L)
+        assertEquals("the same drop cues once the pause ends", 1, clogged("radar_drop_cue"))
     }
 
     @Test

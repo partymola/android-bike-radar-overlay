@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.6.3 - 2026-09-24
+
+### Fix
+
+- **With an eBike, the app stops trusting its data once Bosch Flow stops sending it.** The app takes your speed and whether you are climbing from Flow. When Flow went quiet mid-ride, the app kept using the last values it had for as long as the silence lasted: a bike that had been stopped still counted as stopped, which kept the approach beeps quiet, a bike that had been moving still counted as moving, which kept the urgent cue shut, and a climb stayed a climb. Those values now lapse 3 s after Flow's last update, and the app goes back to the speed the radar reports, as it does for a rider with no eBike. If your radar does not report your speed, that leaves no speed at all while Flow is quiet, so the urgent cue cannot sound until Flow resumes. Flow normally updates several times a second; in 5 of the developer's 80 ride logs with eBike data it went quiet for more than 3 s, once for over 42 s. Replaying 211 recorded ride logs gave each one the same count of every alert as before.
+- **A second radar drop during a pause gets its own alert.** If the radar dropped and you were alerted, then it came back and dropped again while alerts were paused, the second drop inherited the first one's alert count and timing, and could stay silent or sound late once the pause ended. It now gets its own alerts. The same applies when the radar comes back too briefly for the app to notice.
+- **A hidden overlay comes back during a call.** The app's alert sounds are off during a phone or internet call, so if another app you allowed had hidden the overlay, nothing from this app showed you the traffic behind you. The overlay now shows during a call whatever that app asked for, and hides again when the call ends. The consent screen and the Privacy screen now say so.
+- **The alert volume applies as soon as you let go of the slider.** It used to reach the beeps only when the app started or the radar connected, so a change mid-ride waited for the next reconnect. A beep or volume change arriving just as the app stops can no longer crash it.
+- **An alert or overlay setting changed just as the app was starting could be ignored.** The older value could stay in force until you changed a setting again or restarted the app. The newer value now applies.
+
+### Diagnostics
+
+- **The capture log records a call while another app has the overlay hidden.** The overlay coming back for the call and going away after it both leave a line, and the Privacy screen says so.
+- **An overlay that cannot be shown is logged once, not on every frame.** The capture log gets one line each time the reason changes, so a missing permission no longer fills it.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the Home Assistant topics, entity names or the values they report, or to which radars work. The cross-app contract version is unchanged. During a call, an app's request to hide the overlay is set aside and the app is not told; it applies again when the call ends. The contract's documentation now says so.
+
+### Internal
+
+- Tests now pin what a pause does: no alert sounds while paused, not even the urgent cue; resuming announces a car still behind you; a drop still under way when the pause ends is announced then; and a radar that comes back during a pause, after its drop was announced, gets its "back" pulse when the pause ends. `AUDIO_DESIGN.md` now describes the pause.
+
 ## v1.6.2 - 2026-09-23
 
 ### Security

@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.6.1 - 2026-09-23
+
+### Fix
+
+- **The app no longer thinks you are still cornering long after the corner.** It reads turns from the phone's motion sensor, and a phone on the handlebar feels every steering correction. The app counted a turn as lasting until the handlebar went still, which on the road it rarely does, so after a real corner it could stay convinced you were turning for half a minute, and once for almost three minutes. While it thinks you are turning it holds back the "road clear" chime, because a corner swings the radar off the car behind you, and it is stricter about a vehicle first seen close behind, because a turn can make a nearby vehicle look as if it is closing. Both stayed on along straight road. It now judges a turn by how far you have actually rotated one way over the last few seconds, which steering wobble cancels out, so the turn usually ends soon after the corner does. Comparing what the old version logged on twelve of the developer's commutes with the new one replayed over the same rides, the share of riding time spent "turning" fell from 26% to 11% and the longest "turn" from 173 s to 17 s, while 190 of 209 corners confirmed by GPS were still recognised, against 193 before.
+- **A vehicle closing in behind you on the straight after a corner is no longer kept silent by the corner you just left.** On one of those rides a car was behind the rider on the straight after the first corner with no beep, because the app still thought they were turning, and it overtook in the next corner with no beep at all. In the replay it now beeps on that straight. The "road clear" chime is also no longer held back for minutes after a corner: on another ride it sounded two and a half minutes after the last vehicle had gone.
+- **What the change costs.** A slow, sweeping bend can stop counting as a turn while you are still in it, so "road clear" can sound before that bend ends. And on those rides one vehicle that crept up to about 5 m at walking pace during a corner, then dropped back, was announced before and is not now. In the replay, a "road clear" followed within 3 s by a beep (a false all-clear) happened as often as before, but two of those are new, on straight road, where the old version was still holding the chime back.
+
+### UX
+
+- **The corner setting under Alerts has a clearer name.** It now reads "Hold the all-clear in corners" (was "No false all-clear in corners"), and its description says it holds the chime back while you turn.
+- **One more Spanish string no longer tells you that you roll.** The warning before you share a capture log still said "rodar" (to roll) for riding; it now says "montar en bici".
+
+### Diagnostics
+
+- **Capture-log turn lines carry different angles.** A `# turn state=TURNING` line now records `win_deg=`, the rotation that started the turn, and a `HOLD` line `turn_deg=`, the turn's total. They replace `cum_deg=` and `total_deg=`, which added up every steering correction since the handlebar rotation last went quiet, so a 1.6.1 capture reads differently from earlier ones at those lines. The `# turn yaw` lines are unchanged.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to the Home Assistant topics, entity names or the values they report, and no change to which radars work.
+
+### Internal
+
+- Source comments on the filter for vehicles first seen close behind now say what a turn can make look like closing speed, and that the bar for admitting one mid-turn is a margin over it rather than a bound.
+
 ## v1.6.0 - 2026-09-21
 
 ### Features

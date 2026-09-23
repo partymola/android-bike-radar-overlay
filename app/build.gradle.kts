@@ -153,8 +153,8 @@ android {
         applicationId = "es.jjrh.bikeradar"
         minSdk = 31
         targetSdk = 36
-        versionCode = 28
-        versionName = "1.6.0"
+        versionCode = 29
+        versionName = "1.6.1"
 
         // Empty by default so no HA bearer token is ever baked into a
         // release (or any non-debug) APK's DEX. The debug buildType below

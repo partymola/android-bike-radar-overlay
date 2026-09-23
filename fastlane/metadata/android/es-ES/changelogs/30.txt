@@ -1,0 +1,1 @@
+La pantalla de Privacidad ahora dice lo que la app envía a tu radar trasero desde la 1.0: la marca y el modelo de tu teléfono y un nombre fijo para la app. El ajuste de curvas en Alertas ahora dice que también retiene los pitidos en el giro por un coche detectado ya cerca, salvo que se acerque rápido. Sin cambios en los avisos, en Home Assistant ni en los radares compatibles.

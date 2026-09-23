@@ -1,0 +1,1 @@
+The Privacy screen now says what the app has sent your rear radar since 1.0: your phone's make and model, and a fixed name for the app. The corner setting under Alerts now says it also holds back beeps mid-turn for a car first seen close, unless it closes fast. No change to any alert, to Home Assistant or to which radars work.

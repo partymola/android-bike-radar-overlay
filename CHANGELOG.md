@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.6.2 - 2026-09-23
+
+### Security
+
+- **The Privacy screen says what the app tells your radar.** When the app connects to your rear radar, it sends the radar your phone's make and model and a fixed name for the app, as it has since 1.0.0. The Privacy screen now says so, in both languages, in its opening line and on the Bluetooth card. The front camera is sent none of this.
+
+### UX
+
+- **The corner setting says both things it does.** Besides holding back the all-clear while you turn, it holds back beeps mid-turn for a vehicle first seen close behind unless it is closing fast, because a turn can make a nearby vehicle look as if it is closing. Its description under Alerts now says so, and turning it off drops both. A vehicle first seen close still has to show it is closing before it beeps.
+- **The Privacy screen's note on capture logs names the corner setting and says when it applies.** It referred to "turn-aware alerts", a name no screen shows, and now says the turn trace is recorded when the setting was on as your radar connected.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to any alert, to the Home Assistant topics, entity names or the values they report, or to which radars work.
+
+### Internal
+
+- Tests now check, through the real connection sequence, that the phone's make and model reach the radar and never the front camera, and that the corner setting governs the filter for vehicles first seen close.
+
 ## v1.6.1 - 2026-09-23
 
 ### Fix

@@ -41,7 +41,7 @@ import java.util.Locale
  * each [attach] call and torn down when the returned [Job] cancels.
  *
  * Inputs that change at runtime (e.g. `cachedOverlayPrefs`, the eBike
- * snapshot) are provided as zero-arg sources so the pipeline always sees the
+ * snapshot) are read per frame so the pipeline always sees the
  * latest value without bouncing through a re-subscription.
  */
 internal class OverlayPipeline(
@@ -57,8 +57,10 @@ internal class OverlayPipeline(
     private val phoneBattery: PhoneBatterySource,
     private val rideStats: () -> RideStatsAccumulator,
     private val overlayPrefsSnapshot: () -> PrefsSnapshot,
-    private val ebikeSnapshot: () -> LiveDataSnapshot?,
-    private val climbingNow: () -> Boolean,
+    /** Read only through its age-checked [EBikeSnapshotCoordinator.snapshot]
+     *  and [EBikeSnapshotCoordinator.climbing], which age on the coordinator's
+     *  own clock. `OverlayPipelineDrivingTest.aStale*` pins the reads. */
+    private val ebike: EBikeSnapshotCoordinator,
     /** Turn-aware alerting: the rider's current turn state
      *  ([TurnSensorController]) - TURNING defers the all-clear, HOLD
      *  anchors the adaptive post-turn tail. Consulted per frame;
@@ -339,7 +341,7 @@ internal class OverlayPipeline(
         nowMonoMs: Long,
         nowWallMs: Long,
     ) {
-        val snap = ebikeSnapshot()
+        val snap = ebike.snapshot()
         val preferredBikeSpeedMs = snap?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs
         val ev = alerts.decide(
             vehicles = state.vehicles,
@@ -347,7 +349,7 @@ internal class OverlayPipeline(
             nowMs = nowMonoMs,
             bikeSpeedMs = preferredBikeSpeedMs,
             bikeNotDriving = snap?.bikeNotDriving,
-            climbing = climbingNow(),
+            climbing = ebike.climbing(),
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
             turnState = if (overlayPrefs.turnAwareAlertsEnabled) {
                 turnState()
@@ -399,8 +401,8 @@ internal class OverlayPipeline(
         // urgent_path attributes each urgent fire to the gate that opened it
         // (low-speed moving extension vs stationary path) so post-ride
         // threshold tuning can count moving fires directly. gate_speed_mps
-        // is the speed decide() actually gated on (eBike wheel speed when
-        // bonded), which can differ from the radar's bike_speed_mps.
+        // is the speed decide() actually gated on (eBike wheel speed while
+        // Flow is streaming), which can differ from the radar's bike_speed_mps.
         // gate_clearance_m is the rider's pass margin as decide() was called
         // with it, so a cue reported as spurious can be told apart from one
         // the rider widened the margin into. The trigger_* fields are the

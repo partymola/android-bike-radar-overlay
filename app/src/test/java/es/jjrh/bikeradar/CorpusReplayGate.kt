@@ -196,8 +196,15 @@ class CorpusReplayGate {
         // wheel speed wins outright, the radar's device-status field is the
         // fallback. `ebike` lines carry no timestamp of their own, so the
         // newest one seen in file order is the snapshot in force - the same
-        // interleaving the live service saw when it wrote them.
+        // interleaving the live service saw when it wrote them. Each is timed
+        // by the next radar frame, so late by up to the gap to that frame,
+        // and both it and the climb verdict lapse after
+        // EBikeSnapshotCoordinator.ALERT_FRESH_MS as they do live. Across a
+        // radar outage that errs toward trusting the eBike line; timing by the
+        // previous frame would err the other way, reading a line written just
+        // before a reconnect as stale.
         var ebike: EbikeState? = null
+        var ebikeAtMs: Long? = null
         var ebikeLines = 0
         var turnLines = 0
         withLines(log) { lines ->
@@ -205,6 +212,7 @@ class CorpusReplayGate {
                 val line = raw.trim()
                 if (line.startsWith("ebike ")) {
                     ebike = parseEbike(line)
+                    ebikeAtMs = null
                     ebikeLines++
                     return@forEach
                 }
@@ -223,15 +231,18 @@ class CorpusReplayGate {
                 val lineTs = parts[0].toLongOrNull() ?: return@forEach
                 val bytes = hexToBytes(parts[2]) ?: return@forEach
                 ts = lineTs
+                if (ebike != null && ebikeAtMs == null) ebikeAtMs = lineTs
                 val state = decoder.feed(bytes) ?: return@forEach
+                val ebikeFresh = ebikeAtMs?.let { lineTs - it <= EBikeSnapshotCoordinator.ALERT_FRESH_MS } == true
+                val live = ebike.takeIf { ebikeFresh }
                 when (
                     val ev = alerts.decide(
                         vehicles = state.vehicles,
                         alertMaxM = alertMax,
                         nowMs = lineTs,
-                        bikeSpeedMs = ebike?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs,
-                        bikeNotDriving = ebike?.notDriving,
-                        climbing = climbing,
+                        bikeSpeedMs = live?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs,
+                        bikeNotDriving = live?.notDriving,
+                        climbing = climbing && ebikeFresh,
                         turnState = turnState,
                     )
                 ) {

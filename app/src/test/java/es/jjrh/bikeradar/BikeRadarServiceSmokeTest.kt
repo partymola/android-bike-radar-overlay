@@ -13,6 +13,7 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -143,6 +144,45 @@ class BikeRadarServiceSmokeTest {
         controller.create()
         assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
         controller.destroy()
+    }
+
+    @Test
+    fun theEBikeSnapshotIsStampedOnTheClockTheRadarLinkReadsItBy() {
+        // The alert path ages the snapshot on the coordinator's own clock, but
+        // RadarLinkCoordinator compares snapshotAtMs() against its own
+        // elapsedRealtime for walk-away arming and the drop cue. Stamped on any
+        // other clock, an unlocked reading would have its age misread there.
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val coord = controller.get().ebikeSnapshotCoordinator
+        // Deep sleep moves elapsedRealtime and not uptimeMillis, which is what
+        // tells the two apart; a plain advance moves both.
+        ShadowSystemClock.simulateDeepSleep(Duration.ofSeconds(10))
+        val at = android.os.SystemClock.elapsedRealtime()
+        coord.onSnapshot(LiveDataSnapshot(bikeNotDriving = true))
+        assertEquals(at, coord.snapshotAtMs())
+        controller.destroy()
+    }
+
+    @Test
+    fun walkAwayArmingStillSeesAnEBikeSnapshotTooOldForTheAlertPath() {
+        // The radar-link coordinator applies its own 30 s window, so it must
+        // get the snapshot however old. Handed the alert path's 3 s one
+        // instead, a bike unlocked 10 s ago would read as absent and the
+        // walk-away alarm would arm on a rider still at the bike.
+        fun armedAfter(ageSec: Long): Boolean {
+            val controller = Robolectric.buildService(BikeRadarService::class.java)
+            controller.create()
+            val service = controller.get()
+            service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = false))
+            ShadowSystemClock.simulateDeepSleep(Duration.ofSeconds(ageSec))
+            service.radarLinkCoordinator.markDisconnected()
+            val armed = service.radarLinkCoordinator.radarLinkState.value.walkAwayArmed
+            controller.destroy()
+            return armed
+        }
+        assertFalse("a 10 s old unlocked reading must still hold arming off", armedAfter(10))
+        assertTrue("a 40 s old one is past the arming window, so it arms", armedAfter(40))
     }
 
     @Test

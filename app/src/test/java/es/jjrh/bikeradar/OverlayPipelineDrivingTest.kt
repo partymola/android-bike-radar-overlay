@@ -294,6 +294,7 @@ class OverlayPipelineDrivingTest {
         clockMono: (() -> Long)? = null,
         overlayPrefsSnapshot: () -> PrefsSnapshot = { prefs.snapshot() },
         ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined,
+        ebike: EBikeSnapshotCoordinator = coordinator(MonoClock(0L)),
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
         ha = ha,
@@ -304,8 +305,7 @@ class OverlayPipelineDrivingTest {
         },
         rideStats = { RideStatsAccumulator() },
         overlayPrefsSnapshot = overlayPrefsSnapshot,
-        ebikeSnapshot = { null },
-        climbingNow = { false },
+        ebike = ebike,
         turnState = turnState,
         turnSensorStart = turnSensorStart,
         turnSensorStop = turnSensorStop,
@@ -553,6 +553,141 @@ class OverlayPipelineDrivingTest {
         job.join()
         RadarStateBus.clear()
         return clogLines
+    }
+
+    // ── eBike data on the alert path (real coordinator, controlled clock) ──
+    //
+    // Each case runs the same frames twice: once with Flow still streaming,
+    // where the eBike reading must win, and once with Flow gone quiet, where
+    // the radar's own speed must. The first half is what makes the second
+    // mean anything - without it a pipeline ignoring the eBike entirely
+    // passes too.
+
+    private class MonoClock(var ms: Long)
+
+    private companion object {
+        const val WALL_BASE_MS = 1_790_000_000_000L
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.driveWithEBike(
+        clock: MonoClock,
+        coord: EBikeSnapshotCoordinator,
+        radarBikeSpeedMs: Float?,
+        frames: List<Pair<Long, List<Vehicle>>>,
+        stillStreaming: LiveDataSnapshot?,
+    ): List<String> {
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(
+            clog = { clogLines += it },
+            clockMono = { clock.ms },
+            ebike = coord,
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        for ((t, vehicles) in frames) {
+            clock.ms = t
+            stillStreaming?.let { coord.onSnapshot(it) }
+            // A frame's own timestamp is wall clock, as the decoder stamps it
+            // live; it must not be what the snapshot is aged against.
+            RadarStateBus.publish(
+                RadarState(source = DataSource.V2, timestamp = WALL_BASE_MS + t, vehicles = vehicles, bikeSpeedMs = radarBikeSpeedMs),
+            )
+            runCurrent()
+        }
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return clogLines
+    }
+
+    private fun coordinator(clock: MonoClock) = EBikeSnapshotCoordinator(
+        clock = { clock.ms },
+        clog = {},
+        publishRideEdge = { _, _ -> },
+        nowIso = { "" },
+    )
+
+    @Test
+    fun aStaleEBikeSnapshotDoesNotMuteTheBeeps() = runTest {
+        // The rider stopped with Flow streaming "not driving", then Flow went
+        // quiet and they rode off. The radar says 5 m/s. A car comes up.
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        val frames = listOf(5_000L to emptyList(), 7_500L to listOf(car), 7_600L to listOf(car))
+        val stopped = LiveDataSnapshot(bikeNotDriving = true)
+
+        val streaming = MonoClock(1_000L)
+        val live = driveWithEBike(streaming, coordinator(streaming).also { it.onSnapshot(stopped) }, 5f, frames, stillStreaming = stopped)
+        assertEquals("a live 'not driving' still mutes: $live", 0, live.count { it.contains("event=Beep") })
+
+        val quiet = MonoClock(1_000L)
+        val stale = driveWithEBike(quiet, coordinator(quiet).also { it.onSnapshot(stopped) }, 5f, frames, stillStreaming = null)
+        assertEquals("a six-second-old one must not: $stale", 1, stale.count { it.contains("event=Beep") })
+    }
+
+    @Test
+    fun aStaleEBikeOnARadarWithNoSpeedLeavesNoUrgentPath() = runTest {
+        // Deliberate, not a gap: with Flow quiet and a radar that reports no
+        // rider speed there is no speed at all, which is the radar-only rider
+        // on such a radar. Believing the stale "not driving" instead would
+        // keep the stationary urgent path open, and also mute every beep once
+        // the rider rides off, which is the defect this age check removes.
+        val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        val frames = listOf(1_000L to emptyList(), 3_500L to listOf(slowNear, fastFar), 3_600L to listOf(slowNear, fastFar))
+        val stopped = LiveDataSnapshot(speedRaw = 0, bikeNotDriving = true)
+
+        val streaming = MonoClock(0L)
+        val live = driveWithEBike(streaming, coordinator(streaming).also { it.onSnapshot(stopped) }, null, frames, stillStreaming = stopped)
+        assertEquals("a live 'not driving' arms it: $live", 1, live.count { it.contains("event=UrgentApproach") })
+
+        val quiet = MonoClock(0L)
+        val stale = driveWithEBike(quiet, coordinator(quiet).also { it.onSnapshot(stopped) }, null, frames, stillStreaming = null)
+        assertEquals("a stale one leaves no speed and no urgent path: $stale", 0, stale.count { it.contains("event=UrgentApproach") })
+    }
+
+    @Test
+    fun aStaleEBikeSpeedDoesNotBlockTheUrgentCue() = runTest {
+        // Flow last said 18 km/h, above the moving urgent path's ceiling, then
+        // went quiet. The radar says the rider is stopped and a fast car
+        // closes: the stationary urgent path must open on the radar's word.
+        val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        val frames = listOf(1_000L to emptyList(), 3_500L to listOf(slowNear, fastFar), 3_600L to listOf(slowNear, fastFar))
+        val moving = LiveDataSnapshot(speedRaw = 1800)
+
+        val streaming = MonoClock(0L)
+        val live = driveWithEBike(streaming, coordinator(streaming).also { it.onSnapshot(moving) }, 0f, frames, stillStreaming = moving)
+        assertEquals("a live 18 km/h still keeps it shut: $live", 0, live.count { it.contains("event=UrgentApproach") })
+
+        val quiet = MonoClock(0L)
+        val stale = driveWithEBike(quiet, coordinator(quiet).also { it.onSnapshot(moving) }, 0f, frames, stillStreaming = null)
+        assertEquals("a stale one must not: $stale", 1, stale.count { it.contains("event=UrgentApproach") })
+    }
+
+    @Test
+    fun aStaleClimbBitDoesNotBlockTheUrgentCue() = runTest {
+        // A climb set the bit, then Flow went quiet with the rider stopped at
+        // the top. The bit forces "not stationary", which shuts the stationary
+        // urgent path; an 8 m/s closer is under the moving path's 10 m/s floor.
+        val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+        val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+        val frames = listOf(31_000L to emptyList(), 33_500L to listOf(slowNear, fastFar), 33_600L to listOf(slowNear, fastFar))
+        val hard = LiveDataSnapshot(riderPower = 300)
+        fun climbed(clock: MonoClock) = coordinator(clock).also {
+            clock.ms = 0L
+            it.onSnapshot(hard)
+            clock.ms = 30_000L
+            it.onSnapshot(hard)
+            assertTrue("fixture must have set the climb bit", it.climbing())
+        }
+
+        val streaming = MonoClock(0L)
+        val live = driveWithEBike(streaming, climbed(streaming), 0f, frames, stillStreaming = hard)
+        assertEquals("a live climb still keeps it shut: $live", 0, live.count { it.contains("event=UrgentApproach") })
+
+        val quiet = MonoClock(0L)
+        val stale = driveWithEBike(quiet, climbed(quiet), 0f, frames, stillStreaming = null)
+        assertEquals("a stale climb must not: $stale", 1, stale.count { it.contains("event=UrgentApproach") })
     }
 
     /** Drive one arming overtake (4 closing frames then track-drop) into

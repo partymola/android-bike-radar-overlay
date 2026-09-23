@@ -116,7 +116,7 @@ command channel and only works while Flow holds the link.
 
 The rider may have only a radar: the front camera/light and the eBike are
 optional. Every feature that consumes their state has a graceful no-accessory
-path (fall back to a GPS-derived signal, or skip the feature), and the
+path (fall back to the radar's own speed, or skip the feature), and the
 no-camera / no-eBike paths carry their own tests. A missing eBike status service produces a
 "no eBike status on this bike" path, never a crash.
 

@@ -52,10 +52,21 @@ internal class EBikeSnapshotCoordinator(
     // momentarily-null snapshot doesn't reclassify an eBike rider as radar-only.
     @Volatile private var everSeen: Boolean = false
 
-    /** Last-known snapshot, or null until the first frame (no eBike / flag off /
-     *  permission missing). Consumed by [WalkAwayArmingGate] and the AlertDecider
-     *  stationary override. */
-    fun snapshot(): LiveDataSnapshot? = lastSnapshot
+    /** The snapshot for the alert path: null unless one arrived within
+     *  [ALERT_FRESH_MS]. Aged on [clock], the clock that stamped it, so no
+     *  caller can age it on another. Null hands the decider back to the radar's
+     *  own speed, the radar-only rider's path. On a radar that reports no rider
+     *  speed that leaves no speed at all, and so no urgent path until Flow
+     *  resumes; that is deliberate and pinned by
+     *  `OverlayPipelineDrivingTest.aStaleEBikeOnARadarWithNoSpeedLeavesNoUrgentPath`.
+     *  The rest is pinned by `EBikeSnapshotCoordinatorTest` and
+     *  `OverlayPipelineDrivingTest.aStale*`. */
+    fun snapshot(): LiveDataSnapshot? = lastSnapshot?.takeIf { isFresh() }
+
+    /** The last snapshot however old, for callers that apply their own age
+     *  gate against [snapshotAtMs] ([WalkAwayArmingGate], the radar-drop cue)
+     *  or only display it. Never feed this to the alert path. */
+    fun lastSnapshotAnyAge(): LiveDataSnapshot? = lastSnapshot
 
     /** True once any eBike snapshot has arrived this session (sticky) - i.e. this
      *  is an eBike rider, not a radar-only one. Used to pick the dead-radar
@@ -69,8 +80,12 @@ internal class EBikeSnapshotCoordinator(
     fun snapshotAtMs(): Long = lastSnapshotMs
 
     /** True while sustained rider power has the climb bit set (keeps alerts
-     *  firing on a slow climb the stationary-suppress gate would otherwise mute). */
-    fun climbing(): Boolean = climbingFlag
+     *  firing on a slow climb the stationary-suppress gate would otherwise mute).
+     *  False once the snapshots stop, for the same reason as [snapshot]: the
+     *  bit is only cleared by a later low-power frame, which never comes. */
+    fun climbing(): Boolean = climbingFlag && isFresh()
+
+    private fun isFresh(): Boolean = clock() - lastSnapshotMs <= ALERT_FRESH_MS
 
     /** Whether the bike has recently been ridden - a sustained above-walking-pace
      *  spell within the freshness window (see [RidingSpeedGate]). The radar-drop
@@ -125,5 +140,17 @@ internal class EBikeSnapshotCoordinator(
             climbingFlag = isClimbing
             clog("# ebike climbing=$isClimbing rider_power=${snap.riderPower}")
         }
+    }
+
+    companion object {
+        /** Measured over the ride captures, timing each `ebike` line by the
+         *  radar frames around it: snapshots arrive several times a second
+         *  while Flow streams, and 75 of the 80 captures with eBike data never
+         *  gap over 1.5 s. The other five went quiet for over 3 s, three of
+         *  them for over 20 s, which is what this acts on. `CorpusReplayGate`
+         *  ages the replayed snapshots by this value.
+         *  The UI's status freshness, [EBIKE_DATA_FRESH_MS], is longer on
+         *  purpose: a status row can wait, the alert path cannot. */
+        const val ALERT_FRESH_MS = 3_000L
     }
 }

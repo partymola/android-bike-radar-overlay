@@ -591,7 +591,8 @@ class AlertDecider(
         // wins outright; the wheel sensor is sub-second and faster than
         // the radar's own bike-speed field. Radar-reported `bikeSpeedMs`
         // (from the V2 device-status frame) is the fallback when eBike
-        // is absent (no eBike, flag off, or pre-bond). Both null = no
+        // is absent (no eBike, flag off, pre-bond, or Flow quiet past
+        // EBikeSnapshotCoordinator.ALERT_FRESH_MS). Both null = no
         // signal, treated as "not below" so the dwell never triggers.
         //
         // Climb override: when the rider is grinding up a hill
@@ -600,7 +601,7 @@ class AlertDecider(
         // climb up Fitzjohns Avenue is not a traffic-light stop; the
         // rider is exposed to overtaking traffic and must still get
         // alerts. The override is non-stateful here; the climb-state
-        // accumulator lives in the caller (BikeRadarService).
+        // accumulator lives in EBikeSnapshotCoordinator.
         val isBelowThreshold = when {
             climbing -> false
             bikeNotDriving != null -> bikeNotDriving
@@ -1424,8 +1425,9 @@ class AlertDecider(
      *
      * When eBike is bonded the caller supplies [bikeSpeedMs] from the
      * bike's wheel-speed sensor (sub-second ground truth). When eBike is
-     * absent the caller supplies the radar's bike-speed field (from the
-     * V2 device-status frame); the decider doesn't care about the
+     * absent, or its data has gone stale, the caller supplies the radar's
+     * bike-speed field (from the V2 device-status frame); the decider
+     * doesn't care about the
      * source, only the magnitude.
      */
     internal fun effectiveMinBeepGapMs(bikeSpeedMs: Float?): Long {

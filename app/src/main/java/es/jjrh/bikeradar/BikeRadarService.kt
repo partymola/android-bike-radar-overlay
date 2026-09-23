@@ -144,9 +144,11 @@ class BikeRadarService : Service() {
     // The snapshot cache + everything derived from it (odometer baseline,
     // ride-edge + climb detection) live in [EBikeSnapshotCoordinator], fed by
     // the status reader's callback. The service keeps only the reader lifecycle
-    // (below). snapshot()==null when the feature is off / no bonded eBike - the
-    // graceful-degradation path radar-only riders take.
-    private lateinit var ebikeSnapshotCoordinator: EBikeSnapshotCoordinator
+    // (below). snapshot()==null when the feature is off, no eBike is bonded
+    // or Flow has stopped streaming - the graceful-degradation path radar-only
+    // riders take.
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var ebikeSnapshotCoordinator: EBikeSnapshotCoordinator
 
     // Sticky: true once the radar has decoded >=1 vehicle this session. Gates the
     // dead-radar banner - no traffic ever seen means a bench test, not a ride.
@@ -395,6 +397,15 @@ class BikeRadarService : Service() {
             sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager,
             clog = ::clog,
         )
+        // Before the pipeline, which holds it. Its ride-edge publisher reaches
+        // haPublisher lazily; the reader that feeds it starts at the end of
+        // onCreate, after haPublisher exists.
+        ebikeSnapshotCoordinator = EBikeSnapshotCoordinator(
+            clock = { SystemClock.elapsedRealtime() },
+            clog = ::clog,
+            publishRideEdge = { edge, iso -> haPublisher.publishRideEdgeIfHa(edge, iso) },
+            nowIso = { java.time.Instant.now().toString() },
+        )
         overlayPipeline = OverlayPipeline(
             prefs = prefs,
             ha = { ha },
@@ -403,8 +414,7 @@ class BikeRadarService : Service() {
             phoneBattery = AndroidPhoneBatterySource(this),
             rideStats = { rideStats },
             overlayPrefsSnapshot = { cachedOverlayPrefs ?: prefs.snapshot() },
-            ebikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
-            climbingNow = { ebikeSnapshotCoordinator.climbing() },
+            ebike = ebikeSnapshotCoordinator,
             turnState = { turnSensor.state() },
             turnSensorStart = { turnSensor.start() },
             turnSensorStop = { turnSensor.stop() },
@@ -421,12 +431,6 @@ class BikeRadarService : Service() {
             macToSlug = { macToSlug },
             loadKnownDevices = { knownDevices.load() },
             slug = { name -> slug(name) },
-        )
-        ebikeSnapshotCoordinator = EBikeSnapshotCoordinator(
-            clock = { SystemClock.elapsedRealtime() },
-            clog = ::clog,
-            publishRideEdge = { edge, iso -> haPublisher.publishRideEdgeIfHa(edge, iso) },
-            nowIso = { java.time.Instant.now().toString() },
         )
         walkAwayAlarm = WalkAwayAlarm(
             this,
@@ -448,7 +452,7 @@ class BikeRadarService : Service() {
             journal = linkJournal::log,
             setReconnectBanner = ::setReconnectBanner,
             resolveDashcamSlug = ::resolveDashcamSlug,
-            eBikeSnapshot = { ebikeSnapshotCoordinator.snapshot() },
+            eBikeSnapshot = { ebikeSnapshotCoordinator.lastSnapshotAnyAge() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
             eBikeRidingFresh = { nowMs -> ebikeSnapshotCoordinator.ridingFresh(nowMs) },
             hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
@@ -1134,7 +1138,7 @@ class BikeRadarService : Service() {
                 dashcamConfigured = prefs.activeDashcamMac != null,
                 dashcamBatteryPct = dashcamSlug?.let { batteries[it]?.pct },
                 ebikeSeen = ebikeSnapshotCoordinator.hasEverSeenSnapshot(),
-                ebikeSoc = ebikeSnapshotCoordinator.snapshot()?.batterySoc,
+                ebikeSoc = ebikeSnapshotCoordinator.lastSnapshotAnyAge()?.batterySoc,
                 audioFailureCount = cueFailedThisRide,
                 uncleanRestart = startedFromDirtyRestart,
             ),

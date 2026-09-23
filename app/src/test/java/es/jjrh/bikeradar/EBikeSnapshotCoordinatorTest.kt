@@ -37,20 +37,68 @@ class EBikeSnapshotCoordinatorTest {
 
     private fun clogged(token: String) = clogLines.count { it.contains(token) }
 
+    private fun snapshotAt(atMs: Long): LiveDataSnapshot? {
+        now = atMs
+        return coord.snapshot()
+    }
+
+    private fun climbingAt(atMs: Long): Boolean {
+        now = atMs
+        return coord.climbing()
+    }
+
     @Test
     fun cachesSnapshotAndTimestamp() {
         val snap = LiveDataSnapshot(batterySoc = 80)
         feed(snap, atMs = 5_000L)
         assertSame(snap, coord.snapshot())
+        assertSame(snap, coord.lastSnapshotAnyAge())
         assertEquals(5_000L, coord.snapshotAtMs())
     }
 
     @Test
     fun startsWithNullSnapshot() {
-        assertNull(coord.snapshot())
+        assertNull(snapshotAt(0L))
+        assertNull(coord.lastSnapshotAnyAge())
         assertEquals(0L, coord.snapshotAtMs())
-        assertFalse(coord.climbing())
+        assertFalse(climbingAt(0L))
         assertFalse(coord.hasEverSeenSnapshot())
+    }
+
+    // ── staleness on the alert path ──────────────────────────────────────────
+
+    @Test
+    fun theAlertSnapshotHoldsForThreeSecondsAndNoLonger() {
+        val snap = LiveDataSnapshot(bikeNotDriving = true)
+        feed(snap, atMs = 10_000L)
+        assertSame(snap, snapshotAt(13_000L))
+        assertNull("Flow stopped streaming: the alert path must not see it", snapshotAt(13_001L))
+    }
+
+    @Test
+    fun aStaleSnapshotIsStillThereForCallersThatGateTheirOwnAge() {
+        val snap = LiveDataSnapshot(systemLocked = false)
+        feed(snap, atMs = 10_000L)
+        assertNull(snapshotAt(40_000L))
+        assertSame(snap, coord.lastSnapshotAnyAge())
+        assertEquals(10_000L, coord.snapshotAtMs())
+    }
+
+    @Test
+    fun aFreshFrameRevivesTheAlertSnapshot() {
+        feed(LiveDataSnapshot(speedRaw = 0), atMs = 10_000L)
+        assertNull(snapshotAt(20_000L))
+        val next = LiveDataSnapshot(speedRaw = 1800)
+        feed(next, atMs = 20_000L)
+        assertSame(next, coord.snapshot())
+    }
+
+    @Test
+    fun theClimbBitLapsesWhenTheSnapshotsStop() {
+        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
+        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L)
+        assertTrue(climbingAt(33_000L))
+        assertFalse("no low-power frame will ever arrive to clear it", climbingAt(33_001L))
     }
 
     @Test

@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowBuild
 import java.util.UUID
 
 /**
@@ -52,11 +53,15 @@ class EnablingSequenceHarnessTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
-    /** Builds a GATT whose callback forwards every completion into [queue]. */
+    /** Builds a GATT whose callback forwards every completion into [queue],
+     *  and records each characteristic write as hex into [written] if given. */
     @Suppress("DEPRECATION") // 3-arg connectGatt: Robolectric harness setup
-    private fun forwardingGatt(queue: BleOpQueue): BluetoothGatt {
+    private fun forwardingGatt(queue: BleOpQueue, written: MutableList<String>? = null): BluetoothGatt {
         val cb = object : BluetoothGattCallback() {
-            override fun onCharacteristicWrite(g: BluetoothGatt?, c: BluetoothGattCharacteristic, s: Int) = queue.onCharacteristicWrite(c, s)
+            override fun onCharacteristicWrite(g: BluetoothGatt?, c: BluetoothGattCharacteristic, s: Int) {
+                if (written != null && g != null) shadowOf(g).latestWrittenBytes?.let { written += it.toHex() }
+                queue.onCharacteristicWrite(c, s)
+            }
             override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, v: ByteArray, s: Int) = queue.onCharacteristicRead(c, v, s)
             override fun onDescriptorWrite(g: BluetoothGatt?, d: BluetoothGattDescriptor, s: Int) = queue.onDescriptorWrite(d, s)
             override fun onMtuChanged(g: BluetoothGatt?, m: Int, s: Int) = queue.onMtuChanged(m, s)
@@ -486,6 +491,59 @@ class EnablingSequenceHarnessTest {
 
         assertNull("front camera handshake should report success; log=$log", abort)
         assertTrue("front camera handshake complete must be logged", log.any { it.contains("front camera handshake complete") })
+        queue.cancel()
+    }
+
+    // ── What the phone tells each device (the Privacy screen's Bluetooth card) ──
+
+    @Test fun theRadarIsSentThePhonesMakeAndModel() = runTest {
+        ShadowBuild.setManufacturer("Acme")
+        ShadowBuild.setModel("Rocket 7")
+        val written = mutableListOf<String>()
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue, written)
+        setUpRadarServices(gatt)
+        startDriver(queue, gatt, radar = true)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("000600"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("0001000000000000000004000040"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("0001000000000000000016000000"))
+        notifies.trySend(Uuids.HANDSHAKE_RX to frame("80000102030405060708090a0b0c0d0e0f1011121314"))
+        backgroundScope.launch { queue.run() }
+
+        val abort = withTimeout(60_000) { EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.RADAR) {} }
+
+        assertNull(abort)
+        // Lead byte from the device-ID frame, the fixed capability bytes, then
+        // "bikeradar overlay", "Acme" and "Rocket 7", length-prefixed, and the trailer.
+        val capability = "804000023f058813a013029608ffffffffffff9b2fffff" +
+            "1162696b657261646172206f7665726c6179" + "0441636d65" + "08526f636b65742037" + "01148400"
+        assertTrue(written.toString(), capability in written)
+        queue.cancel()
+    }
+
+    @Test fun theFrontCameraIsNeverSentThePhonesMakeOrModel() = runTest {
+        ShadowBuild.setManufacturer("Acme")
+        ShadowBuild.setModel("Rocket 7")
+        val written = mutableListOf<String>()
+        val queue = BleOpQueue()
+        val gatt = forwardingGatt(queue, written)
+        setUpFrontCameraServices(gatt)
+        startDriver(queue, gatt, radar = false)
+        val notifies = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
+        notifies.trySend(Uuids.CHAR_2810 to frame("000600"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0001000000000000000004000040"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561800"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561882"))
+        notifies.trySend(Uuids.CHAR_2810 to frame("0000000000000000414d561800"))
+        backgroundScope.launch { queue.run() }
+
+        val abort = withTimeout(60_000) { EnablingSequence.runHandshake(gatt, queue, notifies, DeviceVariant.FRONT_CAMERA) {} }
+
+        assertNull(abort)
+        assertTrue("the harness saw no writes at all", written.isNotEmpty())
+        // "Acme", "Rocket" and "bikeradar": none of the three device-ID fields.
+        assertTrue(written.toString(), written.none { "41636d65" in it || "526f636b6574" in it || "62696b657261646172" in it })
         queue.cancel()
     }
 }

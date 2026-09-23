@@ -169,12 +169,18 @@ Four states quiet or reshape the audio, by design:
   pause, the imminent-impact cue included. The overlay still shows traffic, but the
   dead-radar banner is hidden too. Resuming starts the beep logic afresh, so a
   car still behind is announced if it would be announced now, rather than held
-  silent by what was heard before the pause. If the radar dropped and came back
-  during the pause, the reconnect pulse plays when the pause ends: late, but
-  true, and it answers the drop cue the rider last heard. The tests are
-  `pausingSilencesTheAlertsAndResumingReannouncesTheCarBehind`,
-  `aPauseSilencesADropCueThatWouldOtherwiseSound` and
-  `aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds`.
+  silent by what was heard before the pause. If a drop cue sounded before the
+  pause and the radar came back during it, the reconnect pulse plays when the
+  pause ends: late, but true, and it answers the drop cue the rider last heard.
+  A drop still under way when the pause ends is announced then. A drop that
+  starts and ends inside the pause is never announced, and a second drop that
+  starts inside it gets its own cues rather than the first one's count. The
+  tests are `pausingSilencesTheAlertsAndResumingReannouncesTheCarBehind`,
+  `theFramesAPauseSilencesSoundTheUrgentCueUnpaused`,
+  `aPauseSilencesADropCueThatWouldOtherwiseSound`,
+  `aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds`,
+  `aDropThatStartsAndEndsInsideAPauseIsNeverAnnounced` and
+  `aSecondDropInsideThePauseStartsItsOwnCues`.
 - **Media ducking.** Each cue requests transient audio focus so a podcast or
   music ducks for the cue and restores afterward. Back-to-back cues hold the duck
   across the burst rather than ducking and un-ducking between pulses.

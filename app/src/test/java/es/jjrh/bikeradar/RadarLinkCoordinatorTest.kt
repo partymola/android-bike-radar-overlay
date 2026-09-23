@@ -783,6 +783,124 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
+    fun aSecondDropInsideThePauseStartsItsOwnCues() {
+        // The latch held over a pause belongs to the drop that set it. Here that
+        // drop ran the latch-only cap to three, the radar came back and dropped
+        // again, all inside the pause. The second drop must cue on its own count,
+        // and must not get a "back" pulse, since the radar is down again.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(3) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("the first drop ran the cap", 3, clogged("radar_drop_cue"))
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        connectAt(t)
+        coordinator.evaluateRadarDrop(t + 2_000L)
+        lastRidingMs = t + 20_000L
+        disconnectAt(t + 30_000L)
+        coordinator.evaluateRadarDrop(t + 32_000L)
+        prefs.pausedUntilEpochMs = 0L
+        coordinator.evaluateRadarDrop(t + 30_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals("the second drop cues", 4, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aSecondDropAfterAShortPauseCuesAtItsOwnThreshold() {
+        // The cadence half of the same reset. The first drop cued once at
+        // 65 s; carried over, its cue time would hold the second drop's first
+        // cue until 245 s instead of 136 s. The "back" pulse then answers the
+        // second drop, which is the one the rider last heard.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(65_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        connectAt(70_000L)
+        coordinator.evaluateRadarDrop(72_000L)
+        lastRidingMs = 74_000L
+        disconnectAt(75_000L)
+        prefs.pausedUntilEpochMs = 0L
+        coordinator.evaluateRadarDrop(136_000L)
+        assertEquals("the second drop cues at its own threshold", 2, clogged("radar_drop_cue"))
+        connectAt(140_000L)
+        coordinator.evaluateRadarDrop(142_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aDropAfterAReturnNoTickSawStartsItsOwnCues() {
+        // No pause: the radar returns and drops again inside one 2 s tick, so
+        // no tick sees it up. The capped first drop must not silence the second.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        var t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        repeat(3) {
+            coordinator.evaluateRadarDrop(t)
+            t += RadarLinkCoordinator.RADAR_DROP_CUE_INTERVAL_MS
+        }
+        assertEquals("the first drop ran the cap", 3, clogged("radar_drop_cue"))
+        connectAt(t)
+        lastRidingMs = t + 500L
+        disconnectAt(t + 1_000L)
+        coordinator.evaluateRadarDrop(t + 1_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L)
+        assertEquals("the second drop cues", 4, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aDropThatStartsAndEndsInsideAPauseIsNeverAnnounced() {
+        // The same drop cues unpaused (radarDropCueFiresForRadarOnlyRiderWhenMovingJustBeforeDrop).
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(65_000L)
+        connectAt(70_000L)
+        coordinator.evaluateRadarDrop(72_000L)
+        prefs.pausedUntilEpochMs = 0L
+        coordinator.evaluateRadarDrop(74_000L)
+        assertEquals(0, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aSecondDropInsideThePauseLogsItsOwnSuppression() {
+        // The near-miss line is once per drop, and the second drop is a
+        // different one even though no tick saw the radar up between them.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = true)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val t = 4_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        ebikeAtMs = t - 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_suppressed"))
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        connectAt(t + 1_000L)
+        coordinator.evaluateRadarDrop(t + 2_000L)
+        disconnectAt(t + 3_000L)
+        prefs.pausedUntilEpochMs = 0L
+        val t2 = t + 3_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        ebikeAtMs = t2 - 1_000L
+        coordinator.evaluateRadarDrop(t2)
+        assertEquals(2, clogged("radar_drop_suppressed"))
+    }
+
+    @Test
     fun aPauseSilencesADropCueThatWouldOtherwiseSound() {
         // The drive of radarDropCueFiresForRadarOnlyRiderWhenMovingJustBeforeDrop,
         // which cues.

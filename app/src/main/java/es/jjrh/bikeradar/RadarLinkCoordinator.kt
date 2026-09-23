@@ -105,6 +105,13 @@ internal class RadarLinkCoordinator(
     // the cue forever. Reset with the lastCue latch on radar return.
     @Volatile private var radarDropCueCount = 0
 
+    // The off-instant of the drop the latch above was set for. A later drop
+    // whose return no tick saw, because a pause spanned it or it was shorter
+    // than one tick, gets its own count, cadence and suppression line, and no
+    // "back" pulse (`aSecondDropInsideThePauseStartsItsOwnCues`,
+    // `aDropAfterAReturnNoTickSawStartsItsOwnCues`).
+    @Volatile private var radarDropLatchOffSinceMs: Long? = null
+
     @Volatile private var radarDropSuppressLogged = false
 
     // Radar-activity riding confirmation, LATCHED at the disconnect instant for
@@ -637,6 +644,11 @@ internal class RadarLinkCoordinator(
         // Hoisted: the journal below needs the same answer, and the two must
         // not drift.
         val latchOnly = ridingConfirmed && !liveEBikeConfirmed
+        if (link.radarOffSinceMs != null && link.radarOffSinceMs != radarDropLatchOffSinceMs) {
+            radarDropLastCueMs = null
+            radarDropCueCount = 0
+            radarDropSuppressLogged = false
+        }
         val decision = RadarDropDecider.decide(
             radarEverLive = link.sessionRadarConnectedMs > 0L,
             radarDownForMs = downForMs,
@@ -654,6 +666,7 @@ internal class RadarLinkCoordinator(
         // radarOffSinceMs and restarts below the threshold.
         radarDropLastCueMs = decision.lastCueMs
         radarDropCueCount = decision.cueCount
+        radarDropLatchOffSinceMs = link.radarOffSinceMs
         if (decision.fire) {
             alertBeeper()?.playRadarDropped()
             clog(

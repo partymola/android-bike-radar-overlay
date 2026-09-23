@@ -7,10 +7,10 @@ package es.jjrh.bikeradar
  * half of the ghost-beep filter.
  *
  * Problem: the radar sometimes births a track already inside the tier-3
- * band - a stationary roadside object swept through the beam during a
- * turn, or clutter alongside the rider - and the tier system, which maps
- * distance straight to beep count, opens the episode with an instant
- * close-range triple for something that is not a vehicle. Ride evidence:
+ * band: a road user near the rider that the rider's own turn sweeps
+ * across the beam, or one pacing alongside. The tier system maps distance
+ * straight to beep count, so it opens the episode with an instant
+ * close-range triple for something that is not approaching. Ride evidence:
  * a rider-confirmed false triple fired 179 ms after such a birth, from a
  * track that swept laterally through the beam mid-turn and died without
  * ever passing.
@@ -22,17 +22,20 @@ package es.jjrh.bikeradar
  *
  *  - FAST: closing >= [fastClosingMs] on [evidenceFrames] consecutive
  *    frames, counted only while the rider is not actively turning.
- *    Rotation converts lateral offset into fake radial closing
- *    (dy/dt picks up an omega*x term - 2-3.5 m/s in an urban turn), so
- *    TURNING frames prove nothing at this bar. HOLD counts as clean:
- *    [TurnStateDecider] leaves TURNING when the rotation has gone quiet,
- *    stopped being sustained, or stopped reaching its entry angle - usually
- *    the end of the corner, though its KDoc names the residual cases where
- *    the bike can still be turning.
+ *    Rotation converts lateral offset into fake closing (the radar's
+ *    speed is along the bike's axis, so it picks up an omega*x term that
+ *    reached at least 4.5 m/s on ride replays for road users 5-12 m to
+ *    the side), so TURNING frames prove nothing at this bar. HOLD counts
+ *    as clean: [TurnStateDecider] leaves TURNING when the rotation has
+ *    gone quiet, stopped being sustained, or stopped reaching its entry
+ *    angle. That is usually the end of the corner; its KDoc names the
+ *    residual cases where the bike can still be turning.
  *  - URGENT-GRADE: closing >= [urgentClosingMs] on [evidenceFrames]
- *    consecutive frames, in ANY turn state - turn geometry cannot fake
- *    this much closing, and a real fast closer born mid-turn must not
- *    wait for the corner to end.
+ *    consecutive frames, in ANY turn state, so a real fast closer born
+ *    mid-turn does not wait for the corner to end. This bar is a margin
+ *    over the fake closing a turn produces, not a bound on it: the fake
+ *    grows with turn rate and lateral offset, and ride replays found a few
+ *    sweeps admitted here.
  *  - SLOW: closing >= [slowClosingMs] held continuously for
  *    [slowDwellMs], not-turning frames only - admits genuine crawler
  *    overtakes (a car creeping past at walking pace) with a bounded
@@ -154,15 +157,15 @@ class BornCloseGate(
          *  tier-3 band (10 m at the shipped alertMax 30) with margin. */
         const val BORN_CLOSE_MAX_M = 12
 
-        /** Ordinary closing-evidence bar. Turn-sweep ghosts measured
-         *  2-3.5 m/s of geometric closing mid-turn, hence this bar only
-         *  counts on not-TURNING frames. */
+        /** Ordinary closing-evidence bar. A turn can manufacture more closing
+         *  than this, hence it only counts on not-TURNING frames. */
         const val FAST_CLOSING_MS = 2.5f
 
-        /** Closing this hard cannot be manufactured by turn geometry;
-         *  admits in any turn state so a real fast closer born mid-turn
-         *  alerts immediately. Matches the urgent path's stationary
-         *  closing floor. */
+        /** Admits in any turn state so a real fast closer born mid-turn
+         *  alerts immediately. Matches the urgent path's stationary closing
+         *  floor. It is not above every sweep: ride replays found a few
+         *  admitted at this value. Lowering it to 4.5 admitted more, whose
+         *  closing peaked at exactly 4.5. */
         const val URGENT_GRADE_CLOSING_MS = 6f
 
         /** Slow-path bar: genuine crawler overtakes close at >= 1 m/s

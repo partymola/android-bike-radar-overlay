@@ -165,21 +165,25 @@ class AlertDeciderGhostGateTest {
 
     @Test
     fun `off-axis absurd trigger is vetoed - raw lateral beyond 10 m`() {
-        val d = AlertDecider()
-        val c = Clock()
-        val parallelStreet = Vehicle(
-            id = 6,
-            distanceM = 10,
-            speedMs = -8f,
-            rangeXm = 18.4f,
-            rangeXmRaw = 17f,
-            bornDistanceM = 60,
-            bornInformative = true,
-            bornAtMs = 1L,
-        )
-        repeat(10) {
-            val ev = d.decide(listOf(parallelStreet), alertMax, c.tick())
-            assertEquals(AlertDecider.Event.None, ev)
+        for (side in floatArrayOf(1f, -1f)) {
+            val lines = mutableListOf<String>()
+            val d = AlertDecider(onGateEvent = { lines.add(it) })
+            val c = Clock()
+            val parallelStreet = Vehicle(
+                id = 6,
+                distanceM = 10,
+                speedMs = -8f,
+                rangeXm = side * 18.4f,
+                rangeXmRaw = side * 17f,
+                bornDistanceM = 60,
+                bornInformative = true,
+                bornAtMs = 1L,
+            )
+            repeat(10) {
+                val ev = d.decide(listOf(parallelStreet), alertMax, c.tick())
+                assertEquals("side $side", AlertDecider.Event.None, ev)
+            }
+            assertTrue("the veto must reach the capture log, got $lines", lines.any { it.startsWith("# gate rx-veto tid=6") })
         }
     }
 
@@ -291,21 +295,62 @@ class AlertDeciderGhostGateTest {
     }
 
     @Test
-    fun `raw lateral exactly at the absurdity cap still beeps - veto is strictly beyond`() {
+    fun `traffic in the lanes either side still beeps - the veto only rejects the impossible`() {
+        // 3.7 m is one UK lane over, 7 m the far side of a two-lane road, on
+        // both sides of the bike.
+        for (rawRx in floatArrayOf(3.7f, 7f, -3.7f, -7f)) {
+            val d = AlertDecider()
+            val c = Clock()
+            val otherLane = Vehicle(
+                id = 8,
+                distanceM = 18,
+                speedMs = -4f,
+                rangeXm = rawRx,
+                rangeXmRaw = rawRx,
+                bornDistanceM = 60,
+                bornInformative = true,
+                bornAtMs = 1L,
+            )
+            d.decide(listOf(otherLane), alertMax, c.tick())
+            assertEquals(
+                "raw lateral $rawRx m",
+                AlertDecider.Event.Beep(1),
+                d.decide(listOf(otherLane), alertMax, c.tick()),
+            )
+        }
+    }
+
+    /** The second-frame event for a born-far car at [rawRx] of raw lateral
+     *  and [correctedRx] after the mount offset. */
+    private fun tierBeepAt(rawRx: Float, correctedRx: Float = rawRx): AlertDecider.Event {
         val d = AlertDecider()
         val c = Clock()
-        val edge = Vehicle(
+        val v = Vehicle(
             id = 8,
             distanceM = 18,
             speedMs = -4f,
-            rangeXm = AlertDecider.RX_ABSURD_M,
-            rangeXmRaw = AlertDecider.RX_ABSURD_M,
+            rangeXm = correctedRx,
+            rangeXmRaw = rawRx,
             bornDistanceM = 60,
             bornInformative = true,
             bornAtMs = 1L,
         )
-        d.decide(listOf(edge), alertMax, c.tick())
-        val ev = d.decide(listOf(edge), alertMax, c.tick())
-        assertEquals(AlertDecider.Event.Beep(1), ev)
+        d.decide(listOf(v), alertMax, c.tick())
+        return d.decide(listOf(v), alertMax, c.tick())
+    }
+
+    @Test
+    fun `the absurdity cap sits at 10 m of raw lateral - exactly 10 beeps, just past it does not`() {
+        assertEquals(AlertDecider.Event.Beep(1), tierBeepAt(10f))
+        assertEquals(AlertDecider.Event.Beep(1), tierBeepAt(-10f))
+        assertEquals(AlertDecider.Event.None, tierBeepAt(10.1f))
+        assertEquals(AlertDecider.Event.None, tierBeepAt(-10.1f))
+    }
+
+    @Test
+    fun `the cap reads the sensor's own lateral, not the mount-corrected one`() {
+        // A mount-offset setting must not move a car on or off the road.
+        assertEquals(AlertDecider.Event.Beep(1), tierBeepAt(rawRx = 9.5f, correctedRx = 10.5f))
+        assertEquals(AlertDecider.Event.None, tierBeepAt(rawRx = 10.5f, correctedRx = 9.5f))
     }
 }

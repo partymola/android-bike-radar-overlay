@@ -1,0 +1,1 @@
+Durante una llamada, la notificación ya no dice que la barra lateral está oculta, porque en ese momento se ve.

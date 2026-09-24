@@ -1,0 +1,1 @@
+The ride notification no longer says the overlay is hidden during a call, when it is showing.

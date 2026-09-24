@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.6.4 - 2026-09-24
+
+### Fix
+
+- **The ride notification no longer says the overlay is hidden during a call.** Since 1.6.3 the overlay shows during a phone or internet call even when another app you allowed has hidden it, but the notification kept saying "Overlay hidden" throughout. It now leaves that line off for the call and puts it back when the call ends.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to any alert, to the Home Assistant topics, entity names or the values they report, to which radars work, or to the cross-app contract.
+
+### Internal
+
+- Tests now pin the check that keeps the approach beep quiet for a vehicle reported more than 10 m to the side: its limit on either side of the bike, that cars in the neighbouring lanes still beep, and that a rejection is logged.
+
 ## v1.6.3 - 2026-09-24
 
 ### Fix

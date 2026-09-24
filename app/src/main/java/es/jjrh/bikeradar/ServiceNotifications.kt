@@ -8,10 +8,20 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,6 +44,7 @@ internal class ServiceNotifications(
     private val prefs: () -> Prefs,
 ) {
     private val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
 
     fun ensureChannels() {
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
@@ -185,8 +196,13 @@ internal class ServiceNotifications(
      *
      * [setSubText] takes null as "no sub-text", so a lifted hold clears the
      * line on the next post without a second code path.
+     *
+     * Nothing during a call: the pipeline shows the overlay over the hold then,
+     * while a radar is connected (`aCallSaysNothingBecauseTheOverlayIsShowing`;
+     * the pipeline half is `aCallPutsAHeldOverlayBackAndTheHoldResumesAfter`).
      */
     private fun overlayHolderNote(): String? {
+        if (AlertBeeper.isCallMode(audio.mode)) return null
         val holders = RadarOverlayGate.hiddenBy.value.sorted()
         val first = holders.firstOrNull() ?: return null
         val pm = context.packageManager
@@ -200,9 +216,50 @@ internal class ServiceNotifications(
         return context.getString(R.string.svc_main_notif_overlay_hidden_by, shown)
     }
 
-    /** Re-post the foreground notification in place (pause/resume toggle,
-     *  pause-expiry). The initial post is the service's startForeground. */
+    /** Re-post the foreground notification in place (hold and call changes
+     *  via [launchReposts], the pause/resume toggle, pause-expiry). The
+     *  initial post is the service's startForeground.
+     *  Synchronized so a post built from older state cannot land after one
+     *  built from newer: its callers run on the main thread and on IO. No test
+     *  pins it, since nothing can pause a post between its build and notify. */
+    @Synchronized
     fun postForeground() = nm.notify(NOTIF_ID, buildForeground())
+
+    /**
+     * Repost whenever the overlay holders or the call state change, since
+     * [overlayHolderNote] reads both, until [scope] is cancelled.
+     *
+     * One collector, so a hold change and a call edge arriving together are
+     * posted in turn and the last post reads both. It runs on the main thread
+     * (`repostsAreBuiltOnTheMainThread`), and nothing is posted after the
+     * service's onDestroy has cancelled the scope
+     * (`aCancelledScopePostsNothingEvenForAnEdgeAlreadyQueued`). The first
+     * value is posted too: a change landing between startForeground and this
+     * subscription would otherwise never reach the rider. A failed post is
+     * caught because it would end the collector, and the line with it, for the
+     * rest of the ride (`aFailedRepostLeavesTheCollectorRunning`).
+     */
+    fun launchReposts(scope: CoroutineScope) {
+        scope.launch(Dispatchers.Main) {
+            combine(RadarOverlayGate.hiddenBy, callInProgress()) { _, _ -> }.collect {
+                try {
+                    postForeground()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "could not repost the ride notification", t)
+                }
+            }
+        }
+    }
+
+    /** Registers before reading the current mode, so no edge falls between;
+     *  read the other way round, a call starting in the gap has its end
+     *  swallowed by the de-duplication. No test here interleaves there. */
+    private fun callInProgress(): Flow<Boolean> = callbackFlow {
+        val listener = AudioManager.OnModeChangedListener { trySend(AlertBeeper.isCallMode(it)) }
+        audio.addOnModeChangedListener(context.mainExecutor, listener)
+        trySend(AlertBeeper.isCallMode(audio.mode))
+        awaitClose { audio.removeOnModeChangedListener(listener) }
+    }.distinctUntilChanged()
 
     /** Bond-lost alert: the radar's bond was removed in system settings, so the
      *  reconnect loop was stopped. Deep-links to Bluetooth settings so the rider
@@ -412,6 +469,7 @@ internal class ServiceNotifications(
     }
 
     companion object {
+        private const val TAG = "BikeRadar"
         const val CHANNEL_ID = "bike_radar_min"
 
         // v2 channel created with alarm-stream sound; the v1 legacy id

@@ -895,7 +895,11 @@ enforces them, and CONTRIBUTING.md points contributors here:
   toggle. The overlay is also shown over a granted app's hold for the length
   of the call, since it is then the only warning the app can give, and the
   hold applies again after (`aCallPutsAHeldOverlayBackAndTheHoldResumesAfter`).
-  `AlertBeeper.suppressForCall` is the one definition of "a call" both read.
+  The ride notification drops its "Overlay hidden" line for the call, and
+  `ServiceNotifications.launchReposts` reposts it whenever the holders or the
+  call state change (`aCallStartingOrEndingRepostsTheLine`).
+  `AlertBeeper.isCallMode` is the one definition of "a call"
+  (`AlertBeeperCallModeTest`); `suppressForCall` reads it.
 - `ACCESS_COARSE_LOCATION` is optional and IS prompted in-app: in onboarding,
   in Settings -> Permissions, and via a contextual card in Settings -> Light
   auto-mode (shown whenever either light's auto-mode is on - granted or not,

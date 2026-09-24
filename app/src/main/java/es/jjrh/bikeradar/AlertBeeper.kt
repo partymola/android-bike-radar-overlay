@@ -525,14 +525,9 @@ class AlertBeeper(
      * audio path entirely preserves call audio integrity. The overlay is then
      * the only warning the app can give, so [OverlayPipeline] reads this too
      * and shows the overlay during a call even while another app holds it
-     * hidden.
-     *
-     * MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP (WhatsApp,
-     * Meet, Telegram, SIP) - the same rider situation, so both suppress.
+     * hidden. The definition itself is [isCallMode].
      */
-    internal fun suppressForCall(): Boolean = audioManager.mode.let {
-        it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
-    }
+    internal fun suppressForCall(): Boolean = isCallMode(audioManager.mode)
 
     private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
         if (!hasFocus) {
@@ -864,6 +859,11 @@ class AlertBeeper(
         const val DEFAULT_VOLUME_PCT = 50
 
         private const val TAG = "BikeRadar"
+
+        /** The one definition of "a call" for everything that changes during
+         *  one. MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP
+         *  (WhatsApp, Meet, Telegram, SIP): the same rider situation. */
+        internal fun isCallMode(mode: Int): Boolean = mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
 
         /** Carrier for the whole status timbre-class (radar-drop, reconnect).
          *  Chosen in the ~800-1000 Hz window: the earlier

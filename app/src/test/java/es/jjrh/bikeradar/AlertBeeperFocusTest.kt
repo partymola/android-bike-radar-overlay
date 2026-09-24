@@ -181,6 +181,20 @@ class AlertBeeperFocusTest {
     }
 
     @Test
+    fun aRingingPhoneStillHearsEveryCue() {
+        // Ringing is not a call yet, and an unanswered ring must not silence
+        // the beeper. This pins suppressForCall itself, beside the table test
+        // on the definition it reads.
+        audioManager.setMode(AudioManager.MODE_RINGTONE)
+        val cues = mutableListOf<String>()
+        val beeper = beeperRecordingCues(cues)
+        beeper.play(2)
+        beeper.playUrgent()
+        assertEquals(listOf("beep count=2", "urgent"), cues)
+        beeper.release()
+    }
+
+    @Test
     fun backToBackPlays_extendFocusInsteadOfAbandoning() {
         val beeper = newBeeper()
         beeper.play(2)

@@ -29,8 +29,6 @@ import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.data.PrefsSnapshot
-import es.jjrh.bikeradar.ipc.RadarOverlayGate
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,7 +37,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -341,25 +338,9 @@ class BikeRadarService : Service() {
 
         // The ongoing notification is the only surface that can tell a rider
         // mid-ride why their overlay went away, and it is static between posts,
-        // so a hold has to push a repost rather than be read on the next one.
-        //
-        // Below startForeground, not above: a hold landing before the channel
-        // exists posts into nothing. `drop(1)` because the first value is the
-        // state at start-up, which the post above has just rendered.
-        //
-        // The body is wrapped for the same reason the cross-app collectors are:
-        // `notify` can throw, this scope has no handler, and a collector that
-        // died would take the rider's only explanation with it silently.
-        scope.launch {
-            RadarOverlayGate.hiddenBy.drop(1).collect {
-                try {
-                    notifications.postForeground()
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    Log.w(TAG, "could not say who is holding the overlay: $t")
-                }
-            }
-        }
+        // so a hold or a call has to push a repost rather than be read on the
+        // next one.
+        notifications.launchReposts(scope)
 
         // Service-scope AlertBeeper. AudioTracks are warmed once here
         // so the first beep after any radar reconnect lands without

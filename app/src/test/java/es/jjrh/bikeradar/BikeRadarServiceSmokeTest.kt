@@ -3,13 +3,16 @@
 package es.jjrh.bikeradar
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
+import android.media.AudioManager
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -203,6 +206,45 @@ class BikeRadarServiceSmokeTest {
         }
         assertFalse("a 10 s old unlocked reading must still hold arming off", armedAfter(10))
         assertTrue("a 40 s old one is past the arming window, so it arms", armedAfter(40))
+    }
+
+    @Test
+    fun theRideNotificationFollowsAHoldAndACallUntilTheServiceStops() {
+        // The service half of the notification's reposts: that onCreate starts
+        // them and onDestroy ends them. What they post is pinned in
+        // OverlayHoldIsExplainedInTheNotificationTest.
+        RadarOverlayGate.reset()
+        val nm = app.getSystemService(NotificationManager::class.java)
+        fun posted() = shadowOf(nm).getNotification(ServiceNotifications.NOTIF_ID)
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        // The service's own instance, which is the one its listener sits on.
+        val audio = controller.get().getSystemService(AudioManager::class.java)
+        var destroyed = false
+        try {
+            RadarOverlayGate.hide("com.example.trailbuddy")
+            shadowOf(app.mainLooper).idle()
+            assertEquals(
+                "a hold must reach the ride notification",
+                "Overlay hidden: com.example.trailbuddy",
+                posted()?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
+            )
+
+            audio.mode = AudioManager.MODE_IN_CALL
+            shadowOf(app.mainLooper).idle()
+            assertTrue("the ride notification must still be up", posted() != null)
+            assertEquals("a call must take the line off", null, posted()!!.extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+
+            controller.destroy()
+            destroyed = true
+            nm.cancel(ServiceNotifications.NOTIF_ID)
+            audio.mode = AudioManager.MODE_NORMAL
+            shadowOf(app.mainLooper).idle()
+            assertTrue("a stopped service must post nothing", posted() == null)
+        } finally {
+            if (!destroyed) controller.destroy()
+            RadarOverlayGate.reset()
+        }
     }
 
     @Test

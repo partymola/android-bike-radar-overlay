@@ -3,15 +3,21 @@
 package es.jjrh.bikeradar
 
 import android.app.Notification
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.media.AudioManager
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
-import es.jjrh.bikeradar.testutil.RepoFiles
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -19,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import kotlin.concurrent.thread
 
 /**
  * A rider whose overlay disappears has to be able to find out why.
@@ -122,45 +129,147 @@ class OverlayHoldIsExplainedInTheNotificationTest {
     }
 
     @Test
-    fun theRideNotificationIsRepostedWhenAHoldChanges() {
-        // The wiring, not the wording. `buildForeground()` carrying the line
-        // says nothing about a rider ever seeing it: the ongoing notification
-        // is static between posts, so without a collector pushing one the line
-        // appears only when something unrelated happens to repost, which
-        // mid-ride is nothing at all.
-        //
-        // Read from the source because the collector lives inside the ride
-        // service's onCreate, which a unit test cannot stand up. So this pins
-        // that the wiring EXISTS and is shaped right; that it fires is a
-        // property of StateFlow, and what it posts is pinned above.
-        // Comments stripped, like the sibling check in
-        // `RadarIpcServiceCollectorsSurviveTest`: without it a comment that
-        // happens to use one of these words satisfies the assertion.
-        val code = RepoFiles.mainSource("BikeRadarService.kt").readText().lines()
-            .filterNot { it.trimStart().startsWith("//") || it.trimStart().startsWith("*") }
-            .joinToString("\n")
+    fun aCallSaysNothingBecauseTheOverlayIsShowing() {
+        // During a call the pipeline shows the overlay over the hold, so a line
+        // saying it is hidden would describe a screen the rider is not seeing.
+        RadarOverlayGate.hide("com.example.trailbuddy")
+        val audio = app.getSystemService(AudioManager::class.java)
 
-        val launch = Regex("""scope\.launch \{\s*RadarOverlayGate\.hiddenBy(.*?)\n {8}\}""", RegexOption.DOT_MATCHES_ALL)
-            .find(code)
+        audio.mode = AudioManager.MODE_RINGTONE
+        assertEquals("a ringing phone is not a call yet", "Overlay hidden: com.example.trailbuddy", subText())
 
-        assertTrue("nothing reposts the notification when a hold changes", launch != null)
-        val body = launch!!.groupValues[1]
-        assertTrue("the repost is what makes the line reach a rider: $body", body.contains("postForeground()"))
-        assertTrue(
-            "a throw here would end the collector for good and take the explanation with it: $body",
-            body.contains("catch (t: Throwable)"),
-        )
-        // Narrowing to Exception is the cheap way to write this and the wrong
-        // one - an Error ends the collector just as permanently. The two
-        // cross-app collectors have a behavioural test for exactly that; this
-        // one can only read for it.
-        assertTrue(
-            "cancellation has to keep propagating, or this runs on against a stopped service: $body",
-            body.contains("CancellationException"),
-        )
-        assertTrue(
-            "drop(1) keeps start-up from posting twice, since startForeground has just rendered it: $body",
-            body.contains("drop(1)"),
-        )
+        audio.mode = AudioManager.MODE_CALL_SCREENING
+        assertEquals("a call being screened is not answered", "Overlay hidden: com.example.trailbuddy", subText())
+
+        audio.mode = AudioManager.MODE_IN_CALL
+        assertNull("a phone call", subText())
+
+        audio.mode = AudioManager.MODE_IN_COMMUNICATION
+        assertNull("an internet call", subText())
+
+        audio.mode = AudioManager.MODE_NORMAL
+        assertEquals("the hold applies again after the call", "Overlay hidden: com.example.trailbuddy", subText())
+    }
+
+    private val nm get() = app.getSystemService(NotificationManager::class.java)
+
+    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    /** The posted line. Fails when nothing is posted at all, so a missing
+     *  notification cannot pass for a missing line. */
+    private fun postedSubText(): String? {
+        val posted = shadowOf(nm).getNotification(ServiceNotifications.NOTIF_ID)
+        assertNotNull("no ride notification is posted", posted)
+        return posted!!.extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+    }
+
+    /** Runs [body] with reposts launched on a scope it cancels afterwards. */
+    private fun withReposts(target: ServiceNotifications = notifications, body: () -> Unit) {
+        val scope = CoroutineScope(SupervisorJob())
+        target.launchReposts(scope)
+        try {
+            body()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aHoldChangingRepostsTheLine() {
+        // The notification is static between posts. The state at subscription
+        // is posted too, or a hold landing before it would go unexplained.
+        RadarOverlayGate.hide("com.example.trailbuddy")
+        idle()
+        nm.cancel(ServiceNotifications.NOTIF_ID)
+        withReposts {
+            idle()
+            assertEquals("Overlay hidden: com.example.trailbuddy", postedSubText())
+
+            RadarOverlayGate.show("com.example.trailbuddy")
+            idle()
+            assertNull("a stale line would send the rider hunting a hold that has gone", postedSubText())
+        }
+    }
+
+    @Test
+    fun aCallStartingOrEndingRepostsTheLine() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        RadarOverlayGate.hide("com.example.trailbuddy")
+        withReposts {
+            idle()
+            audio.mode = AudioManager.MODE_IN_CALL
+            idle()
+            assertNull("the posted line still says hidden during the call", postedSubText())
+
+            audio.mode = AudioManager.MODE_NORMAL
+            idle()
+            assertEquals("Overlay hidden: com.example.trailbuddy", postedSubText())
+        }
+    }
+
+    @Test
+    fun repostsAreBuiltOnTheMainThread() {
+        // One thread for every repost, so a hold change and a call edge landing
+        // together cannot post out of order. The hold comes from another
+        // thread, as a consumer's does over binder, so a collector that merely
+        // runs wherever it is resumed records false.
+        val onMain = mutableListOf<Boolean>()
+        val recording = ServiceNotifications(app) {
+            synchronized(onMain) { onMain.add(Looper.myLooper() == Looper.getMainLooper()) }
+            Prefs(app)
+        }
+        withReposts(recording) {
+            idle()
+            thread { RadarOverlayGate.hide("com.example.trailbuddy") }.join()
+            idle()
+        }
+        synchronized(onMain) {
+            assertEquals("a repost for the start and one for the hold: $onMain", 2, onMain.size)
+            assertTrue("a repost was built off the main thread: $onMain", onMain.all { it })
+        }
+    }
+
+    @Test
+    fun aCancelledScopePostsNothingEvenForAnEdgeAlreadyQueued() {
+        // The service's onDestroy cancels the scope. A post after it would put
+        // the ongoing notification back for a service that is gone.
+        val audio = app.getSystemService(AudioManager::class.java)
+        val scope = CoroutineScope(SupervisorJob())
+        notifications.launchReposts(scope)
+        idle()
+        nm.cancel(ServiceNotifications.NOTIF_ID)
+
+        audio.mode = AudioManager.MODE_IN_CALL
+        scope.cancel()
+        idle()
+        assertNull(shadowOf(nm).getNotification(ServiceNotifications.NOTIF_ID))
+
+        // The listener is gone too: a later edge queues nothing at all. Left
+        // registered, it would hold the stopped service's context.
+        audio.mode = AudioManager.MODE_NORMAL
+        assertTrue("the mode listener outlived the scope", shadowOf(Looper.getMainLooper()).isIdle)
+    }
+
+    @Test
+    fun aFailedRepostLeavesTheCollectorRunning() {
+        // An Error rather than an Exception, since either would end the
+        // collector, and the line with it, for the rest of the ride.
+        var failing = true
+        var failures = 0
+        val flaky = ServiceNotifications(app) {
+            if (failing) {
+                failures++
+                throw NoClassDefFoundError("boom")
+            }
+            Prefs(app)
+        }
+        withReposts(flaky) {
+            idle()
+            assertEquals("the first repost must have failed", 1, failures)
+            failing = false
+            RadarOverlayGate.hide("com.example.trailbuddy")
+            idle()
+            assertEquals("Overlay hidden: com.example.trailbuddy", postedSubText())
+        }
     }
 }

@@ -634,7 +634,7 @@ class AlertDeciderTest {
     // ── eBike bike_not_driving ground truth wins over GPS speed ────────
 
     @Test fun `eBike bikeNotDriving true wins over GPS that thinks moving`() {
-        // Urban-canyon scenario (Holborn / Bank): wheel sensor says
+        // Urban-canyon scenario (tall buildings both sides): wheel sensor says
         // stopped, GPS bounces around showing 6 m/s. The decider must
         // trust the wheel sensor and suppress after dwell, even though
         // bikeSpeedMs is well above the threshold.
@@ -685,7 +685,7 @@ class AlertDeciderTest {
     // ── climbing override on the stationary-suppress gate ────────────
 
     @Test fun `climbing forces the stationary gate off even when eBike says stopped`() {
-        // Rider grinding up Fitzjohns at a wheel-near-rest cadence:
+        // Rider grinding up a steep hill at a wheel-near-rest cadence:
         // bikeNotDriving could read true on a brief pedal-stroke pause,
         // but the climb override must keep alerts firing because the
         // rider is exposed to overtaking traffic.

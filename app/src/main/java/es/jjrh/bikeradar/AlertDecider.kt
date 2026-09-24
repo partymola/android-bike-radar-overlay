@@ -598,7 +598,7 @@ class AlertDecider(
         // Climb override: when the rider is grinding up a hill
         // (rider_power sustained above threshold via ClimbDetector), the
         // stationary gate is forced off regardless of speed. A 5 km/h
-        // climb up Fitzjohns Avenue is not a traffic-light stop; the
+        // climb up a steep hill is not a traffic-light stop; the
         // rider is exposed to overtaking traffic and must still get
         // alerts. The override is non-stateful here; the climb-state
         // accumulator lives in EBikeSnapshotCoordinator.

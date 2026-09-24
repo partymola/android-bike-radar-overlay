@@ -10,7 +10,9 @@ import es.jjrh.bikeradar.RadarLightMode
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** Tri-state so the upgrader / onboarding flow can distinguish "hasn't
  *  been asked yet" from "explicitly said no". */
@@ -966,14 +968,20 @@ class Prefs(context: Context) {
         setupTranscriptEnabled = setupTranscriptEnabled,
     )
 
+    /** Snapshots are read in `map` on the collector, never in the producer or
+     *  the listener, where a read can finish after a later write's and deliver
+     *  the older values last. The listener is registered before the first
+     *  read is signalled, so no write falls between them. Pinned by
+     *  `PrefsTest.aWriteDuringTheFirstReadIsTheLastValueCollected` and
+     *  `PrefsTest.aWriteBeforeTheListenerIsRegisteredIsStillCollected`. */
     val flow: Flow<PrefsSnapshot> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            trySend(snapshot())
+            trySend(Unit)
         }
         sp.registerOnSharedPreferenceChangeListener(listener)
-        send(snapshot())
+        send(Unit)
         awaitClose { sp.unregisterOnSharedPreferenceChangeListener(listener) }
-    }.distinctUntilChanged()
+    }.conflate().map { snapshot() }.distinctUntilChanged()
 
     fun dumpAll(): String = buildString {
         appendLine("# Some identifying fields are redacted (<redacted>);")

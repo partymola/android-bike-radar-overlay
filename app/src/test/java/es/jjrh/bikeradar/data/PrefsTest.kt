@@ -3,14 +3,19 @@
 package es.jjrh.bikeradar.data
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.RadarLightMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -22,6 +27,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Contract tests for [Prefs], the single SharedPreferences-backed settings
@@ -470,6 +479,73 @@ class PrefsTest {
     }
 
     @Test
+    fun aWriteDuringTheFirstReadIsTheLastValueCollected() {
+        // The first read is held with the old volume already in hand.
+        val seen = volumesCollectedWithAWriteAt(VOLUME_READ)
+        assertEquals("collected $seen", 85, seen.lastOrNull())
+    }
+
+    @Test
+    fun aWriteBeforeTheListenerIsRegisteredIsStillCollected() {
+        // Held on the way into registration: a first read that did not wait
+        // for it would read the old volume and never hear of the change.
+        val seen = volumesCollectedWithAWriteAt(REGISTER)
+        assertEquals("collected $seen", 85, seen.lastOrNull())
+    }
+
+    /** Collects the volume from [Prefs.flow] on an IO thread, holds the flow
+     *  once at [point], changes the volume from 40 to 85 while it is held,
+     *  and returns every volume collected. */
+    private fun volumesCollectedWithAWriteAt(point: String): List<Int> {
+        prefs.alertVolume = 40
+        val real = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holdOnce = AtomicBoolean(true)
+        fun reached(at: String) {
+            if (at == point && holdOnce.compareAndSet(true, false)) {
+                held.countDown()
+                release.await(5, TimeUnit.SECONDS)
+            }
+        }
+        val holding = object : SharedPreferences by real {
+            override fun getInt(key: String?, defValue: Int): Int = real.getInt(key, defValue).also {
+                if (key == Prefs.KEY_ALERT_VOLUME) reached(VOLUME_READ)
+            }
+
+            override fun registerOnSharedPreferenceChangeListener(
+                listener: SharedPreferences.OnSharedPreferenceChangeListener?,
+            ) {
+                reached(REGISTER)
+                real.registerOnSharedPreferenceChangeListener(listener)
+            }
+        }
+        val holdingContext = object : ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = holding
+        }
+        val seen = Collections.synchronizedList(mutableListOf<Int>())
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            Prefs(holdingContext).flow.collect { seen += it.alertVolume }
+        }
+        try {
+            assertTrue("the flow never reached $point", held.await(5, TimeUnit.SECONDS))
+            // Room for a read that does not wait on the hold to be collected first.
+            Thread.sleep(200)
+            prefs.alertVolume = 85
+            release.countDown()
+            val deadline = System.currentTimeMillis() + 5_000L
+            while (85 !in seen && System.currentTimeMillis() < deadline) Thread.sleep(10)
+            // Room for an older read still in flight to land after it.
+            Thread.sleep(200)
+            return synchronized(seen) { seen.toList() }
+        } finally {
+            release.countDown()
+            runBlocking { job.cancelAndJoin() }
+        }
+    }
+
+    @Test
     fun clearingTheDashcamPickIsOneChangeNotThree() {
         prefs.dashcamOwnership = DashcamOwnership.NO
         prefs.dashcamMac = "AA:BB:CC:DD:EE:FF"
@@ -584,6 +660,9 @@ class PrefsTest {
         // Couples to Prefs' private file name; the corrupt-enum test needs to
         // write past the typed setters into the same backing store.
         const val PREFS_FILE = "bike_radar_prefs"
+
+        const val VOLUME_READ = "volume read"
+        const val REGISTER = "register"
     }
 
     @Test

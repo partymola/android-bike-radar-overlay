@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.6.6 - 2026-09-27
+
+### Fix
+
+- **Settings keeps showing when an app last used your radar after you save its access again.** Since 1.5.0, saving on the screen an app opens to ask for access reset that to "Not used yet" until the app next used your radar.
+- **If an app signed with a different key replaces an earlier one, its access question now starts blank.** It used to open with the earlier app's choices filled in, as though it already had access, although that access never carried over to it.
+
+### UX
+
+- **The access question tells you when Bike Radar is not set up yet**, and to open it afterwards to finish setup.
+- **When an app you already allowed asks again, the screen says it already has access, and the top button reads Save.** It used to ask "Share your radar?" and offer Allow, which read like a new request.
+- **For an app you already allowed, the line above the buttons now says what Stop sharing does once both switches are off.** It reads "Stop sharing" removes that app's access, where it used to go blank. That line is also now marked for screen readers to announce when it changes.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to any alert, to the Home Assistant topics, entity names or the values they report, to which radars work, or to the cross-app contract.
+
+### Internal
+
+- A test now pins that opening the app before setup is finished does not start its background service, even with its Bluetooth and notification permissions granted.
+
 ## v1.6.5 - 2026-09-27
 
 ### Fix

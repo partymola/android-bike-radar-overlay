@@ -118,6 +118,23 @@ class RadarConsentDeciderTest {
         assertEquals(false, asked.current?.control)
     }
 
+    /**
+     * The gate refuses a grant stored under a key this app cannot prove, so
+     * showing it as current would tell the rider this app already has access.
+     */
+    @Test
+    fun aGrantUnderAKeyTheAppCannotProveIsNotShownAsCurrent() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true))
+        assertEquals(ConsentRequest.Ask(PKG, "Trail Buddy", null), decider().open(PKG))
+    }
+
+    /** Any of the app's keys will do, as at the gate: not only the one a grant stores today. */
+    @Test
+    fun aGrantUnderAnotherOfTheAppsKeysIsShownAsCurrent() {
+        store.put(RadarGrant(PKG, "bb22", "Trail Buddy", 1L, 2L, read = true, control = false))
+        assertEquals(true, (decider().open(PKG) as ConsentRequest.Ask).current?.read)
+    }
+
     @Test
     fun approvingReadAloneDoesNotGrantControl() {
         assertEquals(Activity.RESULT_OK, decider().decide(PKG, "Trail Buddy", read = true, control = false))
@@ -201,6 +218,14 @@ class RadarConsentDeciderTest {
     @Test
     fun savingAGrantAgainKeepsWhenTheAppLastUsedTheRadar() {
         store.put(RadarGrant(PKG, "aa11", "Trail Buddy", 1L, 3_000L, read = true, control = false))
+        decider().decide(PKG, "Trail Buddy", read = true, control = true)
+        assertEquals(3_000L, store.grantFor(PKG)!!.lastUsedAtMs)
+    }
+
+    /** Stored under the app's other key, as after a signer rotation: still this app. */
+    @Test
+    fun aGrantUnderAnotherOfTheAppsKeysKeepsItsLastUse() {
+        store.put(RadarGrant(PKG, "bb22", "Trail Buddy", 1L, 3_000L, read = true, control = false))
         decider().decide(PKG, "Trail Buddy", read = true, control = true)
         assertEquals(3_000L, store.grantFor(PKG)!!.lastUsedAtMs)
     }

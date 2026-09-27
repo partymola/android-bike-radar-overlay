@@ -147,7 +147,8 @@ class RadarConsentActivityTest {
         store.put(
             RadarGrant(
                 packageName = "com.example.trailbuddy",
-                certDigest = "digest",
+                // The caller's real key: the gate refuses a grant under any other.
+                certDigest = SystemPackageIdentity(context.packageManager).digests("com.example.trailbuddy").min(),
                 label = "Trail Buddy",
                 grantedAtMs = 1L,
                 lastUsedAtMs = 0L,

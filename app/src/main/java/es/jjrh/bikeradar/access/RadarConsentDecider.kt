@@ -8,7 +8,7 @@ import es.jjrh.bikeradar.ipc.RadarContract.Consent
 /** What the consent screen should do about the app that opened it. */
 sealed interface ConsentRequest {
 
-    /** Put the question to the rider. [current] is null the first time. */
+    /** Put the question to the rider. [current] is null unless this app already has a grant. */
     data class Ask(
         val packageName: String,
         val label: String,
@@ -74,15 +74,23 @@ class RadarConsentDecider(
         if (caller?.packageName != packageName) {
             return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
         }
-        if (identity.digests(packageName).isEmpty()) {
+        val digests = identity.digests(packageName)
+        if (digests.isEmpty()) {
             return ConsentRequest.Refuse(Consent.RESULT_CALLER_UNKNOWN)
         }
 
         // A rider mid-ride is looking at the road, not at a permission screen.
         if (rideInProgress()) return ConsentRequest.Refuse(Consent.RESULT_RIDE_IN_PROGRESS)
 
-        return ConsentRequest.Ask(packageName, caller.label, store.grantFor(packageName))
+        return ConsentRequest.Ask(packageName, caller.label, grantProvableBy(packageName, digests))
     }
+
+    /**
+     * The stored grant, if this app can prove its key. The gate refuses one it
+     * cannot, so it is neither shown nor carried over. Membership, as at the
+     * gate, so a rotated signer still counts.
+     */
+    private fun grantProvableBy(packageName: String, digests: Set<String>): RadarGrant? = store.grantFor(packageName)?.takeIf { it.certDigest in digests }
 
     /**
      * Record what the rider decided. Answering no to both removes the grant
@@ -102,11 +110,11 @@ class RadarConsentDecider(
         // Any of the app's keys will do, because the gate checks membership in
         // the set rather than equality with one. Taking the lowest just makes
         // the stored value the same across two grants of the same app.
-        val digest = identity.digests(packageName).minOrNull()
-            ?: return Consent.RESULT_CALLER_UNKNOWN
+        val digests = identity.digests(packageName)
+        val digest = digests.minOrNull() ?: return Consent.RESULT_CALLER_UNKNOWN
         // Settings shows when an app last used the radar; saving the same app
         // again must not reset that to "Not used yet".
-        val lastUsed = store.grantFor(packageName)?.takeIf { it.certDigest == digest }?.lastUsedAtMs ?: 0L
+        val lastUsed = grantProvableBy(packageName, digests)?.lastUsedAtMs ?: 0L
         val stored = store.put(
             RadarGrant(
                 packageName = packageName,

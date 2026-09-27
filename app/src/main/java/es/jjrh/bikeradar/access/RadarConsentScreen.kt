@@ -159,6 +159,9 @@ fun RadarConsentAsk(
                     },
                     onClick = { onSave(read, control) },
                     enabled = action != ConsentPrimaryAction.NOTHING,
+                    // Red when it removes access, as Stop sharing is in Settings,
+                    // so it does not read as a twin of Cancel below it.
+                    tone = br.danger.takeIf { action == ConsentPrimaryAction.REVOKE },
                 )
                 // Changes nothing, so over an existing grant it must not read
                 // "Don't allow": stopping is the primary button, switches off

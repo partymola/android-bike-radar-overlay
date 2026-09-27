@@ -804,6 +804,7 @@
     <string name="radar_consent_control">Cambiar tu luz trasera y la barra lateral</string>
     <string name="radar_consent_control_detail">Cambiar el modo de luz del radar. Si además permites ver el radar, puede ocultar la barra lateral: eso no apaga los avisos sonoros, y sigue oculta aunque estés en otra app. Vuelve cuando esa app la devuelve, cuando deja de ejecutarse o cuando dejas de compartir. Durante una llamada la barra lateral se ve igualmente, porque entonces los avisos sonoros están desactivados, y se oculta de nuevo al terminar la llamada.</string>
     <string name="radar_consent_choose_something">Elige al menos una opción.</string>
+    <string name="radar_consent_how_to_stop">Desactiva las dos opciones para dejar de compartir.</string>
     <string name="radar_consent_save">Permitir</string>
     <string name="radar_consent_cancel">No permitir</string>
     <string name="radar_consent_backup_note">Tu elección se guarda en este móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas. Puedes dejar de compartir cuando quieras en Ajustes, Apps con permiso para tu radar.</string>

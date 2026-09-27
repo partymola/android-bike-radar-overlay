@@ -15,9 +15,9 @@ import org.robolectric.annotation.GraphicsMode
  * rider decides what another app may do with their radar.
  *
  * Variants:
- *  - firstAsk: no existing grant, both switches off
- *  - alreadyReading: an app that was granted read only, so the screen opens
- *    on what the rider last said rather than on nothing
+ *  - firstAsk (and Es): no existing grant, both switches off
+ *  - alreadyReading (and Es): an app that was granted read only, so the
+ *    screen opens on what the rider last said rather than on nothing
  *
  * Verify with `:app:verifyRoborazziDebug`; regenerate with
  * `:app:recordRoborazziDebug`.
@@ -36,26 +36,29 @@ class RadarConsentSnapshotTest {
         }
     }
 
+    private val readOnly = RadarGrant(
+        packageName = "com.example.trailbuddy",
+        certDigest = "aa11",
+        label = "Trail Buddy",
+        grantedAtMs = 0L,
+        lastUsedAtMs = 0L,
+        read = true,
+        control = false,
+    )
+
     @Test
     fun alreadyReading() {
         captureRoboImage {
-            UiTheme {
-                RadarConsentAsk(
-                    request = ask(
-                        RadarGrant(
-                            packageName = "com.example.trailbuddy",
-                            certDigest = "aa11",
-                            label = "Trail Buddy",
-                            grantedAtMs = 0L,
-                            lastUsedAtMs = 0L,
-                            read = true,
-                            control = false,
-                        ),
-                    ),
-                    onCancel = {},
-                    onSave = { _, _ -> },
-                )
-            }
+            UiTheme { RadarConsentAsk(request = ask(readOnly), onCancel = {}, onSave = { _, _ -> }) }
+        }
+    }
+
+    /** Records the stop-sharing hint in Spanish, the longest line the slot above the buttons shows. */
+    @Test
+    @Config(qualifiers = "+es")
+    fun alreadyReadingEs() {
+        captureRoboImage {
+            UiTheme { RadarConsentAsk(request = ask(readOnly), onCancel = {}, onSave = { _, _ -> }) }
         }
     }
 

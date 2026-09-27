@@ -112,11 +112,11 @@ class RadarConsentActivityTest {
 
     /**
      * RESULT_CANCELED means nothing changed, which is what the contract tells
-     * a consumer: "Don't allow" over an existing grant leaves it standing.
-     * Only the primary button's revoke path removes one.
+     * a consumer: the second button, "Cancel" over an existing grant, leaves it
+     * standing. Only the primary button's revoke path removes one.
      */
     @Test
-    fun decliningOverAnExistingGrantLeavesItStanding() {
+    fun cancellingOverAnExistingGrantLeavesItStanding() {
         installCaller("com.example.trailbuddy")
         val store = PrefsRadarGrantStore(
             context.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, Context.MODE_PRIVATE),
@@ -136,7 +136,7 @@ class RadarConsentActivityTest {
         shadowOf(controller.get()).setCallingPackage("com.example.trailbuddy")
         val activity = controller.setup().get()
 
-        compose.onNodeWithText("Don't allow").performScrollTo().performClick()
+        compose.onNodeWithText("Cancel").performScrollTo().performClick()
         compose.waitForIdle()
 
         val shadow = shadowOf(activity)

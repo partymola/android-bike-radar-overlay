@@ -4,10 +4,8 @@ package es.jjrh.bikeradar.access
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -18,13 +16,18 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * That the screen actually renders what `consentPrimaryAction` decides. The
- * pure rule passing says nothing about which button the rider sees, and the
- * goldens render one state each rather than following a toggle.
+ * That the screen actually renders what `consentPrimaryAction` decides, what
+ * the second button and the line above the buttons say, and that the buttons
+ * stay put as the switches change. The pure rule passing says nothing about
+ * which button the rider sees, and the goldens render one state each rather
+ * than following a toggle.
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class RadarConsentAskButtonTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -78,6 +81,7 @@ class RadarConsentAskButtonTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Allow").assertIsEnabled()
+        composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
         tap("Allow")
         assertEquals(true to false, saved)
     }
@@ -87,43 +91,95 @@ class RadarConsentAskButtonTest {
         show(current = grant(read = true, control = false))
 
         composeRule.onNodeWithText("Allow").assertIsEnabled()
+        composeRule.onNodeWithText(HOW_TO_STOP).assertExists()
         composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
         composeRule.onNodeWithText("Stop sharing").assertIsEnabled()
         tap("Stop sharing")
         assertEquals(false to false, saved)
     }
 
+    /**
+     * The second button changes nothing, so over an existing grant it must not
+     * read "Don't allow": a rider who came back to stop an app would tap it and
+     * keep sharing. Stopping is the primary button with both switches off.
+     */
     @Test
-    fun theHelperLineKeepsItsSlotOnceSomethingIsChosen() {
-        // The line above the buttons is only worth showing while nothing is
-        // chosen. REMOVING it rather than emptying it lifts both buttons by a
-        // line at the exact moment the rider's finger is already travelling
-        // towards where Allow was, and where it would land is Don't allow.
-        //
-        // What this asserts is that the slot survives, not a pixel position.
-        // Positions are not a usable measurement here: the screen sits in a
-        // scroll container, so a reading taken before the toggle is scrolled
-        // into view is not comparable with one taken after - an offset between
-        // two nodes measured that way came back negative. So the height itself
-        // is unpinned, and only a golden or a device would show it.
-        show(current = null)
-        assertEquals(1, composeRule.onAllNodesWithText(HELPER).fetchSemanticsNodes().size)
-        val slots = composeRule.onAllNodes(hasText("")).fetchSemanticsNodes().size
+    fun overAnExistingGrantTheSecondButtonSaysCancel() = assertCancelAndHowToStop(grant(read = true, control = false))
+
+    /** The grant shape where the rider most wants the off switch: the app can act, not just read. */
+    @Test
+    fun overAControlOnlyGrantTooTheScreenSaysCancelAndHowToStop() = assertCancelAndHowToStop(grant(read = false, control = true))
+
+    @Test
+    fun overAFullGrantTooTheScreenSaysCancelAndHowToStop() = assertCancelAndHowToStop(grant(read = true, control = true))
+
+    private fun assertCancelAndHowToStop(current: RadarGrant) {
+        show(current = current)
+
+        composeRule.onNodeWithText("Cancel").assertExists()
+        composeRule.onNodeWithText("Don't allow").assertDoesNotExist()
+        composeRule.onNodeWithText(HOW_TO_STOP).assertExists()
+    }
+
+    /**
+     * The slot above the buttons must not change height when its text does,
+     * or the buttons move under a finger already on its way. Measured where a
+     * line is most likely to wrap: a narrow phone at a large font size, and in
+     * Spanish, where the stop-sharing line runs a line longer than the other
+     * one, so a slot sized for the wrong line shows up here. The gap is taken
+     * between two nodes in the same scrolling column, so it does not depend on
+     * how far the screen has scrolled.
+     */
+    @Test
+    @Config(qualifiers = "es-w360dp-h800dp-xxhdpi", fontScale = 2.0f)
+    fun theButtonsStayPutWhenStoppingIsOffered() {
+        show(current = grant(read = true, control = false))
+        val before = gapAboveThePrimaryButton("Permitir", "Tu elección se guarda")
 
         composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        assertEquals(0, composeRule.onAllNodesWithText(HELPER).fetchSemanticsNodes().size)
-        assertEquals(
-            "the emptied line has to stay in the tree, or the buttons move up into it",
-            slots + 1,
-            composeRule.onAllNodes(hasText("")).fetchSemanticsNodes().size,
-        )
+        assertEquals(before, gapAboveThePrimaryButton("Dejar de compartir", "Tu elección se guarda"))
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi", fontScale = 2.0f)
+    fun theButtonsStayPutWhenAFirstChoiceIsMade() {
+        show(current = null)
+        composeRule.onNodeWithText(HELPER).assertExists()
+        val before = gapAboveThePrimaryButton("Allow", BACKUP_NOTE_START)
+
+        composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Allow").assertIsEnabled()
+        composeRule.onNodeWithText(HELPER).assertDoesNotExist()
+        assertEquals(before, gapAboveThePrimaryButton("Allow", BACKUP_NOTE_START))
+    }
+
+    // Unclipped: at a large font size the buttons sit below the visible screen,
+    // where clipped bounds read as zero.
+    private fun gapAboveThePrimaryButton(label: String, noteStart: String): Float {
+        val note = composeRule.onNodeWithText(noteStart, substring = true).fetchSemanticsNode()
+        val button = composeRule.onNodeWithText(label).fetchSemanticsNode()
+        return button.positionInRoot.y - (note.positionInRoot.y + note.size.height)
+    }
+
+    @Test
+    fun aFirstAskStillOffersDontAllow() {
+        show(current = null)
+
+        composeRule.onNodeWithText("Don't allow").assertExists()
+        composeRule.onNodeWithText("Cancel").assertDoesNotExist()
+        composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
     }
 
     private companion object {
         const val HELPER = "Choose at least one to allow."
+        const val HOW_TO_STOP = "Turn both off to stop sharing."
+        const val BACKUP_NOTE_START = "Your choice is kept on this phone"
     }
 }

@@ -21,8 +21,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import es.jjrh.bikeradar.R
@@ -94,24 +97,38 @@ fun RadarConsentAsk(
                 // A first ask LANDS here with both switches off, so the button
                 // is dimmed before the rider has touched anything. Without a
                 // line saying why, the disabled state reads as secondary
-                // emphasis and the tap goes nowhere.
+                // emphasis and the tap goes nowhere. Over an existing grant,
+                // while a switch is on, the same slot says how to stop from
+                // here; the note above only points to Settings.
                 //
-                // Emptied rather than removed, so the line keeps its height.
-                // Dropping it moves both buttons up as the rider flips a
-                // switch, which is the exact moment their finger is already
-                // travelling towards where Allow used to be - and where it
-                // lands is the gap above Don't allow.
-                Text(
-                    text = if (action == ConsentPrimaryAction.NOTHING) {
-                        stringResource(R.string.radar_consent_choose_something)
-                    } else {
-                        ""
-                    },
-                    // Not fgDim: that is the colour of the disabled button right
-                    // below it, so the instruction would read as part of the
-                    // thing it is explaining.
-                    color = br.fgMuted,
-                )
+                // The slot keeps one height whatever it shows. If it shrank,
+                // both buttons would move up as the rider flips a switch, the
+                // moment their finger is already travelling towards the primary
+                // button, and it would land on the second one. It sits on an
+                // invisible copy of the one line this request can show, styled
+                // like it, so that holds at any width or font size
+                // (RadarConsentAskButtonTest).
+                val chooseSomething = stringResource(R.string.radar_consent_choose_something)
+                val howToStop = stringResource(R.string.radar_consent_how_to_stop)
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        if (request.current == null) chooseSomething else howToStop,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+                    )
+                    Text(
+                        text = when {
+                            action == ConsentPrimaryAction.NOTHING -> chooseSomething
+                            action == ConsentPrimaryAction.ALLOW && request.current != null -> howToStop
+                            else -> ""
+                        },
+                        textAlign = TextAlign.Center,
+                        // Not fgDim: that is the colour of the disabled button right
+                        // below it, so the instruction would read as part of the
+                        // thing it is explaining.
+                        color = br.fgMuted,
+                    )
+                }
                 BrOutlinedButton(
                     label = when (action) {
                         ConsentPrimaryAction.REVOKE -> stringResource(R.string.settings_radar_access_revoke)
@@ -121,8 +138,15 @@ fun RadarConsentAsk(
                     onClick = { onSave(read, control) },
                     enabled = action != ConsentPrimaryAction.NOTHING,
                 )
+                // Changes nothing, so over an existing grant it must not read
+                // "Don't allow": stopping is the primary button, switches off
+                // (RadarConsentAskButtonTest).
                 BrOutlinedButton(
-                    label = stringResource(R.string.radar_consent_cancel),
+                    label = if (request.current == null) {
+                        stringResource(R.string.radar_consent_cancel)
+                    } else {
+                        stringResource(R.string.common_cancel)
+                    },
                     onClick = onCancel,
                 )
             }

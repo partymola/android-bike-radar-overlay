@@ -143,12 +143,7 @@ class DebugOverlayService : Service() {
             System.currentTimeMillis(),
             passClearanceM = passClearanceM,
         )
-        when (val cue = AlertCue.forEvent(ev)) {
-            is AlertCue.Beep -> b.play(cue.count)
-            AlertCue.Clear -> b.playClear()
-            AlertCue.Urgent -> b.playUrgent()
-            AlertCue.Silence -> {}
-        }
+        b.playCue(AlertCue.forEvent(ev))
     }
 
     private fun buildParams(wm: WindowManager): WindowManager.LayoutParams {

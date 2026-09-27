@@ -16,6 +16,20 @@ internal interface CuePlayer {
 }
 
 /**
+ * The one mapping from an alert cue to a sound, shared by the ride, the debug
+ * overlay and the sound demo, so none of them can route a cue to a different
+ * sound than the others.
+ */
+internal fun CuePlayer.playCue(cue: AlertCue) {
+    when (cue) {
+        is AlertCue.Beep -> play(cue.count)
+        AlertCue.Clear -> playClear()
+        AlertCue.Urgent -> playUrgent()
+        AlertCue.Silence -> {}
+    }
+}
+
+/**
  * Pure dispatch for the dev cue-preview (Debug screen): play the cue named
  * [name] on [player], or nothing if the name is unknown or [player] is null
  * (the warm beeper is only allocated between onCreate and onDestroy). Names are

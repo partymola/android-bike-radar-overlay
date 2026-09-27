@@ -52,6 +52,22 @@ class CuePreviewTest {
         }
     }
 
+    @Test fun eachAlertCuePlaysTheMatchingSound() {
+        val expected = mapOf(
+            AlertCue.Beep(1) to listOf("play1"),
+            AlertCue.Beep(2) to listOf("play2"),
+            AlertCue.Beep(3) to listOf("play3"),
+            AlertCue.Clear to listOf("clear"),
+            AlertCue.Urgent to listOf("urgent"),
+            AlertCue.Silence to emptyList(),
+        )
+        for ((cue, calls) in expected) {
+            val fake = FakeCuePlayer()
+            fake.playCue(cue)
+            assertEquals("cue $cue", calls, fake.calls)
+        }
+    }
+
     @Test fun unknownOrNullNamePlaysNothing() {
         val fake = FakeCuePlayer()
         playPreviewCue("bogus", fake)

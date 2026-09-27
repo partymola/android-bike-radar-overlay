@@ -383,12 +383,7 @@ internal class OverlayPipeline(
                 alerts = alerts,
             )
         }
-        when (val cue = AlertCue.forEvent(ev)) {
-            is AlertCue.Beep -> beeper.play(cue.count)
-            AlertCue.Clear -> beeper.playClear()
-            AlertCue.Urgent -> beeper.playUrgent()
-            AlertCue.Silence -> {}
-        }
+        beeper.playCue(AlertCue.forEvent(ev))
     }
 
     private fun logAlertEvent(

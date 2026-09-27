@@ -130,6 +130,25 @@ class MainActivitySmokeTest {
         }
     }
 
+    /** Permissions granted, but onboarding unfinished: MainActivity does not start the service. */
+    @Test
+    fun aRiderWhoHasNotFinishedSetupDoesNotStartTheService() {
+        Prefs(app).apply {
+            firstRunComplete = false
+            serviceEnabled = true
+            safetyNoticeAcknowledged = true
+        }
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            controller.create()
+            assertNull(shadowOf(app).peekNextStartedService())
+        }
+    }
+
     @Test
     fun returningUserDoesNotStartServiceWhenServiceDisabled() {
         Prefs(app).apply {

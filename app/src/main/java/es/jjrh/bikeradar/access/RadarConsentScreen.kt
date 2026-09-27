@@ -6,12 +6,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -80,7 +85,18 @@ fun RadarConsentAsk(
             )
             Text(request.packageName, color = br.fgDim)
             if (!bikeRadarSetUp) {
-                Text(stringResource(R.string.radar_consent_not_set_up), color = br.caution)
+                // Under the asking app's package name, an amber line alone
+                // reads as a warning about that app. The glyph marks it as
+                // Bike Radar's own notice, the way its other warnings look.
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = br.caution,
+                        modifier = Modifier.padding(top = 2.dp).size(18.dp),
+                    )
+                    Text(stringResource(R.string.radar_consent_not_set_up), color = br.caution)
+                }
             }
 
             SettingsRowGroup {

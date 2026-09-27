@@ -2,6 +2,10 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.access
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isToggleable
@@ -91,7 +95,7 @@ class RadarConsentAskButtonTest {
     fun turningEverythingOffOverAnExistingGrantOffersToStop() {
         show(current = grant(read = true, control = false))
 
-        composeRule.onNodeWithText("Allow").assertIsEnabled()
+        composeRule.onNodeWithText("Save").assertIsEnabled()
         composeRule.onNodeWithText(HOW_TO_STOP).assertExists()
         composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -123,7 +127,31 @@ class RadarConsentAskButtonTest {
         composeRule.onNodeWithText("Cancel").assertExists()
         composeRule.onNodeWithText("Don't allow").assertDoesNotExist()
         composeRule.onNodeWithText(HOW_TO_STOP).assertExists()
+        composeRule.onNodeWithText("Change what you share?").assertExists()
+        composeRule.onNodeWithText("Trail Buddy already has access to your rear radar.").assertExists()
+        composeRule.onNodeWithText("Share your radar?").assertDoesNotExist()
+        composeRule.onNodeWithText("Save").assertExists()
+        composeRule.onNodeWithText("Allow").assertDoesNotExist()
     }
+
+    /**
+     * The line above the buttons changes under a switch the rider just
+     * flipped, away from a screen reader's focus, so it is marked for screen
+     * readers to announce. Checked on both lines it can show.
+     */
+    @Test
+    fun theStopSharingLineIsMarkedForAnnouncement() {
+        show(current = grant(read = true, control = false))
+        composeRule.onNodeWithText(HOW_TO_STOP).assert(announcedPolitely)
+    }
+
+    @Test
+    fun theFirstAskHelperIsMarkedForAnnouncement() {
+        show(current = null)
+        composeRule.onNodeWithText(HELPER).assert(announcedPolitely)
+    }
+
+    private val announcedPolitely = SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
 
     /** A grant can be made before setup is finished, so the line shows over one too. */
     @Test
@@ -145,7 +173,7 @@ class RadarConsentAskButtonTest {
     @Config(qualifiers = "es-w360dp-h800dp-xxhdpi", fontScale = 2.0f)
     fun theButtonsStayPutWhenStoppingIsOffered() {
         show(current = grant(read = true, control = false))
-        val before = gapAboveThePrimaryButton("Permitir", "Tu elección se guarda")
+        val before = gapAboveThePrimaryButton("Guardar", "Tu elección se guarda")
 
         composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -183,6 +211,8 @@ class RadarConsentAskButtonTest {
         composeRule.onNodeWithText("Don't allow").assertExists()
         composeRule.onNodeWithText("Cancel").assertDoesNotExist()
         composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
+        composeRule.onNodeWithText("Share your radar?").assertExists()
+        composeRule.onNodeWithText("Change what you share?").assertDoesNotExist()
     }
 
     private companion object {

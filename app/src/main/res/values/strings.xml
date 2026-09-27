@@ -825,6 +825,12 @@
     <!-- RadarConsentActivity.kt -->
     <string name="radar_consent_title">Share your radar?</string>
     <string name="radar_consent_body"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> is asking to use your rear radar.</string>
+    <!-- The same screen opened by an app that already has access. The title
+         holds for any mix of the two switches, and names no app because the
+         app chooses its own name. -->
+    <string name="radar_consent_title_again">Change what you share?</string>
+    <string name="radar_consent_body_again"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> already has access to your rear radar.</string>
+    <string name="radar_consent_save_change">Save</string>
     <!-- Shown only while onboarding is unfinished. -->
     <string name="radar_consent_not_set_up">Bike Radar isn\'t set up yet. Open it afterwards to finish setup.</string>
     <string name="radar_consent_read">See what the radar sees</string>

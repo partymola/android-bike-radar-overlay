@@ -799,6 +799,9 @@
     <!-- RadarConsentActivity.kt -->
     <string name="radar_consent_title">¿Compartir tu radar?</string>
     <string name="radar_consent_body"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> pide usar tu radar trasero.</string>
+    <string name="radar_consent_title_again">¿Cambiar lo que compartes?</string>
+    <string name="radar_consent_body_again"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> ya tiene acceso a tu radar trasero.</string>
+    <string name="radar_consent_save_change">Guardar</string>
     <string name="radar_consent_not_set_up">Aún no has configurado Bike Radar. Ábrelo después para terminar de configurarlo.</string>
     <string name="radar_consent_read">Ver lo que ve el radar</string>
     <string name="radar_consent_read_detail">Vehículos detrás de ti, a qué distancia están y a qué velocidad se acercan, su distancia lateral, de qué tipo son, tu propia velocidad, si tu radar está conectado y su batería.</string>

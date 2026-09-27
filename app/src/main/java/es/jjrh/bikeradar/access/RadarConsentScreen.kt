@@ -23,7 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +52,7 @@ fun RadarConsentAsk(
 ) {
     var read by rememberSaveable { mutableStateOf(request.current?.read ?: false) }
     var control by rememberSaveable { mutableStateOf(request.current?.control ?: false) }
+    val revisit = request.current != null
     val br = LocalBrColors.current
 
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -60,13 +64,13 @@ fun RadarConsentAsk(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                stringResource(R.string.radar_consent_title),
+                stringResource(if (revisit) R.string.radar_consent_title_again else R.string.radar_consent_title),
                 color = br.fg,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                stringResource(R.string.radar_consent_body, request.label),
+                stringResource(if (revisit) R.string.radar_consent_body_again else R.string.radar_consent_body, request.label),
                 color = br.fgMuted,
                 // An app chooses its own label, so a lookalike names itself
                 // whatever it likes. The package name is the half it cannot pick,
@@ -102,7 +106,7 @@ fun RadarConsentAsk(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                val action = consentPrimaryAction(request.current != null, read, control)
+                val action = consentPrimaryAction(revisit, read, control)
                 // A first ask LANDS here with both switches off, so the button
                 // is dimmed before the rider has touched anything. Without a
                 // line saying why, the disabled state reads as secondary
@@ -121,14 +125,14 @@ fun RadarConsentAsk(
                 val howToStop = stringResource(R.string.radar_consent_how_to_stop)
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        if (request.current == null) chooseSomething else howToStop,
+                        if (revisit) howToStop else chooseSomething,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.alpha(0f).clearAndSetSemantics {},
                     )
                     Text(
                         text = when {
                             action == ConsentPrimaryAction.NOTHING -> chooseSomething
-                            action == ConsentPrimaryAction.ALLOW && request.current != null -> howToStop
+                            action == ConsentPrimaryAction.ALLOW && revisit -> howToStop
                             else -> ""
                         },
                         textAlign = TextAlign.Center,
@@ -136,13 +140,17 @@ fun RadarConsentAsk(
                         // below it, so the instruction would read as part of the
                         // thing it is explaining.
                         color = br.fgMuted,
+                        // It changes under a switch the rider just flipped, somewhere
+                        // a screen reader's focus is not.
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
                 BrOutlinedButton(
                     label = when (action) {
                         ConsentPrimaryAction.REVOKE -> stringResource(R.string.settings_radar_access_revoke)
+                        // Over a grant "Allow" would read as a new request.
                         ConsentPrimaryAction.ALLOW, ConsentPrimaryAction.NOTHING ->
-                            stringResource(R.string.radar_consent_save)
+                            stringResource(if (revisit) R.string.radar_consent_save_change else R.string.radar_consent_save)
                     },
                     onClick = { onSave(read, control) },
                     enabled = action != ConsentPrimaryAction.NOTHING,
@@ -151,10 +159,10 @@ fun RadarConsentAsk(
                 // "Don't allow": stopping is the primary button, switches off
                 // (RadarConsentAskButtonTest).
                 BrOutlinedButton(
-                    label = if (request.current == null) {
-                        stringResource(R.string.radar_consent_cancel)
-                    } else {
+                    label = if (revisit) {
                         stringResource(R.string.common_cancel)
+                    } else {
+                        stringResource(R.string.radar_consent_cancel)
                     },
                     onClick = onCancel,
                 )

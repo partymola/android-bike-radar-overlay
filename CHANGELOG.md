@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6.5 - 2026-09-27
+
+### Fix
+
+- **An app asking to use your radar before you have accepted the "Before you ride" screen now shows you that screen, then its question.** Since 1.6.0 such a request was refused without a word, and the asking app could not tell that from you saying no. Now you tap through that screen once and answer the question in the same visit. A request made during a ride, or by an app that cannot be identified, is still refused with nothing on screen.
+
+### UX
+
+- **When an app you already allowed asks again, the screen says how to stop sharing.** A line above the buttons says to turn both switches off, which turns the top button into Stop sharing. The second button now reads Cancel rather than Don't allow, because it leaves your choice as it was.
+- **The buttons on that screen stay in place as you flip a switch, at any text size.** The line above them keeps its height when its text changes or goes away. Before, at a large font size, it could shrink and move the buttons under your finger.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to any alert, to the Home Assistant topics, entity names or the values they report, or to which radars work. The cross-app contract version is unchanged. An app that asks before the notice has been accepted now gets the notice and the question instead of an immediate `RESULT_CANCELED`; asked during a ride or by an app that cannot be identified, it gets `RESULT_RIDE_IN_PROGRESS` or `RESULT_CALLER_UNKNOWN`, where 1.6.0 to 1.6.4 returned `RESULT_CANCELED`. The contract now documents `RESULT_CANCELED` as meaning nothing changed, with any earlier grant still standing, and says to treat a result code you do not recognise as no grant.
+
 ## v1.6.4 - 2026-09-24
 
 ### Fix

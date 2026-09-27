@@ -112,28 +112,33 @@ fun RadarConsentAsk(
                 // line saying why, the disabled state reads as secondary
                 // emphasis and the tap goes nowhere. Over an existing grant,
                 // while a switch is on, the same slot says how to stop from
-                // here; the note above only points to Settings.
+                // here; the note above only points to Settings. Once both are
+                // off it says what the button, now Stop sharing, will do.
                 //
                 // The slot keeps one height whatever it shows. If it shrank,
                 // both buttons would move up as the rider flips a switch, the
                 // moment their finger is already travelling towards the primary
-                // button, and it would land on the second one. It sits on an
-                // invisible copy of the one line this request can show, styled
-                // like it, so that holds at any width or font size
+                // button, and it would land on the second one. It sits on
+                // invisible copies of the lines this request can show, styled
+                // like them, so that holds at any width or font size
                 // (RadarConsentAskButtonTest).
                 val chooseSomething = stringResource(R.string.radar_consent_choose_something)
                 val howToStop = stringResource(R.string.radar_consent_how_to_stop)
+                val stopSharing = stringResource(R.string.settings_radar_access_revoke)
+                val willStop = stringResource(R.string.radar_consent_will_stop, stopSharing)
                 Box(contentAlignment = Alignment.Center) {
+                    for (line in if (revisit) listOf(howToStop, willStop) else listOf(chooseSomething)) {
+                        Text(
+                            line,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+                        )
+                    }
                     Text(
-                        if (revisit) howToStop else chooseSomething,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.alpha(0f).clearAndSetSemantics {},
-                    )
-                    Text(
-                        text = when {
-                            action == ConsentPrimaryAction.NOTHING -> chooseSomething
-                            action == ConsentPrimaryAction.ALLOW && revisit -> howToStop
-                            else -> ""
+                        text = when (action) {
+                            ConsentPrimaryAction.NOTHING -> chooseSomething
+                            ConsentPrimaryAction.REVOKE -> willStop
+                            ConsentPrimaryAction.ALLOW -> if (revisit) howToStop else ""
                         },
                         textAlign = TextAlign.Center,
                         // Not fgDim: that is the colour of the disabled button right
@@ -147,7 +152,7 @@ fun RadarConsentAsk(
                 }
                 BrOutlinedButton(
                     label = when (action) {
-                        ConsentPrimaryAction.REVOKE -> stringResource(R.string.settings_radar_access_revoke)
+                        ConsentPrimaryAction.REVOKE -> stopSharing
                         // Over a grant "Allow" would read as a new request.
                         ConsentPrimaryAction.ALLOW, ConsentPrimaryAction.NOTHING ->
                             stringResource(if (revisit) R.string.radar_consent_save_change else R.string.radar_consent_save)

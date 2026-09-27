@@ -839,6 +839,10 @@
     <string name="radar_consent_control_detail">Switch the radar\'s light mode. If you also allow seeing the radar, it can hide the overlay: that does not turn off the alert sounds, and the overlay stays hidden even while you are in another app. It comes back when that app puts it back, when it stops running, or when you stop sharing. During a call the overlay shows anyway, because the alert sounds are off then, and hides again when the call ends.</string>
     <string name="radar_consent_choose_something">Choose at least one to allow.</string>
     <string name="radar_consent_how_to_stop">Turn both off to stop sharing.</string>
+    <!-- Shown once both switches are off over a grant, when the primary
+         button has become Stop sharing. The argument is that button's label
+         (settings_radar_access_revoke). -->
+    <string name="radar_consent_will_stop">\"<xliff:g id="button" example="Stop sharing">%1$s</xliff:g>\" removes that app\'s access.</string>
     <string name="radar_consent_save">Allow</string>
     <string name="radar_consent_cancel">Don\'t allow</string>
     <string name="radar_consent_backup_note">Your choice is kept on this phone and travels in your Android backup, so a new phone starts with the same apps allowed. You can stop sharing at any time in Settings, Apps allowed to use your radar.</string>

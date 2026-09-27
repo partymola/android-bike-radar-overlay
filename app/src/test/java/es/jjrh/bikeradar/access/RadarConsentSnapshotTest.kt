@@ -20,6 +20,7 @@ import org.robolectric.annotation.GraphicsMode
  *    screen opens on what the rider last said rather than on nothing
  *  - notSetUp (and Es): a first ask from a rider who has not finished
  *    setting Bike Radar up
+ *  - revoking (and Es): both switches off over a grant
  *
  * Verify with `:app:verifyRoborazziDebug`; regenerate with
  * `:app:recordRoborazziDebug`.
@@ -75,4 +76,16 @@ class RadarConsentSnapshotTest {
     @Test
     @Config(qualifiers = "+es")
     fun notSetUpEs() = capture(setUp = false)
+
+    // Both switches off over a grant: the primary button is Stop sharing and
+    // the line above it says what that does. A stored grant never has both
+    // off; this is the screen after the rider has turned them off.
+    private val bothOff = readOnly.copy(read = false)
+
+    @Test
+    fun revoking() = capture(bothOff)
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun revokingEs() = capture(bothOff)
 }

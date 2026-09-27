@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performScrollTo
 import es.jjrh.bikeradar.ui.UiTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,6 +88,7 @@ class RadarConsentAskButtonTest {
 
         composeRule.onNodeWithText("Allow").assertIsEnabled()
         composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
+        composeRule.onNodeWithText(WILL_STOP).assertDoesNotExist()
         tap("Allow")
         assertEquals(true to false, saved)
     }
@@ -102,6 +104,8 @@ class RadarConsentAskButtonTest {
 
         composeRule.onNodeWithText(HOW_TO_STOP).assertDoesNotExist()
         composeRule.onNodeWithText("Stop sharing").assertIsEnabled()
+        // The button changed under the rider's finger; the line says what it now does.
+        composeRule.onNodeWithText(WILL_STOP).assert(announcedPolitely)
         tap("Stop sharing")
         assertEquals(false to false, saved)
     }
@@ -137,7 +141,8 @@ class RadarConsentAskButtonTest {
     /**
      * The line above the buttons changes under a switch the rider just
      * flipped, away from a screen reader's focus, so it is marked for screen
-     * readers to announce. Checked on both lines it can show.
+     * readers to announce. Checked on each line it can show; the one after the
+     * last switch goes off is in turningEverythingOffOverAnExistingGrantOffersToStop.
      */
     @Test
     fun theStopSharingLineIsMarkedForAnnouncement() {
@@ -162,24 +167,52 @@ class RadarConsentAskButtonTest {
 
     /**
      * The slot above the buttons must not change height when its text does,
-     * or the buttons move under a finger already on its way. Measured where a
-     * line is most likely to wrap: a narrow phone at a large font size, and in
-     * Spanish, where the stop-sharing line runs a line longer than the other
-     * one, so a slot sized for the wrong line shows up here. The gap is taken
-     * between two nodes in the same scrolling column, so it does not depend on
-     * how far the screen has scrolled.
+     * or the buttons move under a finger already on its way. Over a grant it
+     * shows one of two lines, so each layout below is one where a different
+     * line is strictly the taller: in Spanish at the default size the
+     * how-to-stop line wraps to two lines and the Stop sharing line fits on
+     * one, and in English at 1.6x it is the other way round. A slot sized for
+     * only one of them moves the buttons in one of these, and each test first
+     * checks its layout still separates the two, so a copy or font change
+     * that evens them out fails loudly instead of passing. The gap is taken
+     * between two nodes in the same scrolling column, so it does not depend
+     * on how far the screen has scrolled.
      */
     @Test
-    @Config(qualifiers = "es-w360dp-h800dp-xxhdpi", fontScale = 2.0f)
+    @Config(qualifiers = "es-w360dp-h800dp-xxhdpi")
     fun theButtonsStayPutWhenStoppingIsOffered() {
         show(current = grant(read = true, control = false))
         val before = gapAboveThePrimaryButton("Guardar", "Tu elección se guarda")
+        val hintHeight = lineHeight("Desactiva las dos opciones para dejar de compartir.")
 
         composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
         composeRule.waitForIdle()
 
+        assertTrue(
+            "this layout no longer makes the how-to-stop line the taller; choose another",
+            hintHeight > lineHeight("«Dejar de compartir» le quita el acceso."),
+        )
         assertEquals(before, gapAboveThePrimaryButton("Dejar de compartir", "Tu elección se guarda"))
     }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi", fontScale = 1.6f)
+    fun theButtonsStayPutWhenStoppingIsOfferedInEnglish() {
+        show(current = grant(read = true, control = false))
+        val before = gapAboveThePrimaryButton("Save", BACKUP_NOTE_START)
+        val hintHeight = lineHeight(HOW_TO_STOP)
+
+        composeRule.onAllNodes(isToggleable())[readToggle].performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(
+            "this layout no longer makes the Stop sharing line the taller; choose another",
+            hintHeight < lineHeight(WILL_STOP),
+        )
+        assertEquals(before, gapAboveThePrimaryButton("Stop sharing", BACKUP_NOTE_START))
+    }
+
+    private fun lineHeight(text: String) = composeRule.onNodeWithText(text).fetchSemanticsNode().size.height
 
     @Test
     @Config(qualifiers = "w360dp-h800dp-xxhdpi", fontScale = 2.0f)
@@ -218,6 +251,7 @@ class RadarConsentAskButtonTest {
     private companion object {
         const val HELPER = "Choose at least one to allow."
         const val HOW_TO_STOP = "Turn both off to stop sharing."
+        const val WILL_STOP = "\"Stop sharing\" removes that app's access."
         const val BACKUP_NOTE_START = "Your choice is kept on this phone"
     }
 }

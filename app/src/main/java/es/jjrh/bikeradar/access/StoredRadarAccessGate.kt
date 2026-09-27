@@ -23,12 +23,15 @@ class StoredRadarAccessGate(
     private fun allows(uid: Int, wanted: (RadarGrant) -> Boolean): Boolean {
         val caller = identity.resolve(uid) ?: return false
         val grant = store.grantFor(caller.packageName) ?: return false
-        // Refuse, and leave the grant alone. A signing key the app cannot prove
-        // it owns is either a different app wearing the name or a rotation this
-        // check cannot see; destroying the grant would make the rider re-consent
-        // with no way to tell which it was.
-        if (grant.certDigest !in identity.digests(caller.packageName)) return false
-        if (!wanted(grant)) return false
+        // Unreadable signing info is evidence of nothing, so nothing is recorded.
+        val digests = identity.digests(caller.packageName).ifEmpty { return false }
+        // A key the app cannot prove may belong to another app using the name, to
+        // the same app signed elsewhere, or to a rotation this check cannot see, so
+        // the grant is kept rather than destroyed. The outcome is recorded because
+        // Settings cannot see this app to ask about it later.
+        val proven = grant.isOwnedBy(digests)
+        if (grant.refused == proven) store.recordKeyCheck(caller.packageName, grant.certDigest, proven)
+        if (!proven || !wanted(grant)) return false
         store.markUsed(caller.packageName, now())
         return true
     }

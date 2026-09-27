@@ -5,6 +5,7 @@ package es.jjrh.bikeradar.access
 import android.app.Activity
 import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,6 +33,10 @@ class RadarConsentDeciderTest {
         }
 
         override fun markUsed(packageName: String, atMs: Long) = Unit
+
+        override fun recordKeyCheck(packageName: String, certDigest: String, proven: Boolean) {
+            items[packageName]?.takeIf { it.certDigest == certDigest }?.let { items[packageName] = it.copy(refused = !proven) }
+        }
     }
 
     private class FakeIdentity(
@@ -126,6 +131,52 @@ class RadarConsentDeciderTest {
     fun aGrantUnderAKeyTheAppCannotProveIsNotShownAsCurrent() {
         store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true))
         assertEquals(ConsentRequest.Ask(PKG, "Trail Buddy", null), decider().open(PKG))
+    }
+
+    /** Recorded here, while the app is asking, because Settings cannot look it up later. */
+    @Test
+    fun askingUnderAKeyTheAppCannotProveRecordsTheRefusal() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true))
+        decider().open(PKG)
+        assertTrue(store.grantFor(PKG)!!.refused)
+    }
+
+    /** "aa11" is the app's lowest key but not the first the fixture lists, so only membership passes. */
+    @Test
+    fun askingUnderAProvableKeyRecordsNothing() {
+        store.put(RadarGrant(PKG, "aa11", "Trail Buddy", 1L, 2L, read = true, control = false))
+        decider().open(PKG)
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    /** Proven now, so "couldn't confirm" is no longer true even if the rider then cancels. */
+    @Test
+    fun askingUnderAProvableKeyClearsARecordedRefusal() {
+        store.put(RadarGrant(PKG, "aa11", "Trail Buddy", 1L, 2L, read = true, control = false, refused = true))
+        val asked = decider().open(PKG) as ConsentRequest.Ask
+        assertFalse(store.grantFor(PKG)!!.refused)
+        assertFalse("the question carries the grant as it now stands", asked.current!!.refused)
+    }
+
+    @Test
+    fun aRideInProgressRecordsNothing() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true))
+        decider(riding = true).open(PKG)
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    @Test
+    fun anUnreadableSignatureRecordsNothing() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true))
+        decider(FakeIdentity(certs = emptySet())).open(PKG)
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    @Test
+    fun anAnswerReplacesARecordedRefusal() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 2L, read = true, control = true, refused = true))
+        decider().decide(PKG, "Trail Buddy", read = true, control = false)
+        assertFalse(store.grantFor(PKG)!!.refused)
     }
 
     /** Any of the app's keys will do, as at the gate: not only the one a grant stores today. */

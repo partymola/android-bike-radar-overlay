@@ -19,6 +19,13 @@ import org.json.JSONObject
  * answers "has this app been near the radar lately", never "exactly when".
  * It exists so the settings list can show what has gone quiet,
  * since grants do not expire on their own.
+ *
+ * [refused] records whether, the last time the app was checked, it could not
+ * prove [certDigest]. It is recorded at that moment because it cannot be
+ * looked up later: Android hides other apps from this one unless they are
+ * talking to it, so Settings asking the PackageManager about a granted app
+ * after a reboot is told nothing is installed (measured on an emulator). The
+ * gate and the consent screen both check, and a proven key clears it.
  */
 data class RadarGrant(
     val packageName: String,
@@ -28,7 +35,11 @@ data class RadarGrant(
     val lastUsedAtMs: Long,
     val read: Boolean,
     val control: Boolean,
+    val refused: Boolean = false,
 )
+
+/** Membership rather than equality with one key, so a grant survives a rotation the platform records. */
+fun RadarGrant.isOwnedBy(digests: Set<String>): Boolean = certDigest in digests
 
 /**
  * The rider's standing grants, keyed by package.
@@ -48,6 +59,13 @@ interface RadarGrantStore {
     fun revoke(packageName: String): Boolean
 
     fun markUsed(packageName: String, atMs: Long)
+
+    /**
+     * Sets [RadarGrant.refused] to `!proven`, but only while the stored grant
+     * still carries [certDigest]: a grant the rider replaced after the check
+     * read it is not the one that was checked.
+     */
+    fun recordKeyCheck(packageName: String, certDigest: String, proven: Boolean)
 }
 
 /**
@@ -71,8 +89,8 @@ interface RadarGrantStore {
  * this file are the rider's installed third-party apps, and a capture is a file
  * riders attach to hardware reports, so recording consent events would put a
  * list of what they have installed into an artefact meant to be shared. The
- * store itself is the record: it carries `grantedAtMs` and `lastUsedAtMs`, and
- * the Settings screen reads both.
+ * store itself is the record: it carries `grantedAtMs`, `lastUsedAtMs` and
+ * `refused`, and the Settings screen reads the last two.
  */
 class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantStore {
 
@@ -108,10 +126,17 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
             // stamp changes nothing on screen. Without the floor this is a
             // whole-file rewrite on every allowed call, which is a radar frame.
             if (atMs - existing.lastUsedAtMs < USE_STAMP_RESOLUTION_MS) return
-            write(
-                current.map { if (it.packageName == packageName) it.copy(lastUsedAtMs = atMs) else it },
-                durable = false,
-            )
+            write(current.map { if (it.packageName == packageName) it.copy(lastUsedAtMs = atMs) else it }, durable = false)
+        }
+    }
+
+    /** Writes only a change, so an app retrying does not rewrite the file each time. */
+    override fun recordKeyCheck(packageName: String, certDigest: String, proven: Boolean) {
+        synchronized(LOCK) {
+            val current = read() ?: return
+            val existing = current.firstOrNull { it.packageName == packageName } ?: return
+            if (existing.certDigest != certDigest || existing.refused == !proven) return
+            write(current.map { if (it.packageName == packageName) it.copy(refused = !proven) else it }, durable = false)
         }
     }
 
@@ -135,6 +160,7 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
                     lastUsedAtMs = o.optLong("used", 0L),
                     read = o.optBoolean("read", false),
                     control = o.optBoolean("control", false),
+                    refused = o.optBoolean("refused", false),
                 )
             }
         }.getOrNull()
@@ -151,7 +177,8 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
                     .put("granted", g.grantedAtMs)
                     .put("used", g.lastUsedAtMs)
                     .put("read", g.read)
-                    .put("control", g.control),
+                    .put("control", g.control)
+                    .put("refused", g.refused),
             )
         }
         val editor = prefs.edit().putString(KEY, arr.toString())
@@ -182,6 +209,9 @@ class PrefsRadarGrantStore(private val prefs: SharedPreferences) : RadarGrantSto
          * once a minute for the length of a ride. A use stamp cannot change who
          * is allowed what, so there is nothing to invalidate.
          * `markUsedDoesNotTriggerRevalidation` pins it.
+         *
+         * [recordKeyCheck] does not bump either, for the same reason: it changes
+         * what Settings says, never who is allowed what.
          */
         val writes: StateFlow<Long> = _writes
 

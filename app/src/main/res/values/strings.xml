@@ -868,9 +868,16 @@
     <string name="settings_radar_access_can_control_light_only">Changes your tail light</string>
     <string name="settings_radar_access_last_used">Last used <xliff:g id="when" example="3 days ago">%1$s</xliff:g></string>
     <string name="settings_radar_access_never_used">Not used yet</string>
+    <!-- Shown in place of what the app may do, for a grant whose app could not
+         prove the key the rider approved the last time it asked. Past tense on
+         purpose: it is what was seen then, not a check made now. Never say the
+         app is a different one: an unconfirmed key is also what some key
+         changes look like. -->
+    <string name="settings_radar_access_refused">Blocked last time: couldn\'t confirm it was the app you allowed</string>
     <string name="settings_radar_access_revoke">Stop sharing</string>
     <string name="settings_radar_access_revoke_title">Stop sharing with <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>?</string>
     <string name="settings_radar_access_revoke_body">It will no longer see your radar, change your tail light, or hide the overlay. What it already has stays with it. You can allow it again from the app itself.</string>
+    <string name="settings_radar_access_revoke_body_refused">Bike Radar blocked it the last time it asked to use your radar. If you trust it, open it and allow it if it asks. \"<xliff:g id="button" example="Stop sharing">%1$s</xliff:g>\" removes your saved choice.</string>
     <string name="settings_radar_access_backup_note">This list is kept on your phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
 
 </resources>

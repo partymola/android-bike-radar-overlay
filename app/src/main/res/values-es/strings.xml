@@ -835,9 +835,11 @@
     <string name="settings_radar_access_can_control_light_only">Cambia luz trasera</string>
     <string name="settings_radar_access_last_used">Último uso <xliff:g id="when" example="hace 3 días">%1$s</xliff:g></string>
     <string name="settings_radar_access_never_used">Sin usar todavía</string>
+    <string name="settings_radar_access_refused">Bloqueada la última vez: no se pudo confirmar que fuera la app que permitiste</string>
     <string name="settings_radar_access_revoke">Dejar de compartir</string>
     <string name="settings_radar_access_revoke_title">¿Dejar de compartir con <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>?</string>
     <string name="settings_radar_access_revoke_body">Dejará de ver tu radar, de cambiar tu luz trasera y de ocultar la barra lateral. Lo que ya tenga se queda con ella. Puedes volver a darle permiso desde la propia app.</string>
+    <string name="settings_radar_access_revoke_body_refused">Bike Radar la bloqueó la última vez que pidió usar tu radar. Si confías en ella, ábrela y dale permiso si te lo pide. «<xliff:g id="button" example="Dejar de compartir">%1$s</xliff:g>» borra tu elección guardada.</string>
     <string name="settings_radar_access_backup_note">Esta lista se guarda en tu móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas.</string>
 
 </resources>

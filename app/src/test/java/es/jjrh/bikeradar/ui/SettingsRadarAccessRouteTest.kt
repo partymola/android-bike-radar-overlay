@@ -55,6 +55,10 @@ class SettingsRadarAccessRouteTest {
         }
 
         override fun markUsed(packageName: String, atMs: Long) = Unit
+
+        override fun recordKeyCheck(packageName: String, certDigest: String, proven: Boolean) {
+            grants = grants.map { if (it.packageName == packageName && it.certDigest == certDigest) it.copy(refused = !proven) else it }
+        }
     }
 
     private fun grant(pkg: String, label: String) = RadarGrant(pkg, "aa11", label, 0L, 0L, read = true, control = false)
@@ -125,6 +129,19 @@ class SettingsRadarAccessRouteTest {
         leaveAndComeBack()
 
         composeRule.onNodeWithText("Trail Buddy").assertDoesNotExist()
+    }
+
+    /** The gate records a refusal on a binder thread while this screen sits in the backstack. */
+    @Test
+    fun aRefusalRecordedWhileTheScreenWasAwayIsShownOnReturn() {
+        val store = FakeStore(listOf(grant("com.example.trailbuddy", "Trail Buddy")))
+        show(store)
+        composeRule.onNodeWithText("Blocked", substring = true).assertDoesNotExist()
+
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        leaveAndComeBack()
+
+        composeRule.onNodeWithText("Blocked", substring = true).assertExists()
     }
 
     @Test

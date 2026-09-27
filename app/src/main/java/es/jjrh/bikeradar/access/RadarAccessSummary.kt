@@ -11,7 +11,10 @@ package es.jjrh.bikeradar.access
  * should not read the same for both.
  */
 enum class RadarAccessSummary {
-    /** No app has been allowed anything. */
+    /**
+     * No counted grant allows anything. Settings does not count a grant
+     * refused last time, so this can stand while such a grant is listed.
+     */
     NONE,
 
     /** At least one app can see the radar; none can act on the hardware. */

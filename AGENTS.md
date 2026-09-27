@@ -865,6 +865,18 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - The `<queries>` entry for `com.bosch.ebike.onebikeapp` is load-bearing:
   without it `getLaunchIntentForPackage` returns null on Android 11+ and
   "Open Flow" silently falls back to the Play Store.
+- **Settings cannot ask Android about an app the rider granted.** There is no
+  `<queries>` entry for consumer apps, so on Android 11+ the package manager
+  sees one only after it has bound or opened the consent screen, and, measured
+  on an emulator, loses it again after a reboot. The gate and the consent
+  decider run while that app is calling, so their lookups work; a lookup from
+  Settings answers as if the app were not installed. That is why the outcome
+  of each key check that could read the app's keys is RECORDED as
+  `RadarGrant.refused` at that moment rather than derived by Settings
+  (`StoredRadarAccessGateTest`, `RadarConsentDeciderTest`,
+  `SettingsRadarAccessRefusedTest`).
+  The unit suite drives both through fake identities, so it cannot see this;
+  check a change here on a device or emulator.
 - To test Onboarding without destroying your production install's pairing
   state, build the `onbtest` buildType
   (`scripts/dev gradle :app:assembleOnbtest`). It installs side-by-side under

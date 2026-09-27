@@ -82,15 +82,19 @@ class RadarConsentDecider(
         // A rider mid-ride is looking at the road, not at a permission screen.
         if (rideInProgress()) return ConsentRequest.Refuse(Consent.RESULT_RIDE_IN_PROGRESS)
 
-        return ConsentRequest.Ask(packageName, caller.label, grantProvableBy(packageName, digests))
+        val stored = store.grantFor(packageName)
+        val proven = stored != null && stored.isOwnedBy(digests)
+        // One of the two moments this app can be seen, so what the gate would
+        // make of its key is recorded for Settings.
+        if (stored != null && stored.refused == proven) store.recordKeyCheck(packageName, stored.certDigest, proven)
+        return ConsentRequest.Ask(packageName, caller.label, stored?.takeIf { proven }?.copy(refused = false))
     }
 
     /**
      * The stored grant, if this app can prove its key. The gate refuses one it
-     * cannot, so it is neither shown nor carried over. Membership, as at the
-     * gate, so a rotated signer still counts.
+     * cannot, so it is neither shown nor carried over.
      */
-    private fun grantProvableBy(packageName: String, digests: Set<String>): RadarGrant? = store.grantFor(packageName)?.takeIf { it.certDigest in digests }
+    private fun grantProvableBy(packageName: String, digests: Set<String>): RadarGrant? = store.grantFor(packageName)?.takeIf { it.isOwnedBy(digests) }
 
     /**
      * Record what the rider decided. Answering no to both removes the grant

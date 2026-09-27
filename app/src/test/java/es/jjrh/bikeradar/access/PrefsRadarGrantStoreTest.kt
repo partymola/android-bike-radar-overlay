@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -77,9 +78,73 @@ class PrefsRadarGrantStoreTest {
 
     @Test
     fun everyFieldSurvivesAWriteAndRead() {
-        val g = RadarGrant("com.example.trailbuddy", "ff00", "Trail Buddy", 42L, 7L, read = true, control = true)
+        val g = RadarGrant("com.example.trailbuddy", "ff00", "Trail Buddy", 42L, 7L, read = true, control = true, refused = true)
         store.put(g)
         assertEquals(g, store.grantFor("com.example.trailbuddy"))
+    }
+
+    /** Grants stored before refusals were recorded, including ones restored from a backup. */
+    @Test
+    fun aGrantStoredWithoutTheFieldReadsAsNotRefused() {
+        prefs.edit().putString(
+            "radar_access_grants",
+            """[{"pkg":"com.example.trailbuddy","cert":"aa11","read":true}]""",
+        ).commit()
+        assertFalse(store.grantFor("com.example.trailbuddy")!!.refused)
+    }
+
+    @Test
+    fun aRefusalIsRecordedForThatAppOnly() {
+        store.put(grant(pkg = "com.example.trailbuddy"))
+        store.put(grant(pkg = "com.example.other"))
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        assertTrue(store.grantFor("com.example.trailbuddy")!!.refused)
+        assertFalse(store.grantFor("com.example.other")!!.refused)
+    }
+
+    @Test
+    fun aProvenKeyClearsARefusal() {
+        store.put(grant())
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = true)
+        assertFalse(store.grantFor("com.example.trailbuddy")!!.refused)
+    }
+
+    /** The app used the radar, then could not prove its key: the row keeps when it last did. */
+    @Test
+    fun aRefusalKeepsTheLastRealUse() {
+        store.put(grant(lastUsedAtMs = 500_000L))
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        assertEquals(500_000L, store.grantFor("com.example.trailbuddy")!!.lastUsedAtMs)
+    }
+
+    /** A check read the old grant, then the rider answered again under the app's new key. */
+    @Test
+    fun aCheckOfAReplacedGrantChangesNothing() {
+        store.put(grant())
+        store.put(RadarGrant("com.example.trailbuddy", "bb22", "Trail Buddy", 1_800L, 0L, read = true, control = false))
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        assertFalse(store.grantFor("com.example.trailbuddy")!!.refused)
+
+        store.recordKeyCheck("com.example.trailbuddy", "bb22", proven = false)
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = true)
+        assertTrue(store.grantFor("com.example.trailbuddy")!!.refused)
+    }
+
+    @Test
+    fun aKeyCheckOnAnUnknownAppCreatesNothing() {
+        store.recordKeyCheck("com.example.ghost", "aa11", proven = false)
+        assertEquals(emptyList<RadarGrant>(), store.all())
+    }
+
+    /** It changes what Settings says, not who is allowed what, so nothing held needs revisiting. */
+    @Test
+    fun aKeyCheckDoesNotTriggerRevalidation() {
+        store.put(grant())
+        val before = PrefsRadarGrantStore.writes.value
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = true)
+        assertEquals(before, PrefsRadarGrantStore.writes.value)
     }
 
     @Test
@@ -122,9 +187,11 @@ class PrefsRadarGrantStoreTest {
     fun markUsedStampsOnlyThatApp() {
         store.put(grant(pkg = "com.example.trailbuddy"))
         store.put(grant(pkg = "com.example.other"))
+        store.recordKeyCheck("com.example.other", "aa11", proven = false)
         store.markUsed("com.example.trailbuddy", 500_000L)
         assertEquals(500_000L, store.grantFor("com.example.trailbuddy")!!.lastUsedAtMs)
         assertEquals(0L, store.grantFor("com.example.other")!!.lastUsedAtMs)
+        assertTrue("another app's use says nothing about this one's key", store.grantFor("com.example.other")!!.refused)
     }
 
     @Test
@@ -177,6 +244,9 @@ class PrefsRadarGrantStoreTest {
         assertEquals(damaged, prefs.getString("radar_access_grants", null))
 
         store.markUsed("com.example.trailbuddy", 900_000L)
+        assertEquals(damaged, prefs.getString("radar_access_grants", null))
+
+        store.recordKeyCheck("com.example.trailbuddy", "aa11", proven = false)
         assertEquals(damaged, prefs.getString("radar_access_grants", null))
     }
 

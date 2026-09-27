@@ -137,12 +137,14 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         }
     }
 
-    // Re-read on resume rather than held in state: a grant can be added by the
-    // consent screen in another task while this one sits in the backstack.
+    // Re-read on each tick rather than held in state: a grant can be added by
+    // the consent screen in another task while this one sits in the backstack.
+    // A grant refused the last time its app asked is not an app using the
+    // radar, so it is not counted; its own screen still lists it, saying why.
     val radarGrants = remember(tickNowMs) {
         PrefsRadarGrantStore(
             ctx.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, android.content.Context.MODE_PRIVATE),
-        ).all()
+        ).all().filterNot { it.refused }
     }
 
     // Stale entries are dropped rather than rendered: BatteryStateBus is never

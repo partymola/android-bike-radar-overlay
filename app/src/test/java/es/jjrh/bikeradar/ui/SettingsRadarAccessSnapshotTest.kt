@@ -18,6 +18,8 @@ import org.robolectric.annotation.GraphicsMode
  *  - readingOnly: an app that can see the radar and nothing else
  *  - mixed: one reader and one that can also change the tail light, so the
  *    two levels of trust are visibly different rather than one label
+ *  - refused (and Es): a reader beside a grant refused the last time its app
+ *    asked
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -84,4 +86,26 @@ class SettingsRadarAccessSnapshotTest {
             }
         }
     }
+
+    private fun captureRefused() {
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarAccessContent(
+                    grants = listOf(
+                        grant("com.example.trailbuddy", "Trail Buddy", read = true, control = false),
+                        grant("com.example.other", "Another Navigator", read = true, control = true).copy(refused = true),
+                    ),
+                    onRevoke = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun refused() = captureRefused()
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun refusedEs() = captureRefused()
 }

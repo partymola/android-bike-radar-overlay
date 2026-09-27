@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Visibility
@@ -114,12 +115,17 @@ fun SettingsRadarAccessContent(
             SettingsRowGroup {
                 grants.forEachIndexed { index, grant ->
                     SettingsActionRow(
-                        leadingIcon = if (grant.control) Icons.Default.FlashOn else Icons.Default.Visibility,
-                        leadingTint = if (grant.control) br.caution else br.brand,
+                        leadingIcon = when {
+                            grant.refused -> Icons.Default.Block
+                            grant.control -> Icons.Default.FlashOn
+                            else -> Icons.Default.Visibility
+                        },
+                        leadingTint = if (grant.refused || grant.control) br.caution else br.brand,
                         title = grant.label,
                         subtitle = listOfNotNull(
                             grant.packageName,
-                            stringResource(R.string.settings_radar_access_can_read).takeIf { grant.read },
+                            stringResource(R.string.settings_radar_access_refused).takeIf { grant.refused },
+                            stringResource(R.string.settings_radar_access_can_read).takeIf { !grant.refused && grant.read },
                             // Hiding the overlay needs a live registration and
                             // so needs READ as well, which the consent screen
                             // now says. A control-only grant here would be told
@@ -131,9 +137,11 @@ fun SettingsRadarAccessContent(
                                 } else {
                                     R.string.settings_radar_access_can_control_light_only
                                 },
-                            ).takeIf { grant.control },
+                            ).takeIf { !grant.refused && grant.control },
                             if (grant.lastUsedAtMs == 0L) {
-                                stringResource(R.string.settings_radar_access_never_used)
+                                // Beside "Blocked last time" it reads as a
+                                // contradiction: the block says the app tried.
+                                stringResource(R.string.settings_radar_access_never_used).takeUnless { grant.refused }
                             } else {
                                 stringResource(
                                     R.string.settings_radar_access_last_used,
@@ -182,7 +190,18 @@ fun SettingsRadarAccessContent(
                     overflow = TextOverflow.Ellipsis,
                 )
             },
-            text = { Text(stringResource(R.string.settings_radar_access_revoke_body)) },
+            text = {
+                Text(
+                    if (grant.refused) {
+                        stringResource(
+                            R.string.settings_radar_access_revoke_body_refused,
+                            stringResource(R.string.settings_radar_access_revoke),
+                        )
+                    } else {
+                        stringResource(R.string.settings_radar_access_revoke_body)
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     onRevoke(grant.packageName)

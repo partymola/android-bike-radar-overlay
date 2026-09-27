@@ -33,6 +33,10 @@ class StoredRadarAccessGateTest {
         override fun markUsed(packageName: String, atMs: Long) {
             items[packageName]?.let { items[packageName] = it.copy(lastUsedAtMs = atMs) }
         }
+
+        override fun recordKeyCheck(packageName: String, certDigest: String, proven: Boolean) {
+            items[packageName]?.takeIf { it.certDigest == certDigest }?.let { items[packageName] = it.copy(refused = !proven) }
+        }
     }
 
     /**
@@ -143,19 +147,86 @@ class StoredRadarAccessGateTest {
         )
     }
 
+    /**
+     * Settings cannot ask about the app itself later: Android hides other apps
+     * from this one unless they are talking to it. So the refusal is recorded
+     * now, while the app is calling.
+     */
+    @Test
+    fun aKeyTheAppCannotProveIsRecordedAsRefused() {
+        val store = FakeStore(grant(read = true, cert = "not-this-app"))
+        assertFalse(gate(store).canRead(42))
+        assertTrue(store.grantFor(PKG)!!.refused)
+        assertEquals("a refusal is not a use", 0L, store.grantFor(PKG)!!.lastUsedAtMs)
+    }
+
+    @Test
+    fun aCallerThatProvesItsKeyIsNotRecordedAsRefused() {
+        val store = FakeStore(grant(read = true))
+        assertTrue(gate(store).canRead(42))
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    /** An app that only ever asks for the tail light is still checked, and its refusal still recorded. */
+    @Test
+    fun aKeyTheAppCannotProveIsRecordedWhateverTheCallAskedFor() {
+        val store = FakeStore(grant(read = true, control = false, cert = "not-this-app"))
+        assertFalse(gate(store).canControl(42))
+        assertTrue(store.grantFor(PKG)!!.refused)
+    }
+
+    /** Asking for more than was granted is the app's scope, not doubt about which app it is. */
+    @Test
+    fun askingForWhatWasNotGrantedIsNotRecordedAsRefused() {
+        val store = FakeStore(grant(read = true, control = false))
+        assertFalse(gate(store).canControl(42))
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    /** The key was proven, so "couldn't confirm" is no longer true, whatever the call asked for. */
+    @Test
+    fun aProvenKeyClearsARefusalEvenWhenTheCallIsOutOfScope() {
+        val store = FakeStore(grant(read = true, control = false).copy(refused = true))
+        assertFalse(gate(store).canControl(42))
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
+    @Test
+    fun anUnidentifiableCallerRecordsNothing() {
+        val store = FakeStore(grant(read = true, cert = "not-this-app"))
+        assertFalse(gate(store, FakeIdentity(emptyMap())).canRead(42))
+        assertFalse(store.grantFor(PKG)!!.refused)
+    }
+
     @Test
     fun aRotatedKeyStillCountsAsTheAppTheRiderApproved() {
         // The app now signs with a new key, but still proves it owns the old
         // one. Without this the rider is silently made to consent again.
-        val store = FakeStore(grant(read = true, cert = "retired-key"))
-        val rotated = FakeIdentity(mapOf(42 to caller), certsByPackage = mapOf(PKG to setOf("retired-key", "current-key")))
+        // The approved key is neither the lowest of the set nor the first, so
+        // only membership passes, not equality with one chosen key.
+        val store = FakeStore(grant(read = true, cert = "retired-key").copy(refused = true))
+        val rotated = FakeIdentity(mapOf(42 to caller), certsByPackage = mapOf(PKG to linkedSetOf("current-key", "retired-key", "a-older-key")))
         assertTrue(gate(store, rotated).canRead(42))
+        assertFalse(store.grantFor(PKG)!!.refused)
     }
 
     @Test
     fun anAppThatProvesNoCertificateAtAllIsRefused() {
         val g = gate(FakeStore(grant(read = true)), FakeIdentity(mapOf(42 to caller), certsByPackage = emptyMap()))
         assertFalse(g.canRead(42))
+    }
+
+    /** Unreadable signing info says nothing about the key, as at the consent screen. */
+    @Test
+    fun unreadableSigningInfoRecordsNothingEitherWay() {
+        val noKeys = FakeIdentity(mapOf(42 to caller), certsByPackage = emptyMap())
+        val clean = FakeStore(grant(read = true))
+        assertFalse(gate(clean, noKeys).canRead(42))
+        assertFalse(clean.grantFor(PKG)!!.refused)
+
+        val marked = FakeStore(grant(read = true).copy(refused = true))
+        assertFalse(gate(marked, noKeys).canRead(42))
+        assertTrue(marked.grantFor(PKG)!!.refused)
     }
 
     @Test

@@ -193,6 +193,26 @@ class RadarConsentDeciderTest {
         assertEquals("aa11", store.grantFor(PKG)!!.certDigest)
     }
 
+    /**
+     * Settings shows when an app last used the radar, and "Not used yet" for
+     * zero. Saving the same app's grant again, changed or not, must not make
+     * an app in daily use read as never used.
+     */
+    @Test
+    fun savingAGrantAgainKeepsWhenTheAppLastUsedTheRadar() {
+        store.put(RadarGrant(PKG, "aa11", "Trail Buddy", 1L, 3_000L, read = true, control = false))
+        decider().decide(PKG, "Trail Buddy", read = true, control = true)
+        assertEquals(3_000L, store.grantFor(PKG)!!.lastUsedAtMs)
+    }
+
+    /** A grant under a key the app cannot prove is not carried over, so its record starts fresh. */
+    @Test
+    fun aGrantForANewSigningKeyStartsUnused() {
+        store.put(RadarGrant(PKG, "zz99", "Trail Buddy", 1L, 3_000L, read = true, control = false))
+        decider().decide(PKG, "Trail Buddy", read = true, control = false)
+        assertEquals(0L, store.grantFor(PKG)!!.lastUsedAtMs)
+    }
+
     @Test
     fun anAppThatCannotProveAKeyIsNotGranted() {
         val unreadable = FakeIdentity(certs = emptySet())

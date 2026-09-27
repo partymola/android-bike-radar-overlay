@@ -104,13 +104,16 @@ class RadarConsentDecider(
         // the stored value the same across two grants of the same app.
         val digest = identity.digests(packageName).minOrNull()
             ?: return Consent.RESULT_CALLER_UNKNOWN
+        // Settings shows when an app last used the radar; saving the same app
+        // again must not reset that to "Not used yet".
+        val lastUsed = store.grantFor(packageName)?.takeIf { it.certDigest == digest }?.lastUsedAtMs ?: 0L
         val stored = store.put(
             RadarGrant(
                 packageName = packageName,
                 certDigest = digest,
                 label = label,
                 grantedAtMs = now(),
-                lastUsedAtMs = 0L,
+                lastUsedAtMs = lastUsed,
                 read = read,
                 control = control,
             ),

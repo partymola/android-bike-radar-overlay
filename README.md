@@ -163,8 +163,9 @@ Store-listing metadata lives under `fastlane/metadata/android/`
 ## First run
 
 1. Read the "Before you ride" screen and tap through it. It appears once,
-   on your first launch, and again under **Settings -> About** whenever you
-   want it.
+   on your first launch or the first time another app asks to use your
+   radar, whichever comes first.
+   It is also under **Settings -> About** whenever you want it.
 2. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
    notifications, overlay).
 3. Enter your Home Assistant base URL and long-lived token (or skip).

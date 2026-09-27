@@ -106,17 +106,18 @@ class Prefs(context: Context) {
     /** Whether the rider has acknowledged the riding-aid notice. Defaults to
      *  false, which is what makes one flag serve both audiences: a new install
      *  meets the screen before onboarding, and an install upgrading from a
-     *  version that never wrote the key meets it once on the next launch.
-     *  Two readers, and both gate a screen on it before showing one:
-     *  [es.jjrh.bikeradar.MainActivity] picks the start destination, and
-     *  [es.jjrh.bikeradar.access.RadarConsentActivity] refuses outright. The
-     *  second is the safety-relevant one, because it is exported and any
-     *  installed app can start it; a third reader is a third way in and belongs
-     *  in `NoScreenBeforeTheNoticeTest`. Deliberately absent from [snapshot]
-     *  and [flow] even so. The consent activity reads it in `onCreate`; the
-     *  launcher reads it inside its composition rather than in `onCreate`'s
-     *  body, so that is where to look for it. Neither reads it more than once
-     *  per launch, and neither needs to observe a later change.
+     *  version that never wrote the key meets it once, at the next launch or
+     *  in front of the first consent question another app opens.
+     *  Two activities show the notice while it is false, and both store the
+     *  tap: [es.jjrh.bikeradar.MainActivity] picks it as the start
+     *  destination, and [es.jjrh.bikeradar.access.RadarConsentActivity] puts it
+     *  in front of its question, after the decider's refusals. The second is
+     *  the safety-relevant one, because it is exported and any installed app
+     *  can start it; a third reader is a third way in and belongs in
+     *  `NoScreenBeforeTheNoticeTest`. Deliberately absent from [snapshot] and
+     *  [flow] even so. Both read it inside their composition rather than in
+     *  `onCreate`'s body, so that is where to look for it, and each acts on its
+     *  own tap rather than observing the key.
      *
      *  Absent from [dumpAll] for a stronger reason than that, and the reason
      *  is what keeps it out: the only way to produce a diagnostic bundle is

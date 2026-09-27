@@ -182,7 +182,8 @@
 
     <!-- ════════════════════════════════════════════════════════════════
          Aviso de ayuda a la conducción (SafetyNotice.kt) - se muestra una
-         vez antes de la app, y luego en Ajustes → Acerca de.
+         vez antes de la app o antes de la primera pregunta de acceso de otra
+         app, lo que llegue antes, y luego en Ajustes → Acerca de.
          ════════════════════════════════════════════════════════════════ -->
     <string name="safety_notice_title">Antes de montar en bici</string>
     <string name="safety_notice_intro">Bike Radar es una ayuda a la conducción. Te avisa del tráfico que viene por detrás. No mira atrás por ti.</string>

@@ -22,7 +22,8 @@ import androidx.compose.ui.unit.sp
 import es.jjrh.bikeradar.R
 
 /**
- * The riding-aid notice, shown once on the next launch of the app.
+ * The riding-aid notice, shown once: at the next launch of the app, or in
+ * front of the first consent question another app opens, whichever comes first.
  *
  * Not "before a rider can reach the app": `BootReceiver` restarts the service
  * on `MY_PACKAGE_REPLACED`, so an upgrading rider's radar comes back without
@@ -37,15 +38,17 @@ import es.jjrh.bikeradar.R
  * wants to get on with it.
  *
  * Settings, About re-opens THIS composable rather than a read-only copy of
- * it, and the button there only closes the screen. Do not reintroduce a
- * second version for that route: a variant is free to render the title twice,
+ * it, and the button there only closes the screen. The consent screen another
+ * app opens shows it too, in front of its question. Do not reintroduce a
+ * second version for either route: a variant is free to render the title twice,
  * to carry no golden of its own, and to let its copy drift from this one, and
  * nothing would report any of it.
  *
- * No other ACTIVITY of this app reaches a rider before the tap.
- * `NoScreenBeforeTheNoticeTest` pins the manifest's activity set and gates the
- * exported consent activity another app can start; this launcher's own gating
- * is pinned by `SafetyNoticeGateTest` and `SafetyNoticeAcknowledgeTest`.
+ * No ACTIVITY of this app shows a rider anything but this notice before the tap.
+ * `NoScreenBeforeTheNoticeTest` pins the manifest's activity set and the
+ * notice in the exported consent activity another app can start; this
+ * launcher's own gating is pinned by `SafetyNoticeGateTest` and
+ * `SafetyNoticeAcknowledgeTest`.
  *
  * ACTIVITY rather than "screen", and the word carries the whole claim: the
  * service described above keeps drawing the overlay, posting its notification

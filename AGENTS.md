@@ -186,10 +186,12 @@ summary; the Key files table maps each part to its file.
   `BootReceiver` produces on `MY_PACKAGE_REPLACED` and what
   `MainActivitySmokeTest.theServiceStillStartsWhileTheNoticeIsUp` pins.
   `RadarConsentActivity` is the second reader of the flag and the one that
-  matters most, being exported: it refuses before composing anything, and
-  `NoScreenBeforeTheNoticeTest.anAppThisRiderCouldGrantIsStillRefusedBeforeTheTap`
-  is the only test whose fixture makes that gate do any work, since every
-  other one uses a caller the decider rejects on its own.
+  matters most, being exported: it shows the notice in front of its question,
+  and only after the decider's refusals, so a ride in progress or an unknown
+  caller is still answered with no screen at all.
+  In `NoScreenBeforeTheNoticeTest` the tests with a caller the decider accepts
+  are the ones where that gate does work; the two refusal tests use a caller or
+  a moment the decider rejects on its own, so they cannot see it.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
@@ -316,7 +318,7 @@ summary; the Key files table maps each part to its file.
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
 | `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see the Architecture note on why that ordering is the feature |
-| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with two routes: the launch gate, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for the second |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with three routes: the launch gate, the consent screen another app opens, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for any of them |
 | `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
 | `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |

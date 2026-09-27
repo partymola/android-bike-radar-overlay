@@ -6,10 +6,15 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import es.jjrh.bikeradar.radarStreamIsLive
+import es.jjrh.bikeradar.ui.SafetyNoticeScreen
 import es.jjrh.bikeradar.ui.UiTheme
 
 /**
@@ -26,18 +31,7 @@ class RadarConsentActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // The riding-aid notice gates EVERY screen this app can put in front
-        // of a rider, and this is the only other one. It is exported, so any
-        // installed app can start it, which would otherwise put app UI on
-        // screen for a rider who has never seen the notice and cannot reach it
-        // from here. Refused without a screen, like the decider's own refusals:
-        // an install that has not acknowledged the notice has no business
-        // granting another app its radar either.
-        if (!Prefs(this).safetyNoticeAcknowledged) {
-            finishWith(RESULT_CANCELED, read = false, control = false)
-            return
-        }
+        val prefs = Prefs(this)
 
         val decider = RadarConsentDecider(
             store = PrefsRadarGrantStore(
@@ -55,16 +49,31 @@ class RadarConsentActivity : ComponentActivity() {
             is ConsentRequest.Refuse ->
                 finishWith(request.resultCode, read = false, control = false)
 
+            // The riding-aid notice gates every activity this app can put in
+            // front of a rider, and this one is exported, so the notice comes
+            // first here too. After the refusals above rather than before
+            // them, so a rider mid-ride is still shown no screen by this
+            // activity (NoScreenBeforeTheNoticeTest).
             is ConsentRequest.Ask -> setContent {
-                UiTheme {
-                    RadarConsentAsk(
-                        request = request,
-                        onCancel = { finishWith(RESULT_CANCELED, read = false, control = false) },
-                        onSave = { read, control ->
-                            val code = decider.decide(request.packageName, request.label, read, control)
-                            finishWith(code, read, control)
+                var acknowledged by remember { mutableStateOf(prefs.safetyNoticeAcknowledged) }
+                if (!acknowledged) {
+                    SafetyNoticeScreen(
+                        onAcknowledge = {
+                            prefs.safetyNoticeAcknowledged = true
+                            acknowledged = true
                         },
                     )
+                } else {
+                    UiTheme {
+                        RadarConsentAsk(
+                            request = request,
+                            onCancel = { finishWith(RESULT_CANCELED, read = false, control = false) },
+                            onSave = { read, control ->
+                                val code = decider.decide(request.packageName, request.label, read, control)
+                                finishWith(code, read, control)
+                            },
+                        )
+                    }
                 }
             }
         }

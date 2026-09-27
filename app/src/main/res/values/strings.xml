@@ -205,7 +205,8 @@
     <string name="main_dashcam_prompt_no">I don\'t have one</string>
 
     <!-- ════════════════════════════════════════════════════════════════
-         Riding-aid notice (SafetyNotice.kt) - shown once before the app,
+         Riding-aid notice (SafetyNotice.kt) - shown once before the app or
+         before another app's first access question, whichever comes first,
          and again under Settings → About whenever the rider wants it.
          ════════════════════════════════════════════════════════════════ -->
     <string name="safety_notice_title">Before you ride</string>

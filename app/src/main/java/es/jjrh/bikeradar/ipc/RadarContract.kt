@@ -75,7 +75,15 @@ object RadarContract {
      * launches it: a consent screen thrown over a moving map is the failure
      * this shape avoids. Launching grants nothing, and calling again when a
      * grant exists shows its current state, so one screen covers connecting and
-     * changing your mind.
+     * changing your mind. If the rider has not yet read Bike Radar's
+     * riding-aid notice, it is shown first, and closing it returns
+     * [Activity.RESULT_CANCELED].
+     *
+     * [Activity.RESULT_CANCELED] means nothing changed: the rider declined or
+     * the screen closed without an answer, and any grant they gave before still
+     * stands. Ask again only when your user acts again. Result codes
+     * may be added within a contract [VERSION], so treat one you do not
+     * recognise as no grant.
      */
     object Consent {
 

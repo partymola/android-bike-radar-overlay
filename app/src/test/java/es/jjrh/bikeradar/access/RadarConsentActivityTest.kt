@@ -4,13 +4,20 @@ package es.jjrh.bikeradar.access
 
 import android.app.Activity
 import android.content.Context
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarContract.Consent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -33,14 +40,15 @@ class RadarConsentActivityTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    @get:Rule val compose = createEmptyComposeRule()
+
     @Before
     fun clearGrants() {
         context.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().clear().commit()
-        // Past the riding-aid notice. Before it this activity refuses without
-        // showing anything, so every test below would be answered by that gate
-        // rather than by the rules it is here to exercise. The gate itself is
-        // covered by `NoScreenBeforeTheNoticeTest`.
+        // Past the riding-aid notice. Before it this activity shows the notice
+        // in front of the question, so the tests below would be looking at the
+        // wrong screen. The notice here is covered by `NoScreenBeforeTheNoticeTest`.
         Prefs(context).safetyNoticeAcknowledged = true
     }
 
@@ -91,11 +99,76 @@ class RadarConsentActivityTest {
     @Test
     fun anIdentifiedAppIsShownTheQuestionRatherThanAnswered() {
         installCaller("com.example.trailbuddy")
-        val activity = launch("com.example.trailbuddy")
+        val controller = Robolectric.buildActivity(RadarConsentActivity::class.java)
+        shadowOf(controller.get()).setCallingPackage("com.example.trailbuddy")
+        val activity = controller.setup().get()
         assertFalse(
             "the rider has not answered yet, so nothing may be returned",
             activity.isFinishing,
         )
-        assertEquals(Activity.RESULT_CANCELED, shadowOf(activity).resultCode)
+        assertNull("nothing may be returned before an answer", shadowOf(activity).resultIntent)
+        compose.onNodeWithText("Share your radar?").assertIsDisplayed()
+    }
+
+    /**
+     * RESULT_CANCELED means nothing changed, which is what the contract tells
+     * a consumer: "Don't allow" over an existing grant leaves it standing.
+     * Only the primary button's revoke path removes one.
+     */
+    @Test
+    fun decliningOverAnExistingGrantLeavesItStanding() {
+        installCaller("com.example.trailbuddy")
+        val store = PrefsRadarGrantStore(
+            context.getSharedPreferences(PrefsRadarGrantStore.PREFS_NAME, Context.MODE_PRIVATE),
+        )
+        store.put(
+            RadarGrant(
+                packageName = "com.example.trailbuddy",
+                certDigest = "digest",
+                label = "Trail Buddy",
+                grantedAtMs = 1L,
+                lastUsedAtMs = 0L,
+                read = true,
+                control = false,
+            ),
+        )
+        val controller = Robolectric.buildActivity(RadarConsentActivity::class.java)
+        shadowOf(controller.get()).setCallingPackage("com.example.trailbuddy")
+        val activity = controller.setup().get()
+
+        compose.onNodeWithText("Don't allow").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        val shadow = shadowOf(activity)
+        assertTrue("the button must answer", activity.isFinishing)
+        assertEquals(Activity.RESULT_CANCELED, shadow.resultCode)
+        requireNotNull(shadow.resultIntent.extras) { "the answer must carry extras" }
+        val kept = requireNotNull(store.grantFor("com.example.trailbuddy")) { "declining removed the grant" }
+        assertTrue(kept.read)
+    }
+
+    /**
+     * The rider's own no, through the real button. It must stay
+     * RESULT_CANCELED and not become one of the refusal codes, because telling
+     * the two apart is what those codes are for.
+     */
+    @Test
+    fun theRiderDecliningComesBackAsCancelled() {
+        installCaller("com.example.trailbuddy")
+        val controller = Robolectric.buildActivity(RadarConsentActivity::class.java)
+        shadowOf(controller.get()).setCallingPackage("com.example.trailbuddy")
+        val activity = controller.setup().get()
+
+        compose.onNodeWithText("Don't allow").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        val shadow = shadowOf(activity)
+        assertTrue(activity.isFinishing)
+        assertEquals(Activity.RESULT_CANCELED, shadow.resultCode)
+        // RESULT_CANCELED is also what Robolectric reports when setResult was
+        // never called, so the extras are what prove the button answered.
+        val extras = requireNotNull(shadow.resultIntent.extras) { "the answer must carry extras" }
+        assertFalse(extras.getBoolean(Consent.EXTRA_READ, true))
+        assertFalse(extras.getBoolean(Consent.EXTRA_CONTROL, true))
     }
 }

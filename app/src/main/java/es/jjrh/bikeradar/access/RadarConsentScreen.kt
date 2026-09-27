@@ -34,10 +34,16 @@ import es.jjrh.bikeradar.ui.LocalBrColors
 import es.jjrh.bikeradar.ui.SettingsRowGroup
 import es.jjrh.bikeradar.ui.SettingsToggleRow
 
-/** The question, with whatever the rider already answered pre-filled. */
+/**
+ * The question, with whatever the rider already answered pre-filled.
+ *
+ * [bikeRadarSetUp] is false until onboarding is done, and the rider is then
+ * pointed back to finish it.
+ */
 @Composable
 fun RadarConsentAsk(
     request: ConsentRequest.Ask,
+    bikeRadarSetUp: Boolean,
     onCancel: () -> Unit,
     onSave: (read: Boolean, control: Boolean) -> Unit,
 ) {
@@ -69,6 +75,9 @@ fun RadarConsentAsk(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(request.packageName, color = br.fgDim)
+            if (!bikeRadarSetUp) {
+                Text(stringResource(R.string.radar_consent_not_set_up), color = br.caution)
+            }
 
             SettingsRowGroup {
                 SettingsToggleRow(

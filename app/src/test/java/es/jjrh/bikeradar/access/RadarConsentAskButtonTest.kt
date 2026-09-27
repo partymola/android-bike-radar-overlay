@@ -39,11 +39,12 @@ class RadarConsentAskButtonTest {
 
     private fun grant(read: Boolean, control: Boolean) = RadarGrant("com.example.trailbuddy", "aa11", "Trail Buddy", 0L, 0L, read, control)
 
-    private fun show(current: RadarGrant?) {
+    private fun show(current: RadarGrant?, setUp: Boolean = true) {
         composeRule.setContent {
             UiTheme {
                 RadarConsentAsk(
                     request = ConsentRequest.Ask("com.example.trailbuddy", "Trail Buddy", current),
+                    bikeRadarSetUp = setUp,
                     onCancel = {},
                     onSave = { r, c -> saved = r to c },
                 )
@@ -122,6 +123,13 @@ class RadarConsentAskButtonTest {
         composeRule.onNodeWithText("Cancel").assertExists()
         composeRule.onNodeWithText("Don't allow").assertDoesNotExist()
         composeRule.onNodeWithText(HOW_TO_STOP).assertExists()
+    }
+
+    /** A grant can be made before setup is finished, so the line shows over one too. */
+    @Test
+    fun theSetupLineShowsOverAnExistingGrantToo() {
+        show(current = grant(read = true, control = false), setUp = false)
+        composeRule.onNodeWithText("Bike Radar isn't set up yet.", substring = true).assertExists()
     }
 
     /**

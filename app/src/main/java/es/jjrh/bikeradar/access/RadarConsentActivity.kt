@@ -67,6 +67,7 @@ class RadarConsentActivity : ComponentActivity() {
                     UiTheme {
                         RadarConsentAsk(
                             request = request,
+                            bikeRadarSetUp = prefs.firstRunComplete,
                             onCancel = { finishWith(RESULT_CANCELED, read = false, control = false) },
                             onSave = { read, control ->
                                 val code = decider.decide(request.packageName, request.label, read, control)

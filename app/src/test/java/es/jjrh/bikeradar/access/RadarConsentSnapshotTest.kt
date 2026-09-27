@@ -18,6 +18,8 @@ import org.robolectric.annotation.GraphicsMode
  *  - firstAsk (and Es): no existing grant, both switches off
  *  - alreadyReading (and Es): an app that was granted read only, so the
  *    screen opens on what the rider last said rather than on nothing
+ *  - notSetUp (and Es): a first ask from a rider who has not finished
+ *    setting Bike Radar up
  *
  * Verify with `:app:verifyRoborazziDebug`; regenerate with
  * `:app:recordRoborazziDebug`.
@@ -29,12 +31,14 @@ class RadarConsentSnapshotTest {
 
     private fun ask(current: RadarGrant? = null) = ConsentRequest.Ask("com.example.trailbuddy", "Trail Buddy", current)
 
-    @Test
-    fun firstAsk() {
+    private fun capture(current: RadarGrant? = null, setUp: Boolean = true) {
         captureRoboImage {
-            UiTheme { RadarConsentAsk(request = ask(), onCancel = {}, onSave = { _, _ -> }) }
+            UiTheme { RadarConsentAsk(request = ask(current), bikeRadarSetUp = setUp, onCancel = {}, onSave = { _, _ -> }) }
         }
     }
+
+    @Test
+    fun firstAsk() = capture()
 
     private val readOnly = RadarGrant(
         packageName = "com.example.trailbuddy",
@@ -47,20 +51,12 @@ class RadarConsentSnapshotTest {
     )
 
     @Test
-    fun alreadyReading() {
-        captureRoboImage {
-            UiTheme { RadarConsentAsk(request = ask(readOnly), onCancel = {}, onSave = { _, _ -> }) }
-        }
-    }
+    fun alreadyReading() = capture(readOnly)
 
     /** Records the stop-sharing hint in Spanish, the longest line the slot above the buttons shows. */
     @Test
     @Config(qualifiers = "+es")
-    fun alreadyReadingEs() {
-        captureRoboImage {
-            UiTheme { RadarConsentAsk(request = ask(readOnly), onCancel = {}, onSave = { _, _ -> }) }
-        }
-    }
+    fun alreadyReadingEs() = capture(readOnly)
 
     /**
      * Spanish, where every string on this screen is longer than its English
@@ -71,9 +67,12 @@ class RadarConsentSnapshotTest {
      */
     @Test
     @Config(qualifiers = "+es")
-    fun firstAskEs() {
-        captureRoboImage {
-            UiTheme { RadarConsentAsk(request = ask(), onCancel = {}, onSave = { _, _ -> }) }
-        }
-    }
+    fun firstAskEs() = capture()
+
+    @Test
+    fun notSetUp() = capture(setUp = false)
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun notSetUpEs() = capture(setUp = false)
 }

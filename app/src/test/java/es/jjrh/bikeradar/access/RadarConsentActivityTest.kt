@@ -110,6 +110,29 @@ class RadarConsentActivityTest {
         compose.onNodeWithText("Share your radar?").assertIsDisplayed()
     }
 
+    /** The not-set-up line follows the real onboarding flag, both ways. */
+    @Test
+    fun aRiderWhoHasNotSetUpBikeRadarIsToldBeforeAnswering() {
+        Prefs(context).firstRunComplete = false
+        askedBy("com.example.trailbuddy")
+        compose.onNodeWithText(NOT_SET_UP, substring = true).assertExists()
+    }
+
+    @Test
+    fun aRiderWhoHasSetUpBikeRadarIsNotTold() {
+        Prefs(context).firstRunComplete = true
+        askedBy("com.example.trailbuddy")
+        compose.onNodeWithText("Share your radar?").assertIsDisplayed()
+        compose.onNodeWithText(NOT_SET_UP, substring = true).assertDoesNotExist()
+    }
+
+    private fun askedBy(packageName: String) {
+        installCaller(packageName)
+        val controller = Robolectric.buildActivity(RadarConsentActivity::class.java)
+        shadowOf(controller.get()).setCallingPackage(packageName)
+        controller.setup()
+    }
+
     /**
      * RESULT_CANCELED means nothing changed, which is what the contract tells
      * a consumer: the second button, "Cancel" over an existing grant, leaves it
@@ -170,5 +193,9 @@ class RadarConsentActivityTest {
         val extras = requireNotNull(shadow.resultIntent.extras) { "the answer must carry extras" }
         assertFalse(extras.getBoolean(Consent.EXTRA_READ, true))
         assertFalse(extras.getBoolean(Consent.EXTRA_CONTROL, true))
+    }
+
+    private companion object {
+        const val NOT_SET_UP = "Bike Radar isn't set up yet."
     }
 }

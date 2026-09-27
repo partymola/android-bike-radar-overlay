@@ -825,6 +825,8 @@
     <!-- RadarConsentActivity.kt -->
     <string name="radar_consent_title">Share your radar?</string>
     <string name="radar_consent_body"><xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> is asking to use your rear radar.</string>
+    <!-- Shown only while onboarding is unfinished. -->
+    <string name="radar_consent_not_set_up">Bike Radar isn\'t set up yet. Open it afterwards to finish setup.</string>
     <string name="radar_consent_read">See what the radar sees</string>
     <string name="radar_consent_read_detail">Vehicles behind you, how far away they are and how fast they are closing, how far to your side they sit, what type they are, your own speed, whether your radar is connected, and its battery.</string>
     <string name="radar_consent_control">Change your tail light and overlay</string>

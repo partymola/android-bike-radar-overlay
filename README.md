@@ -169,7 +169,8 @@ Store-listing metadata lives under `fastlane/metadata/android/`
 2. Play the example ride to hear the traffic alerts and what they mean.
    Riders past onboarding find it under **Settings -> Alerts -> Alert sounds**.
 3. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
-   notifications, overlay).
+   notifications, overlay, and optionally approximate location for the
+   lights).
 4. Enter your Home Assistant base URL and long-lived token (or skip).
 5. Pair your rear radar via Android's **Settings -> Connected devices ->
    Pair new device** while the radar is in pair mode. The app detects

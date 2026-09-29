@@ -23,7 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -116,6 +116,11 @@ internal class DemoCuePlayer(private val create: () -> AlertBeeper?) : CuePlayer
         beeper()?.playRadarReconnected()
     }
 
+    /** Applies to a beeper already built; one built later reads the saved volume. */
+    fun setVolumePct(pct: Int) {
+        beeper?.setVolumePct(pct)
+    }
+
     fun release() {
         built = true
         beeper?.release()
@@ -132,7 +137,7 @@ internal class DemoCuePlayer(private val create: () -> AlertBeeper?) : CuePlayer
 internal fun rememberDemoCuePlayer(
     prefs: Prefs,
     create: (Context) -> AlertBeeper? = { newDemoBeeper(it, prefs) },
-): CuePlayer {
+): DemoCuePlayer {
     val context = LocalContext.current
     val player = remember { DemoCuePlayer { create(context) } }
     DisposableEffect(player) { onDispose { player.release() } }
@@ -155,7 +160,7 @@ internal fun newDemoBeeper(
         walkAwayOverrideActive = { prefs.walkAwaySavedAlarmVolume != null },
     ).also { it.setVolumePct(prefs.alertVolume) }
 } catch (t: Throwable) {
-    Log.w("BikeRadar", "sound demo has no player", t)
+    Log.w("BikeRadar", "demo beeper unavailable", t)
     (executor as? ExecutorService)?.shutdown()
     null
 }
@@ -314,7 +319,7 @@ internal fun SoundDemoStepContent(
                 .verticalScroll(rememberScrollState()),
         ) {
             StepHeroBlock(
-                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                icon = Icons.AutoMirrored.Filled.DirectionsBike,
                 tint = br.brand,
                 mark = stringResource(mark),
                 title = stringResource(R.string.sound_demo_title),

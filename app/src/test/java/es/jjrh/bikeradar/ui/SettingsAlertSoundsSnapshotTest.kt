@@ -18,7 +18,7 @@ class SettingsAlertSoundsSnapshotTest {
     private fun capture(canPlay: Boolean) {
         captureRoboImage {
             UiTheme {
-                SettingsAlertSoundsContent(canPlay = canPlay, onBack = {}, onPlay = {}, onWatchDemo = {})
+                SettingsAlertSoundsContent(canPlay = canPlay, onBack = {}, onPlay = {}, onWatchDemo = {}, onSetVolume = {})
             }
         }
     }

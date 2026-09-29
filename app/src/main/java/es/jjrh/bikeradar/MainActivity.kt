@@ -16,6 +16,7 @@ import androidx.navigation.navArgument
 import es.jjrh.bikeradar.access.PrefsRadarGrantStore
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ui.AlertVolumeScreen
 import es.jjrh.bikeradar.ui.DashcamPickerSheet
 import es.jjrh.bikeradar.ui.DebugScreen
 import es.jjrh.bikeradar.ui.DevModeState
@@ -119,6 +120,13 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/sound-demo") {
                         SoundDemoScreen(
+                            prefs = prefs,
+                            mark = R.string.alert_sounds_title,
+                            onDone = { navController.popBackStack() },
+                        )
+                    }
+                    composable("settings/alert-volume") {
+                        AlertVolumeScreen(
                             prefs = prefs,
                             mark = R.string.alert_sounds_title,
                             onDone = { navController.popBackStack() },

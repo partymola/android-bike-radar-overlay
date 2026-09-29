@@ -433,7 +433,9 @@
     <string name="settings_radar_ms_value"><xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
     <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1.0">%1$s</xliff:g> m</string>
     <string name="settings_radar_alert_volume_title">Alert volume</string>
-    <string name="settings_radar_alert_volume_helper">Beep volume for approach alerts. 0 silences audio; the overlay still flashes.</string>
+    <!-- The gain applies to every AlertBeeper cue: beeps, urgent, all-clear
+         and both radar pulses. The walk-away alarm has its own volume. -->
+    <string name="settings_radar_alert_volume_helper">How loud the alert sounds are. At 0 they are silent; the overlay still shows.</string>
     <string name="settings_radar_alert_distance_title">Alert distance</string>
     <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
     <string name="settings_radar_urgent_clearance_title">Urgent warning clearance</string>
@@ -888,7 +890,7 @@
          be on the overlay. -->
     <string name="sound_demo_mark">Before your first ride</string>
     <string name="sound_demo_title">What you\'ll hear</string>
-    <string name="sound_demo_sub">A 20-second example ride: a car passes you, then another closes in while you\'re stopped. If it\'s too loud, use your phone\'s volume buttons.</string>
+    <string name="sound_demo_sub">A 20-second example ride: a car passes you, then another closes in while you\'re stopped.</string>
     <string name="sound_demo_play">Play</string>
     <string name="sound_demo_play_again">Play again</string>
     <string name="sound_demo_playing">Playing…</string>
@@ -899,9 +901,16 @@
     <string name="sound_demo_caption_three">Close: three beeps.</string>
     <string name="sound_demo_caption_clear">Nothing within your alert distance any more: this sound.</string>
     <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
+    <string name="alert_volume_title">Set the alert volume</string>
+    <string name="alert_volume_sub">Play a test sound and set how loud the alerts are. Your phone\'s volume buttons work here too.</string>
+    <string name="alert_volume_play">Play a test sound</string>
+    <string name="alert_volume_radar_streaming">The test sound plays only while the radar is off. The volume still changes.</string>
+    <!-- The same words as alert_volume_title in English; Spanish uses the
+         infinitive for a list row and the imperative for a screen title. -->
+    <string name="alert_volume_row">Set the alert volume</string>
     <string name="alert_sounds_title">Alert sounds</string>
     <string name="alert_sounds_row_subtitle">Hear each one and what it means</string>
-    <string name="alert_sounds_while_riding">Available when the radar is off.</string>
+    <string name="alert_sounds_while_riding">The sounds play only while the radar is off.</string>
     <string name="alert_sounds_section_traffic">Traffic</string>
     <string name="alert_sounds_section_radar">Radar</string>
     <string name="alert_sounds_watch_demo">Watch the example ride again</string>

@@ -99,6 +99,28 @@ class DemoCuePlayerTest {
     }
 
     @Test
+    fun aVolumeSetBeforeAnySoundBuildsNothing() {
+        var built = 0
+        val player = DemoCuePlayer {
+            built += 1
+            null
+        }
+        player.setVolumePct(80)
+        assertEquals(0, built)
+    }
+
+    @Test
+    fun aVolumeSetAfterASoundReachesTheBeeperAlreadyBuilt() {
+        prefs.alertVolume = 50
+        val beeper = newDemoBeeper(app, prefs, executor = { it.run() })!!
+        val player = DemoCuePlayer { beeper }
+        player.play(1)
+        player.setVolumePct(80)
+        assertEquals(80, beeper.currentVolumePct)
+        player.release()
+    }
+
+    @Test
     fun theDemoPlaysAtTheRidersAlertVolume() {
         prefs.alertVolume = 37
         val beeper = newDemoBeeper(app, prefs, executor = { it.run() })!!

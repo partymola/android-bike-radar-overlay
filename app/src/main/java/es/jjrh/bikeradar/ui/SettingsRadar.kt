@@ -95,6 +95,9 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     // BootReceiver edge case) flips the pref while Settings is composed.
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val serviceEnabled = prefsSnap.serviceEnabled
+    // The volume step, reached from this screen's Alert sounds row, writes the
+    // same pref, and this entry's saved slider value outlives the trip there.
+    LaunchedEffect(prefsSnap.alertVolume) { alertVol = prefsSnap.alertVolume }
     var showStopDialog by rememberSaveable { mutableStateOf(false) }
 
     SettingsRadarContent(
@@ -287,15 +290,7 @@ internal fun SettingsRadarContent(
             // Alerts group — sliders sit directly on the screen background
             // matching the JSX which puts them outside any card.
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_alerts))
-            SettingsSliderRow(
-                title = stringResource(R.string.settings_radar_alert_volume_title),
-                valueDisplay = stringResource(R.string.settings_radar_percent_value, alertVol),
-                helper = stringResource(R.string.settings_radar_alert_volume_helper),
-                value = alertVol.toFloat(),
-                valueRange = 0f..100f,
-                onValueChange = { onAlertVolChange(it.toInt()) },
-                onValueChangeFinished = onAlertVolFinished,
-            )
+            AlertVolumeSliderRow(volume = alertVol, onChange = onAlertVolChange, onFinished = onAlertVolFinished)
             SettingsSliderRow(
                 title = stringResource(R.string.settings_radar_alert_distance_title),
                 valueDisplay = stringResource(R.string.settings_radar_meters_value, alertDist),

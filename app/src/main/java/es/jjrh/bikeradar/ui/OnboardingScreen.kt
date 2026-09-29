@@ -38,7 +38,8 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.launch
 
 /**
- * Mockup-fidelity onboarding pager, after the sound demo. Five-step structure:
+ * Mockup-fidelity onboarding pager, after the sound demo and the alert volume.
+ * Five-step structure:
  * Permissions -> Home Assistant (optional) -> Pair devices -> Radar position ->
  * Connect your eBike.
  *
@@ -70,15 +71,24 @@ private fun OnboardingScreenBody(
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 5 })
     var demoDone by rememberSaveable { mutableStateOf(false) }
+    var volumeDone by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = pagerState.currentPage > 0) {
         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
     }
+    // Back walks the way Continue came: first step to volume, volume to demo.
+    BackHandler(enabled = volumeDone && pagerState.currentPage == 0) { volumeDone = false }
+    BackHandler(enabled = demoDone && !volumeDone) { demoDone = false }
 
-    // The sound demo comes first, ahead of the numbered steps, so it is not one
-    // of them. Riders already past onboarding find it in Settings instead.
+    // The sound demo, then the volume, come first, ahead of the numbered steps,
+    // so they are not among them. Riders already past onboarding find both in
+    // Settings instead.
     if (!demoDone) {
         SoundDemoScreen(prefs = prefs, mark = R.string.sound_demo_mark, onDone = { demoDone = true })
+        return
+    }
+    if (!volumeDone) {
+        AlertVolumeScreen(prefs = prefs, mark = R.string.sound_demo_mark, onDone = { volumeDone = true })
         return
     }
 

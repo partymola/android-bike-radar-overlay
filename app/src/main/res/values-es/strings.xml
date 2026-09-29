@@ -407,8 +407,8 @@
     <string name="settings_radar_kmh_value"><xliff:g id="kmh" example="10">%1$d</xliff:g> km/h</string>
     <string name="settings_radar_ms_value"><xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
     <string name="settings_radar_meters_decimal_value"><xliff:g id="m" example="1,0">%1$s</xliff:g> m</string>
-    <string name="settings_radar_alert_volume_title">Volumen de alerta</string>
-    <string name="settings_radar_alert_volume_helper">Volumen de los pitidos de aviso de aproximación. 0 silencia el audio; la barra lateral sigue parpadeando.</string>
+    <string name="settings_radar_alert_volume_title">Volumen de los avisos</string>
+    <string name="settings_radar_alert_volume_helper">Lo fuerte que suenan los avisos. Con 0 no suenan; la barra lateral se sigue viendo.</string>
     <string name="settings_radar_alert_distance_title">Distancia de alerta</string>
     <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la barra lateral pero sin sonido. Se ajusta a la velocidad de la bici cuando las alertas adaptativas están activadas.</string>
     <string name="settings_radar_urgent_clearance_title">Holgura del aviso urgente</string>
@@ -846,7 +846,7 @@
          avisos reales, lo primero de la introducción. -->
     <string name="sound_demo_mark">Antes de tu primera ruta</string>
     <string name="sound_demo_title">Lo que vas a oír</string>
-    <string name="sound_demo_sub">Una ruta de ejemplo de 20 s: un coche te adelanta y luego otro se acerca mientras estás parado. Si suena demasiado alto, usa los botones de volumen del móvil.</string>
+    <string name="sound_demo_sub">Una ruta de ejemplo de 20 s: un coche te adelanta y luego otro se acerca mientras estás parado.</string>
     <string name="sound_demo_play">Reproducir</string>
     <string name="sound_demo_play_again">Repetir</string>
     <string name="sound_demo_playing">Reproduciendo…</string>
@@ -857,9 +857,14 @@
     <string name="sound_demo_caption_three">Cerca: 3 pitidos.</string>
     <string name="sound_demo_caption_clear">Ya no hay nada en tu distancia de alerta: este sonido.</string>
     <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente.</string>
+    <string name="alert_volume_title">Ajusta el volumen de los avisos</string>
+    <string name="alert_volume_sub">Reproduce un sonido de prueba y elige el volumen de los avisos. Los botones de volumen del móvil también sirven aquí.</string>
+    <string name="alert_volume_play">Probar el sonido</string>
+    <string name="alert_volume_radar_streaming">El sonido de prueba solo se reproduce con el radar apagado. El volumen sí se puede cambiar.</string>
+    <string name="alert_volume_row">Ajustar el volumen de los avisos</string>
     <string name="alert_sounds_title">Sonidos de aviso</string>
     <string name="alert_sounds_row_subtitle">Escucha cada uno y qué significa</string>
-    <string name="alert_sounds_while_riding">Disponibles con el radar apagado.</string>
+    <string name="alert_sounds_while_riding">Los sonidos solo se reproducen con el radar apagado.</string>
     <string name="alert_sounds_section_traffic">Tráfico</string>
     <string name="alert_sounds_section_radar">Radar</string>
     <string name="alert_sounds_watch_demo">Ver otra vez la ruta de ejemplo</string>

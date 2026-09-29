@@ -60,11 +60,10 @@ golden to one that has it, and every gate stays green while the title sits under
 the phone's clock. Every full-screen surface here carries
 `Modifier.fillMaxSize().background(br.bg).systemBarsPadding()` on its outermost
 container - a `Box` on most, a `Column` on `OnboardingScreen`,
-`SoundDemoScreen` and the riding-aid notice's gate form, which pins a footer
-button below the scrolling text. `OnboardingScreen` is what the
-`Onboarding*Step` files render inside, which is why they carry none of their
-own. A new surface that does not is only
-catchable on a device.
+`SoundDemoScreen`, `AlertVolumeScreen` and the riding-aid notice's gate form,
+which pins a footer button below the scrolling text. `OnboardingScreen` is
+what the `Onboarding*Step` files render inside, which is why they carry none
+of their own. A new surface that does not is only catchable on a device.
 
 **Before bumping the version, writing a CHANGELOG section or cutting a `v*`
 tag, read [`RELEASING.md`](RELEASING.md).** It holds the heading order,
@@ -458,8 +457,8 @@ ordinary work:
 - `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
   released in `onDestroy`). The first beep after every BLE reconnect lands
   on the same warm AudioTrack pool; do not allocate per-overlayJob.
-  The sound demo and the Alert sounds page build a second, screen-scoped
-  beeper (`newDemoBeeper`) on the same alarm stream. It joins both halves of
+  The sound demo, the volume step and the Alert sounds page build a second,
+  screen-scoped beeper (`newDemoBeeper`) on the same alarm stream. It joins both halves of
   the walk-away interlock through the shared Prefs slots and never runs the
   crash repair, since the ride's beeper may hold a lift from that slot
   (`WalkAwayAlarmBeeperInterlockTest.aSoundDemoLiftIsInterlockedWithTheWalkAwayAlarmToo`,

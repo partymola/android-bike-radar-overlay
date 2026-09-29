@@ -5,10 +5,14 @@ package es.jjrh.bikeradar.ui
 import android.app.Application
 import android.content.Context
 import android.media.AudioManager
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import es.jjrh.bikeradar.MainActivity
@@ -70,6 +74,48 @@ class SettingsAlertSoundsRouteTest {
         compose.onNodeWithText("ALERT SOUNDS").assertExists()
         tap("Continue", scroll = false)
         compose.onNodeWithText("Watch the example ride again").assertExists()
+    }
+
+    @Test
+    fun settingsReachesTheVolumeAndComesBack() {
+        tap("Settings", scroll = false)
+        tap("Alerts")
+        tap("Alert sounds")
+        tap("Set the alert volume")
+        compose.onNodeWithText("Play a test sound").assertExists()
+        compose.onNodeWithText("ALERT SOUNDS").assertExists()
+        tap("Continue", scroll = false)
+        compose.onNodeWithText("Watch the example ride again").assertExists()
+    }
+
+    @Test
+    fun theAlertsPageShowsTheVolumeSetOnTheVolumeScreen() {
+        tap("Settings", scroll = false)
+        tap("Alerts")
+        tap("Alert sounds")
+        tap("Set the alert volume")
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(73f) }
+        compose.waitForIdle()
+        tap("Continue", scroll = false)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Alert distance").assertExists()
+        compose.onNodeWithText("Play a test sound").assertDoesNotExist()
+        compose.onNodeWithText("73%").assertExists()
+        assertEquals(73, Prefs(app).alertVolume)
+        assertEquals(AudioManager.USE_DEFAULT_STREAM_TYPE, compose.activity.volumeControlStream)
+    }
+
+    @Test
+    fun theTestSoundSoundsThroughTheRealBeeper() {
+        loudMedia()
+        tap("Settings", scroll = false)
+        tap("Alerts")
+        tap("Alert sounds")
+        tap("Set the alert volume")
+        tap("Play a test sound", scroll = false)
+        assertEquals(1, slotWritten())
     }
 
     /**

@@ -347,7 +347,7 @@ class SoundDemoStepTest {
         assertTrue(screenKeptOn())
         composeRule.onNodeWithText("Continue").performClick()
         advance(500L)
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.onboarding_perm_title)).assertExists()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.alert_volume_title)).assertExists()
         assertFalse(screenKeptOn())
     }
 
@@ -361,7 +361,7 @@ class SoundDemoStepTest {
     }
 
     @Test
-    fun onboardingOpensOnTheDemoAndContinuesToTheFirstStep() {
+    fun onboardingOpensOnTheDemoThenTheVolumeThenTheFirstStep() {
         val prefs = Prefs(composeRule.activity)
         composeRule.setContent {
             OnboardingScreen(navController = rememberNavController(), prefs = prefs, onFinished = {})
@@ -370,7 +370,37 @@ class SoundDemoStepTest {
         composeRule.onNodeWithText("BEFORE YOUR FIRST RIDE").assertExists()
         composeRule.onNodeWithText("Continue").performClick()
         composeRule.waitForIdle()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.alert_volume_title)).assertExists()
+        composeRule.onNodeWithText("BEFORE YOUR FIRST RIDE").assertExists()
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.onboarding_perm_title)).assertExists()
+    }
+
+    private fun back() {
+        composeRule.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun backWalksOnboardingTheWayContinueCame() {
+        val prefs = Prefs(composeRule.activity)
+        composeRule.setContent {
+            OnboardingScreen(navController = rememberNavController(), prefs = prefs, onFinished = {})
+        }
+        val demo = composeRule.activity.getString(R.string.sound_demo_title)
+        val volume = composeRule.activity.getString(R.string.alert_volume_title)
+        val perms = composeRule.activity.getString(R.string.onboarding_perm_title)
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(perms).assertExists()
+        back()
+        composeRule.onNodeWithText(volume).assertExists()
+        back()
+        composeRule.onNodeWithText(demo).assertExists()
+        assertFalse(composeRule.activity.isFinishing)
     }
 
     @Test
@@ -415,6 +445,21 @@ class SoundDemoStepTest {
         restore.setContent {
             OnboardingScreen(navController = rememberNavController(), prefs = prefs, onFinished = {})
         }
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.waitForIdle()
+        restore.emulateSavedInstanceStateRestore()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.alert_volume_title)).assertExists()
+    }
+
+    @Test
+    fun aRiderPastTheVolumeIsNotSentBackToItByARotation() {
+        val prefs = Prefs(composeRule.activity)
+        val restore = StateRestorationTester(composeRule)
+        restore.setContent {
+            OnboardingScreen(navController = rememberNavController(), prefs = prefs, onFinished = {})
+        }
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("Continue").performClick()
         composeRule.waitForIdle()
         restore.emulateSavedInstanceStateRestore()

@@ -51,6 +51,7 @@ class SettingsAlertSoundsTest {
 
     private val player = FakeCuePlayer()
     private var demos = 0
+    private var volumes = 0
 
     private val rows = listOf(
         "One beep" to "play1",
@@ -71,7 +72,13 @@ class SettingsAlertSoundsTest {
     private fun show(riding: Boolean) {
         composeRule.setContent {
             UiTheme {
-                SettingsAlertSoundsBody(player = player, riding = riding, onBack = {}, onWatchDemo = { demos += 1 })
+                SettingsAlertSoundsBody(
+                    player = player,
+                    riding = riding,
+                    onBack = {},
+                    onWatchDemo = { demos += 1 },
+                    onSetVolume = { volumes += 1 },
+                )
             }
         }
     }
@@ -91,7 +98,7 @@ class SettingsAlertSoundsTest {
     @Test
     fun nothingPlaysWhileTheRadarStreams() {
         show(riding = true)
-        composeRule.onNodeWithText("Available when the radar is off.").assertExists()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertExists()
         rows.forEach { (title, _) -> tap(title) }
         tap("Watch the example ride again")
         assertEquals(emptyList<String>(), player.calls)
@@ -101,9 +108,17 @@ class SettingsAlertSoundsTest {
     @Test
     fun theDemoIsOneTapAway() {
         show(riding = false)
-        composeRule.onNodeWithText("Available when the radar is off.").assertDoesNotExist()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertDoesNotExist()
         tap("Watch the example ride again")
         assertEquals(1, demos)
+    }
+
+    @Test
+    fun theVolumeIsOneTapAwayEvenWhileTheRadarStreams() {
+        show(riding = true)
+        tap("Set the alert volume")
+        assertEquals(1, volumes)
+        assertEquals(0, demos)
     }
 
     @Test
@@ -127,7 +142,7 @@ class SettingsAlertSoundsTest {
         val prefs = Prefs(ApplicationProvider.getApplicationContext<Application>())
         composeRule.setContent { SettingsAlertSounds(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Available when the radar is off.").assertExists()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertExists()
     }
 
     @Test
@@ -138,11 +153,11 @@ class SettingsAlertSoundsTest {
         val prefs = Prefs(ApplicationProvider.getApplicationContext<Application>())
         composeRule.setContent { SettingsAlertSounds(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Available when the radar is off.").assertExists()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertExists()
         Thread.sleep(5_500L)
         composeRule.mainClock.advanceTimeBy(5_100L)
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Available when the radar is off.").assertDoesNotExist()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertDoesNotExist()
     }
 
     @Test
@@ -150,10 +165,10 @@ class SettingsAlertSoundsTest {
         val prefs = Prefs(ApplicationProvider.getApplicationContext<Application>())
         composeRule.setContent { SettingsAlertSounds(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Available when the radar is off.").assertDoesNotExist()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertDoesNotExist()
         RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = System.currentTimeMillis()))
         composeRule.mainClock.advanceTimeByFrame()
-        composeRule.onNodeWithText("Available when the radar is off.").assertExists()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertExists()
     }
 
     @Test
@@ -161,6 +176,6 @@ class SettingsAlertSoundsTest {
         val prefs = Prefs(ApplicationProvider.getApplicationContext<Application>())
         composeRule.setContent { SettingsAlertSounds(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Available when the radar is off.").assertDoesNotExist()
+        composeRule.onNodeWithText("The sounds play only while the radar is off.").assertDoesNotExist()
     }
 }

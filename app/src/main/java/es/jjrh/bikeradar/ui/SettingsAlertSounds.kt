@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Text
@@ -57,6 +58,7 @@ fun SettingsAlertSounds(navController: NavController, prefs: Prefs) {
             riding = rememberRadarStreaming(),
             onBack = { navController.popBackStack() },
             onWatchDemo = { navController.navigate("settings/sound-demo") },
+            onSetVolume = { navController.navigate("settings/alert-volume") },
         )
     }
 }
@@ -68,22 +70,28 @@ internal fun SettingsAlertSoundsBody(
     riding: Boolean,
     onBack: () -> Unit,
     onWatchDemo: () -> Unit,
+    onSetVolume: () -> Unit,
 ) {
     SettingsAlertSoundsContent(
         canPlay = !riding,
         onBack = onBack,
         onPlay = { sound -> player?.let(sound.play) },
         onWatchDemo = onWatchDemo,
+        onSetVolume = onSetVolume,
     )
 }
 
-/** Stateless leaf so the goldens can render it. */
+/**
+ * Stateless leaf so the goldens can render it. The volume row stays enabled
+ * during a ride: its slider works then, and only its test sound is off.
+ */
 @Composable
 internal fun SettingsAlertSoundsContent(
     canPlay: Boolean,
     onBack: () -> Unit,
     onPlay: (AlertSound) -> Unit,
     onWatchDemo: () -> Unit,
+    onSetVolume: () -> Unit,
 ) {
     val br = LocalBrColors.current
     Box(modifier = Modifier.fillMaxSize().background(br.bg).systemBarsPadding()) {
@@ -104,13 +112,20 @@ internal fun SettingsAlertSoundsContent(
             Spacer(modifier = Modifier.height(16.dp))
             SettingsRowGroup {
                 SettingsRow(
-                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    icon = Icons.AutoMirrored.Filled.DirectionsBike,
                     iconTint = if (canPlay) br.brand else br.fgFaint,
                     title = stringResource(R.string.alert_sounds_watch_demo),
                     subtitle = null,
                     onClick = onWatchDemo,
                     clickable = canPlay,
                     enabled = canPlay,
+                )
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    iconTint = br.brand,
+                    title = stringResource(R.string.alert_volume_row),
+                    subtitle = null,
+                    onClick = onSetVolume,
                     isLast = true,
                 )
             }

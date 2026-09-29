@@ -43,8 +43,8 @@ screen stays yours.
   screen whatever else you are running.
 - **Alerts you don't have to look at.** Beeps rise in tiers as the
   closest car nears, a distinct urgent tone fires if an impact looks
-  imminent, and a clear chime sounds when the radar no longer sees
-  vehicles behind.
+  imminent, and a clear chime sounds when the radar sees nothing left
+  within your alert distance.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
   summary, and keeps per-ride stats - distance, overtakes, close passes, how close

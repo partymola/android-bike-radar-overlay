@@ -462,7 +462,7 @@ abstract class VerifyReleaseDexKeeps : DefaultTask() {
     }
 }
 
-// Rationale and scope: AGENTS.md, "Release DEX keep gate".
+// Rationale and scope: QUALITY_GATES.md, "Release DEX keep gate".
 //
 // Deliberately NOT wired to assembleRelease. F-Droid builds this from source
 // to verify the published APK reproduces, and a finalizer would put python3

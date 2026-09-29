@@ -38,18 +38,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 **Every build runs the wrapper, and `gradle/wrapper/gradle-wrapper.properties`
 is the only place a Gradle version is written down.** The container ships a
 JDK and no Gradle, and no workflow passes `gradle-version:` to
-`gradle/actions/*` - absent it, those actions use the wrapper. That is
-deliberate: the version used to be repeated in the image tag and seven
-workflow pins, a dependency bump moved the wrapper alone twice, and both times
-a from-source build (the F-Droid path) would have compiled with a Gradle no
-gate had run. Do not reintroduce a pin to "be explicit" - a second place to
-write the version is the whole defect, and nothing checks the two agree.
+`gradle/actions/*`, so those actions use the wrapper. Do not reintroduce a
+pin to "be explicit": nothing checks a second copy agrees, and a from-source
+build (the F-Droid path) could compile with a Gradle no gate had run.
 
-One consequence worth knowing: the distribution is no longer baked into the
-image, so the first `./gradlew` against a cold `~/.cache/bike-radar-gradle`
-downloads it and needs network. The same goes for Robolectric's SDK jars,
-cached separately in `~/.cache/bike-radar-m2`: the first unit-test run on a
-cold cache downloads them.
+The distribution is not baked into the image, so the first `./gradlew`
+against a cold `~/.cache/bike-radar-gradle` downloads it and needs network.
+The same goes for Robolectric's SDK jars, cached separately in
+`~/.cache/bike-radar-m2`: the first unit-test run on a cold cache downloads
+them.
 
 Screenshot tests: `:app:verifyRoborazziDebug` renders the Compose and
 Canvas goldens via Robolectric Native Graphics, so they run inside
@@ -62,43 +59,17 @@ navigation bar, so a screen missing `systemBarsPadding()` produces a byte-identi
 golden to one that has it, and every gate stays green while the title sits under
 the phone's clock. Every full-screen surface here carries
 `Modifier.fillMaxSize().background(br.bg).systemBarsPadding()` on its outermost
-container - a `Box` on most, a `Column` on `OnboardingScreen` and on the
-riding-aid notice's gate form, which pins a footer button below the scrolling
-text. `OnboardingScreen` is what the five `Onboarding*Step` files render inside,
-which is why they carry none of their own. A new surface that does not is only
+container - a `Box` on most, a `Column` on `OnboardingScreen`,
+`SoundDemoScreen` and the riding-aid notice's gate form, which pins a footer
+button below the scrolling text. `OnboardingScreen` is what the
+`Onboarding*Step` files render inside, which is why they carry none of their
+own. A new surface that does not is only
 catchable on a device.
 
-Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
-add a top-level entry to `CHANGELOG.md` (group changes under the
-headings already in use - Breaking, Features, Fix, Security, UX,
-Compatibility, Reliability, Stability, Power, Diagnostics, Internal -
-matching the tone of existing entries). `Breaking` says what the rider
-has to change by hand. Order the headings by how many riders they reach:
-`Breaking` leads when it reaches everyone, and `Features` leads when the
-breakage only reaches a subset, as in 1.5.0, where it lands on Home
-Assistant users alone. The section
-covers everything since the last tag, not just what is unpushed - read
-the range as `v<last>..HEAD`. Write each bullet on a SINGLE line, no
-hard wrapping: the release workflow copies the section verbatim into the
-GitHub release body, which renders every newline as a line break, so a
-wrapped bullet shows mid-sentence breaks on the Releases page. Also add a
-short per-version changelog at
-`fastlane/metadata/android/{en-US,es-ES}/changelogs/<versionCode>.txt` (the
-F-Droid / store "What's New"; keyed by `versionCode`, not the name) - a tight
-benefit-framed summary, not the full CHANGELOG section. Then push
-a `v*` tag (e.g.
-`v1.3.0`). The tag triggers `.github/workflows/release-apk.yml`,
-which builds a release-signed APK and publishes a GitHub release.
-The workflow sets `prerelease: false`, because the app has been stable
-since 1.0.0. Cutting a pre-release means flipping that for the tag.
-
-**A released section is published history, and its wording is never
-revised.** The tag was cut from it and the workflow has already copied it
-verbatim into the GitHub release body, so editing it here changes the
-repo's copy and not the one riders read. When a later measurement shows a
-shipped claim was wrong, correct the source the claim came from (the
-KDoc, the notes, the test) and state the corrected fact in the next
-version's section. Never rewrite the old entry, and never annotate it.
+**Before bumping the version, writing a CHANGELOG section or cutting a `v*`
+tag, read [`RELEASING.md`](RELEASING.md).** It holds the heading order,
+the single-line-bullet rule the release body depends on, the fastlane
+changelogs, and the rule that a released section is never revised.
 
 **The store and README screenshots are Roborazzi goldens, copied.** EVERY image
 under `screenshots/` and `fastlane/.../phoneScreenshots/` is a byte copy of a
@@ -109,33 +80,17 @@ at 390x2991, from `RadarOverlayViewTest`, the one golden that is not a whole
 screen: it is the README hero and store slot 2 in both locales. Store slot 1
 is the home screen, so do not re-copy the strip into it.
 
-**No published image is a device capture, and that is the point.** Every one
-is a golden copy, so the freshness check below can inspect all of them.
-
-**Re-copy rather than re-capture.** A device capture is 1344x2992, one pixel
-taller, and would carry the rider's real Home Assistant host and device names
-into a public artefact.
+**Re-copy rather than re-capture.** No published image is a device capture: a
+capture is 1344x2992, one pixel taller, and would carry the rider's real Home
+Assistant host and device names into a public artefact.
 
 `scripts/check-screenshot-freshness.py` reports any portrait image that is no
-longer a copy of a current golden. It runs in `ci.yml` as a **non-blocking**
-step: the goldens re-record on any UI change, so failing the build would turn
-every UI pull request red until the copies were refreshed in the same commit,
-and a check that fires on routine work gets bypassed. Read the log rather than
-the exit status.
-
-It now reaches every published image, because none is landscape any more: a
-clean run reads `22 match a current golden, 0 landscape skipped`, and a
-non-zero skip count means a device capture has come back. Its landscape branch
-is kept for exactly that.
-
-What it still cannot do: tell whether a slot holds the RIGHT golden, only that
-it holds one. The README alt text is the only statement of which screen belongs
-where, and it is prose. Re-copying is therefore the step to check by eye, not
-the pass.
-
-Why it exists: nothing else can see inside a PNG, and these had drifted far
-enough to advertise a credential-encryption layer the app does not have, an
-entity list it no longer renders, and a version from the alpha series.
+longer a copy of a current golden. It is a **non-blocking** `ci.yml` step,
+because the goldens re-record on any UI change; read the log, not the exit
+status. A non-zero "landscape skipped" count means a device capture has come
+back, which is what its landscape branch is kept for. It cannot tell whether a
+slot holds the RIGHT golden, only that it holds one; the README alt text says
+which screen belongs where, so check re-copies by eye.
 
 **Build-dir permission gotcha:** if `:app:testDebugUnitTest` fails with
 `Unable to delete directory .../test-results/...`, a previous container left
@@ -150,8 +105,8 @@ docker run --rm -v "$PWD:/workspace" -w /workspace bike-radar-builder \
 
 For a narrative map of the whole system (service shell, coordinators, state
 buses, the overlay/alert pipeline, the pure decider core, and the BLE lifecycle),
-see [`ARCHITECTURE.md`](ARCHITECTURE.md). The notes below are the working
-summary; the Key files table maps each part to its file.
+see [`ARCHITECTURE.md`](ARCHITECTURE.md), whose Key files table maps each part
+to its file. The notes below are the working summary.
 
 - Single foreground service (`BikeRadarService`), Compose-only UI, no
   fragments. The two BLE links now live in their own coordinators -
@@ -163,12 +118,13 @@ summary; the Key files table maps each part to its file.
   single-responsibility coordinators injected at `onCreate` (overlay pipeline,
   radar link, camera-light link, radar-link/walk-away state machine, battery
   reader, HA publishing, notifications, capture log, known-device cache - see
-  Key files). The service stays the sole owner of `scope` and the warm
-  `AlertBeeper`; `RadarLinkCoordinator` owns the radar-link/walk-away state
-  (`_radarLinkState`) and the transitions that drive the dismount alarm + the
-  dropped-radar cue. The radar controller reaches the state through a
-  `RadarLinkStateGateway`, and the camera controller reads the radar off-time
-  through an injected lambda for its shared backoff cap.
+  Key files in ARCHITECTURE.md). The service stays the sole owner of `scope`
+  and the warm `AlertBeeper`; `RadarLinkCoordinator` owns the
+  radar-link/walk-away state (`_radarLinkState`) and the transitions that
+  drive the dismount alarm + the dropped-radar cue. The radar controller
+  reaches the state through a `RadarLinkStateGateway`, and the camera
+  controller reads the radar off-time through an injected lambda for its
+  shared backoff cap.
 - **The riding-aid notice is in front of EVERY other destination, and that
   ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
   answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,
@@ -212,138 +168,52 @@ summary; the Key files table maps each part to its file.
 - Capture log is opt-in (off by default; `Prefs.captureLoggingEnabled`, toggled
   on the Debug screen). When enabled it is written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`
-  (in the `captures/` subdir so the FileProvider share subtree is scoped to the
-  logs, not the whole external-files root). Cap is `MAX_CAPTURE_LOGS = 50`.
-  When the toggle is off, `openCaptureLog` no-ops and no file is created.
+  (the `captures/` subdir scopes the FileProvider share to the logs, not the
+  whole external-files root). Cap is `MAX_CAPTURE_LOGS = 50`; with the toggle
+  off no file is created.
   `clog` lines mirror to logcat only in debug builds (`BuildConfig.DEBUG`);
   release builds keep BLE/movement payloads out of logcat. Every other sink
-  carrying raw device bytes is guarded the same way, for the same reason: the
-  handshake replies include the device-ID frame, and a release build printing
-  it unconditionally would undo the consent the setup transcript asks for.
-  `SettingsPrivacyLogcatGuardTest` names those sites and pins each one,
-  because `BuildConfig.DEBUG` is true under the test variant so no runtime
-  test can reach the release behaviour; read the list there rather than
-  restating it here. The first-V2-frame line keeps its message on release
-  builds and drops only the hex, so a live test still has its signal.
-  The boundary is RAW BYTES, not everything a device reports: a decoded
-  value the app already publishes to Home Assistant - a light mode, say -
-  is not a payload, and some of those are guarded only because they sit
-  beside one. Device names and connection state also still reach release
-  logcat, deliberately, since the link journal already records them and the
-  Privacy screen discloses it.
-  By default, a fresh capture file is opened per radar connection (after
-  handshake) and closed on disconnect, so a mid-ride radar drop splits one
-  ride across multiple files and the dead-radar window between them is
-  uncaptured.
-  Consequence: a radar that never completes the handshake produces no
-  capture at all. The second Debug toggle, **Record connection setup**
-  (`Prefs.setupTranscriptEnabled`), exists for exactly that: it opens the
-  file before the GATT connect - so the connection states, the discovered
-  services and the handshake script lines (including the `ABORT:` reason)
-  are recorded - and one file spans the whole reconnect loop instead of
-  one per attempt. Because the loop has no self-exit, that file keeps
-  growing across every later connection too, successful rides included,
-  and it is listed on the Debug screen WHILE STILL OPEN, marked as
-  recording, so a reporter shares it as it stands. That row withholds
-  delete and Delete all skips it, because unlinking a file under the live
-  writer loses the session silently: the writer feeds an unlinked inode,
-  no replacement opens while the writer lives, and the close-time gzip
-  finds nothing to compress. `deletableCaptureLogs` is the guard and
-  `CaptureLogManager.prune` carries the same exclusion.
-  It still closes at the end of the first attempt after the toggle goes
-  off, when the service stops, or when Bluetooth drops - that just no
-  longer gates retrieval. The toggle subtitle and the issue template say
-  to turn it off when done, which is about retention rather than access:
-  it keeps recording across later rides and the file holds the serial
-  number.
-  Turning the capture-log master switch off closes it at the next attempt
-  too: `CaptureLogManager.open` closes an open file when logging is off
-  rather than just returning, so that switch keeps meaning what its own
-  subtitle promises.
-  It is the tool for unsupported-hardware reports. The transcript carries
-  the radar's DIS serial number and its device-ID frame, which
-  post-handshake captures do not - when the handshake gets that far. Both
-  reads sit near the end of the sequence, so an abort at an early step
-  records neither.
-  Independent of it, the discovered-service table and abort token of every
-  attempt are stored per link - `Prefs.radarLinkProbe` and
-  `Prefs.cameraLinkProbe` (see `LinkProbe`) - and printed in the diagnostic
-  bundle, so even a bundle without any capture names the failing step. The
-  two exits before service discovery, a null GATT and discovery itself
-  failing, record an outcome with no table rather than nothing: leaving the
-  slot alone would let a bundle report the PREVIOUS attempt's stopping point
-  as though it were this one. Both links share `LinkProbeRecorder`, which
-  owns the change-debounce and the per-answer `since=` stamps; a separate
-  slot per link is deliberate, so the device that reconnected last cannot
-  erase the other's answer. The slot is
-  rewritten only when the answer changes, and the stamp is when that
-  answer was first seen. Those stamps are kept per distinct answer in the
-  process, and the stored one is read back at start-up, so an alternating
-  link reports each answer's real age within a session and the last-written
-  answer keeps its age across a restart. The slot holds one line, so the
-  other answer restamps after a restart.
-  Every file's header carries a build stamp (`# app version=... code=...
-  build=...`), plus `commit=` on non-release builds only - so don't infer a
-  build from the APK's install time. It also carries
-  `# clock unix_ms=.. mono_ms=..`, both clocks read at one instant: packet
-  lines are prefixed with wall-clock ms while sensor series such as
-  `# turn yaw ts_mono=` are elapsedRealtime, and this converts between them
-  by subtraction rather than by correlation. The offset holds while the wall
-  clock is not stepped - an NTP correction mid-ride moves the packet stamps
-  and not the anchor, and nothing in the file records it.
-  **A release-variant capture is NOT
-  attributable to a tree**: two release APKs built from different code stamp
-  identically. Why, and the `commit=unknown` fallback: `BuildStamp` KDoc.
-
-## Key files
-
-| Path | Role |
-|------|------|
-| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + sighting dispatch + battery reads; coordinators injected at onCreate |
-| `app/src/main/java/es/jjrh/bikeradar/RadarLinkCoordinator.kt` | Owns `_radarLinkState` + the walk-away/radar-drop transitions (markConnected/markDisconnected/tick/evaluate*); the `RadarLinkStateGateway` impl |
-| `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches the link state via `RadarLinkStateGateway`) |
-| `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
-| `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
-| `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
-| `app/src/main/java/es/jjrh/bikeradar/LinkProbe.kt` | Pure formatter and parser for the stored connection probe (discovered GATT table + abort token) the diagnostic bundle prints |
-| `app/src/main/java/es/jjrh/bikeradar/BuildStamp.kt` | Pure formatter for the capture header's build-provenance line, plus the BuildConfig binding; release builds carry no commit |
-| `app/src/main/java/es/jjrh/bikeradar/RideSummaryNotificationDecider.kt` | Pure decider for the post-ride summary notification (ride end = sustained radar-off; new-ride stats reset on long-gap reconnect) |
-| `app/src/main/java/es/jjrh/bikeradar/CrashLogger.kt` | Process-wide uncaught-exception recorder (reports to `crashes/`, capture-log emergency flush hook); surfaced on the Debug screen with the unclean-restart counter |
-| `app/src/main/java/es/jjrh/bikeradar/BluetoothStateMonitor.kt` | Adapter on/off watch: tears the links down when Bluetooth dies mid-ride, re-registers the scan + kickstarts them when it returns |
-| `app/src/main/java/es/jjrh/bikeradar/RideCheckpoint.kt` | Crash-safe single-slot ride checkpoint (pure write-gate decider + store); flushed into ride history at the next start after a process death |
-| `app/src/main/java/es/jjrh/bikeradar/TurnSensorController.kt` | Gyroscope yaw-rate feed for `TurnStateDecider` (gravity-projected, mount-orientation independent); drives the turn-aware alert hold and writes the `# turn yaw` capture trace |
-| `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
-| `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
-| `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
-| `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
-| `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
-| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see the Architecture note on why that ordering is the feature |
-| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with three routes: the launch gate, the consent screen another app opens, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for any of them |
-| `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
-| `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
-| `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
-| `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
-| `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
-| `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
-| `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
-| `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, light-mode values, bind strings, and the consent screen's action, extras and result codes. Permissive, and references nothing in the app |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateProjection.kt` | The projection from `RadarState`/`Vehicle` onto that wire; the half a consumer cannot use, which is why it is not in the contract |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
-| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware. The consent screen's WIRE is not here; it is `RadarContract.Consent`, so a consumer can copy it |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcService.kt` | The exported bound service. A shell: binder lifetime, the frame feed, and re-checking grants when the store changes |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcBinder.kt` | The contract implemented, and where every grant check lives. Listener registry, one live registration per package, revocation |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarOverlayGate.kt` | Which apps are asking for our overlay to be hidden. Held per package so a crashed consumer cannot leave the rider without it |
-| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarControlBridge.kt` | How the service reaches the live radar link for a tail-light write; install on connect, reset on teardown |
-| `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
-| `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
-| `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
-| `app/src/main/java/es/jjrh/bikeradar/ScanGate.kt` | Pure accept/reject gate for an active BLE scan result (name-match AND bonded), used by the service's device discovery |
-| `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
-| `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge + climb detection); fed by the status reader's callback |
-| `app/src/main/java/es/jjrh/bikeradar/EBikeStatusDecoder.kt` | TLV decoder for the proprietary status stream (add new object IDs here) |
-| `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |
+  carrying raw device bytes is guarded the same way, because the handshake
+  replies include the device-ID frame. `SettingsPrivacyLogcatGuardTest` names
+  and pins those sites; no runtime test can, since `BuildConfig.DEBUG` is true
+  under the test variant. The boundary is RAW BYTES: a decoded value the app
+  already publishes to Home Assistant is not a payload, though some are
+  guarded and pinned anyway because they sit beside one. Device names and
+  connection state still reach release logcat, deliberately, because the link
+  journal records them and the Privacy screen discloses it.
+  By default a file opens per radar connection after the handshake, so a
+  mid-ride radar drop splits one ride across files with the gap between them
+  unrecorded, and an ordinary capture carries neither the DIS serial nor the
+  device-ID frame. A radar that never completes the handshake produces no
+  capture, unless it takes the legacy-stream fallback, which opens one after
+  the abort. **Record connection setup** (`Prefs.setupTranscriptEnabled`)
+  opens the file before the GATT connect and keeps one file across the whole
+  reconnect loop, successful rides included. It is the tool for
+  unsupported-hardware reports, and carries the serial and device-ID frame
+  when the handshake gets that far; its subtitle and the issue template tell
+  reporters to turn it off when done. The open file is listed on the Debug
+  screen marked as recording: its row withholds delete, and Delete all and
+  prune skip it (`deletableCaptureLogs`, `CaptureLogManager.prune`), because
+  unlinking it under the live writer loses the session silently. Turning the
+  transcript toggle off closes the file at the end of the next attempt that
+  gets a GATT connection (a whole ride, if that attempt is one), or when the
+  service stops or Bluetooth drops. Turning the capture-log master switch off
+  closes it at the next attempt (`CaptureLogManager.open`).
+  Separately, each link stores its discovered-service table and abort token
+  (`Prefs.radarLinkProbe`, `Prefs.cameraLinkProbe`; one slot per link,
+  deliberately), printed in the diagnostic bundle. The exits before service
+  discovery record an outcome with no table, so a bundle never reports the
+  previous attempt's stopping point as this one's. Within a process each
+  distinct answer keeps its first-seen `since=` stamp (`LinkProbeRecorder`);
+  the slot holds one line, so after a restart only the stored answer keeps
+  its age and any other answer restamps.
+  Every file's header carries a build stamp, with `commit=` on non-release
+  builds only, and a `# clock unix_ms=.. mono_ms=..` anchor that lets packet
+  stamps be converted to the elapsedRealtime sensor series by subtraction
+  (the NTP caveat is in the `CaptureLogManager` KDoc). **A release-variant
+  capture is NOT attributable to a tree**: two release APKs built from
+  different code stamp identically. Why, and the `commit=unknown` fallback:
+  `BuildStamp` KDoc.
 
 ## Protocol reference
 
@@ -368,88 +238,12 @@ decoders in both Python and Kotlin live there.
 
 ## Writing copy (UI strings)
 
-User-facing text lives in `res/values/strings.xml` (en) + `values-es/`. When
-adding or editing it, follow these principles - the `/qc` copy reviewer
-enforces them, and CONTRIBUTING.md points contributors here:
-
-- **Benefit, not mechanism.** Say what the rider gets, not how it works. "Set
-  your lights by local sunset" beats "compute sunrise/sunset for the auto-mode
-  state machine". Internals (MQTT discovery, BLE stack, GCM, file paths) are
-  noise on most screens.
-- **Short and scannable.** A phone screen is small and read mid-task. Prefer one
-  line; use `\n• ` bullets for any list of three or more items rather than a
-  dense paragraph (see the Privacy permissions/publish strings).
-- **No jargon, acronyms, or filler nouns** the rider can't parse: drop
-  "companion app", "telemetry", "bearer token", "phone home". Established
-  product terms stay (Bluetooth, Home Assistant, Bosch Flow, MQTT, eBike).
-- **es: Spain register** (tú), no LatAm vocab, and gender must match the
-  on-screen referent: a shared string under both "Radar" (m) and "Cámara" (f)
-  needs splitting (e.g. `_radar_not_seen` / `_cam_not_seen`).
-- **es runs long - keep it tight.** Spanish averages ~15-30% longer than
-  English, but the SHORT strings in the tightest spots expand worst - single
-  labels and chips can grow 100-300% ("Dashcam" 7 chars -> "Cámara delantera"
-  16). The layout-sensitive surfaces are labels, button text, screen/section
-  titles, chips, and notification titles; size them to the longest es form,
-  never the en width. Concrete levers (Spain UI convention, tú register):
-  - **Infinitive for action labels** (buttons, menu items, chips): "Configurar",
-    "Cancelar", "Seleccionar todo". **Imperative tú for prompts** that tell the
-    rider to act: "Configúrala", "Elige", "Pulsa Aceptar". Both beat
-    "Configurar la cámara delantera" - drop the object the screen already shows.
-  - **Omit articles/possessives where Spanish allows** - "Crear carpeta" not
-    "Crear una carpeta", "Modo de luz" not "Modo de la luz", "del eBike" not
-    "de tu eBike". Don't stack "de la ... delantera" ("Luz de cámara").
-  - **Drop a qualifier the screen already supplies** - "Cámara" not "Cámara
-    delantera" on a chip / glyph legend / switch-row (the app has one camera).
-  - **No gerund for titles/labels** - translate -ing as an infinitive or noun
-    ("Configurar", "Búsqueda"); reserve the gerund for genuine progress
-    ("Buscando…", "Imprimiendo…").
-  - **Nominal style in short status strings** - drop ser/estar: "Disco lleno",
-    "Cámara no disponible", not "El disco está lleno".
-  - **Symbols, not abbreviations, for units** (no period, no plural, space):
-    "30 s", "2 min", "10 km". **The percent sign is the exception and takes
-    no space**: "12%", not "12 %". This overrides the RAE norm deliberately
-    and `values-es` is consistent with it throughout, so a lone "12 %" is a
-    regression rather than a correction. Ordinary abbreviations keep the dot
-    and accent ("máx.", "mín.", "núm."). Reuse the Android-es words riders
-    know ("Ajustes", "No molestar").
-  - **"Riding" is "montar en bicicleta". "Conducir" is used too. NEVER
-    "rodar".** Not a register preference: in the DLE every sense of `rodar`
-    that involves wheels takes the VEHICLE as its subject ("El automóvil rodó
-    lentamente"), so "mientras ruedas" says "while you roll". `montar` carries
-    the rider sense (DLE 3, `cabalgar`, used transitively too). Cycling
-    glossaries do use `rodar`, but as peloton jargon, which is the wrong
-    register for a commuter. Do not reintroduce it.
-    **Clipping it to `bici` is standard Spain and is accepted** where the full
-    form does not fit, as in the riding-aid notice's title `Antes de montar en
-    bici`. Settled; do not "correct" such a title back to `bicicleta`.
-  - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
-  - **Guillemets are accepted when es quotes one of the app's own labels**
-    («Vía despejada»), even though `values-es` elsewhere escapes straight
-    quotes for the same job. Settled; do not raise it as an inconsistency.
-  - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
-    "Seguir Mi Luz").
-  A term that fits the en layout can overflow es - verify against the es
-  Roborazzi golden (or on-device) for clipping/wrapping before committing.
-- **The Privacy screen is the deliberate exception.** It is the "verify by
-  reading the code" disclosure; it keeps full substance (and the literal tokens
-  `scripts/privacy-disclosure-check.sh` pins: permission names, the backup
-  disclosure + manifest/backup-rules pairing, HTTPS, the DataDisclosure
-  keywords). Trim it to bullets, never gut it.
-  **That script reads `values/strings.xml` only, so every Spanish disclosure gap
-  is invisible to it** - it has already let the es sharing paragraph enumerate
-  one fewer data category than the en one. Be precise about which half is
-  guarded: a disclosure string PRESENT in one locale and missing from the other
-  is caught by lint, since `MissingTranslation` and `ExtraTranslation` are
-  errors with `abortOnError` (measured - deleting one es string fails
-  `:app:lintDebug`). What nothing catches is the half that actually bit: a
-  string that keeps its key in both locales while one of them says something
-  narrower. When a disclosure changes, read both locales side by side.
-  It also never opens `SettingsPrivacy.kt`, so it cannot see a string that
-  exists but is no longer rendered. `SettingsPrivacyRendersEveryDisclosureTest`
-  is what covers that half.
-- **Review with screen context, not a flat string list.** Verbosity and
-  gender-in-context bugs only show on the screen: use the English Roborazzi
-  goldens or map each string to its Composable referent before judging it.
+**Before adding or editing any user-facing string, in either locale, read
+[`WRITING_COPY.md`](WRITING_COPY.md)**; the `/qc` copy reviewer enforces it.
+It holds the Spain-Spanish rules (never "rodar"; the percent sign takes no
+space), the Privacy screen exception, and the fact that
+`scripts/privacy-disclosure-check.sh` reads the English strings only, so when
+a disclosure changes both locales are read side by side.
 
 ## Testing
 
@@ -471,7 +265,8 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - All decoder logic is pure JVM; test with `:app:testDebugUnitTest`
   (Robolectric). CI runs this alongside `:app:lintDebug`,
   `:app:ktlintCheck`, `:app:verifyRoborazziDebug`, and
-  `:app:jacocoCoverageVerification` (see Static analysis & coverage below).
+  `:app:jacocoCoverageVerification` (see
+  [`QUALITY_GATES.md`](QUALITY_GATES.md)).
 - Roborazzi screenshot tests render via Robolectric Native Graphics and run
   as part of `testDebugUnitTest`. `:app:verifyRoborazziDebug` compares
   against the golden PNGs; this gate runs in CI and before any push that
@@ -536,290 +331,53 @@ enforces them, and CONTRIBUTING.md points contributors here:
 
 ## Static analysis & coverage
 
-- **ktlint** (`:app:ktlintCheck`, runs in CI) enforces the `intellij_idea`
-  code style set in `.editorconfig`. The codebase is fully formatted and the
-  baseline (`app/config/ktlint/baseline.xml`) is empty, so all code must be
-  clean; `:app:ktlintFormat` autofixes most issues. Regenerate the baseline
-  (`:app:ktlintGenerateBaseline`) only after a deliberate style sweep, never
-  to silence a fresh finding.
-- **JaCoCo** runs via the on-the-fly agent on `:app:testDebugUnitTest`
-  (`JacocoTaskExtension { isIncludeNoLocationClasses = true }`), exec at
-  `build/jacoco/testDebugUnitTest.exec`. Do NOT switch to AGP's offline
-  `enableUnitTestCoverage`: it cannot see classes loaded through
-  Robolectric's sandbox classloader, so Robolectric-tested code silently
-  reports 0%.
-  - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
-    and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
-  - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
-    project floors LINE >= 0.80, INSTRUCTION >= 0.78, BRANCH >= 0.68 on the
-    whole testable layer, plus a tighter BRANCH >= 0.93 on every `*Decider` /
-    `*Deriver` (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
-    `app/build.gradle.kts` as coverage grows.
-  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, runs in CI and
-    as a mandatory pre-push `/qc` gate - never leave it to CI alone): the
-    changed executable production lines in a PR (or a push) must be >= 85%
-    covered. The project ratchet above can't see a 200-line untested feature
-    while the average holds; this gate does. It wraps `diff-cover` over
-    `jacocoDiffReport`, which keeps Compose UI in scope - per-diff there is
-    nothing to dilute, so a new inline `when` over app state in a Composable
-    body is gated rather than exempt. That report depends on
-    `verifyRoborazziDebug`, not `testDebugUnitTest`: Roborazzi only composes
-    when its task property is set, so a bare unit-test run overwrites the
-    exec data with one where no golden rendered and every
-    snapshot-only Composable reads as uncovered. Diffs under 10 executable changed
-    lines are exempt (one untested line shouldn't fail CI), and an
-    unreachable base ref skips rather than fails. It fires on PRs and direct
-    pushes to `main` alike; a contributor PR is the case it most guards.
-  - **The script READS `jacocoDiffReport.xml` and does not build it, so run
-    `:app:jacocoDiffReport` immediately before it, every time.** In CI the task
-    dependency makes that automatic; by hand it reports on whatever XML is on
-    disk, which is indistinguishable from a real measurement and can be many
-    edits stale. The gap is large enough to change a decision: one tree read
-    85% against an 85% floor from a stale report and 96% from a fresh one.
-    Same family as the corpus gate's "confirm it ran rather than trusting the
-    exit code".
-- **Release DEX keep gate** (`scripts/check-release-dex-keeps.py`, run by
-  `:app:verifyReleaseDexKeeps`): one of the two checks on the artifact riders
-  install; the other is the `boot-smoke` job, described below. Every gate above
-  runs the debug variant, which R8 never touches. It unzips `classes*.dex`, runs
-  `dexdump -f`, and fails if any enum constant in its table is absent under its
-  exact name. The `release-shrink` CI job runs it on every push to `main` and
-  every PR targeting `main`, so it can go red BEFORE a tag exists rather than
-  stranding a public tag. Tag pushes do not trigger `ci.yml`; `release-apk.yml`
-  names the task too, so they are covered there.
-  - **That job also keeps its APK as a run artifact, on pushes only.** It is
-    what a hardware report gets linked to, so an outsider installs a build
-    from a named commit rather than from a maintainer's laptop. It is
-    DEBUG-SIGNED, because no release keystore is injected here, and the
-    artifact name says so.
-  - **Two artifacts from two runs will NOT install over each other, which is
-    the part that bites.** `debug.keystore` is gitignored, so
-    `ensureDebugKeystore` mints a fresh keypair on every runner and each run's
-    APK has a different signer. A tester moving from one build to the next
-    gets `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and has to uninstall, losing
-    their pairing and settings. So the artifact suits a one-off "try this
-    build"; a back-and-forth over several builds wants a LOCAL build instead,
-    where the synced repo-root `debug.keystore` keeps one signature
-    throughout. Neither will upgrade over a store install.
-  - Not on pull requests: that would publish a binary built from unreviewed
-    fork code into this repo's Actions tab. Treat that as policy for honest
-    contributors rather than a control, since a fork runs its own copy of the
-    workflow; it reaches no secrets and holds a read-only token regardless.
-    Downloading an artifact prompts anyone signed out to log in, and it
-    expires after 90 days. Cut a tag and use the release for anything that
-    must outlive that or reach a signed-out reader.
-  - **Deliberately not wired to `assembleRelease`.** A from-source build by a
-    packager - which is what the pending F-Droid submission would do - must not
-    need `python3` and a matching build-tools `dexdump` just to produce the
-    APK, and a finalizer would make both hard requirements of it. `ci.yml` and
-    `release-apk.yml` name the task explicitly instead, so the requirement
-    stays ours. It does `dependsOn("packageRelease")`, without which Gradle
-    rejects the task graph for an implicit dependency on the APK directory.
-  - **What that costs, stated rather than assumed:** any APK built outside
-    those two workflows is not itself gate-checked - a packager's from-source
-    build, or one built by hand and uploaded. Such a build carries the property
-    only if it is byte-identical to one that was checked, which is what a
-    reproducible-build verification would establish. Publish through the
-    workflow.
-  - **What the gate does NOT replace.** It reads names out of the DEX; it never
-    executes the APK. `boot-smoke` does that half: on every push to `main` it
-    builds the shrunk release APK, installs it on an API 34 emulator, and fails
-    unless the process is alive at launch, still alive ten seconds later, and
-    no fatal exception for the app is in logcat. The second look matters more
-    than the first, because a member R8 removed fails at first use rather than
-    at process start.
-    Its reach ends at the first screen. The emulator has no BLE and the overlay
-    permission is not granted, so the service's link paths, the overlay and
-    every alert path run on no release build in CI. Nothing requires a ride
-    test of a minified build before a tag either. Read a green pair as "the
-    names survived and it starts", never as evidence the release works on a
-    ride.
-    Tag pushes do not trigger `ci.yml`, so the release-SIGNED artifact itself is
-    never booted: what was booted is the same commit's debug-signed build, when
-    it was pushed to `main`.
-  - **The table is the set whose NAME crosses a process boundary**, and that
-    is the whole scope: six enums persisted by name and read back with
-    `valueOf()`, plus `VehicleSize`, `ClosePassDetector.Side` and
-    `ClosePassDetector.Severity`, published by name into Home Assistant
-    payloads and the close-pass event JSON. Renaming one silently resets a
-    saved setting or stops a rider's automation firing, with no compile error
-    and no failing test. String literals (`org.json` field names, the prefs
-    key constants) are deliberately NOT covered: no R8 configuration rewrites
-    them, so checking them would add assertions that cannot fail. Same for
-    manifest components, kept by the AAPT rules whatever
-    `proguard-rules.pro` says.
-  - **Write the expected table by hand from the enum declarations.** Deriving
-    it from a DEX, `usage.txt` or `seeds.txt` makes it agree with the artifact
-    it checks by construction.
-  - **Nothing forces a NEW name-crossing enum into the table.** The check is
-    only that the table is a subset of what shipped, so a seventh
-    `CameraLightMode` constant, or a new enum persisted by name, ships ungated
-    and silent. Add it by hand when you add the enum. Deriving the table from
-    the Kotlin SOURCE would close this and is not the same mistake as deriving
-    it from the artifact under test.
-  - Read a failure as the R8 config change needing a keep rule, not the gate
-    needing an edit.
-  - **Both failure branches are pinned against real R8 output, not just the
-    parser.** Removing `-dontobfuscate` renames the classes, so all nine
-    descriptors leave the DEX at once (the whole-class branch). Removing
-    `-dontoptimize` leaves the classes in place but takes the static fields for
-    `CameraLightMode.HIGH/MEDIUM/NIGHT_FLASH/OFF` and
-    `RadarLightMode.SOLID/PELOTON/OFF` out of the shipped DEX (the constant
-    branch). That is the measurement; which R8 pass does it, and whether
-    `valueOf` would still resolve those names from `$VALUES`, is not
-    established - read `usage.txt` from a mutation build if you need to know.
-    The gate pins the contract, not a reproduction of rider-visible harm.
-    Re-run either mutation to re-confirm it.
-  - `--self-test` covers the parser separately, and the Gradle task runs it
-    BEFORE the APK check. A regression in section tracking returns a superset
-    of the static fields, which would make the real check pass unconditionally.
-  - **Do not add `testReleaseUnitTest` and call the release covered** - it
-    runs against release-variant classes *before* R8, so it reports green on
-    exactly the risk it appears to address.
-  - The gate pins enum constant NAMES, not their order. `CameraLightMode`'s BLE
-    wire value is `ordinal + 1`, so reordering its constants breaks the device
-    protocol and passes this gate green. Different hazard, different guard: R8
-    does not reorder, a maintainer does.
-  - **`RadarLightMode`'s ORDER is not a wire format, and must not become one.**
-    The wire values are `RadarContract.LIGHT_MODE_*`, and `RadarIpcBinder` maps
-    them to the enum case by case, so the two move independently. Do NOT
-    refactor that `when` toward `RadarLightMode.entries.getOrNull(mode)`: an
-    ordinal makes reordering the constants change what every already-installed
-    consumer sets on a rider's tail light, with no compile error, no failing
-    test, the DEX gate blind to it because it reads names, and the consumer a
-    different APK.
-    `RadarIpcBinderTest.theWireValueOfEveryLightModeIsFixed` maps each
-    constant to a literal int and `anOutOfRangeLightModeIsRefusedRatherThanCoerced`
-    pins the boundary; `RadarContractTest.everyLightModeWireValueIsFixedAndDistinct`
-    pins the constants themselves. Do not restate any of them as
-    `RadarLightMode.X.ordinal`, which is what would make them agree with the
-    code by construction and stop failing. Changing a `LIGHT_MODE_*` value is a
-    `RadarContract.VERSION` bump; a new mode needs a value and a `when` branch,
-    and until it has both it is simply unsettable over the contract.
-- **Licence headers** (`scripts/check-licence-headers.py`): every Kotlin, AIDL,
-  first-party Python and shell file, plus the SVG master, must carry an SPDX
-  identifier AND a copyright line, and the six cross-app contract files must
-  carry `Apache-2.0` where everything else carries `GPL-3.0-or-later`.
-  **Blocking in `ci.yml`**, unlike the two script gates around it: it reads only
-  the working tree, so it cannot red on a CDN blip or on a re-recorded golden.
-  - The expected holder is read from `additional-permission.txt`, the operative
-    legal document, so the name is declared in exactly one place. The check also
-    asserts README carries that same notice and names the same six files, since
-    both facts otherwise exist as unpinned second copies.
-  - `--self-test` runs first and is fatal, and covers three surfaces rather
-    than one: the check, the README seam, and `--fix` itself. The last matters
-    most, because the two shapes a naive splice damages are exactly the ones
-    the check cannot see afterwards.
-  - **Anti-vacuity, and it is the half a self-test cannot reach.** Narrowing
-    `SUFFIX_COMMENT` would shrink the check in silence: dropping `.aidl` alone
-    stops it looking at three of the six permissive files, and both the tree
-    and the self-test stay green. `ANCHORS` names a real tracked path per
-    declared kind, **keyed by that kind and asserted against the declared
-    scope**, so every way of narrowing the check by a single edit reds on that
-    edit. The keying is the load-bearing part: as a bare set, removing one
-    entry looked like trimming a list and disarmed that kind on its own, and
-    the matching `SUFFIX_COMMENT` edit could land months later, so the pair
-    never appeared in one diff.
-    **`SUBTREE_ANCHORS` covers the other axis**: `ANCHORS` pins a file per
-    KIND and every one sits in `app/src/main` or `scripts`, so a filter
-    excluding the test tree or the ui package passed. These pin a file per
-    SUBTREE, keyed by the prefix so an anchor cannot be retargeted out of the
-    subtree it stands for. That is also the only thing that makes narrowing
-    `tracked_files` audible: it is the universe every other guard is expressed
-    against, so filtering it narrows both sides of every comparison at once and
-    cannot be caught from inside.
-    **One scope, computed once.** `scoped()` returns it and `findings()` and
-    `fix()` are handed it rather than re-deriving it, so there is a single
-    filter in the file. `findings()` additionally counts what it read and reds
-    if that is fewer than the set it was given.
-    What still passes is removing a guard together with the data it guards, in
-    one of three shapes listed in the mutation harness. That floor is
-    deliberate: any guard can be removed by removing the guard, so no further
-    level would change it. What it costs is coordinated edits in one diff,
-    which is what the review gate is for.
-  - `--fix` only ever INSERTS, and refuses a symlink, a non-UTF-8 file, or a
-    header too deep to insert under. Changing the holder or the year in the
-    grant therefore produces a finding per file that `--fix` cannot clear.
-  - **The year is read but deliberately not compared, and the reason is not
-    that it would red every January.** Comparing a header's year against the
-    GRANT's year would never do that. It is not compared because a notice
-    carries the year of that file's own first publication, so a file added in a
-    later year will legitimately differ from the grant. Do not "fix" this with
-    a comparison against the current year, which is the one design that really
-    would red every January. The consequence is that a header year is not
-    checked at all, only its presence, so `Copyright (C) 2062` passes.
-- **Transitive licence check** (`scripts/check-transitive-licences.py`, fed by
-  `:app:writeReleaseRuntimeCoordinates`): reports the licence of every artifact
-  on the release runtime classpath, resolved from each artifact's own POM.
-  **Findings are report-only in `ci.yml`** - read the log, not the exit status.
-  `--strict` makes findings fail; promote once it has been quiet for a while.
-  - **It is hardening, not a compliance fix.** Measured Aug 2026: no artifact
-    on the release runtime classpath distributes a `NOTICE` file, so Apache 2.0
-    s.4(d) has nothing to carry forward, and the APK embeds the full Apache 2.0
-    text for six AndroidX artifacts. Note the trigger for s.4(d) is whether the
-    upstream **Work** ships a NOTICE, not whether our APK does - never argue it
-    from our own APK's contents, which would make stripping NOTICE files read
-    as a defence. Nothing re-checks this: the script reads POM `<licenses>`,
-    not NOTICE files, so a future bump can invalidate it silently. This watches
-    for a bump introducing an incompatible licence unnoticed - otherwise
-    invisible, because a bump is not read as a licensing change.
-  - **Two cheaper-looking routes were measured and are dead**, so do not
-    rebuild either. The Gradle module cache holds no `.pom` for most of what
-    ships (core-ktx, material3, navigation-compose have none), so a cache
-    reader silently skips the majority and reports clean. GitHub's
-    dependency-graph SBOM enumerates the shipped set correctly but resolves a
-    licence for 13 of 149 artifacts and **none of the 123 AndroidX ones**.
-  - **The upstream POMs do carry it**, which is why a direct fetch works where
-    those fail - and why this needs no Gradle resolution API and therefore **no
-    configuration-cache exemption**, which was the cost that made this a
-    decision rather than a chore.
-  - Findings are report-only for a different reason than the screenshot check
-    above: this one reaches the network, and a gate that reds on a CDN blip
-    gets bypassed.
-  - **The allow-list is exact spellings, not a regex on "apache".** A substring
-    match would absorb "Apache License 2.0 with Commons Clause", which is not a
-    free licence. An unfamiliar spelling should reach a human.
-  - **Anti-vacuity is the one thing that is always fatal**, findings-report-only
-    or not: exit 2 means the check examined nothing, and the workflow step
-    swallows every other code but re-raises that one. It fires on an unreadable
-    coordinate list, a list that does not look like this app's classpath, and a
-    run where no coordinate resolved at all. **`continue-on-error` on the step
-    would defeat all of it**, because it discards exit 2 exactly as it discards
-    exit 1, so the step swallows findings explicitly in its own script instead.
-    Do not "simplify" that back.
-  - `--self-test` pins that the classifier can REJECT, that a vacuous run
-    aborts, and that an all-unrecognised or all-undeclared run does not. That
-    last property is the one the abort exists to avoid having, and it is pinned
-    against real bucket shapes through `resolved_count`, because the defect it
-    guards was never in the predicate but in which quantity the caller fed it.
-    CI runs the self-test before the real check. Proven against real data too:
-    dropping one Apache spelling from the allow-list flips almost every
-    artifact to `unrecognised`.
-  - Current state: every artifact on the classpath resolves to Apache-2.0, in
-    four spellings. The count is not written here - the check prints it.
-  - `coreLibraryDesugaring`'s payload is GPL-2.0-with-Classpath-Exception and
-    is a real legal question, deliberately not pre-vetted. It is not enabled
-    (`minSdk 31`), and `SettingsLicencesCoverageTest` already watches for the
-    declaration appearing.
-- **detekt** is intentionally not wired: no stable release targets the
-  pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
-  in a public build. Revisit when a stable detekt supports the toolchain.
-- **CodeQL** runs from `.github/workflows/codeql.yml` on pushes to `main` and
-  weekly, over three languages: `actions` and `python` buildlessly, and
-  `java-kotlin` from a real `:app:assembleDebug`. The build is not optional
-  there - CodeQL extracts Kotlin only from an actual compile, so the buildless
-  mode skips every `.kt` file and reports a green scan of nothing. The build
-  step disables the Gradle *and* Kotlin compiler daemons for the same reason:
-  a compile outside the traced process tree extracts nothing. It also passes
-  `--no-build-cache`, because a cache entry restored from an earlier run
-  satisfies `compileDebugKotlin` without running the compiler at all, and a
-  grep over the build log fails the step unless that task appears as
-  executed rather than FROM-CACHE or UP-TO-DATE. Advanced setup
-  cannot coexist with GitHub's default setup, which is why one workflow covers
-  all three languages rather than only the one that needs a build.
+CI runs ktlint, lint, JaCoCo (a project ratchet plus a diff-coverage gate),
+a release DEX keep gate, `boot-smoke`, licence-header and transitive-licence
+checks, and CodeQL; `/qc` runs the ktlint, lint, coverage and licence-header
+gates locally. **Before changing a workflow under `.github/`,
+`.editorconfig`, the coverage, lint or R8 configuration, `proguard-rules.pro`,
+or a gate script, read [`QUALITY_GATES.md`](QUALITY_GATES.md)**: what each
+gate checks and what must not be changed about it. Four that bite in
+ordinary work:
+
+- ktlint's baseline is empty and all code must be clean; `:app:ktlintFormat`
+  fixes most findings. Never regenerate the baseline to silence one.
+- Run `:app:jacocoDiffReport` immediately before
+  `scripts/diff-coverage-gate.py`: the script reads that report and never
+  builds it, and a stale one looks like a real measurement.
+- A new enum whose constant NAMES are persisted or published, or a new
+  constant in an enum already listed (the light modes, `AttentionKind` and
+  others), goes into the DEX keep table in
+  `scripts/check-release-dex-keeps.py` by hand; nothing forces it in.
+- Every new Kotlin, AIDL, first-party Python or shell file carries an SPDX
+  identifier and a copyright line (`GPL-3.0-or-later`; `Apache-2.0` on the six
+  contract files). CI blocks on it; check with
+  `python3 scripts/check-licence-headers.py`, and `--fix` inserts what is
+  missing.
 
 ## Gotchas
 
+- `CameraLightMode`'s BLE wire value is `ordinal + 1`, so reordering its
+  constants breaks the device protocol. The release DEX gate cannot see it,
+  since it reads names, not order; `CameraLightModeWireFormatTest` pins the
+  bytes.
+- **`RadarLightMode`'s ORDER is not a wire format, and must not become one.**
+  The wire values are `RadarContract.LIGHT_MODE_*`, and `RadarIpcBinder` maps
+  them to the enum case by case, so the two move independently. Do NOT
+  refactor that `when` toward `RadarLightMode.entries.getOrNull(mode)`: an
+  ordinal makes reordering the constants change what every already-installed
+  consumer sets on a rider's tail light, with no compile error, no failing
+  test, the DEX gate blind to it because it reads names, and the consumer a
+  different APK.
+  `RadarIpcBinderTest.theWireValueOfEveryLightModeIsFixed` maps each
+  constant to a literal int and
+  `anOutOfRangeLightModeIsRefusedRatherThanCoerced` pins the boundary;
+  `RadarContractTest.everyLightModeWireValueIsFixedAndDistinct` pins the
+  constants themselves. Do not restate any of them as
+  `RadarLightMode.X.ordinal`, which is what would make them agree with the
+  code by construction and stop failing. Changing a `LIGHT_MODE_*` value is a
+  `RadarContract.VERSION` bump; a new mode needs a value and a `when` branch,
+  and until it has both it is simply unsettable over the contract.
 - After `adb install -r` the radar GATT may be left half-open;
   `runRadarConnection`'s ABORT path closes and reconnects automatically
   (~1.5 s). If the reconnect doesn't happen, see live-testing recovery

@@ -1,8 +1,8 @@
 # Architecture
 
 A map of how Bike Radar is put together, for contributors and reviewers. The
-day-to-day build/test/quality commands live in `AGENTS.md`; this file covers the
-structure those commands operate on.
+day-to-day build and test commands live in `AGENTS.md` and the CI gates in
+`QUALITY_GATES.md`; this file covers the structure those commands operate on.
 
 ## The big picture
 
@@ -140,5 +140,55 @@ text contrast.
 
 ## Where to look
 
-The `Key files` table in `AGENTS.md` maps each responsibility above to its file.
-The BLE wire protocol is documented in the sibling `bike-radar-docs` repository.
+The table below maps each responsibility above to its file. The BLE wire
+protocol is documented in the sibling `bike-radar-docs` repository.
+
+## Key files
+
+| Path | Role |
+|------|------|
+| `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + sighting dispatch + battery reads; coordinators injected at onCreate |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkCoordinator.kt` | Owns `_radarLinkState` + the walk-away/radar-drop transitions (markConnected/markDisconnected/tick/evaluate*); the `RadarLinkStateGateway` impl |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches the link state via `RadarLinkStateGateway`) |
+| `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda) |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
+| `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
+| `app/src/main/java/es/jjrh/bikeradar/LinkProbe.kt` | Pure formatter and parser for the stored connection probe (discovered GATT table + abort token) the diagnostic bundle prints |
+| `app/src/main/java/es/jjrh/bikeradar/BuildStamp.kt` | Pure formatter for the capture header's build-provenance line, plus the BuildConfig binding; release builds carry no commit |
+| `app/src/main/java/es/jjrh/bikeradar/RideSummaryNotificationDecider.kt` | Pure decider for the post-ride summary notification (ride end = sustained radar-off; new-ride stats reset on long-gap reconnect) |
+| `app/src/main/java/es/jjrh/bikeradar/CrashLogger.kt` | Process-wide uncaught-exception recorder (reports to `crashes/`, capture-log emergency flush hook); surfaced on the Debug screen with the unclean-restart counter |
+| `app/src/main/java/es/jjrh/bikeradar/BluetoothStateMonitor.kt` | Adapter on/off watch: tears the links down when Bluetooth dies mid-ride, re-registers the scan + kickstarts them when it returns |
+| `app/src/main/java/es/jjrh/bikeradar/RideCheckpoint.kt` | Crash-safe single-slot ride checkpoint (pure write-gate decider + store); flushed into ride history at the next start after a process death |
+| `app/src/main/java/es/jjrh/bikeradar/TurnSensorController.kt` | Gyroscope yaw-rate feed for `TurnStateDecider` (gravity-projected, mount-orientation independent); drives the turn-aware alert hold and writes the `# turn yaw` capture trace |
+| `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
+| `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
+| `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
+| `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
+| `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see AGENTS.md's Architecture note on why that ordering is the feature |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with three routes: the launch gate, the consent screen another app opens, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for any of them |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
+| `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
+| `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
+| `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
+| `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
+| `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
+| `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, light-mode values, bind strings, and the consent screen's action, extras and result codes. Permissive, and references nothing in the app |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateProjection.kt` | The projection from `RadarState`/`Vehicle` onto that wire; the half a consumer cannot use, which is why it is not in the contract |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateParcel.kt` | The only `Parcelable` on that contract; version leads, targets marshalled inline |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarVehicleParcel.kt` | One target as carried over the contract; a plain data class, not a `Parcelable` |
+| `app/src/main/java/es/jjrh/bikeradar/access/RadarAccess.kt` | Who may read the stream and who may act on the hardware. The consent screen's WIRE is not here; it is `RadarContract.Consent`, so a consumer can copy it |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcService.kt` | The exported bound service. A shell: binder lifetime, the frame feed, and re-checking grants when the store changes |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarIpcBinder.kt` | The contract implemented, and where every grant check lives. Listener registry, one live registration per package, revocation |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarOverlayGate.kt` | Which apps are asking for our overlay to be hidden. Held per package so a crashed consumer cannot leave the rider without it |
+| `app/src/main/java/es/jjrh/bikeradar/ipc/RadarControlBridge.kt` | How the service reaches the live radar link for a tail-light write; install on connect, reset on teardown |
+| `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
+| `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
+| `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
+| `app/src/main/java/es/jjrh/bikeradar/ScanGate.kt` | Pure accept/reject gate for an active BLE scan result (name-match AND bonded), used by the service's device discovery |
+| `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
+| `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge + climb detection); fed by the status reader's callback |
+| `app/src/main/java/es/jjrh/bikeradar/EBikeStatusDecoder.kt` | TLV decoder for the proprietary status stream (add new object IDs here) |
+| `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |

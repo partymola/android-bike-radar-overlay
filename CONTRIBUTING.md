@@ -71,8 +71,7 @@ then, plain pull requests are the way.)
 If you're adding or editing the English text (not just translating), keep it
 short and lead with what the rider gets, not how it works - it's a phone app
 read mid-ride. The full set of copy principles lives in
-[`AGENTS.md`](AGENTS.md) under "Writing copy (UI strings)" (the `/qc` copy
-review enforces them there).
+[`WRITING_COPY.md`](WRITING_COPY.md) (the `/qc` copy review enforces them).
 
 The one exception is **Settings → Privacy**: it is a full, deliberate
 disclosure, so it keeps its detail (and some required technical terms). Tidy it,

@@ -3,9 +3,10 @@
 package es.jjrh.bikeradar
 
 /**
- * Minimal cue-playing surface. [AlertBeeper] implements it; extracting it lets
- * the Debug cue-preview's name-to-cue dispatch ([playPreviewCue]) be unit-tested
- * with a fake, without an AudioTrack-backed beeper.
+ * Minimal cue-playing surface. [AlertBeeper] implements it, and so does the
+ * sound demo's lazily built player; the Debug cue preview, the demo and the
+ * Alert sounds page are unit-tested against fakes of it, without an
+ * AudioTrack-backed beeper.
  */
 internal interface CuePlayer {
     fun play(beeps: Int)

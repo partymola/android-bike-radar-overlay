@@ -458,6 +458,19 @@ ordinary work:
 - `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
   released in `onDestroy`). The first beep after every BLE reconnect lands
   on the same warm AudioTrack pool; do not allocate per-overlayJob.
+  The sound demo and the Alert sounds page build a second, screen-scoped
+  beeper (`newDemoBeeper`) on the same alarm stream. It joins both halves of
+  the walk-away interlock through the shared Prefs slots and never runs the
+  crash repair, since the ride's beeper may hold a lift from that slot
+  (`WalkAwayAlarmBeeperInterlockTest.aSoundDemoLiftIsInterlockedWithTheWalkAwayAlarmToo`,
+  `DemoCuePlayerTest`). Each beeper takes the rider's level for a new lift
+  from that slot (`sharedFloorBaseline`) before the stream, so a lift that
+  starts while the other beeper's saved level is in the slot saves that
+  level, not the raised stream (`TwoBeepersShareOneFloorTest`); do not
+  collapse that seam into `loadAlarmFloor`, which would make the demo
+  repair from a screen. The debug overlay's preview beeper
+  (`DebugOverlayService`) has none of this wiring; any beeper a rider
+  reaches outside the debug tools needs all of it.
 - `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
   a re-arming abandon timer. The walk-away alarm path uses the stronger
   `_EXCLUSIVE` flavour and is separate from the close-pass path.

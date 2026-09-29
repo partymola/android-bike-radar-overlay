@@ -192,8 +192,8 @@ Four states quiet or reshape the audio, by design:
   own media level is used as a proxy for how loud the environment is; there is no
   microphone and no privacy cost. It is best-effort (some devices reject volume
   writes from a background service, which is fine, the app-level gain still
-  plays) and burst-scoped (lifted once, restored once, and repaired at next start
-  if a process death leaks the lift).
+  plays) and burst-scoped (lifted once, restored once, and repaired when the
+  ride service next starts if a process death leaks the lift).
 - **In-call suppression.** While a phone or VoIP call is active the cue's audio
   path is skipped entirely; the visual overlay still fires. It is shown even
   while another app holds it hidden, since it is then the only warning the app

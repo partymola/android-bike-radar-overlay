@@ -524,6 +524,47 @@ class OverlayPipelineDrivingTest {
         )
     }
 
+    /** Swap in a beeper that records what it actually played. */
+    private fun recordingBeeper(): MutableList<String> {
+        val cues = mutableListOf<String>()
+        beeper.release()
+        beeper = AlertBeeper(
+            audioManager = context.getSystemService(AudioManager::class.java),
+            executor = java.util.concurrent.Executor { it.run() },
+            playTrackOverride = { true },
+            onCue = { cues += it },
+        )
+        return cues
+    }
+
+    @Test
+    fun theUrgentWarningReachesTheBeeper() = runTest {
+        // The alert line is written before the cue is played, so it cannot
+        // show the cue reached the speaker; this asserts at the beeper.
+        val cues = recordingBeeper()
+        driveStationaryUrgent()
+        assertTrue("the urgent must be played, got $cues", cues.contains("urgent"))
+    }
+
+    @Test
+    fun theAllClearReachesTheBeeper() = runTest {
+        val cues = recordingBeeper()
+        var mono = 1_000L
+        val pipeline = buildPipeline(clockMono = { mono })
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        for (t in 1_000L..6_000L step 100L) {
+            mono = t
+            val vehicles = if (t <= 1_100L) listOf(car) else emptyList()
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = vehicles, bikeSpeedMs = 5f))
+            runCurrent()
+        }
+        assertEquals("the car is announced, then the road behind clears", listOf("beep count=3", "clear"), cues)
+        job.cancel()
+        job.join()
+    }
+
     @Test
     fun beepAlertLogCarriesTheTierTrigger() = runTest {
         // Same audit contract for the awareness beeps. Tiers score on true

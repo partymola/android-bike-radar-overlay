@@ -64,18 +64,69 @@ class AlertBeeperMediaFloorTest {
     private fun idleMainLooper() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
 
     @Test fun computeAlarmFloorIndex_liftsAboveScaledMusic_flooredAtRiderLevel_cappedAtMax() {
-        val b = beeper()
         // Loud media (max) with the alarm range = music range -> pinned to max.
-        assertEquals(10, b.computeAlarmFloorIndex(musicVol = 10, musicMax = 10, alarmVol = 2, alarmMax = 10))
+        assertEquals(10, AlertBeeper.computeAlarmFloorIndex(musicVol = 10, musicMax = 10, alarmVol = 2, alarmMax = 10))
         // Mid media: scaled-in + ~6 dB margin, still below max.
-        assertEquals(5 + AlertBeeper.ALARM_MARGIN_STEPS, b.computeAlarmFloorIndex(5, 10, 0, 10))
+        assertEquals(7, AlertBeeper.computeAlarmFloorIndex(5, 10, 0, 10))
         // Never turn the alarm DOWN: rider's own louder preset wins.
-        assertEquals(9, b.computeAlarmFloorIndex(1, 10, 9, 10))
+        assertEquals(9, AlertBeeper.computeAlarmFloorIndex(1, 10, 9, 10))
         // No media playing -> leave the alarm exactly as the rider set it.
-        assertEquals(4, b.computeAlarmFloorIndex(0, 10, 4, 10))
+        assertEquals(4, AlertBeeper.computeAlarmFloorIndex(0, 10, 4, 10))
         // Degenerate ranges -> no change.
-        assertEquals(3, b.computeAlarmFloorIndex(5, 0, 3, 10))
-        assertEquals(3, b.computeAlarmFloorIndex(5, 10, 3, 0))
+        assertEquals(3, AlertBeeper.computeAlarmFloorIndex(5, 0, 3, 10))
+        assertEquals(3, AlertBeeper.computeAlarmFloorIndex(5, 10, 3, 0))
+        // Unequal ranges, as on a phone: 4 of 15 media steps is 2 of 7 alarm steps, plus the margin.
+        assertEquals(4, AlertBeeper.computeAlarmFloorIndex(4, 15, 0, 7))
+    }
+
+    @Test fun theVolumeThatSetsACuesLoudnessIsMediaOnlyWhileTheFloorLifts() {
+        // Loud media over a quiet alarm: the lift sets the loudness.
+        assertEquals(AudioManager.STREAM_MUSIC, AlertBeeper.cueLoudnessStream(10, 10, 2, 10))
+        // 3/10 media lifts to exactly 5, the rider's own level: no lift.
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(3, 10, 5, 10))
+        // One step lower on the alarm and the same media does lift it.
+        assertEquals(AudioManager.STREAM_MUSIC, AlertBeeper.cueLoudnessStream(3, 10, 4, 10))
+        // No media playing.
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(0, 10, 0, 10))
+        // The rider's alarm is already the louder of the two.
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(1, 10, 9, 10))
+        // Unequal ranges: 2 of 15 media lifts to exactly 3 of 7, 4 of 15 to 4.
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(2, 15, 3, 7))
+        assertEquals(AudioManager.STREAM_MUSIC, AlertBeeper.cueLoudnessStream(4, 15, 3, 7))
+    }
+
+    @Test fun theLoudnessStreamIsReadFromTheVolumesSetNow() {
+        // Robolectric's ranges are 15 media and 7 alarm steps.
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, 3, 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(audioManager, savedAlarm = null))
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 4, 0)
+        assertEquals(AudioManager.STREAM_MUSIC, AlertBeeper.cueLoudnessStream(audioManager, savedAlarm = null))
+    }
+
+    @Test fun duringALiftTheRidersOwnAlarmLevelDecides() {
+        // Lifted to max for loud media; the slot holds the rider's own 1.
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
+        assertEquals(AudioManager.STREAM_ALARM, AlertBeeper.cueLoudnessStream(audioManager, savedAlarm = null))
+        assertEquals(AudioManager.STREAM_MUSIC, AlertBeeper.cueLoudnessStream(audioManager, savedAlarm = 1))
+    }
+
+    @Test fun theSlotIsWrittenBeforeTheLiftAndClearedAfterTheRestore() {
+        // A reader of the slot and the stream together must never see a lifted
+        // stream with an empty slot.
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, 1, 0)
+        val alarmAtEachWrite = mutableListOf<Pair<Int?, Int>>()
+        val b = AlertBeeper(
+            audioManager = audioManager,
+            executor = directExecutor,
+            playTrackOverride = { true },
+            saveAlarmFloor = { alarmAtEachWrite += it to alarmVol },
+        )
+        b.play(1)
+        idleMainLooper()
+        assertEquals(listOf<Pair<Int?, Int>>(1 to 1, null to 1), alarmAtEachWrite)
         b.release()
     }
 

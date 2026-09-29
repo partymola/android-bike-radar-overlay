@@ -2,8 +2,8 @@
 <!--
   Recursos de cadenas en espanol (es-ES).
 
-  Registro (es-ES). Convenciones fijadas en AGENTS.md, "Writing copy (UI
-  strings)", incluidas las de terminologia y unidades.
+  Registro (es-ES). Convenciones fijadas en WRITING_COPY.md, incluidas las
+  de terminologia y unidades.
   Las claves name="..." son identicas a las del fichero por defecto. El
   elemento <xliff:g> y sus argumentos (%1$s, %1$d, etc.) se conservan tal
   cual; solo se traduce el texto que los rodea. Nombres propios y terminos
@@ -841,5 +841,41 @@
     <string name="settings_radar_access_revoke_body">Dejará de ver tu radar, de cambiar tu luz trasera y de ocultar la barra lateral. Lo que ya tenga se queda con ella. Puedes volver a darle permiso desde la propia app.</string>
     <string name="settings_radar_access_revoke_body_refused">Bike Radar la bloqueó la última vez que pidió usar tu radar. Si confías en ella, ábrela y dale permiso si te lo pide. «<xliff:g id="button" example="Dejar de compartir">%1$s</xliff:g>» borra tu elección guardada.</string>
     <string name="settings_radar_access_backup_note">Esta lista se guarda en tu móvil y viaja en la copia de seguridad de Android, así que un móvil nuevo empieza con las mismas apps permitidas.</string>
+
+    <!-- Demo de sonidos (SoundDemoStep.kt): una ruta de ejemplo con los
+         avisos reales, lo primero de la introducción. -->
+    <string name="sound_demo_mark">Antes de tu primera ruta</string>
+    <string name="sound_demo_title">Lo que vas a oír</string>
+    <string name="sound_demo_sub">Una ruta de ejemplo de 20 s: un coche te adelanta y luego otro se acerca mientras estás parado. Si suena demasiado alto, usa los botones de volumen del móvil.</string>
+    <string name="sound_demo_play">Reproducir</string>
+    <string name="sound_demo_play_again">Repetir</string>
+    <string name="sound_demo_playing">Reproduciendo…</string>
+    <string name="sound_demo_radar_streaming">Solo se reproduce con el radar apagado.</string>
+    <string name="sound_demo_caption_nothing">Nada en tu distancia de alerta: sin sonido.</string>
+    <string name="sound_demo_caption_one">Un coche detrás de ti: 1 pitido.</string>
+    <string name="sound_demo_caption_two">Más cerca: 2 pitidos.</string>
+    <string name="sound_demo_caption_three">Cerca: 3 pitidos.</string>
+    <string name="sound_demo_caption_clear">Ya no hay nada en tu distancia de alerta: este sonido.</string>
+    <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente.</string>
+    <string name="alert_sounds_title">Sonidos de aviso</string>
+    <string name="alert_sounds_row_subtitle">Escucha cada uno y qué significa</string>
+    <string name="alert_sounds_while_riding">Disponibles con el radar apagado.</string>
+    <string name="alert_sounds_section_traffic">Tráfico</string>
+    <string name="alert_sounds_section_radar">Radar</string>
+    <string name="alert_sounds_watch_demo">Ver otra vez la ruta de ejemplo</string>
+    <string name="alert_sound_one_title">1 pitido</string>
+    <string name="alert_sound_one_meaning">Un vehículo detrás</string>
+    <string name="alert_sound_two_title">2 pitidos</string>
+    <string name="alert_sound_two_meaning">Está más cerca</string>
+    <string name="alert_sound_three_title">3 pitidos</string>
+    <string name="alert_sound_three_meaning">Está cerca</string>
+    <string name="alert_sound_clear_title">Vía despejada</string>
+    <string name="alert_sound_clear_meaning">Ya no hay nada en tu distancia de alerta</string>
+    <string name="alert_sound_urgent_title">Aviso urgente</string>
+    <string name="alert_sound_urgent_meaning">Se acerca rápido mientras estás parado o vas despacio</string>
+    <string name="alert_sound_lost_title">3 pulsos graves</string>
+    <string name="alert_sound_lost_meaning">El radar se ha desconectado</string>
+    <string name="alert_sound_back_title">1 pulso grave</string>
+    <string name="alert_sound_back_meaning">El radar ha vuelto</string>
 
 </resources>

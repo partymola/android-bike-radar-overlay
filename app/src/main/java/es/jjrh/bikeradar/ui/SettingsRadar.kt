@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -336,6 +337,17 @@ internal fun SettingsRadarContent(
                     subtitle = stringResource(R.string.settings_radar_turn_subtitle),
                     checked = turnAware,
                     onCheckedChange = onTurnAwareChange,
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    iconTint = br.brand,
+                    title = stringResource(R.string.alert_sounds_title),
+                    subtitle = stringResource(R.string.alert_sounds_row_subtitle),
+                    onClick = { navController.navigate("settings/alert-sounds") },
+                    isLast = true,
                 )
             }
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_overlay))

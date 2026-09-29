@@ -24,6 +24,7 @@ import es.jjrh.bikeradar.ui.OnboardingScreen
 import es.jjrh.bikeradar.ui.RideHistoryScreen
 import es.jjrh.bikeradar.ui.SafetyNoticeScreen
 import es.jjrh.bikeradar.ui.SettingsAbout
+import es.jjrh.bikeradar.ui.SettingsAlertSounds
 import es.jjrh.bikeradar.ui.SettingsDashcam
 import es.jjrh.bikeradar.ui.SettingsEBike
 import es.jjrh.bikeradar.ui.SettingsExperimental
@@ -36,6 +37,7 @@ import es.jjrh.bikeradar.ui.SettingsRadar
 import es.jjrh.bikeradar.ui.SettingsRadarAccessRoute
 import es.jjrh.bikeradar.ui.SettingsRadarDevice
 import es.jjrh.bikeradar.ui.SettingsScreen
+import es.jjrh.bikeradar.ui.SoundDemoScreen
 import es.jjrh.bikeradar.ui.UiTheme
 import es.jjrh.bikeradar.ui.startDestination
 
@@ -111,6 +113,16 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("settings/radar") {
                         SettingsRadar(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/alert-sounds") {
+                        SettingsAlertSounds(navController = navController, prefs = prefs)
+                    }
+                    composable("settings/sound-demo") {
+                        SoundDemoScreen(
+                            prefs = prefs,
+                            mark = R.string.alert_sounds_title,
+                            onDone = { navController.popBackStack() },
+                        )
                     }
                     composable("settings/radar-device") {
                         SettingsRadarDevice(navController = navController, prefs = prefs)

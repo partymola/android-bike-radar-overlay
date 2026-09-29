@@ -181,12 +181,13 @@ internal class WalkAwayAlarm(
         // the rider's - capturing it would restore the lift as "original" in
         // stop() and strand the slider high (the beeper's own restore skips
         // the stream while this override is active, handing ownership here).
-        // [beeperAlarmBaseline] supplies the true pre-lift level instead.
+        // [beeperAlarmBaseline] supplies the true pre-lift level instead, and
+        // the shared slot covers a lift by the sound demo's own beeper.
         val alreadyOverridden = savedAlarmVolume != null
         val saved = if (alreadyOverridden) {
             null
         } else {
-            beeperAlarmBaseline() ?: try {
+            beeperAlarmBaseline() ?: prefs.alertBeeperSavedAlarmVolume ?: try {
                 am.getStreamVolume(AudioManager.STREAM_ALARM)
             } catch (_: Throwable) {
                 null

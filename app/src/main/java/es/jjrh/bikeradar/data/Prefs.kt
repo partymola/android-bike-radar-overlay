@@ -171,7 +171,7 @@ class Prefs(context: Context) {
         }
 
     var alertMaxDistanceM: Int
-        get() = sp.getInt(KEY_ALERT_MAX_DISTANCE_M, 20)
+        get() = sp.getInt(KEY_ALERT_MAX_DISTANCE_M, DEFAULT_ALERT_MAX_DISTANCE_M)
         set(v) {
             sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v).apply()
         }
@@ -880,9 +880,10 @@ class Prefs(context: Context) {
      *  lifted stream value, and the beeper hands its restore off while the
      *  walk-away override is active (see [AlertBeeper.alarmFloorBaseline]). A
      *  non-null value at the next start means a process death inside the
-     *  sub-second lift window left the alarm raised; [AlertBeeper] repairs it
-     *  from this slot on construction. Runtime state, not part of [snapshot] /
-     *  [flow] / [dumpAll]. */
+     *  sub-second lift window left the alarm raised; the ride service's
+     *  [AlertBeeper] repairs it from this slot on construction. The sound
+     *  demo's beeper writes this slot too but never repairs from it. Runtime
+     *  state, not part of [snapshot] / [flow] / [dumpAll]. */
     var alertBeeperSavedAlarmVolume: Int?
         get() = if (sp.contains(KEY_BEEPER_SAVED_ALARM_VOLUME)) {
             sp.getInt(KEY_BEEPER_SAVED_ALARM_VOLUME, 0)
@@ -1049,6 +1050,10 @@ class Prefs(context: Context) {
         /** The low-battery threshold an untouched install runs at. The single
          *  source: the getter below and the Compose default both read it. */
         const val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = 20
+
+        /** The alert distance an untouched install runs at. The single source:
+         *  the getter below and the sound demo's scene both read it. */
+        const val DEFAULT_ALERT_MAX_DISTANCE_M = 20
 
         private const val FILE = "bike_radar_prefs"
         const val KEY_FIRST_RUN_COMPLETE = "first_run_complete"

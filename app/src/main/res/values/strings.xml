@@ -880,4 +880,44 @@
     <string name="settings_radar_access_revoke_body_refused">Bike Radar blocked it the last time it asked to use your radar. If you trust it, open it and allow it if it asks. \"<xliff:g id="button" example="Stop sharing">%1$s</xliff:g>\" removes your saved choice.</string>
     <string name="settings_radar_access_backup_note">This list is kept on your phone and travels in your Android backup, so a new phone starts with the same apps allowed.</string>
 
+    <!-- Sound demo (SoundDemoStep.kt): an example ride with the real alert
+         sounds, first thing in onboarding. Captions say what the last sound
+         meant; "closer/close" rather than metres, since the bands follow each
+         rider's alert distance. The all-clear and the silence are about the
+         alert distance, not what the radar sees: cars further back can still
+         be on the overlay. -->
+    <string name="sound_demo_mark">Before your first ride</string>
+    <string name="sound_demo_title">What you\'ll hear</string>
+    <string name="sound_demo_sub">A 20-second example ride: a car passes you, then another closes in while you\'re stopped. If it\'s too loud, use your phone\'s volume buttons.</string>
+    <string name="sound_demo_play">Play</string>
+    <string name="sound_demo_play_again">Play again</string>
+    <string name="sound_demo_playing">Playing…</string>
+    <string name="sound_demo_radar_streaming">Plays only while the radar is off.</string>
+    <string name="sound_demo_caption_nothing">Nothing within your alert distance: no sound.</string>
+    <string name="sound_demo_caption_one">A car behind you: one beep.</string>
+    <string name="sound_demo_caption_two">Closer: two beeps.</string>
+    <string name="sound_demo_caption_three">Close: three beeps.</string>
+    <string name="sound_demo_caption_clear">Nothing within your alert distance any more: this sound.</string>
+    <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
+    <string name="alert_sounds_title">Alert sounds</string>
+    <string name="alert_sounds_row_subtitle">Hear each one and what it means</string>
+    <string name="alert_sounds_while_riding">Available when the radar is off.</string>
+    <string name="alert_sounds_section_traffic">Traffic</string>
+    <string name="alert_sounds_section_radar">Radar</string>
+    <string name="alert_sounds_watch_demo">Watch the example ride again</string>
+    <string name="alert_sound_one_title">One beep</string>
+    <string name="alert_sound_one_meaning">A vehicle behind you</string>
+    <string name="alert_sound_two_title">Two beeps</string>
+    <string name="alert_sound_two_meaning">It\'s closer</string>
+    <string name="alert_sound_three_title">Three beeps</string>
+    <string name="alert_sound_three_meaning">It\'s close</string>
+    <string name="alert_sound_clear_title">All-clear</string>
+    <string name="alert_sound_clear_meaning">Nothing within your alert distance any more</string>
+    <string name="alert_sound_urgent_title">Urgent warning</string>
+    <string name="alert_sound_urgent_meaning">Closing fast while you are stopped or slow</string>
+    <string name="alert_sound_lost_title">Three low pulses</string>
+    <string name="alert_sound_lost_meaning">The radar has disconnected</string>
+    <string name="alert_sound_back_title">One low pulse</string>
+    <string name="alert_sound_back_meaning">The radar is back</string>
+
 </resources>

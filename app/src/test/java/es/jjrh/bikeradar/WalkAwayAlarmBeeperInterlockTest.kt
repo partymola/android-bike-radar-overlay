@@ -2,10 +2,13 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.os.Looper
 import android.os.VibratorManager
+import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.ui.newDemoBeeper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -174,5 +177,32 @@ class WalkAwayAlarmBeeperInterlockTest {
 
         alarm.stop()
         assertEquals("the rider's level comes back after the episode", riderLevel, alarmVol)
+    }
+
+    @Test
+    fun aSoundDemoLiftIsInterlockedWithTheWalkAwayAlarmToo() {
+        // The demo's beeper is not the one the service wires in, so the walk-away
+        // sees its lift only through the crash-repair slot the two share.
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(app)
+        try {
+            val riderLevel = 1
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, riderLevel, 0)
+            val demo = newDemoBeeper(app, prefs, directExecutor)!!
+            val alarm = WalkAwayAlarm(app, scope, { FakeTone() }, prefs, beeperAlarmBaseline = { null })
+
+            demo.play(2)
+            assertTrue("the demo must have lifted the stream", alarmVol > riderLevel)
+            alarm.start()
+            idleMainLooper()
+            assertEquals("the demo's restore must not pull the blaring walk-away down", maxAlarm, alarmVol)
+            assertNull("the shared slot must be cleared by the hand-off", prefs.alertBeeperSavedAlarmVolume)
+            alarm.stop()
+            assertEquals("the rider's own alarm level must survive both restores", riderLevel, alarmVol)
+            demo.release()
+        } finally {
+            app.getSharedPreferences("bike_radar_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+        }
     }
 }

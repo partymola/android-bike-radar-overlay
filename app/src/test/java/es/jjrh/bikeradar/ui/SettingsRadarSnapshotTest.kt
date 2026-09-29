@@ -51,7 +51,7 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w448dp-h2200dp-xxhdpi")
+    @Config(qualifiers = "w448dp-h2400dp-xxhdpi")
     fun closePassSectionNoHa() {
         captureRoboImage {
             UiTheme { RadarContent(haConfigured = false) }
@@ -59,7 +59,7 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w448dp-h2200dp-xxhdpi")
+    @Config(qualifiers = "w448dp-h2400dp-xxhdpi")
     fun closePassSectionWithHa() {
         captureRoboImage {
             UiTheme { RadarContent(haConfigured = true) }

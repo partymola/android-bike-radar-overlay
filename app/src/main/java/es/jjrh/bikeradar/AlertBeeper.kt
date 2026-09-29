@@ -158,6 +158,17 @@ class AlertBeeper(
     // keeping this class injectable like its other seams.
     private val saveAlarmFloor: (Int?) -> Unit = {},
     private val loadAlarmFloor: () -> Int? = { null },
+    // The rider's level another beeper saved in the same slot while its own
+    // lift holds (the ride's and the sound demo's share one), so a lift that
+    // starts while the other beeper's saved level is in the slot saves that
+    // level, not the raised stream (TwoBeepersShareOneFloorTest). Defaults to
+    // the repair read, which is that slot for the ride; the demo passes it
+    // without repairing from it. The two lifts are otherwise uncoordinated,
+    // deliberately: whichever burst ends first restores the stream and clears
+    // the slot for both, so the other plays the rest of its cue at the
+    // rider's own level. The demo plays only while the radar is not
+    // streaming, so the overlap is at most a drop or reconnect pulse.
+    private val sharedFloorBaseline: () -> Int? = loadAlarmFloor,
     // One half of the WalkAwayAlarm interlock (the other half is
     // [alarmFloorBaseline], which the walk-away alarm reads): true while the
     // walk-away alarm holds its own STREAM_ALARM override (forced max). While
@@ -581,8 +592,10 @@ class AlertBeeper(
             val musicMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
             val alarmMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             // Baseline = the rider's true level: the already-saved original
-            // during a burst, else the current (un-lifted) alarm index.
+            // during a burst, else what another beeper's lift saved, else the
+            // current (un-lifted) alarm index.
             val baseline = savedAlarmFloor
+                ?: sharedFloorBaseline()
                 ?: audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
             val target = computeAlarmFloorIndex(musicVol, musicMax, baseline, alarmMax)
             if (target <= baseline) return
@@ -637,8 +650,8 @@ class AlertBeeper(
 
     /** Repair an alarm-floor lift leaked by a process death mid-burst: a
      *  persisted level ([loadAlarmFloor]) means the previous process raised the
-     *  alarm stream and died before restoring. No cue can be active at
-     *  construction, so restoring unconditionally is safe. */
+     *  alarm stream and died before restoring. None of this beeper's cues can
+     *  be active at construction. */
     private fun repairLeakedAlarmFloor() {
         val leaked = loadAlarmFloor() ?: return
         try {
@@ -649,30 +662,6 @@ class AlertBeeper(
             Log.w(TAG, "leaked alarm-floor restore failed: $t")
         }
         saveAlarmFloor(null)
-    }
-
-    /**
-     * Pure target-index computation for the media-volume floor. STREAM_MUSIC
-     * and STREAM_ALARM have independent step counts, so the music index is
-     * scaled into the alarm range, then [ALARM_MARGIN_STEPS] (~6 dB headroom) is
-     * added. The result is FLOORED at [alarmVol] (never turn the rider's alarm
-     * down) and capped at [alarmMax]. When no media is playing ([musicVol] == 0)
-     * the rider's own alarm level stands - the floor lifts above MEDIA, nothing
-     * else.
-     * Volume steps are not perfectly uniform in dB, so the margin is an honest
-     * approximation, not a calibrated +6 dB.
-     */
-    internal fun computeAlarmFloorIndex(
-        musicVol: Int,
-        musicMax: Int,
-        alarmVol: Int,
-        alarmMax: Int,
-    ): Int {
-        if (alarmMax <= 0 || musicMax <= 0) return alarmVol
-        if (musicVol <= 0) return alarmVol
-        val musicScaledToAlarm = ceil(musicVol.toDouble() / musicMax * alarmMax).toInt()
-        val target = musicScaledToAlarm + ALARM_MARGIN_STEPS
-        return target.coerceIn(alarmVol, alarmMax)
     }
 
     /**
@@ -918,6 +907,55 @@ class AlertBeeper(
          *  level, in alarm-stream steps (~6 dB; steps are not uniform in dB, so
          *  this is an honest approximation, not a calibrated figure). */
         internal const val ALARM_MARGIN_STEPS = 2
+
+        /**
+         * Pure target-index computation for the media-volume floor. STREAM_MUSIC
+         * and STREAM_ALARM have independent step counts, so the music index is
+         * scaled into the alarm range, then [ALARM_MARGIN_STEPS] (~6 dB headroom) is
+         * added. The result is FLOORED at [alarmVol] (never turn the rider's alarm
+         * down) and capped at [alarmMax]. When no media is playing ([musicVol] == 0)
+         * the rider's own alarm level stands - the floor lifts above MEDIA, nothing
+         * else.
+         * Volume steps are not perfectly uniform in dB, so the margin is an honest
+         * approximation, not a calibrated +6 dB.
+         */
+        internal fun computeAlarmFloorIndex(
+            musicVol: Int,
+            musicMax: Int,
+            alarmVol: Int,
+            alarmMax: Int,
+        ): Int {
+            if (alarmMax <= 0 || musicMax <= 0) return alarmVol
+            if (musicVol <= 0) return alarmVol
+            val musicScaledToAlarm = ceil(musicVol.toDouble() / musicMax * alarmMax).toInt()
+            val target = musicScaledToAlarm + ALARM_MARGIN_STEPS
+            return target.coerceIn(alarmVol, alarmMax)
+        }
+
+        /**
+         * The stream whose volume sets how loud a cue sounds: media when the
+         * floor would lift the alarm above the rider's own level, else the alarm.
+         * The one to hand the volume buttons, since turning the other down
+         * changes nothing the rider hears.
+         */
+        internal fun cueLoudnessStream(musicVol: Int, musicMax: Int, alarmVol: Int, alarmMax: Int): Int {
+            val lifted = computeAlarmFloorIndex(musicVol, musicMax, alarmVol, alarmMax) > alarmVol
+            return if (lifted) AudioManager.STREAM_MUSIC else AudioManager.STREAM_ALARM
+        }
+
+        /**
+         * [cueLoudnessStream] for the volumes set now. [savedAlarm] is the
+         * crash-repair slot: while a lift holds, it is the rider's own alarm
+         * level, which the stream no longer shows. [applyAlarmFloor] writes it
+         * before lifting and [restoreAlarmFloor] clears it after restoring, so
+         * a read at any moment sees one or the other.
+         */
+        internal fun cueLoudnessStream(audioManager: AudioManager, savedAlarm: Int?): Int = cueLoudnessStream(
+            musicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC),
+            musicMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+            alarmVol = savedAlarm ?: audioManager.getStreamVolume(AudioManager.STREAM_ALARM),
+            alarmMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+        )
 
         /** Prepended to a cue's [onCue] tag when the play attempt failed even
          *  after the rebuild-and-retry. Consumers key off the bare tags

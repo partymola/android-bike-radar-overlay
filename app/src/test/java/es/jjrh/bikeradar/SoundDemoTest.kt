@@ -39,7 +39,41 @@ class SoundDemoTest {
     }
 
     @Test
+    fun playbackSoundsEachCueOnceWhenTheClockPassesIt() {
+        val played = mutableListOf<AlertCue>()
+        val playback = SoundDemo.Playback { played += it }
+        playback.advanceTo(3_399L)
+        assertEquals(emptyList<AlertCue>(), played)
+        playback.advanceTo(3_400L)
+        playback.advanceTo(3_400L)
+        assertEquals(listOf<AlertCue>(AlertCue.Beep(1)), played)
+        assertEquals(AlertCue.Beep(1), playback.lastCue)
+    }
+
+    @Test
+    fun aFrameThatJumpsAheadStillPlaysEveryCueInOrder() {
+        val played = mutableListOf<AlertCue>()
+        SoundDemo.Playback { played += it }.advanceTo(SoundDemo.DURATION_MS)
+        assertEquals(listOf(AlertCue.Beep(1), AlertCue.Beep(2), AlertCue.Beep(3), AlertCue.Clear, AlertCue.Urgent), played)
+    }
+
+    @Test
+    fun theSceneLastsTheTwentySecondsItsIntroductionPromises() {
+        assertEquals(20_000L, SoundDemo.DURATION_MS)
+    }
+
+    @Test
     fun theLastSoundHasTimeToFinishBeforeTheSceneEnds() {
-        assertTrue(SoundDemo.cues().last().atMs <= 17_000L)
+        assertTrue(SoundDemo.DURATION_MS - SoundDemo.cues().last().atMs >= 1_500L)
+    }
+
+    @Test
+    fun eachCarIsDrawnOneFrameBeforeItsFirstSound() {
+        // Before that the strip is empty, which is what the silent caption says.
+        fun firstDrawnAfter(fromMs: Long) = (fromMs..SoundDemo.DURATION_MS step SoundDemo.FRAME_MS)
+            .first { t -> SoundDemo.vehiclesAt(t).any { it.distanceM <= SoundDemo.VISUAL_MAX_M } }
+        assertEquals(20, SoundDemo.VISUAL_MAX_M)
+        assertEquals(3_300L, firstDrawnAfter(0L))
+        assertEquals(15_200L, firstDrawnAfter(10_000L))
     }
 }

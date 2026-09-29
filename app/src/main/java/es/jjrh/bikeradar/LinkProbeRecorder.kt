@@ -14,8 +14,10 @@ package es.jjrh.bikeradar
  * was FIRST seen, which is why the rendered line reads `since=`. A marginal
  * link stops at one step on one attempt and a different one on the next, so a
  * single slot would restamp on every flip and a link failing the same two ways
- * for a week would always read "a moment ago". Each distinct answer keeps its
- * own first sighting, and [seed] carries them across a process start.
+ * for a week would always read "a moment ago". Within a process each distinct
+ * answer keeps its own first sighting. Across a process start only the stored
+ * line survives: [seed] restores that one answer's stamp, and any other answer
+ * seen afterwards is stamped as new.
  *
  * The write RATE is deliberately not bounded and the change-debounce does not
  * bound it: a link alternating between two answers differs from the previous

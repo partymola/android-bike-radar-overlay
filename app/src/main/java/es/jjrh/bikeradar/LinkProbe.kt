@@ -8,8 +8,9 @@ package es.jjrh.bikeradar
  * a bug report.
  *
  * It exists because neither existing sink answers "why did this radar never go
- * live?". The capture log opens only after a successful handshake, so a device
- * that never gets that far produces no file at all. The always-on journal does
+ * live?". Unless the setup transcript is on, the capture log opens only after
+ * the handshake (or on the legacy-stream fallback), so a device that aborts
+ * without a fallback produces no file at all. The always-on journal does
  * record the abort, but it cannot carry the discovered table: it is one short
  * line per event, and a link that aborts every 1.5 s pushes everything else out
  * of the newest lines the diagnostic bundle prints. The caller stores this in

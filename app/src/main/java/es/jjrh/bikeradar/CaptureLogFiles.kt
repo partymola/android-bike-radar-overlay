@@ -18,8 +18,7 @@ import java.util.zip.GZIPOutputStream
  * Gzipping happens AFTER `closeCaptureLog` has flushed + closed the
  * PrintWriter; the live write path never touches a gzip stream so a crash
  * mid-ride still produces a valid plain `.log` (which the next prune pass
- * will then compress). 5-10x space saving on the steady-state cache; the
- * 500-file cap on phone storage drops from ~150 MB to ~15-30 MB.
+ * will then compress). 5-10x space saving on the steady-state cache.
  */
 internal object CaptureLogFiles {
 

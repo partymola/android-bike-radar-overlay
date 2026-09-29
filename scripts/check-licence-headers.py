@@ -106,13 +106,13 @@ ANCHORS = {
 #
 # What these do is remove the silence. ANCHORS pins one file per declared KIND
 # and every one of them sits in app/src/main or scripts, so a filter excluding
-# the test tree or the ui package used to pass. These pin one file per SUBTREE
+# the test tree or the ui package would pass them. These pin one file per SUBTREE
 # instead, keyed by the prefix so an anchor cannot be retargeted out of the
-# subtree it stands for. A pathspec or substring filter in `tracked_files` now
+# subtree it stands for. A pathspec or substring filter in `tracked_files`
 # reds naming the subtree it removed.
 #
-# Still not a closed class: a filter narrow enough to miss all six passes. It
-# is a smaller target than "anything", which is what it was.
+# Still not a closed class: a filter narrow enough to miss every anchor
+# passes, but it has to miss every subtree at once.
 SUBTREE_ANCHORS = {
     "app/src/main/": "app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt",
     "app/src/test/": "app/src/test/java/es/jjrh/bikeradar/AlertBeeperCueShapeTest.kt",
@@ -190,9 +190,9 @@ def inspect(text: str) -> tuple[str | None, str | None]:
 def scoped(root: Path) -> tuple[set[str], set[str]]:
     """(tracked, examined), computed ONCE and passed to everything below.
 
-    The scope used to be recomputed at three call sites, so `scope_findings`
-    validated a set the other two did not use, and extending one of their
-    filters narrowed the check with every gate green. One filter, one result.
+    Recomputed at each call site, `scope_findings` would validate a set the
+    others do not use, and extending one of their filters would narrow the
+    check with every gate green. One filter, one result.
     """
     tracked = set(tracked_files(root))
     return tracked, {p for p in tracked if in_scope(p)}
@@ -219,10 +219,10 @@ def scope_findings(tracked: set[str], examined: set[str]) -> list[tuple[str, str
         out.append((extra, "examined but outside the declared scope"))
     # The anchors guard the scope, so the anchors are tied to the scope: one
     # per declared kind, and each anchor really of that kind. Every way of
-    # narrowing the check by a SINGLE edit now reds on that edit, whether it
+    # narrowing the check by a SINGLE edit reds on that edit, whether it
     # touches SUFFIX_COMMENT, EXTRA_FILES or the anchors themselves.
     #
-    # The regress stops deliberately, and the floor is now three coordinated
+    # The regress stops deliberately, and the floor is three coordinated
     # edits: a kind, its entry here, and the subtree anchor that covers the
     # same files from the other direction. No further level would change that,
     # because any guard can be removed by removing the guard. What it costs is
@@ -267,11 +267,11 @@ def scope_findings(tracked: set[str], examined: set[str]) -> list[tuple[str, str
 def findings(root: Path, examined: set[str], holder: str) -> list[tuple[str, str]]:
     out = []
     # Iterates the set `scope_findings` validates, rather than re-deriving it,
-    # and counts every path it HANDLED. Two weaker versions were tried and both
-    # let a filter through. Counting at the loop head tallies paths visited, so
-    # a filter beside the is_file skip or just before the read passes. Tallying
-    # the skip separately is worse: widening the skip's own condition then
-    # routes filtered files into that tally and it still passes.
+    # and counts every path it HANDLED. Two weaker shapes let a filter through.
+    # Counting at the loop head tallies paths visited, so a filter beside the
+    # is_file skip or just before the read passes. Tallying the skip separately
+    # is worse: widening the skip's own condition routes filtered files into
+    # that tally and it still passes.
     # So there is no separate tally. A tracked in-scope path that is not a
     # readable file is a finding in its own right, which is true anyway, and
     # every path therefore either increments `seen` or reports.
@@ -302,8 +302,8 @@ def doc_findings(root: Path, notice: str) -> list[tuple[str, str]]:
     """Facts that exist in more than one place have to agree.
 
     The holder lives in the grant and is restated in README; the six permissive
-    paths live in PERMISSIVE_FILES and are listed in README again. Nothing
-    connected them, so either copy could drift in silence.
+    paths live in PERMISSIVE_FILES and are listed in README again. Without
+    this, either copy could drift in silence.
     """
     out = []
     readme = (root / README).read_text(errors="replace")
@@ -503,7 +503,7 @@ def self_test(notice: str, holder: str) -> int:
         # The fixture has to resemble the real README in the one dimension the
         # anchoring depends on: SEVERAL paragraphs mention the licence and only
         # one of them is the list. A single-paragraph fixture passes whatever
-        # the anchor picks, which is how a wrong anchor shipped once already.
+        # the anchor picks, so it could not catch a wrong anchor.
         readme = root / README
         names = " ".join(f"`{Path(p).name}`" for p in PERMISSIVE_FILES)
         one = sorted(PERMISSIVE_FILES)[0]

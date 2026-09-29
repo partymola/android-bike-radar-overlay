@@ -12,10 +12,11 @@
 # compile and does not fail a unit test - it silently resets a saved setting to
 # its default, or stops an automation firing, on the rider's phone.
 #
-# Every other CI check runs the debug variant, which R8 never touches, so this
-# is the only one that reads the shipped artifact. It reads the DEX rather than
-# R8's own usage report because the report describes what R8 says it did, and
-# the question here is what the APK actually contains.
+# The other CI checks run the debug variant, which R8 never touches, apart
+# from boot-smoke, which launches the shrunk APK without looking inside it.
+# This is the only one that reads what the shipped artifact contains. It reads
+# the DEX rather than R8's own usage report because the report describes what
+# R8 says it did, and the question here is what the APK actually contains.
 #
 # Scope is deliberately narrow: symbols whose NAME is load-bearing. It excludes
 # things that cannot fail. String literals (org.json field names, the

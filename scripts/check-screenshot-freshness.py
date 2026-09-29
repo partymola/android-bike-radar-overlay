@@ -17,11 +17,11 @@
 #    golden set, so the licences screen sitting where the About screen belongs
 #    passes. The README alt text is the only statement of which screen goes in
 #    which slot, and it is prose.
-#  - The landscape images at all. They are genuine device captures of the ride
-#    overlay, which no golden reproduces - the overlay goldens are a 390px-wide
-#    strip of the View alone. Note what that means: device captures are the
-#    class that can carry a real Home Assistant host and real device names, and
-#    they are exactly the class this cannot inspect. It covers the safe images.
+#  - The landscape images at all. None is published: every image is a golden
+#    copy, and the overlay golden is a 390px-wide strip. A landscape image
+#    would be a device capture, the class that can carry a real Home Assistant
+#    host and real device names and exactly the class this cannot inspect, so
+#    a non-zero skip count means one has come back.
 #  - Whether a skipped image is really a device capture. Landscape is decided
 #    from the IHDR width and height, which is data inside the file being
 #    checked, so a portrait image edited to claim landscape is exempt.

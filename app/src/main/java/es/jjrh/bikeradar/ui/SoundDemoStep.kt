@@ -203,10 +203,16 @@ internal fun VolumeKeysFollowCues(prefs: Prefs) {
 
 /**
  * The demo as a whole screen: first in onboarding, and again from Settings.
- * [mark] is the label over the title, which differs between the two.
+ * [mark] is the label over the title and [doneLabel] the button that leaves,
+ * both of which differ between the two.
  */
 @Composable
-fun SoundDemoScreen(prefs: Prefs, @StringRes mark: Int, onDone: () -> Unit) {
+fun SoundDemoScreen(
+    prefs: Prefs,
+    @StringRes mark: Int,
+    onDone: () -> Unit,
+    @StringRes doneLabel: Int = R.string.common_continue,
+) {
     UiTheme {
         VolumeKeysFollowCues(prefs)
         val br = LocalBrColors.current
@@ -216,6 +222,7 @@ fun SoundDemoScreen(prefs: Prefs, @StringRes mark: Int, onDone: () -> Unit) {
                 canPlay = !rememberRadarStreaming(),
                 onContinue = onDone,
                 mark = mark,
+                doneLabel = doneLabel,
             )
         }
     }
@@ -232,6 +239,7 @@ internal fun SoundDemoStep(
     canPlay: Boolean,
     onContinue: () -> Unit,
     @StringRes mark: Int = R.string.sound_demo_mark,
+    @StringRes doneLabel: Int = R.string.common_continue,
 ) {
     var runs by rememberSaveable { mutableIntStateOf(0) }
     var playing by remember { mutableStateOf(false) }
@@ -286,6 +294,7 @@ internal fun SoundDemoStep(
             onContinue()
         },
         mark = mark,
+        doneLabel = doneLabel,
     )
 }
 
@@ -300,6 +309,7 @@ internal fun SoundDemoStepContent(
     onPlay: () -> Unit,
     onContinue: () -> Unit,
     @StringRes mark: Int = R.string.sound_demo_mark,
+    @StringRes doneLabel: Int = R.string.common_continue,
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
@@ -330,7 +340,7 @@ internal fun SoundDemoStepContent(
         // Once the scene has been watched, moving on is the main action.
         if (played && !playing && canPlay) {
             FooterCtaDual(
-                primary = stringResource(R.string.common_continue),
+                primary = stringResource(doneLabel),
                 secondary = stringResource(R.string.sound_demo_play_again),
                 primaryEnabled = true,
                 onPrimary = onContinue,
@@ -339,7 +349,7 @@ internal fun SoundDemoStepContent(
         } else {
             FooterCtaDual(
                 primary = stringResource(if (playing) R.string.sound_demo_playing else R.string.sound_demo_play),
-                secondary = stringResource(R.string.common_continue),
+                secondary = stringResource(doneLabel),
                 primaryEnabled = canPlay && !playing,
                 onPrimary = onPlay,
                 onSecondary = onContinue,

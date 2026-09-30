@@ -32,6 +32,7 @@
     <string name="common_change">Change</string>
     <string name="common_clear">Clear</string>
     <string name="common_back">Back</string>
+    <string name="common_done">Done</string>
 
     <!-- UI primitives (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -903,7 +904,7 @@
     <string name="sound_demo_caption_clear">The radar sees nothing within your alert distance any more: the all-clear.</string>
     <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
     <string name="alert_volume_title">Set the alert volume</string>
-    <string name="alert_volume_sub">Play a test sound and set how loud the alerts are. Your phone\'s volume buttons work here too.</string>
+    <string name="alert_volume_sub">Play a test sound while you set it. Your phone\'s volume buttons change the phone\'s volume, not this slider.</string>
     <string name="alert_volume_play">Play a test sound</string>
     <string name="alert_volume_radar_streaming">The test sound plays only while the radar is off. The volume still changes.</string>
     <!-- The same words as alert_volume_title in English; Spanish uses the

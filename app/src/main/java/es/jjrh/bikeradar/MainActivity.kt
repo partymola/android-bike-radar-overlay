@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
                             prefs = prefs,
                             mark = R.string.alert_sounds_title,
                             onDone = { navController.popBackStack() },
+                            doneLabel = R.string.common_done,
                         )
                     }
                     composable("settings/alert-volume") {
@@ -130,6 +131,7 @@ class MainActivity : ComponentActivity() {
                             prefs = prefs,
                             mark = R.string.alert_sounds_title,
                             onDone = { navController.popBackStack() },
+                            doneLabel = R.string.common_done,
                         )
                     }
                     composable("settings/radar-device") {

@@ -17,9 +17,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Roborazzi goldens for the sound demo leaf at three moments of the scene:
- * before Play, as the first car reaches three beeps, and at the urgent
- * warning, plus the three-beep moment in Spanish, where the sub runs longest,
- * and the Settings replay locked by a streaming radar, in Spanish.
+ * before Play, mid-scene as the first car reaches three beeps, and mid-scene
+ * at the urgent warning, plus the three-beep moment in Spanish, where the sub
+ * runs longest, and the Settings replay locked by a streaming radar, in Spanish.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -30,8 +30,10 @@ class SoundDemoStepSnapshotTest {
         tMs: Long,
         lastCue: AlertCue?,
         played: Boolean,
+        playing: Boolean = false,
         canPlay: Boolean = true,
         mark: Int = R.string.sound_demo_mark,
+        doneLabel: Int = R.string.common_continue,
     ) {
         captureRoboImage {
             UiTheme {
@@ -39,12 +41,13 @@ class SoundDemoStepSnapshotTest {
                     SoundDemoStepContent(
                         tMs = tMs,
                         lastCue = lastCue,
-                        playing = false,
+                        playing = playing,
                         played = played,
                         canPlay = canPlay,
                         onPlay = {},
                         onContinue = {},
                         mark = mark,
+                        doneLabel = doneLabel,
                     )
                 }
             }
@@ -55,14 +58,14 @@ class SoundDemoStepSnapshotTest {
     fun beforePlay() = capture(tMs = 0L, lastCue = null, played = false)
 
     @Test
-    fun threeBeeps() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true)
+    fun threeBeeps() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true, playing = true)
 
     @Test
-    fun urgent() = capture(tMs = 16_000L, lastCue = AlertCue.Urgent, played = true)
+    fun urgent() = capture(tMs = 16_000L, lastCue = AlertCue.Urgent, played = true, playing = true)
 
     @Test
     @Config(qualifiers = "+es")
-    fun threeBeepsEs() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true)
+    fun threeBeepsEs() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true, playing = true)
 
     @Test
     @Config(qualifiers = "+es")
@@ -72,5 +75,6 @@ class SoundDemoStepSnapshotTest {
         played = true,
         canPlay = false,
         mark = R.string.alert_sounds_title,
+        doneLabel = R.string.common_done,
     )
 }

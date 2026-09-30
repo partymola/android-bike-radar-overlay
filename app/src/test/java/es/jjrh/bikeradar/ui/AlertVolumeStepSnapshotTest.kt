@@ -20,7 +20,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class AlertVolumeStepSnapshotTest {
 
-    private fun capture(canPlay: Boolean = true, mark: Int = R.string.sound_demo_mark) {
+    private fun capture(
+        canPlay: Boolean = true,
+        mark: Int = R.string.sound_demo_mark,
+        doneLabel: Int = R.string.common_continue,
+    ) {
         captureRoboImage {
             UiTheme {
                 Box(modifier = Modifier.fillMaxSize().background(LocalBrColors.current.bg)) {
@@ -31,6 +35,7 @@ class AlertVolumeStepSnapshotTest {
                         onVolumeChange = {},
                         onPlay = {},
                         onContinue = {},
+                        doneLabel = doneLabel,
                     )
                 }
             }
@@ -45,5 +50,5 @@ class AlertVolumeStepSnapshotTest {
     fun onboardingEs() = capture()
 
     @Test
-    fun lockedInSettings() = capture(canPlay = false, mark = R.string.alert_sounds_title)
+    fun lockedInSettings() = capture(canPlay = false, mark = R.string.alert_sounds_title, doneLabel = R.string.common_done)
 }

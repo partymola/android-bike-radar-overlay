@@ -38,6 +38,7 @@ internal fun AlertVolumeScreen(
     prefs: Prefs,
     @StringRes mark: Int,
     onDone: () -> Unit,
+    @StringRes doneLabel: Int = R.string.common_continue,
     create: (Context) -> AlertBeeper? = { newDemoBeeper(it, prefs) },
 ) {
     UiTheme {
@@ -52,6 +53,7 @@ internal fun AlertVolumeScreen(
                 canPlay = !rememberRadarStreaming(),
                 mark = mark,
                 onContinue = onDone,
+                doneLabel = doneLabel,
             )
         }
     }
@@ -66,6 +68,7 @@ internal fun AlertVolumeStep(
     canPlay: Boolean,
     @StringRes mark: Int,
     onContinue: () -> Unit,
+    @StringRes doneLabel: Int = R.string.common_continue,
 ) {
     // Saved on every change, not when a drag finishes: a drag cut short by a
     // rotation or by leaving the screen never reports that it finished.
@@ -81,6 +84,7 @@ internal fun AlertVolumeStep(
         },
         onPlay = { player?.play(3) },
         onContinue = onContinue,
+        doneLabel = doneLabel,
     )
 }
 
@@ -93,6 +97,7 @@ internal fun AlertVolumeStepContent(
     onVolumeChange: (Int) -> Unit,
     onPlay: () -> Unit,
     onContinue: () -> Unit,
+    @StringRes doneLabel: Int = R.string.common_continue,
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
@@ -120,7 +125,7 @@ internal fun AlertVolumeStepContent(
         }
         FooterCtaDual(
             primary = stringResource(R.string.alert_volume_play),
-            secondary = stringResource(R.string.common_continue),
+            secondary = stringResource(doneLabel),
             primaryEnabled = canPlay,
             onPrimary = onPlay,
             onSecondary = onContinue,

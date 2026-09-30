@@ -21,6 +21,7 @@
     <string name="common_change">Cambiar</string>
     <string name="common_clear">Borrar</string>
     <string name="common_back">Atrás</string>
+    <string name="common_done">Hecho</string>
 
     <!-- Primitivas de UI (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -858,7 +859,7 @@
     <string name="sound_demo_caption_clear">El radar ya no ve nada en tu distancia de alerta: «Vía despejada».</string>
     <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente.</string>
     <string name="alert_volume_title">Ajusta el volumen de los avisos</string>
-    <string name="alert_volume_sub">Reproduce un sonido de prueba y elige el volumen de los avisos. Los botones de volumen del móvil también sirven aquí.</string>
+    <string name="alert_volume_sub">Reproduce un sonido de prueba mientras lo ajustas. Los botones de volumen cambian el volumen del móvil, no este control.</string>
     <string name="alert_volume_play">Probar el sonido</string>
     <string name="alert_volume_radar_streaming">El sonido de prueba solo se reproduce con el radar apagado. El volumen sí se puede cambiar.</string>
     <string name="alert_volume_row">Ajustar el volumen de los avisos</string>

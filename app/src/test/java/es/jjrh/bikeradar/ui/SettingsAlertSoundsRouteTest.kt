@@ -72,7 +72,8 @@ class SettingsAlertSoundsRouteTest {
         compose.onNodeWithText("What you'll hear").assertExists()
         compose.onNodeWithText("BEFORE YOUR FIRST RIDE").assertDoesNotExist()
         compose.onNodeWithText("ALERT SOUNDS").assertExists()
-        tap("Continue", scroll = false)
+        compose.onNodeWithText("Continue").assertDoesNotExist()
+        tap("Done", scroll = false)
         compose.onNodeWithText("Watch the example ride again").assertExists()
     }
 
@@ -84,7 +85,8 @@ class SettingsAlertSoundsRouteTest {
         tap("Set the alert volume")
         compose.onNodeWithText("Play a test sound").assertExists()
         compose.onNodeWithText("ALERT SOUNDS").assertExists()
-        tap("Continue", scroll = false)
+        compose.onNodeWithText("Continue").assertDoesNotExist()
+        tap("Done", scroll = false)
         compose.onNodeWithText("Watch the example ride again").assertExists()
     }
 
@@ -97,7 +99,7 @@ class SettingsAlertSoundsRouteTest {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
             .performSemanticsAction(SemanticsActions.SetProgress) { it(73f) }
         compose.waitForIdle()
-        tap("Continue", scroll = false)
+        tap("Done", scroll = false)
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
         compose.onNodeWithText("Alert distance").assertExists()
@@ -174,7 +176,7 @@ class SettingsAlertSoundsRouteTest {
         tap("Watch the example ride again")
         settle()
         assertEquals(AudioManager.STREAM_ALARM, compose.activity.volumeControlStream)
-        tap("Continue", scroll = false)
+        tap("Done", scroll = false)
         settle()
         assertEquals(AudioManager.STREAM_ALARM, compose.activity.volumeControlStream)
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }

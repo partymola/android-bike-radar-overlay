@@ -63,14 +63,35 @@ internal class EBikeSnapshotCoordinator(
      *  `OverlayPipelineDrivingTest.aStale*`. */
     fun snapshot(): LiveDataSnapshot? = lastSnapshot?.takeIf { isFresh() }
 
-    /** The last snapshot however old, for callers that apply their own age
-     *  gate against [snapshotAtMs] ([WalkAwayArmingGate], the radar-drop cue)
-     *  or only display it. Never feed this to the alert path. */
+    /** The last snapshot however old, less any lock [forgetSilentLock] dropped,
+     *  for callers that apply their own age gate against [snapshotAtMs]
+     *  ([WalkAwayArmingGate], the radar-drop cue) or only display it. Never
+     *  feed this to the alert path. */
     fun lastSnapshotAnyAge(): LiveDataSnapshot? = lastSnapshot
 
+    /** Drop a lock the bike is no longer sending, and keep the rest. Called
+     *  when the radar begins a ride: a silent bike's lock was read before it,
+     *  and would otherwise stand through a ride on which the bike never
+     *  streams. A lock the bike is still sending is live, so it stays. An
+     *  unlocked reading is never dropped, because the forgot-to-lock reminder
+     *  needs it; the cost is that an earlier ride's "unlocked" can outlast a
+     *  silent ride. Holds the lock [onSnapshot] writes under, so a frame
+     *  arriving mid-call is never overwritten by the older copy. True when a
+     *  lock was dropped. */
+    fun forgetSilentLock(): Boolean = synchronized(this) {
+        val snap = lastSnapshot
+        if (snap?.systemLocked == true && !isFresh()) {
+            lastSnapshot = snap.copy(systemLocked = null)
+            true
+        } else {
+            false
+        }
+    }
+
     /** True once any eBike snapshot has arrived this session (sticky) - i.e. this
-     *  is an eBike rider, not a radar-only one. Used to pick the dead-radar
-     *  banner's cohort behaviour even if Flow has momentarily dropped. */
+     *  is an eBike rider, not a radar-only one. Read by the drop cue's
+     *  track-presence fallback, which it withdraws from an eBike rider, and by
+     *  the end-of-ride attention feed. */
     fun hasEverSeenSnapshot(): Boolean = everSeen
 
     /** Monotonic (elapsedRealtime) ms of the last snapshot. The radar-drop cue trusts
@@ -99,8 +120,10 @@ internal class EBikeSnapshotCoordinator(
      * line to the capture log, and drive ride-edge + climb detection.
      */
     fun onSnapshot(snap: LiveDataSnapshot) {
-        lastSnapshot = snap
-        lastSnapshotMs = clock()
+        synchronized(this) {
+            lastSnapshot = snap
+            lastSnapshotMs = clock()
+        }
         everSeen = true
         // Capture odometer baseline on first sighting, then log the snapshot
         // delta-only. format() returns null when every field is still

@@ -462,6 +462,9 @@ class BikeRadarService : Service() {
             lastRidingActivityMs = { lastRidingActivityMs },
             lastTrackActivityMs = { lastTrackActivityMs },
             clearTrackActivity = { lastTrackActivityMs = null },
+            forgetEBikeLock = {
+                if (ebikeSnapshotCoordinator.forgetSilentLock()) linkJournal.log("ebike lock reading dropped as the ride began")
+            },
             wakeTick = { walkAwayKick.trySend(Unit) },
             acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
             releaseRideWakeLock = { rideWakeLock.release() },

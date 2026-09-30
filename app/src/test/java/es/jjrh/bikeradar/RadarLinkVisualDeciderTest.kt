@@ -30,7 +30,7 @@ class RadarLinkVisualDeciderTest {
         everSawTrack: Boolean = true,
         downForMs: Long?,
         paused: Boolean = false,
-        hasEBike: Boolean = false,
+        readsUnlocked: Boolean = false,
         explicitParked: Boolean = false,
         persistent: Boolean = false,
     ) = RadarLinkVisualDecider.decide(
@@ -39,7 +39,7 @@ class RadarLinkVisualDeciderTest {
         radarDownForMs = downForMs,
         visualThresholdMs = threshold,
         paused = paused,
-        hasEBikeSignal = hasEBike,
+        bikeReadsUnlocked = readsUnlocked,
         explicitParked = explicitParked,
         ebikeMaxMs = ebikeMax,
         radarOnlyMaxMs = radarOnlyMax,
@@ -57,25 +57,25 @@ class RadarLinkVisualDeciderTest {
     @Test fun pausedStaysLiveEvenWhenDown() = assertEquals(live, decide(downForMs = threshold + 5_000, paused = true))
 
     // Radar connected but never decoded a vehicle -> bench test, suppress (both cohorts).
-    @Test fun noTrackEverSeenSuppressesRadarOnly() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, hasEBike = false))
+    @Test fun noTrackEverSeenSuppressesRadarOnly() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, readsUnlocked = false))
 
-    @Test fun noTrackEverSeenSuppressesEbikeUnlocked() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, hasEBike = true, explicitParked = false))
+    @Test fun noTrackEverSeenSuppressesEbikeUnlocked() = assertEquals(live, decide(everSawTrack = false, downForMs = threshold + 5_000, readsUnlocked = true, explicitParked = false))
 
-    // ── radar-only cohort (no eBike signal) ──────────────────────────────────
+    // ── plain branch: radar-only, or an eBike whose lock is unknown ──────────
 
-    @Test fun radarOnlyShowsPlainAtThreshold() = assertEquals(plain, decide(downForMs = threshold, hasEBike = false))
+    @Test fun radarOnlyShowsPlainAtThreshold() = assertEquals(plain, decide(downForMs = threshold, readsUnlocked = false))
 
-    @Test fun radarOnlyRetiresAtCap() = assertEquals(live, decide(downForMs = radarOnlyMax, hasEBike = false))
+    @Test fun radarOnlyRetiresAtCap() = assertEquals(live, decide(downForMs = radarOnlyMax, readsUnlocked = false))
 
-    @Test fun radarOnlyJustUnderCapStillShows() = assertEquals(plain, decide(downForMs = radarOnlyMax - 1, hasEBike = false))
+    @Test fun radarOnlyJustUnderCapStillShows() = assertEquals(plain, decide(downForMs = radarOnlyMax - 1, readsUnlocked = false))
 
-    @Test fun radarOnlyPersistentToggleIgnoresCap() = assertEquals(plain, decide(downForMs = radarOnlyMax * 100, hasEBike = false, persistent = true))
+    @Test fun radarOnlyPersistentToggleIgnoresCap() = assertEquals(plain, decide(downForMs = radarOnlyMax * 100, readsUnlocked = false, persistent = true))
 
-    // ── eBike cohort ─────────────────────────────────────────────────────────
+    // ── eBike branch: the last reading says unlocked ─────────────────────────
 
-    @Test fun ebikeUnlockedShowsUnlockedMessage() = assertEquals(unlocked, decide(downForMs = threshold, hasEBike = true, explicitParked = false))
+    @Test fun ebikeUnlockedShowsUnlockedMessage() = assertEquals(unlocked, decide(downForMs = threshold, readsUnlocked = true, explicitParked = false))
 
-    @Test fun ebikeExplicitlyParkedHides() = assertEquals(live, decide(downForMs = threshold + 5_000, hasEBike = true, explicitParked = true))
+    @Test fun ebikeExplicitlyParkedHides() = assertEquals(live, decide(downForMs = threshold + 5_000, readsUnlocked = true, explicitParked = true))
 
     @Test
     fun ebikeStaleSnapshotUnlockedKeepsShowing() {
@@ -85,24 +85,24 @@ class RadarLinkVisualDeciderTest {
         // failure mode, uncoupled from the audio cue). A stale-LOCKED reading maps
         // to explicitParked == true (locked is sticky) and hides - see
         // RadarLinkCoordinatorTest.bannerStaleEbikeLockHidesBanner.
-        assertEquals(unlocked, decide(downForMs = threshold + 5_000, hasEBike = true, explicitParked = false))
+        assertEquals(unlocked, decide(downForMs = threshold + 5_000, readsUnlocked = true, explicitParked = false))
     }
 
-    @Test fun ebikeRetiresAtForgotToLockBackstop() = assertEquals(live, decide(downForMs = ebikeMax, hasEBike = true, explicitParked = false))
+    @Test fun ebikeRetiresAtForgotToLockBackstop() = assertEquals(live, decide(downForMs = ebikeMax, readsUnlocked = true, explicitParked = false))
 
-    @Test fun ebikeJustUnderBackstopStillShows() = assertEquals(unlocked, decide(downForMs = ebikeMax - 1, hasEBike = true, explicitParked = false))
+    @Test fun ebikeJustUnderBackstopStillShows() = assertEquals(unlocked, decide(downForMs = ebikeMax - 1, readsUnlocked = true, explicitParked = false))
 
     @Test
     fun ebikeNotSubjectToRadarOnlyCap() {
         // The 40s radar-only cap must not apply to an eBike rider - their banner
         // persists past it (up to the 5-min backstop) while unlocked.
-        assertEquals(unlocked, decide(downForMs = radarOnlyMax + 5_000, hasEBike = true, explicitParked = false))
+        assertEquals(unlocked, decide(downForMs = radarOnlyMax + 5_000, readsUnlocked = true, explicitParked = false))
     }
 
     @Test
     fun reconnectReturnsToLive() {
-        assertEquals(unlocked, decide(downForMs = threshold + 1, hasEBike = true))
+        assertEquals(unlocked, decide(downForMs = threshold + 1, readsUnlocked = true))
         // Radar returns (downForMs back to null) -> LIVE, no latch to leak.
-        assertEquals(live, decide(downForMs = null, hasEBike = true))
+        assertEquals(live, decide(downForMs = null, readsUnlocked = true))
     }
 }

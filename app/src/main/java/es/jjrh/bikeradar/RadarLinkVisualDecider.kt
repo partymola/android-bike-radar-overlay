@@ -23,8 +23,8 @@ package es.jjrh.bikeradar
  * app protects nobody. So the banner is now bounded, and uses the eBike lock
  * state (when present) to bound it smartly:
  *
- * - **eBike riders** ([hasEBikeSignal] true - a Bosch eBike snapshot has been
- *   seen this session): the banner shows while the bike is NOT explicitly parked
+ * - **eBike reading unlocked** ([bikeReadsUnlocked] true - the last Bosch eBike reading,
+ *   fresh or stale, says unlocked): the banner shows while the bike is NOT explicitly parked
  *   and hides the moment it is locked ([explicitParked]). It is bounded by a
  *   generous [ebikeMaxMs] (a forgot-to-lock backstop) - safe to bound because
  *   this rider also gets the repeating audio drop cue. The banner hides whenever
@@ -36,11 +36,15 @@ package es.jjrh.bikeradar
  *   coupled to the audio cue's. This banner doubles as a "you walked off without
  *   locking" alert, the one case the walk-away alarm stays silent for (it never
  *   arms while unlocked).
- * - **Radar-only riders** ([hasEBikeSignal] false - no eBike lock signal to
- *   consult): the banner shows from the threshold and retires after
+ * - **Radar-only riders** ([bikeReadsUnlocked] false - no eBike lock reading to
+ *   consult). An eBike whose lock the app does not know, never reported on this
+ *   link or forgotten when a ride began, takes this branch too: the eBike
+ *   branch says "but bike unlocked", which needs a reading that says so
+ *   (`RadarLinkCoordinatorTest.aNewRideForgetsTheLastRidesLock`). The banner
+ *   shows from the threshold and retires after
  *   [radarOnlyMaxMs]. This is a deliberate, documented tradeoff: a radar-only
- *   rider whose radar dies mid-ride loses the visual after the cap (they get no
- *   audio cue either). It is accepted because (a) a permanent overlay is the
+ *   rider whose radar dies mid-ride loses the visual after the cap (and may get
+ *   no audio cue either). It is accepted because (a) a permanent overlay is the
  *   bigger harm, (b) their built-in fixed rear light - the primary rear signal -
  *   is unaffected, and (c) [radarOnlyPersistent] is an opt-in escape hatch for
  *   the safety-maximalist radar-only rider. The cap is per down-episode, so a
@@ -82,10 +86,12 @@ object RadarLinkVisualDecider {
      * @param visualThresholdMs how long down before the screen is marked blind.
      * @param paused whether the rider has paused alerts. Paused stays
      *   [LinkVisual.LIVE] so the banner never appears while the app is muted.
-     * @param hasEBikeSignal whether a Bosch eBike snapshot has ever been seen
-     *   this session (sticky). Selects the eBike vs radar-only path + message.
+     * @param bikeReadsUnlocked the last eBike reading, however old, says
+     *   unlocked. Selects the eBike path and its "but bike unlocked" message;
+     *   false for a radar-only rider and for an eBike whose lock is unknown.
      * @param explicitParked the last-known eBike reading is system_locked == true
-     *   (locked is sticky across snapshot staleness - see class KDoc). Maps to
+     *   (sticky across staleness, forgotten when a ride begins - see class
+     *   KDoc), or the rider said the ride is over. Maps to
      *   [LinkVisual.LIVE] (banner hidden); a last-known-UNLOCKED snapshot, fresh
      *   or stale, does not.
      * @param ebikeMaxMs down-duration after which the eBike banner retires even
@@ -101,7 +107,7 @@ object RadarLinkVisualDecider {
         radarDownForMs: Long?,
         visualThresholdMs: Long,
         paused: Boolean,
-        hasEBikeSignal: Boolean,
+        bikeReadsUnlocked: Boolean,
         explicitParked: Boolean,
         ebikeMaxMs: Long,
         radarOnlyMaxMs: Long,
@@ -116,7 +122,7 @@ object RadarLinkVisualDecider {
         // was correct while an eBike lock was the only way to say it and left
         // a radar-only rider staring at the banner after ending their ride.
         if (explicitParked) return LinkVisual.LIVE
-        return if (hasEBikeSignal) {
+        return if (bikeReadsUnlocked) {
             when {
                 radarDownForMs >= ebikeMaxMs -> LinkVisual.LIVE
                 else -> LinkVisual.RECONNECTING_UNLOCKED

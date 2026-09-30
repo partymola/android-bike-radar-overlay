@@ -76,6 +76,12 @@ internal class RadarLinkCoordinator(
     // still confirms. The 3-cue cap and the rider's own park declaration bound
     // that, which is the same bargain the whole fallback is on.
     private val clearTrackActivity: () -> Unit,
+    // Forget a lock the bike is no longer sending when a connect begins a
+    // ride, so an earlier ride's lock cannot veto this ride's drop cue or hide
+    // its banner when the bike never streams this ride
+    // (`aNewRideForgetsTheLastRidesLock`,
+    // `theFirstRadarOfTheSessionForgetsAnEarlierLock`).
+    private val forgetEBikeLock: () -> Unit,
     // Wake the walk-away tick loop out of its idle delay so it flips to the
     // fast cadence the instant the radar drops (no up-to-30 s lag on the first
     // dead-radar evaluation).
@@ -241,6 +247,14 @@ internal class RadarLinkCoordinator(
         // New radar presence episode: clear dashcam-probe backoff so the camera
         // is re-probed promptly this ride (the storm guard resets per ride).
         clearDashcamBackoff()
+        // A connect that begins a ride, the session's first or one past the
+        // new-ride gap: a lock the bike stopped sending before it is an
+        // earlier ride's. Not on every reconnect
+        // (`aReconnectWithinTheSameRideKeepsTheLock`). "First" is read from
+        // connected time, because an attempt that never connects still stamps
+        // an off-instant (`theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt`).
+        val firstConnect = prev.sessionRadarConnectedMs == 0L && prev.radarConnectStartMs == null
+        if (startsNewRide || firstConnect) forgetEBikeLock()
         if (prev.radarOffSinceMs != null) {
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
             cancelWalkAwaySnooze()
@@ -416,7 +430,9 @@ internal class RadarLinkCoordinator(
             }
             // ebike_locked + ebike_age_ms make the arming decision tunable: a
             // BLANK is always a fresh unlocked reading; an ARMED is one of
-            // locked / stale-unlocked / no-eBike, told apart by these two.
+            // locked / stale-unlocked / no lock reading (no eBike, or a lock
+            // forgotten when this ride began, which the journal records), told
+            // apart by these two.
             val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
             if (armOnDisconnect) {
                 clog(
@@ -575,11 +591,12 @@ internal class RadarLinkCoordinator(
         // persistence. Locked is STICKY regardless of snapshot freshness: locking
         // the bike is itself what makes it sleep and drop the eBike link, so the
         // lock reading inevitably ages out - a freshness gate here mis-reads a
-        // just-parked bike as "unlocked" for minutes (the reported bug). A riding
-        // rider is never last-known-locked (the bike doesn't sleep while moving),
-        // so this can't hide the banner mid-ride; only a last-known-UNLOCKED stale
-        // snapshot keeps the banner up, which is the ambiguous mid-ride Flow+radar
-        // dropout the banner must survive. Must run before the isPaused
+        // just-parked bike as "unlocked" for minutes. A lock
+        // the bike has stopped sending is forgotten when the radar begins a
+        // ride (forgetEBikeLock); within one ride it stands until the bike
+        // sends another reading. A last-known-UNLOCKED stale snapshot keeps the
+        // banner up, which is the ambiguous mid-ride Flow+radar dropout the
+        // banner must survive. Must run before the isPaused
         // early-return so a pause HIDES the banner (decide() returns LIVE when
         // paused); the eager hide on reconnect lives in markConnected.
         // Two sources, one meaning: the bike says it is locked, or the rider
@@ -610,7 +627,7 @@ internal class RadarLinkCoordinator(
             radarDownForMs = downForMs,
             visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
             paused = prefs.isPaused,
-            hasEBikeSignal = hasEBikeSignal(),
+            bikeReadsUnlocked = snap?.systemLocked == false,
             explicitParked = explicitParked,
             ebikeMaxMs = RADAR_BANNER_EBIKE_MAX_MS,
             radarOnlyMaxMs = RADAR_BANNER_RADAR_ONLY_MAX_MS,

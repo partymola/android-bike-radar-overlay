@@ -61,9 +61,12 @@ data class RadarLinkState(
      *  tick by `RadarLinkCoordinator.evaluateRadarDrop` from the snapshot the
      *  drop cue reads. Not age-gated, by design: the bike drops its link as it
      *  sleeps, so a real lock reading is already old when the home screen
-     *  would ask (`theBikesLockReachesTheStateTheHomeScreenAsksFrom`). The
-     *  reading is held for the service session, so an earlier ride's lock
-     *  stands until the bike sends another. */
+     *  would ask (`theBikesLockReachesTheStateTheHomeScreenAsksFrom`). A lock
+     *  the bike has stopped sending is forgotten when the radar begins a ride
+     *  (`aNewRideForgetsTheLastRidesLock`,
+     *  `theFirstRadarOfTheSessionForgetsAnEarlierLock`); within one ride it
+     *  stands until the bike sends another reading
+     *  (`aReconnectWithinTheSameRideKeepsTheLock`). */
     val bikeLocked: Boolean = false,
     /** True on the tick after a reconnect that started a NEW RIDE (the radar
      *  was off longer than the app's parked boundary).

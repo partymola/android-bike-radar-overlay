@@ -346,8 +346,9 @@ class RadarDropDeciderTest {
         // freshness window of still moving; the latch stays true for the whole
         // off-episode and the cue repeated against a parked, locked bike. A
         // last-known locked bike means the rider explicitly parked, so it must
-        // veto BOTH confirmation paths - and it is sticky (a riding rider is
-        // never last-known-locked, so staleness cannot mute a genuine drop).
+        // veto BOTH confirmation paths - and it is sticky, since the lock
+        // reading always ages out. An earlier ride's lock is forgotten upstream
+        // (RadarLinkCoordinatorTest.aNewRideForgetsTheLastRidesLock).
         assertFalse(
             RadarDropDecider.ridingConfirmed(
                 systemLocked = true,

@@ -85,6 +85,63 @@ class EBikeSnapshotCoordinatorTest {
     }
 
     @Test
+    fun aLockTheBikeHasStoppedSendingIsForgottenAndNothingElse() {
+        // 3_001 ms after the last frame: one past the alert path's freshness.
+        val original = LiveDataSnapshot(
+            systemLocked = true,
+            batterySoc = 64,
+            speedRaw = 1800,
+            odometerM = 12_000L,
+            bikeNotDriving = true,
+        )
+        feed(original, atMs = 5_000L)
+        now = 8_001L
+        assertTrue(coord.forgetSilentLock())
+        assertEquals(original.copy(systemLocked = null), coord.lastSnapshotAnyAge())
+        assertEquals(5_000L, coord.snapshotAtMs())
+        assertNull("still too old for the alert path", coord.snapshot())
+        assertTrue(coord.hasEverSeenSnapshot())
+    }
+
+    @Test
+    fun aLockTheBikeIsStillSendingIsKept() {
+        feed(LiveDataSnapshot(systemLocked = true), atMs = 5_000L)
+        now = 8_000L
+        assertFalse(coord.forgetSilentLock())
+        assertEquals(true, coord.lastSnapshotAnyAge()?.systemLocked)
+    }
+
+    @Test
+    fun anUnlockedReadingIsNeverForgotten() {
+        // The forgot-to-lock reminder fires only on a last reading of unlocked.
+        feed(LiveDataSnapshot(systemLocked = false), atMs = 5_000L)
+        now = 60_000L
+        assertFalse(coord.forgetSilentLock())
+        assertEquals(false, coord.lastSnapshotAnyAge()?.systemLocked)
+    }
+
+    @Test
+    fun forgettingTheLockLeavesTheRidingConfirmationAlone() {
+        val sustained = RidingSpeedGate.SUSTAIN_MS
+        feed(LiveDataSnapshot(speedRaw = 1800), atMs = 0L)
+        feed(LiveDataSnapshot(systemLocked = true, speedRaw = 1800), atMs = sustained)
+        val later = sustained + 3_001L
+        assertTrue(coord.ridingFresh(later))
+        now = later
+        coord.forgetSilentLock()
+        assertNull(coord.lastSnapshotAnyAge()?.systemLocked)
+        assertTrue(coord.ridingFresh(later))
+    }
+
+    @Test
+    fun forgettingBeforeAnySnapshotLeavesNone() {
+        now = 60_000L
+        assertFalse(coord.forgetSilentLock())
+        assertNull(coord.lastSnapshotAnyAge())
+        assertFalse(coord.hasEverSeenSnapshot())
+    }
+
+    @Test
     fun aFreshFrameRevivesTheAlertSnapshot() {
         feed(LiveDataSnapshot(speedRaw = 0), atMs = 10_000L)
         assertNull(snapshotAt(20_000L))

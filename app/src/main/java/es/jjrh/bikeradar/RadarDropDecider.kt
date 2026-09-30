@@ -275,9 +275,11 @@ object RadarDropDecider {
      * The lock source is sticky regardless of snapshot freshness,
      * for the same reason the reconnect banner treats locked as sticky:
      * locking is what makes the bike sleep and drop the eBike link, so the
-     * lock reading inevitably ages out - and a riding rider is never
-     * last-known-locked (the bike doesn't sleep while moving), so the veto
-     * cannot silence a genuine mid-ride drop.
+     * lock reading inevitably ages out. The caller forgets a lock the bike has
+     * stopped sending when the radar begins a ride (`RadarLinkCoordinator`,
+     * pinned by `aNewRideForgetsTheLastRidesLock` and
+     * `theFirstRadarOfTheSessionForgetsAnEarlierLock`), so a silent bike's lock
+     * can veto a mid-ride drop only if it was taken earlier in the same ride.
      *
      * Extracted as a pure function (like `WalkAwayArmingGate.shouldArm`) so this
      * safety gate is unit-tested rather than buried inline in the service.

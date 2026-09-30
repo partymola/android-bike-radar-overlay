@@ -17,6 +17,7 @@ import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -221,6 +222,53 @@ class BikeRadarServiceSmokeTest {
         ShadowSystemClock.simulateDeepSleep(Duration.ofHours(8))
         service.radarLinkCoordinator.evaluateRadarDrop(android.os.SystemClock.elapsedRealtime())
         assertTrue(service.radarLinkCoordinator.radarLinkState.value.bikeLocked)
+        controller.destroy()
+    }
+
+    @Test
+    fun aNewRideForgetsTheLockInTheServicesOwnSnapshot() {
+        // The coordinator-side test asserts a test double, so without this the
+        // production lambda could be empty and the last ride's lock would
+        // still veto this ride's drop cue.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        Prefs(app).radarLongOfflineThresholdMinutes = 5
+        service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = true, batterySoc = 64))
+        // Still being sent as the first radar comes up: live, so kept.
+        service.radarLinkCoordinator.markConnected()
+        assertEquals(true, service.ebikeSnapshotCoordinator.lastSnapshotAnyAge()?.systemLocked)
+        // A ride long enough to count, so the reconnect below is a new ride
+        // rather than the session's first connect.
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(30))
+        service.radarLinkCoordinator.markDisconnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(6))
+        service.radarLinkCoordinator.markConnected()
+        val kept = service.ebikeSnapshotCoordinator.lastSnapshotAnyAge()
+        assertNull(kept?.systemLocked)
+        assertEquals(64, kept?.batterySoc)
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertTrue("the dropped lock must reach the always-on journal, got:\n$journal", journal.contains("ebike lock reading dropped"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aNewRideKeepsAStaleUnlockedReading() {
+        // Only a lock is forgotten: the forgot-to-lock reminder needs the last
+        // unlocked reading, however old.
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        Prefs(app).radarLongOfflineThresholdMinutes = 5
+        service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = false))
+        service.radarLinkCoordinator.markConnected()
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(30))
+        service.radarLinkCoordinator.markDisconnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(6))
+        service.radarLinkCoordinator.markConnected()
+        assertEquals(false, service.ebikeSnapshotCoordinator.lastSnapshotAnyAge()?.systemLocked)
         controller.destroy()
     }
 

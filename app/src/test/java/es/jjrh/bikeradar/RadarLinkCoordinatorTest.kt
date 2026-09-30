@@ -119,6 +119,11 @@ class RadarLinkCoordinatorTest {
                 lastTrackMs = null
                 trackClearCount++
             },
+            // Mirrors EBikeSnapshotCoordinator.forgetSilentLock, whose own
+            // tests pin the 3 s freshness boundary.
+            forgetEBikeLock = {
+                if (ebike?.systemLocked == true && now - ebikeAtMs > 3_000L) ebike = ebike?.copy(systemLocked = null)
+            },
             wakeTick = { wakeTickCount++ },
             acquireRideWakeLock = { wakeLockAcquireCount++ },
             releaseRideWakeLock = { wakeLockReleaseCount++ },
@@ -213,11 +218,12 @@ class RadarLinkCoordinatorTest {
     @Test
     fun lockedEBikeArms() {
         ebike = LiveDataSnapshot(systemLocked = true) // locked -> always arms
+        ebikeAtMs = 1_000_000L // still being sent as the radar comes up, so kept
         connectAt(1_000_000L)
         ebikeAtMs = 1_004_000L
         disconnectAt(1_004_000L)
         assertTrue(snap().walkAwayArmed)
-        assertEquals(1, clogged("state=ARMED"))
+        assertEquals(1, clogged("state=ARMED transition_reason=radar-disconnected ebike_locked=true"))
     }
 
     @Test
@@ -527,8 +533,99 @@ class RadarLinkCoordinatorTest {
         assertTrue("radar-only rider", asked(15_000L))
         hasEBike = true
         ebike = LiveDataSnapshot(speedRaw = 1_800)
+        ebikeAtMs = 16_000L
+        bannerStates.clear()
         coordinator.evaluateRadarDrop(17_000L)
         assertTrue("lock not reported yet", asked(17_000L))
+        // Plain, not "but bike unlocked", for a bike streaming without a lock.
+        assertEquals(listOf(plain), bannerStates)
+    }
+
+    /** One ride locks up and parks; the next starts [gapMs] after that radar
+     *  went off, with the bike never streaming again, and its radar dies while
+     *  the rider is moving. Returns the instant past the drop cue's threshold. */
+    private fun lockThenRideAgainAfter(gapMs: Long): Long {
+        prefs.pausedUntilEpochMs = 0L
+        prefs.radarLongOfflineThresholdMinutes = 10
+        hasEBike = true
+        ebikeRiding = false
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        ebike = LiveDataSnapshot(systemLocked = true) // the bike locks as the ride ends
+        ebikeAtMs = 4_000L
+        val next = 4_000L + gapMs
+        connectAt(next)
+        lastRidingMs = next + 60_000L
+        disconnectAt(next + 61_000L)
+        return next + 61_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+    }
+
+    @Test
+    fun aNewRideForgetsTheLastRidesLock() {
+        // Held over, the last ride's lock would veto the drop cue on a genuine
+        // mid-ride failure whenever Flow is not holding the bike's link. 10 min
+        // 1 s is one second past the new-ride boundary.
+        val t = lockThenRideAgainAfter(601_000L)
+        // 20 s down: plain, not "but bike unlocked", since the app no longer
+        // knows the lock.
+        bannerStates.clear()
+        coordinator.evaluateRadarDrop(t - RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 19_000L)
+        assertEquals(listOf(plain), bannerStates)
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertTrue("and the rider can say the ride is over", asked(t))
+    }
+
+    @Test
+    fun aReconnectWithinTheSameRideKeepsTheLock() {
+        // One second inside the boundary: a stop shorter than the rider's
+        // new-ride gap is the same ride, and forgetting the lock there would
+        // let the activity latch cue a rider parked at a locked bike.
+        val t = lockThenRideAgainAfter(599_000L)
+        bannerStates.clear()
+        coordinator.evaluateRadarDrop(t - RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 19_000L)
+        assertEquals("parked: no banner at 20 s down", listOf(live), bannerStates)
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(0, clogged("radar_drop_cue"))
+        assertFalse(asked(t))
+    }
+
+    @Test
+    fun theFirstRadarOfTheSessionForgetsAnEarlierLock() {
+        // A lock that reached the app before the session's first radar connect
+        // (the service restarted between rides) is an earlier ride's too.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebikeRiding = false
+        ebike = LiveDataSnapshot(systemLocked = true)
+        ebikeAtMs = 1_000L
+        connectAt(605_000L)
+        lastRidingMs = 665_000L
+        disconnectAt(666_000L)
+        val t = 666_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertTrue(asked(t))
+    }
+
+    @Test
+    fun theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt() {
+        // An attempt that never connects still reports a disconnect, so the
+        // off-instant cannot say whether the radar has connected yet.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebikeRiding = false
+        ebike = LiveDataSnapshot(systemLocked = true)
+        ebikeAtMs = 1_000L
+        disconnectAt(604_000L) // the failed attempt
+        connectAt(605_000L)
+        lastRidingMs = 665_000L
+        disconnectAt(666_000L)
+        val t = 666_000L + RadarLinkCoordinator.RADAR_DROP_THRESHOLD_MS + 1_000L
+        coordinator.evaluateRadarDrop(t)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertTrue(asked(t))
     }
 
     // ── evaluateRadarDrop banner ordering + cue ──────────────────────────────

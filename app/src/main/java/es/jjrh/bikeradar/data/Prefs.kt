@@ -198,11 +198,13 @@ class Prefs(context: Context) {
      *  the BLE stack idle during overnight parking instead of hammering
      *  GATT opens at the steady-state 8 s ceiling.
      *
-     *  It is also the app's "a new ride has started" boundary, so it has two
-     *  more consumers than the name suggests: the ride-stats reset, and the
-     *  radar-drop cue's bookkeeping reset on reconnect. Lowering it therefore
-     *  also shortens how long a mid-ride return still earns the reconnect
-     *  acknowledgement beep. The Settings copy describes the backoff only. */
+     *  It is also the app's "a new ride has started" boundary, which the
+     *  ride-stats reset, the radar-drop cue's bookkeeping reset, the traffic
+     *  sighting clear and the eBike lock forget all read on reconnect.
+     *  Lowering it therefore also shortens how long a mid-ride return still
+     *  earns the reconnect acknowledgement beep; raising it lengthens how long
+     *  a lock taken at a stop still counts as this ride's. The Settings copy
+     *  describes the backoff only. */
     var radarLongOfflineThresholdMinutes: Int
         get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN, 30).coerceIn(5, 120)
         set(v) {
@@ -305,9 +307,10 @@ class Prefs(context: Context) {
     }
 
     /** Keep the dead-radar overlay banner up until the radar reconnects, instead
-     *  of retiring it after the short cap. Only affects riders with NO Bosch
-     *  eBike (eBike riders' banner is already gated on the lock state); for them
-     *  the banner is the sole dead-radar signal, so a safety-first rider can opt
+     *  of retiring it after the short cap. Only affects the plain banner: riders
+     *  with NO Bosch eBike, and eBike riders whose lock the app does not know
+     *  (an eBike rider with a lock reading is already gated on it); for them
+     *  the banner may be the only dead-radar signal, so a safety-first rider can opt
      *  to never hide it mid-ride. Default off - an unbounded overlay is otherwise
      *  an uninstall driver. See [RadarLinkVisualDecider]. */
     var reconnectBannerPersistent: Boolean

@@ -137,6 +137,14 @@ class SoundDemoStepTest {
     }
 
     @Test
+    fun noCaptionUntilTheFirstPlay() {
+        show()
+        composeRule.onNodeWithText("The radar sees nothing within your alert distance: no sound.").assertDoesNotExist()
+        tapPlay()
+        composeRule.onNodeWithText("The radar sees nothing within your alert distance: no sound.").assertExists()
+    }
+
+    @Test
     fun theSceneSoundsInOrderWithTheCaptionInStep() {
         show()
         tapPlay()
@@ -202,7 +210,7 @@ class SoundDemoStepTest {
         composeRule.onNodeWithText("Play again").performClick()
         composeRule.waitForIdle()
         advance(100L)
-        composeRule.onNodeWithText("Nothing within your alert distance: no sound.").assertExists()
+        composeRule.onNodeWithText("The radar sees nothing within your alert distance: no sound.").assertExists()
         advanceUntil(10_000L) { player.calls.size >= 6 }
         assertEquals(listOf("play1", "play2", "play3", "clear", "urgent", "play1"), player.calls)
     }
@@ -280,7 +288,7 @@ class SoundDemoStepTest {
         canPlay = false
         show()
         composeRule.onNodeWithText("Plays only while the radar is off.").assertExists()
-        composeRule.onNodeWithText("Nothing within your alert distance: no sound.").assertDoesNotExist()
+        composeRule.onNodeWithText("The radar sees nothing within your alert distance: no sound.").assertDoesNotExist()
         composeRule.onNodeWithText("Play").assertIsNotEnabled()
         advance(20_000L)
         assertEquals(emptyList<String>(), player.calls)
@@ -472,12 +480,12 @@ class SoundDemoStepTest {
             .map { composeRule.activity.getString(soundDemoCaption(it)) }
         assertEquals(
             listOf(
-                "Nothing within your alert distance: no sound.",
-                "Nothing within your alert distance: no sound.",
+                "The radar sees nothing within your alert distance: no sound.",
+                "The radar sees nothing within your alert distance: no sound.",
                 "A car behind you: one beep.",
                 "Closer: two beeps.",
                 "Close: three beeps.",
-                "Nothing within your alert distance any more: this sound.",
+                "The radar sees nothing within your alert distance any more: the all-clear.",
                 "Closing fast while you are stopped or slow: the urgent warning.",
             ),
             captions,

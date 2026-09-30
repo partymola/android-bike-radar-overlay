@@ -885,9 +885,10 @@
     <!-- Sound demo (SoundDemoStep.kt): an example ride with the real alert
          sounds, first thing in onboarding. Captions say what the last sound
          meant; "closer/close" rather than metres, since the bands follow each
-         rider's alert distance. The all-clear and the silence are about the
-         alert distance, not what the radar sees: cars further back can still
-         be on the overlay. -->
+         rider's alert distance. The all-clear and the silence keep both
+         halves: "the radar sees nothing", as in the riding-aid notice, and
+         "within your alert distance", since cars further back can still be
+         on the overlay. -->
     <string name="sound_demo_mark">Before your first ride</string>
     <string name="sound_demo_title">What you\'ll hear</string>
     <string name="sound_demo_sub">A 20-second example ride: a car passes you, then another closes in while you\'re stopped.</string>
@@ -895,11 +896,11 @@
     <string name="sound_demo_play_again">Play again</string>
     <string name="sound_demo_playing">Playing…</string>
     <string name="sound_demo_radar_streaming">Plays only while the radar is off.</string>
-    <string name="sound_demo_caption_nothing">Nothing within your alert distance: no sound.</string>
+    <string name="sound_demo_caption_nothing">The radar sees nothing within your alert distance: no sound.</string>
     <string name="sound_demo_caption_one">A car behind you: one beep.</string>
     <string name="sound_demo_caption_two">Closer: two beeps.</string>
     <string name="sound_demo_caption_three">Close: three beeps.</string>
-    <string name="sound_demo_caption_clear">Nothing within your alert distance any more: this sound.</string>
+    <string name="sound_demo_caption_clear">The radar sees nothing within your alert distance any more: the all-clear.</string>
     <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
     <string name="alert_volume_title">Set the alert volume</string>
     <string name="alert_volume_sub">Play a test sound and set how loud the alerts are. Your phone\'s volume buttons work here too.</string>
@@ -921,9 +922,9 @@
     <string name="alert_sound_three_title">Three beeps</string>
     <string name="alert_sound_three_meaning">It\'s close</string>
     <string name="alert_sound_clear_title">All-clear</string>
-    <string name="alert_sound_clear_meaning">Nothing within your alert distance any more</string>
+    <string name="alert_sound_clear_meaning">The radar sees nothing within your alert distance any more</string>
     <string name="alert_sound_urgent_title">Urgent warning</string>
-    <string name="alert_sound_urgent_meaning">Closing fast while you are stopped or slow</string>
+    <string name="alert_sound_urgent_meaning">Closing fast while you are stopped or slow (only on radars that report speed)</string>
     <string name="alert_sound_lost_title">Three low pulses</string>
     <string name="alert_sound_lost_meaning">The radar has disconnected</string>
     <string name="alert_sound_back_title">One low pulse</string>

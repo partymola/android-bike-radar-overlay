@@ -315,9 +315,9 @@ internal fun SoundDemoStepContent(
                 title = stringResource(R.string.sound_demo_title),
                 sub = stringResource(R.string.sound_demo_sub),
             )
-            // No caption while locked: a live radar is streaming then, and "the
-            // radar sees nothing" would read as its status.
-            SoundDemoScene(tMs = tMs, lastCue = lastCue, captioned = canPlay)
+            // No caption before the first Play or while locked: "the radar sees
+            // nothing" would read as the status of the rider's own radar.
+            SoundDemoScene(tMs = tMs, lastCue = lastCue, captioned = canPlay && (played || playing))
             if (!canPlay) {
                 Text(
                     text = stringResource(R.string.sound_demo_radar_streaming),

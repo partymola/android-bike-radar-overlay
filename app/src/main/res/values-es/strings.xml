@@ -851,11 +851,11 @@
     <string name="sound_demo_play_again">Repetir</string>
     <string name="sound_demo_playing">Reproduciendo…</string>
     <string name="sound_demo_radar_streaming">Solo se reproduce con el radar apagado.</string>
-    <string name="sound_demo_caption_nothing">Nada en tu distancia de alerta: sin sonido.</string>
+    <string name="sound_demo_caption_nothing">El radar no ve nada en tu distancia de alerta: sin sonido.</string>
     <string name="sound_demo_caption_one">Un coche detrás de ti: 1 pitido.</string>
     <string name="sound_demo_caption_two">Más cerca: 2 pitidos.</string>
     <string name="sound_demo_caption_three">Cerca: 3 pitidos.</string>
-    <string name="sound_demo_caption_clear">Ya no hay nada en tu distancia de alerta: este sonido.</string>
+    <string name="sound_demo_caption_clear">El radar ya no ve nada en tu distancia de alerta: «Vía despejada».</string>
     <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente.</string>
     <string name="alert_volume_title">Ajusta el volumen de los avisos</string>
     <string name="alert_volume_sub">Reproduce un sonido de prueba y elige el volumen de los avisos. Los botones de volumen del móvil también sirven aquí.</string>
@@ -875,9 +875,9 @@
     <string name="alert_sound_three_title">3 pitidos</string>
     <string name="alert_sound_three_meaning">Está cerca</string>
     <string name="alert_sound_clear_title">Vía despejada</string>
-    <string name="alert_sound_clear_meaning">Ya no hay nada en tu distancia de alerta</string>
+    <string name="alert_sound_clear_meaning">El radar ya no ve nada en tu distancia de alerta</string>
     <string name="alert_sound_urgent_title">Aviso urgente</string>
-    <string name="alert_sound_urgent_meaning">Se acerca rápido mientras estás parado o vas despacio</string>
+    <string name="alert_sound_urgent_meaning">Se acerca rápido mientras estás parado o vas despacio (solo con radares que miden velocidad)</string>
     <string name="alert_sound_lost_title">3 pulsos graves</string>
     <string name="alert_sound_lost_meaning">El radar se ha desconectado</string>
     <string name="alert_sound_back_title">1 pulso grave</string>

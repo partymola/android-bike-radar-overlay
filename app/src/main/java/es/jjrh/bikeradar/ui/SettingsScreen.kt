@@ -39,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -119,23 +118,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     // Re-read on a tick so a device that drops while this screen is open stops
     // reporting as connected: the entries flow only emits when a device IS
     // seen, so without this the last verdict would stand indefinitely.
-    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(lifecycleOwner) {
-        // RESUMED-gated: this screen sits in the backstack behind its
-        // sub-screens, and an ungated loop keeps recomposing there.
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            // Resume-first, then loop. The gated loop restarts on RESUME
-            // and would otherwise delay BEFORE its first assignment, so a
-            // screen left open across an hour of standby would difference
-            // two hour-old values, get a small number, and render a dead
-            // device as connected for the first five seconds back.
-            tickNowMs = System.currentTimeMillis()
-            while (true) {
-                delay(5_000)
-                tickNowMs = System.currentTimeMillis()
-            }
-        }
-    }
+    val tickNowMs = rememberStatusClock()
 
     // Re-read on each tick rather than held in state: a grant can be added by
     // the consent screen in another task while this one sits in the backstack.

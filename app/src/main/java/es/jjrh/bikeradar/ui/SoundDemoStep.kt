@@ -172,17 +172,7 @@ internal fun newDemoBeeper(
 @Composable
 internal fun rememberRadarStreaming(): Boolean {
     val radarState by RadarStateBus.state.collectAsState()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                nowMs = System.currentTimeMillis()
-                delay(5_000)
-            }
-        }
-    }
-    return radarStreamIsLive(radarState, nowMs)
+    return radarStreamIsLive(radarState, rememberStatusClock())
 }
 
 /**

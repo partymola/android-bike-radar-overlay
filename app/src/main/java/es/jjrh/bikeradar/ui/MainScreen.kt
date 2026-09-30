@@ -149,26 +149,19 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Read before the first wait, or a rider back from the Bluetooth
+            // screen the banner sent them to still sees it for five seconds.
             while (true) {
-                delay(5_000)
                 hasBond = radarIsSelected(ctx, prefs.radarMac)
                 btEnabled = bluetoothIsOn(ctx)
+                delay(5_000)
             }
         }
     }
 
-    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                // Freshness boundaries on this screen are 10s (radar) and
-                // 30s (dashcam); a 5s tick keeps detection latency well
-                // under those thresholds while halving the recompose rate.
-                delay(5_000)
-                tickNowMs = System.currentTimeMillis()
-            }
-        }
-    }
+    // Freshness boundaries on this screen are 10 s (radar) and 30 s (dashcam);
+    // the clock's 5 s tick keeps detection latency well under both.
+    val tickNowMs = rememberStatusClock()
 
     var devTapCount by remember { mutableIntStateOf(0) }
     var lastDevTapMs by remember { mutableLongStateOf(0L) }

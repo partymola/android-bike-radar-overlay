@@ -28,11 +28,9 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,9 +43,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
@@ -60,7 +55,6 @@ import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.radarStreamIsLive
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -86,27 +80,12 @@ fun SettingsRadarDevice(navController: NavController, prefs: Prefs) {
 @Composable
 private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
     val batteryEntries by BatteryStateBus.entries.collectAsState()
     // Ticked, not sampled once: the entries flow only emits when a device IS
     // seen, so a screen left open would hold its last verdict indefinitely and
     // keep calling a dead radar connected.
-    var tickNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            // Resume-first, then loop. The gated loop restarts on RESUME
-            // and would otherwise delay BEFORE its first assignment, so a
-            // screen left open across an hour of standby would difference
-            // two hour-old values, get a small number, and render a dead
-            // device as connected for the first five seconds back.
-            tickNowMs = System.currentTimeMillis()
-            while (true) {
-                delay(5_000)
-                tickNowMs = System.currentTimeMillis()
-            }
-        }
-    }
+    val tickNowMs = rememberStatusClock()
 
     // Re-enumerated on the tick, not once per radarMac. Bonding happens in
     // Android's Bluetooth settings, which this screen's only action deep-links

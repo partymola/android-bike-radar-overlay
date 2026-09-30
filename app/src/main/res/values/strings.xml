@@ -325,7 +325,7 @@
     <string name="onboarding_ebike_privacy_heading">What\'s collected</string>
     <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends anything to your bike</string>
     <string name="onboarding_ebike_bullet_phone">Stays on your phone, saved to the ride log</string>
-    <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride and battery info is sent there</string>
+    <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride info is sent there</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Settings (SettingsScreen.kt + per-section screens)
@@ -565,7 +565,7 @@
     <string name="settings_ebike_whats_collected_label">What\'s collected</string>
     <string name="settings_ebike_collected_item_reads">Reads battery, speed and pedalling - read-only, never sends anything to your bike</string>
     <string name="settings_ebike_collected_item_phone">Stays on your phone, saved to the ride log</string>
-    <string name="settings_ebike_collected_item_ha">Ride and battery info goes to Home Assistant only if you set it up</string>
+    <string name="settings_ebike_collected_item_ha">Ride info goes to Home Assistant only if you set it up</string>
     <string name="settings_ebike_privacy_detail">Full detail in the Privacy screen.</string>
     <string name="settings_ebike_open_flow_failed_toast">Couldn\'t open Flow. Install it from the Play Store and try again.</string>
 

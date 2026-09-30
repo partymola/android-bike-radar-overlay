@@ -298,7 +298,7 @@
     <string name="onboarding_ebike_privacy_heading">Qué se recopila</string>
     <string name="onboarding_ebike_bullet_reads">Lee la batería, la velocidad y el pedaleo de tu bici - solo lectura, nunca envía nada a tu bici</string>
     <string name="onboarding_ebike_bullet_phone">Se queda en tu teléfono, guardado en el registro de la ruta</string>
-    <string name="onboarding_ebike_bullet_ha">Si Home Assistant está configurado, la información de ruta y batería se envía allí</string>
+    <string name="onboarding_ebike_bullet_ha">Si Home Assistant está configurado, la información de ruta se envía allí</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Ajustes (SettingsScreen.kt + pantallas por sección)
@@ -537,7 +537,7 @@
     <string name="settings_ebike_whats_collected_label">Qué se recopila</string>
     <string name="settings_ebike_collected_item_reads">Lee la batería, la velocidad y el pedaleo - solo lectura, nunca envía nada a tu bici</string>
     <string name="settings_ebike_collected_item_phone">Se queda en tu teléfono, guardado en el registro de la ruta</string>
-    <string name="settings_ebike_collected_item_ha">La información de ruta y batería se envía a Home Assistant solo si lo configuras</string>
+    <string name="settings_ebike_collected_item_ha">La información de ruta se envía a Home Assistant solo si lo configuras</string>
     <string name="settings_ebike_privacy_detail">Más detalle en la pantalla de Privacidad.</string>
     <string name="settings_ebike_open_flow_failed_toast">No se ha podido abrir Flow. Instálala desde Play Store e inténtalo de nuevo.</string>
 

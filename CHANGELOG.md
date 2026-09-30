@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.7.0 - 2026-10-01
+
+### Features
+
+- **Hear the traffic alerts before your first ride.** Right after the "Before you ride" screen, setup now plays a 20-second example ride with the app's own traffic alert sounds, each captioned with what it means: one, two and three beeps as a car closes in, the all-clear once the radar sees nothing left within your alert distance, and the urgent warning for a car closing fast while you are stopped or slow. It plays only when you tap Play, and only while the radar is off.
+- **Set the alert volume during setup**, straight after the example ride. Play a test sound and set how loud the alerts are. The slider is the same Alert volume as in Settings; the phone's volume buttons change the phone's volume, not the slider.
+- **A new Alert sounds page under Settings -> Alerts** lists the ride's alert sounds with what each means, including the pulses for the radar dropping and coming back, and plays each one when you tap it while the radar is off. It also opens the example ride and the volume step, so riders already set up can use both without going through setup again.
+
+### Fix
+
+- **After a ride, the home screen stops asking "Finished your ride?" once your eBike is off.** Switching the bike off already told the app the ride was over, and the drop alert and its banner already went quiet for it, but the home screen never checked, so the question came up after every ride. It now shows "Waiting for radar", as it does after you tap "I've parked".
+- **A bike lock from an earlier ride no longer silences the drop alert.** The app kept the eBike's last lock reading for as long as it ran. On a later ride where Bosch Flow never connected to the bike, that old lock kept the drop alert quiet and hid its banner if the radar failed. A lock the bike has stopped sending is now dropped when a ride starts. On such a ride the drop banner behaves as it does for a rider with no eBike: it leaves out "but bike unlocked" and hides 40 seconds after the drop, unless "Keep the drop warning on screen" is on.
+- **The home screen is up to date as soon as you come back to it.** For up to 5 seconds after the phone left standby it could still show the radar as live when it was not, and for up to 5 seconds after you turned Bluetooth on from its banner it kept showing that banner.
+- **Settings now shows when Bike Radar blocked an app you allowed.** If an app you had allowed asked to use your radar and could not confirm it was the app you allowed, Bike Radar refused it, yet Settings kept listing it as able to use your radar. Its entry now says it was blocked last time, its Stop sharing dialog says how to let it back in, and the Settings summary of apps using your radar leaves it out. An app blocked before this update is marked only once it is blocked again.
+
+### UX
+
+- **The Alert volume setting now says it sets how loud every ride alert sound is.** Its description said "approach alerts", although the urgent warning, the all-clear and the radar pulses follow it too, and it said the overlay flashes at 0, which it does not.
+- **The eBike screens no longer say your eBike's battery goes to Home Assistant.** It never did; only ride information is sent there.
+- **On the access question, Stop sharing is now red**, as it is in Settings, so it no longer looks like the Cancel button below it.
+- **The "not set up yet" line on the access question now starts with a warning icon**, so it reads as a warning about Bike Radar rather than about the app asking. Its Spanish wording no longer repeats a verb.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. The drop alert can now sound on a ride where an old bike lock used to keep it quiet (see Fix); no other change to when an alert sounds during a ride. No change to the Home Assistant topics, entity names or the values they report, to which radars work, or to the cross-app contract.
+
+### Internal
+
+- The ride and the example ride play their sounds through one shared mapping, and the example ride's script runs through the same decider a ride uses rather than choosing its own sounds. Android Gradle plugin 9.4.1, Roborazzi 1.75.0 and setup-android 4.0.4.
+
 ## v1.6.6 - 2026-09-27
 
 ### Fix

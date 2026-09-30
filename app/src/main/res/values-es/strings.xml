@@ -195,7 +195,7 @@
     <string name="safety_notice_ack">Entendido</string>
 
     <!-- ════════════════════════════════════════════════════════════════
-         Introducción (OnboardingScreen.kt) - asistente de 4 pasos
+         Introducción (OnboardingScreen.kt) - demo de sonidos, paso de volumen y asistente de 5 pasos
          ════════════════════════════════════════════════════════════════ -->
     <string name="onboarding_skip">Omitir</string>
     <string name="onboarding_skip_for_now">Omitir por ahora</string>

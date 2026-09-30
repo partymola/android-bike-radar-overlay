@@ -219,7 +219,7 @@
     <string name="safety_notice_ack">I understand</string>
 
     <!-- ════════════════════════════════════════════════════════════════
-         Onboarding (OnboardingScreen.kt) - 4-step pager
+         Onboarding (OnboardingScreen.kt) - sound demo, volume step, then a 5-step pager
          ════════════════════════════════════════════════════════════════ -->
     <string name="onboarding_skip">Skip</string>
     <string name="onboarding_skip_for_now">Skip for now</string>

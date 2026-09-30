@@ -174,6 +174,13 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |
+| `app/src/main/java/es/jjrh/bikeradar/AlertCue.kt` | Pure mapping from an `AlertDecider` event to the cue it sounds; the ride, the debug overlay and the sound demo all go through it |
+| `app/src/main/java/es/jjrh/bikeradar/CuePlayer.kt` | The play-a-cue interface `AlertBeeper` implements, and `playCue`, the one place an `AlertCue` becomes a sound |
+| `app/src/main/java/es/jjrh/bikeradar/SoundDemo.kt` | The example ride's scripted scene, run through a fresh `AlertDecider` at default settings so it cannot teach a sound the ride would not make |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SoundDemoStep.kt` | The example ride screen (onboarding and Settings), its screen-scoped beeper, and the volume-key routing both sound screens share |
+| `app/src/main/java/es/jjrh/bikeradar/ui/AlertVolumeStep.kt` | The alert volume screen (onboarding and Settings) and the one Alert volume slider |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SettingsAlertSounds.kt` | Settings -> Alerts -> Alert sounds: each cue with its meaning, playable while the radar is off |
+| `app/src/main/java/es/jjrh/bikeradar/ui/StatusClock.kt` | The one 5 s clock every status screen ticks from; reads on resume before its first wait |
 | `app/src/main/aidl/es/jjrh/bikeradar/ipc/IRadarService.aidl` | The cross-app interface itself, and the only file a consumer compiles against; its KDoc is the consumer-facing documentation |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarContract.kt` | Cross-app wire contract: version, capability bits, size codes, light-mode values, bind strings, and the consent screen's action, extras and result codes. Permissive, and references nothing in the app |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarStateProjection.kt` | The projection from `RadarState`/`Vehicle` onto that wire; the half a consumer cannot use, which is why it is not in the contract |

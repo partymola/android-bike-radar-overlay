@@ -209,6 +209,22 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun anOvernightBikeLockStillReachesTheStateTheHomeScreenReads() {
+        // The home screen's parked question rests on the coordinator getting
+        // the snapshot however old: the bike drops its link as it sleeps, so a
+        // lock reading is hours old by the time it matters. A supplier capped
+        // at any window brings the question back after every ride.
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = true))
+        ShadowSystemClock.simulateDeepSleep(Duration.ofHours(8))
+        service.radarLinkCoordinator.evaluateRadarDrop(android.os.SystemClock.elapsedRealtime())
+        assertTrue(service.radarLinkCoordinator.radarLinkState.value.bikeLocked)
+        controller.destroy()
+    }
+
+    @Test
     fun theRideNotificationFollowsAHoldAndACallUntilTheServiceStops() {
         // The service half of the notification's reposts: that onCreate starts
         // them and onDestroy ends them. What they post is pinned in

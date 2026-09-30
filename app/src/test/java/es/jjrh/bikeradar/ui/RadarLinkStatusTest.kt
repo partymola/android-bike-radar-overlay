@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -106,12 +107,24 @@ class RadarLinkStatusTest {
     /** Literal threshold, not the production constant: asserting a constant
      *  against itself stays green when the constant is wrong. 10_000 is
      *  [es.jjrh.bikeradar.RadarLinkCoordinator.RADAR_DROP_VISUAL_THRESHOLD_MS]. */
-    private fun offer(downForMs: Long?, everLive: Boolean = true, ended: Boolean = false) = RadarLinkStatus.canEndRide(
-        radarEverLive = everLive,
-        downForMs = downForMs,
-        alreadyEnded = ended,
-        visualThresholdMs = 10_000L,
-    )
+    private fun offer(
+        downForMs: Long?,
+        everLive: Boolean = true,
+        ended: Boolean = false,
+        bikeLocked: Boolean = false,
+    ): Boolean {
+        val now = 1_000_000L
+        return RadarLinkStatus.canEndRide(
+            link = RadarLinkState(
+                radarOffSinceMs = downForMs?.let { now - it },
+                sessionRadarConnectedMs = if (everLive) 3_000L else 0L,
+                rideEndedByRider = ended,
+                bikeLocked = bikeLocked,
+            ),
+            nowMs = now,
+            visualThresholdMs = 10_000L,
+        )
+    }
 
     @Test fun endRideIsOfferedOnceTheBannerHasBeenUp() {
         assertTrue("down past the banner threshold is the whole case", offer(downForMs = 10_000L))
@@ -138,5 +151,22 @@ class RadarLinkStatusTest {
     @Test fun endRideIsNotOfferedTwiceForOneOffEpisode() {
         // The declaration is spent until the next radar connect re-arms it.
         assertFalse(offer(downForMs = 60_000L, ended = true))
+    }
+
+    @Test fun endRideIsNotOfferedOnceTheBikeSaysItIsParked() {
+        // An eBike that reports locked or asleep has already answered the
+        // question, so asking it after every ride is noise.
+        assertFalse(offer(downForMs = 60_000L, bikeLocked = true))
+    }
+
+    @Test fun anyTimeWithTheRadarCountsAsARide() {
+        val link = RadarLinkState(radarOffSinceMs = 0L, sessionRadarConnectedMs = 1L)
+        assertTrue(RadarLinkStatus.canEndRide(link, nowMs = 60_000L, visualThresholdMs = 10_000L))
+    }
+
+    @Test fun theThresholdIsTheCallersToChoose() {
+        val link = RadarLinkState(radarOffSinceMs = 0L, sessionRadarConnectedMs = 3_000L)
+        assertFalse(RadarLinkStatus.canEndRide(link, nowMs = 4_999L, visualThresholdMs = 5_000L))
+        assertTrue(RadarLinkStatus.canEndRide(link, nowMs = 5_000L, visualThresholdMs = 5_000L))
     }
 }

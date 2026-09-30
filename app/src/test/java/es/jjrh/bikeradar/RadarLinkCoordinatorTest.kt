@@ -466,6 +466,71 @@ class RadarLinkCoordinatorTest {
         assertEquals(listOf("ride ended by rider"), journalLines.drop(before))
     }
 
+    /** Literal threshold: 10_000 is RADAR_DROP_VISUAL_THRESHOLD_MS. */
+    private fun asked(t: Long) = RadarLinkStatus.canEndRide(snap(), nowMs = t, visualThresholdMs = 10_000L)
+
+    @Test
+    fun theBikesLockReachesTheStateTheHomeScreenAsksFrom() {
+        // The home screen decides whether to ask "Finished your ride?" from
+        // this state, not from the snapshot, so a lock the tick does not
+        // publish leaves the question up after every eBike ride. Eight hours
+        // old: the bike drops its link as it sleeps, so a real lock reading is
+        // always old by then, and any age gate would bring the question back.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = true)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        ebikeAtMs = 15_000L - 8L * 60L * 60L * 1_000L
+        coordinator.evaluateRadarDrop(15_000L)
+        assertTrue(snap().bikeLocked)
+        assertFalse(asked(15_000L))
+    }
+
+    @Test
+    fun theQuestionFollowsTheBikeAsItLocksAndWakes() {
+        // The field order: the radar goes off with the bike still awake, so
+        // the rider is asked; the bike locks, so the question goes; the bike
+        // wakes again, so it comes back.
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(15_000L)
+        assertTrue("asked while the bike is awake", asked(15_000L))
+        ebike = LiveDataSnapshot(systemLocked = true)
+        coordinator.evaluateRadarDrop(17_000L)
+        assertFalse("withdrawn once the bike locks", asked(17_000L))
+        ebike = LiveDataSnapshot(systemLocked = false)
+        coordinator.evaluateRadarDrop(19_000L)
+        assertTrue("asked again once it wakes", asked(19_000L))
+        // Not a transition the decoder produces, since it keeps a field once
+        // seen. It is what fails if the reading is made sticky.
+        ebike = LiveDataSnapshot(systemLocked = true)
+        coordinator.evaluateRadarDrop(21_000L)
+        assertFalse(asked(21_000L))
+        ebike = null
+        coordinator.evaluateRadarDrop(23_000L)
+        assertTrue(asked(23_000L))
+    }
+
+    @Test
+    fun aBikeThatHasNotReportedALockLeavesTheQuestionToTheRider() {
+        // The two unknowns production does produce: a radar-only rider, and a
+        // streaming bike whose lock field has not arrived yet.
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(15_000L)
+        assertTrue("radar-only rider", asked(15_000L))
+        hasEBike = true
+        ebike = LiveDataSnapshot(speedRaw = 1_800)
+        coordinator.evaluateRadarDrop(17_000L)
+        assertTrue("lock not reported yet", asked(17_000L))
+    }
+
     // ── evaluateRadarDrop banner ordering + cue ──────────────────────────────
 
     @Test

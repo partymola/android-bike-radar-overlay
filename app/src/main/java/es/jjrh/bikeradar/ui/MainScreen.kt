@@ -210,9 +210,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // Computed before the inputs so the hero copy and the button are decided
     // from the same ones. Split, the card can ask a question no button answers.
     val canEndRide = RadarLinkStatus.canEndRide(
-        radarEverLive = radarLinkSnap.sessionRadarConnectedMs > 0L,
-        downForMs = radarLinkSnap.radarOffSinceMs?.let { SystemClock.elapsedRealtime() - it },
-        alreadyEnded = radarLinkSnap.rideEndedByRider,
+        link = radarLinkSnap,
+        nowMs = SystemClock.elapsedRealtime(),
         visualThresholdMs = RadarLinkCoordinator.RADAR_DROP_VISUAL_THRESHOLD_MS,
     )
 

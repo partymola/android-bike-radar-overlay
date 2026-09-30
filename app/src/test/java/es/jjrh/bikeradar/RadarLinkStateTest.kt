@@ -32,6 +32,7 @@ class RadarLinkStateTest {
         assertEquals(false, s.walkAwayArmed)
         assertEquals(false, s.walkAwayDismissed)
         assertNull(s.lastWalkAwayFireMs)
+        assertEquals(false, s.bikeLocked)
     }
 
     @Test

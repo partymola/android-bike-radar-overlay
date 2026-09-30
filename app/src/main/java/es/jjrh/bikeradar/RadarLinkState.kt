@@ -54,9 +54,17 @@ data class RadarLinkState(
      *  dead-radar banner retired. Without it the app has to INFER a ride end
      *  from traffic, which is the guessing the whole gate exists to bound.
      *
-     *  Cleared on the next radar connect, the same re-arm edge the eBike lock
-     *  uses, so it can never silence a later ride. */
+     *  Cleared on the next radar connect, so it can never silence a later
+     *  ride. */
     val rideEndedByRider: Boolean = false,
+    /** True while the eBike's last reading says locked or asleep. Written each
+     *  tick by `RadarLinkCoordinator.evaluateRadarDrop` from the snapshot the
+     *  drop cue reads. Not age-gated, by design: the bike drops its link as it
+     *  sleeps, so a real lock reading is already old when the home screen
+     *  would ask (`theBikesLockReachesTheStateTheHomeScreenAsksFrom`). The
+     *  reading is held for the service session, so an earlier ride's lock
+     *  stands until the bike sends another. */
+    val bikeLocked: Boolean = false,
     /** True on the tick after a reconnect that started a NEW RIDE (the radar
      *  was off longer than the app's parked boundary).
      *
@@ -67,4 +75,10 @@ data class RadarLinkState(
      *  acknowledgement pulse the reset exists to stop. Consumed and cleared in
      *  `RadarLinkCoordinator.evaluateRadarDrop`. */
     val newRideAtConnect: Boolean = false,
-)
+) {
+    /** The bike reads locked, or the rider tapped "I've parked". Read by the
+     *  dead-radar banner, the drop cue's latch reset and the home screen's
+     *  parked question; the cue gate takes the two separately in
+     *  `RadarDropDecider.ridingConfirmed`. */
+    val parked: Boolean get() = bikeLocked || rideEndedByRider
+}

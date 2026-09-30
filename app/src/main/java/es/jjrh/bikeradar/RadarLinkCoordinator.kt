@@ -6,6 +6,7 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 
 /**
  * Owner of the rear-radar link state and the walk-away / radar-drop safety
@@ -558,9 +559,14 @@ internal class RadarLinkCoordinator(
      * rationale + scenario matrix there too.
      */
     fun evaluateRadarDrop(nowMs: Long) {
-        val link = _radarLinkState.value
-        val downForMs = link.radarOffSinceMs?.let { nowMs - it }
         val snap = eBikeSnapshot()
+        // Published for the home screen's parked question
+        // (`theBikesLockReachesTheStateTheHomeScreenAsksFrom`).
+        val bikeLocked = snap?.systemLocked == true
+        val link = _radarLinkState.updateAndGet {
+            if (it.bikeLocked == bikeLocked) it else it.copy(bikeLocked = bikeLocked)
+        }
+        val downForMs = link.radarOffSinceMs?.let { nowMs - it }
         val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
         // Dead-radar banner: cohort-aware + bounded (see RadarLinkVisualDecider).
         // eBike riders -> "...but bike unlocked" while unlocked, hidden once the
@@ -579,7 +585,7 @@ internal class RadarLinkCoordinator(
         // Two sources, one meaning: the bike says it is locked, or the rider
         // said so on the main screen. A radar-only rider had no way to say it,
         // which is why the app was left inferring a ride end from traffic.
-        val explicitParked = snap?.systemLocked == true || link.rideEndedByRider
+        val explicitParked = link.parked
         // New-ride edge, handed over by markConnected so this latch keeps one
         // writer. Consumed here: clearing the flag from the tick is safe
         // because `update` is a CAS loop, unlike a bare volatile write.

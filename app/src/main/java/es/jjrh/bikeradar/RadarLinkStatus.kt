@@ -66,19 +66,21 @@ object RadarLinkStatus {
      * disconnected banner. An ordinary mid-ride reconnect runs to a corpus
      * median of 8.4 s, so a gate on "down at all" would put a full-width
      * control that suppresses a warning on screen during routine blips, which
-     * is the mis-tap this bounds. [downForMs] is compared against the banner's
-     * own threshold so the two surfaces appear together.
+     * is the mis-tap this bounds. The down time is compared against the
+     * banner's own threshold so the two surfaces appear together.
      *
-     * [radarEverLive] keeps it off a bench session that never rode.
-     * [alreadyEnded] stops it being offered twice for one off-episode.
+     * Not offered in a session that never saw the radar, nor once the bike or
+     * the rider has said the ride is over ([RadarLinkState.parked]). Takes the
+     * whole state so a caller cannot leave one of those out;
+     * `MainScreenEndRideWiringTest` pins that the home screen hands it the
+     * live state.
+     *
+     * [nowMs] is elapsedRealtime, like [RadarLinkState.radarOffSinceMs].
      */
-    fun canEndRide(
-        radarEverLive: Boolean,
-        downForMs: Long?,
-        alreadyEnded: Boolean,
-        visualThresholdMs: Long,
-    ): Boolean = radarEverLive &&
-        downForMs != null &&
-        downForMs >= visualThresholdMs &&
-        !alreadyEnded
+    fun canEndRide(link: RadarLinkState, nowMs: Long, visualThresholdMs: Long): Boolean {
+        val offSinceMs = link.radarOffSinceMs ?: return false
+        return link.sessionRadarConnectedMs > 0L &&
+            nowMs - offSinceMs >= visualThresholdMs &&
+            !link.parked
+    }
 }

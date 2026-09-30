@@ -23,10 +23,10 @@ import org.robolectric.Shadows.shadowOf
  * The End ride control, driven through the real [ctaFor]: when it is offered,
  * when it is withheld, and what a tap on it does.
  *
- * [es.jjrh.bikeradar.RadarLinkStatus.canEndRide] already pins WHEN the offer is
- * allowed. This pins that the screen actually asks it, that the answer survives
- * the branch's own freshness term, and that the click reaches the service.
- * Without them the predicate could be correct while nothing on screen used it.
+ * [es.jjrh.bikeradar.RadarLinkStatus.canEndRide] pins WHEN the offer is
+ * allowed, and [MainScreenEndRideWiringTest] that the screen asks it. This pins
+ * that the answer survives the branch's own freshness term and that the click
+ * reaches the service.
  *
  * The four states of the two terms the branch reads are covered one test each:
  * either alone answering every case would leave the other unpinned. The

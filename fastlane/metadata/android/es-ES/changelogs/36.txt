@@ -1,0 +1,1 @@
+La pantalla de Privacidad indica ahora lo que el resumen de la ruta envía a Home Assistant y que se actualiza durante la ruta. La ruta de ejemplo, el paso de volumen y Sonidos de aviso explican por qué los botones de volumen pueden cambiar el volumen de tu despertador. «Vía despejada» se llama ahora «Carretera despejada» en toda la app.

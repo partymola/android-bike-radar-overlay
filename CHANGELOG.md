@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.7.1 - 2026-10-01
+
+### UX
+
+- **The Privacy screen and the README now list what the ride summary sends to your Home Assistant**, and say it is updated every minute during the ride: start time, distance, overtake and close-pass counts, the close-pass rate, closing speeds, clearances, time with traffic behind you, alerts per km and per hour, and the tightest pass with its time, side, vehicle size, clearance, closing speed and distance behind.
+- **The example ride, the volume step and the Alert sounds page now say why the volume buttons can change your wake-up alarm.** On those screens the phone's volume buttons change how loud the alerts are, and alerts use the phone's alarm volume so they reach you, which is the volume your wake-up alarm uses too. Only the volume step mentioned it before, without saying why alerts use the alarm volume.
+- **In Spanish, the all-clear is now «Carretera despejada»**, in place of «Vía despejada» and «Vía libre». The README's Spanish section calls a close pass an "adelantamiento cercano".
+- **In English, the riding-aid notice and the screen-reader summary of the overlay now say "All-clear"**, the name every other screen uses, instead of "Road clear".
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. No change to when any alert sounds, to what is sent to Home Assistant or its topics and entity names, to which radars work, or to the cross-app contract.
+
 ## v1.7.0 - 2026-10-01
 
 ### Features

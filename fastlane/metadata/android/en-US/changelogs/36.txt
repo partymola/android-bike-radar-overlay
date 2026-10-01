@@ -1,0 +1,1 @@
+The Privacy screen now lists what the ride summary sends to Home Assistant, and says it updates during the ride. The example ride, the volume step and Alert sounds explain why the volume buttons can change your wake-up alarm. English and Spanish now use one name each for the all-clear.

@@ -859,7 +859,7 @@
     <string name="sound_demo_caption_clear">El radar ya no ve nada en tu distancia de alerta: «Vía despejada».</string>
     <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente.</string>
     <string name="alert_volume_title">Ajusta el volumen de los avisos</string>
-    <string name="alert_volume_sub">Reproduce un sonido de prueba mientras lo ajustas. Los botones de volumen cambian el volumen del móvil, no este control.</string>
+    <string name="alert_volume_sub">Reproduce un sonido de prueba mientras lo ajustas. Los botones de volumen del móvil también sirven aquí. Pueden cambiar el volumen de alarma del móvil, el mismo que usa tu despertador.</string>
     <string name="alert_volume_play">Probar el sonido</string>
     <string name="alert_volume_radar_streaming">El sonido de prueba solo se reproduce con el radar apagado. El volumen sí se puede cambiar.</string>
     <string name="alert_volume_row">Ajustar el volumen de los avisos</string>

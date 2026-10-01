@@ -5,7 +5,7 @@
 ### Features
 
 - **Hear the traffic alerts before your first ride.** Right after the "Before you ride" screen, setup now plays a 20-second example ride with the app's own traffic alert sounds, each captioned with what it means: one, two and three beeps as a car closes in, the all-clear once the radar sees nothing left within your alert distance, and the urgent warning for a car closing fast while you are stopped or slow. It plays only when you tap Play, and only while the radar is off.
-- **Set the alert volume during setup**, straight after the example ride. Play a test sound and set how loud the alerts are. The slider is the same Alert volume as in Settings; the phone's volume buttons change the phone's volume, not the slider.
+- **Set the alert volume during setup**, straight after the example ride. Play a test sound and set how loud the alerts are. The slider is the same Alert volume as in Settings, and the phone's volume buttons work on that screen too. They can change your phone's alarm volume, which your wake-up alarm also uses.
 - **A new Alert sounds page under Settings -> Alerts** lists the ride's alert sounds with what each means, including the pulses for the radar dropping and coming back, and plays each one when you tap it while the radar is off. It also opens the example ride and the volume step, so riders already set up can use both without going through setup again.
 
 ### Fix

@@ -42,8 +42,11 @@ Rules that keep a translation from crashing the app:
   Assistant, Bosch Flow, MQTT, eBike, GPL-3.0, and similar.
 - The `app_name` is intentionally not translatable; don't add it.
 
-Two things that won't crash the app but make a translation better:
+What won't crash the app but makes a translation better:
 
+- **Translate the meaning, not the words.** Say what the English says in the
+  phrasing and sentence order natural to your language; it doesn't have to
+  follow the English sentence by sentence.
 - **Most languages run longer than English, and the shortest strings expand
   worst** - a one-word button or chip can nearly double. The tight spots are
   buttons, chips, switch labels, screen/section titles and notification titles;

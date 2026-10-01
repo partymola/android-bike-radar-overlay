@@ -14,6 +14,9 @@ enforces them, and CONTRIBUTING.md points contributors here:
 - **No jargon, acronyms, or filler nouns** the rider can't parse: drop
   "companion app", "telemetry", "bearer token", "phone home". Established
   product terms stay (Bluetooth, Home Assistant, Bosch Flow, MQTT, eBike).
+- **Neither locale is a translation of the other.** Write each in the words and
+  sentence order natural to it; the two must say the same thing, not say it
+  the same way.
 - **es: Spain register** (tú), no LatAm vocab, and gender must match the
   on-screen referent: a shared string under both "Radar" (m) and "Cámara" (f)
   needs splitting (e.g. `_radar_not_seen` / `_cam_not_seen`).

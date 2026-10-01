@@ -11,12 +11,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -134,6 +136,13 @@ class SoundDemoStepTest {
         show()
         advance(20_000L)
         assertEquals(emptyList<String>(), player.calls)
+    }
+
+    @Test
+    fun itSaysWhyTheVolumeButtonsCanMoveTheWakeUpAlarm() {
+        // An automatic clock: scrolling waits for idle, which the manual one in show() never reaches.
+        composeRule.setContent { UiTheme { SoundDemoStep(player = player, canPlay = true, onContinue = {}) } }
+        composeRule.onNodeWithText("your wake-up alarm uses that volume too", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

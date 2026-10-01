@@ -122,6 +122,7 @@ internal fun AlertVolumeStepContent(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
+            AlarmVolumeNote()
         }
         FooterCtaDual(
             primary = stringResource(R.string.alert_volume_play),

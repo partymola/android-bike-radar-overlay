@@ -8,11 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -143,6 +145,12 @@ class AlertVolumeStepTest {
         assertTrue("saved $saved", saved > 80)
         composeRule.onNodeWithText("$saved%").assertExists()
         assertEquals(saved, gains.last())
+    }
+
+    @Test
+    fun itSaysWhyTheVolumeButtonsCanMoveTheWakeUpAlarm() {
+        show()
+        composeRule.onNodeWithText("your wake-up alarm uses that volume too", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

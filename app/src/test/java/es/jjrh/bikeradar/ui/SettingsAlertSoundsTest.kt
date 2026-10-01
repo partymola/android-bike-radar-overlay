@@ -5,6 +5,7 @@ package es.jjrh.bikeradar.ui
 import android.app.Application
 import android.media.AudioManager
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -111,6 +112,12 @@ class SettingsAlertSoundsTest {
         composeRule.onNodeWithText("The sounds play only while the radar is off.").assertDoesNotExist()
         tap("Watch the example ride again")
         assertEquals(1, demos)
+    }
+
+    @Test
+    fun itSaysWhyTheVolumeButtonsCanMoveTheWakeUpAlarm() {
+        show(riding = false)
+        composeRule.onNodeWithText("your wake-up alarm uses that volume too", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

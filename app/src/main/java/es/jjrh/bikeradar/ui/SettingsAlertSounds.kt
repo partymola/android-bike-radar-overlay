@@ -105,6 +105,7 @@ internal fun SettingsAlertSoundsContent(
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
+            AlarmVolumeNote()
             SettingsSectionLabel(stringResource(R.string.alert_sounds_section_traffic))
             SoundRows(AlertSound.entries.filterNot { it.aboutTheRadar }, canPlay, onPlay)
             SettingsSectionLabel(stringResource(R.string.alert_sounds_section_radar))

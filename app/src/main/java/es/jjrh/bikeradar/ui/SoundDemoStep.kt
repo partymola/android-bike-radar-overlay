@@ -202,6 +202,21 @@ internal fun VolumeKeysFollowCues(prefs: Prefs) {
 }
 
 /**
+ * What a press on [VolumeKeysFollowCues]' screens can do to the wake-up alarm,
+ * and why. Every screen that calls it shows this
+ * (`AlarmVolumeNoteOnEveryKeyScreenTest`).
+ */
+@Composable
+internal fun AlarmVolumeNote() {
+    Text(
+        text = stringResource(R.string.alert_alarm_volume_note),
+        color = LocalBrColors.current.fgDim,
+        fontSize = 13.sp,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+    )
+}
+
+/**
  * The demo as a whole screen: first in onboarding, and again from Settings.
  * [mark] is the label over the title and [doneLabel] the button that leaves,
  * both of which differ between the two.
@@ -336,6 +351,7 @@ internal fun SoundDemoStepContent(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
+            AlarmVolumeNote()
         }
         // Once the scene has been watched, moving on is the main action.
         if (played && !playing && canPlay) {

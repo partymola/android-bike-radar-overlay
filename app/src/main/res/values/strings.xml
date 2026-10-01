@@ -904,7 +904,10 @@
     <string name="sound_demo_caption_clear">The radar sees nothing within your alert distance any more: the all-clear.</string>
     <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
     <string name="alert_volume_title">Set the alert volume</string>
-    <string name="alert_volume_sub">Play a test sound while you set it. The phone\'s volume buttons work here too. They can change your phone\'s alarm volume, which your wake-up alarm also uses.</string>
+    <string name="alert_volume_sub">Play a test sound while you set it.</string>
+    <!-- Shown on every screen that hands the volume buttons to the alerts
+         (VolumeKeysFollowCues): the demo, the volume step, Alert sounds. -->
+    <string name="alert_alarm_volume_note">You can also change the alert volume here with the phone\'s volume buttons. Note: so that alerts reach you, they use your phone\'s alarm volume, and your wake-up alarm uses that volume too.</string>
     <string name="alert_volume_play">Play a test sound</string>
     <string name="alert_volume_radar_streaming">The test sound plays only while the radar is off. The volume still changes.</string>
     <!-- The same words as alert_volume_title in English; Spanish uses the

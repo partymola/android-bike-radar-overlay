@@ -215,6 +215,26 @@ class SoundDemoStepTest {
         assertEquals(listOf("play1", "play2", "play3", "clear", "urgent", "play1"), player.calls)
     }
 
+    @Test
+    fun aWatchedDemoFromSettingsEndsInDone() {
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                UiTheme {
+                    SoundDemoStep(player = player, canPlay = true, onContinue = { continued += 1 }, doneLabel = R.string.common_done)
+                }
+            }
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        tapPlay()
+        advance(25_000L)
+        composeRule.onNodeWithText("Play again").assertExists()
+        composeRule.onNodeWithText("Continue").assertDoesNotExist()
+        composeRule.onNodeWithText("Done").performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, continued)
+    }
+
     private val audio get() = composeRule.activity.getSystemService(AudioManager::class.java)
 
     private fun volumes(media: Int, alarm: Int) {
@@ -313,9 +333,11 @@ class SoundDemoStepTest {
         show()
         tapPlay()
         advanceUntil(10_000L) { player.calls.isNotEmpty() }
+        composeRule.onNodeWithText("A car behind you: one beep.").assertExists()
         canPlay = false
         advance(20_000L)
         assertEquals(listOf("play1"), player.calls)
+        composeRule.onNodeWithText("A car behind you: one beep.").assertDoesNotExist()
         composeRule.onNodeWithText("Play again").assertDoesNotExist()
         composeRule.onNodeWithText("Play").assertIsNotEnabled()
         composeRule.onNodeWithText("Continue").performClick()

@@ -201,4 +201,14 @@ class AlertVolumeStepTest {
         composeRule.waitForIdle()
         assertEquals(AudioManager.STREAM_MUSIC, composeRule.activity.volumeControlStream)
     }
+
+    @Test
+    fun withNoMediaPlayingTheVolumeButtonsMoveTheAlarmOnTheScreen() {
+        val audio = composeRule.activity.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+        audio.setStreamVolume(AudioManager.STREAM_ALARM, 5, 0)
+        composeRule.setContent { AlertVolumeScreen(prefs = prefs, mark = R.string.sound_demo_mark, onDone = {}) }
+        composeRule.waitForIdle()
+        assertEquals(AudioManager.STREAM_ALARM, composeRule.activity.volumeControlStream)
+    }
 }

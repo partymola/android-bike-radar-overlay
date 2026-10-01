@@ -337,15 +337,15 @@ Funciones principales:
 - Radar en pantalla con la distancia, la velocidad de aproximación y la
   posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
   distinto para impacto inminente.
-- Recuento de pases cercanos e historial de rutas en el teléfono, sin
-  necesidad de Home Assistant: cuenta en la pantalla de inicio los
-  adelantamientos cercanos que el radar llega a medir y guarda un historial
-  por ruta (distancia, adelantamientos, pases cercanos, y a qué distancia y velocidad pasaron los
-  más cercanos), sin ubicación ni recorrido.
+- Recuento de adelantamientos cercanos e historial de rutas en el teléfono,
+  sin necesidad de Home Assistant: cuenta en la pantalla de inicio los que el
+  radar llega a medir y guarda un historial por ruta (distancia,
+  adelantamientos totales y cercanos, y a qué distancia y velocidad pasaron
+  los más cercanos), sin ubicación ni recorrido.
 - Integración opcional con Home Assistant por MQTT: batería del radar y de la
-  cámara delantera, modo de la luz delantera, eventos de pase cercano y resumen
-  de fin de ruta (distancia, número de pases, velocidades de aproximación y
-  holguras laterales).
+  cámara delantera, modo de la luz delantera, eventos de adelantamiento
+  cercano y resumen de fin de ruta (distancia, número de adelantamientos
+  cercanos, velocidades de aproximación y holguras laterales).
 - Luz delantera y luz trasera del radar en modo automático según el
   atardecer local.
 - Datos en vivo de la eBike Bosch (solo lectura) mientras Bosch Flow está

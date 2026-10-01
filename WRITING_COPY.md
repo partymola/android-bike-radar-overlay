@@ -55,8 +55,12 @@ enforces them, and CONTRIBUTING.md points contributors here:
     form does not fit, as in the riding-aid notice's title `Antes de montar en
     bici`. Settled; do not "correct" such a title back to `bicicleta`.
   - **Digits for numbers, even below 10**: "1 aviso", "3 coches".
+  - **The all-clear is «Carretera despejada»**, never «Vía despejada» or
+    «Vía libre»: it is what a Spanish rider says. A close pass is an
+    `adelantamiento ajustado` in the app (`adelantamiento cercano` in the
+    README's Spanish section), never a `pase`.
   - **Guillemets are accepted when es quotes one of the app's own labels**
-    («Vía despejada»), even though `values-es` elsewhere escapes straight
+    («Carretera despejada»), even though `values-es` elsewhere escapes straight
     quotes for the same job. Settled; do not raise it as an inconsistency.
   - **Sentence case** - capitalize only the first word ("Seguir mi luz", not
     "Seguir Mi Luz").

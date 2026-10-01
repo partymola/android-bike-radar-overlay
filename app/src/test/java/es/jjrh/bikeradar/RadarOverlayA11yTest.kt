@@ -32,7 +32,7 @@ class RadarOverlayA11yTest {
 
     @Test fun clearRoadWhenNoVehicles() {
         assertEquals(
-            "Bike radar overlay. Road clear.",
+            "Bike radar overlay. All-clear.",
             summary(RadarState(), DashcamStatus.Ok, batteryLow = false),
         )
     }
@@ -41,7 +41,7 @@ class RadarOverlayA11yTest {
         // A target that has overtaken the rider is excluded from the count.
         val s = state(Vehicle(id = 1, distanceM = 10, speedMs = -5f, isBehind = true))
         assertEquals(
-            "Bike radar overlay. Road clear.",
+            "Bike radar overlay. All-clear.",
             summary(s, DashcamStatus.Ok, batteryLow = false),
         )
     }
@@ -67,22 +67,22 @@ class RadarOverlayA11yTest {
 
     @Test fun dashcamWarningsAppendPerStatus() {
         assertEquals(
-            "Bike radar overlay. Road clear. Dashcam connection lost.",
+            "Bike radar overlay. All-clear. Dashcam connection lost.",
             summary(RadarState(), DashcamStatus.Dropped, batteryLow = false),
         )
         assertEquals(
-            "Bike radar overlay. Road clear. Dashcam not found.",
+            "Bike radar overlay. All-clear. Dashcam not found.",
             summary(RadarState(), DashcamStatus.Missing, batteryLow = false),
         )
         assertEquals(
-            "Bike radar overlay. Road clear. Searching for dashcam.",
+            "Bike radar overlay. All-clear. Searching for dashcam.",
             summary(RadarState(), DashcamStatus.Searching, batteryLow = false),
         )
     }
 
     @Test fun lowBatterySuffixAndCombinedWarnings() {
         assertEquals(
-            "Bike radar overlay. Road clear. Low battery.",
+            "Bike radar overlay. All-clear. Low battery.",
             summary(RadarState(), DashcamStatus.Ok, batteryLow = true),
         )
         val s = state(Vehicle(id = 1, distanceM = 15, speedMs = -5f))

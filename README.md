@@ -296,7 +296,7 @@ knowing before you rely on it.
   radar with no eBike never suppresses anything.
 - **Alerts go quiet during a phone call, and while you pause them.** The
   overlay keeps drawing through a call. The sound does not.
-- **"Road clear" means the radar sees nothing.** It does not mean the road
+- **"All-clear" means the radar sees nothing.** It does not mean the road
   behind you is empty, and it does not mean it is safe to move out.
 
 Always look behind before you manoeuvre.

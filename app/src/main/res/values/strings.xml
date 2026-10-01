@@ -67,7 +67,7 @@
          Separators between clauses are added in code, so these stay free of
          leading/trailing whitespace. -->
     <string name="overlay_a11y_prefix">Bike radar overlay.</string>
-    <string name="overlay_a11y_road_clear">Road clear.</string>
+    <string name="overlay_a11y_road_clear">All-clear.</string>
     <plurals name="overlay_a11y_vehicles">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> vehicle.</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> vehicles.</item>
@@ -214,7 +214,7 @@
     <string name="safety_notice_intro">Bike Radar is a riding aid. It warns you about traffic behind you. It cannot look behind for you.</string>
     <string name="safety_notice_bullet_miss">It can miss a vehicle, or warn late.</string>
     <string name="safety_notice_bullet_drop">The radar link or the sound can drop without notice.</string>
-    <string name="safety_notice_bullet_clear">\"Road clear\" only means the radar sees nothing.</string>
+    <string name="safety_notice_bullet_clear">\"All-clear\" only means the radar sees nothing.</string>
     <string name="safety_notice_closing">Always look behind before you move out.</string>
     <string name="safety_notice_ack">I understand</string>
 

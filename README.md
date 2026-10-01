@@ -54,9 +54,12 @@ screen stays yours.
 <details><summary><b>More features</b></summary>
 
 - Home Assistant integration via MQTT discovery: radar and dashcam
-  batteries, front-light mode, close-pass event entity, end-of-ride
-  summary (distance, close-pass count, closing speeds, lateral
-  clearances).
+  batteries, front-light mode, close-pass event entity, and a ride summary
+  updated every minute during the ride (start time, distance, overtake and
+  close-pass counts, the close-pass rate, closing speeds, lateral
+  clearances, time with traffic behind you, alerts per km and per hour, and
+  the tightest pass: time, side, vehicle size, clearance, closing speed and
+  distance behind).
 - Front-camera light auto-mode: picks Day Flash before sunset, Night
   Flash after, computed from your location. Grant approximate location, or
   enter coordinates manually if you'd rather not (London fallback if you do
@@ -344,8 +347,12 @@ Funciones principales:
   los más cercanos), sin ubicación ni recorrido.
 - Integración opcional con Home Assistant por MQTT: batería del radar y de la
   cámara delantera, modo de la luz delantera, eventos de adelantamiento
-  cercano y resumen de fin de ruta (distancia, número de adelantamientos
-  cercanos, velocidades de aproximación y holguras laterales).
+  cercano y un resumen de la ruta que se actualiza cada minuto durante la ruta
+  (hora de inicio, distancia, número de adelantamientos totales y cercanos,
+  porcentaje de cercanos, velocidades de aproximación, holguras laterales,
+  tiempo con tráfico detrás, avisos por km y por hora, y el adelantamiento más
+  cercano: hora, lado, tamaño del vehículo, holgura, velocidad de aproximación
+  y distancia por detrás).
 - Luz delantera y luz trasera del radar en modo automático según el
   atardecer local.
 - Datos en vivo de la eBike Bosch (solo lectura) mientras Bosch Flow está

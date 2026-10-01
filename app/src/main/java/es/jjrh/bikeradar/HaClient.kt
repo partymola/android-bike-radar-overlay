@@ -601,7 +601,7 @@ object DataDisclosure {
         Flow("ride_edge", "Ride start/end events", "ride start/end"),
         Flow(
             "ride_summary",
-            "End-of-ride summary (distance, close-pass counts, closing speeds, clearances)",
+            "Ride summary, updated every minute during the ride (start time, distance, overtake and close-pass counts, close-pass rate, closing speeds, clearances, time with traffic, alert rates, tightest pass)",
             "summary",
         ),
     )

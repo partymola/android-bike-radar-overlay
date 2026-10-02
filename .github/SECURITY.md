@@ -45,10 +45,15 @@ is therefore at the application layer: `HaUrlPolicy` requires HTTPS for any
 non-LAN host and the settings UI refuses to save a cleartext WAN URL, so the
 long-lived bearer token never leaves the phone over plain HTTP to the internet.
 
-The dependency graph is scoped to the app's **release runtime** classpath -
-what actually ships in `app-release.apk` (AndroidX, Compose, kotlinx) - so
-Dependabot alerts reflect code that can reach a rider's phone. The Gradle
+The Gradle dependency graph is scoped to the app's **release runtime**
+classpath - what actually ships in `app-release.apk` (AndroidX, Compose,
+kotlinx) - so its Dependabot alerts reflect code that can reach a rider's
+phone. The Gradle
 plugin/build classpath (AGP, ktlint, Roborazzi and their server-side
 transitives such as Netty or Bouncy Castle) runs only on the build host and
 is deliberately excluded from the graph: those libraries never link into the
 APK, so a CVE in them is build-pipeline hygiene, not a user-facing exposure.
+The Gradle submission adds one build-host entry, Gradle itself: the action
+always reports the Gradle version running the build (`org.gradle:gradle-core`,
+development scope), and no filter removes it. An alert on it concerns the
+build host, not the APK.

@@ -79,8 +79,9 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     /** Dashed line showing where the user-configured alert max distance
-     *  sits against the full visualisation window. Anything above the line
-     *  (closer than alertMaxM) beeps; anything below is drawn but silent.
+     *  sits against the full visualisation window. A target whose range is
+     *  inside alertMaxM can beep; one further out is drawn but silent. A
+     *  sized box's front can cross the line before its range does.
      *  Dashed pattern signals "threshold, not boundary"; longer dashes +
      *  higher alpha than the original 1.5dp/150-alpha so it reads against
      *  a light app underneath at a glance. */
@@ -335,7 +336,10 @@ class RadarOverlayView(context: Context) : View(context) {
 
         val maxLateralPx = (trackX - dp(18f)).coerceAtLeast(dp(10f))
 
-        for (v in state.vehicles) {
+        // Farthest first by the range actually drawn (predicted under precog),
+        // so a nearer box is painted over a longer one behind it.
+        val drawn = state.vehicles.mapNotNull { v -> drawnRangeM(v)?.let { v to it } }.sortedByDescending { it.second }
+        for ((v, rangeYm) in drawn) {
             // Precog: render each vehicle at its predicted position one
             // PRECOG_LOOKAHEAD_S from now, extrapolated from the radar's
             // speedY + speedXMs fields. The visual jump from current to
@@ -343,7 +347,6 @@ class RadarOverlayView(context: Context) : View(context) {
             // swing a beat before it happens. Targets predicted to have
             // passed the rider drop out of the frame; they're about to
             // stop being useful to track.
-            val rangeYm = drawnRangeM(v) ?: continue
             val currentLateralM = v.lateralPos * RadarV2Decoder.LATERAL_FULL_M
             val lateralMeters = if (precog) {
                 currentLateralM + (v.speedXMs ?: 0) * PRECOG_LOOKAHEAD_S
@@ -351,9 +354,14 @@ class RadarOverlayView(context: Context) : View(context) {
                 currentLateralM
             }
 
-            val halfW = vehicleHalfWidth(v.size)
-            val halfH = vehicleHalfHeight(v.size)
-            val centreY = distToY(rangeYm, riderBottom, bottomY)
+            // Both axes to scale, each on its own axis's metres-per-pixel; the
+            // dp sizes are only floors so a box never shrinks below a glyph.
+            val halfW = maxOf(vehicleHalfWidth(v.size), boxWidthM(v.templateWidthM) / 2f * maxLateralPx / RadarV2Decoder.LATERAL_FULL_M)
+            val (nearM, farM) = boxSpanM(rangeYm, v.templateLengthM)
+            val nearY = distToY(nearM, riderBottom, bottomY)
+            val farY = distToY(farM, riderBottom, bottomY)
+                .coerceAtLeast(nearY + 2f * vehicleHalfHeight(v.size))
+                .coerceAtMost(h - dp(2f))
 
             // Edge-dock decision (incl. the renderer-side parked-car
             // fallback the decoder dwell gate can miss) is the pure,
@@ -377,7 +385,7 @@ class RadarOverlayView(context: Context) : View(context) {
                 // coloured box at the true X and the visual jump is the
                 // attention cue.
                 val edgeX = if (v.lateralPos >= 0f) trackX + maxLateralPx else trackX - maxLateralPx
-                tmpRect.set(edgeX - halfW, centreY - halfH, edgeX + halfW, centreY + halfH)
+                tmpRect.set(edgeX - halfW, nearY, edgeX + halfW, farY)
                 canvas.drawRoundRect(tmpRect, dp(3f), dp(3f), parkedOutlinePaint)
                 continue
             }
@@ -396,10 +404,10 @@ class RadarOverlayView(context: Context) : View(context) {
             val b = Color.blue(color)
 
             tailPaint.color = Color.argb((210 * distFactor).toInt(), r, g, b)
-            canvas.drawLine(centreX, centreY + halfH, centreX, centreY + halfH + tailLen, tailPaint)
+            canvas.drawLine(centreX, farY, centreX, farY + tailLen, tailPaint)
 
             boxFillPaint.color = Color.argb((220 * distFactor).toInt(), r, g, b)
-            tmpRect.set(centreX - halfW, centreY - halfH, centreX + halfW, centreY + halfH)
+            tmpRect.set(centreX - halfW, nearY, centreX + halfW, farY)
             canvas.drawRoundRect(tmpRect, dp(3f), dp(3f), boxFillPaint)
 
             boxStrokePaint.color = Color.argb((255 * distFactor).toInt(), r, g, b)
@@ -557,11 +565,9 @@ class RadarOverlayView(context: Context) : View(context) {
         canvas.drawPath(riderPath, riderStrokePaint)
     }
 
-    /** Box half-widths shrunk ~20 % from the original 4/9/14 dp values.
-     *  Two adjacent CAR boxes at the same range now leave headroom inside
-     *  the 130 dp panel instead of stacking visually; the smaller footprint
-     *  also leaves more of the app underneath showing through, which helps
-     *  orientation when the rider glances at the overlay during a turn. */
+    /** Minimum box half-sizes. The box is drawn to scale from the template
+     *  ([boxSpanM], [boxWidthM]); these floors bite only for a short template
+     *  at a long visual range, or a box clamped at the far end of the strip. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
         VehicleSize.CAR -> dp(7f)
         VehicleSize.TRUCK -> dp(11f)

@@ -117,6 +117,35 @@ internal fun threatLevelFromRange(distanceM: Int, visualMaxM: Int): ThreatLevel 
 internal fun distToYFraction(dist: Float, visualMaxM: Int): Float = dist.coerceIn(0f, visualMaxM.toFloat()) / visualMaxM
 
 /**
+ * Near and far edges, in metres behind the rider, of the box the strip draws
+ * for a target at [rangeM] carrying [templateLengthM].
+ *
+ * Before the size lock (length 0) the range is taken as the near edge and the
+ * box runs back one car template. Once locked, the box spans the template
+ * centred on the range. That is meant to leave the near edge in place when
+ * the size locks: bike-radar-docs PROTOCOL.md measures the lock-frame step at
+ * about half the template (median 1.9 m for the 4 m car template), so the near
+ * edge moves only by the gap between that step and half the template. The
+ * view enforces a minimum box size in dp on top of this.
+ */
+internal fun boxSpanM(rangeM: Float, templateLengthM: Float): Pair<Float, Float> {
+    if (templateLengthM <= 0f) return rangeM to rangeM + PRE_LOCK_TEMPLATE_LENGTH_M
+    val half = templateLengthM / 2f
+    return (rangeM - half).coerceAtLeast(0f) to rangeM + half
+}
+
+/** Width in metres of the box drawn for a target: its template width, or the
+ *  car template's until the size fields lock. Capped at the strip's full
+ *  lateral span, so no template byte can paint a box wider than the panel. */
+internal fun boxWidthM(templateWidthM: Float): Float = (if (templateWidthM > 0f) templateWidthM else PRE_LOCK_TEMPLATE_WIDTH_M)
+    .coerceAtMost(2f * RadarV2Decoder.LATERAL_FULL_M)
+
+/** Size drawn for a track whose size fields have not locked yet: the car
+ *  template, which most tracks lock to (bike-radar-docs PROTOCOL.md). */
+internal const val PRE_LOCK_TEMPLATE_LENGTH_M = 4f
+internal const val PRE_LOCK_TEMPLATE_WIDTH_M = 1.75f
+
+/**
  * Close targets render near-solid; far targets fade to ~30% so the rider's eye
  * lands on immediate threats first. Linear in distance - cheap, predictable,
  * easy to re-tune after a ride.

@@ -208,9 +208,9 @@ class RadarOverlayViewTest {
             setState(
                 RadarState(
                     vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 35, speedMs = -8f, lateralPos = -0.3f),
-                        Vehicle(id = 2, distanceM = 18, speedMs = -11f, lateralPos = 0.2f),
-                        Vehicle(id = 3, distanceM = 8, speedMs = -15f, lateralPos = 0.5f),
+                        Vehicle(id = 1, distanceM = 35, speedMs = -8f, lateralPos = -0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 2, distanceM = 18, speedMs = -11f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 3, distanceM = 8, speedMs = -15f, lateralPos = 0.5f, templateLengthM = 4f, templateWidthM = 1.75f),
                     ),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,
@@ -228,7 +228,100 @@ class RadarOverlayViewTest {
                     vehicles = listOf(
                         Vehicle(id = 1, distanceM = 40, speedMs = -6f, size = VehicleSize.CAR),
                         Vehicle(id = 2, distanceM = 22, speedMs = -10f, size = VehicleSize.CAR),
-                        Vehicle(id = 3, distanceM = 12, speedMs = -14f, size = VehicleSize.TRUCK),
+                        Vehicle(id = 3, distanceM = 12, speedMs = -14f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+                    ),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun sizedTargetsAreDrawnToScaleFromTheirFront() {
+        // Locked tracks at 3, 15 and 48 m carry the car template and draw as
+        // 4 x 1.75 m boxes centred on their range; the TRUCK-class track at
+        // 40 m carries the car template too, as most of that class does, and
+        // draws car-sized; the long template at 32 m draws 15 m long; the 2 m
+        // template at 9 m draws short and narrow; the unlocked track at 22 m
+        // draws as a car running back from its range. Rider's 55 m window and
+        // 30 m alert line.
+        overlay().apply {
+            setVisualMaxM(55)
+            setAlertMaxM(30)
+            setState(
+                RadarState(
+                    vehicles = listOf(
+                        Vehicle(id = 1, distanceM = 3, speedMs = 0f, lateralPos = 0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 6, distanceM = 9, speedMs = -2f, lateralPos = -0.6f, templateLengthM = 2f, templateWidthM = 1f),
+                        Vehicle(id = 2, distanceM = 15, speedMs = -4f, lateralPos = -0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 3, distanceM = 22, speedMs = -6f, lateralPos = -0.4f),
+                        Vehicle(id = 4, distanceM = 32, speedMs = -7f, lateralPos = 0.7f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+                        Vehicle(id = 7, distanceM = 40, speedMs = -5f, lateralPos = -0.5f, size = VehicleSize.TRUCK, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 5, distanceM = 48, speedMs = -8f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+                    ),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun theNearerTargetIsDrawnOverALongerOneBehindIt() {
+        // Same lane: a car at 10 m (8-12 m) and a 15 m template at 17 m
+        // (9.5-24.5 m). The car's red box must sit on top of the truck's.
+        overlay().apply {
+            setVisualMaxM(55)
+            setState(
+                RadarState(
+                    vehicles = listOf(
+                        Vehicle(id = 1, distanceM = 10, speedMs = -15f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 2, distanceM = 17, speedMs = -2f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+                    ),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun underPrecogTheOrderFollowsTheDrawnRange() {
+        // Measured, the long template at 12 m is nearer than the car at 20 m.
+        // Predicted one second on, the car closing at 15 m/s draws at 3-7 m,
+        // inside the long box (4.5-19.5 m), so the car must be painted on top.
+        overlay().apply {
+            setVisualMaxM(55)
+            setPrecog(true)
+            setState(
+                RadarState(
+                    vehicles = listOf(
+                        Vehicle(id = 1, distanceM = 20, speedMs = -15f, templateLengthM = 4f, templateWidthM = 1.75f),
+                        Vehicle(id = 2, distanceM = 12, speedMs = 0f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+                    ),
+                    source = DataSource.V2,
+                    bikeSpeedMs = 5f,
+                ),
+            )
+        }.capture()
+    }
+
+    @Test
+    fun theSizeFloorsHoldWhereTheScaleWouldShrinkABox() {
+        // At an 80 m window a 2 x 1 m template on a TRUCK-class track draws
+        // smaller than the TRUCK floor on both axes; an unlocked track at 79 m
+        // has its far edge clamped at the strip's end, so the CAR height floor
+        // sets its box; and one at exactly 80 m would be pushed off the view
+        // by that floor, so the bottom cap holds it.
+        overlay().apply {
+            setVisualMaxM(80)
+            setState(
+                RadarState(
+                    vehicles = listOf(
+                        Vehicle(id = 1, distanceM = 50, speedMs = -4f, size = VehicleSize.TRUCK, templateLengthM = 2f, templateWidthM = 1f),
+                        Vehicle(id = 2, distanceM = 80, speedMs = -4f, lateralPos = -0.5f),
+                        Vehicle(id = 3, distanceM = 79, speedMs = -4f, lateralPos = 0.5f),
                     ),
                     source = DataSource.V2,
                     bikeSpeedMs = 5f,

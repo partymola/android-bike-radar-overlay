@@ -40,7 +40,7 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
 
       # Robolectric downloads its android-all-instrumented SDK jars (~100 MB
       # per API level) into ~/.m2 the first time a test runs on each level.
@@ -110,7 +110,7 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
 
       - name: Run lint and ktlint
         run: ./gradlew :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
@@ -208,7 +208,7 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
 
       - name: Build the shrunk APK and check its kept names
         run: ./gradlew :app:assembleRelease :app:verifyReleaseDexKeeps --console=plain --no-daemon
@@ -293,7 +293,7 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
 
       - name: Build the shrunk release APK
         run: ./gradlew :app:assembleRelease --console=plain --no-daemon

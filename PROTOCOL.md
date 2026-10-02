@@ -158,6 +158,14 @@ canonical spec for the full derivation. An earlier big-endian "25.6 m
 zone-counter" reading (separate low byte, 3-bit zone, separate i8 `rangeX`)
 was wrong and is retracted.
 
+### Size template
+
+Bytes [5] and [6] usually read 0 for a new track's first frames, then take a
+class template, most often 4.00 x 1.75 m. On the frame they lock, `rangeY` steps
+further back by about half the template length (canonical spec, "`rangeY`
+steps when the size fields lock"). The decoder carries both onto `Vehicle` as
+`templateLengthM` / `templateWidthM`, 0 until locked.
+
 ### Speed
 
 The decoder takes closing speed straight from `byte[7]` (x0.5 m/s; negative

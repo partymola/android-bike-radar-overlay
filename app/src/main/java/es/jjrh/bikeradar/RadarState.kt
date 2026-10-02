@@ -66,6 +66,17 @@ data class Vehicle(
      */
     val speedMs: Float,
     val size: VehicleSize = VehicleSize.CAR,
+    /**
+     * The radar's class-template length in metres (target byte[5] x 0.25), or
+     * 0f until the track's size fields lock. When they lock, [distanceM] steps
+     * further back by about half this length (bike-radar-docs PROTOCOL.md,
+     * "`rangeY` steps when the size fields lock"). Not a measurement of the
+     * vehicle.
+     */
+    val templateLengthM: Float = 0f,
+    /** The class-template width in metres (target byte[6] x 0.25), or 0f until
+     *  the size fields lock. Locks together with [templateLengthM]. */
+    val templateWidthM: Float = 0f,
     /** -1.0 = full left, 0.0 = same lane / centre, +1.0 = full right */
     val lateralPos: Float = 0f,
     /**

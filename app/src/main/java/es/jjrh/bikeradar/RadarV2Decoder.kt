@@ -256,6 +256,8 @@ class RadarV2Decoder(
                 distanceM = effectiveDistance,
                 speedMs = speedMs,
                 size = debounced.committed,
+                templateLengthM = (payload[off + 5].toInt() and 0xFF) * 0.25f,
+                templateWidthM = (payload[off + 6].toInt() and 0xFF) * 0.25f,
                 lateralPos = lateralPos,
                 rangeXm = rangeX,
                 isBehind = isBehind,

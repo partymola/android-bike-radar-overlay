@@ -60,8 +60,8 @@ jobs:
 
       - name: Set up Gradle
         # No gradle-version: absent it, the action uses the wrapper, which is
-        # the only place this repo records a Gradle version. AGP 9.3 sets the
-        # floor the wrapper has to clear, per
+        # the only place this repo records a Gradle version. The AGP version
+        # sets the floor the wrapper has to clear, per
         # https://developer.android.com/build/releases/gradle-plugin .
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6.4.0
 

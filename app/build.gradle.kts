@@ -142,11 +142,11 @@ android {
     namespace = "es.jjrh.bikeradar"
     compileSdk = 37
 
-    // Pinned rather than left to AGP's default, which is a different version
-    // (36.0.0 as of AGP 9.3) from the one every workflow installs. Leaving it
-    // implicit means the build tools arrive by auto-download instead of the
-    // sdkmanager line, and verifyReleaseDexKeeps resolves dexdump out of this
-    // directory. Keep in step with the sdkmanager lines in .github/workflows.
+    // Pinned rather than left to AGP's default, which need not match the
+    // version every workflow installs. Leaving it implicit means the build
+    // tools arrive by auto-download instead of the sdkmanager line, and
+    // verifyReleaseDexKeeps resolves dexdump out of this directory. Keep in
+    // step with the sdkmanager lines in .github/workflows.
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
@@ -585,7 +585,7 @@ val diffCoverageExcludes = listOf(
     "**/DebugScreen*.*",
 )
 
-// AGP 9.3 emits Kotlin classes under built_in_kotlinc; if a future AGP moves
+// AGP emits Kotlin classes under built_in_kotlinc; if a future AGP moves
 // this path the report/verification go empty (not silently wrong) - re-point.
 val coverageClassDir = "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
 // The on-the-fly agent writes build/jacoco/testDebugUnitTest.exec.

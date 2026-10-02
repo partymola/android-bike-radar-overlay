@@ -15,14 +15,13 @@ Helpful things to include:
 - Android version and device model,
 - a description of the issue and, where possible, steps to reproduce.
 
-This is a personal alpha project maintained in spare time, so responses
+This is a personal project maintained in spare time, so responses
 are best-effort rather than on a fixed SLA. Reports that turn out to be
 genuine will be fixed and credited (if you want credit) in the CHANGELOG.
 
 ## Supported versions
 
-Only the most recent release receives fixes. The project is pre-1.0 and
-ships as a GitHub pre-release; older tags are not patched.
+Only the most recent release receives fixes; older tags are not patched.
 
 ## Scope notes
 

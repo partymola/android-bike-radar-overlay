@@ -357,6 +357,7 @@ internal class OverlayPipeline(
     ) {
         val snap = ebike.snapshot()
         val preferredBikeSpeedMs = snap?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs
+        val closingCeilingMs = overlayPrefs.closingSpeedCeilingMs?.toFloat()
         val ev = alerts.decide(
             vehicles = state.vehicles,
             alertMaxM = overlayPrefs.alertMaxDistanceM,
@@ -371,6 +372,7 @@ internal class OverlayPipeline(
                 TurnStateDecider.State.IDLE
             },
             passClearanceM = overlayPrefs.urgentPassClearanceM,
+            closingCeilingMs = closingCeilingMs,
         )
         if (ev !is AlertDecider.Event.None) {
             logAlertEvent(
@@ -379,6 +381,7 @@ internal class OverlayPipeline(
                 nowWallMs = nowWallMs,
                 gateBikeSpeedMs = preferredBikeSpeedMs,
                 gatePassClearanceM = overlayPrefs.urgentPassClearanceM,
+                gateClosingCeilingMs = closingCeilingMs,
                 gateAlertMaxM = overlayPrefs.alertMaxDistanceM,
                 alerts = alerts,
             )
@@ -398,6 +401,7 @@ internal class OverlayPipeline(
         nowWallMs: Long,
         gateBikeSpeedMs: Float?,
         gatePassClearanceM: Float,
+        gateClosingCeilingMs: Float?,
         gateAlertMaxM: Int,
         alerts: AlertDecider,
     ) {
@@ -436,6 +440,13 @@ internal class OverlayPipeline(
                     " tier_true_d=${alerts.lastTierDistanceM}"
             }
         } ?: ""
+        // Same reason as gate_clearance_m: a cue for a fast closer may be one
+        // the rider raised or removed the ceiling into.
+        val ceiling = if (ev is AlertDecider.Event.Beep || ev is AlertDecider.Event.UrgentApproach) {
+            " gate_ceiling_mps=${gateClosingCeilingMs ?: "none"}"
+        } else {
+            ""
+        }
         // The envelope decide() gated on, not a fresh read: a mid-ride change
         // would otherwise name a different "closest car" here than the
         // decider actually saw, on the same line.
@@ -448,7 +459,7 @@ internal class OverlayPipeline(
                 "frame_closest_d=${closest?.distanceM ?: -1} " +
                 "closing_mps=${closest?.let { -it.speedMs } ?: -1f} " +
                 "bike_speed_mps=${state.bikeSpeedMs ?: -1f} " +
-                "gate_speed_mps=${gateBikeSpeedMs ?: -1f}$urgentPath$tierTrigger",
+                "gate_speed_mps=${gateBikeSpeedMs ?: -1f}$urgentPath$tierTrigger$ceiling",
         )
     }
 

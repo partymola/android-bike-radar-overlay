@@ -515,13 +515,51 @@ class OverlayPipelineDrivingTest {
         // rider had widened the margin into. It must be the value decide()
         // was called with, not a fresh read at log time: the snapshot here
         // deliberately disagrees with what prefs holds.
-        val doctored = { prefs.snapshot().copy(urgentPassClearanceM = 2.75f) }
+        val doctored = { prefs.snapshot().copy(urgentPassClearanceM = 2.75f, closingSpeedCeilingMs = 50) }
         assertTrue("prefs must not already hold the doctored margin", prefs.urgentPassClearanceM != 2.75f)
+        assertTrue("prefs must not already hold the doctored ceiling", prefs.closingSpeedCeilingMs != 50)
         val urgentLine = driveStationaryUrgent(overlayPrefsSnapshot = doctored)
         assertTrue(
-            "urgent line must carry the gated margin, got $urgentLine",
-            urgentLine.contains("gate_clearance_m=2.75"),
+            "urgent line must carry the gated margin and ceiling, got $urgentLine",
+            urgentLine.contains("gate_clearance_m=2.75") && urgentLine.contains("gate_ceiling_mps=50.0"),
         )
+    }
+
+    /** Two frames of one car closing at 42.5 m/s with the rider moving, and
+     *  the capture-log lines they produce. */
+    private suspend fun kotlinx.coroutines.test.TestScope.driveFastCloser(
+        overlayPrefsSnapshot: () -> PrefsSnapshot,
+    ): List<String> {
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono }, overlayPrefsSnapshot = overlayPrefsSnapshot)
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        for ((t, d) in listOf(1_000L to 15, 1_100L to 12)) {
+            mono = t
+            val car = Vehicle(id = 8, distanceM = d, speedMs = -42.5f, rangeXm = 1f)
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = listOf(car), bikeSpeedMs = 5f))
+            runCurrent()
+        }
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return clogLines
+    }
+
+    @Test
+    fun theRidersClosingCeilingReachesTheDecider() = runTest {
+        // The decider's own tests drive the parameter directly, so they stay
+        // green if the pipeline stops passing it. Under the default 40 m/s the
+        // car is silenced; under a snapshot carrying 45, or no limit, it is
+        // announced, and the alert line says which ceiling let it through.
+        val shipped = driveFastCloser { prefs.snapshot() }
+        assertEquals(shipped.toString(), 0, shipped.count { it.contains("event=Beep") })
+        assertTrue(shipped.toString(), shipped.any { it.startsWith("# gate ceiling tid=8") })
+        val raised = driveFastCloser { prefs.snapshot().copy(closingSpeedCeilingMs = 45) }
+        assertEquals(raised.toString(), 1, raised.count { it.contains("event=Beep") && it.contains("gate_ceiling_mps=45.0") })
+        val noLimit = driveFastCloser { prefs.snapshot().copy(closingSpeedCeilingMs = null) }
+        assertEquals(noLimit.toString(), 1, noLimit.count { it.contains("event=Beep") && it.contains("gate_ceiling_mps=none") })
     }
 
     /** Swap in a beeper that records what it actually played. */

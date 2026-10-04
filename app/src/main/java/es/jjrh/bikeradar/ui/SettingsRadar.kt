@@ -54,6 +54,8 @@ import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsRadar(navController: NavController, prefs: Prefs) {
@@ -63,7 +65,7 @@ fun SettingsRadar(navController: NavController, prefs: Prefs) {
 }
 
 @Composable
-private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
+internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     val ctx = LocalContext.current
     val br = LocalBrColors.current
     val creds = remember { HaCredentials(ctx) }
@@ -75,6 +77,7 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var alertVol by rememberSaveable { mutableIntStateOf(prefs.alertVolume) }
     var alertDist by rememberSaveable { mutableIntStateOf(prefs.alertMaxDistanceM) }
     var urgentMargin by rememberSaveable { mutableFloatStateOf(prefs.urgentPassClearanceM) }
+    var closingCeiling by rememberSaveable { mutableStateOf(prefs.closingSpeedCeilingMs) }
     var visualDist by rememberSaveable { mutableIntStateOf(prefs.visualMaxDistanceM) }
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
@@ -113,6 +116,9 @@ private fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         urgentMargin = urgentMargin,
         onUrgentMarginChange = { urgentMargin = it },
         onUrgentMarginFinished = { prefs.urgentPassClearanceM = urgentMargin },
+        closingCeiling = closingCeiling,
+        onClosingCeilingChange = { closingCeiling = it },
+        onClosingCeilingFinished = { prefs.closingSpeedCeilingMs = closingCeiling },
         visualDist = visualDist,
         onVisualDistChange = { visualDist = it },
         onVisualDistFinished = { prefs.visualMaxDistanceM = visualDist },
@@ -216,6 +222,18 @@ internal fun overlayDimLabel(context: Context, opacity: Float): String = when {
     else -> context.getString(R.string.settings_radar_overlay_dim_strong)
 }
 
+/** The closing-speed ceiling's slider stops in m/s, slowest first, with no
+ *  limit (null) as the last stop so further right always means more permissive. */
+internal val closingCeilingStops: List<Int?> =
+    (Prefs.CLOSING_CEILING_MIN..Prefs.CLOSING_CEILING_MAX step Prefs.CLOSING_CEILING_STEP).toList() + null
+
+/** The stop nearest [ms], for a stored value that is not on the ladder. */
+internal fun closingCeilingStopIndex(ms: Int?): Int = if (ms == null) {
+    closingCeilingStops.lastIndex
+} else {
+    closingCeilingStops.indices.minBy { i -> closingCeilingStops[i]?.let { abs(it - ms) } ?: Int.MAX_VALUE }
+}
+
 /**
  * Stateless leaf - renders the scrolling Settings → Alerts
  * content from already-derived UI state. No `rememberSaveable`, no
@@ -237,6 +255,9 @@ internal fun SettingsRadarContent(
     urgentMargin: Float,
     onUrgentMarginChange: (Float) -> Unit,
     onUrgentMarginFinished: () -> Unit,
+    closingCeiling: Int?,
+    onClosingCeilingChange: (Int?) -> Unit,
+    onClosingCeilingFinished: () -> Unit,
     visualDist: Int,
     onVisualDistChange: (Int) -> Unit,
     onVisualDistFinished: () -> Unit,
@@ -315,6 +336,21 @@ internal fun SettingsRadarContent(
                 steps = 4,
                 onValueChange = onUrgentMarginChange,
                 onValueChangeFinished = onUrgentMarginFinished,
+            )
+            // Label and thumb both show the stop, so a stored value off the
+            // ladder never reads as a speed the thumb is not on.
+            val ceilingStop = closingCeilingStopIndex(closingCeiling)
+            SettingsSliderRow(
+                title = stringResource(R.string.settings_radar_closing_ceiling_title),
+                valueDisplay = closingCeilingStops[ceilingStop]?.let {
+                    stringResource(R.string.settings_radar_kmh_value, (it * 3.6).roundToInt())
+                } ?: stringResource(R.string.settings_radar_closing_ceiling_none),
+                helper = stringResource(R.string.settings_radar_closing_ceiling_helper),
+                value = ceilingStop.toFloat(),
+                valueRange = 0f..closingCeilingStops.lastIndex.toFloat(),
+                steps = closingCeilingStops.size - 2,
+                onValueChange = { onClosingCeilingChange(closingCeilingStops[it.roundToInt()]) },
+                onValueChangeFinished = onClosingCeilingFinished,
             )
             SettingsRowGroup {
                 SettingsToggleRow(

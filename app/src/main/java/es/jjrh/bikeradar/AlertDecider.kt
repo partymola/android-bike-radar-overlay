@@ -131,6 +131,10 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    also absorbs a single-frame dropout or boundary flap. A car genuinely
  *    leaving (overtake -> `isBehind`, or cornering / turning off) clears after
  *    the grace.
+ *  - **Closing-speed ceiling.** A target closing faster than the rider's
+ *    ceiling ([DEFAULT_CLOSING_CEILING_MS]) never enters the close set, so it
+ *    can neither cue nor stand in front of a real car as "the closest"; it
+ *    still counts as present for the Clear chime.
  *  - **Close-set exit hysteresis (distance band).** A track enters the
  *    close set at `distanceM <= alertMaxM` but, once in, stays until
  *    `distanceM` exceeds `alertMaxM + alertMaxM/`[CLOSE_EXIT_HYSTERESIS_DIVISOR].
@@ -310,12 +314,12 @@ class AlertDecider(
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  every silenced or re-armed cue is auditable post-ride. Covers the
      *  born-close suppress and re-fire, the rx veto, the four urgent-pass
-     *  verdicts, and the fit expiry.
+     *  verdicts, the fit expiry, and the closing-speed ceiling.
      *
      *  Volume is bounded per TRACK, not per frame, though the hook is reached
      *  on every frame: each verdict is deduped per track ([logPassGate],
-     *  [passGateOkLogged]) and an expiry can fire once per fit because the
-     *  fit is removed as it is reported. */
+     *  [passGateOkLogged], [ceilingLogged]) and an expiry can fire once per
+     *  fit because the fit is removed as it is reported. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
      *  filter's state machine); injectable for tests. */
@@ -394,7 +398,8 @@ class AlertDecider(
     private var closeEpisodeActive: Boolean = false
 
     /** Raw in-front, in-range track ids from the previous frame (post
-     *  distance-exit-band), used to apply the band's exit hysteresis. */
+     *  distance-exit-band, before the closing-speed ceiling), used to apply
+     *  the band's exit hysteresis. */
     private var prevCloseRaw: Set<Int> = emptySet()
 
     /** Raw behind-in-range track ids from the previous frame (non-`isBehind`,
@@ -540,6 +545,14 @@ class AlertDecider(
      *  [updateLateralHistory]. */
     private val passGateOkLogged = HashMap<Int, MutableSet<String>>()
 
+    /** tid -> the [Vehicle.bornAtMs] of the track whose closing-ceiling
+     *  silencing has been logged, so each track is logged once and a recycled
+     *  tid (a new birth) is logged again. Bounded by the single-byte tid
+     *  space; cleared in [reset]. So a ceiling line marks a track's FIRST
+     *  over-ceiling frame in range, whether or not it would have cued; it is
+     *  not a count of silenced cues or frames. */
+    private val ceilingLogged = HashMap<Int, Long>()
+
     /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
      *  the lateral vetoes passed) was last present. Two qualifying
      *  sightings closer together than [URGENT_EPISODE_GAP_MS] belong to
@@ -577,6 +590,12 @@ class AlertDecider(
          *  on both read and write. A value below that range only widens the
          *  veto; a predicted hit still fires at any margin. */
         passClearanceM: Float = DEFAULT_PASS_CLEARANCE_M,
+        /** Closing speed (m/s) above which a target gets no cue, or null for
+         *  no limit. See [DEFAULT_CLOSING_CEILING_MS]. Not clamped here:
+         *  [data.Prefs] is the only production source. Zero or below reads as
+         *  no limit, so such a value lets every cue through rather than
+         *  silencing them. */
+        closingCeilingMs: Float? = DEFAULT_CLOSING_CEILING_MS,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -634,10 +653,24 @@ class AlertDecider(
         // edge (decoded distance jittering across the boundary) from
         // flapping out and firing a premature Clear. Entry is unchanged.
         val rangeBand = alertMaxM / CLOSE_EXIT_HYSTERESIS_DIVISOR
-        val close = vehicles.filter {
+        val inRange = vehicles.filter {
             if (it.isBehind || it.isAlongsideStationary) return@filter false
             it.distanceM in 0..alertMaxM ||
                 (it.id in prevCloseRaw && it.distanceM in 0..(alertMaxM + rangeBand))
+        }
+        // Closing-speed ceiling, applied HERE rather than where a cue is
+        // emitted: the audio voices only the closest target, so a phantom left
+        // in the running would take that place and the real car behind it
+        // would go unheard. Judged per frame, never latched per track, so a
+        // spiked reading does not silence a real car for the rest of its
+        // approach; a track not yet past `sustainFrames` does restart its
+        // count. The exit band and the presence gate below both ignore it.
+        val ceiling = closingCeilingMs?.takeIf { it > 0f }
+        val (overCeiling, close) = inRange.partition { ceiling != null && -it.speedMs > ceiling }
+        for (v in overCeiling) {
+            if (ceilingLogged.put(v.id, v.bornAtMs) != v.bornAtMs) {
+                onGateEvent("# gate ceiling tid=${v.id} closing=${-v.speedMs} d=${v.distanceM} ceiling=$ceiling")
+            }
         }
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
@@ -646,7 +679,7 @@ class AlertDecider(
         // beep-path `close` set above. A non-isBehind target within range -
         // INCLUDING one docked as isAlongsideStationary, and regardless of tid
         // - means a car is still physically behind, so the road is NOT clear.
-        // Mirrors close's range + exit-band test but drops only the isBehind
+        // Mirrors inRange's range + exit-band test but drops only the isBehind
         // exclusion (alongside is kept), with its own prev set so an alongside
         // car lingering at the band edge still gets the hysteresis.
         val behindPresentVehicles = vehicles.filter {
@@ -1072,7 +1105,7 @@ class AlertDecider(
 
         prevStableClose = stableTids
         prevClosestUrgency = if (stableTids.isEmpty()) 0 else closestUrgency
-        prevCloseRaw = currentCloseTids
+        prevCloseRaw = inRange.mapTo(HashSet()) { it.id }
         prevBehindRaw = behindPresentTids
         return event
     }
@@ -1100,6 +1133,7 @@ class AlertDecider(
         historyBornAtMs.clear()
         passGateLogged.clear()
         passGateOkLogged.clear()
+        ceilingLogged.clear()
         urgentLastQualifyingSeenMs = NOT_INITIALIZED
         urgentLastFireMs = NOT_INITIALIZED
         urgentEpisodePeakClosing = 0f
@@ -1728,6 +1762,20 @@ class AlertDecider(
          *  threshold. */
         const val MIN_PASS_CLEARANCE_M = 0.5f
         const val MAX_PASS_CLEARANCE_M = 3.0f
+
+        /** Closing speed (m/s) above which a target is treated as a radar
+         *  glitch: it gets no beep and no urgent cue, though it is still drawn
+         *  and still holds back the all-clear. Phantoms seen in captures
+         *  have read 33.5-47 m/s, held nearly unchanged across frames, so this
+         *  default catches the faster ones only. A real vehicle closing
+         *  faster than this is silenced too; that is the trade, and why the
+         *  rider can move it to [MIN_CLOSING_CEILING_MS]..[MAX_CLOSING_CEILING_MS]
+         *  or switch it off. `AlertDeciderClosingCeilingTest` pins the boundary
+         *  (strictly faster), that a phantom changes nothing about a real car's
+         *  cues, and that it still holds back the all-clear. */
+        const val DEFAULT_CLOSING_CEILING_MS = 40f
+        const val MIN_CLOSING_CEILING_MS = 35f
+        const val MAX_CLOSING_CEILING_MS = 50f
 
         /** Minimum samples in a track's lateral history before its
          *  predicted-pass intercept is trusted. */

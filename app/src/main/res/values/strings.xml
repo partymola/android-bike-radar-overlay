@@ -441,6 +441,12 @@
     <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
     <string name="settings_radar_urgent_clearance_title">Urgent warning clearance</string>
     <string name="settings_radar_urgent_clearance_helper">The urgent warning stays quiet when a vehicle looks set to clear the middle of your bike by more than this. Raise it to include wider passes too.</string>
+    <!-- Closing-speed cut-off: above it a target gets no beep and no urgent
+         warning but stays on the overlay. The value reads after the title
+         ("Warn up to 144 km/h"); "No limit" is the slider's last stop. -->
+    <string name="settings_radar_closing_ceiling_title">Warn up to</string>
+    <string name="settings_radar_closing_ceiling_none">No limit</string>
+    <string name="settings_radar_closing_ceiling_helper">No beeps or urgent warning for anything approaching faster than the speed you set, real or not. It cuts false alarms when the radar misreads a speed as very fast. Faster vehicles still show on the overlay.</string>
     <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
     <string name="settings_radar_turn_title">Hold the all-clear in corners</string>

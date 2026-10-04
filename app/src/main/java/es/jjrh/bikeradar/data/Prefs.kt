@@ -38,6 +38,7 @@ data class PrefsSnapshot(
     val alertVolume: Int,
     val alertMaxDistanceM: Int,
     val urgentPassClearanceM: Float,
+    val closingSpeedCeilingMs: Int?,
     val visualMaxDistanceM: Int,
     val overlayOpacity: Float,
     val radarLongOfflineThresholdMinutes: Int,
@@ -167,6 +168,22 @@ class Prefs(context: Context) {
                     KEY_URGENT_PASS_CLEARANCE_M,
                     v.coerceIn(AlertDecider.MIN_PASS_CLEARANCE_M, AlertDecider.MAX_PASS_CLEARANCE_M),
                 )
+                .apply()
+        }
+
+    /** Closing speed (m/s) above which a target gets no beep and no urgent cue,
+     *  or null for no limit. See [AlertDecider.DEFAULT_CLOSING_CEILING_MS].
+     *  Stored as whole m/s with 0 meaning no limit; any other value is snapped
+     *  to the nearest stop the Settings slider offers, on read and on write,
+     *  so the label, the thumb and the decider never disagree. */
+    var closingSpeedCeilingMs: Int?
+        get() {
+            val v = sp.getInt(KEY_CLOSING_SPEED_CEILING_MS, AlertDecider.DEFAULT_CLOSING_CEILING_MS.toInt())
+            return if (v == CLOSING_CEILING_NO_LIMIT) null else snapClosingCeiling(v)
+        }
+        set(v) {
+            sp.edit()
+                .putInt(KEY_CLOSING_SPEED_CEILING_MS, v?.let(::snapClosingCeiling) ?: CLOSING_CEILING_NO_LIMIT)
                 .apply()
         }
 
@@ -929,6 +946,7 @@ class Prefs(context: Context) {
         alertVolume = alertVolume,
         alertMaxDistanceM = alertMaxDistanceM,
         urgentPassClearanceM = urgentPassClearanceM,
+        closingSpeedCeilingMs = closingSpeedCeilingMs,
         visualMaxDistanceM = visualMaxDistanceM,
         overlayOpacity = overlayOpacity,
         radarLongOfflineThresholdMinutes = radarLongOfflineThresholdMinutes,
@@ -996,6 +1014,7 @@ class Prefs(context: Context) {
         appendLine("alert_volume=$alertVolume")
         appendLine("alert_max_distance_m=$alertMaxDistanceM")
         appendLine("urgent_pass_clearance_m=$urgentPassClearanceM")
+        appendLine("closing_speed_ceiling_ms=${closingSpeedCeilingMs ?: "none"}")
         appendLine("visual_max_distance_m=$visualMaxDistanceM")
         appendLine("overlay_opacity=$overlayOpacity")
         appendLine("radar_long_offline_threshold_min=$radarLongOfflineThresholdMinutes")
@@ -1065,6 +1084,16 @@ class Prefs(context: Context) {
         const val KEY_ALERT_VOLUME = "alert_volume"
         const val KEY_ALERT_MAX_DISTANCE_M = "alert_max_distance_m"
         const val KEY_URGENT_PASS_CLEARANCE_M = "urgent_pass_clearance_m"
+        const val KEY_CLOSING_SPEED_CEILING_MS = "closing_speed_ceiling_ms"
+
+        /** Storage form of [closingSpeedCeilingMs]: whole m/s, 0 = no limit. */
+        const val CLOSING_CEILING_NO_LIMIT = 0
+        const val CLOSING_CEILING_MIN = AlertDecider.MIN_CLOSING_CEILING_MS.toInt()
+        const val CLOSING_CEILING_MAX = AlertDecider.MAX_CLOSING_CEILING_MS.toInt()
+        const val CLOSING_CEILING_STEP = 5
+
+        private fun snapClosingCeiling(v: Int): Int = ((v - CLOSING_CEILING_MIN + CLOSING_CEILING_STEP / 2) / CLOSING_CEILING_STEP * CLOSING_CEILING_STEP + CLOSING_CEILING_MIN)
+            .coerceIn(CLOSING_CEILING_MIN, CLOSING_CEILING_MAX)
         const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
         const val KEY_OVERLAY_OPACITY = "overlay_opacity"
         const val KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN = "radar_long_offline_threshold_min"

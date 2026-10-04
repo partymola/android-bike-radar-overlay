@@ -682,6 +682,57 @@ class PrefsTest {
     }
 
     @Test
+    fun `the closing-speed ceiling defaults to 40 and reaches the snapshot and the bundle`() {
+        // The unset path is the one every install takes, and the snapshot is
+        // what the alert pipeline reads.
+        assertEquals(40, prefs.closingSpeedCeilingMs)
+        assertEquals(40, prefs.snapshot().closingSpeedCeilingMs)
+        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=40"))
+    }
+
+    @Test
+    fun `the closing-speed ceiling clamps to the slider's range and round-trips no limit`() {
+        prefs.closingSpeedCeilingMs = 99
+        assertEquals(50, prefs.closingSpeedCeilingMs)
+        prefs.closingSpeedCeilingMs = 10
+        assertEquals(35, prefs.closingSpeedCeilingMs)
+        prefs.closingSpeedCeilingMs = 45
+        assertEquals(45, Prefs(context).closingSpeedCeilingMs)
+        prefs.closingSpeedCeilingMs = null
+        assertNull(Prefs(context).closingSpeedCeilingMs)
+        assertNull(prefs.snapshot().closingSpeedCeilingMs)
+        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=none"))
+    }
+
+    @Test
+    fun `a closing-speed ceiling written past the setter is still clamped`() {
+        // A restored backup from a build with a different ladder arrives this
+        // way. 0 is the stored form of no limit, so it must stay that.
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 200).commit()
+        assertEquals(50, Prefs(context).closingSpeedCeilingMs)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 20).commit()
+        assertEquals(35, Prefs(context).closingSpeedCeilingMs)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 0).commit()
+        assertNull(Prefs(context).closingSpeedCeilingMs)
+    }
+
+    @Test
+    fun `a closing-speed ceiling between stops reads as the nearest stop`() {
+        // The decider gets what the slider shows: a stored 37 must not label
+        // as 126 km/h while 133 km/h is in force.
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 37).commit()
+        assertEquals(35, Prefs(context).closingSpeedCeilingMs)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 38).commit()
+        assertEquals(40, Prefs(context).closingSpeedCeilingMs)
+        raw.edit().putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 48).commit()
+        assertEquals(50, Prefs(context).closingSpeedCeilingMs)
+        prefs.closingSpeedCeilingMs = 42
+        assertEquals(40, raw.getInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, -1))
+    }
+
+    @Test
     fun `urgent pass clearance defaults to the shipped margin when never set`() {
         // The clamp test above writes before it reads, so it says nothing
         // about the value a rider who never opens the slider actually gets -

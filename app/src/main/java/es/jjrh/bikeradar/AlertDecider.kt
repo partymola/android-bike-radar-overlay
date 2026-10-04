@@ -59,11 +59,9 @@ enum class UrgentCooldown { SHARED_WITH_BEEPS, EPISODE_ONLY }
  *    RADAR, which is one point on a machine about 2.5 m long. Retained so a
  *    corpus replay can diff the two directly.
  *
- * The envelope is what lets the threshold be a number a rider can reason about
+ * The envelope makes the threshold a number a rider can reason about
  * ("do not warn me about anything that will clear my bike by 1.5 m") instead of
- * an offset from a sensor. Measured over the ride corpus, the span itself moves
- * only a few cues; the working part of the change is that the threshold now
- * means something physical, and so can be exposed in Settings.
+ * an offset from a sensor, which is what lets it be exposed in Settings.
  *
  * The capture log writes the scored quantity as `min_clearance=` under both,
  * which under [RADAR_POINT] is the radar-point offset rather than a minimum
@@ -1700,66 +1698,32 @@ class AlertDecider(
          *  intercept, not a measurement, so intercept error - fit noise over a
          *  short approach span, plus whatever the mount-offset setting leaves
          *  behind - can score a vehicle wider than it really passes and veto a
-         *  genuinely close one. That is why [URGENT_PASS_LATERAL_MIN_M], the
-         *  threshold this replaces, was set loose enough to swallow the error
-         *  rather than tuned. Lowering this value spends that safety margin.
+         *  genuinely close one. Lowering this value widens the veto, and so
+         *  spends the margin that absorbs that error. A corpus replay samples
+         *  the error; it does not bound it.
          *
-         *  **How 1.5 m answers it - measured, not reasoned.** An offline
-         *  sweep over 183 ride captures at `alertMaxM` 30, above the 20 m
-         *  default, removes 16 of 100 urgent cues at
-         *  this value, and 14 vehicles lose their urgent cue outright rather
-         *  than losing a repeat. Three of the removals are on vehicles that
-         *  came within 2.0 m of the radar: two are the reported false alarms
-         *  this change exists to fix, and the third's track still gets a
-         *  warning from another cue. Read that 2.0 m with its own metric in
-         *  mind - closest approach there is measured to the RADAR, so for a
-         *  vehicle converging on the front wheel it understates how close
-         *  the car came to the bike, which is the point this whole scoring
-         *  change rests on. That is the error budget, sampled rather than
-         *  bounded: it says the intercept error did not swing a vehicle
-         *  measured close to the radar across the line on those rides, not
-         *  that it cannot.
-         *
-         *  **Two replays, two populations, and the figures above are
-         *  historical.** They were measured by the sweep, which reads both
-         *  `.log` and `.log.gz`, against a [CorpusReplayGate] that then read
-         *  only `.log`, took rider speed from the radar's device-status field
-         *  alone, forced the turn state idle and dropped the mount offset.
-         *  It never read the eBike's wheel speed, which the live path prefers
-         *  and which carries the not-driving flag. Of 201 distinct captures 94
-         *  carry the radar's field, 72 of those carry eBike lines too, and 105
-         *  carry no rider speed at all; on that last group the urgent gates
-         *  could not arm and the gate could not see this decision. Feeding
-         *  both sources moved the corpus from 65 urgent cues to 55 and changed
-         *  34 of 176 captures.
-         *
-         *  It now feeds the rider speed, turn state and mount offset
-         *  the live path passes, and replays two alert distances. Two inputs
-         *  stay at their defaults, `urgentLowSpeedEnabled` and this constant,
-         *  because no capture header records either; both defaults are the
-         *  shipped ones, so the replay judges the configuration riders run
-         *  rather than an arbitrary one. The two instruments have never been
-         *  reconciled: re-derived on the current gate, this scoring change is
-         *  worth roughly a tenth of urgent cues rather than the sixth quoted
-         *  above. The gate is the runnable check; the sweep is where 16 of
-         *  100 came from.
-         *
-         *  **Do not lower the default without re-running both.** The corpus
-         *  is private ride data, so neither replay is in this tree and CI
-         *  runs neither; the in-repo cue-ledger fixture reaches no urgent
-         *  cue and cannot stand in
-         *  ([CueLedgerReplayTest.passClearanceIsNoOpForThisFixture] pins
-         *  that). A rider may of course set it lower; the setting is theirs,
-         *  and the helper text says which way it trades. */
+         *  **Do not lower the default without a corpus replay at the
+         *  candidate value.** [CorpusReplayGate] passes no clearance to the
+         *  decider, so it replays the default only (no capture header records
+         *  the rider's setting); judging another value means changing the
+         *  replay to pass it. The corpus is private ride data, so it is not in
+         *  this tree and CI never replays it (the gate assume-skips without
+         *  one); the in-repo cue-ledger fixture reaches no urgent cue and
+         *  cannot stand in ([CueLedgerReplayTest.passClearanceIsNoOpForThisFixture]
+         *  pins that). A rider may of course set it lower; the setting is
+         *  theirs, and the helper text says which way it trades. */
         const val DEFAULT_PASS_CLEARANCE_M = 1.5f
 
         /** Bounds for the rider-set clearance, kept beside the default so the
          *  three cannot drift apart across files. The bottom reaches the
          *  predicted-hit path (a fitted line crossing the centreline inside
          *  the bike scores zero), which only changes an outcome below a metre;
-         *  the top reaches a near-equivalent of the pre-change behaviour -
-         *  near, not identical, since over the corpus 2.5 m of envelope
-         *  clearance differed from [PassScoring.RADAR_POINT] by 3 cues in 100. */
+         *  the top is at least as cautious as [PassScoring.RADAR_POINT] at
+         *  [URGENT_PASS_LATERAL_MIN_M]. The envelope's clearance is a minimum
+         *  over a span that contains the radar point, so it never scores a
+         *  vehicle wider than the radar point does; `a track converging onto the
+         *  front wheel fires though it clears the radar` and `the rear of the
+         *  bike counts too` pin the two ends. */
         const val MIN_PASS_CLEARANCE_M = 0.5f
         const val MAX_PASS_CLEARANCE_M = 3.0f
 

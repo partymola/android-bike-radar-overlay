@@ -83,10 +83,11 @@ class SettingsRadarClosingCeilingTest {
 
     @Test
     fun anOffLadderCeilingIsLabelledWithTheStopTheThumbIsOn() {
-        // End to end: a stored value between stops (a backup from a build
-        // with other stops) shows the stop it is snapped to, never 133 km/h.
-        prefs.closingSpeedCeilingMs = 37
+        // A value between stops is shown as the stop it snaps to (PrefsTest
+        // covers a raw stored value). 38 snaps to 40, which is neither the
+        // default nor 38's own 137 km/h.
+        prefs.closingSpeedCeilingMs = 38
         showScreen()
-        assertEquals("126 km/h", slider().fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        assertEquals("144 km/h", slider().fetchSemanticsNode().config[SemanticsProperties.StateDescription])
     }
 }

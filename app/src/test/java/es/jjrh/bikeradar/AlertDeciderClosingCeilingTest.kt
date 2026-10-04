@@ -90,8 +90,13 @@ class AlertDeciderClosingCeilingTest {
     }
 
     @Test fun `omitting the ceiling applies the shipped default`() {
+        // 37.5 m/s, the slowest phantom the default exists to catch: silenced
+        // at 35, voiced at 40, so this tells the two apart.
+        val phantom37 = listOf(83, 76, 68, 61, 53, 46, 38, 31, 23, 16, 8).map { listOf(target(85, it, 37.5f)) } +
+            List(15) { emptyList() }
+        assertTrue(run(phantom37, bikeSpeedMs = 5f, ceiling = 40f).any { it is Event.Beep })
         val d = AlertDecider()
-        val events = phantom42.mapIndexed { i, vs -> d.decide(vs, alertMax, 600L + i * frameMs, bikeSpeedMs = 5f) }
+        val events = phantom37.mapIndexed { i, vs -> d.decide(vs, alertMax, 600L + i * frameMs, bikeSpeedMs = 5f) }
         assertEquals(emptyList<Event>(), events.audible())
     }
 

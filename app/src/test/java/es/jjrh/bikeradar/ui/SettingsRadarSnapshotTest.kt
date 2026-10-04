@@ -98,7 +98,7 @@ class SettingsRadarSnapshotTest {
     }
 
     @Composable
-    private fun RadarContent(haConfigured: Boolean, closingCeiling: Int? = 40) {
+    private fun RadarContent(haConfigured: Boolean, closingCeiling: Int? = 35) {
         SettingsRadarContent(
             navController = rememberNavController(),
             haConfigured = haConfigured,

@@ -682,12 +682,12 @@ class PrefsTest {
     }
 
     @Test
-    fun `the closing-speed ceiling defaults to 40 and reaches the snapshot and the bundle`() {
+    fun `the closing-speed ceiling defaults to 35 and reaches the snapshot and the bundle`() {
         // The unset path is the one every install takes, and the snapshot is
         // what the alert pipeline reads.
-        assertEquals(40, prefs.closingSpeedCeilingMs)
-        assertEquals(40, prefs.snapshot().closingSpeedCeilingMs)
-        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=40"))
+        assertEquals(35, prefs.closingSpeedCeilingMs)
+        assertEquals(35, prefs.snapshot().closingSpeedCeilingMs)
+        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=35"))
     }
 
     @Test

@@ -1767,13 +1767,14 @@ class AlertDecider(
          *  glitch: it gets no beep and no urgent cue, though it is still drawn
          *  and still holds back the all-clear. Phantoms seen in captures
          *  have read 33.5-47 m/s, held nearly unchanged across frames, so this
-         *  default catches the faster ones only. A real vehicle closing
+         *  default catches the faster ones only. It is also the strictest
+         *  setting the slider offers. A real vehicle closing
          *  faster than this is silenced too; that is the trade, and why the
          *  rider can move it to [MIN_CLOSING_CEILING_MS]..[MAX_CLOSING_CEILING_MS]
          *  or switch it off. `AlertDeciderClosingCeilingTest` pins the boundary
          *  (strictly faster), that a phantom changes nothing about a real car's
          *  cues, and that it still holds back the all-clear. */
-        const val DEFAULT_CLOSING_CEILING_MS = 40f
+        const val DEFAULT_CLOSING_CEILING_MS = 35f
         const val MIN_CLOSING_CEILING_MS = 35f
         const val MAX_CLOSING_CEILING_MS = 50f
 

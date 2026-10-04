@@ -550,7 +550,7 @@ class OverlayPipelineDrivingTest {
     @Test
     fun theRidersClosingCeilingReachesTheDecider() = runTest {
         // The decider's own tests drive the parameter directly, so they stay
-        // green if the pipeline stops passing it. Under the default 40 m/s the
+        // green if the pipeline stops passing it. Under the default 35 m/s the
         // car is silenced; under a snapshot carrying 45, or no limit, it is
         // announced, and the alert line says which ceiling let it through.
         val shipped = driveFastCloser { prefs.snapshot() }

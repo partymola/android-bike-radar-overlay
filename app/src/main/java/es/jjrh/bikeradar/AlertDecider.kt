@@ -1723,7 +1723,9 @@ class AlertDecider(
          *  over a span that contains the radar point, so it never scores a
          *  vehicle wider than the radar point does; `a track converging onto the
          *  front wheel fires though it clears the radar` and `the rear of the
-         *  bike counts too` pin the two ends. */
+         *  bike counts too` pin the two ends, and `the top of the slider is no
+         *  less cautious than radar-point scoring` pins the top above the
+         *  threshold. */
         const val MIN_PASS_CLEARANCE_M = 0.5f
         const val MAX_PASS_CLEARANCE_M = 3.0f
 

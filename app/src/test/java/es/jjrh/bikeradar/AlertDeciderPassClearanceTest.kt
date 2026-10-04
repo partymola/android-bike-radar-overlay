@@ -3,6 +3,8 @@
 package es.jjrh.bikeradar
 
 import es.jjrh.bikeradar.AlertDecider.Companion.DEFAULT_PASS_CLEARANCE_M
+import es.jjrh.bikeradar.AlertDecider.Companion.MAX_PASS_CLEARANCE_M
+import es.jjrh.bikeradar.AlertDecider.Companion.URGENT_PASS_LATERAL_MIN_M
 import es.jjrh.bikeradar.AlertDecider.Event
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -176,6 +178,18 @@ class AlertDeciderPassClearanceTest {
     @Test fun `the highest margin the slider allows still lets a closer pass fire`() {
         // 3.0 m is the ceiling; 2.9 m off the centreline is inside it.
         assertTrue(approach(interceptM = 2.9f, slopePerM = 0f, clearanceM = 3.0f).urgents() > 0)
+    }
+
+    @Test fun `the top of the slider is no less cautious than radar-point scoring`() {
+        // The envelope never scores wider than the radar point, so at a margin
+        // of at least the radar-point threshold it vetoes only what that
+        // scoring vetoed. That holds only while the ceiling stays at or above
+        // that threshold; lowering it would let a rider's top setting silence
+        // a cue radar-point scoring would have sounded.
+        assertTrue(
+            "slider ceiling $MAX_PASS_CLEARANCE_M is below the radar-point threshold $URGENT_PASS_LATERAL_MIN_M",
+            MAX_PASS_CLEARANCE_M >= URGENT_PASS_LATERAL_MIN_M,
+        )
     }
 
     @Test fun `the gate line records the margin it judged against`() {

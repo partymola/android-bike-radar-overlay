@@ -360,11 +360,7 @@ class ScreenshotCaptureService : Service() {
         if (bitmap == null) return
 
         withContext(Dispatchers.IO) {
-            val name = "bike-radar-overlay-${TIMESTAMP_FMT.get()!!.format(Date())}.png"
-            val file = File(outDir, name)
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
+            val file = writeFrame(outDir, bitmap, System.currentTimeMillis())
             Log.i(TAG, "wrote ${file.name} (${file.length() / 1024} KB)")
         }
         bitmap.recycle()
@@ -432,6 +428,10 @@ class ScreenshotCaptureService : Service() {
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
         const val SCREENSHOT_DIR = "screenshots"
+        const val FILE_PREFIX = "bike-radar-overlay-"
+
+        /** Frames kept on the phone; about half an hour at one a minute. */
+        const val MAX_SCREENSHOTS = 30
         private const val VIRTUAL_DISPLAY_NAME = "BikeRadarCapture"
 
         // 2 buffers is intentional: with a 60 s capture interval the
@@ -450,5 +450,23 @@ class ScreenshotCaptureService : Service() {
         }
 
         @Volatile var isRunning: Boolean = false
+
+        /** Save [bitmap] as a timestamped PNG in [outDir], then keep only the
+         *  newest [MAX_SCREENSHOTS]. */
+        internal fun writeFrame(outDir: File, bitmap: Bitmap, nowMs: Long): File {
+            val file = File(outDir, "$FILE_PREFIX${TIMESTAMP_FMT.get()!!.format(Date(nowMs))}.png")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            prune(outDir, MAX_SCREENSHOTS)
+            return file
+        }
+
+        /** Keep the newest [max] screenshots in [dir]. Ordered by the timestamp
+         *  in the name, since frames saved within a second share an mtime. */
+        fun prune(dir: File, max: Int) {
+            val frames = dir.listFiles { f -> f.isFile && f.name.startsWith(FILE_PREFIX) } ?: return
+            frames.sortedByDescending { it.name }.drop(max).forEach { it.delete() }
+        }
     }
 }

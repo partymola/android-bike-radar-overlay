@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.ScreenshotCaptureService
 
 /**
  * Privacy summary. Bike Radar is a self-hosted companion: the app does
@@ -93,6 +94,7 @@ private fun SettingsPrivacyBody(navController: NavController) {
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_rides))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_creds))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_capture))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_screenshots, ScreenshotCaptureService.MAX_SCREENSHOTS))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_crashes))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_linklog))
             }

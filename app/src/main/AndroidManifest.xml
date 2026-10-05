@@ -72,7 +72,8 @@
     <!-- Backups are ON so settings and the Home Assistant credentials move
          to a new phone (cloud backup, lockscreen-secret-encrypted, plus the
          direct device-to-device transfer). Ride history, capture logs, crash
-         reports and the link journal live in app-specific EXTERNAL storage,
+         reports, the link journal and debug screenshots live in app-specific
+         EXTERNAL storage,
          which @xml/data_extraction_rules explicitly EXCLUDES from both -
          Auto Backup would include it by default. -->
     <application

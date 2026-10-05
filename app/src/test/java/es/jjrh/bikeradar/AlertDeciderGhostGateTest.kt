@@ -7,11 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * End-to-end decide() semantics of the ghost-beep filter (always on since
- * the 2026-07 promotion). The safety contract pinned here:
- *  - suppression is BEEP-ONLY: the all-clear presence gate and the
- *    urgent path never change;
- *  - admission re-delivers the cue at the track's current tier.
+ * End-to-end decide() semantics of the ghost-beep filter and the
+ * lateral-absurdity veto. The safety contract pinned here:
+ *  - born-close suppression is BEEP-ONLY: the all-clear presence gate and
+ *    the urgent path never change;
+ *  - admission re-delivers the cue at the track's current tier;
+ *  - an off-road target leaves the close set, so it can neither cue nor
+ *    stand in front of a real car, but it still holds back the all-clear.
  */
 class AlertDeciderGhostGateTest {
 
@@ -231,8 +233,10 @@ class AlertDeciderGhostGateTest {
     }
 
     @Test
-    fun `rx veto consumes no cooldown and writes no latch`() {
-        val d = AlertDecider()
+    fun `an off-road target does not delay the next car's cue`() {
+        // No tier-raise bypass, so a cooldown the off-road target started
+        // would hold the next car's first cue back.
+        val d = AlertDecider(escalationBypass = EscalationCooldownBypass.NONE)
         val c = Clock()
         val parallelStreet = Vehicle(
             id = 6,
@@ -249,7 +253,7 @@ class AlertDeciderGhostGateTest {
             AlertDecider.Event.None,
             d.decide(listOf(parallelStreet), alertMax, c.tick()),
         )
-        // A different, in-lane car right after the veto: the veto must not
+        // A different, in-lane car right after: the off-road target must not
         // have advanced the beep cooldown, so this cue lands the moment
         // its own sustain is met.
         val realCar = Vehicle(
@@ -352,5 +356,125 @@ class AlertDeciderGhostGateTest {
         // A mount-offset setting must not move a car on or off the road.
         assertEquals(AlertDecider.Event.Beep(1), tierBeepAt(rawRx = 9.5f, correctedRx = 10.5f))
         assertEquals(AlertDecider.Event.None, tierBeepAt(rawRx = 10.5f, correctedRx = 9.5f))
+    }
+
+    /** Just past the absurdity cap; at 2 m back, 10.7 m of true range, so it
+     *  stands in front of a real car for most of an approach. Shaped to
+     *  exercise the mechanism, not to reproduce field geometry. */
+    private fun offRoad(distanceM: Int = 2, bornAtMs: Long = 1L) = Vehicle(
+        id = 85,
+        distanceM = distanceM,
+        speedMs = -1f,
+        rangeXm = 10.5f,
+        rangeXmRaw = 10.5f,
+        bornAtMs = bornAtMs,
+    )
+
+    private fun car(distanceM: Int, rawRx: Float = 0f) = Vehicle(id = 7, distanceM = distanceM, speedMs = -5f, rangeXm = rawRx, rangeXmRaw = rawRx)
+
+    /** Walks the whole ladder: tier 1 from 21 m, tier 2 from 14 m, tier 3 from 7 m. */
+    private val approach: List<List<Vehicle>> = (0..22).map { listOf(car(25 - it)) } + List(30) { emptyList() }
+
+    private fun events(
+        frames: List<List<Vehicle>>,
+        gateLines: MutableList<String> = mutableListOf(),
+        closingCeilingMs: Float? = AlertDecider.DEFAULT_CLOSING_CEILING_MS,
+    ): List<AlertDecider.Event> {
+        val d = AlertDecider(onGateEvent = { gateLines.add(it) })
+        val c = Clock()
+        // Nearest first, as the decoder's snapshot orders them.
+        return frames.map { d.decide(it.sortedBy { v -> v.distanceM }, alertMax, c.tick(), closingCeilingMs = closingCeilingMs) }
+    }
+
+    @Test
+    fun `an off-road target closer than a real car changes nothing about the real car's beeps`() {
+        // The audio voices only the closest target, and the off-road one is
+        // nearer by true range until the car is inside 10.7 m. The veto must
+        // not depend on the closing-speed ceiling, which a rider can turn off.
+        val withOffRoad = approach.mapIndexed { i, vs -> if (i <= 22) vs + offRoad() else vs }
+        for (ceiling in listOf(AlertDecider.DEFAULT_CLOSING_CEILING_MS, null)) {
+            val alone = events(approach, closingCeilingMs = ceiling)
+            assertEquals(
+                "the real car must walk the whole ladder on its own, ceiling $ceiling",
+                listOf(AlertDecider.Event.Beep(1), AlertDecider.Event.Beep(2), AlertDecider.Event.Beep(3)),
+                alone.filterIsInstance<AlertDecider.Event.Beep>(),
+            )
+            assertEquals("ceiling $ceiling", alone, events(withOffRoad, closingCeilingMs = ceiling))
+        }
+    }
+
+    @Test
+    fun `one off-road reading does not silence a real car for the rest of its approach`() {
+        assertTrue("the real car must beep on its own", events(approach).count { it is AlertDecider.Event.Beep } >= 2)
+        // Frame 8 sits at 17 m, mid tier 1. Frame 10 sits at 15 m, the frame
+        // before the tier-2 edge: the car keeps its sustain through one
+        // off-road frame, so its tier-2 cue is not pushed a frame later.
+        for (frame in listOf(8, 10)) {
+            val spiked = approach.mapIndexed { i, vs -> if (i == frame) listOf(car(25 - i, rawRx = 12f)) else vs }
+            assertEquals("spike at frame $frame", events(approach), events(spiked))
+        }
+    }
+
+    @Test
+    fun `an off-road fast closer does not change the urgent cue for a real one behind a stopped rider`() {
+        fun run(withOffRoad: Boolean): List<AlertDecider.Event> {
+            val d = AlertDecider()
+            val c = Clock()
+            val stopped = List(10) { emptyList<Vehicle>() }
+            val closing = listOf(20, 19, 17, 16, 15, 13, 12, 11, 10, 8, 7, 6).map { at ->
+                val real = Vehicle(id = 7, distanceM = at, speedMs = -12f)
+                val off = Vehicle(id = 85, distanceM = 5, speedMs = -12f, rangeXm = 10.5f, rangeXmRaw = 10.5f)
+                (if (withOffRoad) listOf(real, off) else listOf(real)).sortedBy { it.distanceM }
+            }
+            return (stopped + closing).map { d.decide(it, alertMax, c.tick(), bikeSpeedMs = 0f) }
+        }
+        val alone = run(withOffRoad = false)
+        val urgent = alone.filterIsInstance<AlertDecider.Event.UrgentApproach>()
+        assertTrue("the real car must fire the urgent cue on its own", urgent.isNotEmpty())
+        assertTrue(urgent.all { it.triggerTid == 7 })
+        assertEquals(alone, run(withOffRoad = true))
+    }
+
+    @Test
+    fun `a target coming onto the road from off it is cued`() {
+        val frames = List(5) { listOf(car(18, rawRx = 12f)) } + List(5) { listOf(car(18, rawRx = 3f)) }
+        val all = events(frames)
+        assertEquals(AlertDecider.Event.Beep(1), all.firstOrNull { it != AlertDecider.Event.None })
+        assertEquals("cued once its own sustain is met on the road", 6, all.indexOfFirst { it is AlertDecider.Event.Beep })
+    }
+
+    @Test
+    fun `an off-road target passing the rider does not re-sound a real car's tier`() {
+        // A real car already told at tier 3; the off-road target was never voiced.
+        val together = List(12) { listOf(car(5), offRoad()) }
+        val passed = List(12) { listOf(car(5), offRoad(distanceM = 1).copy(isBehind = true)) }
+        assertEquals(listOf(AlertDecider.Event.Beep(3)), events(together + passed).filterIsInstance<AlertDecider.Event.Beep>())
+    }
+
+    @Test
+    fun `an off-road target alone leaves no all-clear`() {
+        val frames = List(10) { listOf(offRoad()) } + List(30) { emptyList() }
+        assertEquals(emptyList<AlertDecider.Event>(), events(frames).filter { it != AlertDecider.Event.None })
+    }
+
+    @Test
+    fun `an off-road target still behind the rider holds back the all-clear`() {
+        val real = (0..18).map { listOf(Vehicle(id = 7, distanceM = 20 - it, speedMs = -5f)) }
+        val offRoadStays = List(40) { listOf(offRoad()) }
+        val all = events(real + offRoadStays + List(30) { emptyList() })
+        val clearAt = all.indexOfFirst { it == AlertDecider.Event.Clear }
+        assertTrue("expected a beep for the real car", all.any { it is AlertDecider.Event.Beep })
+        assertTrue("the all-clear must wait for the off-road target to go, fired at frame $clearAt", clearAt >= real.size + offRoadStays.size)
+    }
+
+    @Test
+    fun `each off-road track is logged once at its first frame in range, and a recycled id again`() {
+        val lines = mutableListOf<String>()
+        fun run(bornAtMs: Long) = listOf(20, 18, 16, 14).map { listOf(offRoad(distanceM = it, bornAtMs = bornAtMs)) }
+        events(run(bornAtMs = 1_000L) + run(bornAtMs = 9_000L), lines)
+        assertEquals(
+            List(2) { "# gate rx-veto tid=85 d=20 raw_rx=10.5" },
+            lines.filter { it.startsWith("# gate rx-veto ") },
+        )
     }
 }

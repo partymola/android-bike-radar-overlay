@@ -134,7 +134,9 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *  - **Closing-speed ceiling.** A target closing faster than the rider's
  *    ceiling ([DEFAULT_CLOSING_CEILING_MS]) never enters the close set, so it
  *    can neither cue nor stand in front of a real car as "the closest"; it
- *    still counts as present for the Clear chime.
+ *    still counts as present for the Clear chime. A target beyond
+ *    [RX_ABSURD_M] of raw lateral is treated the same way, except on a
+ *    [Vehicle.lateralUnknown] frame.
  *  - **Close-set exit hysteresis (distance band).** A track enters the
  *    close set at `distanceM <= alertMaxM` but, once in, stays until
  *    `distanceM` exceeds `alertMaxM + alertMaxM/`[CLOSE_EXIT_HYSTERESIS_DIVISOR].
@@ -312,14 +314,16 @@ class AlertDecider(
      *  guard), so there is no flood risk. */
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
     /** Diagnostic hook for the gate decisions, written to the capture log so
-     *  every silenced or re-armed cue is auditable post-ride. Covers the
-     *  born-close suppress and re-fire, the rx veto, the four urgent-pass
-     *  verdicts, the fit expiry, and the closing-speed ceiling.
+     *  they can be audited post-ride. Covers the born-close suppress and
+     *  re-fire, the four urgent-pass verdicts, the fit expiry, and the
+     *  closing-speed ceiling and rx veto; those two mark a track's first
+     *  excluded frame, not each silenced cue (see [ceilingLogged]), so the
+     *  rest of an exclusion is recovered by replaying the capture's packets.
      *
      *  Volume is bounded per TRACK, not per frame, though the hook is reached
      *  on every frame: each verdict is deduped per track ([logPassGate],
-     *  [passGateOkLogged], [ceilingLogged]) and an expiry can fire once per
-     *  fit because the fit is removed as it is reported. */
+     *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged]) and an expiry can
+     *  fire once per fit because the fit is removed as it is reported. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
      *  filter's state machine); injectable for tests. */
@@ -398,8 +402,8 @@ class AlertDecider(
     private var closeEpisodeActive: Boolean = false
 
     /** Raw in-front, in-range track ids from the previous frame (post
-     *  distance-exit-band, before the closing-speed ceiling), used to apply
-     *  the band's exit hysteresis. */
+     *  distance-exit-band, before the closing-speed ceiling and the
+     *  lateral-absurdity veto), used to apply the band's exit hysteresis. */
     private var prevCloseRaw: Set<Int> = emptySet()
 
     /** Raw behind-in-range track ids from the previous frame (non-`isBehind`,
@@ -553,6 +557,11 @@ class AlertDecider(
      *  not a count of silenced cues or frames. */
     private val ceilingLogged = HashMap<Int, Long>()
 
+    /** As [ceilingLogged], for the lateral-absurdity veto ([RX_ABSURD_M]): a
+     *  line marks a track's first off-road frame in range, whether or not it
+     *  would have cued. */
+    private val rxVetoLogged = HashMap<Int, Long>()
+
     /** Monotonic ms an urgent-QUALIFYING target (both kinematic gates and
      *  the lateral vetoes passed) was last present. Two qualifying
      *  sightings closer together than [URGENT_EPISODE_GAP_MS] belong to
@@ -665,11 +674,22 @@ class AlertDecider(
         // spiked reading does not silence a real car for the rest of its
         // approach; a track not yet past `sustainFrames` does restart its
         // count. The exit band and the presence gate below both ignore it.
+        // The lateral-absurdity veto ([RX_ABSURD_M]) is applied here for the
+        // same reason and on the same terms (AlertDeciderGhostGateTest, "an
+        // off-road target closer than a real car changes nothing about the
+        // real car's beeps"), except that it fails open on a lateral-unknown
+        // frame.
         val ceiling = closingCeilingMs?.takeIf { it > 0f }
-        val (overCeiling, close) = inRange.partition { ceiling != null && -it.speedMs > ceiling }
+        val (overCeiling, underCeiling) = inRange.partition { ceiling != null && -it.speedMs > ceiling }
         for (v in overCeiling) {
             if (ceilingLogged.put(v.id, v.bornAtMs) != v.bornAtMs) {
                 onGateEvent("# gate ceiling tid=${v.id} closing=${-v.speedMs} d=${v.distanceM} ceiling=$ceiling")
+            }
+        }
+        val (offRoad, close) = underCeiling.partition { !it.lateralUnknown && abs(it.rangeXmRaw) > RX_ABSURD_M }
+        for (v in offRoad) {
+            if (rxVetoLogged.put(v.id, v.bornAtMs) != v.bornAtMs) {
+                onGateEvent("# gate rx-veto tid=${v.id} d=${v.distanceM} raw_rx=${v.rangeXmRaw}")
             }
         }
         val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
@@ -746,11 +766,10 @@ class AlertDecider(
 
         // Ghost-beep filter: tier Beeps whose trigger track was BORN inside
         // [BornCloseGate.BORN_CLOSE_MAX_M] stay silent until the track shows
-        // closing evidence ([BornCloseGate] admission paths), and Beeps whose
-        // trigger sits beyond [RX_ABSURD_M] of raw lateral are vetoed
-        // outright (the veto sites below). Beep-path ONLY by construction:
-        // the all-clear presence gate, urgent evaluation, sustain counters,
-        // and the overlay never see the gate.
+        // closing evidence ([BornCloseGate] admission paths; the veto site is
+        // below). Beep-path ONLY by construction: the all-clear presence
+        // gate, urgent evaluation, sustain counters, and the overlay never
+        // see the gate.
         //
         // This block accrues closing evidence for born-close tracks and
         // re-arms the beep path for any track admitted this frame whose cue
@@ -1053,49 +1072,32 @@ class AlertDecider(
                     }
                     else -> {
                         val v = closestVehicle
-                        // Ghost-beep filter vetoes. Consume the pending
-                        // beep WITHOUT touching lastBeepAtMs or the
-                        // per-tid latch: no audio happened, so the
-                        // cooldown must not advance and a later
-                        // admission re-fire must see a clean latch.
-                        val gateVeto = v != null &&
-                            bornCloseGate.isGated(v)
-                        val rxVeto = v != null &&
-                            !v.lateralUnknown &&
-                            abs(v.rangeXmRaw) > RX_ABSURD_M
-                        when {
-                            gateVeto -> {
-                                beepPending = false
-                                bornCloseGate.noteSuppressed(v)
-                                onGateEvent(
-                                    "# gate suppress tid=${v.id} tier=$closestUrgency" +
-                                        " d=${v.distanceM} eff=${alertDistanceM(v)}" +
-                                        " closing=${-v.speedMs}" +
-                                        " birth_d=${v.bornDistanceM} turn=$turnState",
-                                )
-                                Event.None
+                        // Born-close veto. Consume the pending beep
+                        // WITHOUT touching lastBeepAtMs or the per-tid
+                        // latch: no audio happened, so the cooldown must
+                        // not advance and a later admission re-fire must
+                        // see a clean latch.
+                        if (v != null && bornCloseGate.isGated(v)) {
+                            beepPending = false
+                            bornCloseGate.noteSuppressed(v)
+                            onGateEvent(
+                                "# gate suppress tid=${v.id} tier=$closestUrgency" +
+                                    " d=${v.distanceM} eff=${alertDistanceM(v)}" +
+                                    " closing=${-v.speedMs}" +
+                                    " birth_d=${v.bornDistanceM} turn=$turnState",
+                            )
+                            Event.None
+                        } else {
+                            lastBeepAtMs = nowMs
+                            beepPending = false
+                            // The guard is defensive: beepPending should
+                            // not reach here with no closest track, and
+                            // the tier latch has nothing to key on if it
+                            // does. The cue fires either way.
+                            if (v != null) {
+                                firedTierPerTid[v.id] = closestUrgency
                             }
-                            rxVeto -> {
-                                beepPending = false
-                                onGateEvent(
-                                    "# gate rx-veto tid=${v.id} tier=$closestUrgency" +
-                                        " d=${v.distanceM} eff=${alertDistanceM(v)}" +
-                                        " raw_rx=${v.rangeXmRaw}",
-                                )
-                                Event.None
-                            }
-                            else -> {
-                                lastBeepAtMs = nowMs
-                                beepPending = false
-                                // The guard is defensive: beepPending should
-                                // not reach here with no closest track, and
-                                // the tier latch has nothing to key on if it
-                                // does. The cue fires either way.
-                                if (v != null) {
-                                    firedTierPerTid[v.id] = closestUrgency
-                                }
-                                Event.Beep(count = closestUrgency)
-                            }
+                            Event.Beep(count = closestUrgency)
                         }
                     }
                 }
@@ -1134,6 +1136,7 @@ class AlertDecider(
         passGateLogged.clear()
         passGateOkLogged.clear()
         ceilingLogged.clear()
+        rxVetoLogged.clear()
         urgentLastQualifyingSeenMs = NOT_INITIALIZED
         urgentLastFireMs = NOT_INITIALIZED
         urgentEpisodePeakClosing = 0f
@@ -1527,15 +1530,21 @@ class AlertDecider(
     }
 
     companion object {
-        /** Ghost-beep filter: a tier-beep trigger with RAW lateral offset
-         *  beyond this is physically not on the rider's road (a full
-         *  carriageway is ~7 m) - vehicles on parallel streets have fired
-         *  tier beeps at raw rx 13-22 m in ride captures. Raw (the
-         *  sensor's own reading) because a physical-plausibility veto
-         *  must not depend on rider configuration: the mount-offset
-         *  translation is centimetres against a 10 m bar. An order
-         *  looser than any lane-discrimination gate on purpose: this only
-         *  rejects the physically impossible, never judges lane position. */
+        /** Lateral-absurdity veto: a target with RAW lateral offset beyond
+         *  this leaves the close set for that frame, and so both the tier
+         *  beeps and urgent evaluation. On a straight road it is off the
+         *  rider's road, since a full carriageway is ~7 m; vehicles on
+         *  parallel streets have fired tier beeps at raw rx 13-22 m in ride
+         *  captures. Mid-turn a real car behind can read past it, which costs
+         *  that car the close set while it does, and its sustain if it is out
+         *  for longer than one frame (`one off-road reading does not silence
+         *  a real car for the rest of its approach`). Fails open
+         *  on a [Vehicle.lateralUnknown] frame (`off-axis veto fails open on
+         *  lateral-unknown frames`). Raw (the sensor's own reading) because a
+         *  physical-plausibility veto must not depend on rider configuration:
+         *  the mount-offset translation is centimetres against a 10 m bar. An
+         *  order looser than any lane-discrimination gate on purpose: this
+         *  never judges lane position. */
         const val RX_ABSURD_M = 10f
 
         /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`

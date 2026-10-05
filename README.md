@@ -48,7 +48,7 @@ screen stays yours.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
   summary, and keeps per-ride stats - distance, overtakes, close passes, how close
-  and how fast the closest came - in app-private storage. No account,
+  and how fast the closest came - in the app's own folder on the phone. No account,
   no location, no route.
 
 <details><summary><b>More features</b></summary>
@@ -83,7 +83,7 @@ screen stays yours.
   the developer. What the other app does with it afterwards is up to that
   app, so only allow one you trust.
 - Optional per-ride capture log (off by default; enable on the Debug
-  screen) written to app-private storage: radar packets, BLE
+  screen) written to the app's own folder on the phone: radar packets, BLE
   characteristic notifications, eBike telemetry from Bosch Flow,
   phone-battery trace, turn direction and rate from the motion sensors,
   the start and end of a call while another app has the overlay hidden,

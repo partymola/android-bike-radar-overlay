@@ -12,10 +12,11 @@ import java.io.File
  * [BikeRadarService.maybePostRideSummary]) and read back by the Ride
  * history screen.
  *
- * Deliberately minimal - a single JSON-lines file in app-private
- * storage, no database. The history is a per-ride log, not a sync
- * target: it never leaves the phone, holds no location, and is capped
- * at [MAX_RIDES] (oldest dropped) so it can't grow unbounded.
+ * Deliberately minimal - a single JSON-lines file in app-specific
+ * external storage, no database. The history is a per-ride log, not a
+ * sync target: the app never sends it anywhere, backups exclude it, it
+ * holds no location, and it is capped at [MAX_RIDES] (oldest dropped)
+ * so it can't grow unbounded.
  *
  * Thread-safety: [append] runs on the service's walk-away tick (IO
  * dispatcher) and [readAll] on a UI-launched IO coroutine, on separate

@@ -2,7 +2,9 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+import android.content.Context
 import android.graphics.Bitmap
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -40,13 +42,29 @@ class ScreenshotPruneTest {
     }
 
     @Test
-    fun theOldestByNameGoesEvenWhenItWasTouchedLast() {
+    fun theOldestByWriteTimeGoesWhateverItsNameSays() {
+        // After the clocks go back, a new frame's local-time name sorts below
+        // the frames saved in the hour before.
         val dir = tmp.newFolder("screenshots")
-        val older = File(dir, "bike-radar-overlay-001.png").apply { writeText("x") }
-        val newer = File(dir, "bike-radar-overlay-002.png").apply { writeText("x") }
-        assertTrue(older.setLastModified(2_000_000L))
-        assertTrue(newer.setLastModified(1_000_000L))
+        val earlier = File(dir, "bike-radar-overlay-002.png").apply { writeText("x") }
+        val later = File(dir, "bike-radar-overlay-001.png").apply { writeText("x") }
+        assertTrue(earlier.setLastModified(1_000_000L))
+        assertTrue(later.setLastModified(2_000_000L))
         ScreenshotCaptureService.prune(dir, 1)
-        assertEquals(listOf(newer.name), names(dir))
+        assertEquals(listOf(later.name), names(dir))
+    }
+
+    @Test
+    fun appStartTrimsABacklogWithoutCapturing() {
+        val app = ApplicationProvider.getApplicationContext<Context>() as BikeRadarApp
+        val dir = File(app.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+        repeat(32) { i ->
+            File(dir, "bike-radar-overlay-%03d.png".format(i)).apply {
+                writeText("x")
+                assertTrue(setLastModified(1_000_000L + i * 60_000L))
+            }
+        }
+        app.onCreate()
+        assertEquals((2 until 32).map { "bike-radar-overlay-%03d.png".format(it) }, names(dir))
     }
 }

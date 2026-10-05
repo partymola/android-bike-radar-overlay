@@ -375,7 +375,7 @@ private fun DebugScreenBody(navController: NavController, prefs: Prefs) {
             SettingsRowGroup {
                 SettingsToggleRow(
                     title = stringResource(R.string.debug_periodic_screenshots_title),
-                    subtitle = stringResource(R.string.debug_periodic_screenshots_subtitle),
+                    subtitle = stringResource(R.string.debug_periodic_screenshots_subtitle, ScreenshotCaptureService.MAX_SCREENSHOTS),
                     checked = screenshotRunning,
                     onCheckedChange = { wantOn ->
                         if (wantOn) {

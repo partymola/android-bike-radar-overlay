@@ -25,7 +25,7 @@ import java.util.UUID
  * file is created, so every [clog] then no-ops on the null writer.
  *
  * Dependencies are injected so the class is JVM/Robolectric-constructible:
- * [externalFilesDir] supplies the app-private external root,
+ * [externalFilesDir] supplies the app-specific external root,
  * [captureLoggingEnabled] is the opt-in read, [mirror] is the debug-only
  * logcat echo (kept out of release builds by the caller), [onActiveName]
  * mirrors the active file name to wherever the UI reads it, and [clockAnchor]

@@ -73,9 +73,8 @@
          to a new phone (cloud backup, lockscreen-secret-encrypted, plus the
          direct device-to-device transfer). Ride history, capture logs, crash
          reports, the link journal and debug screenshots live in app-specific
-         EXTERNAL storage,
-         which @xml/data_extraction_rules explicitly EXCLUDES from both -
-         Auto Backup would include it by default. -->
+         EXTERNAL storage, which @xml/data_extraction_rules explicitly EXCLUDES
+         from both - Auto Backup would include it by default. -->
     <application
         android:name=".BikeRadarApp"
         android:allowBackup="true"
@@ -159,7 +158,7 @@
              Not exported: a peer app must never be able to start the debug
              overlay/replay FGSes, even on a device where the user has
              flipped devModeUnlocked. Keep it that way (ManifestExportsTest
-             pins every exported component). Reach all three from
+             pins what the app exports). Reach all three from
              the Debug screen; driving them by shell broadcast is not a
              supported route and has never been seen to work. -->
         <receiver

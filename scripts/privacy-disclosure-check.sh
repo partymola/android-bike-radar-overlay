@@ -133,9 +133,9 @@ if grep -qF 'android:allowBackup="true"' "$MANIFEST" && ! grep -qF 'android:data
     blocker "allowBackup is on without dataExtractionRules - backup scope must be explicit"
 fi
 # The "stays on your phone" claims for ride history / capture logs / crash
-# reports / link journal depend on the external-storage excludes (Auto Backup
-# includes getExternalFilesDir() by DEFAULT), and the "encrypted with your
-# screen lock" claim depends on refusing un-encryptable cloud backups.
+# reports / link journal / screenshots depend on the external-storage excludes
+# (Auto Backup includes getExternalFilesDir() by DEFAULT), and the "encrypted
+# with your screen lock" claim depends on refusing un-encryptable cloud backups.
 if [ "$(grep -cF '<exclude' "$RULES")" -ne 2 ] || ! grep -qF 'domain="external"' "$RULES"; then
     blocker "external storage must be excluded from BOTH cloud backup and device transfer (data_extraction_rules.xml)"
 fi

@@ -19,7 +19,7 @@ import java.util.Locale
  * audio cues are the primary safety channel. A crash silently removes that
  * awareness - no beep, no overlay, just gone - and the opt-in capture log does
  * not record it. This installs an uncaught-exception handler that writes a
- * minimal crash summary to app-private external storage (no remote telemetry)
+ * minimal crash summary to app-specific external storage (no remote telemetry)
  * before the process dies, then delegates to the platform's previous handler so
  * the normal crash dialog / process termination still happen.
  *

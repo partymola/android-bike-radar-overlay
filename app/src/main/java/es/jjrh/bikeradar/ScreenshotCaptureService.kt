@@ -44,10 +44,12 @@ import java.util.Locale
  * Periodic screenshot capture, gated on a live radar link.
  *
  * Captures the device screen via MediaProjection on a fixed interval and
- * writes a PNG only when [RadarStateBus] is publishing fresh decoded frames
- * (i.e. the overlay is being drawn on top of whatever app the rider is
- * using). Frames acquired while the radar is disconnected are dropped, so
- * leaving the toggle on between rides does not flood the files dir.
+ * writes a PNG only when [RadarStateBus] is publishing fresh decoded frames.
+ * That is radar data (the live link, or a Debug replay or synthetic scenario),
+ * not the overlay: frames are still written while a granted app has the
+ * overlay hidden, which the Privacy and Debug copy say.
+ * Frames acquired while the radar is disconnected are dropped, so leaving
+ * the toggle on between rides does not flood the files dir.
  *
  * MediaProjection consent must be obtained from an Activity before this
  * service starts; the result intent is forwarded via [EXTRA_RESULT_CODE]
@@ -359,11 +361,14 @@ class ScreenshotCaptureService : Service() {
         }
         if (bitmap == null) return
 
-        withContext(Dispatchers.IO) {
-            val file = writeFrame(outDir, bitmap, System.currentTimeMillis())
-            Log.i(TAG, "wrote ${file.name} (${file.length() / 1024} KB)")
+        try {
+            withContext(Dispatchers.IO) {
+                val file = writeFrame(outDir, bitmap, System.currentTimeMillis())
+                Log.i(TAG, "wrote ${file.name} (${file.length() / 1024} KB)")
+            }
+        } finally {
+            bitmap.recycle()
         }
-        bitmap.recycle()
     }
 
     override fun onDestroy() {
@@ -462,11 +467,23 @@ class ScreenshotCaptureService : Service() {
             return file
         }
 
-        /** Keep the newest [max] screenshots in [dir]. Ordered by the timestamp
-         *  in the name, since frames saved within a second share an mtime. */
-        fun prune(dir: File, max: Int) {
+        /** Keep the newest [max] screenshots in [dir], by when each was written.
+         *  Not by name: the name is local time, which runs backwards when the
+         *  clocks go back (`theOldestByWriteTimeGoesWhateverItsNameSays`). */
+        internal fun prune(dir: File, max: Int) {
             val frames = dir.listFiles { f -> f.isFile && f.name.startsWith(FILE_PREFIX) } ?: return
-            frames.sortedByDescending { it.name }.drop(max).forEach { it.delete() }
+            // Each file's time is read once: a file deleted mid-sort would
+            // otherwise change its key under the comparator.
+            frames.map { it to it.lastModified() }
+                .sortedWith(compareByDescending<Pair<File, Long>> { it.second }.thenByDescending { it.first.name })
+                .drop(max)
+                .forEach { it.first.delete() }
+        }
+
+        /** Run at app start, so the cap holds whether or not capture is ever
+         *  turned on again (`appStartTrimsABacklogWithoutCapturing`). */
+        internal fun pruneSaved(externalFilesDir: File?) {
+            externalFilesDir?.let { prune(File(it, SCREENSHOT_DIR), MAX_SCREENSHOTS) }
         }
     }
 }

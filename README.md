@@ -47,9 +47,9 @@ screen stays yours.
   within your alert distance.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
-  summary, and keeps per-ride stats - distance, overtakes, close passes, how close
-  and how fast the closest came - in the app's own folder on the phone. No account,
-  no location, no route.
+  summary, and keeps per-ride stats - distance, overtakes, close passes, how
+  close and how fast the closest came - in the app's own folder on the phone.
+  No account, no location, no route.
 
 <details><summary><b>More features</b></summary>
 
@@ -256,10 +256,11 @@ to use your radar - are part of your Android backup
 wizard (a direct phone-to-phone copy that never touches a server), so
 the app comes up configured on the new phone. Two things don't
 transfer: the radar pairing (Bluetooth bonds belong to the system;
-re-pair once in Android's Bluetooth settings) and the ride history and
-capture logs (diagnostic data the app deliberately excludes from
-backups - if you want long-term ride stats off the phone, the Home
-Assistant integration is the supported path).
+re-pair once in Android's Bluetooth settings) and the files in the app's
+own folder: ride history, capture logs, crash reports, the connection log
+and periodic screenshots (the app deliberately excludes them from backups -
+if you want long-term ride stats off the phone, the Home Assistant
+integration is the supported path).
 
 ## Status
 

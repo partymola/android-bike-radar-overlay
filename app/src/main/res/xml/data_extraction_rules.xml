@@ -6,14 +6,14 @@
      counters) are self-healing after a restore.
 
      App-specific EXTERNAL storage is explicitly excluded from both: it holds
-     the ride history, capture logs, crash reports, and the link journal -
-     diagnostic data that belongs to the device it was recorded on, carries
-     BLE payloads (capture logs), and at up to 50 gzipped logs would blow the
-     25 MB cloud-backup quota that the settings backup depends on. Auto
-     Backup includes getExternalFilesDir() by DEFAULT, so these exclude rules
-     are load-bearing: the Privacy screen's "stays on your phone" claims for
-     that data are true because of them (scripts/privacy-disclosure-check.sh
-     pins their presence).
+     the ride history, capture logs, crash reports, the link journal and debug
+     screenshots - diagnostic data that belongs to the device it was recorded
+     on, carries BLE payloads (capture logs), and at up to 50 gzipped logs
+     would blow the 25 MB cloud-backup quota that the settings backup depends
+     on. Auto Backup includes getExternalFilesDir() by DEFAULT, so these
+     exclude rules are load-bearing: the Privacy screen's "stays on your phone"
+     claims for that data are true because of them
+     (scripts/privacy-disclosure-check.sh pins their presence).
 
      disableIfNoEncryptionCapabilities keeps the Privacy screen's "encrypted
      with your screen lock" claim strictly true for the CLOUD copy: a device

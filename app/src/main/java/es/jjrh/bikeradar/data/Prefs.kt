@@ -840,10 +840,10 @@ class Prefs(context: Context) {
 
     /** Master switch for the per-ride capture log. Off by default: the log
      *  records the exact timing of every radar packet, BLE notify and eBike
-     *  snapshot to app-private storage - ride-tracking-grade data the app
-     *  should not write unprompted. Enable it on the Debug screen to produce a
-     *  log for bug reports or analysis; when off, [CaptureLogManager.open]
-     *  is a no-op and no file is created. */
+     *  snapshot to app-specific external storage - ride-tracking-grade data
+     *  the app should not write unprompted. Enable it on the Debug screen to
+     *  produce a log for bug reports or analysis; when off,
+     *  [CaptureLogManager.open] is a no-op and no file is created. */
     var captureLoggingEnabled: Boolean
         get() = sp.getBoolean(KEY_CAPTURE_LOGGING, false)
         set(v) {

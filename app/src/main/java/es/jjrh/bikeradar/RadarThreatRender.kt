@@ -11,8 +11,7 @@ import kotlin.math.abs
  * (it is exercised only through Roborazzi golden renders), so the safety-
  * adjacent decisions it makes - which threat colour a target gets, where it
  * sits on the strip, how far it fades, and whether a near-stationary target is
- * demoted to a hollow "noted, not a threat" outline - used to live inline in
- * `onDraw` at 0% measured coverage. They are extracted here as density-free
+ * demoted to a hollow "noted, not a threat" outline - live here as density-free
  * functions over primitives so each branch is JVM-unit-asserted; the view keeps
  * only the Canvas drawing and the dp/Color packing.
  */
@@ -136,9 +135,31 @@ internal fun boxSpanM(rangeM: Float, templateLengthM: Float): Pair<Float, Float>
 
 /** Width in metres of the box drawn for a target: its template width, or the
  *  car template's until the size fields lock. Capped at the strip's full
- *  lateral span, so no template byte can paint a box wider than the panel. */
+ *  lateral span. */
 internal fun boxWidthM(templateWidthM: Float): Float = (if (templateWidthM > 0f) templateWidthM else PRE_LOCK_TEMPLATE_WIDTH_M)
     .coerceAtMost(2f * RadarV2Decoder.LATERAL_FULL_M)
+
+/**
+ * Half-width in px of a target's box, given the length the strip actually
+ * drew it ([drawnLengthPx]). Width uses the smaller of the two axes'
+ * px-per-metre scales, and a box lengthened to [minLengthPx] widens with it,
+ * up to the lateral scale.
+ * The result never exceeds half the drawn length, so no box is wider than it
+ * is long (`RadarOverlayDrawnBoxesTest`).
+ */
+internal fun boxHalfWidthPx(
+    drawnLengthPx: Float,
+    rangePxPerM: Float,
+    lateralPxPerM: Float,
+    templateLengthM: Float,
+    templateWidthM: Float,
+    minLengthPx: Float,
+    minHalfWidthPx: Float,
+): Float {
+    val lengthM = if (templateLengthM > 0f) templateLengthM else PRE_LOCK_TEMPLATE_LENGTH_M
+    val pxPerM = maxOf(rangePxPerM, minLengthPx / lengthM).coerceAtMost(lateralPxPerM)
+    return maxOf(minHalfWidthPx, boxWidthM(templateWidthM) / 2f * pxPerM).coerceAtMost(drawnLengthPx / 2f)
+}
 
 /** Size drawn for a track whose size fields have not locked yet: the car
  *  template, which most tracks lock to (bike-radar-docs PROTOCOL.md). */

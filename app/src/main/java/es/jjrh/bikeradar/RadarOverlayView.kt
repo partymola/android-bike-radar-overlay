@@ -354,14 +354,20 @@ class RadarOverlayView(context: Context) : View(context) {
                 currentLateralM
             }
 
-            // Both axes to scale, each on its own axis's metres-per-pixel; the
-            // dp sizes are only floors so a box never shrinks below a glyph.
-            val halfW = maxOf(vehicleHalfWidth(v.size), boxWidthM(v.templateWidthM) / 2f * maxLateralPx / RadarV2Decoder.LATERAL_FULL_M)
             val (nearM, farM) = boxSpanM(rangeYm, v.templateLengthM)
             val nearY = distToY(nearM, riderBottom, bottomY)
             val farY = distToY(farM, riderBottom, bottomY)
                 .coerceAtLeast(nearY + 2f * vehicleHalfHeight(v.size))
                 .coerceAtMost(h - dp(2f))
+            val halfW = boxHalfWidthPx(
+                drawnLengthPx = farY - nearY,
+                rangePxPerM = (bottomY - riderBottom) / visualMaxM,
+                lateralPxPerM = maxLateralPx / RadarV2Decoder.LATERAL_FULL_M,
+                templateLengthM = v.templateLengthM,
+                templateWidthM = v.templateWidthM,
+                minLengthPx = 2f * vehicleHalfHeight(v.size),
+                minHalfWidthPx = vehicleHalfWidth(v.size),
+            )
 
             // Edge-dock decision (incl. the renderer-side parked-car
             // fallback the decoder dwell gate can miss) is the pure,
@@ -566,8 +572,9 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     /** Minimum box half-sizes. The box is drawn to scale from the template
-     *  ([boxSpanM], [boxWidthM]); these floors bite only for a short template
-     *  at a long visual range, or a box clamped at the far end of the strip. */
+     *  ([boxSpanM], [boxHalfWidthPx]); these floors bite for a short template
+     *  or a long visual range, including a car on a landscape strip. The width
+     *  floor yields to [boxHalfWidthPx]'s length cap. */
     private fun vehicleHalfWidth(size: VehicleSize): Float = when (size) {
         VehicleSize.CAR -> dp(7f)
         VehicleSize.TRUCK -> dp(11f)

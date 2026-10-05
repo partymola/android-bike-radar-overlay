@@ -75,9 +75,12 @@ under `screenshots/` and `fastlane/.../phoneScreenshots/` is a byte copy of a
 golden from `app/src/test/snapshots/images/`, which is why they carry the
 fixture host `homeassistant.local:8123`, a masked token and no device names.
 Most are whole screens at 1344x2991. The exception is the overlay strip alone
-at 390x2991, from `RadarOverlayViewTest`, the one golden that is not a whole
-screen: it is the README hero and store slot 2 in both locales. Store slot 1
-is the home screen, so do not re-copy the strip into it.
+at 390x2991, `RadarOverlayViewTest.multipleVehicles`, the one published image
+that is not a whole screen: it is the README hero and store slot 2 in both
+locales. Overlay goldens render the landscape strip a mounted phone shows
+(390x1344) unless the test asks for portrait, and only this one is
+published. Store slot 1 is the home screen, so do not re-copy the strip
+into it.
 
 **Re-copy rather than re-capture.** No published image is a device capture: a
 capture is 1344x2992, one pixel taller, and would carry the rider's real Home

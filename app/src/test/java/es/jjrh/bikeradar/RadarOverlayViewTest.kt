@@ -19,8 +19,12 @@ import org.robolectric.annotation.GraphicsMode
  * [RadarState] and captures the Canvas via Roborazzi (Robolectric Native
  * Graphics) - no device, emulator, or layoutlib, so it runs in cold-cache CI.
  *
- * The view is rendered at its production width (130 dp) and full device
- * height so layout and drawing proportions match the real overlay.
+ * The view is rendered at its production width (130 dp) and the window's
+ * height, which is the strip's length. Fixtures default to a phone in
+ * landscape, the way it is mounted on a bike: at the usual view ranges the
+ * range axis then has fewer px per metre than the lateral one, which a
+ * portrait render cannot show. Portrait renders are kept for the store image
+ * and the tall-strip case. Box shapes are asserted in [RadarOverlayDrawnBoxesTest].
  * Verify with `:app:verifyRoborazziDebug`; regenerate with
  * `:app:recordRoborazziDebug`.
  */
@@ -31,13 +35,13 @@ class RadarOverlayViewTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
-    /** A measured + laid-out overlay at production width (130 dp) and full
-     *  device height. Roborazzi draws the view as-is, so it must be sized
-     *  before capture. */
-    private fun overlay(): RadarOverlayView {
+    /** A measured + laid-out overlay at production width (130 dp), as tall
+     *  as the screen's short side (landscape) or long side ([portrait]).
+     *  Roborazzi draws the view as-is, so it must be sized before capture. */
+    private fun overlay(portrait: Boolean = false): RadarOverlayView {
         val metrics = context.resources.displayMetrics
         val widthPx = (130 * metrics.density).toInt()
-        val heightPx = metrics.heightPixels
+        val heightPx = if (portrait) metrics.heightPixels else metrics.widthPixels
         return RadarOverlayView(context).apply {
             measure(
                 View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
@@ -204,7 +208,8 @@ class RadarOverlayViewTest {
 
     @Test
     fun multipleVehicles() {
-        overlay().apply {
+        // Portrait: this golden is copied as the README and store image.
+        overlay(portrait = true).apply {
             setState(
                 RadarState(
                     vehicles = listOf(
@@ -245,27 +250,37 @@ class RadarOverlayViewTest {
         // draws car-sized; the long template at 32 m draws 15 m long; the 2 m
         // template at 9 m draws short and narrow; the unlocked track at 22 m
         // draws as a car running back from its range. Rider's 55 m window and
-        // 30 m alert line.
+        // 30 m alert line. Portrait, where the range scale is fine enough
+        // that cars draw above the size floors.
+        overlay(portrait = true).apply {
+            setVisualMaxM(55)
+            setAlertMaxM(30)
+            setState(sizedTargets)
+        }.capture()
+    }
+
+    @Test
+    fun sizedTargetsOnALandscapeStrip() {
         overlay().apply {
             setVisualMaxM(55)
             setAlertMaxM(30)
-            setState(
-                RadarState(
-                    vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 3, speedMs = 0f, lateralPos = 0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
-                        Vehicle(id = 6, distanceM = 9, speedMs = -2f, lateralPos = -0.6f, templateLengthM = 2f, templateWidthM = 1f),
-                        Vehicle(id = 2, distanceM = 15, speedMs = -4f, lateralPos = -0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
-                        Vehicle(id = 3, distanceM = 22, speedMs = -6f, lateralPos = -0.4f),
-                        Vehicle(id = 4, distanceM = 32, speedMs = -7f, lateralPos = 0.7f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
-                        Vehicle(id = 7, distanceM = 40, speedMs = -5f, lateralPos = -0.5f, size = VehicleSize.TRUCK, templateLengthM = 4f, templateWidthM = 1.75f),
-                        Vehicle(id = 5, distanceM = 48, speedMs = -8f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
-                    ),
-                    source = DataSource.V2,
-                    bikeSpeedMs = 5f,
-                ),
-            )
+            setState(sizedTargets)
         }.capture()
     }
+
+    private val sizedTargets = RadarState(
+        vehicles = listOf(
+            Vehicle(id = 1, distanceM = 3, speedMs = 0f, lateralPos = 0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
+            Vehicle(id = 6, distanceM = 9, speedMs = -2f, lateralPos = -0.6f, templateLengthM = 2f, templateWidthM = 1f),
+            Vehicle(id = 2, distanceM = 15, speedMs = -4f, lateralPos = -0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+            Vehicle(id = 3, distanceM = 22, speedMs = -6f, lateralPos = -0.4f),
+            Vehicle(id = 4, distanceM = 32, speedMs = -7f, lateralPos = 0.7f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+            Vehicle(id = 7, distanceM = 40, speedMs = -5f, lateralPos = -0.5f, size = VehicleSize.TRUCK, templateLengthM = 4f, templateWidthM = 1.75f),
+            Vehicle(id = 5, distanceM = 48, speedMs = -8f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+        ),
+        source = DataSource.V2,
+        bikeSpeedMs = 5f,
+    )
 
     @Test
     fun theNearerTargetIsDrawnOverALongerOneBehindIt() {

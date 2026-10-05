@@ -57,4 +57,44 @@ class BoxSpanTest {
         // 0xFF in the width byte decodes to 63.75 m; the strip spans 6 m.
         assertEquals(6f, boxWidthM(63.75f), 0f)
     }
+
+    private fun halfWidth(
+        drawnLength: Float = 100f,
+        rangePxPerM: Float,
+        lateralPxPerM: Float = 16f,
+        lengthM: Float = 4f,
+        widthM: Float = 1.75f,
+        minLength: Float = 24f,
+        minHalfWidth: Float = 7f,
+    ) = boxHalfWidthPx(drawnLength, rangePxPerM, lateralPxPerM, lengthM, widthM, minLength, minHalfWidth)
+
+    @Test
+    fun theWidthUsesTheSmallerOfTheTwoScales() {
+        assertEquals(14f, halfWidth(rangePxPerM = 18f), 0f)
+        assertEquals(10.5f, halfWidth(rangePxPerM = 12f), 0f)
+    }
+
+    @Test
+    fun anUnlockedTrackIsAsWideAsTheCarTemplate() {
+        assertEquals(14f, halfWidth(rangePxPerM = 18f, lengthM = 0f, widthM = 0f), 0f)
+    }
+
+    @Test
+    fun aCarOnALandscapeStripFallsToTheWidthFloor() {
+        assertEquals(7f, halfWidth(drawnLength = 24f, rangePxPerM = 6f), 0f)
+    }
+
+    @Test
+    fun aBoxLengthenedToItsFloorWidensWithIt() {
+        // 2 x 1 m at 2 px/m is 4 px long; the 36 px floor makes it 18 px/m.
+        assertEquals(9f, halfWidth(drawnLength = 36f, rangePxPerM = 2f, lateralPxPerM = 30f, lengthM = 2f, widthM = 1f, minLength = 36f), 0f)
+    }
+
+    @Test
+    fun noBoxIsWiderThanTheLengthItWasDrawn() {
+        // A garbage width byte, and a TRUCK floor on a box the strip's end cut
+        // to 18 px.
+        assertEquals(15f, halfWidth(drawnLength = 30f, rangePxPerM = 18f, widthM = 63.75f), 0f)
+        assertEquals(9f, halfWidth(drawnLength = 18f, rangePxPerM = 6f, minLength = 36f, minHalfWidth = 11f), 0f)
+    }
 }

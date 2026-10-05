@@ -74,6 +74,10 @@
          de "se te ha olvidado bloquearla". -->
     <string name="overlay_radar_disconnected">Radar trasero desconectado</string>
     <string name="overlay_radar_disconnected_unlocked">pero bici sin bloquear</string>
+    <!-- El mismo aviso en una ruta sin radar (nunca se conectó, así que no
+         "desconectado"); aparece cuando ya ha sonado el aviso. -->
+    <string name="overlay_radar_not_on">Sin radar trasero</string>
+    <string name="overlay_radar_not_on_sub">Enciéndelo</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)
@@ -281,6 +285,7 @@
     <string name="onboarding_ebike_bullet_status">Batería y estado de la eBike en la pantalla de inicio</string>
     <string name="onboarding_ebike_bullet_climb">Los pitidos de adelantamiento ajustado siguen activos en una subida lenta</string>
     <string name="onboarding_ebike_bullet_timing">El ritmo de los pitidos se ajusta a la velocidad de tu rueda</string>
+    <string name="onboarding_ebike_bullet_no_radar">Un aviso si vas sin el radar encendido</string>
     <string name="onboarding_ebike_have_title">Tengo una</string>
     <string name="onboarding_ebike_have_sub">Enciéndela.</string>
     <string name="onboarding_ebike_donthave_title">No tengo</string>
@@ -437,6 +442,8 @@
     <string name="settings_radar_idle_interval_helper">Con qué frecuencia reintentar la conexión mientras el radar está en reposo. Los valores más largos ahorran batería por la noche; los más cortos detectan el radar más rápido al volver.</string>
     <string name="settings_radar_banner_persistent_title">Mantener el aviso de desconexión en pantalla</string>
     <string name="settings_radar_banner_persistent_subtitle">Sin eBike Bosch, o si la app no sabe si la tuya está bloqueada: se mantiene hasta que el radar se reconecte, en vez de ocultarse 40 s después de la desconexión.</string>
+    <string name="settings_radar_no_radar_warning_title">Avisar si vas sin el radar</string>
+    <string name="settings_radar_no_radar_warning_subtitle">Con una eBike Bosch: si llevas <xliff:g id="seconds" example="90">%1$d</xliff:g> s en marcha sin el radar conectado, suenan 3 pulsos graves, hasta 3 veces, y aparece un aviso en la barra lateral.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
@@ -538,6 +545,7 @@
     <string name="settings_ebike_does_item_battery">Muestra la batería y el estado de conexión de la eBike en la pantalla de inicio</string>
     <string name="settings_ebike_does_item_beeps">Mantiene los pitidos de adelantamiento ajustado activos en una subida lenta</string>
     <string name="settings_ebike_does_item_timing">Ajusta el ritmo de los pitidos a la velocidad de tu rueda</string>
+    <string name="settings_ebike_does_item_no_radar">Te avisa si vas sin el radar encendido</string>
     <string name="settings_ebike_whats_collected_label">Qué se recopila</string>
     <string name="settings_ebike_collected_item_reads">Lee la batería, la velocidad y el pedaleo - solo lectura, nunca envía nada a tu bici</string>
     <string name="settings_ebike_collected_item_phone">Se queda en tu teléfono, guardado en el registro de la ruta</string>
@@ -886,7 +894,7 @@
     <string name="alert_sound_urgent_title">Aviso urgente</string>
     <string name="alert_sound_urgent_meaning">Se acerca rápido mientras estás parado o vas despacio (solo con radares que miden velocidad)</string>
     <string name="alert_sound_lost_title">3 pulsos graves</string>
-    <string name="alert_sound_lost_meaning">El radar se ha desconectado</string>
+    <string name="alert_sound_lost_meaning">El radar se ha desconectado o vas sin él</string>
     <string name="alert_sound_back_title">1 pulso grave</string>
     <string name="alert_sound_back_meaning">El radar ha vuelto</string>
 

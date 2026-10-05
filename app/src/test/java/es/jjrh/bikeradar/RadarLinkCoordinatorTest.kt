@@ -61,9 +61,17 @@ class RadarLinkCoordinatorTest {
     // tests below set it false, which is what a powered-on but unridden bike gives.
     private var ebikeRiding = true
 
+    // When the current riding confirmation began. Default 0: riding since before
+    // any radar event, so every pre-existing test's radar counts as up this ride.
+    private var ridingSinceMs = 0L
+
+    // Whether a radar is paired for this bike. Default true: a rider who has one.
+    private var radarPaired = true
+
     private val live = RadarLinkVisualDecider.LinkVisual.LIVE
     private val plain = RadarLinkVisualDecider.LinkVisual.RECONNECTING_PLAIN
     private val unlocked = RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
+    private val noRadar = RadarLinkVisualDecider.LinkVisual.NO_RADAR
 
     private var postWalkAwayCount = 0
     private var cancelWalkAwayCount = 0
@@ -106,7 +114,8 @@ class RadarLinkCoordinatorTest {
             resolveDashcamSlug = { dashcamSlug },
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs },
-            eBikeRidingFresh = { ebikeRiding },
+            eBikeRidingSinceMs = { if (ebikeRiding) ridingSinceMs else null },
+            hasLinkableRadar = { radarPaired },
             hasEBikeSignal = { hasEBike },
             everSawTrack = { sawTrack },
             postForgotToLock = { forgotToLockPostCount++ },
@@ -1084,7 +1093,7 @@ class RadarLinkCoordinatorTest {
         // The coordinator seam of the endless-repeat fix: with no eBike, the
         // activity latch is the only confirmation, so the cue must stop at
         // MAX_LATCH_ONLY_CUES per off-episode. A wiring regression (dropping
-        // the cueCount write-back, or hardcoding latchOnlyConfirmation) brings
+        // the cueCount write-back, or hardcoding the cap flag) brings
         // back the beep-every-cadence-forever field bug and must fail here.
         prefs.pausedUntilEpochMs = 0L
         ebike = null
@@ -1145,10 +1154,16 @@ class RadarLinkCoordinatorTest {
         assertEquals(0, clogged("radar_drop_cue"))
         // ...and once the rider is genuinely riding with the radar still dead,
         // the cue is NOT suppressed - the safety case the gate must never break.
+        // It is today's ride with no radar, not yesterday's drop, so it waits
+        // the same grace as any other ride whose radar is not on yet.
         ebikeRiding = true
+        ridingSinceMs = t
         ebikeAtMs = t - 1_000L
         coordinator.evaluateRadarDrop(t)
-        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_drop_cue") + clogged("no_radar_cue"))
+        ebikeAtMs = t + 90_000L - 1_000L
+        coordinator.evaluateRadarDrop(t + 90_000L)
+        assertEquals(1, clogged("no_radar_cue"))
     }
 
     @Test
@@ -1968,6 +1983,632 @@ class RadarLinkCoordinatorTest {
         connectAt(500L)
         disconnectAt(300_000L)
         assertEquals(0, wakeLockAcquireCount)
+    }
+
+    // ── riding with no radar this ride ───────────────────────────────────────
+
+    /** An eBike ride confirmed from [since] with the radar never up this
+     *  session. Ages are literal: 90 s is the grace, 180 s the repeat. */
+    private fun rideWithNoRadarFrom(since: Long) {
+        prefs.pausedUntilEpochMs = 0L
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        ebikeRiding = true
+        ridingSinceMs = since
+    }
+
+    private fun tick(t: Long) {
+        ebikeAtMs = t - 1_000L
+        coordinator.evaluateRadarDrop(t)
+    }
+
+    @Test
+    fun aRideWithNoRadarIsSilentUntilTheGraceThenWarns() {
+        rideWithNoRadarFrom(100_000L)
+        tick(100_000L)
+        tick(189_999L)
+        assertEquals("not before 90 s of riding", 0, clogged("no_radar_cue"))
+        tick(190_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        assertEquals("it is not a drop", 0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun theWarningReachesTheBeeperAsTheRadarLostSound() {
+        val cueTags = mutableListOf<String>()
+        beeper = AlertBeeper(
+            audioManager = RuntimeEnvironment.getApplication()
+                .getSystemService(android.media.AudioManager::class.java),
+            executor = Executor { it.run() },
+            playTrackOverride = { true },
+            onCue = { cueTags += it },
+        )
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        assertEquals(listOf("radar_drop"), cueTags)
+    }
+
+    @Test
+    fun theRadarArrivingInsideTheGraceIsSilent() {
+        rideWithNoRadarFrom(100_000L)
+        tick(130_000L)
+        connectAt(140_000L)
+        tick(190_000L)
+        tick(400_000L)
+        assertEquals(0, clogged("no_radar_cue") + clogged("radar_drop_cue"))
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun theRadarArrivingAfterTheWarningGetsOneBackPulse() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        connectAt(200_000L)
+        tick(202_000L)
+        tick(204_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun theBackPulseSurvivesARadarConnectThatStartsANewRide() {
+        // Yesterday's off-episode makes today's first connect a new ride, and
+        // that edge resets the drop cue's bookkeeping. It must not take the
+        // pulse answering today's warning with it.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val today = 4_000L + 8L * 60L * 60L * 1_000L
+        rideWithNoRadarFrom(today)
+        tick(today + 90_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        connectAt(today + 100_000L)
+        tick(today + 102_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aStopLongerThanTheRidingWindowNeitherPulsesNorRestartsTheGrace() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebikeRiding = false // a long red light
+        tick(250_000L)
+        tick(380_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+        ebikeRiding = true
+        ridingSinceMs = 400_000L // a fresh confirmation after the stop
+        tick(400_000L)
+        // Due on cadence (180 s after the first), not 90 s after setting off.
+        assertEquals(2, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aRideWithNoRadarWarnsThreeTimesAtMost() {
+        rideWithNoRadarFrom(100_000L)
+        var t = 190_000L
+        repeat(6) {
+            tick(t)
+            t += 180_000L
+        }
+        assertEquals(3, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun everyWarningReachesTheJournal() {
+        rideWithNoRadarFrom(100_000L)
+        var t = 190_000L
+        repeat(4) {
+            tick(t)
+            t += 180_000L
+        }
+        assertEquals(
+            listOf(
+                "no-radar alert sounded (cue 1, 90 s into the ride, grace 90 s)",
+                "no-radar alert sounded (cue 2, 270 s into the ride, grace 90 s)",
+                "no-radar alert sounded (cue 3, 450 s into the ride, grace 90 s)",
+            ),
+            journalLines,
+        )
+    }
+
+    @Test
+    fun theBannerComesUpOnTheTickTheWarningSounds() {
+        rideWithNoRadarFrom(100_000L)
+        tick(150_000L)
+        assertEquals(live, bannerStates.last())
+        tick(190_000L)
+        assertEquals(noRadar, bannerStates.last())
+        connectAt(200_000L)
+        assertEquals(live, bannerStates.last())
+    }
+
+    @Test
+    fun theBannerGoesOnceTheBikeNoLongerShowsTheRide() {
+        // Flow gone or the bike switched off without a lock: the banner must
+        // not sit over every app for the rest of the new-ride gap.
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        assertEquals(noRadar, bannerStates.last())
+        ebikeRiding = false
+        tick(250_000L)
+        assertEquals(live, bannerStates.last())
+    }
+
+    @Test
+    fun lockingTheBikeEndsTheRideAndLeavesNoPulseForTomorrow() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebike = LiveDataSnapshot(systemLocked = true)
+        tick(300_000L)
+        assertEquals(live, bannerStates.last())
+        val tomorrow = 300_000L + 8L * 60L * 60L * 1_000L
+        connectAt(tomorrow)
+        tick(tomorrow + 2_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aLongSpellWithoutRidingEndsTheRideWithoutALock() {
+        // No lock reading at all: the rider's new-ride gap ends it instead.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebikeRiding = false
+        tick(190_000L + 600_000L)
+        assertEquals(live, bannerStates.last())
+        connectAt(190_000L + 900_000L)
+        tick(190_000L + 902_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aRadarConnectingJustInsideTheGapGetsTheBackPulse() {
+        // The connect lands half a second before the gap runs out and the
+        // next tick after it: the ride ends on that tick, and the pulse is
+        // still owed.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebikeRiding = false
+        tick(190_000L + 599_000L)
+        connectAt(190_000L + 599_500L)
+        tick(190_000L + 602_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aRadarConnectingLongAfterTheRideGetsNoPulse() {
+        // No tick ran between the gap running out and a connect hours later
+        // (the phone asleep): that connect is a new ride's, not this one's.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebikeRiding = false
+        val later = 190_000L + 600_000L + 3L * 60L * 60L * 1_000L
+        connectAt(later)
+        tick(later + 2_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aRadarConnectingAtTheGapGetsNoPulse() {
+        // The other side of the boundary: exactly at the gap is too late.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        ebikeRiding = false
+        tick(190_000L + 599_000L)
+        connectAt(190_000L + 600_000L)
+        tick(190_000L + 602_000L)
+        assertEquals(0, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun aParkedTapDoesNotSilenceTheNextRideWithoutTheRadar() {
+        // Ride with the radar, tap "I've parked", ride again later with the
+        // radar left off: the tap ended the first ride, not this one.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        hasEBike = true
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        now = 20_000L
+        coordinator.markRideEndedByRider()
+        ebikeRiding = false
+        tick(60_000L)
+        val today = 8L * 60L * 60L * 1_000L
+        rideWithNoRadarFrom(today)
+        tick(today)
+        tick(today + 89_999L)
+        assertEquals(0, clogged("no_radar_cue"))
+        tick(today + 90_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aParkedTapDuringTheRunItEndedStillHolds() {
+        // A riding run that began before the tap is the ride the tap ended.
+        rideWithNoRadarFrom(100_000L)
+        now = 150_000L
+        coordinator.markRideEndedByRider()
+        tick(150_000L)
+        tick(400_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aShortLockThenRidingOnWaitsTheGraceAgain() {
+        // The riding run outlives a short lock, so without the park date the
+        // ride would start 90 s in the past and cue at once.
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        ebike = LiveDataSnapshot(systemLocked = true)
+        tick(200_000L)
+        ebike = LiveDataSnapshot(systemLocked = false)
+        tick(210_000L)
+        tick(289_999L)
+        assertEquals(1, clogged("no_radar_cue"))
+        tick(290_000L)
+        assertEquals(2, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aDropWhileWheelingOutStaysOnTheDropPath() {
+        // The radar was up 120 s before the ride was dated: it joined this
+        // ride, so this is a drop, not a radar left off.
+        connectAt(50_000L)
+        disconnectAt(80_000L)
+        rideWithNoRadarFrom(200_000L)
+        tick(200_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aRadarUpBeforeTheRidingWindowIsNoRadarThisRide() {
+        // One millisecond earlier than the sibling's window edge.
+        connectAt(50_000L)
+        disconnectAt(80_000L)
+        rideWithNoRadarFrom(200_001L)
+        tick(200_001L)
+        assertEquals(0, clogged("radar_drop_cue") + clogged("no_radar_cue"))
+        tick(290_001L)
+        assertEquals(1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aStaleEBikeSnapshotHoldsTheWarning() {
+        // Flow quiet for 30 s mid-ride: the bike no longer says the rider is
+        // on it.
+        rideWithNoRadarFrom(100_000L)
+        tick(100_000L)
+        ebikeAtMs = 190_000L - 30_000L
+        coordinator.evaluateRadarDrop(190_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+        ebikeAtMs = 192_000L - 29_999L
+        coordinator.evaluateRadarDrop(192_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theGraceOutlastsALongReconnectPause() {
+        // A 120 s reconnect cap sleeps up to 144 s; 30 s more for the connect.
+        prefs.radarLongOfflineCapSec = 120
+        rideWithNoRadarFrom(100_000L)
+        tick(273_999L)
+        assertEquals(0, clogged("no_radar_cue"))
+        tick(274_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theGraceStaysAt90SecondsUpToA50SecondReconnectPause() {
+        assertEquals(90_000L, RadarLinkCoordinator.noRadarGraceMs(30))
+        assertEquals(90_000L, RadarLinkCoordinator.noRadarGraceMs(50))
+        assertEquals(91_200L, RadarLinkCoordinator.noRadarGraceMs(51))
+    }
+
+    @Test
+    fun aRiderWithNoRadarPairedGetsNoWarning() {
+        // Nothing to switch on; "Turn it on" would be the wrong instruction.
+        radarPaired = false
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        tick(400_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+        assertTrue(bannerStates.isNotEmpty())
+        assertTrue(bannerStates.all { it == live })
+        assertFalse(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun aFailedConnectAttemptDuringTheGraceIsNotTheRadarBeingUp() {
+        rideWithNoRadarFrom(100_000L)
+        disconnectAt(130_000L) // an attempt that never connected
+        tick(190_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aDropAfterTheRadarWasUpThisRideStaysOnTheDropPath() {
+        rideWithNoRadarFrom(100_000L)
+        tick(105_000L)
+        connectAt(110_000L)
+        disconnectAt(200_000L)
+        tick(259_999L)
+        assertEquals(0, clogged("radar_drop_cue"))
+        tick(260_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun switchingTheWarningOffSilencesItAndYesterdaysDropToo() {
+        prefs.noRadarRideWarningEnabled = false
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val today = 4_000L + 8L * 60L * 60L * 1_000L
+        rideWithNoRadarFrom(today)
+        var t = today
+        repeat(4) {
+            tick(t)
+            t += 180_000L
+        }
+        assertEquals(0, clogged("no_radar_cue") + clogged("radar_drop_cue"))
+        assertTrue(bannerStates.isNotEmpty())
+        assertTrue(bannerStates.all { it == live })
+    }
+
+    @Test
+    fun switchingTheWarningOffMidRideTakesTheBannerAndTheRepeats() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        tick(192_000L)
+        assertEquals(noRadar, bannerStates.last())
+        prefs.noRadarRideWarningEnabled = false
+        tick(194_000L)
+        assertEquals(live, bannerStates.last())
+        tick(400_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun aPauseSilencesTheWarning() {
+        rideWithNoRadarFrom(100_000L)
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        tick(190_000L)
+        tick(192_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+        assertTrue(bannerStates.all { it == live })
+    }
+
+    @Test
+    fun aRiderWithNoEBikeGetsNoWarning() {
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        hasEBike = false
+        ridingSinceMs = 100_000L
+        tick(190_000L)
+        tick(400_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+        // No ride is dated without a live eBike, so nothing else changes either.
+        assertTrue(bannerStates.isNotEmpty())
+        assertTrue(bannerStates.all { it == live })
+        assertFalse(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun aBikeAwakeButNotRiddenGetsNoWarning() {
+        rideWithNoRadarFrom(100_000L)
+        ebikeRiding = false
+        tick(190_000L)
+        tick(400_000L)
+        assertEquals(0, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theTickRunsFastOnlyWhileARideHasNoRadar() {
+        assertFalse(coordinator.needsFastTick())
+        rideWithNoRadarFrom(100_000L)
+        tick(100_000L)
+        assertTrue(coordinator.needsFastTick())
+        connectAt(110_000L)
+        assertFalse(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun theFastTickEndsWithTheRide() {
+        rideWithNoRadarFrom(100_000L)
+        tick(100_000L)
+        assertTrue(coordinator.needsFastTick())
+        ebike = LiveDataSnapshot(systemLocked = true)
+        tick(110_000L)
+        assertFalse("a lock ends it", coordinator.needsFastTick())
+        prefs.radarLongOfflineThresholdMinutes = 10
+        ebike = LiveDataSnapshot(systemLocked = false)
+        tick(120_000L)
+        assertTrue(coordinator.needsFastTick())
+        ebikeRiding = false
+        tick(120_000L + 600_000L)
+        assertFalse("so does the new-ride gap", coordinator.needsFastTick())
+    }
+
+    @Test
+    fun theFastTickRunsWhileTheRadarIsDown() {
+        connectAt(1_000L)
+        assertFalse(coordinator.needsFastTick())
+        disconnectAt(4_000L)
+        assertTrue(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun aRideFirstSeenAfterASleepLongerThanTheGapStartsAfresh() {
+        // No tick ran between yesterday's last ridden tick and today's ride
+        // already being confirmed: yesterday's ride and its spent cues must
+        // not carry over.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        rideWithNoRadarFrom(100_000L)
+        var t = 190_000L
+        repeat(3) {
+            tick(t)
+            t += 180_000L
+        }
+        assertEquals(3, clogged("no_radar_cue"))
+        val today = 8L * 60L * 60L * 1_000L
+        ridingSinceMs = today
+        tick(today)
+        tick(today + 89_999L)
+        assertEquals(3, clogged("no_radar_cue"))
+        tick(today + 90_000L)
+        assertEquals(4, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theFastTickNeedsTheWarningSwitchedOn() {
+        rideWithNoRadarFrom(100_000L)
+        tick(100_000L)
+        prefs.noRadarRideWarningEnabled = false
+        assertFalse(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun aRadarConnectedSinceBeforeTheRideNeverWarns() {
+        // The ordinary morning: radar on at home, minutes of wheeling out and
+        // fitting kit, then riding, with the link up throughout. Its last
+        // connect is far older than the riding window before the ride.
+        connectAt(1_000L)
+        rideWithNoRadarFrom(300_000L)
+        tick(300_000L)
+        tick(390_000L)
+        tick(570_000L)
+        assertEquals(0, clogged("no_radar_cue") + clogged("radar_drop_cue"))
+        assertTrue(bannerStates.isNotEmpty())
+        assertTrue(bannerStates.none { it == noRadar })
+        assertFalse(coordinator.needsFastTick())
+    }
+
+    @Test
+    fun aPauseTakesTheBannerDown() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        assertEquals(noRadar, bannerStates.last())
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        tick(192_000L)
+        assertEquals(live, bannerStates.last())
+        tick(370_000L)
+        assertEquals("no repeat while paused", 1, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theRepeatWaitsThreeMinutes() {
+        rideWithNoRadarFrom(100_000L)
+        tick(190_000L)
+        tick(369_999L)
+        assertEquals(1, clogged("no_radar_cue"))
+        tick(370_000L)
+        assertEquals(2, clogged("no_radar_cue"))
+    }
+
+    @Test
+    fun theBannerStaysAfterTheLastWarning() {
+        rideWithNoRadarFrom(100_000L)
+        var t = 190_000L
+        repeat(3) {
+            tick(t)
+            t += 180_000L
+        }
+        tick(700_000L)
+        assertEquals(3, clogged("no_radar_cue"))
+        assertEquals(noRadar, bannerStates.last())
+    }
+
+    @Test
+    fun theJournalKeepsTheGraceTheFirstCueWaited() {
+        // The rider lowers the reconnect interval after the first cue: the
+        // later lines still name the wait that applied.
+        prefs.radarLongOfflineCapSec = 120
+        rideWithNoRadarFrom(100_000L)
+        tick(274_000L)
+        prefs.radarLongOfflineCapSec = 30
+        tick(454_000L)
+        assertEquals(
+            listOf(
+                "no-radar alert sounded (cue 1, 174 s into the ride, grace 174 s)",
+                "no-radar alert sounded (cue 2, 354 s into the ride, grace 174 s)",
+            ),
+            journalLines,
+        )
+    }
+
+    @Test
+    fun theGraceRoundsUpToTheSecond() {
+        assertEquals(90, RadarLinkCoordinator.noRadarGraceSec(30))
+        assertEquals(92, RadarLinkCoordinator.noRadarGraceSec(51))
+        assertEquals(174, RadarLinkCoordinator.noRadarGraceSec(120))
+    }
+
+    @Test
+    fun switchingTheWarningOffLeavesAMidRideDropCue() {
+        prefs.noRadarRideWarningEnabled = false
+        rideWithNoRadarFrom(100_000L)
+        tick(105_000L)
+        connectAt(110_000L)
+        disconnectAt(200_000L)
+        tick(259_999L)
+        assertEquals(0, clogged("radar_drop_cue"))
+        tick(260_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(unlocked, bannerStates.last())
+    }
+
+    @Test
+    fun switchingTheWarningOffLeavesARadarOnlyDropCue() {
+        prefs.noRadarRideWarningEnabled = false
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.evaluateRadarDrop(15_000L)
+        assertEquals(plain, bannerStates.last())
+        coordinator.evaluateRadarDrop(65_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun noRadarPairedLeavesAMidRideDropCue() {
+        radarPaired = false
+        rideWithNoRadarFrom(100_000L)
+        tick(105_000L)
+        connectAt(110_000L)
+        disconnectAt(200_000L)
+        tick(260_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(unlocked, bannerStates.last())
+    }
+
+    @Test
+    fun aRadarThatDiedBeforeALockGetsTheNoRadarWarningAfterIt() {
+        // Deliberate: a lock ends the ride, so riding on with the radar still
+        // dead is a ride without it. It waits the grace and is capped, and the
+        // switch silences it, where the drop cue would have repeated at once.
+        rideWithNoRadarFrom(100_000L)
+        connectAt(110_000L)
+        disconnectAt(200_000L)
+        tick(260_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        ebike = LiveDataSnapshot(systemLocked = true)
+        tick(300_000L)
+        tick(600_000L)
+        ebike = LiveDataSnapshot(systemLocked = false)
+        tick(602_000L)
+        tick(689_999L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("no_radar_cue"))
+        tick(690_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        assertEquals(noRadar, bannerStates.last())
     }
 
     // ── snooze re-arm helper ─────────────────────────────────────────────────

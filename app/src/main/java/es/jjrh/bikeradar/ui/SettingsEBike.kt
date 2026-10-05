@@ -57,7 +57,8 @@ import kotlinx.coroutines.delay
  * power, odometer) by passively subscribing to the proprietary status stream
  * the Bosch eBike Flow app uses - it works only while Flow is open and
  * connected to the bike. Only battery and a live/waiting status are surfaced
- * in the UI; the rest feeds alert tuning (stop detection, walk-away gating).
+ * in the UI; the rest feeds alert tuning (stop detection, walk-away gating)
+ * and dates the ride the no-radar warning is timed from.
  * There is nothing to pair in this app, so this screen has no pairing
  * walkthrough or unpair action; status is just "are frames arriving right
  * now", derived from [EBikeStateBus] snapshot freshness.
@@ -290,6 +291,7 @@ internal fun SettingsEBikeContent(
                     stringResource(R.string.settings_ebike_does_item_battery),
                     stringResource(R.string.settings_ebike_does_item_beeps),
                     stringResource(R.string.settings_ebike_does_item_timing),
+                    stringResource(R.string.settings_ebike_does_item_no_radar),
                 ).joinToString("\n") { "•  $it" },
                 color = br.fgMuted,
                 fontSize = 12.sp,

@@ -167,8 +167,9 @@ package es.jjrh.bikeradar
  * mean the radar came back (clear road) or that it is still down. So the same
  * reconnect edge that resets the latch also raises [Decision.fireReconnect]
  * IF a drop cue had actually been raised this down-episode (latch non-null).
- * One acknowledgement cue then restores silence's meaning. It never fires on a
- * cold start or a sub-threshold blip, because those never set the latch.
+ * One acknowledgement cue then restores silence's meaning. It never fires
+ * after a sub-threshold blip, or on a connect no cue preceded, because those
+ * never set the latch.
  */
 object RadarDropDecider {
 
@@ -181,15 +182,17 @@ object RadarDropDecider {
         val fireReconnect: Boolean = false,
     )
 
-    /** Repeat cap when riding is confirmed ONLY by the latched radar-activity
-     *  signal (no live eBike confirmation). The latch is sampled once at the
-     *  drop and can never be un-confirmed, so a quick park - radar powered off
-     *  within the freshness window of the last moving frame - would otherwise
-     *  repeat the cue at [decide]'s cadence FOREVER (observed in the field: a
-     *  3-beep cue every 3 minutes for the rest of the evening). Three cues
-     *  (threshold + two cadences, ~7 minutes) still cover a genuine mid-ride
-     *  drop the rider missed once; a live eBike "unlocked" keeps repeating
-     *  uncapped because it genuinely re-confirms riding every tick. */
+    /** Repeat cap for a [capped] episode. Two kinds are capped. Riding
+     *  confirmed ONLY by the latched radar-activity signal (no live eBike
+     *  confirmation): the latch is sampled once at the drop and can never be
+     *  un-confirmed, so a quick park - radar powered off within the freshness
+     *  window of the last moving frame - would otherwise repeat the cue at
+     *  [decide]'s cadence FOREVER (observed in the field: a 3-beep cue every 3
+     *  minutes for the rest of the evening). And a ride the radar has not
+     *  joined, which may be deliberate. Three cues (threshold + two cadences,
+     *  ~7 minutes) still cover a rider who missed the first; a live eBike
+     *  "unlocked" after a mid-ride drop keeps repeating uncapped because it
+     *  genuinely re-confirms riding every tick. */
     const val MAX_LATCH_ONLY_CUES = 3
 
     fun decide(
@@ -200,14 +203,14 @@ object RadarDropDecider {
         thresholdMs: Long,
         cadenceMs: Long,
         lastCueMs: Long?,
-        latchOnlyConfirmation: Boolean = false,
+        capped: Boolean = false,
         cueCount: Int = 0,
     ): Decision {
         val eligible = radarEverLive &&
             radarDownForMs != null &&
             radarDownForMs >= thresholdMs &&
             ridingConfirmed &&
-            !(latchOnlyConfirmation && cueCount >= MAX_LATCH_ONLY_CUES)
+            !(capped && cueCount >= MAX_LATCH_ONLY_CUES)
         if (!eligible) {
             // Reset the latch only when the radar is back up, so the next
             // drop fires promptly at the threshold. While still down but not

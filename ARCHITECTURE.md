@@ -77,7 +77,8 @@ testable.
   `TYPE_APPLICATION_OVERLAY` window) - attach/detach, per-vehicle state, and
   battery-low / dashcam-status badging;
 - the `AlertBeeper` audio cues (tiered proximity beeps, the urgent
-  imminent-impact cue, the all-clear chime, radar drop/reconnect cues);
+  imminent-impact cue, the all-clear chime); the radar drop/reconnect cues
+  come from `RadarLinkCoordinator.evaluateRadarDrop` instead;
 - close-pass detection (a state machine that emits an event, publishes it to HA
   when configured, and updates the ride tally).
 

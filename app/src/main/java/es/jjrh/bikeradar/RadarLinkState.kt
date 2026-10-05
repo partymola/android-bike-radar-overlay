@@ -22,9 +22,10 @@ package es.jjrh.bikeradar
 data class RadarLinkState(
     /** True while the GATT link to the rear radar is open. */
     val radarGattActive: Boolean = false,
-    /** Monotonic (elapsedRealtime) ms when the radar last went from connected
-     *  to disconnected. Null while the radar is connected, or before the
-     *  first disconnect of the session. */
+    /** Monotonic (elapsedRealtime) ms the current off-episode began: the first
+     *  disconnect after a connection, or the first connect attempt that failed
+     *  (`theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt`). Null while
+     *  the radar is connected, or before the first of either this session. */
     val radarOffSinceMs: Long? = null,
     /** Monotonic (elapsedRealtime) ms when the current radar connection began.
      *  Null while disconnected. Used to integrate [sessionRadarConnectedMs] on
@@ -35,6 +36,11 @@ data class RadarLinkState(
      *  tick is 30 s and a connection that ends within that window would
      *  go unnoticed under a per-tick scheme). */
     val sessionRadarConnectedMs: Long = 0L,
+    /** Monotonic (elapsedRealtime) ms the radar link was last up: stamped on a
+     *  connect, and on a disconnect that ends a connection rather than a failed
+     *  attempt. Null if never this session. Answers "was the radar up during
+     *  this ride" for the no-radar warning. */
+    val lastRadarUpMs: Long? = null,
     /** True after a radar disconnect when the walk-away decider is watching
      *  the dashcam for a leave-behind. Disarmed when the dashcam goes stale
      *  (BLANK) or the radar comes back (IDLE). */
@@ -54,9 +60,16 @@ data class RadarLinkState(
      *  dead-radar banner retired. Without it the app has to INFER a ride end
      *  from traffic, which is the guessing the whole gate exists to bound.
      *
-     *  Cleared on the next radar connect, so it can never silence a later
-     *  ride. */
+     *  Cleared on the next radar connect, or when an eBike riding run begins
+     *  after [rideEndedAtMs], so it cannot silence a later ride whose radar
+     *  stays off (`aParkedTapDoesNotSilenceTheNextRideWithoutTheRadar`). A run
+     *  begins after a stop longer than `RidingSpeedGate.FRESH_MS`, so riding
+     *  on sooner than that is still the ride the tap ended
+     *  (`aParkedTapDuringTheRunItEndedStillHolds`). */
     val rideEndedByRider: Boolean = false,
+    /** Monotonic (elapsedRealtime) ms of the rider's "I've parked" tap, or null
+     *  while [rideEndedByRider] is false. */
+    val rideEndedAtMs: Long? = null,
     /** True while the eBike's last reading says locked or asleep. Written each
      *  tick by `RadarLinkCoordinator.evaluateRadarDrop` from the snapshot the
      *  drop cue reads. Not age-gated, by design: the bike drops its link as it

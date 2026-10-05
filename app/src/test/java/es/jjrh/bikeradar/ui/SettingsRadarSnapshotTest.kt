@@ -143,6 +143,8 @@ class SettingsRadarSnapshotTest {
             radarLongOfflineCap = 30,
             onRadarLongOfflineCapChange = {},
             onRadarLongOfflineCapFinished = {},
+            noRadarWarning = true,
+            onNoRadarWarningChange = {},
             bannerPersistent = false,
             onBannerPersistentChange = {},
             onStopScanningClick = {},

@@ -186,6 +186,7 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
                 stringResource(R.string.onboarding_ebike_bullet_status),
                 stringResource(R.string.onboarding_ebike_bullet_climb),
                 stringResource(R.string.onboarding_ebike_bullet_timing),
+                stringResource(R.string.onboarding_ebike_bullet_no_radar),
             ).joinToString("\n") { "•  $it" },
             color = br.fgMuted,
             fontSize = 13.sp,

@@ -75,6 +75,12 @@ screen stays yours.
   assist mode while Bosch Flow is connected. Never writes to the bike.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
+- Radar-off warning: with a Bosch eBike, the app notices when you ride with no
+  radar connected. Once the bike has shown you riding for 90 seconds, you hear
+  the drop alert (three low pulses), up to three times a ride. A banner on the
+  overlay tells you to turn the radar on. An idle reconnect interval over 50
+  seconds makes it wait longer. It needs Bosch Flow connected to the bike.
+  Switch it off in **Settings → Alerts**, under Connection.
 - Radar sharing (off until you allow it): another app on the phone can ask
   to read your radar stream, and to change your tail light and hide the
   overlay. It gets nothing until you say yes on a screen naming it. Stop it
@@ -287,7 +293,9 @@ knowing before you rely on it.
 - **The link and the sound can drop without telling you.** Bluetooth can
   disconnect mid-ride, and another app can take the audio. There is an
   alert for a dropped radar, and it has limits of its own (see
-  [compatibility](#compatibility)).
+  [compatibility](#compatibility)). With a Bosch eBike there is also one for
+  riding with the radar off. It needs Bosch Flow connected to the bike, and
+  it stays quiet while you pause alerts.
 - **The ordinary beeps stop while you are stopped.** After a couple of
   seconds at a standstill the tier beeps are suppressed, while the urgent
   tone and the all-clear chime still sound. That is deliberate, so a queue at
@@ -361,6 +369,12 @@ Funciones principales:
   bici.
 - Aviso de cámara olvidada: te avisa si la cámara delantera sigue encendida
   cuando te alejas de la bici después de aparcarla.
+- Aviso de radar apagado: con una eBike Bosch, la app nota si vas sin el radar
+  conectado. Cuando, según la bici, llevas 90 s en marcha, suena el aviso de
+  desconexión, hasta 3 veces por ruta, y la barra lateral te pide que
+  enciendas el radar. Con un intervalo de reconexión en reposo de más de 50 s,
+  el aviso tarda más. Necesita Bosch Flow conectado a la bici. Se desactiva en
+  Ajustes → Alertas, en Conexión.
 
 El radar funciona por sí solo; Home Assistant, la cámara delantera y la eBike
 son opcionales.

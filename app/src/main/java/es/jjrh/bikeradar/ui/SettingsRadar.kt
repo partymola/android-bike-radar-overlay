@@ -51,6 +51,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarLinkCoordinator
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -92,6 +93,7 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var radarLongOfflineThreshold by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineThresholdMinutes) }
     var radarLongOfflineCap by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineCapSec) }
     var bannerPersistent by rememberSaveable { mutableStateOf(prefs.reconnectBannerPersistent) }
+    var noRadarWarning by rememberSaveable { mutableStateOf(prefs.noRadarRideWarningEnabled) }
     // serviceEnabled is binary and atomic — no in-progress drag state to mirror —
     // so derive from prefs.flow instead of a local rememberSaveable. Keeps the
     // Danger-zone row honest if anything else (future MainScreen action,
@@ -168,6 +170,11 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         radarLongOfflineCap = radarLongOfflineCap,
         onRadarLongOfflineCapChange = { radarLongOfflineCap = it },
         onRadarLongOfflineCapFinished = { prefs.radarLongOfflineCapSec = radarLongOfflineCap },
+        noRadarWarning = noRadarWarning,
+        onNoRadarWarningChange = {
+            noRadarWarning = it
+            prefs.noRadarRideWarningEnabled = it
+        },
         bannerPersistent = bannerPersistent,
         onBannerPersistentChange = {
             bannerPersistent = it
@@ -292,6 +299,8 @@ internal fun SettingsRadarContent(
     radarLongOfflineCap: Int,
     onRadarLongOfflineCapChange: (Int) -> Unit,
     onRadarLongOfflineCapFinished: () -> Unit,
+    noRadarWarning: Boolean,
+    onNoRadarWarningChange: (Boolean) -> Unit,
     bannerPersistent: Boolean,
     onBannerPersistentChange: (Boolean) -> Unit,
     onStopScanningClick: () -> Unit,
@@ -434,6 +443,16 @@ internal fun SettingsRadarContent(
                 onValueChangeFinished = onRadarLongOfflineCapFinished,
             )
             SettingsRowGroup {
+                SettingsToggleRow(
+                    title = stringResource(R.string.settings_radar_no_radar_warning_title),
+                    // Follows the interval slider above, which lengthens the grace.
+                    subtitle = stringResource(
+                        R.string.settings_radar_no_radar_warning_subtitle,
+                        RadarLinkCoordinator.noRadarGraceSec(radarLongOfflineCap),
+                    ),
+                    checked = noRadarWarning,
+                    onCheckedChange = onNoRadarWarningChange,
+                )
                 SettingsToggleRow(
                     title = stringResource(R.string.settings_radar_banner_persistent_title),
                     subtitle = stringResource(R.string.settings_radar_banner_persistent_subtitle),

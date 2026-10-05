@@ -5,7 +5,7 @@ package es.jjrh.bikeradar
 /**
  * "Is the rider actually riding right now?", decided from the eBike's own live
  * speed. Pure state machine; the caller ([EBikeSnapshotCoordinator]) threads
- * [State] across snapshots and asks [ridingFresh] per tick.
+ * [State] across snapshots and asks [ridingSinceMs] per tick.
  *
  * Why it exists: the radar-drop cue used to confirm riding from the eBike's
  * `system_locked == false` alone. But an eBike reports itself unlocked the
@@ -86,10 +86,13 @@ object RidingSpeedGate {
      *   null when the bike is at/below walking pace.
      * @param lastRidingMs monotonic instant riding was last confirmed (the
      *   sustain spell had been met), or null if never this session.
+     * @param confirmedSinceMs the first confirmed frame of the current run of
+     *   confirmations, a run lasting while each is within [FRESH_MS] of the last.
      */
     data class State(
         val movingSinceMs: Long? = null,
         val lastRidingMs: Long? = null,
+        val confirmedSinceMs: Long? = null,
     )
 
     /** Fold one snapshot's speed into the state. [speedMs] null = no movement
@@ -100,14 +103,16 @@ object RidingSpeedGate {
         speedMs: Float?,
         walkingPaceMs: Float = WALKING_PACE_MS,
         sustainMs: Long = SUSTAIN_MS,
+        freshMs: Long = FRESH_MS,
     ): State {
         if (speedMs == null) return prev
         if (speedMs <= walkingPaceMs) return prev.copy(movingSinceMs = null)
         val since = prev.movingSinceMs ?: nowMs
-        val sustained = nowMs - since >= sustainMs
+        if (nowMs - since < sustainMs) return prev.copy(movingSinceMs = since)
         return State(
             movingSinceMs = since,
-            lastRidingMs = if (sustained) nowMs else prev.lastRidingMs,
+            lastRidingMs = nowMs,
+            confirmedSinceMs = if (ridingFresh(prev, nowMs, freshMs)) prev.confirmedSinceMs else nowMs,
         )
     }
 
@@ -118,6 +123,10 @@ object RidingSpeedGate {
         val last = state.lastRidingMs ?: return false
         return nowMs - last < freshMs
     }
+
+    /** When the current run of riding confirmations began, or null while
+     *  riding is not [ridingFresh]. */
+    fun ridingSinceMs(state: State, nowMs: Long, freshMs: Long = FRESH_MS): Long? = state.confirmedSinceMs.takeIf { ridingFresh(state, nowMs, freshMs) }
 
     /** Bosch reports speed raw in 1/100 km/h; null stays null. */
     fun speedMs(speedRaw: Int?): Float? = speedRaw?.let { it / 360f }

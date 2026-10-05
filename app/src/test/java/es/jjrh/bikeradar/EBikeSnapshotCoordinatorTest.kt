@@ -47,6 +47,8 @@ class EBikeSnapshotCoordinatorTest {
         return coord.climbing()
     }
 
+    private fun ridingAt(atMs: Long): Boolean = coord.ridingSinceMs(atMs) != null
+
     @Test
     fun cachesSnapshotAndTimestamp() {
         val snap = LiveDataSnapshot(batterySoc = 80)
@@ -126,11 +128,11 @@ class EBikeSnapshotCoordinatorTest {
         feed(LiveDataSnapshot(speedRaw = 1800), atMs = 0L)
         feed(LiveDataSnapshot(systemLocked = true, speedRaw = 1800), atMs = sustained)
         val later = sustained + 3_001L
-        assertTrue(coord.ridingFresh(later))
+        assertTrue(ridingAt(later))
         now = later
         coord.forgetSilentLock()
         assertNull(coord.lastSnapshotAnyAge()?.systemLocked)
-        assertTrue(coord.ridingFresh(later))
+        assertTrue(ridingAt(later))
     }
 
     @Test
@@ -280,10 +282,10 @@ class EBikeSnapshotCoordinatorTest {
         // The real wiring the radar-drop cue depends on: decoded frame -> speed
         // field -> gate. A single above-pace frame is not a ride...
         feed(LiveDataSnapshot(speedRaw = riding), atMs = 0L)
-        assertFalse(coord.ridingFresh(0L))
+        assertFalse(ridingAt(0L))
         // ...a sustained spell is.
         feed(LiveDataSnapshot(speedRaw = riding), atMs = RidingSpeedGate.SUSTAIN_MS)
-        assertTrue(coord.ridingFresh(RidingSpeedGate.SUSTAIN_MS))
+        assertTrue(ridingAt(RidingSpeedGate.SUSTAIN_MS))
     }
 
     @Test
@@ -293,7 +295,16 @@ class EBikeSnapshotCoordinatorTest {
         feed(LiveDataSnapshot(speedRaw = 0), atMs = 0L)
         feed(LiveDataSnapshot(speedRaw = 0), atMs = 60_000L)
         feed(LiveDataSnapshot(speedRaw = 300), atMs = 120_000L) // 3 km/h - wheeled
-        assertFalse(coord.ridingFresh(120_000L))
+        assertFalse(ridingAt(120_000L))
+    }
+
+    @Test
+    fun theRideIsDatedFromTheFrameThatConfirmedIt() {
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = 2_000L)
+        assertNull(coord.ridingSinceMs(2_000L))
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = 12_000L)
+        feed(LiveDataSnapshot(speedRaw = riding), atMs = 30_000L)
+        assertEquals(12_000L, coord.ridingSinceMs(30_000L))
     }
 
     @Test
@@ -303,8 +314,8 @@ class EBikeSnapshotCoordinatorTest {
         val stopped = RidingSpeedGate.SUSTAIN_MS
         // A long light must not un-confirm the ride (a radar dying at a red light
         // still has to cue)...
-        assertTrue(coord.ridingFresh(stopped + RidingSpeedGate.FRESH_MS - 1))
+        assertTrue(ridingAt(stopped + RidingSpeedGate.FRESH_MS - 1))
         // ...but a bike left standing does stop counting as ridden.
-        assertFalse(coord.ridingFresh(stopped + RidingSpeedGate.FRESH_MS))
+        assertFalse(ridingAt(stopped + RidingSpeedGate.FRESH_MS))
     }
 }

@@ -458,7 +458,7 @@ class RadarDropDeciderTest {
                 thresholdMs = threshold,
                 cadenceMs = cadence,
                 lastCueMs = lastCue,
-                latchOnlyConfirmation = true,
+                capped = true,
                 cueCount = count,
             )
             assertTrue("cue ${it + 1} of the cap must still fire", d.fire)
@@ -479,7 +479,7 @@ class RadarDropDeciderTest {
             thresholdMs = threshold,
             cadenceMs = cadence,
             lastCueMs = lastCue,
-            latchOnlyConfirmation = true,
+            capped = true,
             cueCount = count,
         )
         assertFalse("cue past the latch-only cap must stay silent", after.fire)
@@ -498,7 +498,7 @@ class RadarDropDeciderTest {
             thresholdMs = threshold,
             cadenceMs = cadence,
             lastCueMs = now,
-            latchOnlyConfirmation = false,
+            capped = false,
             cueCount = RadarDropDecider.MAX_LATCH_ONLY_CUES + 5,
         )
         assertTrue("live-confirmed repeats must not be capped", d.fire)
@@ -514,7 +514,7 @@ class RadarDropDeciderTest {
             thresholdMs = threshold,
             cadenceMs = cadence,
             lastCueMs = now - 5_000L,
-            latchOnlyConfirmation = true,
+            capped = true,
             cueCount = RadarDropDecider.MAX_LATCH_ONLY_CUES,
         )
         assertEquals("a reconnect must reset the per-episode cue count", 0, d.cueCount)

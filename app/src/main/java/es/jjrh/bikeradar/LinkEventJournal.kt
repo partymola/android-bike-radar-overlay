@@ -24,7 +24,8 @@ import java.util.Locale
  * Not a capture log: no radar packets, no movement data, no location.
  * Link lifecycle with device names, plus the app events that explain a
  * link's behaviour and would otherwise reach logcat alone - a service
- * start, a recovered ride, the dead-radar alert sounding, and the rider
+ * start, a recovered ride, the dead-radar alert sounding (for a dropped
+ * radar or a ride without one), and the rider
  * silencing it by declaring the ride over or dismissing or snoozing the
  * walk-away alarm. `JournalScopeIsDisclosedTest` holds every writer it
  * can see, which is any file that constructs the journal, names the

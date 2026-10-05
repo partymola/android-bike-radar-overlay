@@ -110,8 +110,8 @@ class RadarOverlayView(context: Context) : View(context) {
     private var dashcamSlug: String? = null
 
     // Non-LIVE means the view draws ONLY the dead-radar banner (the rear-radar
-    // link is down past the visual threshold) and skips the radar canvas. The
-    // variant picks the message (plain vs "...but bike unlocked"). Set by the
+    // link is down past the visual threshold, or a ride has no radar) and skips
+    // the radar canvas. The variant picks the message. Set by the
     // service-owned reconnect overlay, never by the per-connection pipeline
     // (which is torn down during the drop). See RadarLinkVisualDecider.
     private var reconnectVisual = RadarLinkVisualDecider.LinkVisual.LIVE
@@ -208,7 +208,7 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     /** Set the dead-radar banner state. Non-LIVE makes [onDraw] render only the
-     *  banner (PLAIN, or with the "...but bike unlocked" line for UNLOCKED).
+     *  banner (PLAIN, UNLOCKED with "...but bike unlocked", or NO_RADAR).
      *  Driven by the service-owned reconnect overlay off [RadarLinkVisualDecider];
      *  the per-connection pipeline never sets it. */
     fun setReconnecting(visual: RadarLinkVisualDecider.LinkVisual) {
@@ -221,6 +221,10 @@ class RadarOverlayView(context: Context) : View(context) {
             RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED ->
                 context.getString(R.string.overlay_radar_disconnected) + ", " +
                     context.getString(R.string.overlay_radar_disconnected_unlocked)
+            // Two sentences: the second line is an instruction.
+            RadarLinkVisualDecider.LinkVisual.NO_RADAR ->
+                context.getString(R.string.overlay_radar_not_on) + ". " +
+                    context.getString(R.string.overlay_radar_not_on_sub) + "."
         }
         postInvalidate()
     }
@@ -442,17 +446,16 @@ class RadarOverlayView(context: Context) : View(context) {
         val top = dp(16f)
         val innerPad = dp(8f)
         val vPad = dp(10f)
-        // The "...but bike unlocked" subtitle is drawn only for the eBike-unlocked
-        // variant; the radar-only banner is the title alone. Both wrap to the
+        // The radar-only banner is the title alone. Both lines wrap to the
         // narrow pill via StaticLayout (the copy is too long for one line at 130dp).
-        val showUnlocked = reconnectVisual == RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED
-        val innerWidth = (w - 2f * pad - 2f * innerPad).toInt().coerceAtLeast(1)
-        val titleLayout = bannerLayout(context.getString(R.string.overlay_radar_disconnected), reconnectTitlePaint, innerWidth)
-        val subLayout = if (showUnlocked) {
-            bannerLayout(context.getString(R.string.overlay_radar_disconnected_unlocked), reconnectSubPaint, innerWidth)
-        } else {
-            null
+        val (title, sub) = when (reconnectVisual) {
+            RadarLinkVisualDecider.LinkVisual.NO_RADAR -> R.string.overlay_radar_not_on to R.string.overlay_radar_not_on_sub
+            RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED -> R.string.overlay_radar_disconnected to R.string.overlay_radar_disconnected_unlocked
+            else -> R.string.overlay_radar_disconnected to null
         }
+        val innerWidth = (w - 2f * pad - 2f * innerPad).toInt().coerceAtLeast(1)
+        val titleLayout = bannerLayout(context.getString(title), reconnectTitlePaint, innerWidth)
+        val subLayout = sub?.let { bannerLayout(context.getString(it), reconnectSubPaint, innerWidth) }
         val gap = if (subLayout != null) dp(3f) else 0f
         val contentH = titleLayout.height + (subLayout?.height ?: 0) + gap
         val bottom = top + vPad + contentH + vPad

@@ -22,10 +22,13 @@ import kotlin.random.Random
  */
 internal fun jittered(baseMs: Long, random: Random = Random.Default): Long {
     if (baseMs <= 0L) return baseMs
-    val jitterRangeMs = (baseMs * 0.2).toLong()
+    val jitterRangeMs = (baseMs * RECONNECT_JITTER_FRACTION).toLong()
     if (jitterRangeMs <= 0L) return baseMs
     return baseMs + random.nextLong(-jitterRangeMs, jitterRangeMs + 1)
 }
+
+/** The fraction [jittered] can add to or take from a delay. */
+internal const val RECONNECT_JITTER_FRACTION = 0.2
 
 // Reconnect backoff: starts fast, doubles on each consecutive failure, caps at
 // 8 s. Resets to the initial value once a connection reaches the V2 decode loop.

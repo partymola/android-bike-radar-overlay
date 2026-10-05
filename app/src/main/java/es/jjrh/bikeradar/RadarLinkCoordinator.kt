@@ -42,10 +42,16 @@ internal class RadarLinkCoordinator(
     private val resolveDashcamSlug: () -> String?,
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
     private val eBikeSnapshotAtMs: () -> Long,
-    // Whether the eBike's own speed shows a recent sustained ride (RidingSpeedGate).
-    // The radar-drop cue's eBike confirmation: an unlocked bike is merely awake,
-    // and a garage power-on must not read as a mid-ride radar failure.
-    private val eBikeRidingFresh: (Long) -> Boolean,
+    // When the eBike's own speed first confirmed the current ride, or null when it
+    // shows no recent sustained ride (RidingSpeedGate). The radar-drop cue's eBike
+    // confirmation: an unlocked bike is merely awake, and a garage power-on must
+    // not read as a mid-ride radar failure. The instant dates a ride with no radar.
+    private val eBikeRidingSinceMs: (Long) -> Long?,
+    // A radar is paired for this bike (RadarSelection.hasLinkableRadar). With
+    // none there is nothing to switch on, so the no-radar warning stays quiet.
+    // Bluetooth off or its permission revoked also reads as none; the eBike
+    // reader is down then too, so no ride is dated and nothing is lost.
+    private val hasLinkableRadar: () -> Boolean,
     private val hasEBikeSignal: () -> Boolean,
     private val everSawTrack: () -> Boolean,
     private val postForgotToLock: () -> Unit,
@@ -95,7 +101,8 @@ internal class RadarLinkCoordinator(
     val radarLinkState: StateFlow<RadarLinkState> = _radarLinkState
 
     // Re-fire latch for the radar-drop cue + a one-shot "suppressed" diagnostic
-    // flag, both scoped to the current off-episode. Single tick-loop writer
+    // flag, both scoped to the current off-episode or ride with no radar
+    // ([radarDropLatchOffSinceMs]). Single tick-loop writer
     // ([evaluateRadarDrop]); reset lazily there on radar return.
     //
     // The single-writer property is load-bearing rather than incidental. A
@@ -107,17 +114,23 @@ internal class RadarLinkCoordinator(
     // [RadarLinkState.rideEndedByRider]) that the tick consumes.
     @Volatile private var radarDropLastCueMs: Long? = null
 
-    // Cues fired this off-episode; caps the latch-only confirmation path
-    // (RadarDropDecider.MAX_LATCH_ONLY_CUES) so a quick park cannot repeat
-    // the cue forever. Reset with the lastCue latch on radar return.
+    // Cues fired this episode; caps the latch-only confirmation path and a ride
+    // with no radar (RadarDropDecider.MAX_LATCH_ONLY_CUES), so neither can
+    // repeat the cue forever. Reset with the lastCue latch on radar return.
     @Volatile private var radarDropCueCount = 0
 
-    // The off-instant of the drop the latch above was set for. A later drop
-    // whose return no tick saw, because a pause spanned it or it was shorter
-    // than one tick, gets its own count, cadence and suppression line, and no
-    // "back" pulse (`aSecondDropInsideThePauseStartsItsOwnCues`,
+    // The episode the latch above was set for: a drop's off-instant, or the
+    // start of a ride with no radar. A later drop whose return no tick saw,
+    // because a pause spanned it or it was shorter than one tick, gets its own
+    // count, cadence and suppression line, and no "back" pulse
+    // (`aSecondDropInsideThePauseStartsItsOwnCues`,
     // `aDropAfterAReturnNoTickSawStartsItsOwnCues`).
     @Volatile private var radarDropLatchOffSinceMs: Long? = null
+
+    // The grace a ride with no radar waited for its first cue, in whole
+    // seconds, so a later cue's journal line names the wait that applied
+    // rather than a setting changed since (`theJournalKeepsTheGraceTheFirstCueWaited`).
+    @Volatile private var appliedGraceSec = 0
 
     @Volatile private var radarDropSuppressLogged = false
 
@@ -140,7 +153,77 @@ internal class RadarLinkCoordinator(
     // off-episode; reset in markConnected on radar return.
     @Volatile private var forgotToLockFired = false
 
+    // The current eBike ride, dated from its first riding confirmation (or the
+    // last parked tick, if later) and held through stops, so a long light
+    // neither restarts the no-radar grace nor reads as the radar coming back.
+    // Ended by a park, or by no ridden tick for the rider's new-ride gap.
+    // Tick-loop only, like the cue latch.
+    @Volatile private var rideStartMs: Long? = null
+
+    @Volatile private var lastRiddenTickMs: Long? = null
+
+    // The last tick the bike or the rider said parked. A ride is dated no
+    // earlier, so riding off after a short lock waits the whole grace again
+    // (`aShortLockThenRidingOnWaitsTheGraceAgain`).
+    @Volatile private var lastParkedMs: Long? = null
+
+    // The cue latch belongs to a ride the radar never joined. It then survives
+    // the new-ride reset at connect, so the "back" pulse answers the warning,
+    // and is closed when that ride ends with the radar still down.
+    @Volatile private var latchIsNoRadarRide = false
+
     override fun snapshot(): RadarLinkState = _radarLinkState.value
+
+    /** The service ticks at its fast cadence while this holds: the radar is
+     *  down, or a ride has no radar and its warning is armed, for the rest of
+     *  that ride, after the last cue too. */
+    fun needsFastTick(): Boolean = _radarLinkState.value.radarOffSinceMs != null || noRadarRideActive()
+
+    private fun noRadarRideActive(): Boolean {
+        val start = rideStartMs ?: return false
+        return !radarUpDuring(_radarLinkState.value, start) && noRadarWarningArmed()
+    }
+
+    private fun noRadarWarningArmed(): Boolean = prefs.noRadarRideWarningEnabled && hasLinkableRadar()
+
+    // A connected radar counts as up, which keeps an ordinary morning, radar
+    // on well before the ride, off this path
+    // (`aRadarConnectedSinceBeforeTheRideNeverWarns`). One that connects and
+    // then fails its handshake counts as up too, as it does for the drop cue.
+    private fun radarUpDuring(link: RadarLinkState, rideStart: Long): Boolean = link.radarGattActive ||
+        (link.lastRadarUpMs ?: Long.MIN_VALUE) >= rideStart - RADAR_UP_BEFORE_RIDE_MS
+
+    private fun trackRide(nowMs: Long, link: RadarLinkState, ridingSince: Long?) {
+        // Checked first, so a ride that resumes on the first tick after a
+        // sleep longer than the gap starts afresh
+        // (`aRideFirstSeenAfterASleepLongerThanTheGapStartsAfresh`).
+        val last = lastRiddenTickMs
+        val gapMs = prefs.radarLongOfflineThresholdMinutes * 60_000L
+        if (last != null && nowMs - last >= gapMs) {
+            // A radar that connected before the gap ran out joined this ride
+            // and is owed the warning's "back" pulse; one that connected
+            // later belongs to another ride
+            // (`aRadarConnectingLongAfterTheRideGetsNoPulse`).
+            endRide(keepLatch = link.radarConnectStartMs?.let { it < last + gapMs } == true)
+        }
+        if (link.parked) {
+            lastParkedMs = nowMs
+            endRide(keepLatch = false)
+        } else if (ridingSince != null) {
+            if (rideStartMs == null) rideStartMs = maxOf(ridingSince, lastParkedMs ?: Long.MIN_VALUE)
+            lastRiddenTickMs = nowMs
+        }
+    }
+
+    private fun endRide(keepLatch: Boolean) {
+        rideStartMs = null
+        lastRiddenTickMs = null
+        if (latchIsNoRadarRide && !keepLatch) {
+            radarDropLastCueMs = null
+            radarDropCueCount = 0
+            latchIsNoRadarRide = false
+        }
+    }
 
     /** Rider dismissed the walk-away alarm for this off-episode.
      *
@@ -177,7 +260,8 @@ internal class RadarLinkCoordinator(
      *  rather than up to one tick later. That is at most 2 s here, since the
      *  loop is already at its active cadence while the radar is off. */
     fun markRideEndedByRider() {
-        _radarLinkState.update { it.copy(rideEndedByRider = true) }
+        val nowMs = clock()
+        _radarLinkState.update { it.copy(rideEndedByRider = true, rideEndedAtMs = nowMs) }
         clog("# ride_end source=rider")
         // The line above lands in a file only in setup-transcript mode: the
         // capture writer is closed by the link teardown long before the control
@@ -220,7 +304,7 @@ internal class RadarLinkCoordinator(
                 // Any → IDLE: radar is back, leave-behind tracking off.
                 // Re-arming requires the next radar disconnect. The rider's
                 // ride-end declaration is spent here too: it scopes to one
-                // off-episode, so it can never silence a later ride.
+                // off-episode.
                 current.copy(
                     radarOffSinceMs = null,
                     walkAwayArmed = false,
@@ -228,7 +312,9 @@ internal class RadarLinkCoordinator(
                     lastWalkAwayFireMs = null,
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    lastRadarUpMs = nowMs,
                     rideEndedByRider = false,
+                    rideEndedAtMs = null,
                     newRideAtConnect = startsNewRide,
                 )
             } else {
@@ -240,7 +326,9 @@ internal class RadarLinkCoordinator(
                 current.copy(
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    lastRadarUpMs = nowMs,
                     rideEndedByRider = false,
+                    rideEndedAtMs = null,
                 )
             }
         }
@@ -359,6 +447,7 @@ internal class RadarLinkCoordinator(
                 radarGattActive = false,
                 radarConnectStartMs = null,
                 sessionRadarConnectedMs = current.sessionRadarConnectedMs + addedMs,
+                lastRadarUpMs = if (current.radarConnectStartMs != null) nowMs else current.lastRadarUpMs,
                 // Off-instant is stamped on the FIRST disconnect; a stutter
                 // mid-off-episode must not refresh it.
                 radarOffSinceMs = current.radarOffSinceMs ?: nowMs,
@@ -573,17 +662,53 @@ internal class RadarLinkCoordinator(
      * latch is stale) but is deliberately NOT exclusive with walk-away arming -
      * see the WALK-AWAY EXCLUSIVITY note in [RadarDropDecider]. Full design
      * rationale + scenario matrix there too.
+     *
+     * A ride the radar has not been up during takes the same cue and latch,
+     * timed from the ride's start: [noRadarGraceMs] before the first cue,
+     * capped at [RadarDropDecider.MAX_LATCH_ONLY_CUES], live eBike
+     * confirmation only, a radar paired, and the
+     * [RadarLinkVisualDecider.LinkVisual.NO_RADAR] banner from the first cue
+     * while the bike still shows the ride. That covers a radar never switched
+     * on and a later ride whose radar stayed off since the last one, which
+     * therefore waits the grace rather than cueing on the first riding tick
+     * (`RadarLinkCoordinatorTest`, riding with no radar this ride).
      */
     fun evaluateRadarDrop(nowMs: Long) {
         val snap = eBikeSnapshot()
         // Published for the home screen's parked question
         // (`theBikesLockReachesTheStateTheHomeScreenAsksFrom`).
         val bikeLocked = snap?.systemLocked == true
-        val link = _radarLinkState.updateAndGet {
+        var link = _radarLinkState.updateAndGet {
             if (it.bikeLocked == bikeLocked) it else it.copy(bikeLocked = bikeLocked)
         }
-        val downForMs = link.radarOffSinceMs?.let { nowMs - it }
         val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
+        val ridingSince = eBikeRidingSinceMs(nowMs)
+        val ridingFresh = ridingSince != null
+        // "I've parked" covers the ride it ended. A riding run that begins
+        // after the tap is a new ride, which the tap must not silence
+        // (`aParkedTapDoesNotSilenceTheNextRideWithoutTheRadar`).
+        val tappedAt = link.rideEndedAtMs
+        if (link.rideEndedByRider && ridingSince != null && tappedAt != null && ridingSince > tappedAt) {
+            link = _radarLinkState.updateAndGet {
+                if (it.rideEndedAtMs == tappedAt) it.copy(rideEndedByRider = false, rideEndedAtMs = null) else it
+            }
+        }
+        // The live eBike signal alone: what dates a ride, and what keeps a cue
+        // uncapped after a mid-ride drop.
+        val liveEBikeConfirmed = RadarDropDecider.ridingConfirmed(
+            systemLocked = snap?.systemLocked,
+            snapshotAgeMs = ebikeAgeMs,
+            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+            eBikeRidingFresh = ridingFresh,
+        )
+        trackRide(nowMs, link, ridingSince.takeIf { liveEBikeConfirmed })
+        val rideStart = rideStartMs
+        val noRadarRide = rideStart != null && !radarUpDuring(link, rideStart)
+        val warnNoRadar = noRadarRide && noRadarWarningArmed()
+        // Non-null for the whole of a ride with no radar, so a stop never
+        // reads as the radar coming back.
+        val noRadarRideMs = rideStart?.takeIf { noRadarRide }?.let { nowMs - it }
+        val downForMs = noRadarRideMs ?: link.radarOffSinceMs?.let { nowMs - it }
         // Dead-radar banner: cohort-aware + bounded (see RadarLinkVisualDecider).
         // eBike riders -> "...but bike unlocked" while unlocked, hidden once the
         // bike is locked, capped by a forgot-to-lock backstop; radar-only ->
@@ -606,9 +731,13 @@ internal class RadarLinkCoordinator(
         // New-ride edge, handed over by markConnected so this latch keeps one
         // writer. Consumed here: clearing the flag from the tick is safe
         // because `update` is a CAS loop, unlike a bare volatile write.
+        // Not a latch from this ride's no-radar warning, whose "back" pulse is
+        // due now (`theBackPulseSurvivesARadarConnectThatStartsANewRide`).
         if (link.newRideAtConnect) {
-            radarDropLastCueMs = null
-            radarDropCueCount = 0
+            if (!latchIsNoRadarRide) {
+                radarDropLastCueMs = null
+                radarDropCueCount = 0
+            }
             _radarLinkState.update { it.copy(newRideAtConnect = false) }
         }
         // Ride-over reset. An explicit lock ends the ride, so this off-episode's
@@ -620,67 +749,88 @@ internal class RadarLinkCoordinator(
         if (explicitParked) {
             radarDropLastCueMs = null
             radarDropCueCount = 0
+            latchIsNoRadarRide = false
         }
-        val visual = RadarLinkVisualDecider.decide(
-            radarEverLive = link.sessionRadarConnectedMs > 0L,
-            everSawTrack = everSawTrack(),
-            radarDownForMs = downForMs,
-            visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
-            paused = prefs.isPaused,
-            bikeReadsUnlocked = snap?.systemLocked == false,
-            explicitParked = explicitParked,
-            ebikeMaxMs = RADAR_BANNER_EBIKE_MAX_MS,
-            radarOnlyMaxMs = RADAR_BANNER_RADAR_ONLY_MAX_MS,
-            radarOnlyPersistent = prefs.reconnectBannerPersistent,
-        )
-        setReconnectBanner(visual)
+        // A ride with no radar sets its banner after this tick's cue decision,
+        // so it is up on the tick the first warning sounds; here only when it
+        // stays hidden.
+        if (!noRadarRide) {
+            setReconnectBanner(
+                RadarLinkVisualDecider.decide(
+                    radarEverLive = link.sessionRadarConnectedMs > 0L,
+                    everSawTrack = everSawTrack(),
+                    radarDownForMs = downForMs,
+                    visualThresholdMs = RADAR_DROP_VISUAL_THRESHOLD_MS,
+                    paused = prefs.isPaused,
+                    bikeReadsUnlocked = snap?.systemLocked == false,
+                    explicitParked = explicitParked,
+                    ebikeMaxMs = RADAR_BANNER_EBIKE_MAX_MS,
+                    radarOnlyMaxMs = RADAR_BANNER_RADAR_ONLY_MAX_MS,
+                    radarOnlyPersistent = prefs.reconnectBannerPersistent,
+                ),
+            )
+        } else if (!warnNoRadar || prefs.isPaused) {
+            setReconnectBanner(RadarLinkVisualDecider.LinkVisual.LIVE)
+        }
         // A radar that came back during a pause keeps its latch, so the "back"
         // pulse sounds when the pause ends: late, but still true, and it answers
         // the drop the rider last heard. Deliberate, pinned by
         // `aRadarBackDuringAPauseIsAcknowledgedWhenThePauseEnds`; do not clear
         // the latch here.
         if (prefs.isPaused) return
-        val ridingFresh = eBikeRidingFresh(nowMs)
         // The Experimental toggle is read per tick rather than at the drop, so
         // a rider who switches it off on hearing an unwanted cue silences the
         // REST of this off-episode, not merely the next one.
         val trackConfirmed = trackFreshAtDrop && prefs.radarDropTrackFallbackEnabled
         // The rider's declaration must reach the CUE gate, not just the banner.
         // Reaching only the reset above uncaps the cue instead of silencing it.
-        val ridingConfirmed = RadarDropDecider.ridingConfirmed(
-            systemLocked = snap?.systemLocked,
-            snapshotAgeMs = ebikeAgeMs,
-            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
-            eBikeRidingFresh = ridingFresh,
-            radarActivityFreshAtDrop = radarActivityFreshAtDrop || trackConfirmed,
-            riderEndedRide = link.rideEndedByRider,
-        )
+        // A ride with no radar has no drop, so the latches sampled at one say
+        // nothing about it: only the live eBike confirms it.
+        val ridingConfirmed = if (noRadarRide) {
+            warnNoRadar &&
+                RadarDropDecider.ridingConfirmed(
+                    systemLocked = snap?.systemLocked,
+                    snapshotAgeMs = ebikeAgeMs,
+                    freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+                    eBikeRidingFresh = ridingFresh,
+                    riderEndedRide = link.rideEndedByRider,
+                )
+        } else {
+            RadarDropDecider.ridingConfirmed(
+                systemLocked = snap?.systemLocked,
+                snapshotAgeMs = ebikeAgeMs,
+                freshMs = RADAR_DROP_EBIKE_FRESH_MS,
+                eBikeRidingFresh = ridingFresh,
+                radarActivityFreshAtDrop = radarActivityFreshAtDrop || trackConfirmed,
+                riderEndedRide = link.rideEndedByRider,
+            )
+        }
         // Latch-only = riding is confirmed, but not by a live eBike signal:
-        // only that path gets the per-episode repeat cap (a live "unlocked"
-        // genuinely re-confirms riding every tick and stays uncapped).
-        val liveEBikeConfirmed = RadarDropDecider.ridingConfirmed(
-            systemLocked = snap?.systemLocked,
-            snapshotAgeMs = ebikeAgeMs,
-            freshMs = RADAR_DROP_EBIKE_FRESH_MS,
-            eBikeRidingFresh = ridingFresh,
-        )
-        // Hoisted: the journal below needs the same answer, and the two must
-        // not drift.
-        val latchOnly = ridingConfirmed && !liveEBikeConfirmed
-        if (link.radarOffSinceMs != null && link.radarOffSinceMs != radarDropLatchOffSinceMs) {
+        // that path gets the per-episode repeat cap, and so does a ride with
+        // no radar (a live "unlocked" after a mid-ride drop genuinely
+        // re-confirms riding every tick and stays uncapped). Hoisted: the
+        // journal below needs the same answer, and the two must not drift.
+        val latchOnly = !noRadarRide && ridingConfirmed && !liveEBikeConfirmed
+        val episodeKey = if (noRadarRide) rideStart else link.radarOffSinceMs
+        if (episodeKey != null && episodeKey != radarDropLatchOffSinceMs) {
             radarDropLastCueMs = null
             radarDropCueCount = 0
             radarDropSuppressLogged = false
         }
+        // Read once, so the grace the cue waits and the one its journal line
+        // names cannot differ.
+        val longOfflineCapSec = prefs.radarLongOfflineCapSec
         val decision = RadarDropDecider.decide(
-            radarEverLive = link.sessionRadarConnectedMs > 0L,
+            // A ride with no radar is the radar being missing, which is all
+            // this gate asks, even though it has never been live.
+            radarEverLive = link.sessionRadarConnectedMs > 0L || noRadarRide,
             radarDownForMs = downForMs,
             ridingConfirmed = ridingConfirmed,
             nowMs = nowMs,
-            thresholdMs = RADAR_DROP_THRESHOLD_MS,
+            thresholdMs = if (noRadarRide) noRadarGraceMs(longOfflineCapSec) else RADAR_DROP_THRESHOLD_MS,
             cadenceMs = RADAR_DROP_CUE_INTERVAL_MS,
             lastCueMs = radarDropLastCueMs,
-            latchOnlyConfirmation = latchOnly,
+            capped = latchOnly || noRadarRide,
             cueCount = radarDropCueCount,
         )
         // The latch resets lazily here on the next tick that sees the radar
@@ -689,8 +839,27 @@ internal class RadarLinkCoordinator(
         // radarOffSinceMs and restarts below the threshold.
         radarDropLastCueMs = decision.lastCueMs
         radarDropCueCount = decision.cueCount
-        radarDropLatchOffSinceMs = link.radarOffSinceMs
-        if (decision.fire) {
+        radarDropLatchOffSinceMs = episodeKey
+        latchIsNoRadarRide = decision.lastCueMs != null && noRadarRide
+        if (warnNoRadar) {
+            // Up from the first warning, so a glance explains the sound, and
+            // held through stops while the bike still shows the ride.
+            val visual = if (latchIsNoRadarRide && ridingFresh) {
+                RadarLinkVisualDecider.LinkVisual.NO_RADAR
+            } else {
+                RadarLinkVisualDecider.LinkVisual.LIVE
+            }
+            setReconnectBanner(visual)
+        }
+        if (decision.fire && noRadarRide) {
+            alertBeeper()?.playRadarDropped()
+            clog("# no_radar_cue ride_ms=$downForMs system_locked=${snap?.systemLocked} cue_count=${decision.cueCount}")
+            // Every cue: the path is capped, so it cannot flood the journal.
+            // The ride time says whether the cue came on time.
+            val rideSec = (noRadarRideMs ?: 0L) / 1000
+            if (decision.cueCount == 1) appliedGraceSec = noRadarGraceSec(longOfflineCapSec)
+            journal("no-radar alert sounded (cue ${decision.cueCount}, $rideSec s into the ride, grace $appliedGraceSec s)")
+        } else if (decision.fire) {
             alertBeeper()?.playRadarDropped()
             clog(
                 "# radar_drop_cue down_ms=${downForMs ?: -1L} " +
@@ -724,7 +893,8 @@ internal class RadarLinkCoordinator(
         // track-presence window), so widening this to them is worth doing when
         // there is a report to tune it from; it is left narrow until then
         // rather than adding a line nobody reads.
-        val suppressed = link.sessionRadarConnectedMs > 0L &&
+        val suppressed = !noRadarRide &&
+            link.sessionRadarConnectedMs > 0L &&
             snap != null &&
             downForMs != null &&
             downForMs >= RADAR_DROP_THRESHOLD_MS &&
@@ -799,6 +969,38 @@ internal class RadarLinkCoordinator(
 
         /** Radar-drop cue re-fire gap while the radar stays down. */
         const val RADAR_DROP_CUE_INTERVAL_MS = 180_000L
+
+        /** Time from the start of a ride with no radar to its first cue, at
+         *  the default reconnect settings. The floor of [noRadarGraceMs]. */
+        const val NO_RADAR_GRACE_MS = 90_000L
+
+        /** How long before a ride's start a radar that was up still counts as
+         *  having joined it. The start is the riding confirmation, or the last
+         *  parked tick if later. The confirmation comes after the bike has been
+         *  wheeled out and moving for a while, so a radar that dropped then is
+         *  a drop, not a radar left off (`aDropWhileWheelingOutStaysOnTheDropPath`). */
+        const val RADAR_UP_BEFORE_RIDE_MS = 120_000L
+
+        /** Allowance for one connect attempt once the reconnect loop wakes. An
+         *  estimate: how long a just-powered radar takes to connect is not
+         *  measured. */
+        const val NO_RADAR_CONNECT_MARGIN_MS = 30_000L
+
+        /** The no-radar grace for a rider's long-offline reconnect cap. The loop
+         *  sleeps up to that cap plus jitter between attempts, and a radar
+         *  switched on mid-sleep waits for the sleep to end, so the warning
+         *  outlasts the longest sleep plus [NO_RADAR_CONNECT_MARGIN_MS]. At the
+         *  default 30 s cap that is [NO_RADAR_GRACE_MS]
+         *  (`theGraceOutlastsALongReconnectPause`). */
+        fun noRadarGraceMs(longOfflineCapSec: Int): Long {
+            val capMs = longOfflineCapSec * 1_000L
+            val longestSleepMs = capMs + (capMs * RECONNECT_JITTER_FRACTION).toLong()
+            return maxOf(NO_RADAR_GRACE_MS, longestSleepMs + NO_RADAR_CONNECT_MARGIN_MS)
+        }
+
+        /** [noRadarGraceMs] in whole seconds, rounded up, as Settings shows it
+         *  and the journal records it (`theGraceRoundsUpToTheSecond`). */
+        fun noRadarGraceSec(longOfflineCapSec: Int): Int = ((noRadarGraceMs(longOfflineCapSec) + 999) / 1_000).toInt()
 
         /** Max age of the eBike snapshot for its `system_locked` to be trusted
          *  by the radar-drop cue. Older than this means the eBike link has

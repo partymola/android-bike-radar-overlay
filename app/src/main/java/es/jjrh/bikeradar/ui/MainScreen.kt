@@ -755,8 +755,9 @@ internal fun ctaFor(
         // A mis-tap is cheap ONLY where the radar comes back, because that is
         // what spends the declaration. On a flat radar battery no reconnect
         // comes, the control withholds itself once used, and there is no undo,
-        // so the drop alert stays off for the rest of the session. Do not widen
-        // the gate on the strength of the cheap case.
+        // so for a rider with no eBike the drop alert stays off for the rest of
+        // the session; an eBike riding run that begins after the tap spends it.
+        // Do not widen the gate on the strength of the cheap case.
         //
         // The freshness term is what makes this branch agree with the hero,
         // which offers the parked question only from its stale-radar block.

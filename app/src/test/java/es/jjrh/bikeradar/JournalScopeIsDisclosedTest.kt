@@ -86,6 +86,8 @@ class JournalScopeIsDisclosedTest {
 
     private val declared = listOf(
         Event("dead-radar alert sounded (cue ${'$'}{decision.cueCount})", "drop alert", "aviso de desconexión"),
+        // The same sound as the drop alert, played for a ride the radar never joined.
+        Event("no-radar alert sounded (cue ${'$'}{decision.cueCount}, ${'$'}rideSec s into the ride, grace ${'$'}appliedGraceSec s)", "drop alert", "aviso de desconexión"),
         Event("ride ended by rider", "ride is over", "ruta ha terminado"),
         Event("walk-away alarm snoozed by rider", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm dismissed by rider", "walk-away alarm", "alarma al alejarte"),

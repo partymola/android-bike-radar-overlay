@@ -133,8 +133,8 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var radarLinkCoordinator: RadarLinkCoordinator
 
-    // Thin read accessors for the two remaining service-side read sites
-    // (scheduleRead light-flip guard, walk-away tick cadence). All other reads
+    // Thin read accessors for the remaining service-side read sites
+    // (scheduleRead's piggyback guard, the ride summary). All other reads
     // moved into the coordinator with the transitions.
     private val radarGattActive get() = radarLinkCoordinator.snapshot().radarGattActive
     private val radarOffSinceMs get() = radarLinkCoordinator.snapshot().radarOffSinceMs
@@ -447,7 +447,8 @@ class BikeRadarService : Service() {
             resolveDashcamSlug = ::resolveDashcamSlug,
             eBikeSnapshot = { ebikeSnapshotCoordinator.lastSnapshotAnyAge() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
-            eBikeRidingFresh = { nowMs -> ebikeSnapshotCoordinator.ridingFresh(nowMs) },
+            eBikeRidingSinceMs = { nowMs -> ebikeSnapshotCoordinator.ridingSinceMs(nowMs) },
+            hasLinkableRadar = { RadarSelection.hasLinkableRadar(RadarSelection.bondedDevices(this), prefs.radarMac) },
             hasEBikeSignal = { ebikeSnapshotCoordinator.hasEverSeenSnapshot() },
             everSawTrack = { sawTrack },
             postForgotToLock = notifications::postForgotToLock,
@@ -984,11 +985,11 @@ class BikeRadarService : Service() {
         scope.launch {
             var prevTickMs = SystemClock.elapsedRealtime()
             while (true) {
-                // Only the off-episode path needs 2 s cadence; the connected
-                // path just needs to clear stale state once after reconnect,
-                // and the never-paired-in-session path needs nothing at all.
-                // Slow ticks 15× when idle to drop background CPU wake-ups.
-                val activeTracking = radarOffSinceMs != null
+                // Only an off-episode or a ride with no radar needs the 2 s
+                // cadence; the connected path just needs to clear stale state
+                // once after reconnect. Slow ticks 15x when idle to drop
+                // background CPU wake-ups.
+                val activeTracking = radarLinkCoordinator.needsFastTick()
                 // Sleep for the cadence, but a radar drop (markDisconnected ->
                 // walkAwayKick) short-circuits the wait so the loop re-reads
                 // activeTracking immediately and flips to the 2 s cadence,
@@ -1205,7 +1206,8 @@ class BikeRadarService : Service() {
          * The radar-only equivalent of a Bosch eBike reporting itself locked,
          * and routed to the same state, so it vetoes the dead-radar cue,
          * closes out its latch and retires the banner. Scoped to one
-         * off-episode: the next radar connect spends it.
+         * off-episode: the next radar connect spends it, and so does an eBike
+         * ride that starts after it.
          */
         const val ACTION_END_RIDE = "es.jjrh.bikeradar.END_RIDE"
 

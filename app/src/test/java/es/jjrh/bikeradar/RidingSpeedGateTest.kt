@@ -94,6 +94,43 @@ class RidingSpeedGateTest {
     }
 
     @Test
+    fun theRideIsDatedFromTheFrameThatFirstConfirmedIt() {
+        val st = fold(1_000L to 5.0f, 11_000L to 5.0f, 40_000L to 5.0f)
+        assertEquals(11_000L, RidingSpeedGate.ridingSinceMs(st, 40_000L))
+    }
+
+    @Test
+    fun aStopInsideTheFreshWindowKeepsTheRidesStart() {
+        val st = fold(
+            1_000L to 5.0f,
+            11_000L to 5.0f,
+            20_000L to 0f, // a light
+            120_999L to 5.0f,
+            130_999L to 5.0f, // re-sustained 119.999 s after the last confirmed frame
+        )
+        assertEquals(11_000L, RidingSpeedGate.ridingSinceMs(st, 130_999L))
+    }
+
+    @Test
+    fun aStopPastTheFreshWindowStartsANewRun() {
+        val st = fold(
+            1_000L to 5.0f,
+            11_000L to 5.0f,
+            20_000L to 0f,
+            121_000L to 5.0f,
+            131_000L to 5.0f, // exactly 120 s after the last confirmed frame
+        )
+        assertEquals(131_000L, RidingSpeedGate.ridingSinceMs(st, 131_000L))
+    }
+
+    @Test
+    fun noRideStartWhileRidingIsNotFresh() {
+        val st = fold(1_000L to 5.0f, 11_000L to 5.0f)
+        assertNull(RidingSpeedGate.ridingSinceMs(st, 131_000L))
+        assertNull(RidingSpeedGate.ridingSinceMs(RidingSpeedGate.State(), 0L))
+    }
+
+    @Test
     fun speedRawConvertsFromHundredthsOfKmh() {
         assertNull(RidingSpeedGate.speedMs(null))
         // 1800 (1/100 km/h) = 18 km/h = 5 m/s.

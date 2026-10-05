@@ -407,6 +407,23 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun noRadarThisRide() {
+        // A ride the radar never joined: not "disconnected", and the line says
+        // what to do about it.
+        overlay().apply {
+            setReconnecting(RadarLinkVisualDecider.LinkVisual.NO_RADAR)
+        }.capture()
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun noRadarThisRideEs() {
+        overlay().apply {
+            setReconnecting(RadarLinkVisualDecider.LinkVisual.NO_RADAR)
+        }.capture()
+    }
+
+    @Test
     fun scenarioModeLabel() {
         // Non-null scenarioTimeMs triggers the t+... replay label.
         overlay().apply {

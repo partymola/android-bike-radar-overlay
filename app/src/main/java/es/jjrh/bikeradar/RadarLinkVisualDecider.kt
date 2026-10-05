@@ -70,8 +70,10 @@ package es.jjrh.bikeradar
 object RadarLinkVisualDecider {
 
     /** Banner state + which message to render. PLAIN omits the lock-state line;
-     *  UNLOCKED appends "but bike unlocked" (eBike rider, bike not parked). */
-    enum class LinkVisual { LIVE, RECONNECTING_PLAIN, RECONNECTING_UNLOCKED }
+     *  UNLOCKED appends "but bike unlocked" (eBike rider, bike not parked).
+     *  NO_RADAR is a ride the radar has not joined; [decide] never returns it,
+     *  `RadarLinkCoordinator.evaluateRadarDrop` picks it. */
+    enum class LinkVisual { LIVE, RECONNECTING_PLAIN, RECONNECTING_UNLOCKED, NO_RADAR }
 
     /**
      * @param radarEverLive whether the radar has connected at least once this

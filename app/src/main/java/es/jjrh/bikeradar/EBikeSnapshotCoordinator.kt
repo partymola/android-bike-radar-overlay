@@ -108,11 +108,13 @@ internal class EBikeSnapshotCoordinator(
 
     private fun isFresh(): Boolean = clock() - lastSnapshotMs <= ALERT_FRESH_MS
 
-    /** Whether the bike has recently been ridden - a sustained above-walking-pace
-     *  spell within the freshness window (see [RidingSpeedGate]). The radar-drop
-     *  cue's eBike confirmation, in place of the bare unlock bit: a bike powered
-     *  on in a garage is unlocked but not moving, and must stay silent. */
-    fun ridingFresh(nowMs: Long): Boolean = RidingSpeedGate.ridingFresh(ridingState, nowMs)
+    /** When the current ride was first confirmed, or null unless the bike has
+     *  recently been ridden: a sustained above-walking-pace spell within the
+     *  freshness window (see [RidingSpeedGate]). The radar-drop cue's eBike
+     *  confirmation, in place of the bare unlock bit, since a bike powered on
+     *  in a garage is unlocked but not moving and must stay silent. The
+     *  instant dates a ride with no radar. */
+    fun ridingSinceMs(nowMs: Long): Long? = RidingSpeedGate.ridingSinceMs(ridingState, nowMs)
 
     /**
      * Handle a fresh live-data snapshot: cache it for the AlertDecider

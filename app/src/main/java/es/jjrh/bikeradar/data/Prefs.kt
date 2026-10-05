@@ -217,7 +217,8 @@ class Prefs(context: Context) {
      *
      *  It is also the app's "a new ride has started" boundary, which the
      *  ride-stats reset, the radar-drop cue's bookkeeping reset, the traffic
-     *  sighting clear and the eBike lock forget all read on reconnect.
+     *  sighting clear and the eBike lock forget all read on reconnect, and
+     *  which ends a ride with no radar after this long without riding.
      *  Lowering it therefore also shortens how long a mid-ride return still
      *  earns the reconnect acknowledgement beep; raising it lengthens how long
      *  a lock taken at a stop still counts as this ride's. The Settings copy
@@ -230,7 +231,9 @@ class Prefs(context: Context) {
 
     /** Backoff cap once the radar has been offline past
      *  [radarLongOfflineThresholdMinutes]. Higher = longer idle and a
-     *  slower reconnect when the radar comes back. */
+     *  slower reconnect when the radar comes back, and above 50 s a longer
+     *  wait before the no-radar warning
+     *  (`RadarLinkCoordinator.noRadarGraceMs`). */
     var radarLongOfflineCapSec: Int
         get() = sp.getInt(KEY_RADAR_LONG_OFFLINE_CAP_SEC, 30).coerceIn(5, 120)
         set(v) {
@@ -334,6 +337,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_RECONNECT_BANNER_PERSISTENT, false)
         set(v) {
             sp.edit().putBoolean(KEY_RECONNECT_BANNER_PERSISTENT, v).apply()
+        }
+
+    /** Warn, with the radar-lost sound and a banner, when the eBike shows a
+     *  ride under way and the radar has not been up during it. Default on.
+     *  Needs the eBike link: nothing else tells the app the rider is riding.
+     *  Off also silences a later ride whose radar stayed off since the last
+     *  one. See `RadarLinkCoordinator.evaluateRadarDrop`. */
+    var noRadarRideWarningEnabled: Boolean
+        get() = sp.getBoolean(KEY_NO_RADAR_RIDE_WARNING, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_NO_RADAR_RIDE_WARNING, v).apply()
         }
 
     /** Experimental. Let the dead-radar audio cue confirm a ride from traffic
@@ -1035,6 +1049,7 @@ class Prefs(context: Context) {
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("precog_enabled=$precogEnabled")
+        appendLine("no_radar_ride_warning_enabled=$noRadarRideWarningEnabled")
         appendLine("radar_drop_track_fallback_enabled=$radarDropTrackFallbackEnabled")
         appendLine("radar_drop_track_window_sec=$radarDropTrackWindowSec")
         appendLine("turn_aware_alerts_enabled=$turnAwareAlertsEnabled")
@@ -1137,6 +1152,7 @@ class Prefs(context: Context) {
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN = "capture_log_share_warning_seen"
         const val KEY_CAPTURE_LOG_SHARE_WARNING_SEEN_V2 = "capture_log_share_warning_seen_v2"
         const val KEY_RECONNECT_BANNER_PERSISTENT = "reconnect_banner_persistent"
+        const val KEY_NO_RADAR_RIDE_WARNING = "no_radar_ride_warning_enabled"
         const val KEY_FORGOT_TO_LOCK_ALERT = "forgot_to_lock_alert_enabled"
         const val KEY_AUTO_LIGHT_MODE = "auto_light_mode_enabled"
         const val KEY_CAMERA_LIGHT_DAY_MODE = "camera_light_day_mode"

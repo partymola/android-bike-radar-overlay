@@ -78,7 +78,14 @@ confused with each other or with the awareness beeps:
   Silence would be a lie, so the loss is announced by sound: a status-class
   three-pulse. Because this one has a screen consequence the rider might act on
   (reconnect the radar), it also gets a screen banner; a persistence option
-  exists for riders whose only rear sensor is the radar.
+  exists for riders whose only rear sensor is the radar. A ride the radar never
+  joined gets the same three-pulse, because the rider's remedy is the same. It
+  needs an eBike: once the bike has shown the rider riding for 90 s with no
+  radar up (longer when the rider has raised the idle reconnect interval; see
+  `RadarLinkCoordinator.noRadarGraceMs`), the three-pulse sounds at most three
+  times a ride, with its own banner. A lock ends a ride, so riding on after one
+  starts the count again. Once it has sounded, the "back" pulse plays when the
+  radar arrives.
 
 ### 3. End of trip
 

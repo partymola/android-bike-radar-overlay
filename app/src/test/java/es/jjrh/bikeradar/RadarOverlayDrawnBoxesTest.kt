@@ -30,13 +30,21 @@ class RadarOverlayDrawnBoxesTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
-    private class BoxRecorder(bmp: Bitmap) : Canvas(bmp) {
+    // One per view, reused for every draw: a fresh bitmap per draw, even
+    // recycled, takes this class's test JVM past 13 GB.
+    private class BoxRecorder(private val bmp: Bitmap) : Canvas(bmp) {
         val rects = mutableListOf<RectF>()
         override fun drawRoundRect(rect: RectF, rx: Float, ry: Float, paint: Paint) {
             rects += RectF(rect)
             super.drawRoundRect(rect, rx, ry, paint)
         }
+        fun clear() {
+            rects.clear()
+            bmp.eraseColor(0)
+        }
     }
+
+    private fun RadarOverlayView.recorder() = BoxRecorder(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
 
     private data class Target(val name: String, val vehicle: (distanceM: Int, lateralPos: Float) -> Vehicle)
 
@@ -69,21 +77,22 @@ class RadarOverlayDrawnBoxesTest {
 
     /** The boxes [view] draws for [vehicle] alone. The background and the
      *  danger border span the view, so they are left out. */
-    private fun RadarOverlayView.boxesFor(vehicle: Vehicle): List<RectF> {
+    private fun RadarOverlayView.boxesFor(vehicle: Vehicle, canvas: BoxRecorder): List<RectF> {
         setState(RadarState(vehicles = listOf(vehicle), source = DataSource.V2, bikeSpeedMs = 1f))
-        val canvas = BoxRecorder(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
+        canvas.clear()
         draw(canvas)
         return canvas.rects.filter { it.width() < width - 4 * resources.displayMetrics.density }
     }
 
     private fun boxesDrawn(portrait: Boolean, check: (Target, String, RectF, Float) -> Unit) {
         val view = overlay(portrait)
+        val canvas = view.recorder()
         for (window in listOf(10, 15, 20, 30, 55, 80)) {
             view.setVisualMaxM(window)
             for (target in targets + garbageWidth) {
                 for (distance in (0..window step 3) + window) {
                     for (lateral in listOf(0f, 1f)) {
-                        val boxes = view.boxesFor(target.vehicle(distance, lateral))
+                        val boxes = view.boxesFor(target.vehicle(distance, lateral), canvas)
                         val where = "${target.name} at $distance m of $window, lateral $lateral, ${if (portrait) "portrait" else "landscape"}"
                         assertTrue("$where: nothing drawn", boxes.isNotEmpty())
                         boxes.forEach { check(target, where, it, view.width.toFloat()) }
@@ -120,7 +129,7 @@ class RadarOverlayDrawnBoxesTest {
         // cap alone cannot tell that from the right shape.
         val view = overlay(portrait = false).apply { setVisualMaxM(55) }
         val car = Vehicle(id = 1, distanceM = 30, speedMs = -5f, templateLengthM = 4f, templateWidthM = 1.75f)
-        view.boxesFor(car).forEach { box ->
+        view.boxesFor(car, view.recorder()).forEach { box ->
             assertTrue("${box.width()} wide, ${box.height()} long", box.width() < 0.6f * box.height())
         }
     }

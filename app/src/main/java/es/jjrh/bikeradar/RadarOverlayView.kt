@@ -221,10 +221,11 @@ class RadarOverlayView(context: Context) : View(context) {
             RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED ->
                 context.getString(R.string.overlay_radar_disconnected) + ", " +
                     context.getString(R.string.overlay_radar_disconnected_unlocked)
-            // Two sentences: the second line is an instruction.
+            // Two sentences; the second line is a question and carries its own
+            // mark (theNoRadarBannerIsSpokenAsAQuestion).
             RadarLinkVisualDecider.LinkVisual.NO_RADAR ->
                 context.getString(R.string.overlay_radar_not_on) + ". " +
-                    context.getString(R.string.overlay_radar_not_on_sub) + "."
+                    context.getString(R.string.overlay_radar_not_on_sub)
         }
         postInvalidate()
     }

@@ -9,6 +9,7 @@ import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -410,11 +411,18 @@ class RadarOverlayViewTest {
 
     @Test
     fun noRadarThisRide() {
-        // A ride the radar never joined: not "disconnected", and the line says
-        // what to do about it.
+        // A ride the radar never joined: not "disconnected", and the line asks
+        // whether it is on.
         overlay().apply {
             setReconnecting(RadarLinkVisualDecider.LinkVisual.NO_RADAR)
         }.capture()
+    }
+
+    @Test
+    fun theNoRadarBannerIsSpokenAsAQuestion() {
+        // The question carries its own mark, so no full stop after it.
+        val view = overlay().apply { setReconnecting(RadarLinkVisualDecider.LinkVisual.NO_RADAR) }
+        assertEquals("No rear radar. Is it on?", view.contentDescription)
     }
 
     @Test

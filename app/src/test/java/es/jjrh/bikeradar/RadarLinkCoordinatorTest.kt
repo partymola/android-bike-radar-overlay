@@ -2310,7 +2310,7 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun aRiderWithNoRadarPairedGetsNoWarning() {
-        // Nothing to switch on; "Turn it on" would be the wrong instruction.
+        // No radar to ask about, so no warning and no banner.
         radarPaired = false
         rideWithNoRadarFrom(100_000L)
         tick(190_000L)

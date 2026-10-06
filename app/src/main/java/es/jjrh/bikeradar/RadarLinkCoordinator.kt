@@ -48,7 +48,7 @@ internal class RadarLinkCoordinator(
     // not read as a mid-ride radar failure. The instant dates a ride with no radar.
     private val eBikeRidingSinceMs: (Long) -> Long?,
     // A radar is paired for this bike (RadarSelection.hasLinkableRadar). With
-    // none there is nothing to switch on, so the no-radar warning stays quiet.
+    // none there is no radar to ask about, so the no-radar warning stays quiet.
     // Bluetooth off or its permission revoked also reads as none; the eBike
     // reader is down then too, so no ride is dated and nothing is lost.
     private val hasLinkableRadar: () -> Boolean,

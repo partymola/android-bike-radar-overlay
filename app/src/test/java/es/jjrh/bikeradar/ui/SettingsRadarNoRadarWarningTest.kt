@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -75,6 +76,30 @@ class SettingsRadarNoRadarWarningTest {
         prefs.radarLongOfflineCapSec = 120
         showScreen()
         composeRule.onNodeWithText("174 seconds into a ride", substring = true, useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun itIsHiddenForARiderWithNoEBike() {
+        // The warning needs a Bosch eBike; the row beside it stays.
+        prefs.eBikeOwnership = EBikeOwnership.NO
+        showScreen()
+        composeRule.onNodeWithText(app.getString(R.string.settings_radar_no_radar_warning_title)).assertDoesNotExist()
+        composeRule.onNodeWithText(app.getString(R.string.settings_radar_banner_persistent_title)).performScrollTo().assertExists()
+    }
+
+    @Test
+    fun itShowsForARiderWithAnEBike() {
+        prefs.eBikeOwnership = EBikeOwnership.YES
+        showScreen()
+        row().assertIsOn()
+    }
+
+    @Test
+    fun itShowsForARiderWhoNeverAnswered() {
+        // An upgrader can have the eBike reader on without ever answering.
+        prefs.eBikeOwnership = EBikeOwnership.UNANSWERED
+        showScreen()
+        row().assertIsOn()
     }
 
     @Test

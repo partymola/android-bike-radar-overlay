@@ -52,6 +52,7 @@ import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkCoordinator
+import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import java.util.Locale
@@ -170,6 +171,9 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         radarLongOfflineCap = radarLongOfflineCap,
         onRadarLongOfflineCapChange = { radarLongOfflineCap = it },
         onRadarLongOfflineCapFinished = { prefs.radarLongOfflineCapSec = radarLongOfflineCap },
+        // The warning needs a Bosch eBike, so a rider who said they have none
+        // is not offered its switch (SettingsRadarNoRadarWarningTest).
+        showNoRadarWarning = prefsSnap.eBikeOwnership != EBikeOwnership.NO,
         noRadarWarning = noRadarWarning,
         onNoRadarWarningChange = {
             noRadarWarning = it
@@ -299,6 +303,7 @@ internal fun SettingsRadarContent(
     radarLongOfflineCap: Int,
     onRadarLongOfflineCapChange: (Int) -> Unit,
     onRadarLongOfflineCapFinished: () -> Unit,
+    showNoRadarWarning: Boolean,
     noRadarWarning: Boolean,
     onNoRadarWarningChange: (Boolean) -> Unit,
     bannerPersistent: Boolean,
@@ -443,16 +448,18 @@ internal fun SettingsRadarContent(
                 onValueChangeFinished = onRadarLongOfflineCapFinished,
             )
             SettingsRowGroup {
-                SettingsToggleRow(
-                    title = stringResource(R.string.settings_radar_no_radar_warning_title),
-                    // Follows the interval slider above, which lengthens the grace.
-                    subtitle = stringResource(
-                        R.string.settings_radar_no_radar_warning_subtitle,
-                        RadarLinkCoordinator.noRadarGraceSec(radarLongOfflineCap),
-                    ),
-                    checked = noRadarWarning,
-                    onCheckedChange = onNoRadarWarningChange,
-                )
+                if (showNoRadarWarning) {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_radar_no_radar_warning_title),
+                        // Follows the interval slider above, which lengthens the grace.
+                        subtitle = stringResource(
+                            R.string.settings_radar_no_radar_warning_subtitle,
+                            RadarLinkCoordinator.noRadarGraceSec(radarLongOfflineCap),
+                        ),
+                        checked = noRadarWarning,
+                        onCheckedChange = onNoRadarWarningChange,
+                    )
+                }
                 SettingsToggleRow(
                     title = stringResource(R.string.settings_radar_banner_persistent_title),
                     subtitle = stringResource(R.string.settings_radar_banner_persistent_subtitle),

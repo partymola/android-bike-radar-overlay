@@ -88,9 +88,10 @@
     <string name="overlay_radar_disconnected">Rear radar disconnected</string>
     <string name="overlay_radar_disconnected_unlocked">but bike unlocked</string>
     <!-- The same banner on a ride the radar has not joined (never connected,
-         so not "disconnected"), shown once its warning has sounded. -->
+         so not "disconnected"), shown once its warning has sounded. A question:
+         the radar may be on but held by another app or device. -->
     <string name="overlay_radar_not_on">No rear radar</string>
-    <string name="overlay_radar_not_on_sub">Turn it on</string>
+    <string name="overlay_radar_not_on_sub">Is it on?</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)

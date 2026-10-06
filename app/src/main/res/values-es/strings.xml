@@ -77,7 +77,7 @@
     <!-- El mismo aviso en una ruta sin radar (nunca se conectó, así que no
          "desconectado"); aparece cuando ya ha sonado el aviso. -->
     <string name="overlay_radar_not_on">Sin radar trasero</string>
-    <string name="overlay_radar_not_on_sub">Enciéndelo</string>
+    <string name="overlay_radar_not_on_sub">¿Está encendido?</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)

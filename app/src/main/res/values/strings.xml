@@ -476,7 +476,7 @@
     <string name="settings_radar_no_radar_warning_title">Warn when riding without the radar</string>
     <!-- The seconds follow the idle reconnect interval above: 90 up to a 50 s
          interval, longer beyond it (RadarLinkCoordinator.noRadarGraceMs). -->
-    <string name="settings_radar_no_radar_warning_subtitle">With a Bosch eBike: <xliff:g id="seconds" example="90">%1$d</xliff:g> seconds into a ride with no radar connected, you hear three low pulses, up to three times, and see a warning on the overlay.</string>
+    <string name="settings_radar_no_radar_warning_subtitle">With eBike data on and Bosch Flow running: <xliff:g id="seconds" example="90">%1$d</xliff:g> seconds into a ride with no radar connected, you hear three low pulses, up to three times, and see a warning on the overlay.</string>
     <string name="settings_radar_low_battery_title">Low-battery threshold</string>
     <string name="settings_radar_low_battery_helper">Show an amber warning beside the rider when any paired device drops below this level.</string>
     <string name="settings_radar_show_labels_title">Show device labels</string>

@@ -443,7 +443,7 @@
     <string name="settings_radar_banner_persistent_title">Mantener el aviso de desconexión en pantalla</string>
     <string name="settings_radar_banner_persistent_subtitle">Sin eBike Bosch, o si la app no sabe si la tuya está bloqueada: se mantiene hasta que el radar se reconecte, en vez de ocultarse 40 s después de la desconexión.</string>
     <string name="settings_radar_no_radar_warning_title">Avisar si vas sin el radar</string>
-    <string name="settings_radar_no_radar_warning_subtitle">Con una eBike Bosch: si llevas <xliff:g id="seconds" example="90">%1$d</xliff:g> s en marcha sin el radar conectado, suenan 3 pulsos graves, hasta 3 veces, y aparece un aviso en la barra lateral.</string>
+    <string name="settings_radar_no_radar_warning_subtitle">Con los datos de la eBike activados y Bosch Flow en segundo plano: si llevas <xliff:g id="seconds" example="90">%1$d</xliff:g> s en marcha sin el radar conectado, suenan 3 pulsos graves, hasta 3 veces, y aparece un aviso en la barra lateral.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
     <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
     <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>

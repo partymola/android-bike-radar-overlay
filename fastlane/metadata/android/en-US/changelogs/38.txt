@@ -1,0 +1,1 @@
+"Warn up to" now starts at No limit, so the fastest approaches get beeps and urgent warnings again. In 1.8.0 it started at 126 km/h, which could silence a real vehicle. A speed you chose yourself is kept. To quiet fast phantom readings again, set a speed in Settings → Alerts; 126 km/h was the 1.8.0 setting.

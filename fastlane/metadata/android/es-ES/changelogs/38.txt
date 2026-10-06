@@ -1,0 +1,1 @@
+«Avisar hasta» empieza ahora en «Sin límite», así que lo que se acerca más rápido vuelve a sonar con pitidos y aviso urgente. En 1.8.0 empezaba en 126 km/h, y eso podía silenciar un vehículo real. Si ya has elegido una velocidad, se mantiene. Para volver a silenciar los fantasmas rápidos del radar, elige una velocidad en Ajustes → Alertas; 126 km/h era el valor de 1.8.0.

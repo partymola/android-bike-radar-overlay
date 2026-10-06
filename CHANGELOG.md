@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.8.1 - 2026-10-06
+
+### Fix
+
+- **"Warn up to" now starts at No limit.** In 1.8.0 it started at 126 km/h. Anything reported closing faster got no beep and no urgent warning. A real vehicle can close that fast, and it is the one you most need to hear. That default came from phantom readings on the developer's own rides, too narrow a base to apply to everyone. If you moved the slider yourself, your choice is kept. To quiet fast phantom readings again, choose a speed in Settings -> Alerts. 126 km/h was the 1.8.0 setting.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. If you never moved "Warn up to", beeps and urgent warnings come back for anything reported closing faster than 126 km/h, and so does the all-clear that follows them. Alerts per km count beeps and urgent warnings, so they can rise in the ride summary and in Home Assistant, and so can alerts per hour in Home Assistant. No change to the Home Assistant topics or entity names, to which radars work, or to the cross-app contract.
+
 ## v1.8.0 - 2026-10-06
 
 ### Features

@@ -198,7 +198,8 @@ class BikeRadarService : Service() {
     // Read-only reader for the bike's proprietary live-data stream (the channel
     // the Bosch Flow app uses). Sources the live snapshot. Null when the eBike
     // feature is off or no bonded eBike is present.
-    @Volatile private var ebikeStatusReader: EBikeStatusReader? = null
+    @androidx.annotation.VisibleForTesting
+    @Volatile internal var ebikeStatusReader: EBikeStatusReader? = null
 
     // The radar-link / walk-away cluster (radarOffSinceMs, sessionRadarConnectedMs,
     // walkAwayArmed, walkAwayDismissed, lastWalkAwayFireMs ...) and its
@@ -525,9 +526,7 @@ class BikeRadarService : Service() {
                 // the ON path can re-register.
                 radarLink.forceReconnect()
                 cameraLink.stop()
-                ebikeStatusReader?.shutdown()
-                ebikeStatusReader = null
-                EBikeStateBus.reset()
+                stopEBikeReader()
                 scanRegistered = false
             },
             onAdapterOn = {
@@ -542,7 +541,19 @@ class BikeRadarService : Service() {
         launchWalkAwayTick()
         launchDashcamRefresh()
         haPublisher.launchRideSummaryPublishLoop()
-        maybeStartEBikeReader()
+        // Follows the switch both ways: Settings and onboarding write only the
+        // pref. On Main, like every other caller, so two starts cannot race.
+        scope.launch(Dispatchers.Main) {
+            prefs.flow.map { it.eBikeDataEnabled }.distinctUntilChanged().collect { enabled ->
+                if (enabled) maybeStartEBikeReader() else stopEBikeReader()
+            }
+        }
+    }
+
+    private fun stopEBikeReader() {
+        ebikeStatusReader?.shutdown()
+        ebikeStatusReader = null
+        EBikeStateBus.reset()
     }
 
     /**
@@ -651,9 +662,7 @@ class BikeRadarService : Service() {
                 // Tear the status reader down and rebuild it (e.g. the rider
                 // re-opened Flow, or the bike came back).
                 Log.i(TAG_RADAR, "ebike: ACTION_RESTART_EBIKE_READER - restarting status reader")
-                ebikeStatusReader?.shutdown()
-                ebikeStatusReader = null
-                EBikeStateBus.reset()
+                stopEBikeReader()
                 maybeStartEBikeReader()
             }
             ACTION_WALKAWAY_SNOOZE -> {
@@ -708,9 +717,7 @@ class BikeRadarService : Service() {
         // internal timer scope. The reader's GATT calls are wrapped in
         // try/catch so permission revocation between start and shutdown does
         // not crash here.
-        ebikeStatusReader?.shutdown()
-        ebikeStatusReader = null
-        EBikeStateBus.reset()
+        stopEBikeReader()
         scope.cancel()
         // After scope.cancel(), not before: the reconnect loop opens the file at
         // the top of every attempt in transcript mode, so closing it while that

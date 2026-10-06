@@ -14,6 +14,7 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -147,6 +148,61 @@ class BikeRadarServiceSmokeTest {
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
         assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
+        controller.destroy()
+    }
+
+    private fun idleMainUntil(timeoutMs: Long = 5_000L, done: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!done() && System.currentTimeMillis() < deadline) {
+            shadowOf(app.mainLooper).idle()
+            Thread.sleep(10)
+        }
+    }
+
+    @Test
+    fun switchingEBikeDataOffStopsARunningReader() {
+        // Settings and onboarding's "back" and "I don't have one" write only the
+        // pref. A reader left running keeps feeding the no-radar warning for a
+        // rider whose switch for it is hidden.
+        val prefs = Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = true
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        shadowOf(app.mainLooper).idle()
+        // Robolectric has no bonded eBike, so stand in for one that started.
+        val readerScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        service.ebikeStatusReader = EBikeStatusReader(app, readerScope, "AA:BB:CC:DD:EE:FF", onSnapshot = {})
+        EBikeStateBus.setStage(EBikeStage.WAITING)
+
+        prefs.eBikeDataEnabled = false
+        idleMainUntil { service.ebikeStatusReader == null }
+        assertNull("switching eBike data off must stop the reader", service.ebikeStatusReader)
+        assertEquals(EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
+        readerScope.cancel()
+        controller.destroy()
+    }
+
+    @Test
+    fun switchingEBikeDataOnStartsTheReaderWithoutARestart() {
+        // The Settings switch writes only the pref, and its toast says the data
+        // is on. Without a bonded eBike the start attempt can only record why it
+        // did not start, which is what shows it ran.
+        EBikeStateBus.reset()
+        val prefs = Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = false
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        shadowOf(app.mainLooper).idle()
+        assertEquals(EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
+
+        prefs.eBikeDataEnabled = true
+        idleMainUntil { EBikeStateBus.stage.value != EBikeStage.NOT_STARTED }
+        assertEquals(EBikeStage.NO_BONDED_BIKE, EBikeStateBus.stage.value)
         controller.destroy()
     }
 

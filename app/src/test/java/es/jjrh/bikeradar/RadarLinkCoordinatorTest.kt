@@ -2542,6 +2542,17 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
+    fun anOnTimeCueNeverReadsAsEarlierThanItsGrace() {
+        // A 51 s pause gives a 91.2 s grace, shown as 92 s. Rounded down, the
+        // cue on time at 91.2 s would read as 91 s into the ride.
+        prefs.radarLongOfflineCapSec = 51
+        rideWithNoRadarFrom(100_000L)
+        tick(191_199L)
+        tick(191_200L)
+        assertEquals(listOf("no-radar alert sounded (cue 1, 92 s into the ride, grace 92 s)"), journalLines)
+    }
+
+    @Test
     fun theGraceRoundsUpToTheSecond() {
         assertEquals(90, RadarLinkCoordinator.noRadarGraceSec(30))
         assertEquals(92, RadarLinkCoordinator.noRadarGraceSec(51))

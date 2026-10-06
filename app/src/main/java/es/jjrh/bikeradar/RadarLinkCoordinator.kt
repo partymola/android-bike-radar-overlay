@@ -855,8 +855,10 @@ internal class RadarLinkCoordinator(
             alertBeeper()?.playRadarDropped()
             clog("# no_radar_cue ride_ms=$downForMs system_locked=${snap?.systemLocked} cue_count=${decision.cueCount}")
             // Every cue: the path is capped, so it cannot flood the journal.
-            // The ride time says whether the cue came on time.
-            val rideSec = (noRadarRideMs ?: 0L) / 1000
+            // The ride time says whether the cue came on time. Rounded up, as
+            // the grace is, so an on-time cue never reads as early
+            // (`anOnTimeCueNeverReadsAsEarlierThanItsGrace`).
+            val rideSec = ((noRadarRideMs ?: 0L) + 999) / 1000
             if (decision.cueCount == 1) appliedGraceSec = noRadarGraceSec(longOfflineCapSec)
             journal("no-radar alert sounded (cue ${decision.cueCount}, $rideSec s into the ride, grace $appliedGraceSec s)")
         } else if (decision.fire) {

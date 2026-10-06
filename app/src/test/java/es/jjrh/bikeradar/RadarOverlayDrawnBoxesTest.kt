@@ -23,7 +23,9 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w448dp-h997dp-xxhdpi")
+// 395 dp wide is the short side of a mounted phone, which a landscape strip
+// runs along.
+@Config(qualifiers = "w395dp-h997dp-xxhdpi")
 class RadarOverlayDrawnBoxesTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()

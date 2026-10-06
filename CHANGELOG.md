@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.8.0 - 2026-10-06
+
+### Features
+
+- **With a Bosch eBike, a warning when you ride without the rear radar.** It needs a paired radar, and Bosch Flow connected to the bike. After your eBike has shown you riding for 90 seconds with no radar connected, you hear the drop alert (three low pulses), and the overlay shows "No rear radar" and "Is it on?". The sound plays up to three times, 3 minutes apart. The banner stays while you ride, until the radar connects. Then you hear one low pulse, the sound for the radar coming back. An idle reconnect interval over 50 seconds lengthens the wait, and the switch's description shows how long. Before, the drop alert stayed silent on the first ride after the app restarted. With the radar still off on a later ride, it sounded at once and repeated every 3 minutes. Both now get this warning instead, and so does riding on after a lock with the radar dead for a few minutes. The switch is in Settings -> Alerts, under Connection, and turning it off silences all of these.
+- **Vehicles are drawn to scale on the overlay, starting from their front.** Each vehicle is drawn at the size the radar gives it. Nearer ones are drawn on top. Boxes keep a vehicle's shape on a phone in landscape. Before, every vehicle was a small box centred on the distance the radar reports. Once the radar sizes a vehicle, that distance jumps back by about half its length. So a car's front could appear over a metre further away than a moment before. A vehicle not sized yet is drawn as a standard car.
+- **Set the fastest approach the alerts warn about.** "Warn up to", in Settings -> Alerts, defaults to 126 km/h. Anything reported closing faster gets no beep and no urgent warning, real or not. It still shows on the overlay and still holds back the all-clear. The radar sometimes reports a phantom closing at an implausible speed with nothing behind you. This keeps the faster ones quiet. The speed is how fast something closes on you, not its road speed. Choose 126, 144, 162 or 180 km/h, or no limit.
+
+### Fix
+
+- **A vehicle far to the side can no longer hide a real car's beeps.** Beeps describe only the closest vehicle. A target more than 10 m to the side was set aside only after it was picked as the closest. So a car on a parallel street could keep a real one behind you quiet. It is now set aside before the closest is picked. It still holds back the all-clear, but it no longer causes a beep or an all-clear on its own.
+- **Debug screenshots are no longer kept forever.** Periodic screenshots from the Debug screen were saved once a minute and never deleted. Only the newest 30 are now kept. The first start after updating keeps only the newest 30, so copy off any others you want before you update.
+
+### UX
+
+- **The Privacy screen now covers periodic screenshots.** It says each one shows the whole screen, including the app underneath. It also says they are taken whenever the radar is connected, even if another app has hidden the overlay. The Debug switch and its notification now say so too.
+- **The Privacy screen and the README now say where ride history and logs are kept.** Ride history, capture logs, periodic screenshots, crash reports and the connection log are files in the app's own folder. Other apps can't open them on their own. Your Android backup and the phone-to-phone transfer leave them out. They can be copied to a computer over USB.
+- **The Alert sounds page says three low pulses can also mean you are riding without the radar.**
+
+### Diagnostics
+
+- **The connection log records each warning for riding without the radar.** It notes how far into the ride the warning came, and the wait that applied.
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. Three changes above affect when an alert sounds. They are the warning for riding without the radar, the approach speed limit, and targets far to the side. The first also changes the drop alert for an eBike rider whose radar was already off, as its bullet says. No change to the Home Assistant topics or entity names, or to which values are sent. Alerts per km and per hour count beeps and urgent warnings, so they follow those alert changes. No change to which radars work, or to the cross-app contract.
+
+### Internal
+
+- A test now pins which of the app's receivers and services other apps can reach. Gradle 9.8.0, Roborazzi 1.76.0, androidx core 1.19.1, navigation-compose 2.10.2 and gradle/actions 6.4.0.
+
 ## v1.7.1 - 2026-10-01
 
 ### UX

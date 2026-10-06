@@ -206,6 +206,36 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    /** A ride confirmed by the service's own eBike path with the radar never
+     *  up, then the tick cadence the loop would sleep for. */
+    private fun tickDelayOnARideWithNoRadar(radarBonded: Boolean): Long {
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        shadowOf(radar).setName("RearVue8")
+        shadowOf(adapter).setBondedDevices(if (radarBonded) setOf(radar) else emptySet())
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertEquals("idle before any ride", 30_000L, service.walkAwayTickDelayMs())
+        repeat(13) {
+            service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = false, speedRaw = 2_000))
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        }
+        service.radarLinkCoordinator.evaluateRadarDrop(android.os.SystemClock.elapsedRealtime())
+        val delay = service.walkAwayTickDelayMs()
+        controller.destroy()
+        return delay
+    }
+
+    @Test
+    fun aRideWithNoRadarTicksFastOnlyWhenARadarIsPaired() {
+        // The service half of the no-radar warning: the loop's cadence comes
+        // from the coordinator, and "a radar is paired" from the bonded list.
+        // Either wired to a constant leaves the coordinator tests green.
+        assertEquals(2_000L, tickDelayOnARideWithNoRadar(radarBonded = true))
+        assertEquals(30_000L, tickDelayOnARideWithNoRadar(radarBonded = false))
+    }
+
     @Test
     fun theEBikeSnapshotIsStampedOnTheClockTheRadarLinkReadsItBy() {
         // The alert path ages the snapshot on the coordinator's own clock, but

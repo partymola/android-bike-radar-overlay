@@ -992,16 +992,11 @@ class BikeRadarService : Service() {
         scope.launch {
             var prevTickMs = SystemClock.elapsedRealtime()
             while (true) {
-                // Only an off-episode or a ride with no radar needs the 2 s
-                // cadence; the connected path just needs to clear stale state
-                // once after reconnect. Slow ticks 15x when idle to drop
-                // background CPU wake-ups.
-                val activeTracking = radarLinkCoordinator.needsFastTick()
                 // Sleep for the cadence, but a radar drop (markDisconnected ->
                 // walkAwayKick) short-circuits the wait so the loop re-reads
-                // activeTracking immediately and flips to the 2 s cadence,
-                // instead of finishing out up to 30 s of the idle delay.
-                withTimeoutOrNull(if (activeTracking) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS) {
+                // the cadence immediately and flips to the 2 s one, instead of
+                // finishing out up to 30 s of the idle delay.
+                withTimeoutOrNull(walkAwayTickDelayMs()) {
                     walkAwayKick.receive()
                 }
                 val now = SystemClock.elapsedRealtime()
@@ -1014,6 +1009,12 @@ class BikeRadarService : Service() {
             }
         }
     }
+
+    /** Only an off-episode or a ride with no radar needs the 2 s cadence; the
+     *  connected path just needs to clear stale state once after reconnect.
+     *  Slow ticks 15x when idle to drop background CPU wake-ups. */
+    @androidx.annotation.VisibleForTesting
+    internal fun walkAwayTickDelayMs(): Long = if (radarLinkCoordinator.needsFastTick()) WALKAWAY_TICK_MS else WALKAWAY_IDLE_TICK_MS
 
     /** Ride-summary notification + new-ride stats reset, evaluated from the
      *  walk-away tick (the only loop that keeps running while the radar is

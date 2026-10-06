@@ -2622,6 +2622,30 @@ class RadarLinkCoordinatorTest {
         assertEquals(noRadar, bannerStates.last())
     }
 
+    @Test
+    fun theSwitchSilencesARadarThatDiedBeforeALock() {
+        // The after-a-lock half of the switch: off, the dead radar is silent
+        // once the rider rides on, where the drop cue would have repeated.
+        rideWithNoRadarFrom(100_000L)
+        connectAt(110_000L)
+        disconnectAt(200_000L)
+        tick(260_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        prefs.noRadarRideWarningEnabled = false
+        ebike = LiveDataSnapshot(systemLocked = true)
+        tick(300_000L)
+        tick(600_000L)
+        ebike = LiveDataSnapshot(systemLocked = false)
+        var t = 602_000L
+        repeat(6) {
+            tick(t)
+            t += 180_000L
+        }
+        assertEquals(1, clogged("radar_drop_cue"))
+        assertEquals(0, clogged("no_radar_cue"))
+        assertEquals(live, bannerStates.last())
+    }
+
     // ── a radar that opens its link and never streams ────────────────────────
     //
     // The calls a radar failing its handshake on every attempt produces: the

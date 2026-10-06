@@ -158,9 +158,9 @@ class RadarOverlayView(context: Context) : View(context) {
 
     fun setState(s: RadarState) {
         // Gate on the rendered content, not full equality: RadarState carries a
-        // fresh timestamp (and a source tag) every frame, so `s == state` almost
-        // never holds and the overlay would redraw each frame even when the
-        // picture is unchanged. See [overlayRenderEquivalent].
+        // fresh timestamp every frame, so `s == state` almost never holds and the
+        // overlay would redraw each frame even when the picture is unchanged.
+        // See [overlayRenderEquivalent].
         if (overlayRenderEquivalent(s, state)) return
         state = s
         updateA11y()

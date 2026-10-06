@@ -7,8 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins [overlayRenderEquivalent]: per-frame timestamp/source churn must NOT
- * force an overlay redraw, but any change to a field onDraw reads must.
+ * Pins [overlayRenderEquivalent]: per-frame timestamp churn must NOT force an
+ * overlay redraw, but any change to a field onDraw reads must.
  */
 class OverlayRenderKeyTest {
 
@@ -30,10 +30,12 @@ class OverlayRenderKeyTest {
     }
 
     @Test
-    fun sourceOnlyDifferenceIsEquivalent() {
-        val a = RadarState(vehicles = listOf(v1), source = DataSource.NONE)
+    fun sourceOnlyDifferenceIsNotEquivalent() {
+        // onDraw colours each box by the source's classifier (closing speed vs
+        // range only), so the same vehicles from another source can change colour.
+        val a = RadarState(vehicles = listOf(v1), source = DataSource.V1)
         val b = RadarState(vehicles = listOf(v1), source = DataSource.V2)
-        assertTrue(overlayRenderEquivalent(a, b))
+        assertFalse(overlayRenderEquivalent(a, b))
     }
 
     @Test

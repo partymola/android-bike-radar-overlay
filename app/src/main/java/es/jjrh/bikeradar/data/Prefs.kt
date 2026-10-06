@@ -172,13 +172,14 @@ class Prefs(context: Context) {
         }
 
     /** Closing speed (m/s) above which a target gets no beep and no urgent cue,
-     *  or null for no limit. See [AlertDecider.DEFAULT_CLOSING_CEILING_MS].
+     *  or null for no limit. No limit until the rider moves the slider, which
+     *  is the only writer; see [AlertDecider.MIN_CLOSING_CEILING_MS] for why.
      *  Stored as whole m/s with 0 meaning no limit; any other value is snapped
      *  to the nearest stop the Settings slider offers, on read and on write,
      *  so the label, the thumb and the decider never disagree. */
     var closingSpeedCeilingMs: Int?
         get() {
-            val v = sp.getInt(KEY_CLOSING_SPEED_CEILING_MS, AlertDecider.DEFAULT_CLOSING_CEILING_MS.toInt())
+            val v = sp.getInt(KEY_CLOSING_SPEED_CEILING_MS, CLOSING_CEILING_NO_LIMIT)
             return if (v == CLOSING_CEILING_NO_LIMIT) null else snapClosingCeiling(v)
         }
         set(v) {

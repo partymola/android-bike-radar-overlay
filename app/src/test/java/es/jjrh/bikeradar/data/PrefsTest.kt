@@ -682,12 +682,16 @@ class PrefsTest {
     }
 
     @Test
-    fun `the closing-speed ceiling defaults to 35 and reaches the snapshot and the bundle`() {
-        // The unset path is the one every install takes, and the snapshot is
-        // what the alert pipeline reads.
-        assertEquals(35, prefs.closingSpeedCeilingMs)
-        assertEquals(35, prefs.snapshot().closingSpeedCeilingMs)
-        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=35"))
+    fun `the closing-speed ceiling defaults to no limit and reaches the snapshot and the bundle`() {
+        // The unset path is the one every install takes, including every
+        // upgrader who never moved the slider, and the snapshot is what the
+        // alert pipeline reads. A rider who chose 35 keeps it.
+        assertNull(prefs.closingSpeedCeilingMs)
+        assertNull(prefs.snapshot().closingSpeedCeilingMs)
+        assertTrue(prefs.dumpAll().contains("closing_speed_ceiling_ms=none"))
+        context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit()
+            .putInt(Prefs.KEY_CLOSING_SPEED_CEILING_MS, 35).commit()
+        assertEquals(35, Prefs(context).snapshot().closingSpeedCeilingMs)
     }
 
     @Test

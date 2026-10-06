@@ -89,15 +89,14 @@ class AlertDeciderClosingCeilingTest {
         assertTrue(run(approach, bikeSpeedMs = 0f, ceiling = 40f).any { it is Event.UrgentApproach })
     }
 
-    @Test fun `omitting the ceiling applies the shipped default`() {
-        // 37.5 m/s, the slowest phantom the default exists to catch: silenced
-        // at 35, voiced at 40, so this tells the two apart.
-        val phantom37 = listOf(83, 76, 68, 61, 53, 46, 38, 31, 23, 16, 8).map { listOf(target(85, it, 37.5f)) } +
-            List(15) { emptyList() }
-        assertTrue(run(phantom37, bikeSpeedMs = 5f, ceiling = 40f).any { it is Event.Beep })
+    @Test fun `omitting the ceiling applies no limit`() {
+        // 64 m/s is the fastest closing speed the decoder can report, so any
+        // default ceiling below it would silence this target.
+        val fast = listOf(77, 64, 51, 38, 26, 13).map { listOf(target(9, it, 64f)) } + List(15) { emptyList() }
+        assertEquals(emptyList<Event>(), run(fast, bikeSpeedMs = 5f, ceiling = 50f).audible())
         val d = AlertDecider()
-        val events = phantom37.mapIndexed { i, vs -> d.decide(vs, alertMax, 600L + i * frameMs, bikeSpeedMs = 5f) }
-        assertEquals(emptyList<Event>(), events.audible())
+        val events = fast.mapIndexed { i, vs -> d.decide(vs, alertMax, 600L + i * frameMs, bikeSpeedMs = 5f) }
+        assertTrue(events.any { it is Event.Beep })
     }
 
     @Test fun `a phantom closer than a real car changes nothing about the real car's beeps`() {

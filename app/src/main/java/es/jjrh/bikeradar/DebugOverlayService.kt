@@ -45,7 +45,7 @@ class DebugOverlayService : Service() {
     private var volumePct = AlertBeeper.DEFAULT_VOLUME_PCT
     private var maxDistanceM = DEFAULT_MAX_DISTANCE_M
     private var passClearanceM = AlertDecider.DEFAULT_PASS_CLEARANCE_M
-    private var closingCeilingMs: Float? = AlertDecider.DEFAULT_CLOSING_CEILING_MS
+    private var closingCeilingMs: Float? = null
     private var visualMaxM = RadarOverlayView.DEFAULT_VISUAL_MAX_M
 
     override fun onBind(intent: Intent?): IBinder? = null

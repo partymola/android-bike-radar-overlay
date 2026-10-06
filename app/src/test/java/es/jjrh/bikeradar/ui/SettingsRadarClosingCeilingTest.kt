@@ -14,6 +14,7 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
@@ -63,13 +64,29 @@ class SettingsRadarClosingCeilingTest {
 
     @Test
     fun aMiddleStopPersistsItsSpeed() {
-        // Seeded at no limit, away from both the default and the target, so
-        // neither an empty release nor a reset to the default can pass.
+        // Seeded at no limit, away from the target, so an empty release
+        // cannot pass.
         prefs.closingSpeedCeilingMs = null
         showScreen()
         slider().performSemanticsAction(SemanticsActions.SetProgress) { it(2f) }
         composeRule.waitForIdle()
         assertEquals(45, Prefs(app).closingSpeedCeilingMs)
+    }
+
+    @Test
+    fun aFreshInstallOpensOnNoLimitAndStoresNothing() {
+        // The goldens render the leaf with a literal null, so a fallback to a
+        // speed in the screen itself would pass them and show a no-limit rider
+        // a ceiling, which one tap would then store.
+        showScreen()
+        composeRule.waitForIdle()
+        val node = slider().fetchSemanticsNode()
+        assertEquals("No limit", node.config[SemanticsProperties.StateDescription])
+        assertEquals(4f, node.config[SemanticsProperties.ProgressBarRangeInfo].current, 0.001f)
+        assertFalse(
+            app.getSharedPreferences("bike_radar_prefs", android.content.Context.MODE_PRIVATE)
+                .contains(Prefs.KEY_CLOSING_SPEED_CEILING_MS),
+        )
     }
 
     @Test

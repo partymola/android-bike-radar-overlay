@@ -550,16 +550,17 @@ class OverlayPipelineDrivingTest {
     @Test
     fun theRidersClosingCeilingReachesTheDecider() = runTest {
         // The decider's own tests drive the parameter directly, so they stay
-        // green if the pipeline stops passing it. Under the default 35 m/s the
-        // car is silenced; under a snapshot carrying 45, or no limit, it is
+        // green if the pipeline stops passing it. Under a snapshot carrying
+        // 35 m/s the car is silenced; under 45, or the shipped no limit, it is
         // announced, and the alert line says which ceiling let it through.
-        val shipped = driveFastCloser { prefs.snapshot() }
-        assertEquals(shipped.toString(), 0, shipped.count { it.contains("event=Beep") })
-        assertTrue(shipped.toString(), shipped.any { it.startsWith("# gate ceiling tid=8") })
+        val strict = driveFastCloser { prefs.snapshot().copy(closingSpeedCeilingMs = 35) }
+        assertEquals(strict.toString(), 0, strict.count { it.contains("event=Beep") })
+        assertTrue(strict.toString(), strict.any { it.startsWith("# gate ceiling tid=8") })
         val raised = driveFastCloser { prefs.snapshot().copy(closingSpeedCeilingMs = 45) }
         assertEquals(raised.toString(), 1, raised.count { it.contains("event=Beep") && it.contains("gate_ceiling_mps=45.0") })
-        val noLimit = driveFastCloser { prefs.snapshot().copy(closingSpeedCeilingMs = null) }
-        assertEquals(noLimit.toString(), 1, noLimit.count { it.contains("event=Beep") && it.contains("gate_ceiling_mps=none") })
+        val shipped = driveFastCloser { prefs.snapshot() }
+        assertEquals(shipped.toString(), 1, shipped.count { it.contains("event=Beep") && it.contains("gate_ceiling_mps=none") })
+        assertFalse(shipped.toString(), shipped.any { it.startsWith("# gate ceiling") })
     }
 
     /** Swap in a beeper that records what it actually played. */

@@ -131,9 +131,10 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    also absorbs a single-frame dropout or boundary flap. A car genuinely
  *    leaving (overtake -> `isBehind`, or cornering / turning off) clears after
  *    the grace.
- *  - **Closing-speed ceiling.** A target closing faster than the rider's
- *    ceiling ([DEFAULT_CLOSING_CEILING_MS]) never enters the close set, so it
- *    can neither cue nor stand in front of a real car as "the closest"; it
+ *  - **Closing-speed ceiling.** Off unless the rider sets one (see
+ *    [MIN_CLOSING_CEILING_MS] for the range and why there is no default).
+ *    A target closing faster than it never enters the close set, so it can
+ *    neither cue nor stand in front of a real car as "the closest"; it
  *    still counts as present for the Clear chime. A target beyond
  *    [RX_ABSURD_M] of raw lateral is treated the same way, except on a
  *    [Vehicle.lateralUnknown] frame.
@@ -600,11 +601,11 @@ class AlertDecider(
          *  veto; a predicted hit still fires at any margin. */
         passClearanceM: Float = DEFAULT_PASS_CLEARANCE_M,
         /** Closing speed (m/s) above which a target gets no cue, or null for
-         *  no limit. See [DEFAULT_CLOSING_CEILING_MS]. Not clamped here:
-         *  [data.Prefs] is the only production source. Zero or below reads as
-         *  no limit, so such a value lets every cue through rather than
-         *  silencing them. */
-        closingCeilingMs: Float? = DEFAULT_CLOSING_CEILING_MS,
+         *  no limit, the default (see [MIN_CLOSING_CEILING_MS]). Not clamped
+         *  here: [data.Prefs] is the only production source. Zero or below
+         *  reads as no limit, so such a value lets every cue through rather
+         *  than silencing them. */
+        closingCeilingMs: Float? = null,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -1772,18 +1773,20 @@ class AlertDecider(
         const val MIN_PASS_CLEARANCE_M = 0.5f
         const val MAX_PASS_CLEARANCE_M = 3.0f
 
-        /** Closing speed (m/s) above which a target is treated as a radar
-         *  glitch: it gets no beep and no urgent cue, though it is still drawn
-         *  and still holds back the all-clear. Phantoms seen in captures
-         *  have read 33.5-47 m/s, held nearly unchanged across frames, so this
-         *  default catches the faster ones only. It is also the strictest
-         *  setting the slider offers. A real vehicle closing
-         *  faster than this is silenced too; that is the trade, and why the
-         *  rider can move it to [MIN_CLOSING_CEILING_MS]..[MAX_CLOSING_CEILING_MS]
-         *  or switch it off. `AlertDeciderClosingCeilingTest` pins the boundary
-         *  (strictly faster), that a phantom changes nothing about a real car's
-         *  cues, and that it still holds back the all-clear. */
-        const val DEFAULT_CLOSING_CEILING_MS = 35f
+        /** Range (m/s) of the closing-speed ceiling a rider can set. Above the
+         *  rider's ceiling a target is treated as a radar glitch: no beep and
+         *  no urgent cue, though it is still drawn and still holds back the
+         *  all-clear. Phantoms seen in captures have read 33.5-47 m/s, held
+         *  nearly unchanged across frames.
+         *
+         *  **There is no ceiling unless the rider sets one, deliberately.** A
+         *  real vehicle closing faster is silenced too, and it is the closer a
+         *  warning matters most for; the phantoms behind these values
+         *  come from one rider's roads. Do not restore a default.
+         *  `AlertDeciderClosingCeilingTest` ("omitting the ceiling applies no
+         *  limit") and `PrefsTest` pin it; the same test class pins the
+         *  boundary (strictly faster), that a phantom changes nothing about a
+         *  real car's cues, and that it still holds back the all-clear. */
         const val MIN_CLOSING_CEILING_MS = 35f
         const val MAX_CLOSING_CEILING_MS = 50f
 

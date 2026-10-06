@@ -378,7 +378,7 @@ class AlertDeciderGhostGateTest {
     private fun events(
         frames: List<List<Vehicle>>,
         gateLines: MutableList<String> = mutableListOf(),
-        closingCeilingMs: Float? = AlertDecider.DEFAULT_CLOSING_CEILING_MS,
+        closingCeilingMs: Float? = null,
     ): List<AlertDecider.Event> {
         val d = AlertDecider(onGateEvent = { gateLines.add(it) })
         val c = Clock()
@@ -392,7 +392,7 @@ class AlertDeciderGhostGateTest {
         // nearer by true range until the car is inside 10.7 m. The veto must
         // not depend on the closing-speed ceiling, which a rider can turn off.
         val withOffRoad = approach.mapIndexed { i, vs -> if (i <= 22) vs + offRoad() else vs }
-        for (ceiling in listOf(AlertDecider.DEFAULT_CLOSING_CEILING_MS, null)) {
+        for (ceiling in listOf(35f, null)) {
             val alone = events(approach, closingCeilingMs = ceiling)
             assertEquals(
                 "the real car must walk the whole ladder on its own, ceiling $ceiling",

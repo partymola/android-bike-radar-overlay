@@ -82,23 +82,24 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
-    fun closingCeilingNoLimit() {
-        // The slider's last stop reads as a label, not a speed.
+    fun closingCeilingSet() {
+        // The defaults render the last stop, a label; a set ceiling reads as a
+        // speed.
         captureRoboImage {
-            UiTheme { RadarContent(haConfigured = false, closingCeiling = null) }
+            UiTheme { RadarContent(haConfigured = false, closingCeiling = 35) }
         }
     }
 
     @Test
     @Config(qualifiers = "+es")
-    fun closingCeilingNoLimitEs() {
+    fun closingCeilingSetEs() {
         captureRoboImage {
-            UiTheme { RadarContent(haConfigured = false, closingCeiling = null) }
+            UiTheme { RadarContent(haConfigured = false, closingCeiling = 35) }
         }
     }
 
     @Composable
-    private fun RadarContent(haConfigured: Boolean, closingCeiling: Int? = 35) {
+    private fun RadarContent(haConfigured: Boolean, closingCeiling: Int? = null) {
         SettingsRadarContent(
             navController = rememberNavController(),
             haConfigured = haConfigured,

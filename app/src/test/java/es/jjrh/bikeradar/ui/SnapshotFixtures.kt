@@ -67,7 +67,7 @@ internal object SnapshotFixtures {
         radarDropTrackFallbackEnabled = true,
         radarDropTrackWindowSec = 30,
         urgentPassClearanceM = 1.5f,
-        closingSpeedCeilingMs = 35,
+        closingSpeedCeilingMs = null,
     )
 }
 

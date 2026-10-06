@@ -148,8 +148,11 @@ class RadarLinkCoordinatorTest {
     private fun snap() = coordinator.snapshot()
     private fun clogged(token: String) = clogLines.count { it.contains(token) }
 
+    /** The sequence production makes: the link opens at discovery, then the
+     *  first frame marks the radar up. */
     private fun connectAt(t: Long) {
         now = t
+        coordinator.markLinkOpen()
         coordinator.markConnected()
     }
 
@@ -162,7 +165,9 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun firstConnectSetsGattActiveAndStartAnchor() {
-        connectAt(1_000L)
+        // Without the link-open call before it, which production always makes.
+        now = 1_000L
+        coordinator.markConnected()
         val s = snap()
         assertTrue(s.radarGattActive)
         assertEquals(1_000L, s.radarConnectStartMs)
@@ -2682,12 +2687,68 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
+    fun aFailingRadarUndoesNothingTheRiderDid() {
+        // A fired and dismissed walk-away alarm and an "I've parked" tap: each
+        // attempt opening the link must leave all of it as it was.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(1, postWalkAwayCount)
+        coordinator.markWalkAwayDismissed(snoozed = false)
+        now = fireAt + 1_000L
+        coordinator.markRideEndedByRider()
+        val before = snap()
+        fun effects() = listOf(
+            cancelWalkAwayCount,
+            forgotToLockCancelCount,
+            snoozeCancelCount,
+            trackClearCount,
+            dashcamBackoffClearCount,
+            wakeLockReleaseCount,
+            bannerStates.size,
+        )
+        val counts = effects()
+        failingAttempts(from = fireAt + 3_000L, until = fireAt + 108_000L) { }
+        assertEquals(before.copy(radarLinkClosedAtMs = fireAt + 107_000L), snap())
+        assertEquals(counts, effects())
+    }
+
+    @Test
+    fun theParkedTapStillSilencesTheDropCueThroughAnAbortLoop() {
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        coordinator.markRideEndedByRider()
+        failingAttempts(from = 6_000L, until = 600_000L) { coordinator.evaluateRadarDrop(it) }
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aStreamAfterAnAbortLoopLongerThanTheGapIsANewRide() {
+        // The loop is the radar being down, so the new-ride gap runs from the
+        // drop, not from the last failing attempt.
+        prefs.radarLongOfflineThresholdMinutes = 10
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        failingAttempts(from = 10_000L, until = 604_000L) { }
+        connectAt(606_000L)
+        assertTrue(snap().newRideAtConnect)
+        assertEquals(1, trackClearCount)
+    }
+
+    @Test
     fun anAbortLoopAfterADropStillCuesOnTime() {
         prefs.pausedUntilEpochMs = 0L
         ebike = LiveDataSnapshot(systemLocked = false)
         connectAt(1_000L)
         disconnectAt(4_000L)
-        failingAttempts(from = 6_000L, until = 60_000L)
+        failingAttempts(from = 6_000L, until = 60_000L) {
+            tick(it)
+            assertTrue("fast ticks while a failing attempt holds the link", coordinator.needsFastTick())
+        }
         tick(63_999L)
         assertEquals(0, clogged("radar_drop_cue"))
         tick(64_000L)

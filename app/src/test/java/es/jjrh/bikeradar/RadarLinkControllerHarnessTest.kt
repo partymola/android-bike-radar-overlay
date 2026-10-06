@@ -414,8 +414,11 @@ class RadarLinkControllerHarnessTest {
         assertEquals(5, v.distanceM)
         assertEquals(-8f, v.speedMs)
         assertEquals("the first frame marks the radar up", 1, gateway.connects)
+        // A battery notify after a second frame is the witness that the loop
+        // read that frame: the channel is first in, first out.
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
-        pumpUntil(timeoutMs = 200) { false }
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
         assertEquals("once per connection, not per frame", 1, gateway.connects)
 
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50") // 0x50 = 80%
@@ -465,7 +468,8 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun radarLightAutoModeRunsAndProcessesStateNotify() = runTest {
         val link = Link()
-        val controller = controller(link, prefs = prefs(radarLightAutoMode = true))
+        val gateway = FakeGateway()
+        val controller = controller(link, prefs = prefs(radarLightAutoMode = true), gateway = gateway)
         startDriver(link)
 
         controller.start("TestRadar", mac)
@@ -479,12 +483,18 @@ class RadarLinkControllerHarnessTest {
         // processed both and kept decoding.
         notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff01") // baseline: slot 0
         notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff01") // slot 1: override
+        // Neither these nor a battery notify is radar data, so none marks the
+        // radar up; a radar that sends them and no 3204 frame covers nothing.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 80 })
+        assertEquals(0, gateway.connects)
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
 
         assertTrue(
             "the loop must keep decoding V2 after the 2f14 frames",
             pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() },
         )
+        assertEquals(1, gateway.connects)
         controller.forceReconnect()
     }
 
@@ -574,7 +584,8 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun reconnectsAfterHealthyDisconnect() = runTest {
         val link = Link()
-        val controller = controller(link)
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway)
         startDriver(link)
 
         controller.start("TestRadar", mac)
@@ -590,6 +601,14 @@ class RadarLinkControllerHarnessTest {
         cb.onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
 
         assertTrue("the reconnect loop must open a second connection", pumpUntil { link.openCount >= 2 })
+
+        // The second connection's first frame marks the radar up again.
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journal.count { it == "radar handshake complete" } >= 2 })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue("events=${gateway.events}", pumpUntil { gateway.connects == 2 })
+        assertEquals("connected", gateway.events.last())
         controller.forceReconnect()
     }
 
@@ -1113,7 +1132,8 @@ class RadarLinkControllerHarnessTest {
      */
     @Test fun theLegacyPathReportsBatteryAndFollowsItsNotifications() = runTest {
         val link = Link()
-        val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway, setUp = ::setUpLegacyOnlyRadarWithBattery)
         startDriver(link)
 
         controller.start("TestRadar", mac)
@@ -1137,6 +1157,7 @@ class RadarLinkControllerHarnessTest {
             "a battery notification on the legacy link must update the bus",
             pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 42 },
         )
+        assertEquals("a battery read or notify is not the legacy stream", 0, gateway.connects)
         controller.forceReconnect()
     }
 
@@ -1177,8 +1198,9 @@ class RadarLinkControllerHarnessTest {
             RadarStateBus.state.value.vehicles.isEmpty(),
         )
         assertEquals("a heartbeat is the legacy radar streaming", 1, gateway.connects)
-        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02")
-        pumpUntil(timeoutMs = 200) { false }
+        // A threat packet after it is the witness that the loop read more.
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
         assertEquals("once per connection", 1, gateway.connects)
         controller.forceReconnect()
     }

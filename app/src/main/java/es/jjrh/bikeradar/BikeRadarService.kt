@@ -671,13 +671,6 @@ class BikeRadarService : Service() {
             // Idempotent: maybeStartEBikeReader bails when the reader is
             // already running.
             ACTION_START_EBIKE_READER -> maybeStartEBikeReader()
-            ACTION_RESTART_EBIKE_READER -> {
-                // Tear the status reader down and rebuild it (e.g. the rider
-                // re-opened Flow, or the bike came back).
-                Log.i(TAG_RADAR, "ebike: ACTION_RESTART_EBIKE_READER - restarting status reader")
-                stopEBikeReader()
-                maybeStartEBikeReader()
-            }
             ACTION_WALKAWAY_SNOOZE -> {
                 Log.i(TAG, "walk-away snoozed for ${WALKAWAY_SNOOZE_MS / 1000}s")
                 radarLinkCoordinator.markWalkAwayDismissed(snoozed = true)
@@ -1248,14 +1241,6 @@ class BikeRadarService : Service() {
          * bails.
          */
         const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
-
-        /**
-         * Tear the existing status reader down and start a fresh one.
-         * [ACTION_START_EBIKE_READER] alone is idempotent - it no-ops when the
-         * reader is already running - so a forced restart needs a stop
-         * first.
-         */
-        const val ACTION_RESTART_EBIKE_READER = "es.jjrh.bikeradar.RESTART_EBIKE_READER"
 
         /** Debug-only radar light-mode write-probe (see [probeWriteRadarLight]).
          *  Forwarded from the dev-only [RemoteControlReceiver]. */

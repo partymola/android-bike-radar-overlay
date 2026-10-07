@@ -198,8 +198,9 @@ class BikeRadarService : Service() {
     private val overlayPrefs: PrefsSnapshot get() = cachedOverlayPrefs ?: prefs.snapshot()
 
     // Read-only reader for the bike's proprietary live-data stream (the channel
-    // the Bosch Flow app uses). Sources the live snapshot. Null when the eBike
-    // feature is off or no bonded eBike is present.
+    // the Bosch Flow app uses). Sources the live snapshot. Null unless a reader
+    // is running: eBike data off, no permission, no bonded eBike, or
+    // Bluetooth off.
     @androidx.annotation.VisibleForTesting
     @Volatile internal var ebikeStatusReader: EBikeStatusReader? = null
 
@@ -545,7 +546,9 @@ class BikeRadarService : Service() {
         haPublisher.launchRideSummaryPublishLoop()
         // Follows the switch both ways: Settings and onboarding write only the
         // pref. Collected on Main, like every other caller, so two starts
-        // cannot race; the snapshot it maps from is built off Main.
+        // cannot race; the snapshot it maps from is built off Main. The
+        // switch-off suspends while the old reader stops, and another start
+        // can run on Main meanwhile, so it clears only if none did.
         scope.launch(Dispatchers.Main) {
             prefs.flow.map { it.eBikeDataEnabled }.distinctUntilChanged().flowOn(Dispatchers.IO).collect { enabled ->
                 if (enabled) {
@@ -553,11 +556,22 @@ class BikeRadarService : Service() {
                 } else {
                     // Joined first: the reader still hands over frames it had
                     // received before the cancel, and one landing after
-                    // forget() would put the reading back
+                    // forget() would put the reading back. The bus is reset
+                    // again for the same reason: such a frame republishes it
                     // (`aFrameStillBeingHandledWhenTheSwitchGoesOffIsForgottenToo`).
-                    stopEBikeReader()?.join()
-                    EBikeStateBus.reset()
-                    ebikeSnapshotCoordinator.forget()
+                    val stopped = stopEBikeReader()
+                    stopped?.join()
+                    if (ebikeStatusReader == null) {
+                        // Logged only when there was something to forget: the
+                        // first emission at every start with eBike data off
+                        // lands here too.
+                        if (stopped != null || ebikeSnapshotCoordinator.hasEverSeenSnapshot()) {
+                            linkJournal.log("ebike data switched off: reader stopped, last reading forgotten")
+                            clog("# ebike data switched off")
+                        }
+                        EBikeStateBus.reset()
+                        ebikeSnapshotCoordinator.forget()
+                    }
                 }
             }
         }
@@ -604,10 +618,7 @@ class BikeRadarService : Service() {
             context = this,
             scope = scope,
             mac = ebikeMac,
-            onSnapshot = { snap ->
-                ebikeSnapshotCoordinator.onSnapshot(snap)
-                EBikeStateBus.setSnapshot(snap)
-            },
+            onSnapshot = ::onEBikeFrame,
             // Journalled as well as logged: every stage of this link used to
             // reach logcat only, so a connect failure, a missing status
             // characteristic and a failed subscribe all left the same trace as
@@ -629,6 +640,13 @@ class BikeRadarService : Service() {
         ebikeStatusReader = reader
         reader.start()
         clog("# ebike status-reader started")
+    }
+
+    /** What the running reader does with each decoded frame. */
+    @androidx.annotation.VisibleForTesting
+    internal fun onEBikeFrame(snap: LiveDataSnapshot) {
+        ebikeSnapshotCoordinator.onSnapshot(snap)
+        EBikeStateBus.setSnapshot(snap)
     }
 
     private fun hasBlePermissions(): Boolean {
@@ -1235,8 +1253,9 @@ class BikeRadarService : Service() {
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
 
         /**
-         * Starts the service if it is not running, for the onboarding eBike
-         * step. A running service also follows `eBikeDataEnabled` on its own;
+         * Starts the reader, for the onboarding eBike step, whose
+         * `startService` also brings the service up if it is not running. A
+         * running service follows `eBikeDataEnabled` on its own too;
          * whichever of the two starts the reader first wins and the other
          * bails.
          */
@@ -1327,9 +1346,8 @@ class BikeRadarService : Service() {
             internal set
 
         /** The radar link state, published for the home screen and the
-         *  Settings radar surfaces so they can tell "connecting" from "not in
-         *  range". Null while the service is not running; they fall back to
-         *  NOT_IN_RANGE then, which is true. */
+         *  Settings radar surfaces so they can show a radar as connecting.
+         *  Null while the service is not running, when nothing is. */
         @Volatile var radarLinkStateForUi: kotlinx.coroutines.flow.StateFlow<RadarLinkState>? = null
             internal set
 

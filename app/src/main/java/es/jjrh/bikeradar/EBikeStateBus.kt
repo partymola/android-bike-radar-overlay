@@ -7,17 +7,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Process-wide bus exposing the eBike live-data snapshot (and its freshness)
- * to UI surfaces outside the [BikeRadarService]. The service-owned
- * [EBikeStatusReader] mirrors each decoded frame here via [setSnapshot]; the
- * SYSTEM-card eBike row, Settings -> eBike and the onboarding step read it.
- *
- * Same pattern as [HaHealthBus] and [BatteryStateBus]: a MutableStateFlow per
- * signal, kept current by the producer, read via the read-only StateFlow. When
- * the service isn't running these stay at their last value; [reset] clears
- * them whenever the reader stops.
- */
-/**
  * Why the eBike feed is not delivering, when it is not.
  *
  * The row used to render every non-receiving state as "Waiting for Flow",
@@ -32,6 +21,15 @@ import kotlinx.coroutines.flow.StateFlow
  */
 enum class EBikeStage { NOT_STARTED, NOT_PERMITTED, NO_BONDED_BIKE, WAITING, RECEIVING }
 
+/**
+ * Process-wide bus exposing the eBike live-data snapshot (and its freshness)
+ * to UI surfaces outside the [BikeRadarService]. The service-owned
+ * [EBikeStatusReader] mirrors each decoded frame here via [setSnapshot]; the
+ * SYSTEM-card eBike row, Settings -> eBike and the onboarding step read it.
+ *
+ * Same pattern as [HaHealthBus] and [BatteryStateBus]: a MutableStateFlow per
+ * signal, kept current by the producer, read via the read-only StateFlow.
+ */
 object EBikeStateBus {
     private val _snapshot = MutableStateFlow(LiveDataSnapshot())
     val snapshot: StateFlow<LiveDataSnapshot> = _snapshot
@@ -56,9 +54,11 @@ object EBikeStateBus {
     }
 
     /** Restore default state. Called whenever the service stops the reader
-     *  (service destroy, the Bluetooth adapter dying, eBike data switched off,
-     *  a reader restart) so UI surfaces see a clean empty state instead of a
-     *  frozen last snapshot. */
+     *  (service destroy, the Bluetooth adapter dying, eBike data switched off)
+     *  so UI surfaces see an empty state instead of a frozen last snapshot.
+     *  Only the switch-off waits for the reader first; on the other two a
+     *  frame the reader was already handling can republish once, and
+     *  [eBikeDataIsFresh] ages it out. */
     fun reset() {
         _snapshot.value = LiveDataSnapshot()
         _lastUpdatedElapsedMs.value = 0L

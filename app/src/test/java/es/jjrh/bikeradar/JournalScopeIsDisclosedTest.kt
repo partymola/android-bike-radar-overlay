@@ -137,6 +137,9 @@ class JournalScopeIsDisclosedTest {
         "bluetooth adapter on: scan re-registered, links kickstarted",
         "ebike reader not started: \$startStage",
         "ebike lock reading dropped as the ride began",
+        // Machinery, like the camera's exit above: the switch is the event,
+        // and this is the reader stopping for it.
+        "ebike data switched off: reader stopped, last reading forgotten",
         "service stopping",
         "scan wake ignored: app not running, service start refused (\$name)",
         "scan wake ignored: Bluetooth permission revoked since the scan started - re-grant \$permission to restore the radar link",

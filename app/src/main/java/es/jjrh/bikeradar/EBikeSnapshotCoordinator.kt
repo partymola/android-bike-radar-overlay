@@ -96,8 +96,10 @@ internal class EBikeSnapshotCoordinator(
      *  Bluetooth-off, which keeps the last reading
      *  (`BikeRadarServiceSmokeTest.switchingEBikeDataOffStopsARunningReader`).
      *  The caller must have stopped the reader first: a frame arriving after
-     *  this would put the reading back. */
+     *  this would put the reading back. A climb in progress is logged as
+     *  ended, since the corpus replay rebuilds the climb bit from those lines. */
     fun forget() = synchronized(this) {
+        if (climbingFlag) clog("# ebike climbing=false forgotten")
         lastSnapshot = null
         lastSnapshotMs = 0L
         everSeen = false

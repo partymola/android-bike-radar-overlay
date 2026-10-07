@@ -154,6 +154,8 @@ class EBikeSnapshotCoordinatorTest {
         assertEquals(listOf("started" to iso), rideEdges)
 
         coord.forget()
+        // The replay rebuilds the climb bit from these lines.
+        assertEquals("the climb in progress is logged as ended", 1, clogged("climbing=false"))
         assertNull(coord.lastSnapshotAnyAge())
         assertEquals(0L, coord.snapshotAtMs())
         assertFalse(coord.hasEverSeenSnapshot())
@@ -162,12 +164,21 @@ class EBikeSnapshotCoordinatorTest {
 
         // The next frames are a new bike's first: a fresh odometer baseline, a
         // ride edge from scratch, and a full climb dwell.
+        val before = clogged("climbing=false")
         feed(LiveDataSnapshot(systemLocked = true, odometerM = 5_000L, riderPower = 300), atMs = 31_000L)
         assertTrue(clogLines.last { it.startsWith("ebike") }.contains("odo_delta_m=0"))
+        assertEquals("no stale climb to end", before, clogged("climbing=false"))
         feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, riderPower = 300), atMs = 32_000L)
         assertEquals(listOf("started" to iso, "started" to iso), rideEdges)
         feed(LiveDataSnapshot(riderPower = 300), atMs = 60_000L)
         assertFalse("30 s of power before the forget must not count", coord.climbing())
+    }
+
+    @Test
+    fun forgettingWithNoClimbLogsNoClimbLine() {
+        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
+        coord.forget()
+        assertEquals(0, clogged("climbing="))
     }
 
     @Test

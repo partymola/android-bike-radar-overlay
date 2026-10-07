@@ -60,8 +60,8 @@ class BikeRadarServiceSmokeTest {
     @After
     fun restoreCryptorFactory() {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
-        // Most tests here create() without destroy(), which would otherwise
-        // leave the static pointing at a dead coordinator for later classes.
+        // A test that fails before destroy() would otherwise leave the static
+        // pointing at a dead coordinator for later classes.
         BikeRadarService.radarLinkStateForUi = null
     }
 
@@ -115,31 +115,53 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
-    fun eBikeDataDisabledIsCleanNoOp() {
-        // Graceful degradation: with the eBike feature flag off, the service
-        // must not start the status reader, even for a rider who owns a Bosch
-        // eBike. Pinned via EBikeStateBus publishing no frame through onCreate
-        // (lastUpdated stays 0) - a regression ships as "the app talks to
-        // eBikes for riders who never opted in".
+    fun eBikeDataOffNeverStartsTheReaderEvenWithABondedEBike() {
+        // Graceful degradation: a rider who owns a Bosch eBike but switched its
+        // data off must not be read from, whichever path asks for a start.
+        // Without a bonded eBike in the fixture no reader could start anyway.
         EBikeStateBus.reset()
-        Prefs(app).apply {
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        val bike = adapter.getRemoteDevice("11:22:33:44:55:66")
+        shadowOf(bike).setName("smart system eBike")
+        shadowOf(adapter).setBondedDevices(setOf(bike))
+        val prefs = Prefs(app).apply {
             eBikeOwnership = EBikeOwnership.YES
             eBikeDataEnabled = false
         }
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
-        assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
+        val service = controller.get()
+        shadowOf(app.mainLooper).idle()
+        // Bluetooth coming back, and onboarding's action, both ask for a start.
+        for (state in listOf(android.bluetooth.BluetoothAdapter.STATE_OFF, android.bluetooth.BluetoothAdapter.STATE_ON)) {
+            app.sendBroadcast(
+                Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                    .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, state),
+            )
+            shadowOf(app.mainLooper).idle()
+        }
+        service.onStartCommand(Intent().apply { action = BikeRadarService.ACTION_START_EBIKE_READER }, 0, 1)
+        assertNull("eBike data is off", service.ebikeStatusReader)
+        assertEquals(EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertFalse("nothing was switched off, so nothing to log", journal.contains("ebike data switched off"))
+
+        // The same fixture with the data on does start one.
+        prefs.eBikeDataEnabled = true
+        idleMainUntil { service.ebikeStatusReader != null }
+        assertTrue("the bonded eBike must be found", service.ebikeStatusReader != null)
         controller.destroy()
     }
 
     @Test
     fun eBikeDataEnabledIsCleanWithoutABondedEBike() {
-        // Flag-on companion of the no-op test. Flag is enabled, ownership is
-        // YES, but no Bosch eBike is bonded in Robolectric's shadow adapter
-        // (the only bonded device fixture is the radar mock, if any). The
-        // reader must not start, and EBikeStateBus stays at the never-received
-        // sentinel - regression ships as a crash on radar-only riders who
-        // toggle the feature on without an eBike.
+        // Flag-on companion. No Bosch eBike is bonded in Robolectric's shadow
+        // adapter, so the start attempt must record why it did not start, and
+        // no frame arrives - a regression ships as a crash on radar-only riders
+        // who toggle the feature on without an eBike. The stage also shows a
+        // service started with the data on attempts the start at all.
         EBikeStateBus.reset()
         Prefs(app).apply {
             eBikeOwnership = EBikeOwnership.YES
@@ -147,6 +169,8 @@ class BikeRadarServiceSmokeTest {
         }
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
+        idleMainUntil { EBikeStateBus.stage.value != EBikeStage.NOT_STARTED }
+        assertEquals(EBikeStage.NO_BONDED_BIKE, EBikeStateBus.stage.value)
         assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
         controller.destroy()
     }
@@ -164,6 +188,8 @@ class BikeRadarServiceSmokeTest {
         // Settings and onboarding's "back" and "I don't have one" write only the
         // pref. A reader left running keeps feeding the no-radar warning for a
         // rider whose switch for it is hidden.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
         val prefs = Prefs(app).apply {
             eBikeOwnership = EBikeOwnership.YES
             eBikeDataEnabled = true
@@ -197,6 +223,8 @@ class BikeRadarServiceSmokeTest {
         idleMainUntil { service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() == null }
         assertNull("and drop the last reading", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge())
         assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
+        assertTrue("the switch-off must reach the journal, got:\n$journal", journal.contains("ebike data switched off"))
         readerScope.cancel()
         controller.destroy()
     }
@@ -205,6 +233,42 @@ class BikeRadarServiceSmokeTest {
     fun aFrameStillBeingHandledWhenTheSwitchGoesOffIsForgottenToo() {
         // The reader hands over frames it had received before its cancel. One
         // that finishes after the switch-off would put the reading back.
+        lateFrameAcrossTheSwitchOff(duringTheWait = { _, _ -> }) { service ->
+            idleMainUntil { service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() == null }
+            assertNull("the late frame must not survive the switch", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge())
+            assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
+            assertEquals("nor on the status bus", EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
+            assertEquals(0L, EBikeStateBus.lastUpdatedElapsedMs.value)
+        }
+    }
+
+    @Test
+    fun aReaderStartedWhileTheSwitchOffWaitsKeepsItsStatus() {
+        // Onboarding's back then "I have one" can start a reader while the
+        // switch-off is still waiting for the old one: clearing then would
+        // wipe the new reader's status.
+        var started: EBikeStatusReader? = null
+        lateFrameAcrossTheSwitchOff(duringTheWait = { service, scope ->
+            started = EBikeStatusReader(app, scope, "AA:BB:CC:DD:EE:FF", onSnapshot = {})
+            service.ebikeStatusReader = started
+            EBikeStateBus.setStage(EBikeStage.WAITING)
+        }) { service ->
+            // Long enough for the switch-off to finish its wait.
+            idleMainUntil(timeoutMs = 1_000L) { false }
+            assertTrue("the new reader was dropped", service.ebikeStatusReader === started)
+            // The old reader's late frame is the last thing on the bus, and the
+            // coordinator keeps it; neither is cleared under the new reader.
+            assertEquals(EBikeStage.RECEIVING, EBikeStateBus.stage.value)
+            assertTrue("the reading was forgotten", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() != null)
+        }
+    }
+
+    /** A real reader holding one frame inside its handler while eBike data is
+     *  switched off; [duringTheWait] runs before the frame is let go. */
+    private fun lateFrameAcrossTheSwitchOff(
+        duringTheWait: (BikeRadarService, kotlinx.coroutines.CoroutineScope) -> Unit,
+        afterRelease: (BikeRadarService) -> Unit,
+    ) {
         Prefs(app).apply {
             eBikeOwnership = EBikeOwnership.YES
             eBikeDataEnabled = true
@@ -216,6 +280,8 @@ class BikeRadarServiceSmokeTest {
 
         val inHandler = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
+        val handled = java.util.concurrent.CountDownLatch(1)
+        val releasedInTime = java.util.concurrent.atomic.AtomicBoolean(false)
         val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
         // Set on the reader's thread, read on this one.
         val cbRef = java.util.concurrent.atomic.AtomicReference<android.bluetooth.BluetoothGattCallback?>()
@@ -230,10 +296,12 @@ class BikeRadarServiceSmokeTest {
             context = app,
             scope = readerScope,
             mac = "AA:BB:CC:DD:EE:FF",
+            // The service's own handler, held until the switch-off is waiting.
             onSnapshot = { snap ->
                 inHandler.countDown()
-                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
-                service.ebikeSnapshotCoordinator.onSnapshot(snap)
+                releasedInTime.set(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                service.onEBikeFrame(snap)
+                handled.countDown()
             },
             log = { logs += it },
             openGatt = { ctx, dev, _, c ->
@@ -264,11 +332,15 @@ class BikeRadarServiceSmokeTest {
         assertTrue(inHandler.await(5, java.util.concurrent.TimeUnit.SECONDS))
         Prefs(app).eBikeDataEnabled = false
         idleMainUntil { service.ebikeStatusReader == null }
+        // Otherwise a switch-off that never arrived fails below as a late frame.
+        assertNull("the switch-off never reached the service", service.ebikeStatusReader)
+        duringTheWait(service, readerScope)
         release.countDown()
+        // Until the frame has landed, "no reading" proves nothing.
+        assertTrue("the late frame was never handled", handled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertTrue("the frame went through before the switch-off", releasedInTime.get())
 
-        idleMainUntil { service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() == null }
-        assertNull("the late frame must not survive the switch", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge())
-        assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
+        afterRelease(service)
         readerScope.cancel()
         controller.destroy()
     }

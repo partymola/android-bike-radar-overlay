@@ -15,8 +15,9 @@ import java.io.File
  * the other on read "All off".
  *
  * Nothing in the type system connects them, so this reads the screen's source
- * and counts its toggles. It fails on the commit that adds the third one,
- * rather than on the ride where the subtitle turns out to be wrong.
+ * and counts its toggles. It fails on the commit that adds the next one
+ * without counting it, rather than on the ride where the subtitle turns out to
+ * be wrong.
  */
 class ExperimentalFeaturesSeamTest {
 

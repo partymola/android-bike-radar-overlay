@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import androidx.compose.runtime.Composable
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -23,99 +24,62 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsExperimentalSnapshotTest {
 
-    @Test
-    fun allOff() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = false,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 30,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
+    @Composable
+    private fun Screen(
+        urgentWaitEnabled: Boolean = false,
+        precogEnabled: Boolean = false,
+        radarDropTrackFallbackEnabled: Boolean = false,
+        radarDropTrackWindowSec: Int = 30,
+    ) {
+        UiTheme {
+            SettingsExperimentalContent(
+                navController = rememberNavController(),
+                urgentWaitEnabled = urgentWaitEnabled,
+                onUrgentWaitChange = {},
+                precogEnabled = precogEnabled,
+                onPrecogChange = {},
+                radarDropTrackFallbackEnabled = radarDropTrackFallbackEnabled,
+                onRadarDropTrackFallbackChange = {},
+                radarDropTrackWindowSec = radarDropTrackWindowSec,
+                onRadarDropTrackWindowChange = {},
+                onRadarDropTrackWindowFinished = {},
+            )
         }
     }
 
     @Test
+    fun allOff() {
+        captureRoboImage { Screen() }
+    }
+
+    @Test
+    fun urgentWaitOn() {
+        captureRoboImage { Screen(urgentWaitEnabled = true) }
+    }
+
+    @Test
     fun precogOn() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = true,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = false,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 30,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
-        }
+        captureRoboImage { Screen(precogEnabled = true) }
     }
 
     /** The state a fresh install is actually in: the drop fallback defaults on. */
     @Test
     fun dropFallbackOn() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = true,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 30,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
-        }
+        captureRoboImage { Screen(radarDropTrackFallbackEnabled = true) }
     }
 
     /** The minutes form of the window label, and the slider away from its
-     *  first stop. The seconds form is covered by every other case here. */
+     *  first stop. The seconds form is in `dropFallbackOn`. */
     @Test
     fun dropWindowStretched() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = true,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 600,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
-        }
+        captureRoboImage { Screen(radarDropTrackFallbackEnabled = true, radarDropTrackWindowSec = 600) }
     }
 
     /** The rung the label switches form on. Seconds below a minute, whole
      *  minutes above it, and 60 s is the first value on the minutes side. */
     @Test
     fun dropWindowAtTheMinuteBoundary() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = true,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 60,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
-        }
+        captureRoboImage { Screen(radarDropTrackFallbackEnabled = true, radarDropTrackWindowSec = 60) }
     }
 
     /** Spanish, at the width the layout is tightest: this screen's titles and
@@ -124,19 +88,6 @@ class SettingsExperimentalSnapshotTest {
     @Test
     @Config(qualifiers = "+es")
     fun dropWindowStretchedEs() {
-        captureRoboImage {
-            UiTheme {
-                SettingsExperimentalContent(
-                    navController = rememberNavController(),
-                    precogEnabled = false,
-                    onPrecogChange = {},
-                    radarDropTrackFallbackEnabled = true,
-                    onRadarDropTrackFallbackChange = {},
-                    radarDropTrackWindowSec = 600,
-                    onRadarDropTrackWindowChange = {},
-                    onRadarDropTrackWindowFinished = {},
-                )
-            }
-        }
+        captureRoboImage { Screen(radarDropTrackFallbackEnabled = true, radarDropTrackWindowSec = 600) }
     }
 }

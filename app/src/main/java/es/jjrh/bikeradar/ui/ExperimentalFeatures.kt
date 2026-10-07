@@ -17,6 +17,7 @@ import es.jjrh.bikeradar.data.PrefsSnapshot
 object ExperimentalFeatures {
 
     private val FLAGS: List<(PrefsSnapshot) -> Boolean> = listOf(
+        { it.urgentUnconfidentWaitEnabled },
         { it.precogEnabled },
         { it.radarDropTrackFallbackEnabled },
     )

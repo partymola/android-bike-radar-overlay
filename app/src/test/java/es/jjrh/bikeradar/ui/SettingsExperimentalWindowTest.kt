@@ -31,7 +31,8 @@ import org.robolectric.RobolectricTestRunner
  * empty change or release lambda, or a position written as seconds all left the
  * screen looking correct, every golden byte-identical and every gate green,
  * while the rider's chosen window either never persisted or silently reverted to
- * the default. Only this test composes `SettingsExperimentalBody`.
+ * the default. This test and `SettingsExperimentalTogglesTest` compose
+ * `SettingsExperimentalBody`.
  */
 @RunWith(RobolectricTestRunner::class)
 class SettingsExperimentalWindowTest {

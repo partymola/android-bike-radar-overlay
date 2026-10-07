@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,9 +39,10 @@ fun SettingsExperimental(navController: NavController, prefs: Prefs) {
     }
 }
 
-/** Internal rather than private so `SettingsExperimentalWindowTest` can compose
- *  the shipped screen: everything between the slider and [Prefs] lives here, and
- *  the snapshot tests render the stateless leaf below with literal values. */
+/** Internal rather than private so `SettingsExperimentalWindowTest` and
+ *  `SettingsExperimentalTogglesTest` can compose the shipped screen: everything
+ *  between the controls and [Prefs] lives here, and the snapshot tests render
+ *  the stateless leaf below with literal values. */
 @Composable
 internal fun SettingsExperimentalBody(navController: NavController, prefs: Prefs) {
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
@@ -52,6 +54,8 @@ internal fun SettingsExperimentalBody(navController: NavController, prefs: Prefs
     var dropWindowSec by rememberSaveable { mutableIntStateOf(prefs.radarDropTrackWindowSec) }
     SettingsExperimentalContent(
         navController = navController,
+        urgentWaitEnabled = prefsSnap.urgentUnconfidentWaitEnabled,
+        onUrgentWaitChange = { prefs.urgentUnconfidentWaitEnabled = it },
         precogEnabled = prefsSnap.precogEnabled,
         onPrecogChange = { prefs.precogEnabled = it },
         radarDropTrackFallbackEnabled = prefsSnap.radarDropTrackFallbackEnabled,
@@ -69,6 +73,8 @@ internal fun SettingsExperimentalBody(navController: NavController, prefs: Prefs
 @Composable
 internal fun SettingsExperimentalContent(
     navController: NavController,
+    urgentWaitEnabled: Boolean,
+    onUrgentWaitChange: (Boolean) -> Unit,
     precogEnabled: Boolean,
     onPrecogChange: (Boolean) -> Unit,
     radarDropTrackFallbackEnabled: Boolean,
@@ -93,6 +99,15 @@ internal fun SettingsExperimentalContent(
 
             Spacer(modifier = Modifier.height(8.dp))
             SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.HourglassTop,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_exp_urgent_hold_title),
+                    subtitle = stringResource(R.string.settings_exp_urgent_hold_subtitle),
+                    checked = urgentWaitEnabled,
+                    onCheckedChange = onUrgentWaitChange,
+                    isLast = false,
+                )
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.FlashOn,
                     leadingTint = br.brand,

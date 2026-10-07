@@ -19,10 +19,10 @@ import org.robolectric.RobolectricTestRunner
  *
  * `ExperimentalFeaturesCountTest` pins the pure count and
  * `ExperimentalFeaturesSeamTest` pins the list against the screen, but neither
- * reaches the row. Every golden renders this screen with both toggles OFF, so
- * replacing the live count with a literal zero keeps the whole suite green and
- * every golden byte-identical, and a rider with a toggle on reads that nothing
- * is on. That is the same defect this row was changed to remove.
+ * reaches the row. The menu goldens each show one fixed combination, so a row
+ * wired to a single flag rather than to the count can match them all while a
+ * rider with a different toggle on reads that nothing is. That is the same
+ * defect this row was changed to remove.
  */
 @RunWith(RobolectricTestRunner::class)
 class SettingsExperimentalRowTest {
@@ -55,35 +55,41 @@ class SettingsExperimentalRowTest {
         composeRule.waitForIdle()
     }
 
-    private fun snapshot(precog: Boolean, dropFallback: Boolean) = SnapshotFixtures.defaultPrefsSnapshot()
-        .copy(precogEnabled = precog, radarDropTrackFallbackEnabled = dropFallback)
+    private fun snapshot(urgentWait: Boolean = false, precog: Boolean = false, dropFallback: Boolean = false) = SnapshotFixtures.defaultPrefsSnapshot()
+        .copy(urgentUnconfidentWaitEnabled = urgentWait, precogEnabled = precog, radarDropTrackFallbackEnabled = dropFallback)
 
     @Test
     fun oneToggleOnIsCountedOnTheRow() {
-        showMenu(snapshot(precog = true, dropFallback = false))
+        showMenu(snapshot(precog = true))
 
-        composeRule.onNodeWithText("On (1 of 2)").assertExists()
+        composeRule.onNodeWithText("On (1 of 3)").assertExists()
     }
 
     @Test
-    fun theOtherToggleOnIsCountedToo() {
+    fun theOtherTogglesOnAreCountedToo() {
         // Separately from the first: a row wired to one specific flag rather
-        // than to the count gets one of these right and the other wrong.
-        showMenu(snapshot(precog = false, dropFallback = true))
-
-        composeRule.onNodeWithText("On (1 of 2)").assertExists()
+        // than to the count gets one of these right and the others wrong.
+        showMenu(snapshot(dropFallback = true))
+        composeRule.onNodeWithText("On (1 of 3)").assertExists()
     }
 
     @Test
-    fun bothOnIsCounted() {
-        showMenu(snapshot(precog = true, dropFallback = true))
+    fun theUrgentWaitOnIsCounted() {
+        showMenu(snapshot(urgentWait = true))
 
-        composeRule.onNodeWithText("On (2 of 2)").assertExists()
+        composeRule.onNodeWithText("On (1 of 3)").assertExists()
+    }
+
+    @Test
+    fun allOnIsCounted() {
+        showMenu(snapshot(urgentWait = true, precog = true, dropFallback = true))
+
+        composeRule.onNodeWithText("On (3 of 3)").assertExists()
     }
 
     @Test
     fun nothingOnKeepsItsOwnWording() {
-        showMenu(snapshot(precog = false, dropFallback = false))
+        showMenu(snapshot())
 
         composeRule.onNodeWithText("All off").assertExists()
     }

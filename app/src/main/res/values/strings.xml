@@ -416,6 +416,8 @@
     <!-- Settings → Experimental (SettingsExperimental.kt) -->
     <string name="settings_exp_title">Experimental</string>
     <string name="settings_exp_intro">Features still being tested. May be jittery or change without notice.</string>
+    <string name="settings_exp_urgent_hold_title">Hold the urgent warning for vehicles to the side</string>
+    <string name="settings_exp_urgent_hold_subtitle">When a vehicle closing fast is already off to one side, the urgent warning waits a moment to see where the vehicle will pass, and stays quiet if it is passing wide. Fewer false alarms from the next lane, but on some close vehicles the warning comes a little later.</string>
     <string name="settings_exp_precog_title">Predict overtake paths (1 s lookahead)</string>
     <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
     <string name="settings_exp_drop_fallback_title">Drop alert without a speed reading</string>

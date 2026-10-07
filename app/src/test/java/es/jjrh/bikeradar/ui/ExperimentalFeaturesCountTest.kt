@@ -10,37 +10,37 @@ import org.robolectric.RobolectricTestRunner
 /**
  * The count itself, with toggles actually on.
  *
- * Every golden renders this screen with both off, so a count that always
- * answered zero would render correctly in all of them and be wrong on the
- * only phone that matters: a rider's, with something turned on. That is the
- * shape of the defect this replaced.
+ * The Settings menu goldens all show one fixed combination, so a count that is
+ * wrong for any other combination renders correctly in every one of them and
+ * is wrong on a rider's phone. Only these tests reach the other combinations.
  */
 @RunWith(RobolectricTestRunner::class)
 class ExperimentalFeaturesCountTest {
 
-    private fun snap(precog: Boolean, dropFallback: Boolean) = SnapshotFixtures.defaultPrefsSnapshot()
-        .copy(precogEnabled = precog, radarDropTrackFallbackEnabled = dropFallback)
+    private fun snap(urgentWait: Boolean = false, precog: Boolean = false, dropFallback: Boolean = false) = SnapshotFixtures.defaultPrefsSnapshot()
+        .copy(urgentUnconfidentWaitEnabled = urgentWait, precogEnabled = precog, radarDropTrackFallbackEnabled = dropFallback)
 
     @Test
     fun nothingOnCountsNone() {
-        assertEquals(0, ExperimentalFeatures.onCount(snap(precog = false, dropFallback = false)))
+        assertEquals(0, ExperimentalFeatures.onCount(snap()))
     }
 
     @Test
     fun eachToggleCountsOnItsOwn() {
-        // Separately, because a count reading one flag twice gets both of
+        // Separately, because a count reading one flag twice gets all of
         // these right only if it happens to read the right one.
-        assertEquals(1, ExperimentalFeatures.onCount(snap(precog = true, dropFallback = false)))
-        assertEquals(1, ExperimentalFeatures.onCount(snap(precog = false, dropFallback = true)))
+        assertEquals(1, ExperimentalFeatures.onCount(snap(urgentWait = true)))
+        assertEquals(1, ExperimentalFeatures.onCount(snap(precog = true)))
+        assertEquals(1, ExperimentalFeatures.onCount(snap(dropFallback = true)))
     }
 
     @Test
-    fun bothOnCountsBoth() {
-        assertEquals(2, ExperimentalFeatures.onCount(snap(precog = true, dropFallback = true)))
+    fun allOnCountsAll() {
+        assertEquals(3, ExperimentalFeatures.onCount(snap(urgentWait = true, precog = true, dropFallback = true)))
     }
 
     @Test
     fun theTotalIsEveryToggleTheScreenHas() {
-        assertEquals(2, ExperimentalFeatures.total)
+        assertEquals(3, ExperimentalFeatures.total)
     }
 }

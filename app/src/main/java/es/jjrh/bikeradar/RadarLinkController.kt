@@ -33,12 +33,18 @@ import java.util.UUID
 
 /**
  * The boundary to the [RadarLinkState] owned by [RadarLinkCoordinator] (the sole
- * writer of the state flow). The controller signals connect/disconnect through
- * this gateway and reads a snapshot for the two fields its connection loop needs
+ * writer of the state flow). The controller signals the link edges through this
+ * gateway and reads a snapshot for the two fields its connection loop needs
  * (radarGattActive for the light-flip guard, radarOffSinceMs for the
  * reconnect-backoff cap).
  */
 internal interface RadarLinkStateGateway {
+    /** Service discovery succeeded: the link is open. Nothing more. */
+    fun markLinkOpen()
+
+    /** The radar's first data frame on this connection, called once. A radar
+     *  that opens the link and never streams must not reach this, or the
+     *  dead-radar warnings read it as up (`RadarLinkControllerHarnessTest`). */
     fun markConnected()
 
     fun markDisconnected()
@@ -413,6 +419,16 @@ internal class RadarLinkController(
         var watchdogJob: Job? = null
         var cacheRefreshed = false
         var gattClosed = false
+        // The notify channel still drains frames buffered before the disconnect
+        // callback closed it, so the first one can be read after that callback
+        // ran. Marking the radar up then would start a stream on a dead link
+        // (`aFrameDrainedAfterTheDisconnectDoesNotMarkTheRadarUp`). Called on a
+        // connection's first frame only, by both streams' frame counters.
+        val linkLock = Any()
+        var linkDown = false
+        fun markStreaming() = synchronized(linkLock) {
+            if (!linkDown) linkState.markConnected()
+        }
         fun closeOnce() {
             if (gattClosed) return
             gattClosed = true
@@ -436,7 +452,10 @@ internal class RadarLinkController(
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
-                        linkState.markDisconnected()
+                        synchronized(linkLock) {
+                            linkDown = true
+                            linkState.markDisconnected()
+                        }
                         queue.cancel()
                         notifyChannel.close()
                         if (!servicesReady.isCompleted) servicesReady.complete(false)
@@ -542,7 +561,7 @@ internal class RadarLinkController(
                 return false
             }
 
-            linkState.markConnected()
+            linkState.markLinkOpen()
             Log.i(TAG, "connected, running handshake")
             journal("radar connected, running handshake")
 
@@ -616,7 +635,7 @@ internal class RadarLinkController(
                     // the token is the diagnostic, and the journal line above
                     // is what records that the fallback ran.
                     overlayJob = overlayPipeline.attach(scope, name)
-                    return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name)
+                    return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name, ::markStreaming)
                 }
                 captureLog.clog("# handshake aborted - closing gatt for quick reconnect")
                 journal("radar handshake aborted at $handshakeAbort (quick reconnect)")
@@ -783,6 +802,7 @@ internal class RadarLinkController(
                             // stays on release builds because it is the signal
                             // a live test waits for.
                             Log.i(TAG, if (BuildConfig.DEBUG) "first V2 frame: ${bytes.toHex()}" else "first V2 frame")
+                            markStreaming()
                         }
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
@@ -898,6 +918,7 @@ internal class RadarLinkController(
         notifyChannel: Channel<Pair<UUID, ByteArray>>,
         v1Char: BluetoothGattCharacteristic,
         name: String,
+        markStreaming: () -> Unit,
     ): Boolean {
         val subscribed = queue.writeCccd(gatt, v1Char)
         captureLog.clog("# legacy stream subscribe ok=$subscribed")
@@ -964,6 +985,7 @@ internal class RadarLinkController(
                     // success would pin the retry delay at its floor and
                     // churn the radio for the whole ride.
                     lastConnectionReachedDecode = true
+                    markStreaming()
                 }
                 // Published on EVERY payload, not only the ones that change the
                 // track set. Heartbeats are the only traffic on an empty road,

@@ -178,11 +178,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // signal" about the same radar.
     val noRadarLinkFlow = remember { MutableStateFlow(RadarLinkState()) }
     val radarLinkSnap by (BikeRadarService.radarLinkStateForUi ?: noRadarLinkFlow).collectAsState()
-    val radarConnecting = RadarLinkStatus.isConnecting(
-        gattActive = radarLinkSnap.radarGattActive,
-        offSinceMs = radarLinkSnap.radarOffSinceMs,
-        nowMs = SystemClock.elapsedRealtime(),
-    )
+    val radarConnecting = RadarLinkStatus.isConnecting(radarLinkSnap, SystemClock.elapsedRealtime())
     // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
     // migration (AndroidKeyStore work on installs that still hold undecryptable
     // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to

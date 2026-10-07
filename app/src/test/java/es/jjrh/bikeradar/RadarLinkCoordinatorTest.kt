@@ -2622,6 +2622,107 @@ class RadarLinkCoordinatorTest {
         assertEquals(noRadar, bannerStates.last())
     }
 
+    // ── a radar that opens its link and never streams ────────────────────────
+    //
+    // The calls a radar failing its handshake on every attempt produces: the
+    // link opens at service discovery, and closes about two seconds later
+    // with no frame in between. Attempts here run every 3 s, ticks land while
+    // the link is open, which is when a wrong reading of it does damage.
+
+    private fun failingAttempts(from: Long, until: Long, eachTick: (Long) -> Unit = { tick(it) }) {
+        var t = from
+        while (t < until) {
+            now = t
+            coordinator.markLinkOpen()
+            eachTick(t + 1_000L)
+            disconnectAt(t + 2_000L)
+            t += 3_000L
+        }
+    }
+
+    @Test
+    fun linkOpenLeavesTheEpisodeAlone() {
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        val before = snap()
+        val counts = listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount)
+        failingAttempts(from = 10_000L, until = 40_000L) { }
+        val after = snap()
+        assertEquals(before.copy(radarLinkClosedAtMs = 39_000L), after)
+        assertEquals(counts, listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount))
+        assertEquals(0, clogged("state=IDLE"))
+        disconnectAt(45_000L) // an attempt that never opened the link
+        assertEquals(39_000L, snap().radarLinkClosedAtMs)
+    }
+
+    @Test
+    fun anAbortLoopAfterADropStillCuesOnTime() {
+        prefs.pausedUntilEpochMs = 0L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        failingAttempts(from = 6_000L, until = 60_000L)
+        tick(63_999L)
+        assertEquals(0, clogged("radar_drop_cue"))
+        tick(64_000L)
+        assertEquals(1, clogged("radar_drop_cue"))
+        failingAttempts(from = 66_000L, until = 300_000L)
+        assertEquals("on cadence through the loop", 2, clogged("radar_drop_cue"))
+        assertEquals("no false 'back' while it keeps failing", 0, clogged("radar_reconnect_cue"))
+        assertEquals(unlocked, bannerStates.last())
+        // Its first frame is the radar coming back.
+        connectAt(301_000L)
+        tick(302_000L)
+        assertEquals(1, clogged("radar_reconnect_cue"))
+    }
+
+    @Test
+    fun anAbortLoopDuringARideIsARideWithoutTheRadar() {
+        rideWithNoRadarFrom(100_000L)
+        failingAttempts(from = 105_000L, until = 188_000L)
+        tick(189_999L)
+        assertEquals(0, clogged("no_radar_cue"))
+        tick(190_000L)
+        assertEquals(1, clogged("no_radar_cue"))
+        failingAttempts(from = 191_000L, until = 1_000_000L)
+        assertEquals("the cap holds through the loop", 3, clogged("no_radar_cue"))
+        assertEquals(0, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aRadarOnlyLatchSurvivesAnAbortLoop() {
+        prefs.pausedUntilEpochMs = 0L
+        ebike = null
+        lastRidingMs = 3_000L
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        failingAttempts(from = 6_000L, until = 12L * 60_000L) { coordinator.evaluateRadarDrop(it) }
+        assertEquals(3, clogged("radar_drop_cue"))
+    }
+
+    @Test
+    fun aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm() {
+        val off = armForFire()
+        now = off + 30_000L
+        coordinator.markLinkOpen()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(1, postWalkAwayCount)
+    }
+
+    @Test
+    fun anAbortingRadarKeepsReadingConnecting() {
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        failingAttempts(from = 10_000L, until = 13_000L) { }
+        // The off-episode began at 4 s; the link last closed at 12 s.
+        assertTrue(RadarLinkStatus.isConnecting(snap(), 16_999L))
+        assertFalse(RadarLinkStatus.isConnecting(snap(), 17_000L))
+    }
+
     // ── snooze re-arm helper ─────────────────────────────────────────────────
 
     @Test

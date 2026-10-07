@@ -18,24 +18,26 @@ package es.jjrh.bikeradar
  * every 1.5 s keeps a reading permanently fresh while sending no targets at
  * all. Frame freshness is the caller's `fresh` input.
  *
- * A recently-dropped link still counts as connecting for [RECENT_OFF_MS]: an
- * aborting radar cycles connect/abort with ~1.5 s gaps, and without the
- * bridge the card would flap between two states at that cadence.
+ * A link that closed recently still counts as connecting for
+ * [RECENT_OFF_MS]: an aborting radar cycles connect/abort with ~1.5 s gaps,
+ * and without the bridge the card would flap between two states at that
+ * cadence. The bridge reads [RadarLinkState.radarLinkClosedAtMs], which every
+ * attempt that opened the link moves, not the off-episode start, which a
+ * failing radar no longer moves (`anAbortingRadarKeepsReadingConnecting`).
  *
- * [nowMs] and [offSinceMs] are both elapsedRealtime - the caller must not
- * pass wall clock, which the Settings screens' own tick uses for battery
- * freshness.
+ * [nowMs] is elapsedRealtime - the caller must not pass wall clock, which the
+ * Settings screens' own tick uses for battery freshness.
  *
- * Scope worth knowing before widening it: [gattActive] is raised once service
- * discovery has succeeded, so an attempt that dies earlier - a null GATT, or
- * discovery itself failing - never reads as connecting and the surface falls
- * through to "No signal". This is intentionally not covered here, because the
- * state has to come from the controller rather than be inferred: covering it
- * means publishing an "attempting" signal at connect time. So a link that
- * fails at the handshake reads Connecting and one that fails earlier does
- * not; which of those a given radar does is what the stored connection probe
- * answers, and it is the thing to read before deciding the earlier signal is
- * worth building.
+ * Scope worth knowing before widening it: [RadarLinkState.radarGattActive] is
+ * raised once service discovery has succeeded, so an attempt that dies earlier
+ * - a null GATT, or discovery itself failing - never reads as connecting and
+ * the surface falls through to "No signal". This is intentionally not covered
+ * here, because the state has to come from the controller rather than be
+ * inferred: covering it means publishing an "attempting" signal at connect
+ * time. So a link that fails at the handshake reads Connecting and one that
+ * fails earlier does not; which of those a given radar does is what the
+ * stored connection probe answers, and it is the thing to read before
+ * deciding the earlier signal is worth building.
  */
 object RadarLinkStatus {
 
@@ -52,11 +54,10 @@ object RadarLinkStatus {
      *  The sibling measurement lives on RADAR_DROP_VISUAL_THRESHOLD_MS. */
     const val RECENT_OFF_MS = 5_000L
 
-    fun isConnecting(
-        gattActive: Boolean,
-        offSinceMs: Long?,
-        nowMs: Long,
-    ): Boolean = gattActive || (offSinceMs != null && nowMs - offSinceMs < RECENT_OFF_MS)
+    fun isConnecting(link: RadarLinkState, nowMs: Long): Boolean {
+        val closedAt = link.radarLinkClosedAtMs
+        return link.radarGattActive || (closedAt != null && nowMs - closedAt < RECENT_OFF_MS)
+    }
 
     /**
      * Whether to offer the rider the "ride is over" control.

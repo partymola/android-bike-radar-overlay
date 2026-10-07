@@ -138,13 +138,17 @@ class SettingsRadarDeviceStatusTest {
 
     @Test
     fun aRecentDropReadsConnectingThroughTheBridge() {
-        // Pins the offSinceMs wiring AND the clock choice: the deriver takes
+        // Pins the link-closed wiring AND the clock choice: the deriver takes
         // elapsedRealtime, and under Robolectric that is small, so a mutant
         // passing the wall-clock tick here computes a huge age and goes red.
+        // The off-episode began long before, as it does for a radar failing
+        // every attempt, so a wiring that read it instead goes red too.
+        val nowMs = android.os.SystemClock.elapsedRealtime()
         BikeRadarService.radarLinkStateForUi = MutableStateFlow(
             RadarLinkState(
                 radarGattActive = false,
-                radarOffSinceMs = android.os.SystemClock.elapsedRealtime() - 1_000,
+                radarOffSinceMs = nowMs - 60_000,
+                radarLinkClosedAtMs = nowMs - 1_000,
             ),
         )
 
@@ -156,14 +160,16 @@ class SettingsRadarDeviceStatusTest {
     @Test
     fun aDropOlderThanTheBridgeReadsNoSignal() {
         // The exit from CONNECTING, which the entry tests above cannot see. A
-        // widened bridge window, or a wiring that ignores offSinceMs entirely
+        // widened bridge window, or a wiring that ignores the stamp entirely
         // and treats any published state as "connecting", leaves the card
         // saying "Connecting…" for a radar that was switched off - the same
         // class of lie the tri-state exists to remove, pointed the other way.
+        val nowMs = android.os.SystemClock.elapsedRealtime()
         BikeRadarService.radarLinkStateForUi = MutableStateFlow(
             RadarLinkState(
                 radarGattActive = false,
-                radarOffSinceMs = android.os.SystemClock.elapsedRealtime() - 6_000,
+                radarOffSinceMs = nowMs - 6_000,
+                radarLinkClosedAtMs = nowMs - 6_000,
             ),
         )
 

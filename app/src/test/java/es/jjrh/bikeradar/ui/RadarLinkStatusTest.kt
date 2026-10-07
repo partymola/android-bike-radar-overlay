@@ -25,30 +25,44 @@ class RadarLinkStatusTest {
     private fun link(
         fresh: Boolean,
         gattActive: Boolean,
-        offSinceMs: Long?,
+        closedAtMs: Long?,
         nowMs: Long = 100_000L,
         linked: Boolean = true,
     ) = deviceLinkState(
         linked = linked,
         fresh = fresh,
-        connecting = RadarLinkStatus.isConnecting(gattActive, offSinceMs, nowMs),
+        connecting = RadarLinkStatus.isConnecting(
+            RadarLinkState(radarGattActive = gattActive, radarLinkClosedAtMs = closedAtMs),
+            nowMs,
+        ),
     )
+
+    @Test fun aRecentOffEpisodeWithNoOpenLinkIsNoSignal() {
+        // The bridge reads when the link last closed. An attempt that never
+        // opened one (no GATT, discovery failed) starts an off-episode without
+        // closing a link, and a radar failing that early reads No signal.
+        val connecting = RadarLinkStatus.isConnecting(
+            RadarLinkState(radarOffSinceMs = 99_000L, radarLinkClosedAtMs = null),
+            nowMs = 100_000L,
+        )
+        assertFalse(connecting)
+    }
 
     @Test fun freshDecodedFramesAreLiveWhateverTheLinkSays() {
         assertEquals(
             DeviceLinkState.LIVE,
-            link(fresh = true, gattActive = false, offSinceMs = null),
+            link(fresh = true, gattActive = false, closedAtMs = null),
         )
         assertEquals(
             DeviceLinkState.LIVE,
-            link(fresh = true, gattActive = true, offSinceMs = 99_000L),
+            link(fresh = true, gattActive = true, closedAtMs = 99_000L),
         )
     }
 
     @Test fun liveGattWithoutFramesYetIsConnecting() {
         assertEquals(
             DeviceLinkState.CONNECTING,
-            link(fresh = false, gattActive = true, offSinceMs = null),
+            link(fresh = false, gattActive = true, closedAtMs = null),
         )
     }
 
@@ -56,7 +70,7 @@ class RadarLinkStatusTest {
         // 4999 ms after the drop: still inside the abort loop's cadence.
         assertEquals(
             DeviceLinkState.CONNECTING,
-            link(fresh = false, gattActive = false, offSinceMs = 95_001L),
+            link(fresh = false, gattActive = false, closedAtMs = 95_001L),
         )
     }
 
@@ -65,14 +79,14 @@ class RadarLinkStatusTest {
         // within one screen tick rather than one tick plus a boundary frame.
         assertEquals(
             DeviceLinkState.NO_SIGNAL,
-            link(fresh = false, gattActive = false, offSinceMs = 95_000L),
+            link(fresh = false, gattActive = false, closedAtMs = 95_000L),
         )
     }
 
     @Test fun oldDropIsNoSignal() {
         assertEquals(
             DeviceLinkState.NO_SIGNAL,
-            link(fresh = false, gattActive = false, offSinceMs = 10_000L),
+            link(fresh = false, gattActive = false, closedAtMs = 10_000L),
         )
     }
 
@@ -81,14 +95,14 @@ class RadarLinkStatusTest {
         // coordinator's write; a negative age is "just dropped", not "ancient".
         assertEquals(
             DeviceLinkState.CONNECTING,
-            link(fresh = false, gattActive = false, offSinceMs = 100_001L),
+            link(fresh = false, gattActive = false, closedAtMs = 100_001L),
         )
     }
 
     @Test fun neverConnectedThisSessionIsNoSignal() {
         assertEquals(
             DeviceLinkState.NO_SIGNAL,
-            link(fresh = false, gattActive = false, offSinceMs = null),
+            link(fresh = false, gattActive = false, closedAtMs = null),
         )
     }
 
@@ -98,7 +112,7 @@ class RadarLinkStatusTest {
         // "Connecting…" about a device the app can no longer reach.
         assertEquals(
             DeviceLinkState.NOT_PAIRED,
-            link(fresh = false, gattActive = true, offSinceMs = null, linked = false),
+            link(fresh = false, gattActive = true, closedAtMs = null, linked = false),
         )
     }
 

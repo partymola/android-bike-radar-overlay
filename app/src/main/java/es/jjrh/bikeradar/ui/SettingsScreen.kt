@@ -182,11 +182,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         linked = btEnabled && radarSelected,
         fresh = radarStreamIsLive(radarState, tickNowMs),
         limited = radarState.source == DataSource.V1,
-        connecting = RadarLinkStatus.isConnecting(
-            gattActive = radarLinkSnap.radarGattActive,
-            offSinceMs = radarLinkSnap.radarOffSinceMs,
-            nowMs = SystemClock.elapsedRealtime(),
-        ),
+        connecting = RadarLinkStatus.isConnecting(radarLinkSnap, SystemClock.elapsedRealtime()),
     )
     val dashcamLink = deviceLinkState(
         // The camera's pairing lives in prefs, which outlive the radio, so

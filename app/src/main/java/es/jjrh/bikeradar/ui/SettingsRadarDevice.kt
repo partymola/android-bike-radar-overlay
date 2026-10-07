@@ -154,11 +154,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         linked = RadarSelection.hasLinkableRadar(allBonded, chosen),
         fresh = connected,
         limited = radarState.source == DataSource.V1,
-        connecting = RadarLinkStatus.isConnecting(
-            gattActive = linkSnap.radarGattActive,
-            offSinceMs = linkSnap.radarOffSinceMs,
-            nowMs = SystemClock.elapsedRealtime(),
-        ),
+        connecting = RadarLinkStatus.isConnecting(linkSnap, SystemClock.elapsedRealtime()),
     )
 
     SettingsRadarDeviceContent(

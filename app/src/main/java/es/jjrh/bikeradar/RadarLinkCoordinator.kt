@@ -186,11 +186,13 @@ internal class RadarLinkCoordinator(
 
     private fun noRadarWarningArmed(): Boolean = prefs.noRadarRideWarningEnabled && hasLinkableRadar()
 
-    // A connected radar counts as up, which keeps an ordinary morning, radar
+    // A streaming radar counts as up, which keeps an ordinary morning, radar
     // on well before the ride, off this path
-    // (`aRadarConnectedSinceBeforeTheRideNeverWarns`). One that connects and
-    // then fails its handshake counts as up too, as it does for the drop cue.
-    private fun radarUpDuring(link: RadarLinkState, rideStart: Long): Boolean = link.radarGattActive ||
+    // (`aRadarConnectedSinceBeforeTheRideNeverWarns`). Streaming, never the
+    // open link: a link opened by every failing attempt would flip this ride
+    // between the two episodes and reset the cap each time
+    // (`anAbortLoopDuringARideIsARideWithoutTheRadar`).
+    private fun radarUpDuring(link: RadarLinkState, rideStart: Long): Boolean = link.radarStreaming ||
         (link.lastRadarUpMs ?: Long.MIN_VALUE) >= rideStart - RADAR_UP_BEFORE_RIDE_MS
 
     private fun trackRide(nowMs: Long, link: RadarLinkState, ridingSince: Long?) {
@@ -276,6 +278,14 @@ internal class RadarLinkCoordinator(
     fun clearWalkAwayDismissalForReArm() {
         _radarLinkState.update { it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null) }
         journal("walk-away snooze over, alarm re-armed")
+    }
+
+    /** Only the open-link flag the "Connecting" status and the dashcam probe
+     *  read. The off-episode and everything keyed on it wait for the first
+     *  frame ([markConnected]), so a radar failing its handshake on every
+     *  attempt stays down (`linkOpenLeavesTheEpisodeAlone`). */
+    override fun markLinkOpen() {
+        _radarLinkState.update { it.copy(radarGattActive = true) }
     }
 
     /** Off-instant is stamped at the actual disconnect callback so it
@@ -445,6 +455,7 @@ internal class RadarLinkCoordinator(
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
             current.copy(
                 radarGattActive = false,
+                radarLinkClosedAtMs = if (current.radarGattActive) nowMs else current.radarLinkClosedAtMs,
                 radarConnectStartMs = null,
                 sessionRadarConnectedMs = current.sessionRadarConnectedMs + addedMs,
                 lastRadarUpMs = if (current.radarConnectStartMs != null) nowMs else current.lastRadarUpMs,
@@ -618,7 +629,9 @@ internal class RadarLinkCoordinator(
             ),
             // Snapshot the cluster once so the decider sees a coherent set
             // of fields rather than a sequence of independent volatile reads.
-            radarConnected = link.radarGattActive,
+            // Streaming, not the open link: a failing attempt must not hold
+            // off the alarm (`aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`).
+            radarConnected = link.radarStreaming,
             radarOffSinceMs = link.radarOffSinceMs,
             dashcamLastAdvertMs = dashcamLastAdvertMs,
             armed = link.walkAwayArmed,

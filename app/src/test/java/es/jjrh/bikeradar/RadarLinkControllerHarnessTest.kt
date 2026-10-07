@@ -123,15 +123,19 @@ class RadarLinkControllerHarnessTest {
         slug = { it.lowercase() },
     )
 
-    /** A [RadarLinkStateGateway] double recording connect/disconnect calls. */
+    /** A [RadarLinkStateGateway] double recording the link edges in order. */
     private class FakeGateway : RadarLinkStateGateway {
-        var connects = 0
-        var disconnects = 0
+        val events: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val opens get() = events.count { it == "open" }
+        val connects get() = events.count { it == "connected" }
+        override fun markLinkOpen() {
+            events += "open"
+        }
         override fun markConnected() {
-            connects++
+            events += "connected"
         }
         override fun markDisconnected() {
-            disconnects++
+            events += "disconnected"
         }
         override fun snapshot(): RadarLinkState = RadarLinkState()
     }
@@ -382,7 +386,8 @@ class RadarLinkControllerHarnessTest {
         feedHandshakeReplies(link)
 
         assertTrue("handshake must complete; journal=$journal", pumpUntil { journalHas("radar handshake complete") })
-        assertTrue("the link state must be marked connected", gateway.connects >= 1)
+        assertEquals("the link opens at discovery", 1, gateway.opens)
+        assertEquals("a finished handshake is not data", 0, gateway.connects)
 
         // A working radar records its table too, so a later report has a
         // baseline to compare an aborting one against.
@@ -408,6 +413,10 @@ class RadarLinkControllerHarnessTest {
         assertEquals(1, v.id)
         assertEquals(5, v.distanceM)
         assertEquals(-8f, v.speedMs)
+        assertEquals("the first frame marks the radar up", 1, gateway.connects)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        pumpUntil(timeoutMs = 200) { false }
+        assertEquals("once per connection, not per frame", 1, gateway.connects)
 
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50") // 0x50 = 80%
         // Waits for the VALUE, not merely for an entry to exist. The handshake
@@ -483,8 +492,9 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun watchdogTearsDownSilentV2Stream() = runTest {
         val link = Link()
+        val gateway = FakeGateway()
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
-        val controller = controller(link, clock = { clockMs.get() })
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
         startDriver(link)
 
         controller.start("TestRadar", mac)
@@ -500,7 +510,64 @@ class RadarLinkControllerHarnessTest {
             "a silent V2 stream must be torn down by the watchdog",
             pumpUntil { journalHas("V2 stream silent") },
         )
+        // A radar that completes the handshake and never streams cycles this
+        // way, and covers nothing.
+        assertEquals(0, gateway.connects)
         controller.forceReconnect()
+    }
+
+    // ── a radar that opens the link and never streams is never "up" ─────────────
+
+    private suspend fun TestScope.neverMarkedUp(setUp: (BluetoothGatt) -> Unit) {
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway, setUp = setUp)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("expected several failing attempts", pumpUntil { link.openCount >= 3 })
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        assertTrue("each attempt opens the link; events=${gateway.events}", gateway.opens >= 2)
+        assertEquals("events=${gateway.events}", 0, gateway.connects)
+    }
+
+    @Test fun aRadarMissingItsHandshakeCharIsNeverMarkedUp() = runTest {
+        neverMarkedUp(::setUpServicesMissingTx)
+    }
+
+    @Test fun aRadarAbortingAfterItsBatteryStepIsNeverMarkedUp() = runTest {
+        // Full table, no replies: it aborts at the open that follows the
+        // battery read, which publishes a battery on every attempt.
+        neverMarkedUp(::setUpRadarServices)
+    }
+
+    @Test fun aV2RadarFailingItsHandshakeIsNeverMarkedUp() = runTest {
+        neverMarkedUp(::setUpV2RadarWithFailingHandshake)
+    }
+
+    @Test fun aFrameDrainedAfterTheDisconnectDoesNotMarkTheRadarUp() = runTest {
+        // The frame is buffered, then the link drops before the loop reads it.
+        // Later attempts get no replies and abort, so any "connected" is the
+        // drained frame's.
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        val gatt = requireNotNull(link.gatt)
+        val cb = requireNotNull(link.cb)
+        cb.onCharacteristicChanged(gatt, gatt.getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V2), v2TargetFrame.hexToBytes())
+        cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        assertEquals("events=${gateway.events}", 0, gateway.connects)
     }
 
     // ── reconnect loop continues after a healthy session disconnects ────────────
@@ -1085,13 +1152,15 @@ class RadarLinkControllerHarnessTest {
      */
     @Test fun aLegacyHeartbeatKeepsThePublishedStateFresh() = runTest {
         val link = Link()
-        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar)
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway, setUp = ::setUpLegacyOnlyRadar)
         startDriver(link)
 
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
         assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        assertEquals("an acknowledged subscribe is not data", 0, gateway.connects)
 
         // A bare heartbeat on an empty road: the decoder has no track to
         // prune, so it reports no change and returns nothing to publish.
@@ -1107,6 +1176,10 @@ class RadarLinkControllerHarnessTest {
             "and it carries no phantom target",
             RadarStateBus.state.value.vehicles.isEmpty(),
         )
+        assertEquals("a heartbeat is the legacy radar streaming", 1, gateway.connects)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02")
+        pumpUntil(timeoutMs = 200) { false }
+        assertEquals("once per connection", 1, gateway.connects)
         controller.forceReconnect()
     }
 

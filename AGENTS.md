@@ -411,6 +411,15 @@ ordinary work:
     awareness tiers and the all-clear still work. `RadarV1SafetyTest` is the
     argument, and it holds close-pass shut even if a rider speed later arrives
     from another source. Read it before widening this path.
+- **The radar counts as up from its first data frame, not from service
+  discovery or the handshake.** `RadarLinkController` calls `markLinkOpen` at
+  discovery (read only by the "Connecting" status and the dashcam probe's
+  backoff) and `markConnected` once, on the first V2 or legacy frame. Moving
+  `markConnected` back earlier makes a radar that fails every handshake read
+  as up: the drop cue and the no-radar warning go silent while the rider has
+  no rear cover. The safety readers use `RadarLinkState.radarStreaming`, never
+  `radarGattActive`. `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`)
+  and the coordinator's abort-loop tests pin it.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

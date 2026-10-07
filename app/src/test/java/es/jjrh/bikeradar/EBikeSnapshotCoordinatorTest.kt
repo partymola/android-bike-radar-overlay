@@ -144,6 +144,33 @@ class EBikeSnapshotCoordinatorTest {
     }
 
     @Test
+    fun forgettingStartsAgainAsIfNoBikeHadStreamed() {
+        // Riding, climbing, mid-ride and with an odometer baseline, then the
+        // rider switches eBike data off.
+        feed(LiveDataSnapshot(systemLocked = true, odometerM = 1_000L, riderPower = 300, speedRaw = riding), atMs = 0L)
+        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, riderPower = 300, speedRaw = riding), atMs = 30_000L)
+        assertTrue(ridingAt(30_000L))
+        assertTrue(climbingAt(30_000L))
+        assertEquals(listOf("started" to iso), rideEdges)
+
+        coord.forget()
+        assertNull(coord.lastSnapshotAnyAge())
+        assertEquals(0L, coord.snapshotAtMs())
+        assertFalse(coord.hasEverSeenSnapshot())
+        assertFalse(ridingAt(30_000L))
+        assertFalse(climbingAt(30_000L))
+
+        // The next frames are a new bike's first: a fresh odometer baseline, a
+        // ride edge from scratch, and a full climb dwell.
+        feed(LiveDataSnapshot(systemLocked = true, odometerM = 5_000L, riderPower = 300), atMs = 31_000L)
+        assertTrue(clogLines.last { it.startsWith("ebike") }.contains("odo_delta_m=0"))
+        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, riderPower = 300), atMs = 32_000L)
+        assertEquals(listOf("started" to iso, "started" to iso), rideEdges)
+        feed(LiveDataSnapshot(riderPower = 300), atMs = 60_000L)
+        assertFalse("30 s of power before the forget must not count", coord.climbing())
+    }
+
+    @Test
     fun aFreshFrameRevivesTheAlertSnapshot() {
         feed(LiveDataSnapshot(speedRaw = 0), atMs = 10_000L)
         assertNull(snapshotAt(20_000L))

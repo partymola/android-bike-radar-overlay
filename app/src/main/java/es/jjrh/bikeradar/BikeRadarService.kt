@@ -37,6 +37,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -542,18 +543,32 @@ class BikeRadarService : Service() {
         launchDashcamRefresh()
         haPublisher.launchRideSummaryPublishLoop()
         // Follows the switch both ways: Settings and onboarding write only the
-        // pref. On Main, like every other caller, so two starts cannot race.
+        // pref. Collected on Main, like every other caller, so two starts
+        // cannot race; the snapshot it maps from is built off Main.
         scope.launch(Dispatchers.Main) {
-            prefs.flow.map { it.eBikeDataEnabled }.distinctUntilChanged().collect { enabled ->
-                if (enabled) maybeStartEBikeReader() else stopEBikeReader()
+            prefs.flow.map { it.eBikeDataEnabled }.distinctUntilChanged().flowOn(Dispatchers.IO).collect { enabled ->
+                if (enabled) {
+                    maybeStartEBikeReader()
+                } else {
+                    // Joined first: the reader still hands over frames it had
+                    // received before the cancel, and one landing after
+                    // forget() would put the reading back
+                    // (`aFrameStillBeingHandledWhenTheSwitchGoesOffIsForgottenToo`).
+                    stopEBikeReader()?.join()
+                    EBikeStateBus.reset()
+                    ebikeSnapshotCoordinator.forget()
+                }
             }
         }
     }
 
-    private fun stopEBikeReader() {
-        ebikeStatusReader?.shutdown()
+    /** Returns the stopped reader's job, for a caller that must wait out the
+     *  frames it is still handing over. */
+    private fun stopEBikeReader(): Job? {
+        val job = ebikeStatusReader?.shutdown()
         ebikeStatusReader = null
         EBikeStateBus.reset()
+        return job
     }
 
     /**
@@ -652,12 +667,9 @@ class BikeRadarService : Service() {
                 Log.i(TAG, "ride ended by rider")
                 radarLinkCoordinator.markRideEndedByRider()
             }
-            ACTION_START_EBIKE_READER -> {
-                // Onboarding eBike step just enabled the feature; bring up the
-                // read-only status reader now. Idempotent: maybeStartEBikeReader
-                // bails when the reader is already running.
-                maybeStartEBikeReader()
-            }
+            // Idempotent: maybeStartEBikeReader bails when the reader is
+            // already running.
+            ACTION_START_EBIKE_READER -> maybeStartEBikeReader()
             ACTION_RESTART_EBIKE_READER -> {
                 // Tear the status reader down and rebuild it (e.g. the rider
                 // re-opened Flow, or the bike came back).
@@ -960,13 +972,14 @@ class BikeRadarService : Service() {
                     val nowMono = SystemClock.elapsedRealtime()
                     val ageMs = entry?.let { nowMono - it.lastSeenElapsedMs } ?: Long.MAX_VALUE
                     if (ageMs >= DASHCAM_REFRESH_MS) {
-                        // Connect-storm guard: while the radar is connected, a
+                        // Connect-storm guard: while the radar's link is open, a
                         // probe that keeps failing (dashcam powered off) backs off
                         // so it can't connect-storm and contend with the radar
-                        // link. While the radar is DISCONNECTED the walk-away alarm
-                        // consumes this same monotonic liveness freshness, so
-                        // backoff is bypassed there - the probe keeps its full
-                        // age-gated cadence.
+                        // link. With no link open the walk-away alarm consumes
+                        // this same monotonic liveness freshness, so backoff is
+                        // bypassed there - the probe keeps its full age-gated
+                        // cadence. A failing radar holds the link for its
+                        // handshake, so the backoff applies then too.
                         val probeOk = BatteryProbeBackoff.shouldProbe(
                             link.radarGattActive,
                             nowMono,
@@ -1228,11 +1241,9 @@ class BikeRadarService : Service() {
         const val ACTION_WALKAWAY_SNOOZE = "es.jjrh.bikeradar.WALKAWAY_SNOOZE"
 
         /**
-         * Brings the eBike Live Data subsystem up mid-session.
-         * Fire-and-forget: the onboarding eBike step sends this after the
-         * rider flips eBikeDataEnabled = true so the read-only status reader
-         * starts immediately, without waiting for a full service restart.
-         * No-op if the flag is off or BLE permissions are missing.
+         * Starts the service if it is not running, for the onboarding eBike
+         * step: a running service follows `eBikeDataEnabled` on its own, so
+         * the reader start this also asks for is then a no-op.
          */
         const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
 

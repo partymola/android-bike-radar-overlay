@@ -33,8 +33,9 @@ internal class EBikeSnapshotCoordinator(
     // (privacy hardening, see EBikeCaptureFormatter).
     @Volatile private var sessionStartOdometerM: Long? = null
 
-    // Ride-edge + climb detector state, mutated only on the BLE callback thread
-    // inside onSnapshot. See RideEdgeDetector / ClimbDetector.
+    // Ride-edge + climb detector state, mutated inside onSnapshot on the
+    // reader's thread, and by forget() once the reader has stopped. See
+    // RideEdgeDetector / ClimbDetector.
     @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
 
     @Volatile private var climbState: ClimbDetector.State = ClimbDetector.State()
@@ -43,13 +44,14 @@ internal class EBikeSnapshotCoordinator(
 
     // Speed-based riding confirmation (see RidingSpeedGate). An unlocked bike is
     // merely awake - a garage power-on looks identical to a mid-ride bike on the
-    // lock bit alone - so the radar-drop cue asks this instead. Mutated only on
-    // the BLE callback thread inside onSnapshot, like rideEdgeState/climbState.
+    // lock bit alone - so the radar-drop cue asks this instead. Written like
+    // rideEdgeState/climbState.
     @Volatile private var ridingState: RidingSpeedGate.State = RidingSpeedGate.State()
 
-    // Sticky: true once any snapshot has arrived this session, i.e. the rider
-    // has a Bosch eBike streaming. Stays true through a Flow dropout so a
-    // momentarily-null snapshot doesn't reclassify an eBike rider as radar-only.
+    // Sticky: true once any snapshot has arrived, i.e. the rider has a Bosch
+    // eBike streaming. Stays true through a Flow dropout so a momentarily-null
+    // snapshot doesn't reclassify an eBike rider as radar-only; only forget()
+    // clears it.
     @Volatile private var everSeen: Boolean = false
 
     /** The snapshot for the alert path: null unless one arrived within
@@ -88,7 +90,25 @@ internal class EBikeSnapshotCoordinator(
         }
     }
 
-    /** True once any eBike snapshot has arrived this session (sticky) - i.e. this
+    /** Back to "no eBike" for a rider who switched eBike data off, so nothing
+     *  that reads [lastSnapshotAnyAge] or [hasEverSeenSnapshot] with no age
+     *  limit keeps acting on a bike the rider turned off. Not on a
+     *  Bluetooth-off, which keeps the last reading
+     *  (`BikeRadarServiceSmokeTest.switchingEBikeDataOffStopsARunningReader`).
+     *  The caller must have stopped the reader first: a frame arriving after
+     *  this would put the reading back. */
+    fun forget() = synchronized(this) {
+        lastSnapshot = null
+        lastSnapshotMs = 0L
+        everSeen = false
+        sessionStartOdometerM = null
+        rideEdgeState = RideEdgeDetector.State()
+        climbState = ClimbDetector.State()
+        climbingFlag = false
+        ridingState = RidingSpeedGate.State()
+    }
+
+    /** True once any eBike snapshot has arrived (sticky until [forget]) - i.e. this
      *  is an eBike rider, not a radar-only one. Read by the drop cue's
      *  track-presence fallback, which it withdraws from an eBike rider, and by
      *  the end-of-ride attention feed. */

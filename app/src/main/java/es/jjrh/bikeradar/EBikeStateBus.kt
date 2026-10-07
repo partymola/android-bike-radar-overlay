@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Same pattern as [HaHealthBus] and [BatteryStateBus]: a MutableStateFlow per
  * signal, kept current by the producer, read via the read-only StateFlow. When
- * the service isn't running these stay at their last value; [reset] (called on
- * service destroy) clears them.
+ * the service isn't running these stay at their last value; [reset] clears
+ * them whenever the reader stops.
  */
 /**
  * Why the eBike feed is not delivering, when it is not.
@@ -55,9 +55,10 @@ object EBikeStateBus {
         _stage.value = EBikeStage.RECEIVING
     }
 
-    /** Restore default state. Called on service destroy - and when the
-     *  Bluetooth adapter dies mid-session - so UI surfaces see a clean empty
-     *  state instead of a frozen last snapshot. */
+    /** Restore default state. Called whenever the service stops the reader
+     *  (service destroy, the Bluetooth adapter dying, eBike data switched off,
+     *  a reader restart) so UI surfaces see a clean empty state instead of a
+     *  frozen last snapshot. */
     fun reset() {
         _snapshot.value = LiveDataSnapshot()
         _lastUpdatedElapsedMs.value = 0L

@@ -177,10 +177,98 @@ class BikeRadarServiceSmokeTest {
         service.ebikeStatusReader = EBikeStatusReader(app, readerScope, "AA:BB:CC:DD:EE:FF", onSnapshot = {})
         EBikeStateBus.setStage(EBikeStage.WAITING)
 
+        // A reading from before: Bluetooth going off keeps it, the switch does
+        // not. Left behind, the forgot-to-lock reminder and the unlocked
+        // banner would keep acting on it with no age limit.
+        service.ebikeSnapshotCoordinator.onSnapshot(LiveDataSnapshot(systemLocked = false))
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.STATE_OFF),
+        )
+        shadowOf(app.mainLooper).idle()
+        assertNull("the broadcast must have reached the adapter-off path", service.ebikeStatusReader)
+        assertEquals(false, service.ebikeSnapshotCoordinator.lastSnapshotAnyAge()?.systemLocked)
+        service.ebikeStatusReader = EBikeStatusReader(app, readerScope, "AA:BB:CC:DD:EE:FF", onSnapshot = {})
+
         prefs.eBikeDataEnabled = false
         idleMainUntil { service.ebikeStatusReader == null }
         assertNull("switching eBike data off must stop the reader", service.ebikeStatusReader)
         assertEquals(EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
+        idleMainUntil { service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() == null }
+        assertNull("and drop the last reading", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge())
+        assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
+        readerScope.cancel()
+        controller.destroy()
+    }
+
+    @Test
+    fun aFrameStillBeingHandledWhenTheSwitchGoesOffIsForgottenToo() {
+        // The reader hands over frames it had received before its cancel. One
+        // that finishes after the switch-off would put the reading back.
+        Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = true
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        shadowOf(app.mainLooper).idle()
+
+        val inHandler = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
+        // Set on the reader's thread, read on this one.
+        val cbRef = java.util.concurrent.atomic.AtomicReference<android.bluetooth.BluetoothGattCallback?>()
+        val gattRef = java.util.concurrent.atomic.AtomicReference<android.bluetooth.BluetoothGatt?>()
+        val status = android.bluetooth.BluetoothGattCharacteristic(
+            Uuids.CHAR_EBIKE_STATUS,
+            android.bluetooth.BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            android.bluetooth.BluetoothGattCharacteristic.PERMISSION_READ,
+        ).apply { addDescriptor(android.bluetooth.BluetoothGattDescriptor(Uuids.CCCD, android.bluetooth.BluetoothGattDescriptor.PERMISSION_WRITE)) }
+        val readerScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        val reader = EBikeStatusReader(
+            context = app,
+            scope = readerScope,
+            mac = "AA:BB:CC:DD:EE:FF",
+            onSnapshot = { snap ->
+                inHandler.countDown()
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                service.ebikeSnapshotCoordinator.onSnapshot(snap)
+            },
+            log = { logs += it },
+            openGatt = { ctx, dev, _, c ->
+                @Suppress("DEPRECATION")
+                dev.connectGatt(ctx, false, c).also { g ->
+                    val svc = android.bluetooth.BluetoothGattService(Uuids.SVC_EBIKE_STATUS, android.bluetooth.BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                    svc.addCharacteristic(status)
+                    shadowOf(g).addDiscoverableService(svc)
+                    gattRef.set(g)
+                    cbRef.set(c)
+                }
+            },
+        )
+        service.ebikeStatusReader = reader
+        reader.start()
+        idleMainUntil { cbRef.get() != null }
+        val cb = requireNotNull(cbRef.get())
+        val gatt = requireNotNull(gattRef.get())
+        cb.onConnectionStateChange(gatt, 0, android.bluetooth.BluetoothProfile.STATE_CONNECTED)
+        idleMainUntil {
+            cb.onDescriptorWrite(gatt, status.getDescriptor(Uuids.CCCD), 0)
+            logs.any { "subscribed" in it }
+        }
+        assertTrue("the reader must reach streaming; log=$logs", logs.any { "subscribed" in it })
+
+        // Battery 72 %: the reader is now inside its handler with this frame.
+        cb.onCharacteristicChanged(gatt, status, "300480880848".hexToBytes())
+        assertTrue(inHandler.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        Prefs(app).eBikeDataEnabled = false
+        idleMainUntil { service.ebikeStatusReader == null }
+        release.countDown()
+
+        idleMainUntil { service.ebikeSnapshotCoordinator.lastSnapshotAnyAge() == null }
+        assertNull("the late frame must not survive the switch", service.ebikeSnapshotCoordinator.lastSnapshotAnyAge())
+        assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
         readerScope.cancel()
         controller.destroy()
     }

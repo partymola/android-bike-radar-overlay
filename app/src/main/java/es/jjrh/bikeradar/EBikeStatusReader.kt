@@ -87,9 +87,14 @@ class EBikeStatusReader(
         loopJob = scope.launch { runLoop(device) }
     }
 
-    fun shutdown() {
-        loopJob?.cancel()
+    /** Cancels the loop and returns its job. Frames already received are
+     *  still handed to [onSnapshot] after the cancel, so a caller that must
+     *  see no more of them joins the job first. */
+    fun shutdown(): Job? {
+        val job = loopJob
+        job?.cancel()
         loopJob = null
+        return job
     }
 
     private suspend fun runLoop(device: BluetoothDevice) {

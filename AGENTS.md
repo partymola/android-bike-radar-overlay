@@ -413,13 +413,15 @@ ordinary work:
     from another source. Read it before widening this path.
 - **The radar counts as up from its first data frame, not from service
   discovery or the handshake.** `RadarLinkController` calls `markLinkOpen` at
-  discovery (read only by the "Connecting" status and the dashcam probe's
-  backoff) and `markConnected` once, on the first V2 or legacy frame. Moving
-  `markConnected` back earlier makes a radar that fails every handshake read
-  as up: the drop cue and the no-radar warning go silent while the rider has
-  no rear cover. The safety readers use `RadarLinkState.radarStreaming`, never
-  `radarGattActive`. `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`)
-  and the coordinator's abort-loop tests pin it.
+  discovery (for the radio-link readers listed on `radarGattActive`) and
+  `markConnected` once, on the first V2 or legacy frame. Moving
+  `markConnected` earlier makes a radar that fails every handshake read as
+  up: the drop cue and the no-radar warning go silent while the rider has no
+  rear cover. No safety path reads `radarGattActive` directly; the
+  `RadarLinkState.radarGattActive` KDoc says what each one reads.
+  `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
+  coordinator's abort-loop tests pin it. Not closed: a radar that
+  sends one frame and then fails, every attempt, still counts as up each time.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

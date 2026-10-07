@@ -21,9 +21,15 @@ package es.jjrh.bikeradar
  */
 data class RadarLinkState(
     /** True while the GATT link to the rear radar is open, from service
-     *  discovery on, whether or not the radar has sent any data. Read by the
-     *  "Connecting" status and the dashcam probe's radio backoff; the safety
-     *  paths read [radarStreaming] instead. */
+     *  discovery on, whether or not the radar has sent any data. For readers
+     *  about the radio link: the "Connecting" status, the dashcam probe's gate
+     *  and backoff, the battery-read piggyback guard and the tail-light flip
+     *  guard. No safety path reads it: the no-radar warning and the walk-away
+     *  alarm read [radarStreaming]
+     *  (`anAbortLoopDuringARideIsARideWithoutTheRadar`,
+     *  `aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`), and the drop cue reads
+     *  the off-episode, which only a first frame ends
+     *  (`anAbortLoopAfterADropStillCuesOnTime`). */
     val radarGattActive: Boolean = false,
     /** Monotonic (elapsedRealtime) ms an open link last closed, streaming or
      *  not; null if none has this session. Bridges the "Connecting" status
@@ -32,8 +38,9 @@ data class RadarLinkState(
     /** Monotonic (elapsedRealtime) ms the current off-episode began: the first
      *  disconnect after the radar streamed, or the first connect attempt that
      *  failed (`theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt`). An
-     *  attempt that opens the link and never streams leaves it where it is
-     *  (`anAbortLoopAfterADropStillCuesOnTime`). Null while the radar is
+     *  attempt that opens the link and never streams does not move an
+     *  off-instant already stamped (`anAbortLoopAfterADropStillCuesOnTime`).
+     *  Null while the radar is
      *  streaming, or before the first of either this session. */
     val radarOffSinceMs: Long? = null,
     /** Monotonic (elapsedRealtime) ms the radar's current stream began: its

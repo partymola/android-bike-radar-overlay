@@ -23,7 +23,7 @@ package es.jjrh.bikeradar
  * and without the bridge the card would flap between two states at that
  * cadence. The bridge reads [RadarLinkState.radarLinkClosedAtMs], which every
  * attempt that opened the link moves, not the off-episode start, which a
- * failing radar no longer moves (`anAbortingRadarKeepsReadingConnecting`).
+ * failing radar does not move (`anAbortingRadarKeepsReadingConnecting`).
  *
  * [nowMs] is elapsedRealtime - the caller must not pass wall clock, which the
  * Settings screens' own tick uses for battery freshness.

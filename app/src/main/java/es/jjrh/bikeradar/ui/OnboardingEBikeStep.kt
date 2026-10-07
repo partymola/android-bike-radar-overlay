@@ -63,9 +63,9 @@ import es.jjrh.bikeradar.eBikeDataIsFresh
  * singleton that [BikeRadarService] mirrors from its service-owned eBike
  * status reader. This decoupling keeps the composable testable without a
  * service binder; the tradeoff is that the bus reads as "no frame ever"
- * when the service isn't running, so we fire
- * [BikeRadarService.ACTION_START_EBIKE_READER] from the chooser's "I have one"
- * branch to bring the subsystem up.
+ * when the service isn't running, so the chooser's "I have one" branch sends
+ * [BikeRadarService.ACTION_START_EBIKE_READER] to start it. A running service
+ * follows `eBikeDataEnabled` on its own.
  */
 @Composable
 internal fun EBikeStep(prefs: Prefs, onFinish: () -> Unit) {

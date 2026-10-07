@@ -15,7 +15,7 @@ package es.jjrh.bikeradar
  *
  * **State-machine framing**:
  *
- *   IDLE        -- radar connected, riding. No leave-behind possible.
+ *   IDLE        -- radar streaming, riding. No leave-behind possible.
  *   ARMED       -- radar just disconnected, dashcam still seen as alive.
  *                  This is the only state in which FIRE can be returned.
  *   BLANK       -- radar still off but dashcam has been silent long
@@ -26,11 +26,11 @@ package es.jjrh.bikeradar
  *                  next IDLE -> ARMED transition.
  *
  * Transitions:
- *   IDLE  -> ARMED : on radar GATT disconnect (caller stamps).
+ *   IDLE  -> ARMED : on radar disconnect (caller stamps).
  *   ARMED -> BLANK : caller observed dashcam stale for [Input.armed]'s
  *                    full disarm window with radar still off.
- *   ARMED -> IDLE  : radar reconnects (next ride begins).
- *   BLANK -> IDLE  : radar reconnects (caller resets `armed` to true on
+ *   ARMED -> IDLE  : radar streams again (next ride begins).
+ *   BLANK -> IDLE  : radar streams again (caller resets `armed` to true on
  *                    the next disconnect, NOT on advert returns within
  *                    the same off-episode).
  *
@@ -67,7 +67,7 @@ object WalkAwayDecider {
         val enabled: Boolean,
         /** Continuous radar-off duration required before firing. */
         val thresholdMs: Long,
-        /** Minimum session-total radar connected time before the
+        /** Minimum session-total time the radar has streamed before the
          *  decider is allowed to fire. Prevents alarms during the
          *  first few seconds after service start, where the radar is
          *  still going through the enabling sequence. */
@@ -86,11 +86,13 @@ object WalkAwayDecider {
     data class Input(
         val nowMs: Long,
         val config: Config,
-        /** True when the radar BLE GATT is currently in the CONNECTED
-         *  state. */
+        /** True while the radar is sending data (`RadarLinkState.radarStreaming`),
+         *  not merely while its link is open: a radar failing its handshake
+         *  must not hold the alarm off
+         *  (`RadarLinkCoordinatorTest.aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`). */
         val radarConnected: Boolean,
-        /** Monotonic timestamp of the last GATT disconnect. Null if
-         *  the radar is currently connected or has never been off
+        /** Monotonic timestamp the current off-episode began. Null if
+         *  the radar is currently streaming or has never been off
          *  this session. */
         val radarOffSinceMs: Long?,
         /** Monotonic timestamp of the last dashcam BLE advert. Used by
@@ -102,7 +104,7 @@ object WalkAwayDecider {
          *
          *  Semantics:
          *
-         *    IDLE   (armed=false): radar connected, riding. No leave-
+         *    IDLE   (armed=false): radar streaming, riding. No leave-
          *           behind possible.
          *    ARMED  (armed=true): radar just disconnected with the
          *           dashcam still alive on the bike. FIRE is gated on
@@ -121,8 +123,8 @@ object WalkAwayDecider {
          *    ARMED -> BLANK : when dashcam stale-since-or-before-radar-off
          *                     exceeds freshness window during the tick
          *                     (see `RadarLinkCoordinator.tickWalkAwayState`).
-         *    ARMED -> IDLE  : on radar reconnect (`markConnected`).
-         *    BLANK -> IDLE  : on radar reconnect.
+         *    ARMED -> IDLE  : on the radar's first frame (`markConnected`).
+         *    BLANK -> IDLE  : on the radar's first frame.
          *
          *  Critically: `armed` does NOT re-flip to true mid-off-
          *  episode even if the dashcam comes back. A rider turning
@@ -130,7 +132,7 @@ object WalkAwayDecider {
          *  alarm. Re-arming requires the next radar power-on/off
          *  cycle. */
         val armed: Boolean,
-        /** Running total of how long the radar has been CONNECTED this
+        /** Running total of how long the radar has streamed this
          *  session. */
         val sessionTotalRadarConnectedMs: Long,
         /** Monotonic timestamp of the last FIRE event, or null if no

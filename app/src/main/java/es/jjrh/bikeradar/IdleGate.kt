@@ -5,14 +5,15 @@ package es.jjrh.bikeradar
 /**
  * Pure gate predicate for the dashcam refresh ticker. Extracted so it
  * can be unit-tested without spinning up a Service. The gate stops
- * the ticker from issuing GATT reads when the radar is disconnected
+ * the ticker from issuing GATT reads when no radar link is open
  * AND we are past the walk-away monitoring window. At that point the
  * dashcam liveness signal has no consumer and the reads are wasted.
  */
 internal object IdleGate {
     /**
-     * Window opens when the radar disconnects (`radarOffSinceMs` set
-     * by `RadarLinkCoordinator.markDisconnected`). Long enough to cover the walk-away
+     * Window opens when the radar's off-episode starts (`radarOffSinceMs`
+     * set by `RadarLinkCoordinator.markDisconnected`, including a session's
+     * first failed attempt). Long enough to cover the walk-away
      * alarm's full lifetime: threshold (max 120 s per the Settings
      * slider) + auto-dismiss-after-fire (10 min default in
      * `WalkAwayDecider.Config`) + margin. The constants sanity test
@@ -25,12 +26,12 @@ internal object IdleGate {
      * Returns true when the dashcam ticker should issue a battery read
      * on this iteration.
      *
-     * - Radar connected: always refresh (UI freshness during the ride).
-     * - Radar disconnected within the window: refresh (walk-away
+     * - Radar link open: always refresh (UI freshness during the ride).
+     * - No link, off-episode within the window: refresh (walk-away
      *   monitoring may still need fresh dashcam state).
-     * - Radar never connected (`radarOffSinceMs == null` and not
-     *   active): skip. The dashcam is logically attached to the bike;
-     *   no radar = no bike-in-range = no consumer for the read.
+     * - No off-episode yet (`radarOffSinceMs == null`, no attempt has ended
+     *   this session) and no link: skip. The dashcam is logically attached
+     *   to the bike; no radar = no bike-in-range = no consumer for the read.
      */
     fun shouldRefreshDashcam(
         radarGattActive: Boolean,

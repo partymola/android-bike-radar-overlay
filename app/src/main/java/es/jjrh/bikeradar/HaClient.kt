@@ -228,7 +228,8 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * all four families. Its name is what HA builds a new install's entity ids
      * from (`has_entity_name`), so `sensor.bike_radar_<device>_battery`; an
      * existing install keeps the ids its registry already holds, keyed on
-     * `unique_id` (`HaClientGuardsTest.theHaDeviceIsNamedForTheApp`).
+     * `unique_id`. Both are Home Assistant's behaviour; the name itself is
+     * pinned by `HaClientGuardsTest.theHaDeviceIsNamedForTheApp`.
      */
     private fun deviceJson(slug: String, deviceName: String): JSONObject = JSONObject()
         .put("identifiers", JSONArray().put("${NS}_$slug"))

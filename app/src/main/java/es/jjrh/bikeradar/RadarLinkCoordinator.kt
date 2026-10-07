@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.updateAndGet
  * service builds one of these in `onCreate`, hands it the side-effect
  * collaborators as constructor lambdas (clock, notifications, alarm, beeper,
  * capture-log writer, reconnect-banner toggle, dashcam-slug resolver, the eBike
- * snapshot reads), and routes the GATT connect/disconnect callbacks through it
- * via [RadarLinkStateGateway]. The pure decisions live in [WalkAwayDecider],
+ * snapshot reads), and routes the link-open, first-frame and disconnect edges
+ * through it via [RadarLinkStateGateway]. The pure decisions live in [WalkAwayDecider],
  * [WalkAwayArmingGate], [RadarDropDecider] and [RadarLinkVisualDecider]; this
  * class is the stateful orchestration that feeds them and fires the effects.
  *
@@ -202,9 +202,9 @@ internal class RadarLinkCoordinator(
         val last = lastRiddenTickMs
         val gapMs = prefs.radarLongOfflineThresholdMinutes * 60_000L
         if (last != null && nowMs - last >= gapMs) {
-            // A radar that connected before the gap ran out joined this ride
-            // and is owed the warning's "back" pulse; one that connected
-            // later belongs to another ride
+            // A radar that streamed before the gap ran out joined this ride
+            // and is owed the warning's "back" pulse; one that started
+            // streaming later belongs to another ride
             // (`aRadarConnectingLongAfterTheRideGetsNoPulse`).
             endRide(keepLatch = link.radarConnectStartMs?.let { it < last + gapMs } == true)
         }
@@ -280,10 +280,13 @@ internal class RadarLinkCoordinator(
         journal("walk-away snooze over, alarm re-armed")
     }
 
-    /** Only the open-link flag the "Connecting" status and the dashcam probe
-     *  read. The off-episode and everything keyed on it wait for the first
+    /** Only the open-link flag ([RadarLinkState.radarGattActive] lists its
+     *  readers). The off-episode and everything keyed on it wait for the first
      *  frame ([markConnected]), so a radar failing its handshake on every
-     *  attempt stays down (`linkOpenLeavesTheEpisodeAlone`). */
+     *  attempt stays down (`aFailingRadarUndoesNothingTheRiderDid`). Intended
+     *  for the new-ride gap too: an abort loop is the radar being down, so a
+     *  stream after a loop longer than the gap starts a new ride
+     *  (`aStreamAfterAnAbortLoopLongerThanTheGapIsANewRide`). */
     override fun markLinkOpen() {
         _radarLinkState.update { it.copy(radarGattActive = true) }
     }
@@ -291,7 +294,7 @@ internal class RadarLinkCoordinator(
     /** Off-instant is stamped at the actual disconnect callback so it
      *  isn't tied to tick cadence (the idle tick is 30 s; that would
      *  drift the walk-away threshold by up to 30 s). Clean-reconnect
-     *  cleanup likewise fires at the connection-success site, not
+     *  cleanup likewise fires here, on the radar's first frame, not
      *  lazily on the next tick.
      *
      *  Side effects (notification cancel, snooze-job cancel, clog) sit
@@ -349,7 +352,7 @@ internal class RadarLinkCoordinator(
         // new-ride gap: a lock the bike stopped sending before it is an
         // earlier ride's. Not on every reconnect
         // (`aReconnectWithinTheSameRideKeepsTheLock`). "First" is read from
-        // connected time, because an attempt that never connects still stamps
+        // streamed time, because an attempt that never streams still stamps
         // an off-instant (`theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt`).
         val firstConnect = prev.sessionRadarConnectedMs == 0L && prev.radarConnectStartMs == null
         if (startsNewRide || firstConnect) forgetEBikeLock()

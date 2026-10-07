@@ -39,7 +39,8 @@ import java.util.UUID
  * reconnect-backoff cap).
  */
 internal interface RadarLinkStateGateway {
-    /** Service discovery succeeded: the link is open. Nothing more. */
+    /** Service discovery succeeded: the link is open. Nothing more; its
+     *  readers are listed on [RadarLinkState.radarGattActive]. */
     fun markLinkOpen()
 
     /** The radar's first data frame on this connection, called once. A radar

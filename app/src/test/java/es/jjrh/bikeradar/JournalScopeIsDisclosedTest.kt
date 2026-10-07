@@ -311,7 +311,7 @@ class JournalScopeIsDisclosedTest {
     fun theSpanishDisclosureCarriesThemToo() {
         // Its own test rather than a loop over locales, because the failure
         // this guards is one locale saying something NARROWER than its sibling,
-        // and `privacy-disclosure-check.sh` reads `values/` only.
+        // and `privacy-disclosure-check.sh` does not look for these phrases.
         val body = app.getString(R.string.settings_privacy_on_phone_linklog)
         for (phrase in declared.map { it.es }.distinct()) {
             assertTrue("la copia del registro de conexiones no menciona $phrase: $body", body.contains(phrase))

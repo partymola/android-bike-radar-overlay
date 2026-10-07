@@ -14,10 +14,14 @@ package es.jjrh.bikeradar
  * probe out as consecutive failures accumulate; the caller resets the failure
  * count on a successful read and at the start of each ride.
  *
- * IMPORTANT: the caller applies this ONLY while the radar is connected. While
- * the radar is disconnected the walk-away alarm consumes the same liveness
- * freshness signal, so the probe must keep running at its base cadence there,
- * never starved by backoff. See `BikeRadarService.launchDashcamRefresh`.
+ * IMPORTANT: the caller applies this ONLY while the radar's link is open
+ * (`RadarLinkState.radarGattActive`). With no link open the walk-away alarm
+ * consumes the same liveness freshness signal, so the probe must keep running
+ * at its base cadence there, never starved by backoff. A radar failing its
+ * handshake holds the link open for each attempt, so while walk-away is armed
+ * a dashcam whose reads have been failing can be probed less often. The gap
+ * grows only on consecutive failed reads and one success clears it. See
+ * `BikeRadarService.launchDashcamRefresh`.
  */
 internal object BatteryProbeBackoff {
     /**
@@ -55,21 +59,21 @@ internal object BatteryProbeBackoff {
 
     /**
      * Whether the dashcam liveness probe should run on this tick. Backoff
-     * applies ONLY while the radar is connected; while it is disconnected the
+     * applies ONLY while the radar's link is open; while it is not, the
      * walk-away alarm consumes the same liveness freshness, so the probe must
      * always run (its base age-gated cadence is enforced by the caller). The
-     * radar-disconnected bypass is the branch that protects the alarm, so it
-     * lives in a pure function that is unit-tested rather than read.
+     * no-link bypass is the branch that protects the alarm, so it lives in a
+     * pure function that is unit-tested rather than read.
      */
     fun shouldProbe(
-        radarConnected: Boolean,
+        radarLinkOpen: Boolean,
         nowMs: Long,
         lastAttemptMs: Long?,
         consecutiveFailures: Int,
         baseMs: Long,
         capMs: Long,
     ): Boolean {
-        if (!radarConnected) return true
+        if (!radarLinkOpen) return true
         return shouldAttempt(nowMs, lastAttemptMs, consecutiveFailures, baseMs, capMs)
     }
 }

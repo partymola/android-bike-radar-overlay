@@ -73,7 +73,7 @@ class BikeRadarService : Service() {
     // dashcam-off connect storm that would otherwise contend with the radar link.
     // lastDashcamProbeMs = last probe-launch time; dashcamProbeFailures =
     // consecutive read-failure count. Consulted only by the dashcam ticker while
-    // the radar is connected; reset on a successful read and at ride start.
+    // the radar's link is open; reset on a successful read and at ride start.
     private val lastDashcamProbeMs = ConcurrentHashMap<String, Long>()
     private val dashcamProbeFailures = ConcurrentHashMap<String, Int>()
 
@@ -128,7 +128,8 @@ class BikeRadarService : Service() {
     // [RadarLinkCoordinator], built in onCreate. It owns the single
     // MutableStateFlow so multi-field transitions are atomic against readers,
     // drives the walk-away alarm + radar-drop cue, and is the
-    // [RadarLinkStateGateway] the radar GATT loop reports connect/disconnect to.
+    // [RadarLinkStateGateway] the radar GATT loop reports its link-open,
+    // first-frame and disconnect edges to.
     // The snooze-job AtomicReference (below) stays service-owned: it's a
     // cancellable side effect, not state.
     @androidx.annotation.VisibleForTesting
@@ -1242,8 +1243,9 @@ class BikeRadarService : Service() {
 
         /**
          * Starts the service if it is not running, for the onboarding eBike
-         * step: a running service follows `eBikeDataEnabled` on its own, so
-         * the reader start this also asks for is then a no-op.
+         * step. A running service also follows `eBikeDataEnabled` on its own;
+         * whichever of the two starts the reader first wins and the other
+         * bails.
          */
         const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
 
@@ -1305,12 +1307,12 @@ class BikeRadarService : Service() {
         // single failed probe is enough to flip the glyph red.
         const val DASHCAM_REFRESH_MS = 20_000L
 
-        // Connect-storm guard: while the radar is connected, a dashcam whose
+        // Connect-storm guard: while the radar's link is open, a dashcam whose
         // liveness probe keeps failing (powered off) is retried with doubling
         // backoff (base DASHCAM_REFRESH_MS) capped here, so it can't connect-storm
         // the radar link. 60s: a dashcam switched back on mid-ride is re-detected
         // within <=60s (auto-light-off config; the camera-light link detects
-        // faster when on). Backoff never applies while the radar is disconnected.
+        // faster when on). Backoff never applies while no radar link is open.
         const val DASHCAM_PROBE_BACKOFF_CAP_MS = 60_000L
 
         // Walk-away alarm tick cadence + snooze. Tick interval matches the
@@ -1339,11 +1341,10 @@ class BikeRadarService : Service() {
         @Volatile var flushCaptureLogForUi: (() -> Unit)? = null
             internal set
 
-        /** The radar link state, published for the Settings radar screen so it
-         *  can tell "connecting" from "not in range". Null while the service is
-         *  not running; the screen falls back to NOT_IN_RANGE then, which is
-         *  true. Same pattern as [activeCaptureLogName]: the screen reads the
-         *  current value on its own tick rather than collecting. */
+        /** The radar link state, published for the home screen and the
+         *  Settings radar surfaces so they can tell "connecting" from "not in
+         *  range". Null while the service is not running; they fall back to
+         *  NOT_IN_RANGE then, which is true. */
         @Volatile var radarLinkStateForUi: kotlinx.coroutines.flow.StateFlow<RadarLinkState>? = null
             internal set
 

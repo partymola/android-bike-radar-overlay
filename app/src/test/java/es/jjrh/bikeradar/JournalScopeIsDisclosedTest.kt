@@ -139,7 +139,8 @@ class JournalScopeIsDisclosedTest {
         "ebike reader not started: \$startStage",
         "ebike lock reading dropped as the ride began",
         // Machinery, like the camera's exit above: the switch is the event,
-        // and this is the reader stopping for it.
+        // and this is the app stopping the reader or dropping its last
+        // reading for it. No cue sounded and no device named.
         "ebike data switched off",
         "service stopping",
         "scan wake ignored: app not running, service start refused (\$name)",

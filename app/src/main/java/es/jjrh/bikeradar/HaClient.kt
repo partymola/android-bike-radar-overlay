@@ -25,9 +25,9 @@ import java.net.URL
  *
  * Topics and unique ids are namespaced under [NS]; Home Assistant builds the
  * entity ids from the device name instead (see [deviceJson]). [NS] named a
- * radar vendor until now, which was wrong twice over: the app supports one vendor's radars
- * but the same namespace also carries the front camera and every ride
- * statistic, so it labelled ride facts with a radar brand.
+ * radar vendor until now, which was wrong twice over: the app supports one
+ * vendor's radars but the same namespace also carries the front camera and
+ * every ride statistic, so it labelled ride facts with a radar brand.
  *
  * The rename is breaking, and handled rather than dropped on the rider:
  * [cleanupStaleDiscoveryTopics] retires the old configs as each device's new

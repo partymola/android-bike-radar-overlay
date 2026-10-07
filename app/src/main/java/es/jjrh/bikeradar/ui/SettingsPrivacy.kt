@@ -57,9 +57,9 @@ import es.jjrh.bikeradar.ScreenshotCaptureService
  * `scripts/privacy-disclosure-check.sh` does NOT cover this file: it reads
  * both locales' `strings.xml`, the manifest and the MQTT anchor, so it proves
  * the strings exist and agree with the code, not that anything here renders
- * them. Deleting
- * a [PrivacyP] call leaves its string in place and that gate still passes, and
- * the single golden covers only the top of a screen taller than a viewport.
+ * them. Deleting a [PrivacyP] call leaves its string in place and that gate
+ * still passes, and the single golden covers only the top of a screen taller
+ * than a viewport.
  * `SettingsPrivacyRendersEveryDisclosureTest` is what closes it, by reading
  * this file and requiring every `settings_privacy_*` key to appear.
  */

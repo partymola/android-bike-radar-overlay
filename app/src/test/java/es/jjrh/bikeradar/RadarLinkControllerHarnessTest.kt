@@ -1186,6 +1186,7 @@ class RadarLinkControllerHarnessTest {
         bootstrap(link)
         assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
         assertEquals("an acknowledged subscribe is not data", 0, gateway.connects)
+        assertFalse("nor is it the stream going live in the journal", journalHas("radar legacy stream live"))
 
         // A bare heartbeat on an empty road: the decoder has no track to
         // prune, so it reports no change and returns nothing to publish.
@@ -1206,7 +1207,32 @@ class RadarLinkControllerHarnessTest {
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
         assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
         assertEquals("once per connection", 1, gateway.connects)
+        assertEquals(1, journal.count { it == "radar legacy stream live" })
         controller.forceReconnect()
+    }
+
+    @Test fun aLegacyFrameDrainedAfterTheDisconnectDoesNotMarkTheRadarUp() = runTest {
+        // The legacy twin of the V2 test above: the loop still drains a
+        // heartbeat buffered before the disconnect, and later attempts send
+        // nothing, so any "connected" is the drained frame's.
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        val gatt = requireNotNull(link.gatt)
+        val cb = requireNotNull(link.cb)
+        val opened = link.openCount
+        cb.onCharacteristicChanged(gatt, gatt.getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V1), "02".hexToBytes())
+        cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount > opened })
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        assertEquals("events=${gateway.events}", 0, gateway.connects)
+        assertFalse("nor does the journal say it went live", journalHas("radar legacy stream live"))
     }
 
     /**

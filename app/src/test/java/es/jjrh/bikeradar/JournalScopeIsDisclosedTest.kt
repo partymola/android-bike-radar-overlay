@@ -116,6 +116,7 @@ class JournalScopeIsDisclosedTest {
         "radar legacy stream attempt after \$handshakeAbort",
         "radar handshake aborted at \$handshakeAbort (quick reconnect)",
         "radar handshake complete",
+        "radar V2 stream live",
         "radar V2 stream silent \${ageMs}ms; tearing down",
         "radar legacy stream subscribe ok=\$subscribed",
         "radar legacy stream silent; tearing down",
@@ -139,7 +140,7 @@ class JournalScopeIsDisclosedTest {
         "ebike lock reading dropped as the ride began",
         // Machinery, like the camera's exit above: the switch is the event,
         // and this is the reader stopping for it.
-        "ebike data switched off: reader stopped, last reading forgotten",
+        "ebike data switched off",
         "service stopping",
         "scan wake ignored: app not running, service start refused (\$name)",
         "scan wake ignored: Bluetooth permission revoked since the scan started - re-grant \$permission to restore the radar link",

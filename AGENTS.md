@@ -230,11 +230,13 @@ decoders in both Python and Kotlin live there.
   prior-art credits, and device-name-matching heuristics (the radar
   advertises its local name as "RearVue8", so our matchers have to look
   for it literally).
-- MQTT topics and HA entity IDs are namespaced under `HaClient.NS`
-  (`bikeradar`). It was a vendor name until the same namespace also carried
-  the front camera and the ride statistics. Renaming it again breaks every
-  rider's automations, so if it ever changes, add the old value to
-  `cleanupStaleDiscoveryTopics` to retire the entities it created.
+- MQTT topics and unique ids are namespaced under `HaClient.NS`
+  (`bikeradar`). Current Home Assistant builds a new install's entity ids
+  from the device name, `Bike Radar <device>` (`HaClient.deviceJson`), and
+  an existing install keeps the ids it has. `NS` was a vendor name until the same
+  namespace also carried the front camera and the ride statistics. Renaming
+  it again breaks every rider's automations, so if it ever changes, add the
+  old value to `cleanupStaleDiscoveryTopics` to retire the entities it created.
 - `BikeRadarService.slug()` strips `varia_` from a device's ADVERTISED name
   and is unrelated to that namespace. Leave it alone.
 
@@ -325,10 +327,10 @@ disclosure changes both locales are read side by side.
     pins that absence deliberately in
     `urgentLowSpeedToggleIsNoOpForThisFixture`,
     `passClearanceIsNoOpForThisFixture` and
-    `unconfidentWaitIsNoOpForThisFixture` - each asserts the ledger is unchanged
-    with the feature toggled, which is a statement about the fixture, not
-    about the feature. Only the private `CorpusReplayGate` corpus can see a
-    change there. Extending `replay-fixture.txt` with a real stationary
+    `unconfidentWaitIsNoOpForThisFixture`. Each asserts the ledger is
+    unchanged with the feature toggled, which is a statement about the
+    fixture, not about the feature. Only the private `CorpusReplayGate`
+    corpus can see a change there. Extending `replay-fixture.txt` with a real stationary
     off-axis window is what would close it; until then, never read a green CI
     as cover for an urgent-path change.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
@@ -420,8 +422,9 @@ ordinary work:
   `markConnected` once, on the first V2 or legacy frame. Moving
   `markConnected` earlier makes a radar that fails every handshake read as
   up: the drop cue and the no-radar warning go silent while the rider has no
-  rear cover. No safety path reads `radarGattActive` directly; the
-  `RadarLinkState.radarGattActive` KDoc says what each one reads.
+  rear cover. No alert reads `radarGattActive` directly; the
+  `RadarLinkState.radarGattActive` KDoc says what each one reads, and how the
+  flag reaches the walk-away alarm through the dashcam probe backoff.
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.

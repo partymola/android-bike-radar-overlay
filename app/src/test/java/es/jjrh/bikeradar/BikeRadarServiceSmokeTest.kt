@@ -230,6 +230,35 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun switchingOffAReaderThatNeverSentAFrameIsJournalledToo() {
+        // The other half of the journal line's condition: a running reader is
+        // worth a line even with no reading to forget.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val prefs = Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = true
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        shadowOf(app.mainLooper).idle()
+        val readerScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        // No GATT, so the loop only backs off: running, and nothing to send.
+        val reader = EBikeStatusReader(app, readerScope, "AA:BB:CC:DD:EE:FF", onSnapshot = {}, openGatt = { _, _, _, _ -> null })
+        service.ebikeStatusReader = reader
+        reader.start()
+
+        prefs.eBikeDataEnabled = false
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME)
+        idleMainUntil { journal.readText().contains("ebike data switched off") }
+        assertFalse(service.ebikeSnapshotCoordinator.hasEverSeenSnapshot())
+        assertTrue("the switch-off must reach the journal, got:\n${journal.readText()}", journal.readText().contains("ebike data switched off"))
+        readerScope.cancel()
+        controller.destroy()
+    }
+
+    @Test
     fun aFrameStillBeingHandledWhenTheSwitchGoesOffIsForgottenToo() {
         // The reader hands over frames it had received before its cancel. One
         // that finishes after the switch-off would put the reading back.

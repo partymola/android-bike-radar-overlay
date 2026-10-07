@@ -80,8 +80,8 @@ screen stays yours.
   the drop alert (three low pulses), up to three times a ride. A banner on the
   overlay asks whether the radar is on. If it is, another app or device may be
   holding it. An idle reconnect interval over 50 seconds makes it wait longer.
-  It needs Bosch Flow connected to the bike. Switch it off in
-  **Settings → Alerts**, under Connection.
+  It needs eBike data switched on and Bosch Flow connected to the bike.
+  Turn the warning off in **Settings → Alerts**, under Connection.
 - Radar sharing (off until you allow it): another app on the phone can ask
   to read your radar stream, and to change your tail light and hide the
   overlay. It gets nothing until you say yes on a screen naming it. Stop it
@@ -119,11 +119,12 @@ the RearVue 820. Earlier radars are not expected to send them at all. On
 those the app reads the older range-only stream instead. You get the
 approach beeps, the all-clear, and overlay colours that show distance
 instead of speed. You do not get the urgent warning or close-pass counting.
-With a Bosch eBike the sound when the radar drops works from the bike, as
-before. Without one it is expected to fire only if the radar was still seeing
-traffic behind you shortly before the link died, because the radar cannot
-report your own speed and recent traffic is what tells the app you are still
-riding; on an empty road it stays silent. **Settings → Experimental** is where
+With a Bosch eBike, eBike data switched on and Bosch Flow running, the sound
+when the radar drops works from the bike, as before. Otherwise it is expected
+to fire only if the radar was still seeing traffic behind you shortly before
+the link died, because the radar cannot report your own speed and recent
+traffic is what tells the app you are still riding; on an empty road it stays
+silent. **Settings → Experimental** is where
 you set how far back it looks for that traffic, from 30 seconds out to an hour,
 or turn the stand-in off. A longer look-back is what makes the sound reachable
 on a quiet road, and it also makes it likelier to sound when you park somewhere
@@ -295,8 +296,8 @@ knowing before you rely on it.
   disconnect mid-ride, and another app can take the audio. There is an
   alert for a dropped radar, and it has limits of its own (see
   [compatibility](#compatibility)). With a Bosch eBike there is also one for
-  riding with no radar connected. It needs Bosch Flow connected to the bike,
-  and it stays quiet while you pause alerts.
+  riding with no radar connected. It needs eBike data switched on and Bosch
+  Flow connected to the bike, and it stays quiet while you pause alerts.
 - **The ordinary beeps stop while you are stopped.** After a couple of
   seconds at a standstill the tier beeps are suppressed, while the urgent
   tone and the all-clear chime still sound. That is deliberate, so a queue at
@@ -375,8 +376,9 @@ Funciones principales:
   de desconexión, hasta 3 veces por ruta, y la barra lateral te pregunta si el
   radar está encendido. Si lo está, puede que otra app u otro dispositivo lo
   esté usando. Con un intervalo de reconexión en reposo de más de 50 s,
-  el aviso tarda más. Necesita Bosch Flow conectado a la bici. Se desactiva en
-  Ajustes → Alertas, en Conexión.
+  el aviso tarda más. Necesita los datos de la eBike activados y Bosch Flow
+  conectado a la bici. Puedes desactivar el aviso en Ajustes → Alertas, en
+  Conexión.
 
 El radar funciona por sí solo; Home Assistant, la cámara delantera y la eBike
 son opcionales.

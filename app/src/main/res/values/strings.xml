@@ -417,7 +417,7 @@
     <string name="settings_exp_title">Experimental</string>
     <string name="settings_exp_intro">Features still being tested. May be jittery or change without notice.</string>
     <string name="settings_exp_urgent_hold_title">Hold the urgent warning for vehicles to the side</string>
-    <string name="settings_exp_urgent_hold_subtitle">When a vehicle closing fast is already off to one side, the urgent warning waits a moment to see where the vehicle will pass, and stays quiet if it is passing wide. Fewer false alarms from the next lane, but on some close vehicles the warning comes a little later.</string>
+    <string name="settings_exp_urgent_hold_subtitle">When a vehicle closing fast is already off to one side, the urgent warning waits a moment and stays quiet if it looks set to pass wider than your urgent warning clearance. Fewer false alarms from the next lane, but the warning for a close vehicle can come a little later, or not at all.</string>
     <string name="settings_exp_precog_title">Predict overtake paths (1 s lookahead)</string>
     <string name="settings_exp_precog_subtitle">Render each vehicle 1 s into the future - see where overtakers are heading, not just where they are. Can look jittery in noisy traffic.</string>
     <string name="settings_exp_drop_fallback_title">Drop alert without a speed reading</string>
@@ -506,7 +506,7 @@
     <string name="settings_radardev_pair_title">Pair your radar</string>
     <string name="settings_radardev_pair_subtitle">Put the radar in pair mode, then pair it in Android\'s Bluetooth settings.</string>
     <string name="settings_radardev_not_selected">Not selected</string>
-    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning and no close-pass logging. With a Bosch eBike the drop alert works from the bike as before; without one it sounds only if the radar was still seeing traffic behind you shortly before the link died.</string>
+    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning and no close-pass logging. With eBike data on and Bosch Flow running, the drop alert works from the bike as before; otherwise it sounds only if the radar was still seeing traffic behind you shortly before the link died.</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>

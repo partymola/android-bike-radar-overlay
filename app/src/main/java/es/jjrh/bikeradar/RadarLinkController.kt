@@ -424,11 +424,13 @@ internal class RadarLinkController(
         // callback closed it, so the first one can be read after that callback
         // ran. Marking the radar up then would start a stream on a dead link
         // (`aFrameDrainedAfterTheDisconnectDoesNotMarkTheRadarUp`). Called on a
-        // connection's first frame only, by both streams' frame counters.
+        // connection's first frame only, by both streams' frame counters; true
+        // when it marked the radar up.
         val linkLock = Any()
         var linkDown = false
-        fun markStreaming() = synchronized(linkLock) {
+        fun markStreaming(): Boolean = synchronized(linkLock) {
             if (!linkDown) linkState.markConnected()
+            !linkDown
         }
         fun closeOnce() {
             if (gattClosed) return
@@ -803,7 +805,9 @@ internal class RadarLinkController(
                             // stays on release builds because it is the signal
                             // a live test waits for.
                             Log.i(TAG, if (BuildConfig.DEBUG) "first V2 frame: ${bytes.toHex()}" else "first V2 frame")
-                            markStreaming()
+                            // The radar counts as up from here, not from the
+                            // handshake line above, so a report needs this edge.
+                            if (markStreaming()) journal("radar V2 stream live")
                         }
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
@@ -919,7 +923,7 @@ internal class RadarLinkController(
         notifyChannel: Channel<Pair<UUID, ByteArray>>,
         v1Char: BluetoothGattCharacteristic,
         name: String,
-        markStreaming: () -> Unit,
+        markStreaming: () -> Boolean,
     ): Boolean {
         val subscribed = queue.writeCccd(gatt, v1Char)
         captureLog.clog("# legacy stream subscribe ok=$subscribed")
@@ -979,14 +983,13 @@ internal class RadarLinkController(
                 lastV2FrameMs = clock()
                 if (frames++ == 0) {
                     Log.i(TAG, "first legacy frame")
-                    journal("radar legacy stream live")
                     // Only now is this a session worth resetting the backoff
                     // for. A radar that ACKs the subscribe and then streams
                     // nothing is not delivering, and treating the ACK as
                     // success would pin the retry delay at its floor and
                     // churn the radio for the whole ride.
                     lastConnectionReachedDecode = true
-                    markStreaming()
+                    if (markStreaming()) journal("radar legacy stream live")
                 }
                 // Published on EVERY payload, not only the ones that change the
                 // track set. Heartbeats are the only traffic on an empty road,

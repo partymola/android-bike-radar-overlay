@@ -21,7 +21,7 @@ package es.jjrh.bikeradar
  *   BLANK       -- radar still off but dashcam has been silent long
  *                  enough that the rider is judged to have intentionally
  *                  packed up (or the kit died). No alarm possible until
- *                  the radar reconnects to start a new ride; subsequent
+ *                  the radar streams again on a new ride; subsequent
  *                  off-events from this state will only re-arm via the
  *                  next IDLE -> ARMED transition.
  *
@@ -77,9 +77,9 @@ object WalkAwayDecider {
         /** Maximum time since the last dashcam advert for "dashcam
          *  is still alive" to hold. */
         val dashcamFreshMs: Long = 20_000L,
-        /** If a fired notification hasn't been reset by a radar
-         *  reconnect or a user dismissal within this window, cancel
-         *  it anyway. Prevents a stale alert from sitting forever. */
+        /** If a fired notification hasn't been reset by the radar
+         *  streaming again or a user dismissal within this window,
+         *  cancel it anyway. Prevents a stale alert from sitting forever. */
         val autoDismissAfterFireMs: Long = 600_000L,
     )
 
@@ -115,8 +115,8 @@ object WalkAwayDecider {
          *           has done something deliberate (turned the camera
          *           off, the kit died, etc.) so this off-episode is
          *           NOT a leave-behind risk. Stays BLANK until the
-         *           radar reconnects (next ride) and then disconnects
-         *           again.
+         *           radar streams again (next ride) and then
+         *           disconnects.
          *
          *  Caller transitions:
          *    IDLE  -> ARMED : on radar disconnect (`markDisconnected`).
@@ -139,7 +139,7 @@ object WalkAwayDecider {
          *  fire has happened this session. */
         val lastFireMs: Long?,
         /** True when the user dismissed the last fire and the decider
-         *  must not re-fire until the radar reconnects (which clears
+         *  must not re-fire until the radar streams again (which clears
          *  this flag on the caller's side). */
         val dismissedForEpisode: Boolean,
     )
@@ -170,8 +170,8 @@ object WalkAwayDecider {
         }
 
         // User dismissed this episode via the notification action;
-        // don't refire until the caller clears the flag on radar
-        // reconnect.
+        // don't refire until the caller clears the flag when the radar
+        // streams again.
         if (i.dismissedForEpisode) return Action.NONE
 
         // ── State-machine master gate ─────────────────────────────────
@@ -181,7 +181,7 @@ object WalkAwayDecider {
         // gate. The BLANK state (armed=false mid-off-episode) blocks
         // a spurious alarm when the rider turns the camera back on
         // between rides without first powering the radar on. Re-arm
-        // is via radar reconnect only.
+        // is via the radar streaming again only.
         if (!i.armed) return Action.NONE
 
         // Radar must be currently off, and off for long enough.

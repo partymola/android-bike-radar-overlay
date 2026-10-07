@@ -143,7 +143,13 @@ class HaClientGuardsTest {
         val names = listOf(client.buildClosePassDiscoveryPayload("rearvue8", "RearVue8")) +
             client.buildRideSummaryDiscoveryPayloads("rearvue8", "RearVue8").map { it.second }
         for (payload in names) {
-            assertEquals("Bike Radar RearVue8", payload.getJSONObject("device").getString("name"))
+            val device = payload.getJSONObject("device")
+            assertEquals("Bike Radar RearVue8", device.getString("name"))
+            // The identity HA groups an existing install's entities under. A
+            // change here moves every rider's entities to a new device.
+            assertEquals("bikeradar_rearvue8", device.getJSONArray("identifiers").getString(0))
+            assertEquals(1, device.getJSONArray("identifiers").length())
+            assertEquals("bikeradar_reader", device.getString("via_device"))
         }
     }
 

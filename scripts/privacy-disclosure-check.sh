@@ -4,9 +4,11 @@
 # Privacy-disclosure freshness gate.
 #
 # Asserts the user-facing privacy copy stays consistent with the code:
-#   0. every Privacy paragraph has Spanish copy;
+#   0. every Privacy paragraph, and the "not affiliated" title, has Spanish
+#      copy;
 #   1. every outbound MQTT flow registered in the DataDisclosure anchor
-#      (HaClient.kt) is disclosed in the Settings -> Privacy copy;
+#      (HaClient.kt) is disclosed in the Privacy screen's Home Assistant
+#      paragraph;
 #   2. every user-facing manifest permission is named in that copy;
 #   3. the core posture claims (backup transfer, HTTPS, "Not affiliated")
 #      still appear in the user-facing copy and match the manifest's
@@ -51,25 +53,38 @@ done
 privacy_copy() { sed -n 's/.*<string name="settings_privacy_[^"]*">\(.*\)<\/string>.*/\1/p' "$1"; }
 string_named() { sed -n "s/.*<string name=\"$2\">\(.*\)<\/string>.*/\1/p" "$1"; }
 has() { printf '%s' "$1" | grep -qF -- "$2"; }
+# True when a string would show the rider at least one letter. Entities and
+# backslash escapes are dropped first, since every invisible form (spaces,
+# no-break and zero-width spaces, quotes, newlines) is one of those or is not
+# a letter.
+has_text() {
+    printf '%s' "$1" | sed -E 's/&#[0-9]+;|&#[xX][0-9a-fA-F]+;|&[a-zA-Z]+;//g; s/\\[uU][0-9a-fA-F]{4}//g; s/\\.//g' \
+        | grep -q '[A-Za-z]'
+}
 PRIVACY_EN="$(privacy_copy "$STRINGS")"
 PRIVACY_ES="$(privacy_copy "$STRINGS_ES")"
 [ -n "$PRIVACY_EN" ] || { echo "BLOCKER: no settings_privacy_* strings parsed from $STRINGS"; exit 2; }
 [ -n "$PRIVACY_ES" ] || { echo "BLOCKER: no settings_privacy_* strings parsed from $STRINGS_ES"; exit 2; }
 
-# 0. Every Privacy paragraph is non-empty in Spanish. Lint catches a missing
-#    translation; an empty one passes lint and shows the rider nothing. So does
-#    one holding only spaces, quotes or a no-break space, all of which Android
-#    renders as nothing.
+# 0. Every Privacy paragraph shows some text in Spanish. Lint catches a missing
+#    translation; an empty one, or one Android renders as nothing, passes lint
+#    and shows the rider nothing (see has_text).
 mapfile -t privacy_keys < <(grep -oE '<string name="settings_privacy_[^"]+"' "$STRINGS" | sed 's/.*name="//; s/"$//')
 for k in "${privacy_keys[@]}"; do
-    [ -n "$(string_named "$STRINGS_ES" "$k" | sed 's/&#160;//g; s/&#[xX][aA]0;//g; s/\\[uU]00[aA]0//g; s/\xc2\xa0//g; s/"//g' | tr -d '[:space:]')" ] \
+    has_text "$(string_named "$STRINGS_ES" "$k")" \
         || blocker "Privacy paragraph '$k' is missing or empty in the Spanish copy ($STRINGS_ES)"
 done
+has_text "$(string_named "$STRINGS_ES" settings_about_unaffiliated_title)" \
+    || blocker "the 'not affiliated' title is missing or empty in the Spanish copy ($STRINGS_ES)"
 
-# 1. Anchor disclosure keywords must appear in the Privacy copy.
+# 1. Anchor disclosure keywords must appear in the Home Assistant paragraph,
+#    the one the anchor names. Several also appear in other paragraphs
+#    ("battery", "close-pass", "summary"), which would otherwise stand in for it.
 #    Pull the outbound listOf(...) block, take its quoted strings in order, and
 #    keep every 3rd one - the disclosureKeyword of each
 #    Flow(topicFamily, category, disclosureKeyword).
+HA_PARA="$(string_named "$STRINGS" settings_privacy_to_ha_publish)"
+[ -n "$HA_PARA" ] || blocker "settings_privacy_to_ha_publish missing from $STRINGS"
 keywords="$(
     awk '/val outbound/{f=1} f{print} f && /^    \)/{exit}' "$HACLIENT" \
         | grep -oE '"[^"]*"' \
@@ -82,8 +97,8 @@ else
     mapfile -t kw_arr <<<"$keywords"
     for kw in "${kw_arr[@]}"; do
         [ -z "$kw" ] && continue
-        has "$PRIVACY_EN" "$kw" \
-            || blocker "outbound flow '$kw' (DataDisclosure) is not disclosed in the Privacy copy (settings_privacy_*)"
+        has "$HA_PARA" "$kw" \
+            || blocker "outbound flow '$kw' (DataDisclosure) is not disclosed in the Home Assistant paragraph (settings_privacy_to_ha_publish)"
     done
 fi
 
@@ -172,42 +187,38 @@ grep -qF 'disableIfNoEncryptionCapabilities="true"' "$RULES" \
 # one of those values may not claim it stays on the device. This exists because
 # the manual-coordinate paragraph said "on this phone only ... never sent
 # anywhere" while every check above passed: they prove the backup posture is
-# DISCLOSED SOMEWHERE, not that a specific paragraph agrees with it. A rider's
-# home coordinates are the worst value to be wrong about.
-loc=$(sed -n 's/.*<string name="settings_privacy_on_phone_location">\(.*\)<\/string>.*/\1/p' "$STRINGS")
-[ -n "$loc" ] || blocker "settings_privacy_on_phone_location missing from the Privacy copy (strings.xml)"
-case "$loc" in
-    *"this phone only"*|*"never sent anywhere"*|*"never leaves"*)
-        blocker "the manual-coordinate paragraph claims the coordinates stay on the device, but they are SharedPreferences and travel in the Android backup" ;;
-esac
-printf '%s' "$loc" | grep -qF "backup" \
-    || blocker "the manual-coordinate paragraph must say the coordinates are included in the Android backup"
-loc_es=$(string_named "$STRINGS_ES" settings_privacy_on_phone_location)
-case "$loc_es" in
-    *"solo en este"*|*"nunca se envían"*|*"nunca sale"*)
-        blocker "the Spanish manual-coordinate paragraph claims the coordinates stay on the device" ;;
-esac
-has "$loc_es" "copia de seguridad" \
-    || blocker "the Spanish manual-coordinate paragraph must say the coordinates are included in the Android backup"
-
-# The granted-app list is SharedPreferences, so it rides the backup exactly as
-# the manual coordinates do. Same failure, same shape: a paragraph that says it
-# stays on the device would be false.
-apps=$(sed -n 's/.*<string name="settings_privacy_to_apps_body">\(.*\)<\/string>.*/\1/p' "$STRINGS")
-if [ -n "$apps" ]; then
-    case "$apps" in
-        *"this phone only"*|*"never sent anywhere"*|*"never leaves this phone"*)
-            blocker "the sharing paragraph claims the granted-app list stays on the device, but it is SharedPreferences and travels in the Android backup" ;;
+# DISCLOSED SOMEWHERE, not that a specific paragraph agrees with it. Each
+# paragraph about a SharedPreferences value must name the backup and must not
+# use a stays-on-the-device phrase. The phrase lists catch the wordings seen so
+# far, not every one: a paragraph that says it in other words passes, so read
+# both locales side by side when one of these changes.
+backup_paragraph() { # key, what it holds
+    local en es
+    en="$(string_named "$STRINGS" "$1")"
+    es="$(string_named "$STRINGS_ES" "$1")"
+    [ -n "$en" ] || { blocker "$1 missing from the Privacy copy ($STRINGS)"; return; }
+    # Lower-cased so a phrase that opens a sentence still matches.
+    case "${en,,}" in
+        *"this phone only"*|*"never sent anywhere"*|*"never leaves"*|*"stay on your phone"*|*"stays on your phone"*|*"stay on this phone"*)
+            blocker "the paragraph on $2 ($1) claims it stays on the device, but it is SharedPreferences and travels in the Android backup" ;;
     esac
-    printf '%s' "$apps" | grep -qF "backup" \
-        || blocker "the sharing paragraph must say the granted-app list is included in the Android backup"
-    apps_es=$(string_named "$STRINGS_ES" settings_privacy_to_apps_body)
-    case "$apps_es" in
-        *"solo en este"*|*"nunca se envía"*|*"nunca sale de este"*)
-            blocker "the Spanish sharing paragraph claims the granted-app list stays on the device" ;;
+    has "$en" "backup" \
+        || blocker "the paragraph on $2 ($1) must say it is included in the Android backup"
+    case "${es,,}" in
+        *"solo en este"*|*"solo en tu"*|*"nunca se envía"*|*"nunca sale"*|*"se queda en tu"*|*"se quedan en tu"*)
+            blocker "the Spanish paragraph on $2 ($1) claims it stays on the device" ;;
     esac
-    has "$apps_es" "copia de seguridad" \
-        || blocker "the Spanish sharing paragraph must say the granted-app list is included in the Android backup"
+    has "$es" "copia de seguridad" \
+        || blocker "the Spanish paragraph on $2 ($1) must say it is included in the Android backup"
+}
+backup_paragraph settings_privacy_on_phone_settings "your settings"
+backup_paragraph settings_privacy_on_phone_creds "the Home Assistant URL and token"
+# A rider's home coordinates are the worst value to be wrong about.
+backup_paragraph settings_privacy_on_phone_location "the manual coordinates"
+# The granted-app list, whenever the copy has a sharing paragraph (2c above
+# requires one while the radar can be shared).
+if [ -n "$(string_named "$STRINGS" settings_privacy_to_apps_body)" ]; then
+    backup_paragraph settings_privacy_to_apps_body "the granted-app list"
 fi
 
 has "$PRIVACY_EN" "HTTPS" || blocker "network claim 'HTTPS' missing from the Privacy copy (settings_privacy_*)"

@@ -24,12 +24,13 @@ data class RadarLinkState(
      *  discovery on, whether or not the radar has sent any data. For readers
      *  about the radio link: the "Connecting" status, the dashcam probe's gate
      *  and backoff, the battery-read piggyback guard and the tail-light flip
-     *  guard. No safety path reads it: the no-radar warning and the walk-away
-     *  alarm read [radarStreaming]
-     *  (`anAbortLoopDuringARideIsARideWithoutTheRadar`,
+     *  guard. No alert reads it: the no-radar warning and the walk-away alarm
+     *  read [radarStreaming] (`anAbortLoopDuringARideIsARideWithoutTheRadar`,
      *  `aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`), and the drop cue reads
      *  the off-episode, which only a first frame ends
-     *  (`anAbortLoopAfterADropStillCuesOnTime`). */
+     *  (`anAbortLoopAfterADropStillCuesOnTime`). It reaches the walk-away
+     *  alarm only through the dashcam probe backoff, which can slow the
+     *  dashcam freshness that alarm reads (`BatteryProbeBackoff`). */
     val radarGattActive: Boolean = false,
     /** Monotonic (elapsedRealtime) ms an open link last closed, streaming or
      *  not; null if none has this session. Bridges the "Connecting" status
@@ -39,9 +40,12 @@ data class RadarLinkState(
      *  disconnect after the radar streamed, or the first connect attempt that
      *  failed (`theFirstRadarForgetsAnEarlierLockEvenAfterAFailedAttempt`). An
      *  attempt that opens the link and never streams does not move an
-     *  off-instant already stamped (`anAbortLoopAfterADropStillCuesOnTime`).
-     *  Null while the radar is
-     *  streaming, or before the first of either this session. */
+     *  off-instant already stamped (`anAbortLoopAfterADropStillCuesOnTime`), so
+     *  an abort loop is one off-episode for every reader: the drop cue, the
+     *  ride-summary dwell, the crash checkpoint, and the reconnect backoff of
+     *  the radar and the front camera, which relax to the long-offline cap once
+     *  it passes the parked threshold. Null while the radar is streaming, or
+     *  before the first of either this session. */
     val radarOffSinceMs: Long? = null,
     /** Monotonic (elapsedRealtime) ms the radar's current stream began: its
      *  first data frame, not service discovery or the handshake, so a radar
@@ -61,10 +65,10 @@ data class RadarLinkState(
     val lastRadarUpMs: Long? = null,
     /** True after a radar disconnect when the walk-away decider is watching
      *  the dashcam for a leave-behind. Disarmed when the dashcam goes stale
-     *  (BLANK) or the radar comes back (IDLE). */
+     *  (BLANK) or the radar streams again (IDLE). */
     val walkAwayArmed: Boolean = false,
     /** True once the rider has dismissed the walk-away alarm for the
-     *  current off-episode (cleared when the radar reconnects or after the
+     *  current off-episode (cleared when the radar streams again or after the
      *  snooze window elapses). */
     val walkAwayDismissed: Boolean = false,
     /** Monotonic (elapsedRealtime) ms of the most recent walk-away alarm fire,
@@ -78,7 +82,7 @@ data class RadarLinkState(
      *  dead-radar banner retired. Without it the app has to INFER a ride end
      *  from traffic, which is the guessing the whole gate exists to bound.
      *
-     *  Cleared on the next radar connect, or when an eBike riding run begins
+     *  Cleared when the radar next streams, or when an eBike riding run begins
      *  after [rideEndedAtMs], so it cannot silence a later ride whose radar
      *  stays off (`aParkedTapDoesNotSilenceTheNextRideWithoutTheRadar`). A new
      *  run needs its next riding confirmation `RidingSpeedGate.FRESH_MS` after
@@ -101,8 +105,8 @@ data class RadarLinkState(
      *  stands until the bike sends another reading
      *  (`aReconnectWithinTheSameRideKeepsTheLock`). */
     val bikeLocked: Boolean = false,
-    /** True on the tick after a reconnect that started a NEW RIDE (the radar
-     *  was off longer than the app's parked boundary).
+    /** True on the tick after the radar streams again having been off longer
+     *  than the app's parked boundary, which starts a NEW RIDE.
      *
      *  Exists so the drop cue's bookkeeping reset runs on the tick loop, which
      *  is that latch's only writer, rather than on the BLE callback thread. A

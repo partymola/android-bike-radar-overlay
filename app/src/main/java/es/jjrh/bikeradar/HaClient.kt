@@ -23,8 +23,9 @@ import java.net.URL
  * HA prerequisite: the MQTT integration must be enabled. The app itself
  * never talks to the MQTT broker - HA does the publish on our behalf.
  *
- * Topics and entity ids are namespaced under [NS]. It named a radar vendor
- * until now, which was wrong twice over: the app supports one vendor's radars
+ * Topics and unique ids are namespaced under [NS]; Home Assistant builds the
+ * entity ids from the device name instead (see [deviceJson]). [NS] named a
+ * radar vendor until now, which was wrong twice over: the app supports one vendor's radars
  * but the same namespace also carries the front camera and every ride
  * statistic, so it labelled ride facts with a radar brand.
  *
@@ -228,7 +229,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * all four families. Its name is what HA builds a new install's entity ids
      * from (`has_entity_name`), so `sensor.bike_radar_<device>_battery`; an
      * existing install keeps the ids its registry already holds, keyed on
-     * `unique_id`. Both are Home Assistant's behaviour; the name itself is
+     * `unique_id`. Both are Home Assistant's behaviour, and the payloads'
+     * `object_id` plays no part in either; a Home Assistant release that
+     * still read it would give `bikeradar_` ids instead. The name itself is
      * pinned by `HaClientGuardsTest.theHaDeviceIsNamedForTheApp`.
      */
     private fun deviceJson(slug: String, deviceName: String): JSONObject = JSONObject()
@@ -505,7 +508,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         private const val DISCOVERY_PREFIX = "homeassistant"
 
         /**
-         * The namespace every topic and entity id is built from. One constant
+         * The namespace every topic and unique id is built from. One constant
          * so a rename is one edit and cannot be applied to some families and
          * not others - the previous name was spelled out at forty sites.
          *
@@ -579,7 +582,9 @@ object DataDisclosure {
     val outbound: List<Flow> = listOf(
         Flow("battery", "Radar and dashcam battery level", "battery"),
         Flow("front_mode", "Front-light mode", "front-light mode"),
-        Flow("close_pass", "Close-pass events", "close-pass"),
+        // The bare word close-pass also matches the ride-summary bullet. No
+        // quotes in comments here: the privacy check reads every third one.
+        Flow("close_pass", "Close-pass events", "close-pass log"),
         Flow("ride_edge", "Ride start/end events", "ride start/end"),
         Flow(
             "ride_summary",

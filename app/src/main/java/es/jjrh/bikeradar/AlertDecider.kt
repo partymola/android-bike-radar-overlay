@@ -325,10 +325,15 @@ class AlertDecider(
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
      *  re-fire, the four urgent-pass verdicts, the unconfident wait's start
-     *  and run-out, the fit expiry, and the
-     *  closing-speed ceiling and rx veto; those two mark a track's first
-     *  excluded frame, not each silenced cue (see [ceilingLogged]), so the
-     *  rest of an exclusion is recovered by replaying the capture's packets.
+     *  and run-out, the fit expiry, and the closing-speed ceiling and rx
+     *  veto; those two mark a track's first excluded frame, not each
+     *  silenced cue (see [ceilingLogged]), so the rest of an exclusion is
+     *  recovered by replaying the capture's packets. A wait's run-out is
+     *  logged only if the car is checked again, still qualifying with no
+     *  confident fit, after the wait ends. A start with no run-out can
+     *  therefore be a car that stopped qualifying, one a matured fit or a
+     *  swing inside [URGENT_PASS_LATERAL_MIN_M] judged, or one never checked
+     *  again behind a closer candidate; the urgent lines say which sounded.
      *
      *  Volume is bounded per TRACK, not per frame, though the hook is reached
      *  on every frame: each verdict is deduped per track ([logPassGate],
@@ -975,8 +980,9 @@ class AlertDecider(
             ?.takeIf { urgentUnconfidentWaitEnabled }
             ?.let { t -> unconfidentWaits[t.id]?.takeIf { it.bornAtMs == t.bornAtMs } }
             ?.takeIf { urgentLastFireMs == NOT_INITIALIZED || urgentLastFireMs < it.sinceMs }
-        // The bar cannot exceed the peak today. The min keeps that true if the
-        // peak is ever allowed to fall, so the bar only brings a cue earlier.
+        // An episode lapse zeroes the peak while a wait keeps its older bar;
+        // the min holds the bar to the peak, so it can only bring a cue
+        // earlier.
         val bypassPeak = waited?.let { minOf(it.peakClosing, urgentEpisodePeakClosing) } ?: urgentEpisodePeakClosing
         val urgentAllowedByEpisode = imminentImpactTrigger != null &&
             (
@@ -1797,14 +1803,17 @@ class AlertDecider(
          *  read within ~3 m. */
         const val URGENT_LATERAL_MAX_M = 6f
 
-        /** Minimum |predicted pass rangeXm| (m) at which the
-         *  predicted-pass veto suppresses an urgent candidate, under
-         *  [PassScoring.RADAR_POINT] only: the fit says the car crosses
-         *  distance 0 at least this far to the side. Deliberately loose - a
-         *  dead-centre threat must never be vetoed, so the threshold must
-         *  exceed the residual error of the mount-offset setting plus fit
-         *  noise with margin. Retained for the corpus A/B;
-         *  [DEFAULT_PASS_CLEARANCE_M] is what ships. */
+        /** Lateral offset (m) with three jobs, so moving it moves all three.
+         *  It is the newest measured sample's bar below which a stale
+         *  fallback fit may not veto ([PassFit.FreshOverride], the fail-open
+         *  that fires the cue for a car swinging into the rider); the bar at
+         *  or above which a candidate with no confident fit is held by the
+         *  Experimental wait ([URGENT_UNCONFIDENT_WAIT_MS]); and, under
+         *  [PassScoring.RADAR_POINT] only, the predicted-pass veto's
+         *  threshold. Deliberately loose - a dead-centre threat must never be
+         *  vetoed, so it must exceed the residual error of the mount-offset
+         *  setting plus fit noise with margin. [DEFAULT_PASS_CLEARANCE_M] is
+         *  the veto threshold that ships. */
         const val URGENT_PASS_LATERAL_MIN_M = 2.5f
 
         /** How long the Experimental wait holds an urgent candidate with no

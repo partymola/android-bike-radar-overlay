@@ -18,8 +18,9 @@ Status legend. **Tested** = the author rides with it daily. **Range only** =
 the app is expected to read the device's V1 stream, which carries range and
 nothing else. You get the approach beeps, the all-clear, and overlay colours
 that show distance instead of speed. You do not get the urgent warning or
-close-pass logging. With a Bosch eBike the sound when the radar drops works
-from the bike, as before; without one it is expected to fire only if the radar
+close-pass logging. With a Bosch eBike, eBike data switched on and Bosch Flow
+running, the sound when the radar drops works from the bike, as before;
+otherwise it is expected to fire only if the radar
 was still seeing traffic behind you shortly before the link died, because it
 cannot report your own speed and recent traffic is what tells the app you are
 still riding. On an empty road it stays silent. **Settings → Experimental** is

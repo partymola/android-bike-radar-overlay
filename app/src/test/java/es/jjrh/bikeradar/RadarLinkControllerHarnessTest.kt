@@ -388,6 +388,7 @@ class RadarLinkControllerHarnessTest {
         assertTrue("handshake must complete; journal=$journal", pumpUntil { journalHas("radar handshake complete") })
         assertEquals("the link opens at discovery", 1, gateway.opens)
         assertEquals("a finished handshake is not data", 0, gateway.connects)
+        assertFalse("nor is it the stream going live in the journal", journalHas("radar V2 stream live"))
 
         // A working radar records its table too, so a later report has a
         // baseline to compare an aborting one against.
@@ -420,6 +421,8 @@ class RadarLinkControllerHarnessTest {
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
         assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
         assertEquals("once per connection, not per frame", 1, gateway.connects)
+        // The edge a report reads to tell an open link from a streaming radar.
+        assertEquals(1, journal.count { it == "radar V2 stream live" })
 
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50") // 0x50 = 80%
         // Waits for the VALUE, not merely for an entry to exist. The handshake
@@ -578,6 +581,7 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
         assertTrue(pumpUntil { !controller.isActive() })
         assertEquals("events=${gateway.events}", 0, gateway.connects)
+        assertFalse("nor does the journal say it went live", journalHas("radar V2 stream live"))
     }
 
     // ── reconnect loop continues after a healthy session disconnects ────────────

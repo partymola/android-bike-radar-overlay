@@ -566,7 +566,7 @@ class BikeRadarService : Service() {
                         // first emission at every start with eBike data off
                         // lands here too.
                         if (stopped != null || ebikeSnapshotCoordinator.hasEverSeenSnapshot()) {
-                            linkJournal.log("ebike data switched off: reader stopped, last reading forgotten")
+                            linkJournal.log("ebike data switched off")
                             clog("# ebike data switched off")
                         }
                         EBikeStateBus.reset()
@@ -1239,7 +1239,7 @@ class BikeRadarService : Service() {
          * The radar-only equivalent of a Bosch eBike reporting itself locked,
          * and routed to the same state, so it vetoes the dead-radar cue,
          * closes out its latch and retires the banner. Scoped to one
-         * off-episode: the next radar connect spends it, and so does an eBike
+         * off-episode: the radar's next stream spends it, and so does an eBike
          * ride that starts after it.
          */
         const val ACTION_END_RIDE = "es.jjrh.bikeradar.END_RIDE"

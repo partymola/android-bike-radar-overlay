@@ -332,7 +332,7 @@ class AlertDeciderUnconfidentWaitTest {
         assertEquals(AlertDecider.Event.None, d.at(2_500L, near, centred))
     }
 
-    @Test fun `a released car that does not clear its arrival peak by 2 m per s is still paced`() {
+    @Test fun `a released car that does not clear its own bar by 2 m per s is still paced`() {
         // The peak it is judged against is the one when its wait began, 6 m/s:
         // 7.5 does not clear it by 2.
         val d = decider()
@@ -376,7 +376,7 @@ class AlertDeciderUnconfidentWaitTest {
         assertTrue("the side car fires once it clears its own 7.0 by 2, got $ev", ev is AlertDecider.Event.UrgentApproach && ev.triggerTid == 1)
     }
 
-    @Test fun `switching the wait off at release drops the arrival bar too`() {
+    @Test fun `switching the wait off at release drops its own bar too`() {
         // As the bypass test above, but the rider turns the wait off as the
         // car is released: it is judged as if it had never waited, against
         // the 7.5 the paced car set, and 9 does not clear that by 2.

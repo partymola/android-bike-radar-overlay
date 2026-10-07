@@ -204,6 +204,14 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *         newest measured sample is itself off-axis - otherwise a long
  *         next-lane approach would outvote the few fresh samples of a car
  *         swinging into the rider (see [predictedPassFit]).
+ *    With the Experimental `urgentUnconfidentWaitEnabled` on, one failing-
+ *    open case waits instead: a candidate with no confident fit whose newest
+ *    measured sample is already [URGENT_PASS_LATERAL_MIN_M] or more to the
+ *    side is held for up to [URGENT_UNCONFIDENT_WAIT_MS] for the fit to
+ *    mature. Until an urgent sounds, its pacing bar is the episode's peak as
+ *    it stood when the wait began, raised only by its own closing speed; no
+ *    other car's check raises it, including those it shadowed while held.
+ *    Off by default, and off it changes nothing.
  *  - **Urgent episode pacing.** The urgent cue repeats while an
  *    imminent condition is held (see the trigger-site comment for the
  *    alarm-standards rationale) - but a platoon released behind a
@@ -215,8 +223,8 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    at least [URGENT_NEW_THREAT_CLOSING_DELTA_MS] faster than anything
  *    already observed this episode - genuinely new severity fires
  *    immediately (IEC 60601-1-8 "paused with new-condition override",
- *    the pattern the audio design already follows). The first fire of
- *    an episode is never delayed.
+ *    the pattern the audio design already follows). The pacing never
+ *    delays the first fire of an episode.
  *  - **Turn-aware clear deferral.** Cornering sweeps the
  *    radar's rear cone off every followed car, so mid-turn the stream
  *    reads empty while the road is not. While [TurnStateDecider] reports
@@ -316,14 +324,16 @@ class AlertDecider(
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
-     *  re-fire, the four urgent-pass verdicts, the fit expiry, and the
+     *  re-fire, the four urgent-pass verdicts, the unconfident wait's start
+     *  and run-out, the fit expiry, and the
      *  closing-speed ceiling and rx veto; those two mark a track's first
      *  excluded frame, not each silenced cue (see [ceilingLogged]), so the
      *  rest of an exclusion is recovered by replaying the capture's packets.
      *
      *  Volume is bounded per TRACK, not per frame, though the hook is reached
      *  on every frame: each verdict is deduped per track ([logPassGate],
-     *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged]) and an expiry can
+     *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged],
+     *  [unconfidentWaits]) and an expiry can
      *  fire once per fit because the fit is removed as it is reported. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
@@ -577,13 +587,32 @@ class AlertDecider(
     /** Fastest closing speed (m/s, positive) among this episode's
      *  triggering candidates at their fire/suppress checks. A new
      *  candidate must beat it by [URGENT_NEW_THREAT_CLOSING_DELTA_MS] to
-     *  bypass the episode pacing. */
+     *  bypass the episode pacing; a car released from the unconfident wait
+     *  is judged against its own bar instead (see [UnconfidentWait]). */
     private var urgentEpisodePeakClosing: Float = 0f
 
     /** True once this episode has produced an audible urgent fire; until
-     *  then the pacing does not apply (the first warning is never
-     *  delayed). */
+     *  then the pacing does not apply (it never delays the first
+     *  warning). */
     private var urgentFiredThisEpisode: Boolean = false
+
+    /** One track birth's unconfident wait: when it began, the car's own
+     *  pacing bar (the episode's closing peak when the wait began, raised by
+     *  the car's own checks since), and whether its run-out has been logged. */
+    private class UnconfidentWait(
+        val bornAtMs: Long,
+        val sinceMs: Long,
+        var peakClosing: Float,
+        var overLogged: Boolean = false,
+    )
+
+    /** tid -> the wait of the birth last held there, until [reset] or a new
+     *  birth under the same tid, so a birth waits once
+     *  (`a track is waited once in its life`). A pause resets the decider
+     *  every frame, so a birth waits again after one (`reset clears the
+     *  wait`). Bounded by the tid space like [ceilingLogged]. Written only
+     *  with the wait switched on. */
+    private val unconfidentWaits = HashMap<Int, UnconfidentWait>()
 
     fun decide(
         vehicles: List<Vehicle>,
@@ -593,6 +622,9 @@ class AlertDecider(
         bikeNotDriving: Boolean? = null,
         climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
+        /** Experimental: hold an urgent candidate with no confident fit that
+         *  is already off to one side, see [URGENT_UNCONFIDENT_WAIT_MS]. */
+        urgentUnconfidentWaitEnabled: Boolean = false,
         turnState: TurnStateDecider.State = TurnStateDecider.State.IDLE,
         /** Clearance the predicted pass must keep, in metres from the bike's
          *  centreline. NOT clamped here - [data.Prefs] is the only production
@@ -908,7 +940,7 @@ class AlertDecider(
                     closingMs >= TTC_GATE_CLOSING_FLOOR_MS &&
                     v.distanceM in 0..alertMaxM &&
                     v.distanceM.toFloat() / closingMs <= TTC_GATE_SECONDS
-                (byProximity || byTtc) && urgentLaterallyPlausible(v, passClearanceM)
+                (byProximity || byTtc) && urgentLaterallyPlausible(v, passClearanceM, nowMs, urgentUnconfidentWaitEnabled)
             }
         }
         // Urgent episode pacing. A qualifying-target gap longer than
@@ -930,17 +962,34 @@ class AlertDecider(
             urgentFiredThisEpisode = false
         }
         val triggerClosingMs = imminentImpactTrigger?.let { -it.speedMs } ?: 0f
+        // A car that has waited, with no urgent heard since its wait began, is
+        // judged against its own bar: the episode peak when the wait began,
+        // raised only by its own checks below. No other car's check raises it,
+        // which can add at most one cue inside the pacing window; above all,
+        // cars it shadowed while held must not (`a car released from its wait
+        // keeps the new-severity bypass it arrived with`, `a car paced behind
+        // a waiting one does not raise its bar for later either`), while its
+        // own creep still ratchets (`a released car's own speed raises its
+        // bar, as the episode peak would`). Only with the wait on.
+        val waited = imminentImpactTrigger
+            ?.takeIf { urgentUnconfidentWaitEnabled }
+            ?.let { t -> unconfidentWaits[t.id]?.takeIf { it.bornAtMs == t.bornAtMs } }
+            ?.takeIf { urgentLastFireMs == NOT_INITIALIZED || urgentLastFireMs < it.sinceMs }
+        // The bar cannot exceed the peak today. The min keeps that true if the
+        // peak is ever allowed to fall, so the bar only brings a cue earlier.
+        val bypassPeak = waited?.let { minOf(it.peakClosing, urgentEpisodePeakClosing) } ?: urgentEpisodePeakClosing
         val urgentAllowedByEpisode = imminentImpactTrigger != null &&
             (
                 !urgentFiredThisEpisode ||
                     (urgentLastFireMs != NOT_INITIALIZED && nowMs - urgentLastFireMs >= URGENT_EPISODE_REPEAT_MS) ||
-                    triggerClosingMs >= urgentEpisodePeakClosing + URGENT_NEW_THREAT_CLOSING_DELTA_MS
+                    triggerClosingMs >= bypassPeak + URGENT_NEW_THREAT_CLOSING_DELTA_MS
                 )
         if (imminentImpactTrigger != null) {
             urgentLastQualifyingSeenMs = nowMs
             if (triggerClosingMs > urgentEpisodePeakClosing) {
                 urgentEpisodePeakClosing = triggerClosingMs
             }
+            waited?.let { if (triggerClosingMs > it.peakClosing) it.peakClosing = triggerClosingMs }
         }
         val anyImminentImpact = urgentAllowedByEpisode
         val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
@@ -1142,6 +1191,7 @@ class AlertDecider(
         urgentLastFireMs = NOT_INITIALIZED
         urgentEpisodePeakClosing = 0f
         urgentFiredThisEpisode = false
+        unconfidentWaits.clear()
     }
 
     /** Append this frame's usable lateral sightings to the per-track fit
@@ -1243,10 +1293,12 @@ class AlertDecider(
     /** Lateral-plausibility vetoes for an urgent candidate; true = the
      *  candidate may fire. Fails OPEN where no lateral truth exists: no
      *  lateral data (`rangeXm == 0f` from lateral-free sources decodes as
-     *  dead centre and passes) and unconfident fits fire; an
+     *  dead centre and passes) and unconfident fits fire, though with
+     *  [waitEnabled] an unconfident fit is first held by
+     *  [heldForUnconfidentWait] and may be vetoed once it matures; an
      *  unknown-sentinel firing frame stands down only the instantaneous
      *  off-axis veto, never the history-derived pass prediction. */
-    private fun urgentLaterallyPlausible(v: Vehicle, passClearanceM: Float): Boolean {
+    private fun urgentLaterallyPlausible(v: Vehicle, passClearanceM: Float, nowMs: Long, waitEnabled: Boolean): Boolean {
         // Unknown-sentinel frames hold a carried-forward lateral value, not
         // a measurement, so the OFF-AXIS veto (an instantaneous read of the
         // firing frame) stands down. The PREDICTED-PASS veto does NOT: its
@@ -1270,7 +1322,7 @@ class AlertDecider(
         }
         // Predicted-pass veto: only with a confident fit.
         return when (val fit = predictedPassFit(v.id)) {
-            is PassFit.Unconfident -> true
+            is PassFit.Unconfident -> !(waitEnabled && heldForUnconfidentWait(v, nowMs))
             is PassFit.FreshOverride -> {
                 // The fail-open path: a stale fit wanted to judge this
                 // candidate and the freshest measurement refused to back
@@ -1312,6 +1364,44 @@ class AlertDecider(
                 !veto
             }
         }
+    }
+
+    /** True while [v], judged with no confident fit, is still inside its
+     *  wait. The wait starts on the first frame its birth is judged so and
+     *  runs [URGENT_UNCONFIDENT_WAIT_MS], once per birth: it is not
+     *  restarted when the track stops qualifying and comes back
+     *  (`a track is waited once in its life`). Nothing ends it early here;
+     *  a fit that matures meanwhile is judged by the normal veto, which
+     *  silences a wide pass and lets anything inside the margin fire, pacing
+     *  permitting, and a newest sample inside [URGENT_PASS_LATERAL_MIN_M]
+     *  fails open on its own.
+     *
+     *  A track with no measured lateral sample is never held: no fit can
+     *  mature on it, so the wait would be pure delay
+     *  (`a candidate never measured laterally is not held`). A
+     *  lateral-unknown frame on a measured track IS held, deliberately: the
+     *  radar drops lateral as a car rides the edge of its cone, so that frame
+     *  comes with the off-axis geometry the wait is for (`a lateral-unknown
+     *  firing frame with a measured unconfident history is held`).
+     *
+     *  Its start and its run-out are logged once each, through their own
+     *  flag rather than [passGateLogged], which would re-arm the verdicts
+     *  deduped there. */
+    private fun heldForUnconfidentWait(v: Vehicle, nowMs: Long): Boolean {
+        if (lateralHistory[v.id].isNullOrEmpty()) return false
+        val prev = unconfidentWaits[v.id]
+        val wait = if (prev != null && prev.bornAtMs == v.bornAtMs) {
+            prev
+        } else {
+            onGateEvent("# gate urgent-pass-wait-start tid=${v.id} d=${v.distanceM} newest_rx=${lateralHistory[v.id]?.lastOrNull()?.rangeXm}")
+            UnconfidentWait(v.bornAtMs, nowMs, urgentEpisodePeakClosing).also { unconfidentWaits[v.id] = it }
+        }
+        if (nowMs - wait.sinceMs < URGENT_UNCONFIDENT_WAIT_MS) return true
+        if (!wait.overLogged) {
+            wait.overLogged = true
+            onGateEvent("# gate urgent-pass-wait-over tid=${v.id} d=${v.distanceM}")
+        }
+        return false
     }
 
     /** Emit a pass-gate decision to the capture log once per verdict per
@@ -1388,8 +1478,9 @@ class AlertDecider(
      *
      *  Everything here fails OPEN: an unconfident fit, a refused
      *  corroboration, and a track never measured across enough approach
-     *  all let the cue fire. First warnings are never delayed for lack of
-     *  history. */
+     *  all let the cue fire. A first warning is delayed for lack of a
+     *  confident fit only with the Experimental wait switched on, and only
+     *  on an unconfident fit ([URGENT_UNCONFIDENT_WAIT_MS]). */
     private fun predictedPassFit(tid: Int): PassFit {
         val all = lateralHistory[tid]?.toList().orEmpty()
         val recent = all.takeLast(URGENT_PASS_RECENT_FIT_WINDOW)
@@ -1715,6 +1806,21 @@ class AlertDecider(
          *  noise with margin. Retained for the corpus A/B;
          *  [DEFAULT_PASS_CLEARANCE_M] is what ships. */
         const val URGENT_PASS_LATERAL_MIN_M = 2.5f
+
+        /** How long the Experimental wait holds an urgent candidate with no
+         *  confident fit that is already [URGENT_PASS_LATERAL_MIN_M] or more
+         *  to the side. This is the wait, not the delay a rider can feel: a
+         *  cue held here can land later still if the episode pacing or a
+         *  maturing fit intervenes.
+         *
+         *  Measured on ride recordings at 300 ms, 500 ms and 1 s. At 300 ms
+         *  no car that came within 2 m of the radar lost its cue, though one
+         *  that passed 2.2 m away did, and some close ones were warned up to
+         *  about 0.7 s later. From 500 ms up the wait silenced cars that came
+         *  within 2 m, and so did extending it to near-centre fail-open
+         *  candidates ([PassFit.FreshOverride]) at any length. Do not lengthen
+         *  it or widen its scope without a fresh corpus replay. */
+        const val URGENT_UNCONFIDENT_WAIT_MS = 300L
 
         /** How far the bike reaches in front of and behind the radar. The
          *  radar sits on the seatpost, so the machine extends well past it

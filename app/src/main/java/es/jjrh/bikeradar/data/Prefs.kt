@@ -57,6 +57,7 @@ data class PrefsSnapshot(
     val walkAwayAlarmThresholdSec: Int,
     val adaptiveAlertsEnabled: Boolean,
     val urgentLowSpeedEnabled: Boolean,
+    val urgentUnconfidentWaitEnabled: Boolean,
     val precogEnabled: Boolean,
     val radarDropTrackFallbackEnabled: Boolean,
     val radarDropTrackWindowSec: Int,
@@ -490,6 +491,19 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_URGENT_LOW_SPEED, true)
         set(v) {
             sp.edit().putBoolean(KEY_URGENT_LOW_SPEED, v).apply()
+        }
+
+    /** Experimental. Hold the urgent cue for a vehicle already off to one
+     *  side until its approach shows where it will pass, for up to
+     *  [es.jjrh.bikeradar.AlertDecider.URGENT_UNCONFIDENT_WAIT_MS]. Fewer
+     *  urgents for cars passing wide, at the cost of a later first urgent
+     *  on some close ones, and none at all for a car the matured prediction
+     *  wrongly calls wide or that stops qualifying before the wait ends.
+     *  Default off until rides show it is worth that. */
+    var urgentUnconfidentWaitEnabled: Boolean
+        get() = sp.getBoolean(KEY_URGENT_UNCONFIDENT_WAIT, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_URGENT_UNCONFIDENT_WAIT, v).apply()
         }
 
     /** Experimental. When true, the overlay renders each vehicle at its
@@ -980,6 +994,7 @@ class Prefs(context: Context) {
         walkAwayAlarmThresholdSec = walkAwayAlarmThresholdSec,
         adaptiveAlertsEnabled = adaptiveAlertsEnabled,
         urgentLowSpeedEnabled = urgentLowSpeedEnabled,
+        urgentUnconfidentWaitEnabled = urgentUnconfidentWaitEnabled,
         precogEnabled = precogEnabled,
         radarDropTrackFallbackEnabled = radarDropTrackFallbackEnabled,
         radarDropTrackWindowSec = radarDropTrackWindowSec,
@@ -1049,6 +1064,7 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
+        appendLine("urgent_unconfident_wait_enabled=$urgentUnconfidentWaitEnabled")
         appendLine("precog_enabled=$precogEnabled")
         appendLine("no_radar_ride_warning_enabled=$noRadarRideWarningEnabled")
         appendLine("radar_drop_track_fallback_enabled=$radarDropTrackFallbackEnabled")
@@ -1128,6 +1144,7 @@ class Prefs(context: Context) {
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
+        const val KEY_URGENT_UNCONFIDENT_WAIT = "urgent_unconfident_wait_enabled"
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_RADAR_DROP_TRACK_FALLBACK = "radar_drop_track_fallback_enabled"
         const val KEY_RADAR_DROP_TRACK_WINDOW_SEC = "radar_drop_track_window_sec"

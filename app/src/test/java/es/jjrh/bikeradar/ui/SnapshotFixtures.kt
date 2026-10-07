@@ -42,6 +42,7 @@ internal object SnapshotFixtures {
         walkAwayAlarmThresholdSec = 30,
         adaptiveAlertsEnabled = true,
         urgentLowSpeedEnabled = true,
+        urgentUnconfidentWaitEnabled = false,
         precogEnabled = false,
         turnAwareAlertsEnabled = true,
         closePassLoggingEnabled = false,

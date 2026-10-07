@@ -9,8 +9,8 @@ import java.util.zip.GZIPInputStream
 
 /**
  * Replays a private ride-capture corpus through the real [RadarV2Decoder] +
- * [AlertDecider] (production defaults) and compares per-capture alert-event
- * tallies against a recorded baseline. This is the repo's "don't change the
+ * [AlertDecider] (production defaults, unless `corpusUnconfidentWait` is set)
+ * and compares per-capture alert-event tallies against a recorded baseline. This is the repo's "don't change the
  * alert behaviour without re-running the capture replay" policy as a
  * one-command gate.
  *
@@ -40,6 +40,10 @@ import java.util.zip.GZIPInputStream
  * `-Pbikeradar.corpusRecord=true` and use the failure diff as the
  * before/after evidence for the change's review.
  *
+ * `-Pbikeradar.corpusUnconfidentWait=true` replays with the Experimental
+ * unconfident wait on, so the failure diff is what the switch changes. It is
+ * compare-only and refuses to record: the baseline is the shipped default.
+ *
  * Capture format: lines of `<epoch-ms> 3204 <hex>` (the V2 notify stream),
  * as written by the in-app capture log and consumed by [ReplayService], plus
  * the `ebike` lines [EBikeCaptureFormatter] writes, which carry the rider
@@ -61,6 +65,8 @@ class CorpusReplayGate {
      * rider at 40 m would hear is still out of reach here.
      */
     private val alertEnvelopesM = listOf(20, 30)
+
+    private val unconfidentWait = System.getProperty("bikeradar.corpusUnconfidentWait") == "true"
 
     private data class Tally(
         var beep1: Int = 0,
@@ -243,6 +249,7 @@ class CorpusReplayGate {
                         bikeSpeedMs = live?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs,
                         bikeNotDriving = live?.notDriving,
                         climbing = climbing && ebikeFresh,
+                        urgentUnconfidentWaitEnabled = unconfidentWait,
                         turnState = turnState,
                     )
                 ) {
@@ -283,6 +290,12 @@ class CorpusReplayGate {
             .toList()
         assumeTrue("corpus dir holds no capture logs - skipping", captures.isNotEmpty())
 
+        val baselineFile = File(corpusDir, BASELINE_NAME)
+        val record = System.getProperty("bikeradar.corpusRecord") == "true"
+        // Before the replay, so a misconfigured run fails in seconds.
+        refusal(unconfidentWait, record, baselineFile.exists())?.let { error(it) }
+        val mode = if (unconfidentWait) " (unconfident wait ON)" else ""
+
         // A capture that cannot be replayed (mid-write truncation from a
         // crash, a corrupt byte sequence the decoder rejects with a throw)
         // must name itself in the failure rather than abort the gate for
@@ -309,8 +322,6 @@ class CorpusReplayGate {
             }
         }
 
-        val baselineFile = File(corpusDir, BASELINE_NAME)
-        val record = System.getProperty("bikeradar.corpusRecord") == "true"
         if (record || !baselineFile.exists()) {
             baselineFile.writeText(current.values.joinToString("\n", postfix = "\n"))
             // Surface (don't silently drop) captures that failed to replay:
@@ -349,21 +360,35 @@ class CorpusReplayGate {
         tolerated.forEach { println(it.value + " (never in baseline, tolerated)") }
         val problems = changed + missing + regressed.map { it.value } + corruptBaseline
         if (problems.isNotEmpty()) {
+            val advice = if (unconfidentWait) {
+                "This diff is what the unconfident wait changes; the baseline stays as recorded.\n\n"
+            } else {
+                "If the alert-behaviour change is intentional, re-record with " +
+                    "-Pbikeradar.corpusRecord=true and cite this diff in the review.\n\n"
+            }
             throw AssertionError(
-                "Corpus replay drifted from baseline (${changed.size} changed, ${missing.size} missing, " +
+                "Corpus replay$mode drifted from baseline (${changed.size} changed, ${missing.size} missing, " +
                     "${regressed.size} unreplayable, ${corruptBaseline.size} corrupt baseline lines).\n" +
-                    "If the alert-behaviour change is intentional, re-record with " +
-                    "-Pbikeradar.corpusRecord=true and cite this diff in the review.\n\n" +
-                    problems.joinToString("\n"),
+                    advice + problems.joinToString("\n"),
             )
         }
-        println("corpus replay clean: ${captures.size} captures x ${alertEnvelopesM.size} envelopes, ${fresh.size} new since baseline")
+        println("corpus replay$mode clean: ${captures.size} captures x ${alertEnvelopesM.size} envelopes, ${fresh.size} new since baseline")
     }
 
-    private companion object {
-        const val BASELINE_NAME = "corpus-baseline.txt"
+    internal companion object {
+        private const val BASELINE_NAME = "corpus-baseline.txt"
+
+        /** Why a run must not go ahead, or null. The unconfident wait is
+         *  compare-only: a baseline recorded with it on, or created by a first
+         *  run with it on, would not be the shipped default. */
+        internal fun refusal(unconfidentWait: Boolean, record: Boolean, baselineExists: Boolean): String? = when {
+            !unconfidentWait -> null
+            record -> "the unconfident wait is compare-only: re-recording with it on would bake it into the baseline"
+            !baselineExists -> "the unconfident wait is compare-only: there is no baseline to compare with"
+            else -> null
+        }
 
         /** What `EBikeSnapshotCoordinator` writes when the climb verdict flips. */
-        const val CLIMB_PREFIX = "# ebike climbing="
+        private const val CLIMB_PREFIX = "# ebike climbing="
     }
 }

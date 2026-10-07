@@ -366,6 +366,7 @@ internal class OverlayPipeline(
             bikeNotDriving = snap?.bikeNotDriving,
             climbing = ebike.climbing(),
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
+            urgentUnconfidentWaitEnabled = overlayPrefs.urgentUnconfidentWaitEnabled,
             turnState = if (overlayPrefs.turnAwareAlertsEnabled) {
                 turnState()
             } else {
@@ -381,6 +382,7 @@ internal class OverlayPipeline(
                 nowWallMs = nowWallMs,
                 gateBikeSpeedMs = preferredBikeSpeedMs,
                 gatePassClearanceM = overlayPrefs.urgentPassClearanceM,
+                gateUnconfidentWait = overlayPrefs.urgentUnconfidentWaitEnabled,
                 gateClosingCeilingMs = closingCeilingMs,
                 gateAlertMaxM = overlayPrefs.alertMaxDistanceM,
                 alerts = alerts,
@@ -401,6 +403,7 @@ internal class OverlayPipeline(
         nowWallMs: Long,
         gateBikeSpeedMs: Float?,
         gatePassClearanceM: Float,
+        gateUnconfidentWait: Boolean,
         gateClosingCeilingMs: Float?,
         gateAlertMaxM: Int,
         alerts: AlertDecider,
@@ -418,7 +421,9 @@ internal class OverlayPipeline(
         // Flow is streaming), which can differ from the radar's bike_speed_mps.
         // gate_clearance_m is the rider's pass margin as decide() was called
         // with it, so a cue reported as spurious can be told apart from one
-        // the rider widened the margin into. The trigger_* fields are the
+        // the rider widened the margin into, and gate_unconf_wait says whether
+        // the Experimental wait was on, so a later replay at the defaults knows
+        // when it is not reproducing this ride. The trigger_* fields are the
         // vehicle that opened the urgent gate -
         // frame_closest_* below is just the nearest car, often a different,
         // slower one, so without these an urgent cannot be audited from the
@@ -426,6 +431,7 @@ internal class OverlayPipeline(
         val urgentPath = (ev as? AlertDecider.Event.UrgentApproach)?.let {
             " urgent_path=${if (it.viaMovingPath) "moving" else "stationary"}" +
                 " gate_clearance_m=$gatePassClearanceM" +
+                " gate_unconf_wait=${if (gateUnconfidentWait) "on" else "off"}" +
                 " trigger_tid=${it.triggerTid} trigger_d=${it.triggerDistanceM}" +
                 " trigger_closing_mps=${it.triggerClosingMs} trigger_rx=${it.triggerRangeXm}"
         } ?: ""

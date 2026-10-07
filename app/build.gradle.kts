@@ -373,7 +373,8 @@ tasks.withType<Test>().configureEach {
     // forked test JVM as a system property (env vars do not survive a warm
     // Gradle daemon). CorpusReplayGate assume-skips when unset, so CI and
     // corpus-less checkouts are unaffected. corpusRecord=true rewrites the
-    // baseline instead of comparing.
+    // baseline instead of comparing; corpusUnconfidentWait=true compares with
+    // the Experimental wait on and refuses to record.
     (project.findProperty("bikeradar.corpusDir") as String?)?.let {
         systemProperty("bikeradar.corpusDir", it)
         // The gate's summary lines (captures replayed, fresh-capture count)
@@ -383,6 +384,9 @@ tasks.withType<Test>().configureEach {
     }
     (project.findProperty("bikeradar.corpusRecord") as String?)?.let {
         systemProperty("bikeradar.corpusRecord", it)
+    }
+    (project.findProperty("bikeradar.corpusUnconfidentWait") as String?)?.let {
+        systemProperty("bikeradar.corpusUnconfidentWait", it)
     }
     // Cue-ledger golden regeneration: -Pbikeradar.cueLedgerRecord=true makes
     // CueLedgerReplayTest print the freshly-computed ledger to stdout (paste

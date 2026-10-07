@@ -84,6 +84,11 @@ class PrefsTest {
         assertTrue(s.adaptiveAlertsEnabled)
         assertTrue(s.turnAwareAlertsEnabled)
         assertFalse(s.precogEnabled)
+        // Off until rides show it is worth what it costs: a later first urgent
+        // on some close cars, and none for a car wrongly predicted wide or
+        // one that stops qualifying inside the wait.
+        assertFalse(s.urgentUnconfidentWaitEnabled)
+        assertTrue(prefs.dumpAll().contains("urgent_unconfident_wait_enabled=false"))
         // Default ON, deliberately: a rider whose radar reports no speed and
         // who has no eBike gets no drop cue at all without it, so a switch
         // defaulted off would leave that rider exactly where the bug did.
@@ -137,6 +142,7 @@ class PrefsTest {
         prefs.walkAwayAlarmThresholdSec = 60
         prefs.adaptiveAlertsEnabled = false
         prefs.precogEnabled = true
+        prefs.urgentUnconfidentWaitEnabled = true
         prefs.radarDropTrackFallbackEnabled = false
         prefs.radarDropTrackWindowSec = 600
         prefs.closePassLoggingEnabled = true
@@ -183,6 +189,9 @@ class PrefsTest {
         assertEquals(60, s.walkAwayAlarmThresholdSec)
         assertFalse(s.adaptiveAlertsEnabled)
         assertTrue(s.precogEnabled)
+        assertTrue(s.urgentUnconfidentWaitEnabled)
+        // A ride with it on has to be identifiable from a bug report.
+        assertTrue(Prefs(context).dumpAll().contains("urgent_unconfident_wait_enabled=true"))
         assertFalse(s.radarDropTrackFallbackEnabled)
         assertEquals(600, s.radarDropTrackWindowSec)
         assertTrue(s.closePassLoggingEnabled)

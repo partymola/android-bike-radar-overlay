@@ -72,6 +72,7 @@ class CueLedgerReplayTest {
         urgentLowSpeedEnabled: Boolean,
         tierDistance: TierDistance = TierDistance.TRUE_RANGE,
         passClearanceM: Float = AlertDecider.DEFAULT_PASS_CLEARANCE_M,
+        urgentUnconfidentWaitEnabled: Boolean = false,
     ): List<String> {
         val frames = loadFixture()
         var clock = 0L
@@ -89,6 +90,7 @@ class CueLedgerReplayTest {
                 bikeNotDriving = null,
                 climbing = false,
                 urgentLowSpeedEnabled = urgentLowSpeedEnabled,
+                urgentUnconfidentWaitEnabled = urgentUnconfidentWaitEnabled,
                 passClearanceM = passClearanceM,
             )
             // Pin that the ledger's notion of "audible" matches production's:
@@ -167,6 +169,17 @@ class CueLedgerReplayTest {
         assertEquals(
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 0.5f),
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 3.0f),
+        )
+    }
+
+    @Test
+    fun unconfidentWaitIsNoOpForThisFixture() {
+        // The same warning again: the fixture reaches no urgent cue, so the
+        // Experimental wait has nothing to hold here and a green run says
+        // nothing about it. Only the private corpus can.
+        assertEquals(
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, urgentUnconfidentWaitEnabled = true),
         )
     }
 

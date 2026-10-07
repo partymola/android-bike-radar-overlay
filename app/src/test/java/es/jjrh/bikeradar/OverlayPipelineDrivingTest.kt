@@ -525,6 +525,48 @@ class OverlayPipelineDrivingTest {
         )
     }
 
+    /** A stopped rider and a car closing fast 3 m to the side, measured at one
+     *  spot, so it has no confident fit. Returns how many urgent lines had been logged
+     *  after each of its frames, and the urgent lines themselves. */
+    private suspend fun kotlinx.coroutines.test.TestScope.driveSideCar(waitOn: Boolean): Pair<List<Int>, List<String>> {
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(
+            clog = { clogLines += it },
+            clockMono = { mono },
+            overlayPrefsSnapshot = { prefs.snapshot().copy(urgentUnconfidentWaitEnabled = waitOn) },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 1_000L, vehicles = emptyList(), bikeSpeedMs = 0f))
+        runCurrent()
+        val side = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = 3f, rangeXmRaw = 3f, bornAtMs = 3_000L)
+        val counts = listOf(3_500L, 3_600L, 3_900L).map { t ->
+            mono = t
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = listOf(side), bikeSpeedMs = 0f))
+            runCurrent()
+            clogLines.count { it.contains("event=UrgentApproach") }
+        }
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return counts to clogLines.filter { it.contains("event=UrgentApproach") }
+    }
+
+    @Test
+    fun theUnconfidentWaitSettingReachesTheDecider() = runTest {
+        // The decider's tests drive the parameter directly, so they stay
+        // green if the pipeline stops passing it. Off, the urgent sounds on
+        // the car's first qualifying frame; on, 300 ms later. The line says
+        // which, so a ride with it on can be told apart afterwards.
+        val (offCounts, offLines) = driveSideCar(waitOn = false)
+        assertEquals(listOf(0, 1, 1), offCounts)
+        assertTrue(offLines.toString(), offLines.single().contains("gate_unconf_wait=off"))
+        val (onCounts, onLines) = driveSideCar(waitOn = true)
+        assertEquals(listOf(0, 0, 1), onCounts)
+        assertTrue(onLines.toString(), onLines.single().contains("gate_unconf_wait=on"))
+    }
+
     /** Two frames of one car closing at 42.5 m/s with the rider moving, and
      *  the capture-log lines they produce. */
     private suspend fun kotlinx.coroutines.test.TestScope.driveFastCloser(

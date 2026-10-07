@@ -993,9 +993,10 @@ class AlertDeciderTest {
 
     @Test fun `thin lateral history fails open and fires`() {
         // Only two sightings at the firing frame: no confident fit, the
-        // veto must not engage. First warnings are never delayed for
-        // lack of history, even on a track that IS heading for a side
-        // pass.
+        // veto must not engage. With the Experimental wait off, first
+        // warnings are never delayed for lack of history, even on a track
+        // that IS heading for a side pass (AlertDeciderUnconfidentWaitTest
+        // covers the switch on).
         val c = Clock()
         val d = stationaryDecider(c)
         val v = sideCar(id = 1, distanceM = 15, speedMs = -8f, rangeXm = 3f)

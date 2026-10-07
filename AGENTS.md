@@ -294,7 +294,9 @@ disclosure changes both locales are read side by side.
   before/after evidence in review. Add `--no-configuration-cache` to corpus
   runs: the property is captured into the configuration cache, so a cached
   entry can leak a previous run's corpus path into an invocation that omitted
-  the flag.
+  the flag. `-Pbikeradar.corpusUnconfidentWait=true` replays with the
+  Experimental unconfident wait on; it is compare-only, and its diff is what
+  the wait changes. Check that the result line says the wait was on.
   - **The path must be the one Gradle sees, not the one your shell sees.**
     Gradle runs inside the build container with the repo mounted at
     `/workspace`, so a host path resolves to nothing there. A missing
@@ -321,8 +323,9 @@ disclosure changes both locales are read side by side.
     pass-prediction path is invisible to CI.** The fixture is 30 s of moving
     traffic with no stopped-rider-plus-fast-closer encounter, and the test
     pins that absence deliberately in
-    `urgentLowSpeedToggleIsNoOpForThisFixture` and
-    `passClearanceIsNoOpForThisFixture` - both assert the ledger is unchanged
+    `urgentLowSpeedToggleIsNoOpForThisFixture`,
+    `passClearanceIsNoOpForThisFixture` and
+    `unconfidentWaitIsNoOpForThisFixture` - each asserts the ledger is unchanged
     with the feature toggled, which is a statement about the fixture, not
     about the feature. Only the private `CorpusReplayGate` corpus can see a
     change there. Extending `replay-fixture.txt` with a real stationary

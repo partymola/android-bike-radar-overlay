@@ -243,9 +243,10 @@ decoders in both Python and Kotlin live there.
 **Before adding or editing any user-facing string, in either locale, read
 [`WRITING_COPY.md`](WRITING_COPY.md)**; the `/qc` copy reviewer enforces it.
 It holds the Spain-Spanish rules (never "rodar"; the percent sign takes no
-space), the Privacy screen exception, and the fact that
-`scripts/privacy-disclosure-check.sh` reads the English strings only, so when
-a disclosure changes both locales are read side by side.
+space), the Privacy screen exception, and what
+`scripts/privacy-disclosure-check.sh` checks in each locale. It cannot see a
+paragraph that keeps its tokens while saying less in one locale, so when a
+disclosure changes both locales are read side by side.
 
 ## Testing
 

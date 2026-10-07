@@ -74,16 +74,16 @@ enforces them, and CONTRIBUTING.md points contributors here:
   `scripts/privacy-disclosure-check.sh` pins: permission names, the backup
   disclosure + manifest/backup-rules pairing, HTTPS, the DataDisclosure
   keywords). Trim it to bullets, never gut it.
-  **That script reads `values/strings.xml` only, so every Spanish disclosure gap
-  is invisible to it** - it has already let the es sharing paragraph enumerate
-  one fewer data category than the en one. Be precise about which half is
-  guarded: a disclosure string PRESENT in one locale and missing from the other
-  is caught by lint, since `MissingTranslation` and `ExtraTranslation` are
-  errors with `abortOnError` (measured - deleting one es string fails
-  `:app:lintDebug`). What nothing catches is the half that actually bit: a
-  string that keeps its key in both locales while one of them says something
-  narrower. When a disclosure changes, read both locales side by side.
-  It also never opens `SettingsPrivacy.kt`, so it cannot see a string that
+  The script reads the `settings_privacy_*` strings only, in both locales. In
+  Spanish it checks that every paragraph is non-empty, the literal tokens
+  (permission names, HTTPS) and the backup statements; the DataDisclosure
+  keywords are English words and are checked in English only. A Privacy string
+  missing from one locale is also caught by lint (`MissingTranslation` /
+  `ExtraTranslation` are errors). **What nothing catches is a paragraph that
+  keeps its key and its tokens in both locales while one of them says something
+  narrower**, such as a list of data categories one item shorter. When a
+  disclosure changes, read both locales side by side.
+  The script never opens `SettingsPrivacy.kt`, so it cannot see a string that
   exists but is no longer rendered. `SettingsPrivacyRendersEveryDisclosureTest`
   is what covers that half.
 - **Review with screen context, not a flat string list.** Verbosity and

@@ -4,6 +4,7 @@
 # Privacy-disclosure freshness gate.
 #
 # Asserts the user-facing privacy copy stays consistent with the code:
+#   0. every Privacy paragraph has Spanish copy;
 #   1. every outbound MQTT flow registered in the DataDisclosure anchor
 #      (HaClient.kt) is disclosed in the Settings -> Privacy copy;
 #   2. every user-facing manifest permission is named in that copy;
@@ -11,11 +12,14 @@
 #      still appear in the user-facing copy and match the manifest's
 #      backup configuration.
 #
-# The disclosure copy is externalised for i18n: the Settings -> Privacy and
-# About strings live in res/values/strings.xml (the .kt screens only hold
-# stringResource references), so the keyword search targets the strings file,
-# not the Composable source. The DataDisclosure anchor itself stays in
-# HaClient.kt (it is code, not copy).
+# The disclosure copy is externalised for i18n, so the search reads the
+# `settings_privacy_*` strings of each locale, not the Composable source and not
+# the whole strings file: a keyword in a toast or an onboarding line says
+# nothing about what the Privacy screen discloses. The Spanish copy is checked
+# for every paragraph, the literal tokens (permission names, HTTPS) and the
+# backup statements; the MQTT keywords are English words, so they are checked in
+# English only. The DataDisclosure anchor itself stays in HaClient.kt (it is
+# code, not copy).
 #
 # The companion unit test (HaClientDataDisclosureTest) proves the inverse for
 # (1): that HaClient does not publish a topic family missing from the anchor.
@@ -26,8 +30,8 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
 HACLIENT="app/src/main/java/es/jjrh/bikeradar/HaClient.kt"
-# User-facing privacy + about copy, externalised to the default string resources.
 STRINGS="app/src/main/res/values/strings.xml"
+STRINGS_ES="app/src/main/res/values-es/strings.xml"
 MANIFEST="app/src/main/AndroidManifest.xml"
 RULES="app/src/main/res/xml/data_extraction_rules.xml"
 
@@ -40,8 +44,26 @@ FOREGROUND_SERVICE_MEDIA_PROJECTION"
 fail=0
 blocker() { echo "BLOCKER: $*"; fail=1; }
 
-for f in "$HACLIENT" "$STRINGS" "$MANIFEST" "$RULES"; do
+for f in "$HACLIENT" "$STRINGS" "$STRINGS_ES" "$MANIFEST" "$RULES"; do
     [ -f "$f" ] || { echo "BLOCKER: missing file $f"; exit 2; }
+done
+
+privacy_copy() { sed -n 's/.*<string name="settings_privacy_[^"]*">\(.*\)<\/string>.*/\1/p' "$1"; }
+string_named() { sed -n "s/.*<string name=\"$2\">\(.*\)<\/string>.*/\1/p" "$1"; }
+has() { printf '%s' "$1" | grep -qF -- "$2"; }
+PRIVACY_EN="$(privacy_copy "$STRINGS")"
+PRIVACY_ES="$(privacy_copy "$STRINGS_ES")"
+[ -n "$PRIVACY_EN" ] || { echo "BLOCKER: no settings_privacy_* strings parsed from $STRINGS"; exit 2; }
+[ -n "$PRIVACY_ES" ] || { echo "BLOCKER: no settings_privacy_* strings parsed from $STRINGS_ES"; exit 2; }
+
+# 0. Every Privacy paragraph is non-empty in Spanish. Lint catches a missing
+#    translation; an empty one passes lint and shows the rider nothing. So does
+#    one holding only spaces, quotes or a no-break space, all of which Android
+#    renders as nothing.
+mapfile -t privacy_keys < <(grep -oE '<string name="settings_privacy_[^"]+"' "$STRINGS" | sed 's/.*name="//; s/"$//')
+for k in "${privacy_keys[@]}"; do
+    [ -n "$(string_named "$STRINGS_ES" "$k" | sed 's/&#160;//g; s/&#[xX][aA]0;//g; s/\\[uU]00[aA]0//g; s/\xc2\xa0//g; s/"//g' | tr -d '[:space:]')" ] \
+        || blocker "Privacy paragraph '$k' is missing or empty in the Spanish copy ($STRINGS_ES)"
 done
 
 # 1. Anchor disclosure keywords must appear in the Privacy copy.
@@ -60,8 +82,8 @@ else
     mapfile -t kw_arr <<<"$keywords"
     for kw in "${kw_arr[@]}"; do
         [ -z "$kw" ] && continue
-        grep -qF "$kw" "$STRINGS" \
-            || blocker "outbound flow '$kw' (DataDisclosure) is not disclosed in the Privacy copy (strings.xml)"
+        has "$PRIVACY_EN" "$kw" \
+            || blocker "outbound flow '$kw' (DataDisclosure) is not disclosed in the Privacy copy (settings_privacy_*)"
     done
 fi
 
@@ -78,8 +100,10 @@ for p in "${perm_arr[@]}"; do
     case " $PERMISSION_ALLOWLIST " in
         *" $p "*) continue ;;
     esac
-    grep -qF "$p" "$STRINGS" \
-        || blocker "manifest permission '$p' is not named in the Privacy copy (strings.xml)"
+    has "$PRIVACY_EN" "$p" \
+        || blocker "manifest permission '$p' is not named in the Privacy copy (settings_privacy_*)"
+    has "$PRIVACY_ES" "$p" \
+        || blocker "manifest permission '$p' is not named in the Spanish Privacy copy"
 done
 
 # 2b. Permissions this app DECLARES, not only ones it uses. A custom permission
@@ -98,8 +122,10 @@ if [ -n "$declared" ]; then
         [ -z "$d" ] && continue
         # By name, so adding a second permission cannot ride in on the first
         # one's disclosure.
-        grep -qF "$d" "$STRINGS" \
+        has "$PRIVACY_EN" "$d" \
             || blocker "this app declares '$d', which lets another app in, and the Privacy copy never names it"
+        has "$PRIVACY_ES" "$d" \
+            || blocker "this app declares '$d', which lets another app in, and the Spanish Privacy copy never names it"
     done
 fi
 
@@ -125,8 +151,9 @@ fi
 #    backup claim must match the manifest: credentials-in-backup is a
 #    deliberate, disclosed posture (settings + HA creds transfer to a new
 #    phone), so the copy and allowBackup must flip together, never alone.
-grep -qF "backup" "$STRINGS" || blocker "backup-transfer disclosure missing from the Privacy copy (strings.xml)"
-if grep -qF "backup" "$STRINGS" && ! grep -qF 'android:allowBackup="true"' "$MANIFEST"; then
+has "$PRIVACY_EN" "backup" || blocker "backup-transfer disclosure missing from the Privacy copy (settings_privacy_*)"
+has "$PRIVACY_ES" "copia de seguridad" || blocker "backup-transfer disclosure missing from the Spanish Privacy copy"
+if has "$PRIVACY_EN" "backup" && ! grep -qF 'android:allowBackup="true"' "$MANIFEST"; then
     blocker "Privacy copy discloses backup transfer but the manifest disables backup"
 fi
 if grep -qF 'android:allowBackup="true"' "$MANIFEST" && ! grep -qF 'android:dataExtractionRules=' "$MANIFEST"; then
@@ -155,6 +182,13 @@ case "$loc" in
 esac
 printf '%s' "$loc" | grep -qF "backup" \
     || blocker "the manual-coordinate paragraph must say the coordinates are included in the Android backup"
+loc_es=$(string_named "$STRINGS_ES" settings_privacy_on_phone_location)
+case "$loc_es" in
+    *"solo en este"*|*"nunca se envían"*|*"nunca sale"*)
+        blocker "the Spanish manual-coordinate paragraph claims the coordinates stay on the device" ;;
+esac
+has "$loc_es" "copia de seguridad" \
+    || blocker "the Spanish manual-coordinate paragraph must say the coordinates are included in the Android backup"
 
 # The granted-app list is SharedPreferences, so it rides the backup exactly as
 # the manual coordinates do. Same failure, same shape: a paragraph that says it
@@ -167,10 +201,19 @@ if [ -n "$apps" ]; then
     esac
     printf '%s' "$apps" | grep -qF "backup" \
         || blocker "the sharing paragraph must say the granted-app list is included in the Android backup"
+    apps_es=$(string_named "$STRINGS_ES" settings_privacy_to_apps_body)
+    case "$apps_es" in
+        *"solo en este"*|*"nunca se envía"*|*"nunca sale de este"*)
+            blocker "the Spanish sharing paragraph claims the granted-app list stays on the device" ;;
+    esac
+    has "$apps_es" "copia de seguridad" \
+        || blocker "the Spanish sharing paragraph must say the granted-app list is included in the Android backup"
 fi
 
-grep -qF "HTTPS" "$STRINGS" || blocker "network claim 'HTTPS' missing from the Privacy copy (strings.xml)"
-grep -qF "Not affiliated" "$STRINGS" || blocker "'Not affiliated' disclaimer missing from the About copy (strings.xml)"
+has "$PRIVACY_EN" "HTTPS" || blocker "network claim 'HTTPS' missing from the Privacy copy (settings_privacy_*)"
+has "$PRIVACY_ES" "HTTPS" || blocker "network claim 'HTTPS' missing from the Spanish Privacy copy"
+has "$(string_named "$STRINGS" settings_about_unaffiliated_title)" "Not affiliated" \
+    || blocker "'Not affiliated' disclaimer missing from the About copy (settings_about_unaffiliated_title)"
 
 if [ "$fail" -ne 0 ]; then
     echo "privacy-disclosure-check: FAIL"

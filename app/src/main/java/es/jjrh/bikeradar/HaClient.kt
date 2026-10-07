@@ -209,7 +209,6 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 
     suspend fun publishBatteryDiscovery(slug: String, deviceName: String): Boolean {
         val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_battery/config"
-        val clean = cleanDeviceName(deviceName)
         val payload = JSONObject()
             .put("object_id", "${NS}_${slug}_battery")
             .put("unique_id", "${NS}_${slug}_battery")
@@ -219,18 +218,24 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             .put("device_class", "battery")
             .put("unit_of_measurement", "%")
             .put("state_class", "measurement")
-            .put(
-                "device",
-                JSONObject()
-                    .put("identifiers", JSONArray().put("${NS}_$slug"))
-                    .put("name", "Varia $clean")
-                    .put("manufacturer", "Garmin")
-                    .put("model", "Varia")
-                    .put("via_device", "${NS}_reader"),
-            )
+            .put("device", deviceJson(slug, deviceName))
             .toString()
         return publishMqtt(topic, payload, retain = true)
     }
+
+    /**
+     * The HA device every entity of [slug] groups under, one definition for
+     * all four families. Its name is what HA builds a new install's entity ids
+     * from (`has_entity_name`), so `sensor.bike_radar_<device>_battery`; an
+     * existing install keeps the ids its registry already holds, keyed on
+     * `unique_id` (`HaClientGuardsTest.theHaDeviceIsNamedForTheApp`).
+     */
+    private fun deviceJson(slug: String, deviceName: String): JSONObject = JSONObject()
+        .put("identifiers", JSONArray().put("${NS}_$slug"))
+        .put("name", "Bike Radar ${cleanDeviceName(deviceName)}")
+        .put("manufacturer", "Garmin")
+        .put("model", "Varia")
+        .put("via_device", "${NS}_reader")
 
     /**
      * Retire discovery configs this app published under names it no longer
@@ -283,7 +288,6 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      */
     suspend fun publishFrontModeDiscovery(slug: String, deviceName: String): Boolean {
         val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_front_mode/config"
-        val clean = cleanDeviceName(deviceName)
         val payload = JSONObject()
             .put("object_id", "${NS}_${slug}_front_mode")
             .put("unique_id", "${NS}_${slug}_front_mode")
@@ -291,15 +295,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             .put("has_entity_name", true)
             .put("state_topic", "$NS/$slug/front_mode")
             .put("icon", "mdi:car-light-high")
-            .put(
-                "device",
-                JSONObject()
-                    .put("identifiers", JSONArray().put("${NS}_$slug"))
-                    .put("name", "Varia $clean")
-                    .put("manufacturer", "Garmin")
-                    .put("model", "Varia")
-                    .put("via_device", "${NS}_reader"),
-            )
+            .put("device", deviceJson(slug, deviceName))
             .toString()
         return publishMqtt(topic, payload, retain = true)
     }
@@ -338,7 +334,6 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * `json_loads_object()` on the rendered result and rejects scalars.
      */
     internal fun buildClosePassDiscoveryPayload(slug: String, deviceName: String): JSONObject {
-        val clean = cleanDeviceName(deviceName)
         val eventTopic = "$NS/$slug/close_pass"
         return JSONObject()
             .put("object_id", "${NS}_${slug}_close_pass")
@@ -348,15 +343,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             .put("state_topic", eventTopic)
             .put("event_types", JSONArray().put("close_pass"))
             .put("json_attributes_topic", eventTopic)
-            .put(
-                "device",
-                JSONObject()
-                    .put("identifiers", JSONArray().put("${NS}_$slug"))
-                    .put("name", "Varia $clean")
-                    .put("manufacturer", "Garmin")
-                    .put("model", "Varia")
-                    .put("via_device", "${NS}_reader"),
-            )
+            .put("device", deviceJson(slug, deviceName))
     }
 
     /**
@@ -441,14 +428,8 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         slug: String,
         deviceName: String,
     ): List<Pair<String, JSONObject>> {
-        val clean = cleanDeviceName(deviceName)
         val stateTopic = "$NS/$slug/ride_summary"
-        val device = JSONObject()
-            .put("identifiers", JSONArray().put("${NS}_$slug"))
-            .put("name", "Varia $clean")
-            .put("manufacturer", "Garmin")
-            .put("model", "Varia")
-            .put("via_device", "${NS}_reader")
+        val device = deviceJson(slug, deviceName)
         return RIDE_SUMMARY_SENSORS.map { s ->
             val topic = "$DISCOVERY_PREFIX/sensor/${NS}_${slug}_${s.field}/config"
             val payload = JSONObject()

@@ -136,6 +136,18 @@ class HaClientGuardsTest {
     }
 
     @Test
+    fun theHaDeviceIsNamedForTheApp() {
+        // HA builds a new install's entity ids from this name, so it decides
+        // `sensor.bike_radar_rearvue8_...`. Every family shares one device.
+        val client = HaClient(baseUrl = "https://h.example", token = "tok")
+        val names = listOf(client.buildClosePassDiscoveryPayload("rearvue8", "RearVue8")) +
+            client.buildRideSummaryDiscoveryPayloads("rearvue8", "RearVue8").map { it.second }
+        for (payload in names) {
+            assertEquals("Bike Radar RearVue8", payload.getJSONObject("device").getString("name"))
+        }
+    }
+
+    @Test
     fun rideSummaryDiscoveryUsesPayloadNoneSentinel() {
         // Regression test for the ride-summary "no value" bug: three
         // nullable numeric sensors (peak_closing_kmh, closing_speed_p90_kmh,

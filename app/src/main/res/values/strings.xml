@@ -487,9 +487,9 @@
     <string name="settings_radar_close_pass_subtitle">Count overtakes that squeeze past too close - on the home screen and in your ride history.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Count overtakes that squeeze past too close - on the home screen, in your ride history, and sent to Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Lateral clearance threshold</string>
-    <string name="settings_radar_lateral_clearance_helper">Only count a pass when the minimum lateral clearance drops below this distance.</string>
+    <string name="settings_radar_lateral_clearance_helper">Counts overtakes that pass closer than this to the middle of your bike.</string>
     <string name="settings_radar_min_rider_speed_title">Minimum rider speed</string>
-    <string name="settings_radar_min_rider_speed_helper">Detector ignores stationary-rider situations (red lights, pushing the bike).</string>
+    <string name="settings_radar_min_rider_speed_helper">Counts a pass only if you were at least this fast as the vehicle closed in.</string>
     <string name="settings_radar_min_closing_speed_title">Minimum closing speed</string>
     <string name="settings_radar_min_closing_speed_helper">Roughly <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h of relative approach speed.</string>
     <string name="settings_radar_stop_scanning">Stop scanning</string>

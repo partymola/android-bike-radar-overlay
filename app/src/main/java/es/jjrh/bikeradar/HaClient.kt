@@ -488,7 +488,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                     .put("vehicle_size", tp.vehicleSize.name)
                     .put("clearance_m", tp.clearanceM.toDouble())
                     .put("closing_kmh", tp.closingKmh)
-                    .put("range_y_m", tp.rangeYAtMinM.toDouble()),
+                    .put("range_y_m", tp.rangeYM.toDouble()),
             )
         }
         return publishMqtt("$NS/$slug/ride_summary", payload.toString(), retain = true)

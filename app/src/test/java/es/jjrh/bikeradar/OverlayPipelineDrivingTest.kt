@@ -1033,11 +1033,13 @@ class OverlayPipelineDrivingTest {
         try {
             runCurrent()
             val frames = listOf(
-                Vehicle(id = 7, distanceM = 20, speedMs = -5.5f, lateralPos = 0.8f, rangeXmRaw = 2.4f, bornAtMs = 1L),
-                Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.3f, rangeXmRaw = 0.9f, bornAtMs = 1L),
+                listOf(Vehicle(id = 7, distanceM = 20, speedMs = -5.5f, lateralPos = 0.8f, rangeXmRaw = 2.4f, bornAtMs = 1L)),
+                listOf(Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.3f, rangeXmRaw = 0.9f, bornAtMs = 1L)),
+                // The car's track ends, which is when its clearance counts.
+                emptyList(),
             )
-            frames.forEachIndexed { i, car ->
-                RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 100L + i, vehicles = listOf(car), bikeSpeedMs = 5f))
+            frames.forEachIndexed { i, vehicles ->
+                RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 100L + i, vehicles = vehicles, bikeSpeedMs = 5f))
                 runCurrent()
             }
         } finally {

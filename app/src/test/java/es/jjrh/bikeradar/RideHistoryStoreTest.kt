@@ -84,7 +84,7 @@ class RideHistoryStoreTest {
                 vehicleSize = VehicleSize.TRUCK,
                 clearanceM = 0.8f,
                 closingKmh = 32,
-                rangeYAtMinM = 1.5f,
+                rangeYM = 1.5f,
             ),
             rideStartedAtMs = 1_000L,
             alertsPerKm = 1.4f,

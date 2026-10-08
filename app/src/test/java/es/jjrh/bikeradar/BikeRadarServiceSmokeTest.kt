@@ -872,9 +872,9 @@ class BikeRadarServiceSmokeTest {
         service.rideStats.observeClosePass(
             ClosePassDetector.Event(
                 timestampMs = 1_000L,
-                minRangeXM = 0.8f,
+                clearanceM = 0.8f,
                 side = ClosePassDetector.Side.RIGHT,
-                rangeYAtMinM = 2f,
+                rangeYM = 2f,
                 closingSpeedKmh = 30,
                 riderSpeedKmh = 20,
                 vehicleSize = VehicleSize.CAR,
@@ -950,9 +950,9 @@ class BikeRadarServiceSmokeTest {
         service.rideStats.observeClosePass(
             ClosePassDetector.Event(
                 timestampMs = 1_000L,
-                minRangeXM = 0.8f,
+                clearanceM = 0.8f,
                 side = ClosePassDetector.Side.RIGHT,
-                rangeYAtMinM = 2f,
+                rangeYM = 2f,
                 closingSpeedKmh = 30,
                 riderSpeedKmh = 20,
                 vehicleSize = VehicleSize.CAR,

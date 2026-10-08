@@ -447,7 +447,7 @@ class HaClientHttpTest {
                 vehicleSize = VehicleSize.TRUCK,
                 clearanceM = 0.85f,
                 closingKmh = 47,
-                rangeYAtMinM = 2.1f,
+                rangeYM = 2.1f,
             ),
             rideStartedAtMs = 1_716_533_000_000L,
             alertsPerKm = 0.32f,

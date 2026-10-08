@@ -31,9 +31,9 @@ class OverlayPipelineTest {
             // those as possible incident anchoring); the format is what
             // matters here, not the absolute moment.
             timestampMs = 0L,
-            minRangeXM = 0.83f,
+            clearanceM = 0.83f,
             side = ClosePassDetector.Side.LEFT,
-            rangeYAtMinM = 4.2f,
+            rangeYM = 4.2f,
             closingSpeedKmh = 42,
             riderSpeedKmh = 18,
             vehicleSize = VehicleSize.CAR,
@@ -62,9 +62,9 @@ class OverlayPipelineTest {
         // 5-dp payloads.
         val ev = ClosePassDetector.Event(
             timestampMs = 0L,
-            minRangeXM = 0.8765432f,
+            clearanceM = 0.8765432f,
             side = ClosePassDetector.Side.RIGHT,
-            rangeYAtMinM = 12.34567f,
+            rangeYM = 12.34567f,
             closingSpeedKmh = 0,
             riderSpeedKmh = 0,
             vehicleSize = VehicleSize.TRUCK,

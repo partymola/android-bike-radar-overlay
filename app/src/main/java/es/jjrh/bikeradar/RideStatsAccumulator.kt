@@ -40,12 +40,18 @@ class RideStatsAccumulator(
     private var lastFrameMs: Long? = null
     private var lastBikeSpeedMs: Float? = null
 
-    /** tid -> the fastest closing (m/s) seen on the track born at [TrackClosing.bornAtMs].
-     *  Bounded by the radar's tid space; a new birth on a reused tid starts over
+    /** tid -> the open track on it. A track ends when its id leaves the frame,
+     *  when it is seen ahead, or when a new birth takes the id
      *  (`aReusedTrackIdDoesNotInheritTheLastCarsApproach`). */
-    private val closingByTrack = HashMap<Int, TrackClosing>()
+    private val openTracks = HashMap<Int, OpenTrack>()
 
-    private class TrackClosing(val bornAtMs: Long, var peakMs: Float)
+    private class OpenTrack(val bornAtMs: Long) {
+        /** The fastest closing (m/s) seen behind the rider. */
+        var peakClosingMs = 0f
+
+        /** Clearances (m) that qualified for the ride's figure. */
+        val alongside = ArrayList<Float>()
+    }
 
     // Per-event state.
     private var closePassCount: Int = 0
@@ -132,19 +138,29 @@ class RideStatsAccumulator(
 
         // Per-frame extrema and overtake-id dedup.
         for (v in state.vehicles) {
-            if (v.isBehind) continue
+            if (v.isBehind) {
+                openTracks.remove(v.id)?.let(::endTrack)
+                continue
+            }
+            val open = openTracks[v.id]
+            val track = if (open?.bornAtMs == v.bornAtMs) {
+                open
+            } else {
+                open?.let(::endTrack)
+                OpenTrack(v.bornAtMs).also { openTracks[v.id] = it }
+            }
             // Before the range check: an approach is often seen only far back
             // (`aFastApproachFromBeyondTrackingRangeStillCounts`). A reading
-            // closing faster than [PEAK_CLOSING_MAX_MS] does not count as one
+            // closing faster than the bound does not count as one
             // (`aReadingAboveTheBoundIsNotAnApproach`).
-            val closing = closingByTrack[v.id]?.takeIf { it.bornAtMs == v.bornAtMs }
-                ?: TrackClosing(v.bornAtMs, 0f).also { closingByTrack[v.id] = it }
-            if (-v.speedMs <= PEAK_CLOSING_MAX_MS) closing.peakMs = maxOf(closing.peakMs, -v.speedMs)
+            if (-v.speedMs <= ClosePassDetector.PEAK_CLOSING_MAX_MS) {
+                track.peakClosingMs = maxOf(track.peakClosingMs, -v.speedMs)
+            }
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
             if (seenTrackIds.add(v.id)) generation++
 
-            if (v.speedMs < 0 && -v.speedMs <= PEAK_CLOSING_MAX_MS) {
+            if (v.speedMs < 0 && -v.speedMs <= ClosePassDetector.PEAK_CLOSING_MAX_MS) {
                 val closingKmh = (-v.speedMs * MS_TO_KMH).toInt()
                 val current = peakClosingKmh
                 if (current == null || closingKmh > current) {
@@ -172,26 +188,36 @@ class RideStatsAccumulator(
             // floor is following, not passing, and reads near dead centre; a
             // car pacing alongside that never closed at the floor is left out
             // with it, deliberately (`aSlowFollowerIsNotAClearance`). Closing
-            // is judged over the track's life, since a passing car often reads
-            // near zero closing as it draws level
-            // (`anOvertakeThatSlowsAlongsideStillCounts`). A car drawing level
-            // with a stopped rider is caught by the rider gate
+            // is judged over the track's life so far, as the detector arms,
+            // since a passing car often reads near zero closing as it draws
+            // level (`anOvertakeThatSlowsAlongsideStillCounts`). A car drawing
+            // level with a stopped rider is caught by the rider gate
             // (`aCarPassingAStoppedRiderIsNotAClearance`).
             if (!v.isAlongsideStationary &&
                 state.source.hasLateral &&
                 !v.lateralUnknown &&
                 v.distanceM <= ClosePassDetector.ALONGSIDE_MAX_RANGE_Y_M &&
                 abs(v.rangeXmRaw) >= ClosePassDetector.RAW_LATERAL_EPSILON &&
-                closing.peakMs >= closingFloorMs &&
+                track.peakClosingMs >= closingFloorMs &&
                 riderMoving
             ) {
-                val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
-                val current = minLateralM
-                if (current == null || lateralM < current) {
-                    minLateralM = lateralM
-                    generation++
-                }
+                track.alongside.add(abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M)
             }
+        }
+        val present = state.vehicles.mapTo(HashSet()) { it.id }
+        openTracks.keys.filter { it !in present }.forEach { tid -> openTracks.remove(tid)?.let(::endTrack) }
+    }
+
+    /** The track's clearance is its [ClosePassDetector.passPoint], as the
+     *  close-pass event's is, taken when the track ends. A car still alongside
+     *  when the radar stops is never counted, as the detector never emits it
+     *  (`aPassStillUnderwayIsNotYetCounted`). */
+    private fun endTrack(track: OpenTrack) {
+        val clearanceM = ClosePassDetector.passPoint(track.alongside) { it } ?: return
+        val current = minLateralM
+        if (current == null || clearanceM < current) {
+            minLateralM = clearanceM
+            generation++
         }
     }
 
@@ -209,17 +235,17 @@ class RideStatsAccumulator(
         if (event.severity == ClosePassDetector.Severity.GRAZING) grazingCount++
         if (event.vehicleSize == VehicleSize.TRUCK) hgvClosePassCount++
         closingSpeedSamples.add(event.closingSpeedKmh)
-        minLateralM = minOf(minLateralM ?: event.minRangeXM, event.minRangeXM)
+        minLateralM = minOf(minLateralM ?: event.clearanceM, event.clearanceM)
 
         val current = tightestPass
-        if (current == null || event.minRangeXM < current.clearanceM) {
+        if (current == null || event.clearanceM < current.clearanceM) {
             tightestPass = TightestPass(
                 tsMs = event.timestampMs,
                 side = event.side,
                 vehicleSize = event.vehicleSize,
-                clearanceM = event.minRangeXM,
+                clearanceM = event.clearanceM,
                 closingKmh = event.closingSpeedKmh,
-                rangeYAtMinM = event.rangeYAtMinM,
+                rangeYM = event.rangeYM,
             )
         }
         generation++
@@ -308,15 +334,6 @@ class RideStatsAccumulator(
         private val MAX_FRAME_GAP_MS = RadarLinkController.V2_FRAME_STALL_MS
         private const val MS_TO_KMH = 3.6f
 
-        /** Fastest closing speed (m/s) the peak records, and the fastest that
-         *  counts as an approach for the clearance: the bottom of
-         *  [AlertDecider]'s ceiling range
-         *  (`thePeakBoundIsThirtyFiveMetresPerSecondInclusive`,
-         *  `aReadingAtThePhantomBoundIsStillAnApproach`). Always on, unlike that
-         *  ceiling, since it drops a number, never a cue; a rider whose ceiling
-         *  is higher can be warned about a closer this leaves out. */
-        private const val PEAK_CLOSING_MAX_MS = AlertDecider.MIN_CLOSING_CEILING_MS
-
         /** Rider speed (m/s) from which the clearance counts; below it the rider
          *  is treated as stopped, so a car drawing level is not an overtake
          *  (`theRiderGateIsTwoMetresPerSecondInclusive`). Deliberately not the
@@ -338,9 +355,9 @@ data class RideStatsSnapshot(
     /** Null until the first close-pass event fires. */
     val closingSpeedP90Kmh: Int?,
     /**
-     * The tightest clearance measured while an overtaking vehicle was alongside
-     * a moving rider, or the tightest close pass if that is tighter. Null until
-     * there is one.
+     * The tightest clearance of an overtaking vehicle where it drew level with
+     * a moving rider, counted once its track ends, or the tightest close pass
+     * if that is tighter. Null until there is one.
      */
     val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,
@@ -361,5 +378,5 @@ data class TightestPass(
     val vehicleSize: VehicleSize,
     val clearanceM: Float,
     val closingKmh: Int,
-    val rangeYAtMinM: Float,
+    val rangeYM: Float,
 )

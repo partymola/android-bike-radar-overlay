@@ -476,9 +476,9 @@ internal class OverlayPipeline(
 
         internal fun closePassJson(ev: ClosePassDetector.Event): JSONObject = JSONObject()
             .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())
-            .put("min_range_x_m", String.format(Locale.US, "%.2f", ev.minRangeXM).toFloat())
+            .put("min_range_x_m", String.format(Locale.US, "%.2f", ev.clearanceM).toFloat())
             .put("side", ev.side.name.lowercase(Locale.ROOT))
-            .put("range_y_at_min_m", String.format(Locale.US, "%.1f", ev.rangeYAtMinM).toFloat())
+            .put("range_y_at_min_m", String.format(Locale.US, "%.1f", ev.rangeYM).toFloat())
             .put("closing_speed_kmh", ev.closingSpeedKmh)
             .put("rider_speed_kmh", ev.riderSpeedKmh)
             .put("vehicle_size", ev.vehicleSize.name)

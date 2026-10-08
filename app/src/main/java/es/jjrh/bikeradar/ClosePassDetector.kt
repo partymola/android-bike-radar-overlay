@@ -47,13 +47,9 @@ class ClosePassDetector {
     data class Config(
         /** Master on/off. When false, decide() is a no-op. */
         val enabled: Boolean,
-        /** Minimum rider bike speed (m/s) for the detector to arm.
-         *  Default 0 so junction close-passes (rider decelerating
-         *  into a waiting line, vehicle closing fast on the rider's
-         *  flank) get logged. The closing-speed floor, lateral arm
-         *  threshold, and frames-to-arm gates already exclude
-         *  filtering-past-traffic noise. Set above 0 to restore an
-         *  active-ride-only filter. */
+        /** Minimum rider bike speed (m/s) for the detector to arm. 0 here;
+         *  the app always passes the rider's setting,
+         *  `Prefs.closePassRiderSpeedFloorKmh`. */
         val riderSpeedFloorMs: Float = 0f,
         /** Minimum closing speed (m/s) for the detector to arm.
          *  Filters out lane-matched cruising and filtering — if the
@@ -83,11 +79,10 @@ class ClosePassDetector {
     )
 
     enum class Severity {
-        /** Min rangeX < 0.5 m. Absolutely unsafe. */
+        /** Min rangeX < 0.5 m. */
         GRAZING,
 
-        /** Min rangeX in [0.5, emitMinRangeXM). Illegal under UK 1.5 m
-         *  rule, dangerous. */
+        /** Min rangeX in [0.5, emitMinRangeXM). */
         VERY_CLOSE,
     }
 

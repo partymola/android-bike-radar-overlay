@@ -1901,7 +1901,10 @@ class AlertDecider(
          *  `AlertDeciderClosingCeilingTest` ("omitting the ceiling applies no
          *  limit") and `PrefsTest` pin it; the same test class pins the
          *  boundary (strictly faster), that a phantom changes nothing about a
-         *  real car's cues, and that it still holds back the all-clear. */
+         *  real car's cues, and that it still holds back the all-clear.
+         *
+         *  [RideStatsAccumulator] reads [MIN_CLOSING_CEILING_MS] as its
+         *  always-on peak bound (`thePeakBoundIsThirtyFiveMetresPerSecondInclusive`). */
         const val MIN_CLOSING_CEILING_MS = 35f
         const val MAX_CLOSING_CEILING_MS = 50f
 

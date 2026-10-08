@@ -283,6 +283,35 @@ class RideStatsAccumulatorTest {
         assertEquals(10, a.snapshot().peakClosingKmh) // -3 * 3.6 = 10.8 → 10 (toInt truncates)
     }
 
+    @Test
+    fun aReadingAboveTheBoundAloneLeavesThePeakUnknown() {
+        // 37.5 m/s is a phantom seen in ride captures.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, speedMs = -37.5f))))
+        assertNull("a phantom alone leaves the peak unknown", a.snapshot().peakClosingKmh)
+    }
+
+    @Test
+    fun aPhantomLeavesAnEarlierRealPeakAlone() {
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, speedMs = -12f)))) // 43 km/h
+        a.observeFrame(radarState(listOf(veh(2, speedMs = -37.5f))))
+        a.observeFrame(radarState(listOf(veh(3, speedMs = -7f)))) // 25 km/h
+        assertEquals(43, a.snapshot().peakClosingKmh)
+    }
+
+    @Test
+    fun thePeakBoundIsThirtyFiveMetresPerSecondInclusive() {
+        // Both sides on literal speeds, one radar quantum apart.
+        val over = acc()
+        over.observeFrame(radarState(listOf(veh(1, speedMs = -35.5f))))
+        assertNull("one quantum over the bound is not a peak", over.snapshot().peakClosingKmh)
+
+        val at = acc()
+        at.observeFrame(radarState(listOf(veh(1, speedMs = -35f))))
+        assertEquals("the bound itself is a peak", 126, at.snapshot().peakClosingKmh)
+    }
+
     // ── min lateral clearance ────────────────────────────────────────────────
 
     @Test

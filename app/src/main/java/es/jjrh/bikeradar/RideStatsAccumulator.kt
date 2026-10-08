@@ -128,8 +128,7 @@ class RideStatsAccumulator(
 
             if (seenTrackIds.add(v.id)) generation++
 
-            // peakClosingKmh: only consider approaching targets (negative speedMs).
-            if (v.speedMs < 0) {
+            if (v.speedMs < 0 && -v.speedMs <= PEAK_CLOSING_MAX_MS) {
                 val closingKmh = (-v.speedMs * MS_TO_KMH).toInt()
                 val current = peakClosingKmh
                 if (current == null || closingKmh > current) {
@@ -282,6 +281,13 @@ class RideStatsAccumulator(
          *  must move together and a second literal could drift. */
         private val MAX_FRAME_GAP_MS = RadarLinkController.V2_FRAME_STALL_MS
         private const val MS_TO_KMH = 3.6f
+
+        /** Fastest closing speed (m/s) the peak records: the bottom of
+         *  [AlertDecider]'s ceiling range
+         *  (`thePeakBoundIsThirtyFiveMetresPerSecondInclusive`). Always on,
+         *  unlike that ceiling, since it drops a number, never a cue; a rider
+         *  whose ceiling is higher can be warned about a closer this leaves out. */
+        private const val PEAK_CLOSING_MAX_MS = AlertDecider.MIN_CLOSING_CEILING_MS
     }
 }
 
@@ -290,7 +296,8 @@ data class RideStatsSnapshot(
     val closePassCount: Int,
     val grazingCount: Int,
     val hgvClosePassCount: Int,
-    /** Null until the first approaching vehicle is observed. */
+    /** Null until the first approaching vehicle is observed. Readings closing
+     *  faster than 35 m/s (126 km/h) are left out. */
     val peakClosingKmh: Int?,
     /** Null until the first close-pass event fires. */
     val closingSpeedP90Kmh: Int?,

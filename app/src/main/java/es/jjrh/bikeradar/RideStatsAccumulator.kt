@@ -134,8 +134,9 @@ class RideStatsAccumulator(
         for (v in state.vehicles) {
             if (v.isBehind) continue
             // Before the range check: an approach is often seen only far back
-            // (`aFastApproachFromBeyondTrackingRangeStillCounts`). A phantom
-            // reading does not count as one (`aPhantomReadingIsNotAnApproach`).
+            // (`aFastApproachFromBeyondTrackingRangeStillCounts`). A reading
+            // closing faster than [PEAK_CLOSING_MAX_MS] does not count as one
+            // (`aReadingAboveTheBoundIsNotAnApproach`).
             val closing = closingByTrack[v.id]?.takeIf { it.bornAtMs == v.bornAtMs }
                 ?: TrackClosing(v.bornAtMs, 0f).also { closingByTrack[v.id] = it }
             if (-v.speedMs <= PEAK_CLOSING_MAX_MS) closing.peakMs = maxOf(closing.peakMs, -v.speedMs)
@@ -316,11 +317,12 @@ class RideStatsAccumulator(
          *  is higher can be warned about a closer this leaves out. */
         private const val PEAK_CLOSING_MAX_MS = AlertDecider.MIN_CLOSING_CEILING_MS
 
-        /** Rider speed (m/s) from which the clearance counts; below it a car
-         *  drawing level is passing a stopped rider
+        /** Rider speed (m/s) from which the clearance counts; below it the rider
+         *  is treated as stopped, so a car drawing level is not an overtake
          *  (`theRiderGateIsTwoMetresPerSecondInclusive`). Deliberately not the
-         *  detector's rider floor, a setting that defaults to 15 km/h: high
-         *  enough to leave out a car passing a rider who is slowing down. */
+         *  detector's rider floor, `Prefs.closePassRiderSpeedFloorKmh`, whose
+         *  default is high enough to leave out a car passing a rider who is
+         *  slowing down. */
         private const val RIDER_MOVING_MS = 2f
     }
 }

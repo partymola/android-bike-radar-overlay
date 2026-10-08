@@ -823,7 +823,7 @@ class RideStatsAccumulatorTest {
     }
 
     @Test
-    fun aPhantomReadingIsNotAnApproach() {
+    fun aReadingAboveTheBoundIsNotAnApproach() {
         // One 37.5 m/s reading on a slow follower's track must not make it an
         // overtake: the peak closing speed rejects the same reading.
         val a = acc()

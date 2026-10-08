@@ -48,7 +48,7 @@ class ClosePassDetector {
         /** Master on/off. When false, decide() is a no-op. */
         val enabled: Boolean,
         /** Minimum rider bike speed (m/s) for the detector to arm. 0 here;
-         *  the app always passes the rider's setting,
+         *  the app passes the rider's setting,
          *  `Prefs.closePassRiderSpeedFloorKmh`. */
         val riderSpeedFloorMs: Float = 0f,
         /** Minimum closing speed (m/s) for the detector to arm.

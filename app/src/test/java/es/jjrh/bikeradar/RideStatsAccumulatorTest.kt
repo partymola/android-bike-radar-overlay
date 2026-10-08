@@ -1009,15 +1009,17 @@ class RideStatsAccumulatorTest {
 
     @Test
     fun theFigureIsTheMedianOfTheTracksAlongsideFrames() {
-        // 0.60, 0.84, 0.66 in time order: the median is neither the first, the
-        // middle, the last, the tightest nor the widest.
+        // 0.84, 0.72, 0.60, 0.90, 0.66 in time order: the median is neither
+        // the first, the middle, the last, the tightest nor the widest.
         val a = acc()
         a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f)))
-        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.2f)))
-        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.28f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.28f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.24f)))
+        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.2f)))
+        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.3f)))
         a.observeFrame(riding(veh(1, distanceM = 0, lateralPos = 0.22f)))
         a.endTracks()
-        assertEquals(0.66f, a.snapshot().minLateralClearanceM!!, 0.01f)
+        assertEquals(0.72f, a.snapshot().minLateralClearanceM!!, 0.01f)
     }
 
     @Test

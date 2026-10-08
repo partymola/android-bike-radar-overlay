@@ -335,7 +335,7 @@ class RideStatsAccumulator(
     }
 
     companion object {
-        private const val MAX_TRACK_DISTANCE_M = 40
+        private const val MAX_TRACK_DISTANCE_M = ClosePassDetector.TRACKING_RANGE_M
 
         /** Widest frame interval still treated as continuous observation.
          *  Reads the radar link's own stall threshold rather than copying it:

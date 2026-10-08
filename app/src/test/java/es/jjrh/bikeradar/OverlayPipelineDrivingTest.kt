@@ -355,8 +355,8 @@ class OverlayPipelineDrivingTest {
             val job = pipeline.attach(this, "TestRadar")
             runCurrent()
             // Drive an arming overtake: approaching fast (-8 m/s), inside
-            // the 1.0 m emit threshold
-            // (lateralPos 0.25 * LATERAL_FULL_M 3.0 = 0.75 m), rider
+            // the 1.0 m emit threshold (lateralPos 0.25 * LATERAL_FULL_M
+            // 3.0 = 0.75 m), rider
             // moving, >= minFramesToArm frames, and coming alongside so the
             // clearance is measured at all. rangeXmRaw is the sensor's own
             // reading: left at 0 it is the radar's declined-to-answer value and
@@ -1093,6 +1093,39 @@ class OverlayPipelineDrivingTest {
             assertEquals("a pass cut off by the drop is not counted", null, stats.snapshot().minLateralClearanceM)
         } finally {
             prefs.closePassClosingSpeedFloorMs = original
+            RadarStateBus.clear()
+        }
+    }
+
+    @Test
+    fun aFastApproachFromFarBackLeavesTheP90AtThePeak() = runTest {
+        // 20 m/s beyond 40 m, 8 m/s inside it: the event's closing speed and
+        // the ride's peak both read 28 km/h, so the p90 is not above the peak.
+        prefs.closePassLoggingEnabled = true
+        val stats = RideStatsAccumulator()
+        val pipeline = buildPipeline(rideStats = { stats })
+        try {
+            val job = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            listOf(
+                listOf(Vehicle(id = 7, distanceM = 60, speedMs = -20f, lateralPos = 0.4f, rangeXmRaw = 1.2f, bornAtMs = 1L)),
+                listOf(Vehicle(id = 7, distanceM = 50, speedMs = -20f, lateralPos = 0.4f, rangeXmRaw = 1.2f, bornAtMs = 1L)),
+                listOf(Vehicle(id = 7, distanceM = 30, speedMs = -8f, lateralPos = 0.4f, rangeXmRaw = 1.2f, bornAtMs = 1L)),
+                listOf(Vehicle(id = 7, distanceM = 20, speedMs = -8f, lateralPos = 0.4f, rangeXmRaw = 1.2f, bornAtMs = 1L)),
+                listOf(Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.2f, rangeXmRaw = 0.6f, bornAtMs = 1L)),
+                emptyList(),
+            ).forEachIndexed { i, vehicles ->
+                RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 100L + i, vehicles = vehicles, bikeSpeedMs = 5f))
+                runCurrent()
+            }
+            job.cancel()
+            job.join()
+            val s = stats.snapshot()
+            assertEquals("one close pass", 1, s.closePassCount)
+            assertEquals("the ride's peak", 28, s.peakClosingKmh)
+            assertEquals("the close passes' p90", 28, s.closingSpeedP90Kmh)
+        } finally {
+            prefs.closePassLoggingEnabled = false
             RadarStateBus.clear()
         }
     }

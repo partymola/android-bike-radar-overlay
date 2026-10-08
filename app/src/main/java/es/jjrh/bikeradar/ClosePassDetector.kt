@@ -67,9 +67,9 @@ class ClosePassDetector {
         /** Minimum frames observed before the detector will arm a
          *  track. Guards against single-frame decoder blips. */
         val minFramesToArm: Int = 3,
-        /** Maximum rangeY at which the detector considers a target.
+        /** Maximum rangeY at which the detector arms on a target.
          *  Beyond this the vehicle is too far to be a "pass". */
-        val maxRangeYM: Int = 40,
+        val maxRangeYM: Int = TRACKING_RANGE_M,
     )
 
     enum class Severity {
@@ -88,7 +88,7 @@ class ClosePassDetector {
         val clearanceM: Float,
         val side: Side,
         val rangeYM: Float,
-        /** The fastest closing reading within [Config.maxRangeYM] behind the
+        /** The fastest closing reading within [TRACKING_RANGE_M] behind the
          *  rider, readings above [PEAK_CLOSING_MAX_MS] left out: a car often
          *  slows as it draws level, so the reading at the pass point is near
          *  zero. */
@@ -169,12 +169,12 @@ class ClosePassDetector {
             // which the termination below reads. Nothing more is taken from it.
             if (v.isBehind) continue
 
-            // Where the ride's published peak closing speed reads, so the
-            // ride's closing-speed p90 cannot exceed its peak, and before the
-            // skips below, which are about the lateral reading
-            // (`the approach peak counts frames the clearance cannot use`,
-            // `the approach peak is taken within the 40 m the ride's own peak reads`).
-            if (v.distanceM in 0..config.maxRangeYM && -v.speedMs <= PEAK_CLOSING_MAX_MS) {
+            // Over the frames the ride's published peak closing speed reads,
+            // so the ride's closing-speed p90 stays at or under that peak
+            // (`OverlayPipelineDrivingTest.aFastApproachFromFarBackLeavesTheP90AtThePeak`),
+            // and before the skips below, which are about the lateral reading
+            // (`the approach peak counts frames the clearance cannot use`).
+            if (v.distanceM in 0..TRACKING_RANGE_M && -v.speedMs <= PEAK_CLOSING_MAX_MS) {
                 state.peakClosingMs = maxOf(state.peakClosingMs, -v.speedMs)
             }
 
@@ -282,15 +282,14 @@ class ClosePassDetector {
         )
     }
 
-    /** Reset all tracking state. Call when the radar connection drops
-     *  so a stale in-flight track from a prior session doesn't fire a
-     *  phantom event on reconnect. */
-    fun reset() {
-        tracks.clear()
-        lastEmitMs = Long.MIN_VALUE / 2
-    }
-
     companion object {
+        /** Farthest rangeY (m) at which a vehicle counts as tracked: the
+         *  detector's arming range, and the range the ride's statistics and
+         *  the event's approach peak read
+         *  (`the approach peak is taken within the 40 m the ride's own peak reads`,
+         *  `overtakesTotalSkipsTracksBeyond40m`). */
+        internal const val TRACKING_RANGE_M = 40
+
         /** Decoder's ±lateralPos 1.0 maps to this metres each side.
          *  Kept in sync with [RadarV2Decoder.LATERAL_FULL_M]. */
         private const val LATERAL_FULL_M = RadarV2Decoder.LATERAL_FULL_M

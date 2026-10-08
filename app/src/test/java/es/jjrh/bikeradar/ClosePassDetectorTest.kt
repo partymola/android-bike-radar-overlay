@@ -609,38 +609,41 @@ class ClosePassDetectorTest {
 
     @Test fun `a car pulling out as it passes reports where it drew level`() {
         // The sideways reading wobbles as it pulls out, so the median frame is
-        // not the middle one in time.
+        // neither the first, the middle nor the last in time.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
             veh(distanceM = 3, lateralPos = 0.1533f) to 300L, // 0.46 m, still behind
-            veh(distanceM = 2, lateralPos = 0.22f) to 400L, // 0.66 m
-            veh(distanceM = 1, lateralPos = 0.3533f) to 500L, // 1.06 m
-            veh(distanceM = 0, lateralPos = 0.2867f) to 600L, // 0.86 m
-            veh(distanceM = 0, lateralPos = 0.3867f, isBehind = true) to 700L,
+            veh(distanceM = 2, lateralPos = 0.3f) to 400L, // 0.90 m
+            veh(distanceM = 1, lateralPos = 0.2667f) to 500L, // 0.80 m
+            veh(distanceM = 0, lateralPos = 0.2f) to 600L, // 0.60 m
+            veh(distanceM = 0, lateralPos = 0.2333f) to 700L, // 0.70 m
+            veh(distanceM = 0, lateralPos = 0.3867f, isBehind = true) to 800L,
         )
         val events = drive(d, frames)
         assertEquals(1, events.size)
         val e = events[0]
-        assertEquals(0.86f, e.clearanceM, 0.01f)
+        assertEquals(0.80f, e.clearanceM, 0.01f)
         assertEquals(ClosePassDetector.Severity.VERY_CLOSE, e.severity)
         // The rest of the event comes from the same frame.
-        assertEquals(0f, e.rangeYM, 0.01f)
-        assertEquals(600L, e.timestampMs)
+        assertEquals(1f, e.rangeYM, 0.01f)
+        assertEquals(500L, e.timestampMs)
         assertEquals(ClosePassDetector.Side.RIGHT, e.side)
     }
 
     @Test fun `the clearance is the median of the alongside frames`() {
-        // In time order 0.60, 0.84, 0.66: the median is neither the first, the
-        // middle, the last, the tightest nor the widest.
+        // In time order 0.84, 0.72, 0.60, 0.90, 0.66: the median is neither the
+        // first, the middle, the last, the tightest nor the widest.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
-            veh(distanceM = 2, lateralPos = 0.2f) to 300L, // 0.60 m
-            veh(distanceM = 1, lateralPos = 0.28f) to 400L, // 0.84 m
-            veh(distanceM = 0, lateralPos = 0.22f) to 500L, // 0.66 m
+            veh(distanceM = 2, lateralPos = 0.28f) to 300L, // 0.84 m
+            veh(distanceM = 2, lateralPos = 0.24f) to 400L, // 0.72 m
+            veh(distanceM = 1, lateralPos = 0.2f) to 500L, // 0.60 m
+            veh(distanceM = 1, lateralPos = 0.3f) to 600L, // 0.90 m
+            veh(distanceM = 0, lateralPos = 0.22f) to 700L, // 0.66 m
         )
-        val events = drive(d, frames) + terminate(d, 600L)
+        val events = drive(d, frames) + terminate(d, 800L)
         assertEquals(1, events.size)
-        assertEquals(0.66f, events[0].clearanceM, 0.01f)
+        assertEquals(0.72f, events[0].clearanceM, 0.01f)
     }
 
     @Test fun `the event's rider speed and size are the pass frame's`() {
@@ -731,19 +734,35 @@ class ClosePassDetectorTest {
     }
 
     @Test fun `the approach peak is taken within the 40 m the ride's own peak reads`() {
-        // 20 m/s far back, 8 m/s once in range: the ride's published peak
-        // closing speed sees only the 8, so the event must not report 72 km/h.
+        // 20 m/s far back, 9 m/s at exactly 40 m, 8 m/s nearer: the ride's
+        // published peak closing speed sees 9 at most, so the event must report
+        // 32 km/h, not 72.
         val d = ClosePassDetector()
         val frames = listOf(
             veh(distanceM = 60, lateralPos = 0.4f, speedMs = -20f) to 0L,
             veh(distanceM = 50, lateralPos = 0.4f, speedMs = -20f) to 100L,
             veh(distanceM = 41, lateralPos = 0.4f, speedMs = -20f) to 200L,
-            veh(distanceM = 30, lateralPos = 0.4f, speedMs = -8f) to 300L,
-            veh(distanceM = 2, lateralPos = 0.2f, speedMs = -1f) to 400L,
+            veh(distanceM = 40, lateralPos = 0.4f, speedMs = -9f) to 300L,
+            veh(distanceM = 30, lateralPos = 0.4f, speedMs = -8f) to 400L,
+            veh(distanceM = 2, lateralPos = 0.2f, speedMs = -1f) to 500L,
         )
-        val events = drive(d, frames) + terminate(d, 500L)
+        val events = drive(d, frames) + terminate(d, 600L)
         assertEquals(1, events.size)
-        assertEquals(28, events[0].closingSpeedKmh)
+        assertEquals(32, events[0].closingSpeedKmh)
+    }
+
+    @Test fun `a reading of exactly 35 metres per second can arm a track`() {
+        // The arming bound is inclusive, as the peak's is.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -1f) to 0L,
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -1f) to 100L,
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -35f) to 200L,
+            veh(distanceM = 2, lateralPos = 0.07f, speedMs = -1f) to 300L, // 0.21 m
+        )
+        val events = drive(d, frames) + terminate(d, 400L)
+        assertEquals(1, events.size)
+        assertEquals(126, events[0].closingSpeedKmh)
     }
 
     @Test fun `a reading above 35 metres per second does not arm a track`() {

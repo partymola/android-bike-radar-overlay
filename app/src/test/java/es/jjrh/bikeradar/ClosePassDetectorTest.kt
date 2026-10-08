@@ -25,6 +25,7 @@ class ClosePassDetectorTest {
          *  skip that reads it treats as no usable clearance, blanking the whole
          *  suite while looking correct. Pass 0f to mean an unresolved frame. */
         rangeXmRaw: Float = lateralPos * RadarV2Decoder.LATERAL_FULL_M,
+        bornAtMs: Long = 0L,
     ) = Vehicle(
         id = id,
         distanceM = distanceM,
@@ -35,6 +36,7 @@ class ClosePassDetectorTest {
         isAlongsideStationary = isAlongsideStationary,
         lateralUnknown = lateralUnknown,
         rangeXmRaw = rangeXmRaw,
+        bornAtMs = bornAtMs,
     )
 
     private fun drive(
@@ -505,6 +507,21 @@ class ClosePassDetectorTest {
         )
         val events = drive(d, frames) + terminate(d, 700L)
         assertTrue("a dead track must not lend its arming to the next vehicle, got $events", events.isEmpty())
+    }
+
+    @Test fun `a reused track id with no gap frame does not inherit the last car's arming`() {
+        // The decoder can prune a track and give its id to a new one within a
+        // single frame; the birth stamp is what tells the two cars apart.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 30, lateralPos = 0.4f, bornAtMs = 100L) to 0L,
+            veh(distanceM = 28, lateralPos = 0.4f, bornAtMs = 100L) to 100L,
+            veh(distanceM = 26, lateralPos = 0.4f, bornAtMs = 100L) to 200L, // armed
+            // A new car on the same id, alongside but closing too slowly to arm.
+            veh(distanceM = 2, lateralPos = 0.1f, speedMs = -1f, bornAtMs = 300L) to 300L,
+        )
+        val events = drive(d, frames) + terminate(d, 400L)
+        assertTrue("a new car on a reused id must arm on its own, got $events", events.isEmpty())
     }
 
     // ── an unresolved lateral reading ────────────────────────────────────────

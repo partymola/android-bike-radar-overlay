@@ -102,6 +102,8 @@ class ClosePassDetector {
 
     private data class TrackState(
         val tid: Int,
+        /** [Vehicle.bornAtMs] of the car this state belongs to. */
+        val bornAtMs: Long,
         var framesSeen: Int = 0,
         var armed: Boolean = false,
         var armedThresholdM: Float = 0f,
@@ -155,7 +157,15 @@ class ClosePassDetector {
             // completes by flipping this true, which we use downstream
             // as the termination signal. We still track them while
             // they're genuinely behind (isBehind == false).
-            val state = tracks.getOrPut(v.id) { TrackState(v.id) }
+            // A new birth on the same id is a different car, even with no
+            // frame between them: the old one ends here
+            // (`a reused track id with no gap frame does not inherit the last car's arming`).
+            val previous = tracks[v.id]
+            if (previous != null && previous.bornAtMs != v.bornAtMs) {
+                maybeEmit(previous, nowMs, config)?.let { emitted.add(it) }
+                tracks.remove(v.id)
+            }
+            val state = tracks.getOrPut(v.id) { TrackState(v.id, v.bornAtMs) }
             state.lastSeenMs = nowMs
             state.framesSeen++
 

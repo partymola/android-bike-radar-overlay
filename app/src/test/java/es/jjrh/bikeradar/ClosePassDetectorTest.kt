@@ -274,12 +274,12 @@ class ClosePassDetectorTest {
     // ── gate: rangeY out of band ─────────────────────────────────────────────
 
     // covers the rangeY arm gate
-    @Test fun `does not arm when target stays beyond maxRangeY`() {
-        // Every frame sits at 45 m > maxRangeYM (40), so rangeYOk is false on
-        // each arm attempt; the lateral track is tight and closing fast, so
-        // only the rangeY gate is keeping it from arming. Track drops at the
-        // end and must NOT emit. Kills a mutant that drops the rangeY upper
-        // bound (e.g. `in 0..config.maxRangeYM` → `>= 0`).
+    @Test fun `does not arm when target stays beyond the tracking range`() {
+        // Every frame sits at 45 m, beyond the 40 m tracking range, so
+        // rangeYOk is false on each arm attempt; the lateral track is tight
+        // and closing fast, so only the rangeY gate is keeping it from
+        // arming. Track drops at the end and must NOT emit. Kills a mutant
+        // that drops the rangeY upper bound (e.g. `in 0..TRACKING_RANGE_M` → `>= 0`).
         val d = ClosePassDetector()
         val frames = (0..4).map { i ->
             listOf(veh(distanceM = 45, lateralPos = 0.1f, speedMs = -8f)) to i * 100L
@@ -290,7 +290,7 @@ class ClosePassDetectorTest {
             emptyList<Vehicle>() to 600L,
         )
         val events = drive(d, frames)
-        assertTrue("a target beyond maxRangeY must never arm", events.isEmpty())
+        assertTrue("a target beyond the tracking range must never arm", events.isEmpty())
     }
 
     // ── gate: rider speed floor ──────────────────────────────────────────────
@@ -609,7 +609,7 @@ class ClosePassDetectorTest {
 
     @Test fun `a car pulling out as it passes reports where it drew level`() {
         // The sideways reading wobbles as it pulls out, so the median frame is
-        // neither the first, the middle nor the last in time.
+        // not the first, the last or the frame at n / 2 in time.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
             veh(distanceM = 3, lateralPos = 0.1533f) to 300L, // 0.46 m, still behind

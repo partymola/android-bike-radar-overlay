@@ -67,9 +67,6 @@ class ClosePassDetector {
         /** Minimum frames observed before the detector will arm a
          *  track. Guards against single-frame decoder blips. */
         val minFramesToArm: Int = 3,
-        /** Maximum rangeY at which the detector arms on a target.
-         *  Beyond this the vehicle is too far to be a "pass". */
-        val maxRangeYM: Int = TRACKING_RANGE_M,
     )
 
     enum class Severity {
@@ -211,7 +208,7 @@ class ClosePassDetector {
             // anyway (`a car that closes while off to the side and comes in as
             // it slows still counts`).
             if (!state.armed) {
-                val rangeYOk = v.distanceM in 0..config.maxRangeYM
+                val rangeYOk = v.distanceM in 0..TRACKING_RANGE_M
                 val closingOk = v.speedMs <= -config.closingSpeedFloorMs && -v.speedMs <= PEAK_CLOSING_MAX_MS
                 val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
@@ -283,11 +280,13 @@ class ClosePassDetector {
     }
 
     companion object {
-        /** Farthest rangeY (m) at which a vehicle counts as tracked: the
-         *  detector's arming range, and the range the ride's statistics and
-         *  the event's approach peak read
-         *  (`the approach peak is taken within the 40 m the ride's own peak reads`,
-         *  `overtakesTotalSkipsTracksBeyond40m`). */
+        /** Farthest rangeY (m) at which a vehicle counts as tracked: beyond it
+         *  a vehicle is too far to be a pass. The detector arms within it, and
+         *  the ride's statistics and the event's approach peak read it
+         *  (`does not arm when target stays beyond the tracking range`,
+         *  `the approach peak is taken within the 40 m the ride's own peak reads`,
+         *  `overtakesTotalSkipsTracksBeyond40m`). A constant rather than a
+         *  [Config] field, for the reason [ALONGSIDE_MAX_RANGE_Y_M] gives. */
         internal const val TRACKING_RANGE_M = 40
 
         /** Decoder's ±lateralPos 1.0 maps to this metres each side.

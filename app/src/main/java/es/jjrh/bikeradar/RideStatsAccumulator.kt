@@ -11,7 +11,8 @@ import kotlin.math.min
  *
  * Two ingest paths:
  *   - [observeFrame] runs on every decoded RadarState snapshot (multi-Hz).
- *     Updates per-frame integrals (distance, exposure, peak/min running maxima).
+ *     Updates per-frame integrals (distance, exposure, peak closing) and the
+ *     per-track readings behind the tightest clearance.
  *   - [observeClosePass] runs once per close-pass event the detector emits.
  *     Updates per-event counters and the tightest-pass record.
  *
@@ -75,8 +76,9 @@ class RideStatsAccumulator(
     /**
      * Ingest a RadarState snapshot. The snapshot's `bikeSpeedMs` integrates
      * into [distanceRiddenM] over the elapsed (monotonic) interval since the
-     * previous frame. Vehicles in the snapshot update peak-closing / min-lateral
-     * running extrema and the unique-overtake set. [closingFloorMs] is the
+     * previous frame. Vehicles in the snapshot update the peak closing speed,
+     * the per-track readings behind the tightest clearance, and the
+     * unique-overtake set. [closingFloorMs] is the
      * rider's close-pass closing floor, the value [ClosePassDetector] reads.
      */
     fun observeFrame(state: RadarState, closingFloorMs: Float) {
@@ -188,7 +190,7 @@ class RideStatsAccumulator(
             // floor is following, not passing, and reads near dead centre; a
             // car pacing alongside that never closed at the floor is left out
             // with it, deliberately (`aSlowFollowerIsNotAClearance`). Closing
-            // is judged over the track's life so far, as the detector arms,
+            // is judged over the track's life so far, not on the frame,
             // since a passing car often reads near zero closing as it draws
             // level (`anOvertakeThatSlowsAlongsideStillCounts`). A car drawing
             // level with a stopped rider is caught by the rider gate
@@ -208,9 +210,17 @@ class RideStatsAccumulator(
         openTracks.keys.filter { it !in present }.forEach { tid -> openTracks.remove(tid)?.let(::endTrack) }
     }
 
+    /** Forget every open track without counting it. Called as each radar
+     *  connection starts, when the close-pass detector starts empty too: a car
+     *  the link dropped was last seen wherever it stopped, often still in line
+     *  behind (`aCarCutOffByARadarDropIsNotCounted`). */
+    fun dropOpenTracks() {
+        openTracks.clear()
+    }
+
     /** The track's clearance is its [ClosePassDetector.passPoint], as the
      *  close-pass event's is, taken when the track ends. A car still alongside
-     *  when the radar stops is never counted, as the detector never emits it
+     *  when the ride ends is never counted, as the detector never emits it
      *  (`aPassStillUnderwayIsNotYetCounted`). */
     private fun endTrack(track: OpenTrack) {
         val clearanceM = ClosePassDetector.passPoint(track.alongside) { it } ?: return

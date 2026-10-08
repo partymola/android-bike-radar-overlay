@@ -83,7 +83,7 @@ class ClosePassDetectorTest {
         // event that should be logged. The previous rider-speed
         // floor excluded these from the HA log.
         // Floor is now 0; the other gates (closing speed,
-        // lateral arm threshold, frames-to-arm) filter the noise.
+        // frames-to-arm) filter the noise.
         val d = ClosePassDetector()
         // Approach + pass + termination (track drops out → emit).
         val frames = (0..6).map { i ->
@@ -135,8 +135,7 @@ class ClosePassDetectorTest {
 
     @Test fun `does not fire when the clearance stays above emit threshold`() {
         val d = ClosePassDetector()
-        // Armed because 1.4 < 1.5 urban threshold, but the clearance is
-        // above the 1.0 m emit cutoff.
+        // Armed, but the clearance is above the 1.0 m emit cutoff.
         val frames = listOf(
             veh(distanceM = 25, lateralPos = 0.47f) to 0L, // 1.41 m
             veh(distanceM = 20, lateralPos = 0.45f) to 100L, // 1.35 m
@@ -154,7 +153,7 @@ class ClosePassDetectorTest {
     @Test fun `respects global cooldown between emits`() {
         val d = ClosePassDetector()
         val longCooldown = baseConfig.copy(cooldownMs = 5_000L)
-        // First overtake: tid 1, min 0.3 m, emits at t=500.
+        // First overtake: tid 1, clearance 0.36 m, emits at t=500.
         val firstFrames = (0..5).map { i ->
             val lp = listOf(0.48f, 0.3f, 0.18f, 0.1f, 0.12f, 0.2f)[i]
             val isBehind = i == 5
@@ -194,7 +193,7 @@ class ClosePassDetectorTest {
             isAlongsideStationary = true,
         )
         val frames = listOf(
-            // Real overtake phase: arms at 1.41 m, 1.14 m alongside.
+            // Real overtake phase: arms, 1.14 m alongside.
             listOf(veh(distanceM = 25, lateralPos = 0.47f)) to 0L,
             listOf(veh(distanceM = 20, lateralPos = 0.45f)) to 100L,
             listOf(veh(distanceM = 15, lateralPos = 0.4f)) to 200L,
@@ -206,7 +205,7 @@ class ClosePassDetectorTest {
             emptyList<Vehicle>() to 600L,
         )
         val events = drive(d, frames)
-        assertTrue("alongside frame must not pull min below the emit threshold", events.isEmpty())
+        assertTrue("alongside frames must not pull the clearance below the emit threshold", events.isEmpty())
     }
 
     // ── lateral-unknown skip ─────────────────────────────────────────────────
@@ -219,39 +218,21 @@ class ClosePassDetectorTest {
      *  decoder cannot produce. */
     private fun sentinel(distanceM: Int, carried: Float = 0.5f) = veh(distanceM = distanceM, lateralPos = carried, lateralUnknown = true)
 
-    @Test fun `lateral-unknown frames do not pollute min tracking`() {
-        // Track armed on a real overtake whose closest frame stayed above the
-        // 1.0 m emit threshold, then a held-over frame arrives alongside. The
-        // held offset is not a measurement and must not become the clearance.
-        val d = ClosePassDetector()
-        val frames = listOf(
-            // Real overtake phase: arms at 1.41 m, 1.14 m alongside.
-            listOf(veh(distanceM = 25, lateralPos = 0.47f)) to 0L,
-            listOf(veh(distanceM = 20, lateralPos = 0.45f)) to 100L,
-            listOf(veh(distanceM = 15, lateralPos = 0.4f)) to 200L,
-            listOf(veh(distanceM = 2, lateralPos = 0.38f)) to 300L, // 1.14 m alongside
-            listOf(sentinel(distanceM = 1)) to 400L,
-            // Track drops; terminate path runs.
-            emptyList<Vehicle>() to 500L,
-        )
-        val events = drive(d, frames)
-        assertTrue("a held offset must not become this pass's clearance", events.isEmpty())
-    }
-
     @Test fun `a pass made entirely of lateral-unknown frames emits nothing`() {
         // The blast radius of that skip, pinned rather than left to be
         // rediscovered. The decoder holds a sentinel run open all the way in,
         // so a whole overtake can arrive with every frame flagged. The pass
         // goes uncounted instead of being counted at the held-over offset.
         // Under-reporting is the deliberate direction; see the skip's comment
-        // in ClosePassDetector.
+        // in ClosePassDetector. Held at 0.45 m, under the emit cutoff, so the
+        // skip is what keeps it out (see the next test for why that offset).
         val d = ClosePassDetector()
         val frames = listOf(
-            listOf(sentinel(distanceM = 25)) to 0L,
-            listOf(sentinel(distanceM = 18)) to 100L,
-            listOf(sentinel(distanceM = 12)) to 200L,
-            listOf(sentinel(distanceM = 6)) to 300L,
-            listOf(sentinel(distanceM = 2)) to 400L,
+            listOf(sentinel(distanceM = 25, carried = 0.15f)) to 0L,
+            listOf(sentinel(distanceM = 18, carried = 0.15f)) to 100L,
+            listOf(sentinel(distanceM = 12, carried = 0.15f)) to 200L,
+            listOf(sentinel(distanceM = 6, carried = 0.15f)) to 300L,
+            listOf(sentinel(distanceM = 2, carried = 0.15f)) to 400L,
             emptyList<Vehicle>() to 500L,
         )
         assertTrue(
@@ -317,8 +298,8 @@ class ClosePassDetectorTest {
     // covers the rider-speed arm gate
     @Test fun `does not arm when rider speed is below the configured floor`() {
         // Non-default floor of 5 m/s with the rider at 3 m/s makes riderOk
-        // false on every arm attempt; all other gates (rangeY, closing, frames,
-        // lateral) pass. No event. Kills a mutant that flips the `>=` to `<=`
+        // false on every arm attempt; all other gates (rangeY, closing, frames)
+        // pass. No event. Kills a mutant that flips the `>=` to `<=`
         // or drops the riderOk conjunct.
         val d = ClosePassDetector()
         val floored = baseConfig.copy(riderSpeedFloorMs = 5f)
@@ -358,14 +339,13 @@ class ClosePassDetectorTest {
     @Test fun `negative signed range emits a LEFT side close pass`() {
         // A close overtake on the rider's left: lateralPos negative throughout,
         // so the pass point's signed offset is negative and the side resolves to
-        // LEFT. The -1.5 m frame sits on the urban gate but cannot arm -
-        // minFramesToArm is 3 - so arming happens on the third frame, and the
-        // pass reads -0.15 → 0.45 m alongside (< 0.5 m → GRAZING, < 1.0 m →
+        // LEFT. minFramesToArm is 3, so arming happens on the third frame, and
+        // the pass reads -0.15 → 0.45 m alongside (< 0.5 m → GRAZING, < 1.0 m →
         // emits). Kills a mutant that flips the `>= 0f` side test or hardcodes
         // RIGHT.
         val d = ClosePassDetector()
         val frames = listOf(
-            veh(distanceM = 30, lateralPos = -0.5f, speedMs = -8f) to 0L, // -1.5 m, on the urban gate
+            veh(distanceM = 30, lateralPos = -0.5f, speedMs = -8f) to 0L, // -1.5 m
             veh(distanceM = 22, lateralPos = -0.35f, speedMs = -8f) to 100L, // -1.05 m
             veh(distanceM = 14, lateralPos = -0.25f, speedMs = -8f) to 200L, // -0.75 m
             veh(distanceM = 3, lateralPos = -0.16f, speedMs = -8f) to 300L, // -0.48 m, still behind
@@ -463,7 +443,7 @@ class ClosePassDetectorTest {
         // It reaches the isBehind flip with nothing sampled, so it must still
         // terminate. Holding it open leaves an armed state for the decoder to
         // hand to the next vehicle on the same track id, which would then skip
-        // every arming gate and report a threshold from a different vehicle.
+        // every arming gate and be logged without earning it.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
             sentinel(distanceM = 2) to 300L,
@@ -628,12 +608,14 @@ class ClosePassDetectorTest {
     }
 
     @Test fun `a car pulling out as it passes reports where it drew level`() {
+        // The sideways reading wobbles as it pulls out, so the median frame is
+        // not the middle one in time.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
             veh(distanceM = 3, lateralPos = 0.1533f) to 300L, // 0.46 m, still behind
             veh(distanceM = 2, lateralPos = 0.22f) to 400L, // 0.66 m
-            veh(distanceM = 1, lateralPos = 0.2867f) to 500L, // 0.86 m
-            veh(distanceM = 0, lateralPos = 0.3533f) to 600L, // 1.06 m
+            veh(distanceM = 1, lateralPos = 0.3533f) to 500L, // 1.06 m
+            veh(distanceM = 0, lateralPos = 0.2867f) to 600L, // 0.86 m
             veh(distanceM = 0, lateralPos = 0.3867f, isBehind = true) to 700L,
         )
         val events = drive(d, frames)
@@ -642,19 +624,19 @@ class ClosePassDetectorTest {
         assertEquals(0.86f, e.clearanceM, 0.01f)
         assertEquals(ClosePassDetector.Severity.VERY_CLOSE, e.severity)
         // The rest of the event comes from the same frame.
-        assertEquals(1f, e.rangeYM, 0.01f)
-        assertEquals(500L, e.timestampMs)
+        assertEquals(0f, e.rangeYM, 0.01f)
+        assertEquals(600L, e.timestampMs)
         assertEquals(ClosePassDetector.Side.RIGHT, e.side)
     }
 
     @Test fun `the clearance is the median of the alongside frames`() {
-        // In time order 0.84, 0.66, 0.60: the median is neither the first, the
-        // last, the tightest nor the widest.
+        // In time order 0.60, 0.84, 0.66: the median is neither the first, the
+        // middle, the last, the tightest nor the widest.
         val d = ClosePassDetector()
         val frames = armingPrefix() + listOf(
-            veh(distanceM = 2, lateralPos = 0.28f) to 300L, // 0.84 m
-            veh(distanceM = 1, lateralPos = 0.22f) to 400L, // 0.66 m
-            veh(distanceM = 0, lateralPos = 0.2f) to 500L, // 0.60 m
+            veh(distanceM = 2, lateralPos = 0.2f) to 300L, // 0.60 m
+            veh(distanceM = 1, lateralPos = 0.28f) to 400L, // 0.84 m
+            veh(distanceM = 0, lateralPos = 0.22f) to 500L, // 0.66 m
         )
         val events = drive(d, frames) + terminate(d, 600L)
         assertEquals(1, events.size)
@@ -662,12 +644,18 @@ class ClosePassDetectorTest {
     }
 
     @Test fun `the event's rider speed and size are the pass frame's`() {
-        // Armed as a car with the rider at 7 m/s; drawing level the radar sizes
-        // it as a truck and the rider has slowed to 5 m/s (18 km/h).
+        // Armed as a car with the rider at 7 m/s. Of three alongside frames the
+        // median is the second, where the radar sized it as a truck and the
+        // rider had slowed to 5 m/s (18 km/h).
         val d = ClosePassDetector()
         drive(d, armingPrefix())
-        val pass = d.decide(listOf(veh(distanceM = 2, lateralPos = 0.2f, size = VehicleSize.TRUCK)), 5f, 300L, baseConfig)
-        val events = pass + terminate(d, 400L)
+        val alongside = listOf(
+            Triple(veh(distanceM = 2, lateralPos = 0.28f), 7f, 300L), // 0.84 m
+            Triple(veh(distanceM = 1, lateralPos = 0.22f, size = VehicleSize.TRUCK), 5f, 400L), // 0.66 m
+            Triple(veh(distanceM = 0, lateralPos = 0.2f), 7f, 500L), // 0.60 m
+        )
+        val pass = alongside.flatMap { (v, rider, ts) -> d.decide(listOf(v), rider, ts, baseConfig) }
+        val events = pass + terminate(d, 600L)
         assertEquals(1, events.size)
         assertEquals(18, events[0].riderSpeedKmh)
         assertEquals(VehicleSize.TRUCK, events[0].vehicleSize)
@@ -677,9 +665,10 @@ class ClosePassDetectorTest {
         // The upper median, as measured on the ride corpus. The lower one would
         // report 0.30 m here and log a pass the upper one does not.
         val d = ClosePassDetector()
+        // Wider first, so the order by clearance is not the order in time.
         val frames = armingPrefix() + listOf(
-            veh(distanceM = 2, lateralPos = 0.1f) to 300L, // 0.30 m
-            veh(distanceM = 1, lateralPos = 0.4f) to 400L, // 1.20 m
+            veh(distanceM = 2, lateralPos = 0.4f) to 300L, // 1.20 m
+            veh(distanceM = 1, lateralPos = 0.1f) to 400L, // 0.30 m
         )
         val events = drive(d, frames) + terminate(d, 500L)
         assertTrue("the upper median is 1.20 m, got $events", events.isEmpty())
@@ -726,9 +715,8 @@ class ClosePassDetectorTest {
     }
 
     @Test fun `the approach peak counts frames the clearance cannot use`() {
-        // The fastest reading came on a frame with no lateral measurement. The
-        // ride figure reads closing on every frame behind the rider, and the
-        // event must give the same number for the same car.
+        // The fastest reading came on a frame with no lateral measurement,
+        // which the ride's peak closing speed counts, so the event must too.
         val d = ClosePassDetector()
         val frames = listOf(
             sentinel(distanceM = 30).copy(speedMs = -14f) to 0L,
@@ -740,6 +728,64 @@ class ClosePassDetectorTest {
         val events = drive(d, frames) + terminate(d, 500L)
         assertEquals(1, events.size)
         assertEquals(50, events[0].closingSpeedKmh)
+    }
+
+    @Test fun `the approach peak is taken within the 40 m the ride's own peak reads`() {
+        // 20 m/s far back, 8 m/s once in range: the ride's published peak
+        // closing speed sees only the 8, so the event must not report 72 km/h.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 60, lateralPos = 0.4f, speedMs = -20f) to 0L,
+            veh(distanceM = 50, lateralPos = 0.4f, speedMs = -20f) to 100L,
+            veh(distanceM = 41, lateralPos = 0.4f, speedMs = -20f) to 200L,
+            veh(distanceM = 30, lateralPos = 0.4f, speedMs = -8f) to 300L,
+            veh(distanceM = 2, lateralPos = 0.2f, speedMs = -1f) to 400L,
+        )
+        val events = drive(d, frames) + terminate(d, 500L)
+        assertEquals(1, events.size)
+        assertEquals(28, events[0].closingSpeedKmh)
+    }
+
+    @Test fun `a reading above 35 metres per second does not arm a track`() {
+        // A slow follower with one phantom reading: no approach, so no pass.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -1f) to 0L,
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -1f) to 100L,
+            veh(distanceM = 20, lateralPos = 0.07f, speedMs = -37.5f) to 200L,
+            veh(distanceM = 2, lateralPos = 0.07f, speedMs = -1f) to 300L, // 0.21 m
+        )
+        val events = drive(d, frames) + terminate(d, 400L)
+        assertTrue("a phantom reading must not arm, got $events", events.isEmpty())
+    }
+
+    @Test fun `a new car taking the id is when the last car's pass is logged`() {
+        val d = ClosePassDetector()
+        val frames = armingPrefix() + listOf(
+            veh(distanceM = 2, lateralPos = 0.2f) to 300L, // 0.6 m
+            veh(distanceM = 20, lateralPos = 0.4f, bornAtMs = 400L) to 400L,
+        )
+        val events = drive(d, frames)
+        assertEquals(1, events.size)
+        assertEquals(0.6f, events[0].clearanceM, 0.01f)
+    }
+
+    @Test fun `a car seen ahead ends only its own track`() {
+        // Car 2 crosses ahead in the frame where car 1 is alongside.
+        val d = ClosePassDetector()
+        fun car(id: Int, distanceM: Int, lateralPos: Float, isBehind: Boolean = false) = veh(id = id, distanceM = distanceM, lateralPos = lateralPos, isBehind = isBehind)
+        val frames = listOf(
+            listOf(car(1, 30, 0.4f), car(2, 30, 0.6f)) to 0L,
+            listOf(car(1, 28, 0.4f), car(2, 20, 0.6f)) to 100L,
+            listOf(car(1, 26, 0.4f), car(2, 10, 0.6f)) to 200L,
+            listOf(car(2, 0, 0.6f, isBehind = true), car(1, 2, 0.2f)) to 300L, // 0.60 m
+            listOf(car(1, 1, 0.22f)) to 400L, // 0.66 m
+            listOf(car(1, 0, 0.24f)) to 500L, // 0.72 m
+            emptyList<Vehicle>() to 600L,
+        )
+        val events = drive(d, frames)
+        assertEquals(1, events.size)
+        assertEquals(0.66f, events[0].clearanceM, 0.01f)
     }
 }
 

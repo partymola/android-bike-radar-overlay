@@ -114,6 +114,9 @@ internal class OverlayPipeline(
                 onGateEvent = clog,
             )
             val closePassDetector = ClosePassDetector()
+            // The ride figure starts this connection's cars afresh, as the
+            // detector does (`aCarCutOffByARadarDropIsNotCountedAfterTheReconnect`).
+            rideStats().dropOpenTracks()
             if (prefs.turnAwareAlertsEnabled) turnSensorStart()
             var closePassDiscoveryPublished = false
             var closePassDiscoveryInFlight = false
@@ -474,6 +477,9 @@ internal class OverlayPipeline(
     companion object {
         private const val TAG = "BikeRadar.Overlay"
 
+        /** Key names are kept for riders' existing Home Assistant automations:
+         *  `min_range_x_m` is the pass-point clearance and `range_y_at_min_m`
+         *  that frame's distance behind, whatever the names say. */
         internal fun closePassJson(ev: ClosePassDetector.Event): JSONObject = JSONObject()
             .put("ts", java.time.Instant.ofEpochMilli(ev.timestampMs).toString())
             .put("min_range_x_m", String.format(Locale.US, "%.2f", ev.clearanceM).toFloat())

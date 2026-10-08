@@ -355,7 +355,7 @@ class OverlayPipelineDrivingTest {
             val job = pipeline.attach(this, "TestRadar")
             runCurrent()
             // Drive an arming overtake: approaching fast (-8 m/s), inside
-            // the urban 1.5 m arm threshold and the 1.0 m emit threshold
+            // the 1.0 m emit threshold
             // (lateralPos 0.25 * LATERAL_FULL_M 3.0 = 0.75 m), rider
             // moving, >= minFramesToArm frames, and coming alongside so the
             // clearance is measured at all. rangeXmRaw is the sensor's own
@@ -1058,6 +1058,42 @@ class OverlayPipelineDrivingTest {
             assertEquals("a 6 m/s floor does not", null, clearanceUnderFloor(6))
         } finally {
             prefs.closePassClosingSpeedFloorMs = original
+        }
+    }
+
+    @Test
+    fun aCarCutOffByARadarDropIsNotCountedAfterTheReconnect() = runTest {
+        // The frames clearanceUnderFloor(5) counts at 0.9 m, but the link
+        // drops before the track ends and the next connection never sees it.
+        val original = prefs.closePassClosingSpeedFloorMs
+        prefs.closePassClosingSpeedFloorMs = 5
+        prefs.closePassLoggingEnabled = false
+        val stats = RideStatsAccumulator()
+        val pipeline = buildPipeline(rideStats = { stats })
+        try {
+            val first = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            listOf(
+                Vehicle(id = 7, distanceM = 20, speedMs = -5.5f, lateralPos = 0.8f, rangeXmRaw = 2.4f, bornAtMs = 1L),
+                Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.3f, rangeXmRaw = 0.9f, bornAtMs = 1L),
+            ).forEachIndexed { i, v ->
+                RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 100L + i, vehicles = listOf(v), bikeSpeedMs = 5f))
+                runCurrent()
+            }
+            first.cancel()
+            first.join()
+            RadarStateBus.clear()
+
+            val second = pipeline.attach(this, "TestRadar")
+            runCurrent()
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 200L, vehicles = emptyList(), bikeSpeedMs = 5f))
+            runCurrent()
+            second.cancel()
+            second.join()
+            assertEquals("a pass cut off by the drop is not counted", null, stats.snapshot().minLateralClearanceM)
+        } finally {
+            prefs.closePassClosingSpeedFloorMs = original
+            RadarStateBus.clear()
         }
     }
 

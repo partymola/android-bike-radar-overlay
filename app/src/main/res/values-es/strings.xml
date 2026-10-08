@@ -454,7 +454,7 @@
     <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos que pasan demasiado cerca y los muestra en la pantalla de inicio y en tu historial de rutas.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos que pasan demasiado cerca; los muestra en la pantalla de inicio y en tu historial de rutas, y los envía a Home Assistant.</string>
     <string name="settings_radar_lateral_clearance_title">Umbral de holgura lateral</string>
-    <string name="settings_radar_lateral_clearance_helper">Cuenta los adelantamientos a menos de esta distancia del centro de tu bici.</string>
+    <string name="settings_radar_lateral_clearance_helper">Cuenta los adelantamientos que pasan a menos de esta distancia del centro de tu bici.</string>
     <string name="settings_radar_min_rider_speed_title">Velocidad mínima del ciclista</string>
     <string name="settings_radar_min_rider_speed_helper">Solo cuenta si ibas al menos a esta velocidad cuando el vehículo se acercaba.</string>
     <string name="settings_radar_min_closing_speed_title">Velocidad mínima de aproximación</string>

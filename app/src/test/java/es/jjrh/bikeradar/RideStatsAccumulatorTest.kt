@@ -1009,13 +1009,13 @@ class RideStatsAccumulatorTest {
 
     @Test
     fun theFigureIsTheMedianOfTheTracksAlongsideFrames() {
-        // 0.84, 0.66, 0.60 in time order: the median is neither the first, the
-        // last, the tightest nor the widest.
+        // 0.60, 0.84, 0.66 in time order: the median is neither the first, the
+        // middle, the last, the tightest nor the widest.
         val a = acc()
         a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f)))
-        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.28f)))
-        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.22f)))
-        a.observeFrame(riding(veh(1, distanceM = 0, lateralPos = 0.2f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.2f)))
+        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.28f)))
+        a.observeFrame(riding(veh(1, distanceM = 0, lateralPos = 0.22f)))
         a.endTracks()
         assertEquals(0.66f, a.snapshot().minLateralClearanceM!!, 0.01f)
     }
@@ -1024,23 +1024,40 @@ class RideStatsAccumulatorTest {
     fun withAnEvenNumberOfFramesTheWiderMiddleOneCounts() {
         val a = acc()
         a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f)))
-        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.1f))) // 0.30 m
-        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.4f))) // 1.20 m
+        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.4f))) // 1.20 m
+        a.observeFrame(riding(veh(1, distanceM = 1, lateralPos = 0.1f))) // 0.30 m
         a.endTracks()
         assertEquals(1.2f, a.snapshot().minLateralClearanceM!!, 0.01f)
     }
 
     @Test
     fun aPassStillUnderwayIsNotYetCounted() {
-        // The median is taken when the track ends. A car still alongside when
-        // the radar stops is never counted; the close-pass detector has the same
-        // limit, so the two figures still agree.
+        // The median is taken when the track ends, so a car still alongside
+        // when the ride ends is never counted, as the close-pass detector never
+        // emits it.
         val a = acc()
         a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f)))
         a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.2f)))
         assertNull("not until the track ends", a.snapshot().minLateralClearanceM)
         a.endTracks()
         assertEquals(0.6f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun aCarCutOffByARadarDropIsNotCounted() {
+        // Last seen still in line behind when the link dropped. Cars seen
+        // after the reconnect still count.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, lateralPos = 0.07f))) // 0.21 m
+        a.dropOpenTracks()
+        a.endTracks()
+        assertNull("a cut-off pass is not counted", a.snapshot().minLateralClearanceM)
+
+        a.observeFrame(riding(veh(2, distanceM = 20, speedMs = -8f)))
+        a.observeFrame(riding(veh(2, distanceM = 2, lateralPos = 0.3f))) // 0.9 m
+        a.endTracks()
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
     }
 
     // covers RideStatsAccumulator.kt:89

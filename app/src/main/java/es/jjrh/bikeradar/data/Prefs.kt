@@ -545,8 +545,8 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_CLOSE_PASS_ENABLED, v).apply()
         }
 
-    /** Advanced: emit an event only if the minimum lateral clearance
-     *  dropped below this many metres. Default 1.0 m keeps the
+    /** Advanced: emit an event only if the clearance where the vehicle drew
+     *  level was below this many metres. Default 1.0 m keeps the
      *  dataset focused on genuinely-unsafe passes; noise rejected
      *  here rather than filtered downstream. */
     var closePassEmitMinRangeXM: Float
@@ -556,8 +556,7 @@ class Prefs(context: Context) {
         }
 
     /** Advanced: minimum rider bike speed (km/h) for the detector to
-     *  arm. Filters stationary-rider scenarios (red lights, pushing
-     *  the bike) where nearby traffic doesn't count as an overtake.
+     *  arm, checked on each frame the vehicle closes in until one passes.
      *  Storage stays in km/h - that's the unit the rider thinks in
      *  and the Settings slider exposes - while the engine consumes
      *  m/s via [closePassRiderSpeedFloorMs]. */

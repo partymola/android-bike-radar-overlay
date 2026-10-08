@@ -80,17 +80,18 @@ class ClosePassDetector {
         VERY_CLOSE,
     }
 
-    /** One close pass. Everything but [closingSpeedKmh] is read off the
-     *  [passPoint] frame. */
+    /** One close pass. The time, clearance, side, distance, rider speed and
+     *  size are read off the [passPoint] frame. */
     data class Event(
         val timestampMs: Long,
         /** Metres, unsigned; [side] carries the sign. */
         val clearanceM: Float,
         val side: Side,
         val rangeYM: Float,
-        /** The fastest closing reading behind the rider, readings above
-         *  [PEAK_CLOSING_MAX_MS] left out: a car slows as it draws level, so
-         *  the reading at the pass point is near zero. */
+        /** The fastest closing reading within [Config.maxRangeYM] behind the
+         *  rider, readings above [PEAK_CLOSING_MAX_MS] left out: a car often
+         *  slows as it draws level, so the reading at the pass point is near
+         *  zero. */
         val closingSpeedKmh: Int,
         val riderSpeedKmh: Int,
         val vehicleSize: VehicleSize,
@@ -151,15 +152,10 @@ class ClosePassDetector {
 
         for (v in vehicles) {
             currentTids.add(v.id)
-            // Ignore targets we've decided aren't overtake candidates.
-            // Note: isBehind in this codebase means "target has
-            // overtaken and is now in front" — a passing overtake
-            // completes by flipping this true, which we use downstream
-            // as the termination signal. We still track them while
-            // they're genuinely behind (isBehind == false).
             // A new birth on the same id is a different car, even with no
             // frame between them: the old one ends here
-            // (`a reused track id with no gap frame does not inherit the last car's arming`).
+            // (`a reused track id with no gap frame does not inherit the last car's arming`,
+            // `a new car taking the id is when the last car's pass is logged`).
             val previous = tracks[v.id]
             if (previous != null && previous.bornAtMs != v.bornAtMs) {
                 maybeEmit(previous, nowMs, config)?.let { emitted.add(it) }
@@ -168,33 +164,37 @@ class ClosePassDetector {
             val state = tracks.getOrPut(v.id) { TrackState(v.id, v.bornAtMs) }
             state.framesSeen++
 
-            // Skip targets already marked isBehind (they've finished
-            // passing and we either already emitted or no longer care).
+            // isBehind in this codebase means "target has overtaken and is
+            // now in front": a passing overtake completes by flipping it true,
+            // which the termination below reads. Nothing more is taken from it.
             if (v.isBehind) continue
 
-            // Before the skips below, as the ride's own peak is taken: the
-            // event and the ride figures give one number for one car
-            // (`the approach peak counts frames the clearance cannot use`).
-            if (-v.speedMs <= PEAK_CLOSING_MAX_MS) state.peakClosingMs = maxOf(state.peakClosingMs, -v.speedMs)
+            // Where the ride's published peak closing speed reads, so the
+            // ride's closing-speed p90 cannot exceed its peak, and before the
+            // skips below, which are about the lateral reading
+            // (`the approach peak counts frames the clearance cannot use`,
+            // `the approach peak is taken within the 40 m the ride's own peak reads`).
+            if (v.distanceM in 0..config.maxRangeYM && -v.speedMs <= PEAK_CLOSING_MAX_MS) {
+                state.peakClosingMs = maxOf(state.peakClosingMs, -v.speedMs)
+            }
 
             // Skip targets the decoder has flagged as alongside-stationary
             // (parked / queued vehicle next to a slow rider). The decoder
             // applies dwell + lateral + closing-speed gates upstream; an
             // alongside flag means this is not an overtake and shouldn't
-            // influence min-rangeX tracking. Without this skip, a real
-            // overtake that ends with the rider braking to a junction
-            // stop alongside the just-overtaken vehicle (both then
-            // near-stationary at the junction) would have its minRangeX
-            // falsely pulled toward zero by the close alongside frames,
-            // emitting a bogus close-pass event when the track
-            // terminates.
+            // influence the clearance. Without this skip, a real overtake
+            // that ends with the rider braking to a junction stop alongside
+            // the just-overtaken vehicle (both then near-stationary at the
+            // junction) would have its clearance dragged toward zero by the
+            // close alongside frames, emitting a bogus close-pass event when
+            // the track terminates.
             if (v.isAlongsideStationary) continue
 
             // Skip frames where the decoder couldn't determine lateral
             // position reliably. The decoder's lateralUnknown flag fires
             // wherever the radar emits its rangeXBits=0 sentinel, close range
-            // included once a run has started; without this skip those frames
-            // pull min-rangeX to zero artificially. What it costs when a whole
+            // included once a run has started; without this skip a held-over
+            // offset would be taken as a clearance. What it costs when a whole
             // pass is flagged is in this class's KDoc.
             if (v.lateralUnknown) continue
 
@@ -212,7 +212,7 @@ class ClosePassDetector {
             // it slows still counts`).
             if (!state.armed) {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM
-                val closingOk = v.speedMs <= -config.closingSpeedFloorMs
+                val closingOk = v.speedMs <= -config.closingSpeedFloorMs && -v.speedMs <= PEAK_CLOSING_MAX_MS
                 val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
                 if (rangeYOk && closingOk && riderOk && framesOk) state.armed = true
@@ -312,9 +312,11 @@ class ClosePassDetector {
         /** Fastest closing speed (m/s) that counts as one: the bottom of
          *  [AlertDecider]'s ceiling range. Always on, unlike that ceiling, since
          *  it drops a number, never a cue; a rider whose ceiling is higher can
-         *  be warned about a closer this leaves out. The ride's peak closing
-         *  speed and its clearance read it too
+         *  be warned about a closer this leaves out. It bounds arming as well
+         *  as the event's figure, and the ride's peak closing speed and its
+         *  clearance read it too
          *  (`a reading above 35 metres per second is not the approach peak`,
+         *  `a reading above 35 metres per second does not arm a track`,
          *  `thePeakBoundIsThirtyFiveMetresPerSecondInclusive`,
          *  `aReadingAtThePhantomBoundIsStillAnApproach`). */
         internal const val PEAK_CLOSING_MAX_MS = AlertDecider.MIN_CLOSING_CEILING_MS
@@ -326,8 +328,8 @@ class ClosePassDetector {
          *  passed`). The upper median is what was measured on the ride corpus;
          *  the lower median and the mean are different rules
          *  (`with an even number of frames the wider middle one counts`).
-         *  Shared with the ride's tightest clearance, so the two read a car the
-         *  same way. */
+         *  Shared with the ride's tightest clearance, which applies it to the
+         *  frames it keeps. */
         internal fun <T> passPoint(alongside: List<T>, clearanceOf: (T) -> Float): T? = alongside.sortedBy(clearanceOf).getOrNull(alongside.size / 2)
 
         /** Below this a raw lateral reading IS the radar's zero, not a small

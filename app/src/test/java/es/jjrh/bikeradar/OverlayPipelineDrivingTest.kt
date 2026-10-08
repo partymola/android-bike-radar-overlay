@@ -411,6 +411,7 @@ class OverlayPipelineDrivingTest {
         overlayPrefsSnapshot: () -> PrefsSnapshot = { prefs.snapshot() },
         ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined,
         ebike: EBikeSnapshotCoordinator = coordinator(MonoClock(0L)),
+        rideStats: () -> RideStatsAccumulator = { RideStatsAccumulator() },
     ): OverlayPipeline = OverlayPipeline(
         prefs = prefs,
         ha = ha,
@@ -419,7 +420,7 @@ class OverlayPipelineDrivingTest {
         phoneBattery = object : PhoneBatterySource {
             override fun readSnapshot(): PhoneBatteryReading? = null
         },
-        rideStats = { RideStatsAccumulator() },
+        rideStats = rideStats,
         overlayPrefsSnapshot = overlayPrefsSnapshot,
         ebike = ebike,
         turnState = turnState,
@@ -1021,6 +1022,43 @@ class OverlayPipelineDrivingTest {
         )
     }
 
+    /** The ride's tightest clearance after a car that closed at 5.5 m/s draws
+     *  level 0.9 m away, under the rider's close-pass closing floor [floorMs]. */
+    private suspend fun kotlinx.coroutines.test.TestScope.clearanceUnderFloor(floorMs: Int): Float? {
+        prefs.closePassClosingSpeedFloorMs = floorMs
+        prefs.closePassLoggingEnabled = false
+        val stats = RideStatsAccumulator()
+        val pipeline = buildPipeline(rideStats = { stats })
+        val job = pipeline.attach(this, "TestRadar")
+        try {
+            runCurrent()
+            val frames = listOf(
+                Vehicle(id = 7, distanceM = 20, speedMs = -5.5f, lateralPos = 0.8f, rangeXmRaw = 2.4f, bornAtMs = 1L),
+                Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.3f, rangeXmRaw = 0.9f, bornAtMs = 1L),
+            )
+            frames.forEachIndexed { i, car ->
+                RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 100L + i, vehicles = listOf(car), bikeSpeedMs = 5f))
+                runCurrent()
+            }
+        } finally {
+            job.cancel()
+            job.join()
+            RadarStateBus.clear()
+        }
+        return stats.snapshot().minLateralClearanceM
+    }
+
+    @Test
+    fun theRidersClosingFloorReachesTheRideClearance() = runTest {
+        val original = prefs.closePassClosingSpeedFloorMs
+        try {
+            assertEquals("a 5 m/s floor admits it", 0.9f, clearanceUnderFloor(5)!!, 0.001f)
+            assertEquals("a 6 m/s floor does not", null, clearanceUnderFloor(6))
+        } finally {
+            prefs.closePassClosingSpeedFloorMs = original
+        }
+    }
+
     /** HaClient double recording close-pass publish attempts. `configured`
      *  drives [HaClient.isConfigured] via non-blank constructor args; the
      *  overridden publishers record and skip the real MQTT path. */
@@ -1128,6 +1166,7 @@ class OverlayPipelineDrivingTest {
     // Helpers re-imported here so the test file is self-contained.
     private fun assertEquals(expected: Any?, actual: Any?) = org.junit.Assert.assertEquals(expected, actual)
     private fun assertEquals(message: String, expected: Any?, actual: Any?) = org.junit.Assert.assertEquals(message, expected, actual)
+    private fun assertEquals(message: String, expected: Float, actual: Float, delta: Float) = org.junit.Assert.assertEquals(message, expected, actual, delta)
     private fun assertTrue(message: String, condition: Boolean) = org.junit.Assert.assertTrue(message, condition)
     private fun assertFalse(message: String, condition: Boolean) = org.junit.Assert.assertFalse(message, condition)
 }

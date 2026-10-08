@@ -175,7 +175,9 @@ internal class OverlayPipeline(
 
                         if (state.source == DataSource.NONE) return@collect
 
-                        rideStats().observeFrame(state)
+                        // Read once: the ride figure and the detector below use the same floor.
+                        val closingFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat()
+                        rideStats().observeFrame(state, closingFloorMs)
 
                         // A granted app drawing its own map can ask for ours to
                         // get out of the way. Checked every frame rather than
@@ -249,7 +251,7 @@ internal class OverlayPipeline(
                         val cpCfg = ClosePassDetector.Config(
                             enabled = prefs.closePassLoggingEnabled,
                             riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
-                            closingSpeedFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat(),
+                            closingSpeedFloorMs = closingFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
                         val table = macToSlug()

@@ -20,6 +20,10 @@ class RideStatsAccumulatorTest {
 
     private fun acc(clock: FakeClock = FakeClock()) = RideStatsAccumulator(clock.provider, clock.provider)
 
+    /** The close-pass closing floor at its 6 m/s default, for every test that
+     *  is not about the floor itself. */
+    private fun RideStatsAccumulator.observeFrame(state: RadarState) = observeFrame(state, 6f)
+
     private fun veh(
         id: Int,
         distanceM: Int = 20,
@@ -35,6 +39,7 @@ class RideStatsAccumulatorTest {
          *  and the clearance rule that reads it would be satisfied by the
          *  fixtures rather than by the code. */
         rangeXmRaw: Float = lateralPos * RadarV2Decoder.LATERAL_FULL_M,
+        bornAtMs: Long = 0L,
     ) = Vehicle(
         id = id,
         distanceM = distanceM,
@@ -45,6 +50,7 @@ class RideStatsAccumulatorTest {
         isAlongsideStationary = isAlongsideStationary,
         lateralUnknown = lateralUnknown,
         rangeXmRaw = rangeXmRaw,
+        bornAtMs = bornAtMs,
     )
 
     /** Alongside, which is the only place a clearance is measured. The default
@@ -73,7 +79,11 @@ class RideStatsAccumulatorTest {
     /** A range-only legacy state: every track carries lateralUnknown because
      *  the source has no lateral channel at all, which is a different thing
      *  from a bad frame on a source that does. */
-    private fun legacyState(vehicles: List<Vehicle>) = RadarState(vehicles = vehicles, source = DataSource.V1)
+    private fun legacyState(vehicles: List<Vehicle>, bikeSpeedMs: Float? = null) = RadarState(vehicles = vehicles, source = DataSource.V1, bikeSpeedMs = bikeSpeedMs)
+
+    /** A rider at a steady ride speed, where the clearance's rider gate is not
+     *  the subject. */
+    private fun riding(vararg vehicles: Vehicle) = radarState(vehicles.toList(), bikeSpeedMs = 5f)
 
     @Test
     fun aLegacyRideStillCountsItsVehicles() {
@@ -123,7 +133,7 @@ class RideStatsAccumulatorTest {
         // permanent while the flag is per-frame, so a source rule that works
         // only when the flag agrees is not a source rule.
         val a = acc()
-        a.observeFrame(legacyState(listOf(alongside(1, lateralPos = 0.5f))))
+        a.observeFrame(legacyState(listOf(alongside(1, lateralPos = 0.5f)), bikeSpeedMs = 5f))
         assertNull(
             "a source that measures no lateral records nothing, flag or no flag",
             a.snapshot().minLateralClearanceM,
@@ -317,9 +327,9 @@ class RideStatsAccumulatorTest {
     @Test
     fun minLateralTrackedAcrossFrames() {
         val a = acc()
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.5f)))) // 1.5 m
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.3f)))) // 0.9 m
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.4f)))) // 1.2 m
+        a.observeFrame(riding(alongside(1, lateralPos = 0.5f))) // 1.5 m
+        a.observeFrame(riding(alongside(1, lateralPos = 0.3f))) // 0.9 m
+        a.observeFrame(riding(alongside(1, lateralPos = 0.4f))) // 1.2 m
         val m = a.snapshot().minLateralClearanceM
         assertNotNull(m)
         assertTrue("expected ~0.9 m, got $m", m!! in 0.85f..0.95f)
@@ -345,11 +355,9 @@ class RideStatsAccumulatorTest {
     fun minLateralSkipsAlongsideStationary() {
         val a = acc()
         a.observeFrame(
-            radarState(
-                listOf(
-                    alongside(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
-                    alongside(2, lateralPos = 0.4f), // 1.2 m
-                ),
+            riding(
+                alongside(1, lateralPos = 0.05f, isAlongsideStationary = true), // 0.15 m
+                alongside(2, lateralPos = 0.4f), // 1.2 m
             ),
         )
         val m = a.snapshot().minLateralClearanceM
@@ -697,14 +705,14 @@ class RideStatsAccumulatorTest {
         // never saw. Null is the honest value.
         val clock = FakeClock(start = 0L)
         val a = acc(clock)
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.5f, lateralUnknown = true))))
+        a.observeFrame(riding(alongside(1, lateralPos = 0.5f, lateralUnknown = true)))
         assertNull(
             "a held offset must not become a measured clearance",
             a.snapshot().minLateralClearanceM,
         )
 
         // A measured frame on the same ride does set it.
-        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.5f))))
+        a.observeFrame(riding(alongside(2, lateralPos = 0.5f)))
         assertEquals(1.5f, a.snapshot().minLateralClearanceM!!, 0.001f)
     }
 
@@ -715,13 +723,13 @@ class RideStatsAccumulatorTest {
         // clearance taken from back there is centimetres that never happened.
         // Without this the ride record and the close-pass events disagreed.
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, distanceM = 20, lateralPos = 0.02f)))) // 0.06 m, far behind
+        a.observeFrame(riding(veh(1, distanceM = 20, lateralPos = 0.02f))) // 0.06 m, far behind
         assertNull(
             "a reading from 20 m back must not become this ride's clearance",
             a.snapshot().minLateralClearanceM,
         )
 
-        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.3f)))) // 0.9 m alongside
+        a.observeFrame(riding(alongside(2, lateralPos = 0.3f))) // 0.9 m alongside
         assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
     }
 
@@ -732,13 +740,13 @@ class RideStatsAccumulatorTest {
         // to 19 survives it, and so does an exclusive comparison. This is the
         // pair that fixes the figure, matching the two the detector has.
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1, distanceM = 4, lateralPos = 0.1f)))) // 0.3 m, outside
+        a.observeFrame(riding(veh(1, distanceM = 4, lateralPos = 0.1f))) // 0.3 m, outside
         assertNull(
             "a reading from 4 m back is not alongside",
             a.snapshot().minLateralClearanceM,
         )
 
-        a.observeFrame(radarState(listOf(veh(2, distanceM = 3, lateralPos = 0.2f)))) // 0.6 m, the boundary
+        a.observeFrame(riding(veh(2, distanceM = 3, lateralPos = 0.2f))) // 0.6 m, the boundary
         assertEquals(
             "the boundary frame itself must count",
             0.6f,
@@ -756,7 +764,7 @@ class RideStatsAccumulatorTest {
         // clearance. lateralPos here is what the decoder produces after that
         // correction (0.0667 * 3.0 = 0.20 m).
         val a = acc()
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.0667f, rangeXmRaw = 0f))))
+        a.observeFrame(riding(alongside(1, lateralPos = 0.0667f, rangeXmRaw = 0f)))
         assertNull(
             "a zero under a mount offset must not become a clearance",
             a.snapshot().minLateralClearanceM,
@@ -770,19 +778,157 @@ class RideStatsAccumulatorTest {
         // does not cover every one of them. Taken as a measurement it publishes
         // a tightest clearance of 0.00 m, which would describe a collision.
         val a = acc()
-        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0f, rangeXmRaw = 0f))))
+        a.observeFrame(riding(alongside(1, lateralPos = 0f, rangeXmRaw = 0f)))
         assertNull(
             "an unresolved reading must not become a clearance",
             a.snapshot().minLateralClearanceM,
         )
 
-        a.observeFrame(radarState(listOf(alongside(2, lateralPos = 0.05f)))) // 0.15 m, measured
+        a.observeFrame(riding(alongside(2, lateralPos = 0.05f))) // 0.15 m, measured
         assertEquals(
             "a genuinely tight measured reading must still count",
             0.15f,
             a.snapshot().minLateralClearanceM!!,
             0.001f,
         )
+    }
+
+    // ── clearance: overtaking vehicles only ──────────────────────────────────
+
+    @Test
+    fun aSlowFollowerIsNotAClearance() {
+        // A car sitting 3 m back reads near dead centre. It never closed at
+        // the floor, so it is following, not passing.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -1f, lateralPos = 0.1f)))
+        a.observeFrame(riding(veh(1, distanceM = 3, speedMs = -1f, lateralPos = 0.07f))) // 0.21 m
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun aCarPassingAStoppedRiderIsNotAClearance() {
+        val a = acc()
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.25f)), bikeSpeedMs = 0.5f)) // 0.75 m, 8 m/s
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun theRiderSpeedIsCarriedFromAnEarlierFrame() {
+        // Device-status frames are slower than target frames, so most frames
+        // carry no rider speed of their own.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, distanceM = 20, speedMs = -8f)), bikeSpeedMs = 5f))
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.25f))))
+        assertEquals(0.75f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun aPhantomReadingIsNotAnApproach() {
+        // One 37.5 m/s reading on a slow follower's track must not make it an
+        // overtake: the peak closing speed rejects the same reading.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -37.5f)))
+        a.observeFrame(riding(veh(1, distanceM = 3, speedMs = -1f, lateralPos = 0.07f)))
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun aReadingAtThePhantomBoundIsStillAnApproach() {
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -35f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, speedMs = -1f, lateralPos = 0.3f)))
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun theFigureIsNeverWiderThanTheTightestPass() {
+        // The detector checks rider speed when it arms; this figure checks it
+        // on every frame. A rider braking as an armed car draws level gets a
+        // close pass the frames alone would not record.
+        val a = acc()
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.2f)), bikeSpeedMs = 0.5f))
+        assertNull(a.snapshot().minLateralClearanceM)
+        a.observeClosePass(closeEvent(clearance = 0.6f))
+        assertEquals(0.6f, a.snapshot().minLateralClearanceM!!, 0.001f)
+
+        // And a tighter frame stays tighter than a looser pass.
+        val b = acc()
+        b.observeFrame(riding(alongside(1, lateralPos = 0.1f))) // 0.3 m
+        b.observeClosePass(closeEvent(clearance = 0.6f))
+        assertEquals(0.3f, b.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun anUnknownRiderSpeedSetsNoClearance() {
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1, distanceM = 20, speedMs = -8f))))
+        a.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.25f))))
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun theRiderGateIsTwoMetresPerSecondInclusive() {
+        // One radar speed quantum (0.25 m/s) apart.
+        val slow = acc()
+        slow.observeFrame(radarState(listOf(veh(1, distanceM = 20, speedMs = -8f)), bikeSpeedMs = 1.75f))
+        slow.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.25f)), bikeSpeedMs = 1.75f))
+        assertNull("below the gate", slow.snapshot().minLateralClearanceM)
+
+        val at = acc()
+        at.observeFrame(radarState(listOf(veh(1, distanceM = 20, speedMs = -8f)), bikeSpeedMs = 2f))
+        at.observeFrame(radarState(listOf(alongside(1, lateralPos = 0.25f)), bikeSpeedMs = 2f))
+        assertEquals("at the gate", 0.75f, at.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun anOvertakeThatSlowsAlongsideStillCounts() {
+        // Closing is judged over the track's life, not on the alongside frame:
+        // a passing car often reads near zero closing as it draws level.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 30, speedMs = -8f, lateralPos = 0.8f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, speedMs = -0.5f, lateralPos = 0.3f))) // 0.9 m
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun theClosingFloorIsTheOneTheCallerPasses() {
+        // 5.5 m/s clears a 5 m/s floor and not a 6 m/s one.
+        val at5 = acc()
+        at5.observeFrame(riding(veh(1, distanceM = 20, speedMs = -5.5f)), 5f)
+        at5.observeFrame(riding(veh(1, distanceM = 2, speedMs = -1f, lateralPos = 0.3f)), 5f)
+        assertEquals(0.9f, at5.snapshot().minLateralClearanceM!!, 0.001f)
+
+        val at6 = acc()
+        at6.observeFrame(riding(veh(1, distanceM = 20, speedMs = -5.5f)), 6f)
+        at6.observeFrame(riding(veh(1, distanceM = 2, speedMs = -1f, lateralPos = 0.3f)), 6f)
+        assertNull(at6.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun theFloorItselfCounts() {
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -6f)), 6f)
+        a.observeFrame(riding(veh(1, distanceM = 2, speedMs = -1f, lateralPos = 0.3f)), 6f)
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
+    }
+
+    @Test
+    fun aReusedTrackIdDoesNotInheritTheLastCarsApproach() {
+        // The radar recycles ids; the birth stamp tells the cars apart.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 20, speedMs = -8f, bornAtMs = 100L)))
+        a.observeFrame(riding(veh(1, distanceM = 3, speedMs = -1f, lateralPos = 0.07f, bornAtMs = 200L)))
+        assertNull(a.snapshot().minLateralClearanceM)
+    }
+
+    @Test
+    fun aFastApproachFromBeyondTrackingRangeStillCounts() {
+        // The approach is often seen only far back, before the 40 m tracking
+        // range the other figures use.
+        val a = acc()
+        a.observeFrame(riding(veh(1, distanceM = 60, speedMs = -8f, lateralPos = 0.8f)))
+        a.observeFrame(riding(veh(1, distanceM = 2, speedMs = -1f, lateralPos = 0.3f))) // 0.9 m
+        assertEquals(0.9f, a.snapshot().minLateralClearanceM!!, 0.001f)
     }
 
     // covers RideStatsAccumulator.kt:89

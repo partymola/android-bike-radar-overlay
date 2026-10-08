@@ -576,7 +576,9 @@ class Prefs(context: Context) {
 
     /** Advanced: minimum closing speed (m/s) for the detector to arm.
      *  Filters lane-matched cruising and filtering — if the vehicle
-     *  isn't genuinely overtaking, it's not a close pass. */
+     *  isn't genuinely overtaking, it's not a close pass. The ride's tightest
+     *  clearance reads it too, whether or not close-pass logging is on
+     *  (`OverlayPipelineDrivingTest.theRidersClosingFloorReachesTheRideClearance`). */
     var closePassClosingSpeedFloorMs: Int
         get() = sp.getInt(KEY_CLOSE_PASS_CLOSING_FLOOR_MS, 6).coerceIn(3, 15)
         set(v) {

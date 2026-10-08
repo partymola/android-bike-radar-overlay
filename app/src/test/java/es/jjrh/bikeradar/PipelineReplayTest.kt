@@ -66,7 +66,7 @@ class PipelineReplayTest {
             val state = decoder.feed(frame.bytes) ?: continue
             snapshotCount++
 
-            stats.observeFrame(state)
+            stats.observeFrame(state, cfg.closingSpeedFloorMs)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,
@@ -148,7 +148,7 @@ class PipelineReplayTest {
         for (frame in frames) {
             clock = frame.relMs
             val state = decoder.feed(frame.bytes) ?: continue
-            stats.observeFrame(state)
+            stats.observeFrame(state, 6f)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,

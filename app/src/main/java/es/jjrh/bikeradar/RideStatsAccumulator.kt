@@ -40,6 +40,13 @@ class RideStatsAccumulator(
     private var lastFrameMs: Long? = null
     private var lastBikeSpeedMs: Float? = null
 
+    /** tid -> the fastest closing (m/s) seen on the track born at [TrackClosing.bornAtMs].
+     *  Bounded by the radar's tid space; a new birth on a reused tid starts over
+     *  (`aReusedTrackIdDoesNotInheritTheLastCarsApproach`). */
+    private val closingByTrack = HashMap<Int, TrackClosing>()
+
+    private class TrackClosing(val bornAtMs: Long, var peakMs: Float)
+
     // Per-event state.
     private var closePassCount: Int = 0
     private var grazingCount: Int = 0
@@ -63,9 +70,10 @@ class RideStatsAccumulator(
      * Ingest a RadarState snapshot. The snapshot's `bikeSpeedMs` integrates
      * into [distanceRiddenM] over the elapsed (monotonic) interval since the
      * previous frame. Vehicles in the snapshot update peak-closing / min-lateral
-     * running extrema and the unique-overtake set.
+     * running extrema and the unique-overtake set. [closingFloorMs] is the
+     * rider's close-pass closing floor, the value [ClosePassDetector] reads.
      */
-    fun observeFrame(state: RadarState) {
+    fun observeFrame(state: RadarState, closingFloorMs: Float) {
         val nowMs = monoMsProvider()
         val prev = lastFrameMs
         lastFrameMs = nowMs
@@ -120,10 +128,17 @@ class RideStatsAccumulator(
         // bikeSpeedMs may arrive in device-status frames at lower cadence than
         // target frames; carrying the last known value is the right approximation.
         if (state.bikeSpeedMs != null) lastBikeSpeedMs = state.bikeSpeedMs
+        val riderMoving = (lastBikeSpeedMs ?: 0f) >= RIDER_MOVING_MS
 
         // Per-frame extrema and overtake-id dedup.
         for (v in state.vehicles) {
             if (v.isBehind) continue
+            // Before the range check: an approach is often seen only far back
+            // (`aFastApproachFromBeyondTrackingRangeStillCounts`). A phantom
+            // reading does not count as one (`aPhantomReadingIsNotAnApproach`).
+            val closing = closingByTrack[v.id]?.takeIf { it.bornAtMs == v.bornAtMs }
+                ?: TrackClosing(v.bornAtMs, 0f).also { closingByTrack[v.id] = it }
+            if (-v.speedMs <= PEAK_CLOSING_MAX_MS) closing.peakMs = maxOf(closing.peakMs, -v.speedMs)
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
             if (seenTrackIds.add(v.id)) generation++
@@ -150,19 +165,24 @@ class RideStatsAccumulator(
             // on a stream with no lateral channel every lateralPos is 0f, which
             // would record a 0.0 m clearance on every track.
             //
-            // The last two conditions are [ClosePassDetector]'s geometry rules,
-            // reading that class's constants rather than a second copy: a
-            // vehicle following directly behind reads as centred, and a raw
-            // reading of exactly zero carries no usable clearance. The GATES
-            // still differ. This figure has no closing-speed floor, no
-            // rider-speed floor and no arming, so a car pacing the rider
-            // alongside sets it with no close-pass event anywhere, which is why
-            // it is not simply the tightest emitted pass.
+            // The window and the raw-zero rule are [ClosePassDetector]'s
+            // geometry rules, read from its constants. The last two keep it to
+            // overtakes of a moving rider. A track that never closed at the
+            // floor is following, not passing, and reads near dead centre; a
+            // car pacing alongside that never closed at the floor is left out
+            // with it, deliberately (`aSlowFollowerIsNotAClearance`). Closing
+            // is judged over the track's life, since a passing car often reads
+            // near zero closing as it draws level
+            // (`anOvertakeThatSlowsAlongsideStillCounts`). A car drawing level
+            // with a stopped rider is caught by the rider gate
+            // (`aCarPassingAStoppedRiderIsNotAClearance`).
             if (!v.isAlongsideStationary &&
                 state.source.hasLateral &&
                 !v.lateralUnknown &&
                 v.distanceM <= ClosePassDetector.ALONGSIDE_MAX_RANGE_Y_M &&
-                abs(v.rangeXmRaw) >= ClosePassDetector.RAW_LATERAL_EPSILON
+                abs(v.rangeXmRaw) >= ClosePassDetector.RAW_LATERAL_EPSILON &&
+                closing.peakMs >= closingFloorMs &&
+                riderMoving
             ) {
                 val lateralM = abs(v.lateralPos) * RadarV2Decoder.LATERAL_FULL_M
                 val current = minLateralM
@@ -177,13 +197,18 @@ class RideStatsAccumulator(
     /**
      * Ingest a close-pass event. Updates discrete counters, the
      * closing-speed sample for p90, and the tightest-pass record if
-     * this event has lower clearance than the current minimum.
+     * this event has lower clearance than the current minimum. The event's
+     * clearance also feeds [minLateralM], so the figure is never wider than
+     * the ride's tightest pass: the detector checks rider speed only when it
+     * arms, this figure on every frame
+     * (`theFigureIsNeverWiderThanTheTightestPass`).
      */
     fun observeClosePass(event: ClosePassDetector.Event) {
         closePassCount++
         if (event.severity == ClosePassDetector.Severity.GRAZING) grazingCount++
         if (event.vehicleSize == VehicleSize.TRUCK) hgvClosePassCount++
         closingSpeedSamples.add(event.closingSpeedKmh)
+        minLateralM = minOf(minLateralM ?: event.minRangeXM, event.minRangeXM)
 
         val current = tightestPass
         if (current == null || event.minRangeXM < current.clearanceM) {
@@ -282,12 +307,21 @@ class RideStatsAccumulator(
         private val MAX_FRAME_GAP_MS = RadarLinkController.V2_FRAME_STALL_MS
         private const val MS_TO_KMH = 3.6f
 
-        /** Fastest closing speed (m/s) the peak records: the bottom of
+        /** Fastest closing speed (m/s) the peak records, and the fastest that
+         *  counts as an approach for the clearance: the bottom of
          *  [AlertDecider]'s ceiling range
-         *  (`thePeakBoundIsThirtyFiveMetresPerSecondInclusive`). Always on,
-         *  unlike that ceiling, since it drops a number, never a cue; a rider
-         *  whose ceiling is higher can be warned about a closer this leaves out. */
+         *  (`thePeakBoundIsThirtyFiveMetresPerSecondInclusive`,
+         *  `aReadingAtThePhantomBoundIsStillAnApproach`). Always on, unlike that
+         *  ceiling, since it drops a number, never a cue; a rider whose ceiling
+         *  is higher can be warned about a closer this leaves out. */
         private const val PEAK_CLOSING_MAX_MS = AlertDecider.MIN_CLOSING_CEILING_MS
+
+        /** Rider speed (m/s) from which the clearance counts; below it a car
+         *  drawing level is passing a stopped rider
+         *  (`theRiderGateIsTwoMetresPerSecondInclusive`). Deliberately not the
+         *  detector's rider floor, a setting that defaults to 15 km/h: high
+         *  enough to leave out a car passing a rider who is slowing down. */
+        private const val RIDER_MOVING_MS = 2f
     }
 }
 
@@ -302,8 +336,9 @@ data class RideStatsSnapshot(
     /** Null until the first close-pass event fires. */
     val closingSpeedP90Kmh: Int?,
     /**
-     * The tightest clearance measured while a vehicle was alongside. Null until
-     * one is, which a ride of following traffic alone never reaches.
+     * The tightest clearance measured while an overtaking vehicle was alongside
+     * a moving rider, or the tightest close pass if that is tighter. Null until
+     * there is one.
      */
     val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,

@@ -482,7 +482,7 @@ internal class OverlayPipeline(
             .put("closing_speed_kmh", ev.closingSpeedKmh)
             .put("rider_speed_kmh", ev.riderSpeedKmh)
             .put("vehicle_size", ev.vehicleSize.name)
-            .put("threshold_m", ev.thresholdArmedM)
+            .put("threshold_m", ev.emitThresholdM)
             .put("severity", ev.severity.name.lowercase(Locale.ROOT))
     }
 }

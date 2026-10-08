@@ -332,35 +332,24 @@ class ClosePassDetectorTest {
         assertTrue("rider below the speed floor must never arm", events.isEmpty())
     }
 
-    // ── rural arm threshold ──────────────────────────────────────────────────
+    // ── the rider's threshold ────────────────────────────────────────────────
 
-    // covers the urban/rural arm-threshold branch
-    @Test fun `arms under the rural threshold above 8point25 ms only`() {
-        // Rider at 9 m/s (> 8.25) selects armRangeXRuralM = 2.0. Because
-        // framesSeen counts every frame the track is present (not just
-        // lateral-passing ones), the first frame eligible to arm is the third -
-        // the 0.9 m one - which is under BOTH the urban (1.5) and rural (2.0)
-        // gates, so an always-urban mutant still arms here and still drives to a
-        // 0.75 m clearance (< 1.0 emit cutoff) → both intact and mutant emit one event.
-        // The kill is therefore NOT the presence of an event: it is the
-        // `assertEquals(2.0f, e.thresholdArmedM)` assertion. The intact code
-        // records the rural 2.0 threshold; an always-urban mutant records 1.5,
-        // so the threshold assertion is the load-bearing kill.
+    @Test fun `the rider's threshold decides, and the event carries it`() {
+        // A 1.8 m pass under a 2.0 m threshold: counted, with the threshold
+        // that counted it.
         val d = ClosePassDetector()
+        val wide = baseConfig.copy(emitMinRangeXM = 2.0f)
         val frames = listOf(
-            veh(distanceM = 30, lateralPos = 0.6f, speedMs = -8f) to 0L, // 1.8 m, over the urban gate
-            veh(distanceM = 22, lateralPos = 0.4f, speedMs = -8f) to 100L, // 1.2 m
-            veh(distanceM = 14, lateralPos = 0.3f, speedMs = -8f) to 200L, // 0.9 m
-            veh(distanceM = 3, lateralPos = 0.2f, speedMs = -8f) to 300L, // 0.6 m, still behind
-            veh(distanceM = 2, lateralPos = 0.25f, speedMs = -8f) to 400L, // 0.75 m alongside
-            veh(distanceM = 0, lateralPos = 0.3f, speedMs = -8f, isBehind = true) to 500L,
+            listOf(veh(distanceM = 30, lateralPos = 0.6f)) to 0L,
+            listOf(veh(distanceM = 25, lateralPos = 0.6f)) to 100L,
+            listOf(veh(distanceM = 20, lateralPos = 0.6f)) to 200L,
+            listOf(veh(distanceM = 2, lateralPos = 0.6f)) to 300L, // 1.8 m
+            emptyList<Vehicle>() to 400L,
         )
-        val events = drive(d, frames, bikeSpeedMs = 9f)
+        val events = drive(d, frames, config = wide)
         assertEquals(1, events.size)
-        val e = events[0]
-        assertEquals("must arm on the rural 2.0 m threshold", 2.0f, e.thresholdArmedM, 0.001f)
-        assertEquals(0.75f, e.clearanceM, 0.01f)
-        assertEquals(ClosePassDetector.Severity.VERY_CLOSE, e.severity)
+        assertEquals(2.0f, events[0].emitThresholdM, 0.001f)
+        assertEquals(1.8f, events[0].clearanceM, 0.01f)
     }
 
     // ── LEFT side ────────────────────────────────────────────────────────────
@@ -600,6 +589,24 @@ class ClosePassDetectorTest {
         val events = drive(d, frames) + terminate(d, 400L)
         assertEquals(1, events.size)
         assertEquals(ClosePassDetector.Severity.GRAZING, events[0].severity)
+    }
+
+    // ── arming ───────────────────────────────────────────────────────────────
+
+    @Test fun `a car that closes while off to the side and comes in as it slows still counts`() {
+        // Closing fast 2.4 m to the side, then slowing as it comes in to pass
+        // 0.75 m away: no single frame is both close sideways and fast.
+        val d = ClosePassDetector()
+        val frames = listOf(
+            veh(distanceM = 30, lateralPos = 0.8f, speedMs = -8f) to 0L,
+            veh(distanceM = 25, lateralPos = 0.8f, speedMs = -8f) to 100L,
+            veh(distanceM = 20, lateralPos = 0.8f, speedMs = -8f) to 200L,
+            veh(distanceM = 8, lateralPos = 0.3f, speedMs = -2f) to 300L,
+            veh(distanceM = 2, lateralPos = 0.25f, speedMs = -1f) to 400L, // 0.75 m
+        )
+        val events = drive(d, frames) + terminate(d, 500L)
+        assertEquals(1, events.size)
+        assertEquals(0.75f, events[0].clearanceM, 0.01f)
     }
 
     // ── the pass point ───────────────────────────────────────────────────────

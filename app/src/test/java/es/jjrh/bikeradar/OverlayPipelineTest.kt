@@ -37,7 +37,7 @@ class OverlayPipelineTest {
             closingSpeedKmh = 42,
             riderSpeedKmh = 18,
             vehicleSize = VehicleSize.CAR,
-            thresholdArmedM = 1.0f,
+            emitThresholdM = 1.0f,
             severity = ClosePassDetector.Severity.VERY_CLOSE,
         )
         val json: JSONObject = OverlayPipeline.closePassJson(ev)
@@ -68,7 +68,7 @@ class OverlayPipelineTest {
             closingSpeedKmh = 0,
             riderSpeedKmh = 0,
             vehicleSize = VehicleSize.TRUCK,
-            thresholdArmedM = 1.5f,
+            emitThresholdM = 1.5f,
             severity = ClosePassDetector.Severity.GRAZING,
         )
         val json = OverlayPipeline.closePassJson(ev)

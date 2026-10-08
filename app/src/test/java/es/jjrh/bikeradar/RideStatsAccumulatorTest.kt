@@ -156,7 +156,7 @@ class RideStatsAccumulatorTest {
         closingSpeedKmh = closingKmh,
         riderSpeedKmh = 25,
         vehicleSize = size,
-        thresholdArmedM = 1.5f,
+        emitThresholdM = 1.0f,
         severity = severity,
     )
 

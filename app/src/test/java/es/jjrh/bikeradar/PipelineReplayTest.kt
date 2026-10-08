@@ -52,8 +52,6 @@ class PipelineReplayTest {
             enabled = true,
             riderSpeedFloorMs = 0f,
             closingSpeedFloorMs = 1f,
-            armRangeXUrbanM = 3.0f,
-            armRangeXRuralM = 3.0f,
             emitMinRangeXM = 3.0f,
             minFramesToArm = 1,
         )

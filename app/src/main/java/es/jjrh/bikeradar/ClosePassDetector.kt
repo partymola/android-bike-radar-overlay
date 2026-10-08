@@ -56,11 +56,6 @@ class ClosePassDetector {
          *  event we care to log. Float at the radar's 0.5 m/s native
          *  quantum (raw byte * 0.5). */
         val closingSpeedFloorMs: Float = 6f,
-        /** Arm when |rangeX| drops under this. Tiered by rider speed
-         *  at ARM time in [decide]: riderSpeed <= 30 km/h uses
-         *  [armRangeXUrbanM]; above uses [armRangeXRuralM]. */
-        val armRangeXUrbanM: Float = 1.5f,
-        val armRangeXRuralM: Float = 2.0f,
         /** Emit the event only if the clearance is below this.
          *  Everything above is logged-but-not-published
          *  via the state machine (dropped at emit time). This is the
@@ -99,7 +94,8 @@ class ClosePassDetector {
         val closingSpeedKmh: Int,
         val riderSpeedKmh: Int,
         val vehicleSize: VehicleSize,
-        val thresholdArmedM: Float,
+        /** [Config.emitMinRangeXM] when the pass was logged. */
+        val emitThresholdM: Float,
         val severity: Severity,
     )
 
@@ -120,7 +116,6 @@ class ClosePassDetector {
     ) {
         var framesSeen = 0
         var armed = false
-        var armedThresholdM = 0f
         var peakClosingMs = 0f
 
         /** Measured frames inside [ALONGSIDE_MAX_RANGE_Y_M] since arming. */
@@ -210,21 +205,17 @@ class ClosePassDetector {
             // and would hide it from a rider who has set one.
             if (abs(v.rangeXmRaw) < RAW_LATERAL_EPSILON) continue
 
-            // Arm the track if all gates pass.
+            // Arm the track if all gates pass. No lateral gate: a car often
+            // closes fast out to the side and comes in only as it slows, so no
+            // one frame is both, and the clearance is judged at the pass
+            // anyway (`a car that closes while off to the side and comes in as
+            // it slows still counts`).
             if (!state.armed) {
                 val rangeYOk = v.distanceM in 0..config.maxRangeYM
                 val closingOk = v.speedMs <= -config.closingSpeedFloorMs
                 val riderOk = riderMs >= config.riderSpeedFloorMs
                 val framesOk = state.framesSeen >= config.minFramesToArm
-                // Urban-cruise branch when rider speed <= 8.25 m/s
-                // (catches raw 0..33 inclusive, matching the prior
-                // 30 km/h cut exactly).
-                val armThreshold = if (riderMs <= 8.25f) config.armRangeXUrbanM else config.armRangeXRuralM
-                val lateralOk = abs(v.lateralPos * LATERAL_FULL_M) <= armThreshold
-                if (rangeYOk && closingOk && riderOk && framesOk && lateralOk) {
-                    state.armed = true
-                    state.armedThresholdM = armThreshold
-                }
+                if (rangeYOk && closingOk && riderOk && framesOk) state.armed = true
             }
 
             if (state.armed && v.distanceM <= ALONGSIDE_MAX_RANGE_Y_M) {
@@ -286,7 +277,7 @@ class ClosePassDetector {
             closingSpeedKmh = (state.peakClosingMs * 3.6f).toInt(),
             riderSpeedKmh = pass.riderSpeedKmh,
             vehicleSize = pass.size,
-            thresholdArmedM = state.armedThresholdM,
+            emitThresholdM = config.emitMinRangeXM,
             severity = severity,
         )
     }

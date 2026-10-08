@@ -878,7 +878,7 @@ class BikeRadarServiceSmokeTest {
                 closingSpeedKmh = 30,
                 riderSpeedKmh = 20,
                 vehicleSize = VehicleSize.CAR,
-                thresholdArmedM = 1.0f,
+                emitThresholdM = 1.0f,
                 severity = ClosePassDetector.Severity.VERY_CLOSE,
             ),
         )
@@ -956,7 +956,7 @@ class BikeRadarServiceSmokeTest {
                 closingSpeedKmh = 30,
                 riderSpeedKmh = 20,
                 vehicleSize = VehicleSize.CAR,
-                thresholdArmedM = 1.0f,
+                emitThresholdM = 1.0f,
                 severity = ClosePassDetector.Severity.VERY_CLOSE,
             ),
         )

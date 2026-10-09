@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.9.0 - 2026-10-09
+
+### Fix
+
+- **A radar that connects but never sends data now counts as off.** A radar that connected and then failed its startup exchange on every attempt was treated as on each time. The drop alert restarted its wait and never sounded, the warning for riding without the radar read it as on, and the walk-away alarm was held off. So you could ride with no rear cover and nothing to tell you. The radar now counts as on from the first data it sends, and its status reads "Connecting…" until then.
+- **Switching eBike data on or off takes effect at once.** Switching it off, in Settings, by going back in setup, or by answering "I don't have one" there, left the app still reading the bike, so the warning for riding without the radar could still sound. Switching it on in Settings did nothing until the app restarted, although Settings said the data was on. Switching it off now also forgets the bike's last reading, which the forgot-to-lock reminder and the drop banner's "but bike unlocked" used with no age limit.
+- **Close passes are measured where the vehicle draws level with you.** The clearance was the tightest reading within 3 m behind you, often a car still in line just before it pulled out to pass. It is now the middle reading of those within 2 m. A close pass's closing speed is now the fastest approach reading within 40 m behind you, where it was the reading as the vehicle drew level, which is often near zero.
+- **A vehicle that closes fast off to the side and moves in towards you as it slows is now counted.** A pass used to count only if, at one moment, the vehicle was both closing fast and within 1.5 m to the side (2.0 m with you above 30 km/h). The clearance is now judged only where it passes, against your Lateral clearance threshold.
+- **One vehicle's close pass can no longer be credited to the next.** The radar can reuse one vehicle's ID for the next one straight away, and the new one could then be logged on the first one's approach.
+- **Readings closing faster than 126 km/h no longer count in close passes or the ride's peak closing speed.** Such a reading no longer sets the ride's peak closing speed, and no longer starts a close pass or sets its closing speed, whatever "Warn up to" is set to. The radar's phantom readings fall there, but so can a real vehicle, so this changes only the statistics and logged passes: beeps and the urgent warning still follow "Warn up to".
+- **The ride's tightest clearance counts only vehicles overtaking you.** It took any vehicle within 3 m behind you, so a car queued behind you, or one creeping past while you were stopped, usually set it. It now counts a vehicle only once it has closed in at your Minimum closing speed, and only while you ride at about 7 km/h or more. It takes each vehicle's clearance where it drew level, once the radar stops following it. A vehicle the radar lost in a dropout is left out. A logged close pass now also sets it when it is tighter.
+- **The overlay redraws when the radar switches between its two data streams.** The same vehicles reported on the other stream could keep their previous colours until something moved.
+
+### Breaking
+
+- **Home Assistant close-pass events change meaning, under the same names.** `min_range_x_m` is now the clearance where the vehicle drew level, and `range_y_at_min_m`, `ts`, `side`, `rider_speed_kmh` and `vehicle_size` come from that same moment. `closing_speed_kmh` is the fastest approach reading within 40 m, so it reads higher. `threshold_m` is now your Lateral clearance threshold, where it was an internal limit of 1.5 or 2.0 m. Which passes are logged changes too, for the reasons under Fix: on the developer's recorded rides, at the default close-pass settings, they fell from 16 to 14. If an automation triggers on a threshold, check it still fires where you want.
+- **The ride summary's counts, clearance and closing speeds read differently.** `close_pass_count`, `grazing_count`, `hgv_close_pass_count` and `close_pass_conversion_rate` move with the passes logged, and grazing is judged on the new clearance. `min_lateral_clearance_m` ("Tightest clearance") reads wider and is Unknown on more rides. `peak_closing_kmh` ("Peak closing speed") no longer goes above 126 km/h. `closing_speed_p90_kmh` reads higher. The `tightest_pass` attribute's clearance, distance behind and time come from where the vehicle drew level, and its closing speed reads higher. The ride history on your phone moves the same way, with or without Home Assistant, and rides recorded before this version keep their old figures. Check ride-summary automations the same way.
+
+### Features
+
+- **Experimental: hold the urgent warning for a vehicle already off to one side.** "Hold the urgent warning for vehicles to the side" is the first row in Settings -> Experimental, off by default. When a vehicle closing fast is already off to one side and too little of its approach has been seen to tell where it will pass, the urgent warning holds off briefly, and stays quiet if the vehicle then looks set to pass wider than your urgent warning clearance. The cost is that the warning for a close vehicle can come later, or not at all, and the switch's description says so. On the developer's recorded rides, at a 30 m alert distance, it removed eight urgent warnings, none of them for a vehicle that passed within 2 m of the radar, and delayed the first warning for eight vehicles that did by about a third of a second typically and 0.7 s at most.
+
+### UX
+
+- **The close-pass settings say what they count.** Lateral clearance threshold: "Counts overtakes that pass closer than this to the middle of your bike." Minimum rider speed: "Counts a pass only if you were at least this fast as the vehicle closed in."
+- **"Warn when riding without the radar" says it needs eBike data on and Bosch Flow running.** It said only "With a Bosch eBike", so an owner with eBike data off could read it as covering them. The range-only radar's card in Settings, the README and the compatibility notes now say the drop alert needs the same.
+- **The Home Assistant device is now named "Bike Radar <device>".** The entity names Home Assistant shows start with it, unless you renamed the device there. Home Assistant keeps the entity ids you have, and on current Home Assistant a new install's ids start with `bike_radar`.
+
+### Diagnostics
+
+- **The connection log notes a radar's first data and an eBike data switch-off.** Its line for the warning for riding without the radar now rounds the ride time up, like the wait it is compared with, so a warning on time no longer reads as a second early.
+- **The capture log's urgent warning lines say whether the experimental wait was on.**
+
+### Compatibility
+
+- minSdk unchanged at 31; targetSdk unchanged at 36. The fix for a radar that never sends data can make the drop alert, the warning for riding without the radar and the walk-away alarm sound where they stayed silent, and switching eBike data off now stops that warning. The experimental wait changes nothing unless you turn it on. The Home Assistant device is renamed, as under UX. No change to the Home Assistant topics or which values are sent, beyond the meanings under Breaking, to which radars work, or to the cross-app contract. Ride history entries written from this version are marked version 2 in the stored file.
+
+### Internal
+
+- The Privacy screen check now reads the Privacy screen's own text, in both languages. Tests pin the warning for riding without the radar through the service, a radar failing its startup exchange, the legacy stream's first frame, and how close passes are measured. An unused eBike service action is removed.
+
 ## v1.8.1 - 2026-10-06
 
 ### Fix

@@ -134,8 +134,15 @@ internal data class RideHistoryRecord(
 
     companion object {
         /** Bump when a field changes meaning; readers tolerate unknown
-         *  keys, so additions don't need a bump. */
-        const val SCHEMA_VERSION = 1
+         *  keys, so additions don't need a bump. 2: `min_lateral_m` and
+         *  `tightest_m` are taken where each vehicle drew level;
+         *  `closing_p90_kmh` and `tightest_kmh` come from each pass's
+         *  approach peak; all three closing fields leave out readings over
+         *  [ClosePassDetector.PEAK_CLOSING_MAX_MS]; `close_passes`, `grazing`
+         *  and `hgv_close_passes` count passes armed on closing speed alone
+         *  and judged where the vehicle drew level. Version 1 records hold
+         *  earlier meanings of those fields (`v2RecordsSayVersionTwo`). */
+        const val SCHEMA_VERSION = 2
 
         fun fromSnapshot(snap: RideStatsSnapshot, endedAtMs: Long): RideHistoryRecord = RideHistoryRecord(
             startedAtMs = snap.rideStartedAtMs,

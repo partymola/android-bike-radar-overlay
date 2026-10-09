@@ -165,6 +165,12 @@ class RideHistoryStoreTest {
         assertEquals(5L, all.last().startedAtMs)
     }
 
+    @Test fun v2RecordsSayVersionTwo() {
+        // Several fields changed meaning at version 2, and the stored marker
+        // is the only thing that tells a new record from an old one.
+        assertEquals(2, org.json.JSONObject(fullRecord().toJsonLine()).getInt("v"))
+    }
+
     @Test fun unknownKeysAreTolerated() {
         val line = fullRecord().toJsonLine().removeSuffix("}") + ""","future_field":"x"}"""
         val parsed = RideHistoryRecord.fromJsonLine(line)

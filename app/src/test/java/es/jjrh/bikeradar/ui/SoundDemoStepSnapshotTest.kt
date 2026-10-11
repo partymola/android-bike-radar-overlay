@@ -19,7 +19,8 @@ import org.robolectric.annotation.GraphicsMode
  * Roborazzi goldens for the sound demo leaf at three moments of the scene:
  * before Play, mid-scene as the first car reaches three beeps, and mid-scene
  * at the urgent warning, plus the three-beep moment in Spanish, where the sub
- * runs longest, and the Settings replay locked by a streaming radar, in Spanish.
+ * runs longest, the urgent caption in Spanish, the longest caption, and the
+ * Settings replay locked by a streaming radar, in Spanish.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -66,6 +67,10 @@ class SoundDemoStepSnapshotTest {
     @Test
     @Config(qualifiers = "+es")
     fun threeBeepsEs() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true, playing = true)
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun urgentEs() = capture(tMs = 16_000L, lastCue = AlertCue.Urgent, played = true, playing = true)
 
     @Test
     @Config(qualifiers = "+es")

@@ -944,7 +944,7 @@
     <string name="sound_demo_caption_two">Closer: two beeps.</string>
     <string name="sound_demo_caption_three">Close: three beeps.</string>
     <string name="sound_demo_caption_clear">The radar sees nothing within your alert distance any more: the all-clear.</string>
-    <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning.</string>
+    <string name="sound_demo_caption_urgent">Closing fast while you are stopped or slow: the urgent warning (only on radars that report speed).</string>
     <string name="alert_volume_title">Set the alert volume</string>
     <string name="alert_volume_sub">Play a test sound while you set it.</string>
     <!-- Shown on every screen that hands the volume buttons to the alerts

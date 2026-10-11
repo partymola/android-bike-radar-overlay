@@ -165,7 +165,7 @@ class SoundDemoStepTest {
 
         advanceUntil(20_000L) { player.calls.size >= 5 }
         assertEquals(listOf("play1", "play2", "play3", "clear", "urgent"), player.calls)
-        composeRule.onNodeWithText("Closing fast while you are stopped or slow: the urgent warning.").assertExists()
+        composeRule.onNodeWithText("Closing fast while you are stopped or slow: the urgent warning (only on radars that report speed).").assertExists()
         advanceUntil(5_000L) { false }
         composeRule.onNodeWithText("Play again").assertExists()
     }
@@ -517,7 +517,7 @@ class SoundDemoStepTest {
                 "Closer: two beeps.",
                 "Close: three beeps.",
                 "The radar sees nothing within your alert distance any more: the all-clear.",
-                "Closing fast while you are stopped or slow: the urgent warning.",
+                "Closing fast while you are stopped or slow: the urgent warning (only on radars that report speed).",
             ),
             captions,
         )

@@ -114,7 +114,7 @@ not a fine-pitch distinction; within the class the cues are separated by
 | Imminent impact (`UrgentApproach`) | Urgent | 3800 Hz | 4 looming pulses (rising loudness, accelerating gaps) |
 | Radar dropped | Urgent | ~900 Hz | 3 pulses |
 | Radar reconnected | End of drop episode | ~900 Hz | 1 pulse |
-| All clear | (road empties) | 1100 to 700 Hz | soft two-tone descent |
+| All clear | (road empties) | 1100 to 700 Hz | two-tone descent |
 
 The status cues share one carrier and are read purely by pulse count: one for
 reconnect, three for drop. The all-clear is its own class (a

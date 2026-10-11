@@ -38,7 +38,7 @@ import kotlin.math.sin
  *                   read on the SAME distance, never a speed/urgency code (that
  *                   is the action channel's job); the carrier and the
  *                   count<->distance mapping are constant across tiers.
- *   playClear() -> softer two-tone descent (1100 -> 700 Hz) for "all clear".
+ *   playClear() -> two-tone descent (1100 -> 700 Hz) for "all clear".
  *                   Its own class (a falling glide), never a status carrier.
  *   playUrgent() -> [URGENT_PULSES]-pulse [URGENT_CARRIER_HZ] Hz imminent-impact
  *                   override, LOOMING: each pulse is louder than the last
@@ -383,7 +383,7 @@ class AlertBeeper(
     }
 
     /** Rear-radar reconnected status cue: the dropped link is back, so rear
-     *  awareness is restored. A SINGLE soft pulse - the count of one separates
+     *  awareness is restored. A SINGLE pulse - the count of one separates
      *  it from the drop cue's three, so the rider reads it by count, not fine
      *  pitch. Fired once
      *  per down-episode, and only after a drop cue was raised (the caller gates

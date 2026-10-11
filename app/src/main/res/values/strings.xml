@@ -153,7 +153,6 @@
 
     <!-- Home-screen toasts. -->
     <string name="main_toast_dev_enabled">Developer options enabled</string>
-    <string name="main_toast_grant_bt">Grant permissions in Settings to start scanning</string>
 
     <!-- Bluetooth-off banner (shown when the adapter is off but a state
          other than the BT-off hero is on screen). -->

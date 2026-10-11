@@ -72,6 +72,7 @@ import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkCoordinator
@@ -165,6 +166,15 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             }
         }
     }
+    // ON_RESUME starts the service after a grant made in App info, but a grant
+    // from the other half of a split screen leaves this activity resumed, and
+    // the poller would clear the card with no service running.
+    LaunchedEffect(missingPermission) {
+        if (missingPermission == null) ServiceAutoStart.startIfAllowed(ctx, prefs)
+    }
+    // Without Nearby devices the bonded list reads empty and the service never
+    // starts, so every device row would describe a cause the card above names.
+    val nearbyMissing = missingPermission == MissingPermission.NEARBY_DEVICES
 
     // Polled, not read once: a first ride is saved minutes after the radar
     // goes off, often with this screen already open. Stops once a ride
@@ -247,7 +257,12 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         serviceEnabled = prefsSnap.serviceEnabled,
         bluetoothEnabled = btEnabled,
         rideEndOfferable = canEndRide,
-        missingPermission = missingPermission,
+        // A service already running, as after a sticky restart with
+        // Notifications revoked, still sounds every alert, so the card must
+        // not say otherwise. The tick re-reads the static.
+        missingPermission = missingPermission?.takeUnless {
+            it == MissingPermission.NOTIFICATIONS && BikeRadarService.radarLinkStateForUi != null
+        },
         radarConnecting = radarConnecting,
     )
     val statusModel = MainStatusDeriver.derive(
@@ -338,13 +353,17 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         MainScreenContent(
             status = status,
             cta = cta,
-            btEnabled = btEnabled,
+            // The rows' "transport up": with Nearby missing they read "Not
+            // paired", as with Bluetooth off, and the card names the reason.
+            btEnabled = btEnabled && !nearbyMissing,
             showBtOffBanner = showBtOffBanner,
             showDashcamPrompt = showDashcamPrompt,
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
-            ebikeStage = ebikeStage,
+            // The service publishes NOT_PERMITTED only once it runs, which it
+            // cannot without the permission; the row would blame Flow.
+            ebikeStage = if (nearbyMissing) EBikeStage.NOT_PERMITTED else ebikeStage,
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
             hasBond = hasBond,
@@ -741,67 +760,60 @@ internal fun ctaFor(
     navController: NavController,
     ctx: Context,
     prefs: Prefs,
-): StatusCta? {
-    // Hoisted out of the onClick lambda below: stringResource is
-    // @Composable-only and cannot be called from the click handler.
-    val grantBtMsg = stringResource(R.string.main_toast_grant_bt)
-    return when {
-        !inputs.firstRunComplete ->
-            StatusCta(stringResource(R.string.main_cta_set_up)) { navController.navigate("onboarding") }
+): StatusCta? = when {
+    !inputs.firstRunComplete ->
+        StatusCta(stringResource(R.string.main_cta_set_up)) { navController.navigate("onboarding") }
 
-        !inputs.serviceEnabled -> StatusCta(stringResource(R.string.main_cta_start_scanning)) {
-            prefs.serviceEnabled = true
-            if (!ServiceAutoStart.startIfAllowed(ctx, prefs)) {
-                Toast.makeText(ctx, grantBtMsg, Toast.LENGTH_LONG).show()
-                navController.navigate("settings/permissions")
-            }
-        }
-
-        inputs.missingPermission != null ->
-            StatusCta(stringResource(R.string.main_cta_grant_permissions)) { navController.navigate("settings/permissions") }
-
-        nowMs < inputs.pausedUntilEpochMs ->
-            StatusCta(stringResource(R.string.main_cta_resume)) { prefs.pausedUntilEpochMs = 0L }
-
-        !inputs.bluetoothEnabled -> StatusCta(
-            label = stringResource(R.string.main_cta_turn_on_bluetooth),
-            onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
-        )
-
-        !inputs.hasBond -> StatusCta(
-            label = stringResource(R.string.main_cta_pair),
-            onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
-        )
-
-        // The radar is down in a session that had one, so the app cannot tell
-        // "off because I finished" from "off because it broke". This is the
-        // rider saying which, and it is the same declaration a Bosch lock
-        // makes for an eBike rider.
-        //
-        // A mis-tap is cheap ONLY where the radar comes back, because that is
-        // what spends the declaration. On a flat radar battery no reconnect
-        // comes, the control withholds itself once used, and there is no undo,
-        // so for a rider with no eBike the drop alert stays off for the rest of
-        // the session; an eBike riding run that begins after the tap spends it.
-        // Do not widen the gate on the strength of the cheap case.
-        //
-        // The freshness term is what makes this branch agree with the hero,
-        // which offers the parked question only from its stale-radar block.
-        // Stated here so neither surface depends on the link controller's
-        // connect and teardown ordering, nor on two unrelated constants in
-        // separate files agreeing. Pinned by
-        // MainScreenEndRideCtaTest.aRadarStillReadingLiveIsNeverOfferedTheControl.
-        inputs.rideEndOfferable && !inputs.radarFresh -> StatusCta(
-            label = stringResource(R.string.main_cta_parked),
-            onClick = {
-                ContextCompat.startForegroundService(ctx, BikeRadarService.endRideIntent(ctx))
-            },
-        )
-
-        // Dashcam-off Warn: no CTA per DEC-002.
-        // Live + good / Live + HA down / Waiting: no CTA.
-        else -> null
+    // Pinned with the Grant route below by MainScreenStartCtaTest.
+    !inputs.serviceEnabled -> StatusCta(stringResource(R.string.main_cta_start_scanning)) {
+        prefs.serviceEnabled = true
+        if (!ServiceAutoStart.startIfAllowed(ctx, prefs)) navController.navigate("settings/permissions")
     }
+
+    inputs.missingPermission != null ->
+        StatusCta(stringResource(R.string.main_cta_grant_permissions)) { navController.navigate("settings/permissions") }
+
+    nowMs < inputs.pausedUntilEpochMs ->
+        StatusCta(stringResource(R.string.main_cta_resume)) { prefs.pausedUntilEpochMs = 0L }
+
+    !inputs.bluetoothEnabled -> StatusCta(
+        label = stringResource(R.string.main_cta_turn_on_bluetooth),
+        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+    )
+
+    !inputs.hasBond -> StatusCta(
+        label = stringResource(R.string.main_cta_pair),
+        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+    )
+
+    // The radar is down in a session that had one, so the app cannot tell
+    // "off because I finished" from "off because it broke". This is the
+    // rider saying which, and it is the same declaration a Bosch lock
+    // makes for an eBike rider.
+    //
+    // A mis-tap is cheap ONLY where the radar comes back, because that is
+    // what spends the declaration. On a flat radar battery no reconnect
+    // comes, the control withholds itself once used, and there is no undo,
+    // so for a rider with no eBike the drop alert stays off for the rest of
+    // the session; an eBike riding run that begins after the tap spends it.
+    // Do not widen the gate on the strength of the cheap case.
+    //
+    // The freshness term is what makes this branch agree with the hero,
+    // which offers the parked question only from its stale-radar block.
+    // Stated here so neither surface depends on the link controller's
+    // connect and teardown ordering, nor on two unrelated constants in
+    // separate files agreeing. Pinned by
+    // MainScreenEndRideCtaTest.aRadarStillReadingLiveIsNeverOfferedTheControl.
+    inputs.rideEndOfferable && !inputs.radarFresh -> StatusCta(
+        label = stringResource(R.string.main_cta_parked),
+        onClick = {
+            ContextCompat.startForegroundService(ctx, BikeRadarService.endRideIntent(ctx))
+        },
+    )
+
+    // Dashcam-off Warn: no CTA per DEC-002.
+    // Live + good / Live + HA down / Waiting: no CTA.
+    else -> null
 }
 
 // ── Settings button ──────────────────────────────────────────────────

@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
  *
  * Variants picked to exercise the visually distinct states:
  *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error),
- *    permissions-missing in Spanish (Warn, the longest subtitle) and
+ *    permissions-missing in Spanish (Error) and
  *    connecting in Spanish beside its System row
  *  - System: empty (nothing paired, HA not configured), populated (radar +
  *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
@@ -94,7 +94,6 @@ class MainScreenSnapshotTest {
         }
     }
 
-    // The longest hero subtitle, in the locale that runs longest.
     @Test
     @Config(qualifiers = "+es")
     fun heroPermissionsEs() {
@@ -104,7 +103,7 @@ class MainScreenSnapshotTest {
                     HeroStatusCard(
                         status = MainStatus(
                             icon = MainStatusIcon.Warning,
-                            tone = MainStatusTone.Warn,
+                            tone = MainStatusTone.Error,
                             headline = stringResource(R.string.main_status_permissions_title),
                             subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
                         ),

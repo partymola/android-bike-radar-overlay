@@ -127,6 +127,7 @@ private fun dotForStatus(
     //   Paused              -> fgDim, no pulse
     //   Not paired (BT on)  -> caution, no pulse
     //   Not paired (BT off) -> danger, no pulse  (mockup's `noBluetooth`)
+    //   Permission missing  -> danger, pulse
     //   Live + dashcam off  -> caution, pulse  (matches `dashcamMissing`)
     //   Live + HA down      -> safe, no pulse  (still live; HA is a side-channel)
     //   Live + good         -> safe, no pulse
@@ -152,7 +153,11 @@ private fun dotForStatus(
             MainStatusTone.Warn -> br.caution to true
             else -> br.fgDim to true
         }
-        MainStatusIcon.Warning -> br.caution to true
+        // Error is a missing permission: the service cannot run at all.
+        MainStatusIcon.Warning -> when (tone) {
+            MainStatusTone.Error -> br.danger to true
+            else -> br.caution to true
+        }
         MainStatusIcon.CheckCircle -> when (tone) {
             MainStatusTone.Good -> br.safe to false
             else -> br.fg to false

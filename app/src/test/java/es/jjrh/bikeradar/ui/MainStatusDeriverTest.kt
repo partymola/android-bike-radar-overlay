@@ -191,7 +191,7 @@ class MainStatusDeriverTest {
     @Test fun aMissingPermissionSaysWhichOne() {
         val nearby = derive(baseInputs(missingPermission = MissingPermission.NEARBY_DEVICES))
         assertEquals(MainStatusIcon.Warning, nearby.icon)
-        assertEquals(MainStatusTone.Warn, nearby.tone)
+        assertEquals(MainStatusTone.Error, nearby.tone)
         assertEquals(R.string.main_status_permissions_title, nearby.headlineRes)
         assertEquals(R.string.main_status_permissions_nearby_sub, nearby.subtitleRes)
         val notifications = derive(baseInputs(missingPermission = MissingPermission.NOTIFICATIONS))

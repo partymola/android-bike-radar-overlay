@@ -126,7 +126,6 @@
 
     <!-- Avisos (toast) de la pantalla de inicio. -->
     <string name="main_toast_dev_enabled">Opciones de desarrollador activadas</string>
-    <string name="main_toast_grant_bt">Concede los permisos en Ajustes para empezar a buscar</string>
 
     <!-- Banner de Bluetooth apagado (se muestra cuando el adaptador está
          apagado pero hay otro estado en pantalla distinto del de BT apagado). -->

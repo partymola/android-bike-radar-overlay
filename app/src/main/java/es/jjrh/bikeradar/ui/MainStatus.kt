@@ -126,9 +126,11 @@ object MainStatusDeriver {
      * turned the whole thing off would be misdirection.
      *
      * A missing permission beats everything after it for the same reason:
-     * without it the service never starts, and with Nearby devices denied
-     * the bonded list reads empty, so "not paired" would send the rider to
-     * Android's Bluetooth list where the radar already is.
+     * the app will not start the service without it, and with Bluetooth
+     * connect denied the bonded list reads empty, so "not paired" would send
+     * the rider to Android's Bluetooth list where the radar already is. The
+     * screen leaves Notifications out while a service is already running,
+     * since that one still sounds every alert.
      *
      * BtOff beats NotPaired because the bond persists across BT toggles;
      * the right prompt is "turn BT back on", not "go pair".
@@ -160,9 +162,10 @@ object MainStatusDeriver {
             )
         }
         inputs.missingPermission?.let { missing ->
+            // Red, as on Settings -> Permissions: no alerts at all.
             return MainStatusModel(
                 icon = MainStatusIcon.Warning,
-                tone = MainStatusTone.Warn,
+                tone = MainStatusTone.Error,
                 headlineRes = R.string.main_status_permissions_title,
                 subtitleRes = when (missing) {
                     MissingPermission.NEARBY_DEVICES -> R.string.main_status_permissions_nearby_sub

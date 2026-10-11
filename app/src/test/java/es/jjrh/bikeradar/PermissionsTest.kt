@@ -17,7 +17,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * Covers the SDK-version branch in [Permissions.hasRequiredForService].
+ * Covers [Permissions.missingForService] and the SDK-version branch in it.
  *
  * On Tiramisu (API 33) and above, POST_NOTIFICATIONS joins BLUETOOTH_SCAN
  * and BLUETOOTH_CONNECT in the required set; below it, only the two
@@ -27,8 +27,6 @@ import org.robolectric.annotation.Config
  * (35, see robolectric.properties) so the JaCoCo agent attributes their
  * coverage - the default sandbox is the one it instruments. The pre-Tiramisu
  * case uses @Config(sdk=S) to drive the other side of the version gate.
- * The shadow application controls which permissions are granted so the
- * all()-predicate is exercised both true and false.
  */
 @RunWith(RobolectricTestRunner::class)
 class PermissionsTest {
@@ -49,8 +47,8 @@ class PermissionsTest {
     @Test
     fun tiramisuMissingPostNotificationsFails() {
         // Both Bluetooth permissions granted, notifications withheld: on
-        // Tiramisu+ the all() predicate must reject because POST_NOTIFICATIONS
-        // is in the required set.
+        // Tiramisu+ this must fail because POST_NOTIFICATIONS is in the
+        // required set.
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
@@ -60,7 +58,7 @@ class PermissionsTest {
 
     @Test
     fun tiramisuMissingBluetoothFails() {
-        // Missing one Bluetooth permission must fail the all() predicate.
+        // Missing one Bluetooth permission must fail.
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
         assertFalse(Permissions.hasRequiredForService(app))
     }

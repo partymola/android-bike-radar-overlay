@@ -86,7 +86,7 @@ class MainScreenEndRideCtaTest {
         // still be asked there; the connecting card itself has no button.
         val both = listOf(false, true)
         val connectingTitle = R.string.main_status_connecting_title
-        val grant = app.getString(R.string.main_cta_grant_permissions)
+        val grant = "Grant permissions"
         var disagreed = listOf<String>()
         var visited = 0
         compose.setContent {
@@ -96,7 +96,7 @@ class MainScreenEndRideCtaTest {
             var n = 0
             for (firstRun in both) {
                 for (serviceOn in both) {
-                    for (missing in listOf(null, MissingPermission.NEARBY_DEVICES)) {
+                    for (missing in listOf(null) + MissingPermission.entries) {
                         for (paused in both) {
                             for (bt in both) {
                                 for (bond in both) {
@@ -145,7 +145,7 @@ class MainScreenEndRideCtaTest {
         compose.waitForIdle()
         // Anti-vacuity: a loop that never ran would satisfy the emptiness
         // assertion below without checking anything.
-        assertEquals("every combination of the nine gates must be visited", 512, visited)
+        assertEquals("every combination of the gates must be visited", 768, visited)
         assertEquals("the card must never ask what the button cannot answer", emptyList<String>(), disagreed)
     }
 

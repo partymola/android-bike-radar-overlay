@@ -72,6 +72,7 @@ import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
+import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkCoordinator
 import es.jjrh.bikeradar.RadarLinkState
@@ -151,6 +152,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var hasBond by remember { mutableStateOf(radarIsSelected(ctx, prefs.radarMac)) }
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
+    var missingPermission by remember { mutableStateOf(Permissions.missingForService(ctx)) }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             // Read before the first wait, or a rider back from the Bluetooth
@@ -158,6 +160,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             while (true) {
                 hasBond = radarIsSelected(ctx, prefs.radarMac)
                 btEnabled = bluetoothIsOn(ctx)
+                missingPermission = Permissions.missingForService(ctx)
                 delay(5_000)
             }
         }
@@ -244,6 +247,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         serviceEnabled = prefsSnap.serviceEnabled,
         bluetoothEnabled = btEnabled,
         rideEndOfferable = canEndRide,
+        missingPermission = missingPermission,
     )
     val statusModel = MainStatusDeriver.derive(
         inputs,
@@ -751,6 +755,9 @@ internal fun ctaFor(
                 navController.navigate("settings/permissions")
             }
         }
+
+        inputs.missingPermission != null ->
+            StatusCta(stringResource(R.string.main_cta_grant_permissions)) { navController.navigate("settings/permissions") }
 
         nowMs < inputs.pausedUntilEpochMs ->
             StatusCta(stringResource(R.string.main_cta_resume)) { prefs.pausedUntilEpochMs = 0L }

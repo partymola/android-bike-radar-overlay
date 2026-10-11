@@ -51,6 +51,11 @@ class MainScreenEndRideWiringTest {
             serviceEnabled = true
             pausedUntilEpochMs = 0L
         }
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
         val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         shadowOf(adapter).setEnabled(true)
         val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")

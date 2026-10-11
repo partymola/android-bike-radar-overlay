@@ -91,6 +91,9 @@
     <string name="main_status_setup_sub">Toca Ajustes para empezar</string>
     <string name="main_status_service_off_title">Servicio detenido</string>
     <string name="main_status_service_off_sub">Toca Iniciar para empezar</string>
+    <string name="main_status_permissions_title">Faltan permisos</string>
+    <string name="main_status_permissions_nearby_sub">Sin alertas hasta que concedas Dispositivos cercanos</string>
+    <string name="main_status_permissions_notifications_sub">Sin alertas hasta que concedas Notificaciones</string>
     <string name="main_status_paused_title">En pausa hasta las <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
     <string name="main_status_paused_sub">Alertas silenciadas</string>
     <string name="main_status_bt_off_title">Bluetooth apagado</string>
@@ -113,6 +116,7 @@
     <!-- Botones de acción de la tarjeta de estado principal. -->
     <string name="main_cta_set_up">Configurar</string>
     <string name="main_cta_start_scanning">Empezar a buscar</string>
+    <string name="main_cta_grant_permissions">Conceder permisos</string>
     <string name="main_cta_resume">Reanudar</string>
     <string name="main_cta_turn_on_bluetooth">Activar Bluetooth</string>
     <string name="main_cta_pair">Emparejar</string>
@@ -120,7 +124,7 @@
 
     <!-- Avisos (toast) de la pantalla de inicio. -->
     <string name="main_toast_dev_enabled">Opciones de desarrollador activadas</string>
-    <string name="main_toast_grant_bt">Concede los permisos de Bluetooth en Ajustes para empezar a buscar</string>
+    <string name="main_toast_grant_bt">Concede los permisos en Ajustes para empezar a buscar</string>
 
     <!-- Banner de Bluetooth apagado (se muestra cuando el adaptador está
          apagado pero hay otro estado en pantalla distinto del de BT apagado). -->
@@ -204,7 +208,7 @@
     <!-- ════════════════════════════════════════════════════════════════
          Introducción (OnboardingScreen.kt) - demo de sonidos, paso de volumen y asistente de 5 pasos
          ════════════════════════════════════════════════════════════════ -->
-    <string name="onboarding_skip">Omitir</string>
+    <string name="onboarding_skip_setup">Omitir configuración</string>
     <string name="onboarding_skip_for_now">Omitir por ahora</string>
     <string name="onboarding_finish">Finalizar</string>
     <string name="onboarding_step_1_of_5">Paso 1 de 5</string>

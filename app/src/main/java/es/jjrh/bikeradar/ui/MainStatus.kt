@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.annotation.StringRes
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.R
 
 /**
@@ -85,6 +86,9 @@ data class MainStatusInputs(
      *  instruction to a question. Defaults false so every existing call site
      *  and test keeps the plain waiting copy. */
     val rideEndOfferable: Boolean = false,
+    /** What stops the radar service starting, or null when nothing does
+     *  ([es.jjrh.bikeradar.Permissions.missingForService]). */
+    val missingPermission: MissingPermission? = null,
 )
 
 object MainStatusDeriver {
@@ -93,13 +97,14 @@ object MainStatusDeriver {
      * Priority order, first match wins:
      *  1. First-run setup
      *  2. Service stopped (user toggled the foreground service off)
-     *  3. User-paused
-     *  4. Bluetooth disabled (adapter off at the OS level)
-     *  5. Radar not paired
-     *  6. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  7. Radar live but HA unreachable
-     *  8. Radar live, all good
-     *  9. Paired but radar stale
+     *  3. A permission the service needs is missing
+     *  4. User-paused
+     *  5. Bluetooth disabled (adapter off at the OS level)
+     *  6. Radar not paired
+     *  7. Radar live but dashcam off  (rider-safety beats HA connectivity)
+     *  8. Radar live but HA unreachable
+     *  9. Radar live, all good
+     *  10. Paired but radar stale
      *
      * DashcamOff is intentionally ranked above HaDown: HA is background
      * telemetry, the dashcam is the rear-view recording the rider needs.
@@ -109,6 +114,11 @@ object MainStatusDeriver {
      * isn't running there's no scanning happening at all — telling the
      * rider the radar is "not paired" when the real cause is that they
      * turned the whole thing off would be misdirection.
+     *
+     * A missing permission beats everything after it for the same reason:
+     * without it the service never starts, and with Nearby devices denied
+     * the bonded list reads empty, so "not paired" would send the rider to
+     * Android's Bluetooth list where the radar already is.
      *
      * BtOff beats NotPaired because the bond persists across BT toggles;
      * the right prompt is "turn BT back on", not "go pair".
@@ -137,6 +147,17 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Neutral,
                 headlineRes = R.string.main_status_service_off_title,
                 subtitleRes = R.string.main_status_service_off_sub,
+            )
+        }
+        inputs.missingPermission?.let { missing ->
+            return MainStatusModel(
+                icon = MainStatusIcon.Warning,
+                tone = MainStatusTone.Warn,
+                headlineRes = R.string.main_status_permissions_title,
+                subtitleRes = when (missing) {
+                    MissingPermission.NEARBY_DEVICES -> R.string.main_status_permissions_nearby_sub
+                    MissingPermission.NOTIFICATIONS -> R.string.main_status_permissions_notifications_sub
+                },
             )
         }
         if (nowMs < inputs.pausedUntilEpochMs) {

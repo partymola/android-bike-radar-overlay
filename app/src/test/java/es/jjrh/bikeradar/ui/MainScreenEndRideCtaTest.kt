@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
@@ -78,7 +79,10 @@ class MainScreenEndRideCtaTest {
         // dropped is offered "I've parked" under a card telling them to turn
         // Bluetooth on, and the tap spends the declaration on a ride that has
         // not ended.
+        // The permissions state is checked the same way: the card naming a
+        // missing permission and the button opening Permissions, together.
         val both = listOf(false, true)
+        val grant = app.getString(R.string.main_cta_grant_permissions)
         var disagreed = listOf<String>()
         var visited = 0
         compose.setContent {
@@ -88,34 +92,40 @@ class MainScreenEndRideCtaTest {
             var n = 0
             for (firstRun in both) {
                 for (serviceOn in both) {
-                    for (paused in both) {
-                        for (bt in both) {
-                            for (bond in both) {
-                                for (fresh in both) {
-                                    for (offerable in both) {
-                                        val inputs = MainStatusInputs(
-                                            firstRunComplete = firstRun,
-                                            pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
-                                            hasBond = bond,
-                                            radarFresh = fresh,
-                                            haErrorRecent = false,
-                                            dashcamOwned = false,
-                                            dashcamWarnWhenOff = false,
-                                            dashcamFresh = false,
-                                            dashcamDisplayName = null,
-                                            serviceEnabled = serviceOn,
-                                            bluetoothEnabled = bt,
-                                            rideEndOfferable = offerable,
-                                        )
-                                        val asks = MainStatusDeriver.derive(inputs, now) { "" }
-                                            .headlineRes == R.string.main_status_ride_over_title
-                                        val offers = ctaFor(inputs, now, nav, app, prefs)?.label == "I've parked"
-                                        if (asks != offers) {
-                                            found += "firstRun=$firstRun service=$serviceOn paused=$paused " +
-                                                "bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
-                                                "(hero asks=$asks, button offers=$offers)"
+                    for (missing in listOf(null, MissingPermission.NEARBY_DEVICES)) {
+                        for (paused in both) {
+                            for (bt in both) {
+                                for (bond in both) {
+                                    for (fresh in both) {
+                                        for (offerable in both) {
+                                            val inputs = MainStatusInputs(
+                                                firstRunComplete = firstRun,
+                                                pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
+                                                hasBond = bond,
+                                                radarFresh = fresh,
+                                                haErrorRecent = false,
+                                                dashcamOwned = false,
+                                                dashcamWarnWhenOff = false,
+                                                dashcamFresh = false,
+                                                dashcamDisplayName = null,
+                                                serviceEnabled = serviceOn,
+                                                bluetoothEnabled = bt,
+                                                rideEndOfferable = offerable,
+                                                missingPermission = missing,
+                                            )
+                                            val headline = MainStatusDeriver.derive(inputs, now) { "" }.headlineRes
+                                            val label = ctaFor(inputs, now, nav, app, prefs)?.label
+                                            val asks = headline == R.string.main_status_ride_over_title
+                                            val offers = label == "I've parked"
+                                            val namesPermission = headline == R.string.main_status_permissions_title
+                                            val opensPermissions = label == grant
+                                            if (asks != offers || namesPermission != opensPermissions) {
+                                                found += "firstRun=$firstRun service=$serviceOn missing=$missing " +
+                                                    "paused=$paused bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
+                                                    "(hero=$headline, button=$label)"
+                                            }
+                                            n++
                                         }
-                                        n++
                                     }
                                 }
                             }
@@ -129,7 +139,7 @@ class MainScreenEndRideCtaTest {
         compose.waitForIdle()
         // Anti-vacuity: a loop that never ran would satisfy the emptiness
         // assertion below without checking anything.
-        assertEquals("every combination of the seven gates must be visited", 128, visited)
+        assertEquals("every combination of the eight gates must be visited", 256, visited)
         assertEquals("the card must never ask what the button cannot answer", emptyList<String>(), disagreed)
     }
 

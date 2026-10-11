@@ -60,6 +60,34 @@ class MainScreenResumeTest {
         RadarStateBus.clear()
     }
 
+    private fun grantAll() = shadowOf(app).grantPermissions(
+        android.Manifest.permission.BLUETOOTH_SCAN,
+        android.Manifest.permission.BLUETOOTH_CONNECT,
+        android.Manifest.permission.POST_NOTIFICATIONS,
+    )
+
+    @Test
+    fun aPermissionGrantedWhileAwayIsShownOnReturn() {
+        shadowOf(adapter).setEnabled(true)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                MainScreen(navController = rememberNavController(), prefs = prefs)
+            }
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.onNodeWithText("Permissions needed").assertExists()
+
+        composeRule.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
+        grantAll()
+        composeRule.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Permissions needed").assertDoesNotExist()
+        composeRule.onNodeWithText("Waiting for radar").assertExists()
+    }
+
     @After
     fun tearDown() {
         RadarStateBus.clear()
@@ -68,6 +96,7 @@ class MainScreenResumeTest {
 
     @Test
     fun bluetoothTurnedOnWhileAwayIsShownOnReturn() {
+        grantAll()
         shadowOf(adapter).setEnabled(false)
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {

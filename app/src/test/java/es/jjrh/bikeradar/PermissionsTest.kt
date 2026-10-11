@@ -6,7 +6,9 @@ import android.Manifest
 import android.app.Application
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,6 +63,23 @@ class PermissionsTest {
         // Missing one Bluetooth permission must fail the all() predicate.
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
         assertFalse(Permissions.hasRequiredForService(app))
+    }
+
+    @Test
+    fun theMissingPermissionIsNamedNearbyDevicesFirst() {
+        assertEquals(MissingPermission.NEARBY_DEVICES, Permissions.missingForService(app))
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        assertEquals(MissingPermission.NEARBY_DEVICES, Permissions.missingForService(app))
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+        assertEquals(MissingPermission.NOTIFICATIONS, Permissions.missingForService(app))
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        assertNull(Permissions.missingForService(app))
+    }
+
+    @Test
+    fun scanWithoutConnectIsStillNearbyDevices() {
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.POST_NOTIFICATIONS)
+        assertEquals(MissingPermission.NEARBY_DEVICES, Permissions.missingForService(app))
     }
 
     @Test

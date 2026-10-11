@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -14,6 +15,7 @@ import es.jjrh.bikeradar.AttentionItem
 import es.jjrh.bikeradar.AttentionKind
 import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.HaStatus
+import es.jjrh.bikeradar.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -26,7 +28,8 @@ import org.robolectric.annotation.GraphicsMode
  * lifecycle-driven pollers in [MainScreen].
  *
  * Variants picked to exercise the visually distinct states:
- *  - Hero: live-good (CheckCircle / Good) and not-paired-bt-on (Error)
+ *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error) and
+ *    permissions-missing in Spanish (Warn, the longest subtitle)
  *  - System: empty (nothing paired, HA not configured), populated (radar +
  *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
  *    eBike row in its amber "Waiting for Flow" state with no stale battery
@@ -82,6 +85,27 @@ class MainScreenSnapshotTest {
                             subtitle = "Pair in Settings",
                         ),
                         cta = StatusCta(label = "Pair", onClick = {}),
+                    )
+                }
+            }
+        }
+    }
+
+    // The longest hero subtitle, in the locale that runs longest.
+    @Test
+    @Config(qualifiers = "+es")
+    fun heroPermissionsEs() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    HeroStatusCard(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Warning,
+                            tone = MainStatusTone.Warn,
+                            headline = stringResource(R.string.main_status_permissions_title),
+                            subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
+                        ),
+                        cta = StatusCta(label = stringResource(R.string.main_cta_grant_permissions), onClick = {}),
                     )
                 }
             }

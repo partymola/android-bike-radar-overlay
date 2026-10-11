@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -23,7 +24,9 @@ class MainStatusDeriverTest {
         serviceEnabled: Boolean = true,
         bluetoothEnabled: Boolean = true,
         rideEndOfferable: Boolean = false,
+        missingPermission: MissingPermission? = null,
     ) = MainStatusInputs(
+        missingPermission = missingPermission,
         rideEndOfferable = rideEndOfferable,
         firstRunComplete = firstRunComplete,
         pausedUntilEpochMs = pausedUntilEpochMs,
@@ -179,6 +182,38 @@ class MainStatusDeriverTest {
         // walked through onboarding rather than seeing a Start CTA.
         val s = derive(baseInputs(firstRunComplete = false, serviceEnabled = false))
         assertEquals(R.string.main_status_setup_title, s.headlineRes)
+    }
+
+    // ── permissions missing ──────────────────────────────────────────────────
+
+    @Test fun aMissingPermissionSaysWhichOne() {
+        val nearby = derive(baseInputs(missingPermission = MissingPermission.NEARBY_DEVICES))
+        assertEquals(MainStatusIcon.Warning, nearby.icon)
+        assertEquals(MainStatusTone.Warn, nearby.tone)
+        assertEquals(R.string.main_status_permissions_title, nearby.headlineRes)
+        assertEquals(R.string.main_status_permissions_nearby_sub, nearby.subtitleRes)
+        val notifications = derive(baseInputs(missingPermission = MissingPermission.NOTIFICATIONS))
+        assertEquals(R.string.main_status_permissions_notifications_sub, notifications.subtitleRes)
+    }
+
+    @Test fun aMissingPermissionBeatsPausedBluetoothAndPairing() {
+        // Without it the service never starts, and with Nearby devices denied
+        // the bonded list reads empty, so "not paired" would be the wrong fix.
+        val s = derive(
+            baseInputs(
+                missingPermission = MissingPermission.NEARBY_DEVICES,
+                pausedUntilEpochMs = 200L,
+                bluetoothEnabled = false,
+                hasBond = false,
+            ),
+            now = 100L,
+        )
+        assertEquals(R.string.main_status_permissions_title, s.headlineRes)
+    }
+
+    @Test fun serviceStoppedStillBeatsAMissingPermission() {
+        val s = derive(baseInputs(serviceEnabled = false, missingPermission = MissingPermission.NEARBY_DEVICES))
+        assertEquals(R.string.main_status_service_off_title, s.headlineRes)
     }
 
     // ── bluetooth-off ────────────────────────────────────────────────────────

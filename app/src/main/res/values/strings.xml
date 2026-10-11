@@ -105,6 +105,11 @@
     <string name="main_status_setup_sub">Tap Settings to begin</string>
     <string name="main_status_service_off_title">Service stopped</string>
     <string name="main_status_service_off_sub">Tap Start to begin</string>
+    <!-- The radar service cannot start without these, so no alerts at all.
+         The subtitle names the one missing, Nearby devices first. -->
+    <string name="main_status_permissions_title">Permissions needed</string>
+    <string name="main_status_permissions_nearby_sub">No alerts until you grant Nearby devices</string>
+    <string name="main_status_permissions_notifications_sub">No alerts until you grant Notifications</string>
     <string name="main_status_paused_title">Paused until <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
     <string name="main_status_paused_sub">Alerts are silenced</string>
     <string name="main_status_bt_off_title">Bluetooth is off</string>
@@ -133,6 +138,7 @@
     <!-- Hero status-card call-to-action buttons. -->
     <string name="main_cta_set_up">Set up</string>
     <string name="main_cta_start_scanning">Start scanning</string>
+    <string name="main_cta_grant_permissions">Grant permissions</string>
     <string name="main_cta_resume">Resume</string>
     <string name="main_cta_turn_on_bluetooth">Turn on Bluetooth</string>
     <string name="main_cta_pair">Pair</string>
@@ -143,7 +149,7 @@
 
     <!-- Home-screen toasts. -->
     <string name="main_toast_dev_enabled">Developer options enabled</string>
-    <string name="main_toast_grant_bt">Grant Bluetooth permissions in Settings to start scanning</string>
+    <string name="main_toast_grant_bt">Grant permissions in Settings to start scanning</string>
 
     <!-- Bluetooth-off banner (shown when the adapter is off but a state
          other than the BT-off hero is on screen). -->
@@ -229,7 +235,7 @@
     <!-- ════════════════════════════════════════════════════════════════
          Onboarding (OnboardingScreen.kt) - sound demo, volume step, then a 5-step pager
          ════════════════════════════════════════════════════════════════ -->
-    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_skip_setup">Skip setup</string>
     <string name="onboarding_skip_for_now">Skip for now</string>
     <string name="onboarding_finish">Finish</string>
     <string name="onboarding_step_1_of_5">Step 1 of 5</string>

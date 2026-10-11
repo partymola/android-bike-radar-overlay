@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -130,7 +132,7 @@ private fun OnboardingScreenBody(
 }
 
 @Composable
-private fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
+internal fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
     val br = LocalBrColors.current
     Row(
         modifier = Modifier
@@ -154,9 +156,18 @@ private fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
                 )
             }
         }
-        Box(modifier = Modifier.clickable(onClick = onSkip).padding(horizontal = 4.dp, vertical = 6.dp)) {
+        // A button at full touch height, not a text link: it ends setup
+        // (`OnboardingSkipButtonTest`).
+        Box(
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(role = Role.Button, onClick = onSkip)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                text = stringResource(R.string.onboarding_skip),
+                text = stringResource(R.string.onboarding_skip_setup),
                 color = br.fgMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

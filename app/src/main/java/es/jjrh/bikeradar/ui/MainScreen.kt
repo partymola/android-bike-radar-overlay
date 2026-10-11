@@ -72,7 +72,6 @@ import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
-import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkCoordinator
 import es.jjrh.bikeradar.RadarLinkState
@@ -80,6 +79,7 @@ import es.jjrh.bikeradar.RadarLinkStatus
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.RideHistoryStore
+import es.jjrh.bikeradar.ServiceAutoStart
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
@@ -746,14 +746,9 @@ internal fun ctaFor(
 
         !inputs.serviceEnabled -> StatusCta(stringResource(R.string.main_cta_start_scanning)) {
             prefs.serviceEnabled = true
-            if (Permissions.hasRequiredForService(ctx)) {
-                ContextCompat.startForegroundService(
-                    ctx,
-                    Intent(ctx, BikeRadarService::class.java),
-                )
-            } else {
+            if (!ServiceAutoStart.startIfAllowed(ctx, prefs)) {
                 Toast.makeText(ctx, grantBtMsg, Toast.LENGTH_LONG).show()
-                navController.navigate("settings")
+                navController.navigate("settings/permissions")
             }
         }
 

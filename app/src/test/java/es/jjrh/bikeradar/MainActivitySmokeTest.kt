@@ -123,10 +123,21 @@ class MainActivitySmokeTest {
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
-            controller.create()
+            controller.create().start().resume()
             val started = shadowOf(app).peekNextStartedService()
-            assertNotNull("service should be enqueued from MainActivity.onCreate", started)
+            assertNotNull("service should be enqueued when MainActivity resumes", started)
             assertEquals(BikeRadarService::class.java.name, started?.component?.className)
+        }
+    }
+
+    /** Drives a launch and a later return, the two resumes the start rule runs on. */
+    private fun assertNoStartAcrossLaunchAndReturn() {
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            controller.create().start().resume()
+            assertNull("launch", shadowOf(app).peekNextStartedService())
+            controller.pause()
+            controller.resume()
+            assertNull("return", shadowOf(app).peekNextStartedService())
         }
     }
 
@@ -143,12 +154,36 @@ class MainActivitySmokeTest {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
+        assertNoStartAcrossLaunchAndReturn()
+    }
+
+    /** Permissions granted while the app was away (the system dialog, App
+     *  info) start the service when the rider comes back, not at the next
+     *  launch or reboot. */
+    @Test
+    fun aPermissionGrantedWhileAwayStartsTheServiceOnReturn() {
+        Prefs(app).apply {
+            firstRunComplete = true
+            serviceEnabled = true
+            safetyNoticeAcknowledged = true
+        }
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
-            controller.create()
-            assertNull(shadowOf(app).peekNextStartedService())
+            controller.create().start().resume()
+            assertNull("no permissions, no service", shadowOf(app).peekNextStartedService())
+
+            controller.pause()
+            shadowOf(app).grantPermissions(
+                android.Manifest.permission.BLUETOOTH_SCAN,
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            )
+            controller.resume()
+
+            assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
         }
     }
 
+    /** "Stop scanning" stays stopped however often the rider opens the app. */
     @Test
     fun returningUserDoesNotStartServiceWhenServiceDisabled() {
         Prefs(app).apply {
@@ -161,9 +196,6 @@ class MainActivitySmokeTest {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
-        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
-            controller.create()
-            assertNull(shadowOf(app).peekNextStartedService())
-        }
+        assertNoStartAcrossLaunchAndReturn()
     }
 }

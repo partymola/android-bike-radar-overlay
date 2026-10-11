@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
 class BootReceiver : BroadcastReceiver() {
@@ -19,20 +18,13 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         val prefs = Prefs(ctx)
-        if (!prefs.firstRunComplete) {
-            Log.d(TAG, "$action: first_run_complete=false, not starting")
-            return
-        }
-        if (!prefs.serviceEnabled) {
-            Log.d(TAG, "$action: service_enabled=false, not starting")
-            return
-        }
-        if (!Permissions.hasRequiredForService(ctx)) {
-            Log.w(TAG, "$action: required perms missing, not starting")
-            return
-        }
-        Log.d(TAG, "$action: starting BikeRadarService")
-        ContextCompat.startForegroundService(ctx, Intent(ctx, BikeRadarService::class.java))
+        val started = ServiceAutoStart.startIfAllowed(ctx, prefs)
+        val permitted = Permissions.hasRequiredForService(ctx)
+        val line = "$action: started=$started first_run_complete=${prefs.firstRunComplete}" +
+            " service_enabled=${prefs.serviceEnabled} permitted=$permitted"
+        // A rider set up and scanning but left without the service is the
+        // outcome worth seeing in a log; the rest is routine.
+        if (!permitted && prefs.firstRunComplete && prefs.serviceEnabled) Log.w(TAG, line) else Log.d(TAG, line)
     }
 
     companion object {

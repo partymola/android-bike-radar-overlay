@@ -2,12 +2,12 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -49,18 +49,15 @@ class MainActivity : ComponentActivity() {
         DevModeState.loadFrom(prefs)
         HaCredentials(this).seedFromBuildConfigIfEmpty()
 
-        // Re-launch the service after process kill (e.g. adb install -r) if
-        // the user is past onboarding and perms are still in place. Boot is
-        // covered by BootReceiver; this covers app relaunch.
-        if (prefs.firstRunComplete &&
-            prefs.serviceEnabled &&
-            Permissions.hasRequiredForService(this)
-        ) {
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, BikeRadarService::class.java),
-            )
-        }
+        // On every resume, the first included: re-launches the service after a
+        // process kill (e.g. adb install -r), and a permission granted in the
+        // system dialog or App info starts it without a relaunch. Boot is
+        // covered by BootReceiver.
+        lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) ServiceAutoStart.startIfAllowed(this, prefs)
+            },
+        )
 
         setContent {
             UiTheme {
@@ -81,12 +78,7 @@ class MainActivity : ComponentActivity() {
                     composable("onboarding") {
                         val onFinished: () -> Unit = {
                             prefs.firstRunComplete = true
-                            if (Permissions.hasRequiredForService(this@MainActivity)) {
-                                ContextCompat.startForegroundService(
-                                    this@MainActivity,
-                                    Intent(this@MainActivity, BikeRadarService::class.java),
-                                )
-                            }
+                            ServiceAutoStart.startIfAllowed(this@MainActivity, prefs)
                             navController.navigate("main") {
                                 popUpTo("onboarding") { inclusive = true }
                             }

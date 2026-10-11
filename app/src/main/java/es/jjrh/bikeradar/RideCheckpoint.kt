@@ -22,9 +22,9 @@ import java.io.File
  * The next service start flushes any leftover checkpoint straight into the
  * ride history ([RideCheckpointStore.take]); the normal summary path clears
  * it instead. A death in the tiny window between the summary's history
- * append and the checkpoint clear can duplicate one history row on restart -
- * the reverse order would lose the ride instead, and a duplicate is the
- * better failure.
+ * append and the checkpoint clear can append the ride again on restart -
+ * the reverse order would lose the ride instead. [RideHistoryStore.readAll]
+ * reads such a repeat as one ride.
  *
  * [RideCheckpointDecider] is the pure write-gate; [RideCheckpointStore] is
  * the single-slot file (temp-write + rename, so a crash mid-write leaves the

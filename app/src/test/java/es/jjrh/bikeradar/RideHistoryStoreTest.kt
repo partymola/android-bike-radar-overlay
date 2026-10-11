@@ -14,8 +14,8 @@ import java.nio.file.Files
 /**
  * Robolectric (for org.json + android.util.Log). Pins the JSON-lines
  * round-trip, null-field handling, the [RideHistoryStore.MAX_RIDES]
- * trim, and corrupt-line tolerance - the contract the Ride history
- * screen reads against.
+ * trim, corrupt-line tolerance and one entry per ride start - the
+ * contract the Ride history screen reads against.
  */
 @RunWith(RobolectricTestRunner::class)
 class RideHistoryStoreTest {
@@ -117,6 +117,75 @@ class RideHistoryStoreTest {
         assertEquals(3, all.size)
         assertEquals(3_000L, all[0].startedAtMs)
         assertEquals(1_000L, all[2].startedAtMs)
+    }
+
+    @Test fun aRideWrittenTwiceIsReadOnce() {
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 1_000L))
+        store.append(fullRecord(start = 2_000L))
+        store.append(fullRecord(start = 2_000L))
+        assertEquals(listOf(2_000L, 1_000L), store.readAll().map { it.startedAtMs })
+    }
+
+    @Test fun theLaterOfTwoCompleteCopiesWins() {
+        // Summary line, then the checkpoint recovered on restart: the two ends
+        // come from separate clock conversions and can differ by milliseconds.
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_003L))
+        val all = store.readAll()
+        assertEquals(1, all.size)
+        assertEquals(6_003L, all[0].endedAtMs)
+    }
+
+    @Test fun aCompleteCopyBeatsALaterPartialOne() {
+        // A failed checkpoint rewrite can leave the slot partial, then recovery
+        // appends it after the complete summary line.
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 5_000L, partial = true))
+        val all = store.readAll()
+        assertEquals(1, all.size)
+        assertEquals(6_000L, all[0].endedAtMs)
+        assertEquals(false, all[0].partial)
+    }
+
+    @Test fun aCompleteCopyBeatsAPartialOneEndingLater() {
+        // A wall-clock step can stamp a stale partial copy after the summary's.
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 9_000L, partial = true))
+        val all = store.readAll()
+        assertEquals(1, all.size)
+        assertEquals(false, all[0].partial)
+    }
+
+    @Test fun ofTwoCopiesEndingTogetherTheLaterLineWins() {
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L, distanceKm = 10f))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L, distanceKm = 11f))
+        assertEquals(11f, store.readAll().single().distanceKm, 0.001f)
+    }
+
+    @Test fun aCompleteCopyBeatsAPartialOneEndingTogether() {
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 6_000L, partial = true))
+        assertEquals(false, store.readAll().single().partial)
+    }
+
+    @Test fun ofTwoPartialCopiesTheOneEndingLaterWins() {
+        val root = Files.createTempDirectory("ridehist").toFile()
+        val store = RideHistoryStore({ root })
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 7_000L, partial = true))
+        store.append(fullRecord(start = 2_000L).copy(endedAtMs = 5_000L, partial = true))
+        assertEquals(7_000L, store.readAll().single().endedAtMs)
     }
 
     @Test fun readAllIsEmptyWhenNoFileExists() {

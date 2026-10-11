@@ -7,10 +7,11 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Local, append-only ride history: one JSON line per finished ride,
- * written when the post-ride summary fires (see
- * [BikeRadarService.maybePostRideSummary]) and read back by the Ride
- * history screen.
+ * Local, append-only ride history: a JSON line per ride saved, written
+ * when the post-ride summary fires (see
+ * [BikeRadarService.maybePostRideSummary]) or when a crash checkpoint is
+ * recovered on start, and read back by the Ride history screen as one ride
+ * per start time ([readAll]).
  *
  * Deliberately minimal - a single JSON-lines file in app-specific
  * external storage, no database. The history is a per-ride log, not a
@@ -46,7 +47,11 @@ internal class RideHistoryStore(
         }
     }
 
-    /** All stored rides, newest first. Empty when no history exists. */
+    /** All stored rides, newest first. Empty when no history exists. Rides are
+     *  keyed by start time: lines repeating a start ([RideCheckpointCoordinator]
+     *  can append a ride again) read as one: the complete copy before a partial
+     *  one, then the copy that ends last, then the later line
+     *  (`aRideWrittenTwiceIsReadOnce` and its neighbours). */
     fun readAll(): List<RideHistoryRecord> {
         synchronized(lock) {
             val file = historyFile() ?: return emptyList()
@@ -55,6 +60,10 @@ internal class RideHistoryStore(
                 file.readLines()
                     .mapNotNull { RideHistoryRecord.fromJsonLine(it) }
                     .asReversed()
+                    .groupBy { it.startedAtMs }
+                    .values
+                    // maxWith keeps the first of equals, and the copies run newest first.
+                    .map { copies -> copies.maxWith(compareBy({ !it.partial }, { it.endedAtMs })) }
             } catch (t: Throwable) {
                 Log.w(TAG, "ride-history read failed: $t")
                 emptyList()

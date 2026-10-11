@@ -11,7 +11,9 @@ tracking.
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](./LICENSE)
 [![Android 12+](https://img.shields.io/badge/android-12%2B-brightgreen)](#requirements)
 
-**[⬇ Download the latest APK](../../releases/latest)** - or add the repo to
+<a href="https://f-droid.org/packages/es.jjrh.bikeradar/"><img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80"></a>
+
+You can also **[⬇ download the latest APK](../../releases/latest)**, or add the repo to
 [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
 
 Built and ridden daily by the author for months on a Garmin Varia RearVue
@@ -161,12 +163,16 @@ Debug screen is hidden behind a three-tap long-press unlock on the app title.
 
 ## Install
 
-Signed APKs are attached to every [GitHub Release](../../releases).
-Download the latest APK and install it, or - to get updates
-automatically - add this repository to
-[Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL
-into *Add App*. Each install is signed with the same key, so updates apply over
-the top without uninstalling.
+Install it from [F-Droid](https://f-droid.org/packages/es.jjrh.bikeradar/).
+F-Droid builds the app from this source and checks it matches the signed APK
+before publishing. Signed APKs are also attached to every
+[GitHub Release](../../releases). F-Droid and GitHub ship the same signed APK,
+so you can switch between them without uninstalling. A new release can take a
+few days to reach F-Droid.
+
+For automatic updates from GitHub, add this repository to
+[Obtainium](https://github.com/ImranR98/Obtainium): paste the repo URL into
+*Add App*.
 
 Store-listing metadata lives under `fastlane/metadata/android/`
 (en-US + es-ES) in the standard fastlane structure that catalogues read.
@@ -257,6 +263,13 @@ app's media gallery, or the camera's USB/SD storage directly. Camera
 clocks can drift a few seconds from the phone's; scrub around the
 timestamp.
 
+**I hear every alert twice with Bluetooth headphones.** With a Bluetooth
+headset connected, the phone may also play each alert on its own speaker. The
+copy in your headset then arrives a moment later. So far this has been seen on
+one phone, and the cause is not known yet. If it happens to
+you, a [bug report](../../issues) saying whether the phone's speaker also
+sounds would help.
+
 **What happens to my data on a new phone?** Your settings - including
 the Home Assistant URL and token, and the list of apps you have allowed
 to use your radar - are part of your Android backup
@@ -346,7 +359,7 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   <img src="screenshots/main-es.png" width="200" alt="Pantalla principal en español" />
 </p>
 
-Funciones principales:
+### Funciones principales
 
 - Radar en pantalla con la distancia, la velocidad de aproximación y la
   posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
@@ -382,6 +395,88 @@ Funciones principales:
 
 El radar funciona por sí solo; Home Assistant, la cámara delantera y la eBike
 son opcionales.
+
+### Compatibilidad
+
+- **Garmin Varia RearVue 820:** todas las funciones, probado a diario.
+- **Otros radares Garmin Varia:** se espera que funcionen, pero solo midiendo
+  la distancia. Tienes los pitidos de aproximación y el aviso de «Carretera
+  despejada», y los colores de la barra lateral muestran la distancia en vez de
+  la velocidad. No tienes el aviso urgente ni el recuento de adelantamientos
+  cercanos. Nadie lo ha confirmado aún con hardware real. Un radar que solo
+  tenga ANT+ no puede conectarse.
+- **Radares de otras marcas** (Wahoo, Bryton, Magene, Trek...): no
+  ([por qué](COMPATIBILITY.md), en inglés).
+
+Con un radar que solo mide la distancia, si tienes los datos de la eBike
+activados y Bosch Flow en segundo plano, el aviso de desconexión funciona desde
+la bici. Si no, se espera que solo suene si el radar seguía viendo tráfico
+detrás justo antes del corte, así que en una carretera vacía no suena. En
+Ajustes → Experimental, en «Aviso de desconexión sin velocidad», eliges cuánto
+tiempo atrás busca ese tráfico (de 30 s a una hora), o desactivas esta
+alternativa. Cuanto más tiempo, más probable es que suene en una carretera
+tranquila, y también que
+suene si aparcas en una zona concurrida. Ningún valor por encima de los 30 s
+por defecto se ha medido con rutas reales. Esta alternativa llegó en la
+versión 1.4.0 y nadie la ha confirmado aún con hardware real.
+
+Si tu radar no es un 820, lo más útil que puedes enviar es un
+[informe](../../issues) diciendo si funciona o no. Puedes escribirlo en español.
+Si la app no reconoce tu radar por el nombre, elígelo en Ajustes → Radar.
+
+### Instalación
+
+<a href="https://f-droid.org/es/packages/es.jjrh.bikeradar/"><img src="https://f-droid.org/badge/get-it-on-es.png" alt="Consíguelo en F-Droid" height="80"></a>
+
+También puedes descargar el APK de la [última versión](../../releases/latest)
+o añadir este repositorio a [Obtainium](https://github.com/ImranR98/Obtainium)
+para recibir las actualizaciones automáticamente. F-Droid y GitHub publican el
+mismo APK firmado, así que puedes pasar de uno a otro sin desinstalar.
+
+Necesitas Android 12 o posterior. El radar se empareja una vez desde los
+ajustes de Bluetooth de Android, con el radar en modo de emparejamiento: la app
+no lo hace por ti.
+
+### Limitaciones conocidas
+
+Al radar y a la app se les pueden escapar cosas. Esto es lo que conviene saber
+antes de fiarte de ellos.
+
+- **El radar puede no ver un vehículo.** Tiene un campo de visión y un alcance
+  limitados, y puede perder de vista un vehículo que estaba siguiendo. La app no
+  puede avisarte de lo que el radar no ha visto.
+- **Un aviso puede llegar tarde.** Los avisos se calculan con lo que el radar
+  informa en cada momento. Si un vehículo aparece ya cerca y rápido, el aviso
+  puede llegar con poco margen.
+- **La conexión y el sonido pueden cortarse sin avisar.** El Bluetooth puede
+  desconectarse en plena ruta, y otra app puede quedarse con el audio. El aviso
+  de desconexión tiene sus propios límites (mira
+  [Compatibilidad](#compatibilidad)). Con una eBike Bosch también hay un aviso
+  si vas sin el radar conectado. Necesita los datos de la eBike activados y
+  Bosch Flow conectado a la bici, y no suena mientras tienes los avisos en
+  pausa.
+- **Los pitidos por nivel se callan cuando estás parado.** A los pocos segundos
+  de detenerte dejan de sonar, pero el aviso urgente y «Carretera despejada»
+  siguen sonando. Es a propósito, para que la app no te pite mientras esperas
+  en un semáforo. A cambio, no oirás un coche que se te acerque por detrás
+  mientras estás parado, salvo que venga tan rápido que salte el aviso
+  urgente. Para saber que estás parado, la app necesita tu velocidad: con un radar que solo mide la
+  distancia y sin eBike, los pitidos nunca se callan.
+- **Los avisos se callan durante una llamada y mientras los tienes en pausa.**
+  Durante la llamada la barra lateral sigue en pantalla, pero sin sonido.
+- **«Carretera despejada» solo significa que el radar no ve nada.** No significa
+  que detrás no haya nadie, ni que sea seguro abrirte o cambiar de carril.
+
+Mira siempre atrás antes de maniobrar.
+
+### Uso bajo tu responsabilidad
+
+Bike Radar es una ayuda para tus rutas, no una garantía de seguridad.
+Complementa tu propia atención y tus espejos; nunca los sustituye. Toma lo que
+muestra la barra lateral solo como orientación, y no dependas únicamente de ella para
+decisiones de seguridad. La licencia GPL-3.0 (mira `LICENSE`) excluye cualquier
+garantía en la medida en que lo permita la ley. No tiene relación con Garmin ni
+con Bosch, y ninguna de las dos lo respalda.
 
 ## Build
 

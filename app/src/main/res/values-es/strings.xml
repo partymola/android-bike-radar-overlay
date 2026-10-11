@@ -780,8 +780,8 @@
     <string name="attention_ebike_battery">Carga la bici - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
     <string name="attention_unclean_restart">La app se ha reiniciado en plena ruta - pueden faltar datos</string>
     <plurals name="attention_audio_failures">
-        <item quantity="one">Un aviso no ha sonado - revisa el volumen</item>
-        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no han sonado - revisa el volumen</item>
+        <item quantity="one">Un aviso no ha sonado - reinicia el móvil si vuelve a pasar</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> avisos no han sonado - reinicia el móvil si vuelve a pasar</item>
     </plurals>
     <string name="attention_dismiss_cd">Descartar: <xliff:g id="item" example="Carga el radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Cámara dejada en la bici</string>

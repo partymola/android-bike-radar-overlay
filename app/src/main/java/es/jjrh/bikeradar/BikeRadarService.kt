@@ -109,9 +109,8 @@ class BikeRadarService : Service() {
     @Volatile internal var startedFromDirtyRestart = false
 
     // Alert-sound play failures observed this ride (the `cue_failed ` onCue
-    // tag). Feeds the end-of-trip attention feed ("alert sounds failed - check
-    // media volume"); reset when a new ride's stats reset. Written from the
-    // AlertBeeper playback thread via onCue.
+    // tag). Feeds the end-of-trip attention feed; reset when a new ride's
+    // stats reset. Written from the AlertBeeper playback thread via onCue.
     @Volatile private var cueFailedThisRide = 0
 
     // Ride-summary notification state: one post per radar-off episode.

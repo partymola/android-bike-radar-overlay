@@ -814,8 +814,8 @@
     <string name="attention_ebike_battery">Charge eBike - <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
     <string name="attention_unclean_restart">App restarted mid-ride - some stats may be incomplete</string>
     <plurals name="attention_audio_failures">
-        <item quantity="one">Alert sound failed - check media volume</item>
-        <item quantity="other">Alert sounds failed <xliff:g id="count" example="3">%1$d</xliff:g> times - check media volume</item>
+        <item quantity="one">An alert sound didn\'t play - restart the phone if this happens again</item>
+        <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> alert sounds didn\'t play - restart the phone if this happens again</item>
     </plurals>
     <string name="attention_dismiss_cd">Dismiss: <xliff:g id="item" example="Charge radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>

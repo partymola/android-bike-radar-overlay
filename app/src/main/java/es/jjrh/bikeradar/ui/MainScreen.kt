@@ -79,14 +79,17 @@ import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
+import es.jjrh.bikeradar.RideHistoryStore
 import es.jjrh.bikeradar.batteryReadIsFresh
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.eBikeDataIsFresh
 import es.jjrh.bikeradar.radarStreamIsLive
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -109,6 +112,7 @@ import android.provider.Settings as AndroidSettings
  *     [SystemRowRouteTest] against the graph in `MainActivity`.
  *  4. CLOSE PASSES card: the session count, and a link to ride history
  *     that stays inert until there is history to see.
+ *     Body polls the history file for that; the leaf below does no IO.
  *  5. Full-width Settings button.
  *
  * Landscape reflows into two columns and renders the same cards. The two
@@ -155,6 +159,21 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
                 hasBond = radarIsSelected(ctx, prefs.radarMac)
                 btEnabled = bluetoothIsOn(ctx)
                 delay(5_000)
+            }
+        }
+    }
+
+    // Polled, not read once: a first ride is saved minutes after the radar
+    // goes off, often with this screen already open. Stops once a ride
+    // exists, since history only grows (`ClosePassHistoryLinkTest`).
+    var rideStored by remember { mutableStateOf(false) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (!rideStored) {
+                rideStored = withContext(Dispatchers.IO) {
+                    RideHistoryStore({ ctx.getExternalFilesDir(null) }).readAll().isNotEmpty()
+                }
+                if (!rideStored) delay(5_000)
             }
         }
     }
@@ -331,6 +350,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+            rideStored = rideStored,
             eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
@@ -377,6 +397,7 @@ internal fun MainScreenContent(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    rideStored: Boolean,
     eBikeDataEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
     ebikeBatterySoc: Int? = null,
@@ -411,6 +432,7 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            rideStored = rideStored,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
@@ -444,6 +466,7 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            rideStored = rideStored,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
             ebikeBatterySoc = ebikeBatterySoc,
@@ -512,6 +535,7 @@ private fun MainScreenPortrait(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    rideStored: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
     ebikeBatterySoc: Int?,
@@ -567,6 +591,7 @@ private fun MainScreenPortrait(
             Spacer(modifier = Modifier.height(12.dp))
             ClosePassStatsCard(
                 loggingEnabled = closePassLoggingEnabled,
+                rideStored = rideStored,
                 onClick = onClosePassCardClick,
             )
             if (showDashcamPrompt) {
@@ -609,6 +634,7 @@ private fun MainScreenLandscape(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    rideStored: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
     ebikeBatterySoc: Int?,
@@ -646,6 +672,7 @@ private fun MainScreenLandscape(
                 Spacer(modifier = Modifier.height(12.dp))
                 ClosePassStatsCard(
                     loggingEnabled = closePassLoggingEnabled,
+                    rideStored = rideStored,
                     compact = true,
                     onClick = onClosePassCardClick,
                 )

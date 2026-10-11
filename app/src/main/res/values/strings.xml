@@ -198,7 +198,7 @@
     <string name="main_section_close_passes">Close passes</string>
     <string name="main_close_passes_caption">this ride</string>
     <string name="main_close_passes_history_link">History ›</string>
-    <string name="main_close_passes_empty_hint">Turn on close-pass counting in Settings → Alerts to count them here and keep a ride history.</string>
+    <string name="main_close_passes_empty_hint">Turn on close-pass counting in Settings → Alerts to count them here.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> close pass this ride</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> close passes this ride</item>

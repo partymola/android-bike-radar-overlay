@@ -528,19 +528,18 @@ private fun SystemRowRender(
 
 // ── Close-pass stats card ─────────────────────────────────────────────
 
+/** [rideStored] has no default: ride history is kept whether or not counting
+ *  is on, so a stored ride alone offers the link (`ClosePassHistoryLinkTest`). */
 @Composable
 internal fun ClosePassStatsCard(
     loggingEnabled: Boolean,
+    rideStored: Boolean,
     compact: Boolean = false,
     onClick: () -> Unit = {},
 ) {
     val br = LocalBrColors.current
     val count by ClosePassStateBus.sessionCount.collectAsState()
-    // The card links to the ride-history screen, but only once there's
-    // plausibly history to see: with counting off and a zero session count a
-    // first-run rider would land on an empty screen, so the link + tap target
-    // stay inert until counting is on or this ride has logged a pass.
-    val historyAvailable = loggingEnabled || count > 0
+    val historyAvailable = loggingEnabled || count > 0 || rideStored
     val cardModifier = Modifier
         .fillMaxWidth()
         .let { if (historyAvailable) it.clickable(onClick = onClick) else it }

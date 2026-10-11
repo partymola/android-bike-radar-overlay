@@ -248,6 +248,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         bluetoothEnabled = btEnabled,
         rideEndOfferable = canEndRide,
         missingPermission = missingPermission,
+        radarConnecting = radarConnecting,
     )
     val statusModel = MainStatusDeriver.derive(
         inputs,

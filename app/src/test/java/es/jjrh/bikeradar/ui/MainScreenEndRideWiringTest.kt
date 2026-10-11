@@ -33,7 +33,8 @@ import java.time.Duration
  * Composes the real home screen against a published radar link state. The
  * other End ride tests drive [ctaFor] and [es.jjrh.bikeradar.RadarLinkStatus]
  * directly, so only this one sees the screen hand the live state and the
- * elapsedRealtime clock to the offer.
+ * elapsedRealtime clock to the offer, and the same state to the connecting
+ * card.
  */
 @RunWith(RobolectricTestRunner::class)
 class MainScreenEndRideWiringTest {
@@ -106,5 +107,33 @@ class MainScreenEndRideWiringTest {
         showWith(downForMs = 5_000L, bikeLocked = false)
         composeRule.onNodeWithText("Waiting for radar").assertIsDisplayed()
         composeRule.onNodeWithText("I've parked").assertDoesNotExist()
+    }
+
+    @Test
+    fun aLinkWithNoDataYetReadsConnectingOnTheCardAndTheRow() {
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState(radarGattActive = true))
+        composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Connecting to radar").assertIsDisplayed()
+        composeRule.onNodeWithText("Connecting…").assertIsDisplayed()
+        composeRule.onNodeWithText("Waiting for radar").assertDoesNotExist()
+    }
+
+    @Test
+    fun aRadarFailingItsSetupAfterARideIsStillAsked() {
+        // Connecting and offerable at once: the question must win, or a rider
+        // with no eBike loses the only way to stop the drop cue repeating.
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(
+            RadarLinkState(
+                radarGattActive = true,
+                radarOffSinceMs = SystemClock.elapsedRealtime() - 11_000L,
+                sessionRadarConnectedMs = 3_000L,
+            ),
+        )
+        composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Finished your ride?").assertIsDisplayed()
+        composeRule.onNodeWithText("I've parked").assertIsDisplayed()
+        composeRule.onNodeWithText("Connecting to radar").assertDoesNotExist()
     }
 }

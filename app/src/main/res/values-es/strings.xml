@@ -112,6 +112,8 @@
     <string name="main_status_waiting_sub">Enciende tu radar</string>
     <string name="main_status_ride_over_title">¿Has terminado la ruta?</string>
     <string name="main_status_ride_over_sub">Si no, enciende tu radar</string>
+    <string name="main_status_connecting_title">Conectando con el radar</string>
+    <string name="main_status_connecting_sub">Si no avanza, apaga y enciende el radar</string>
 
     <!-- Botones de acción de la tarjeta de estado principal. -->
     <string name="main_cta_set_up">Configurar</string>

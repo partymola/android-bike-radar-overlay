@@ -25,7 +25,9 @@ class MainStatusDeriverTest {
         bluetoothEnabled: Boolean = true,
         rideEndOfferable: Boolean = false,
         missingPermission: MissingPermission? = null,
+        radarConnecting: Boolean = false,
     ) = MainStatusInputs(
+        radarConnecting = radarConnecting,
         missingPermission = missingPermission,
         rideEndOfferable = rideEndOfferable,
         firstRunComplete = firstRunComplete,
@@ -333,5 +335,36 @@ class MainStatusDeriverTest {
         assertEquals(MainStatusTone.Neutral, asking.tone)
         assertEquals(waiting.icon, asking.icon)
         assertEquals(waiting.tone, asking.tone)
+    }
+
+    // ── connecting ───────────────────────────────────────────────────────────
+
+    @Test fun aLinkWithNoDataYetReadsConnecting() {
+        // The System row already says "Connecting…" here; the card must not
+        // tell the rider to turn on a radar the app is talking to.
+        val s = derive(baseInputs(radarFresh = false, radarConnecting = true))
+        assertEquals(MainStatusIcon.Sensors, s.icon)
+        assertEquals(MainStatusTone.Warn, s.tone)
+        assertEquals(R.string.main_status_connecting_title, s.headlineRes)
+        assertEquals(R.string.main_status_connecting_sub, s.subtitleRes)
+    }
+
+    @Test fun theParkedQuestionBeatsConnecting() {
+        // A radar failing its setup after a ride is both. The question carries
+        // "I've parked", the only control that stops the drop cue repeating
+        // for a rider with no eBike.
+        val s = derive(baseInputs(radarFresh = false, radarConnecting = true, rideEndOfferable = true))
+        assertEquals(R.string.main_status_ride_over_title, s.headlineRes)
+    }
+
+    @Test fun aLiveRadarIsNotReportedAsConnecting() {
+        // The link stays up while frames flow, so connecting is true then too.
+        val s = derive(baseInputs(radarFresh = true, radarConnecting = true))
+        assertEquals(R.string.main_status_live_title, s.headlineRes)
+    }
+
+    @Test fun anUnpairedRadarIsNotReportedAsConnecting() {
+        val s = derive(baseInputs(hasBond = false, radarFresh = false, radarConnecting = true))
+        assertEquals(R.string.main_status_not_paired_title, s.headlineRes)
     }
 }

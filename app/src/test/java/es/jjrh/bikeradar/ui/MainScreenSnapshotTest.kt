@@ -3,7 +3,9 @@
 package es.jjrh.bikeradar.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -28,8 +30,9 @@ import org.robolectric.annotation.GraphicsMode
  * lifecycle-driven pollers in [MainScreen].
  *
  * Variants picked to exercise the visually distinct states:
- *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error) and
- *    permissions-missing in Spanish (Warn, the longest subtitle)
+ *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error),
+ *    permissions-missing in Spanish (Warn, the longest subtitle) and
+ *    connecting in Spanish beside its System row
  *  - System: empty (nothing paired, HA not configured), populated (radar +
  *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
  *    eBike row in its amber "Waiting for Flow" state with no stale battery
@@ -106,6 +109,42 @@ class MainScreenSnapshotTest {
                             subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
                         ),
                         cta = StatusCta(label = stringResource(R.string.main_cta_grant_permissions), onClick = {}),
+                    )
+                }
+            }
+        }
+    }
+
+    // The hero and the radar row together, so the two dots can be compared:
+    // both amber for the same connecting radar.
+    @Test
+    @Config(qualifiers = "+es")
+    fun heroConnectingEs() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    HeroStatusCard(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Sensors,
+                            tone = MainStatusTone.Warn,
+                            headline = stringResource(R.string.main_status_connecting_title),
+                            subtitle = stringResource(R.string.main_status_connecting_sub),
+                        ),
+                        cta = null,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SystemCard(
+                        radarFresh = false,
+                        radarConnecting = true,
+                        hasBond = true,
+                        btEnabled = true,
+                        dashcamOwned = false,
+                        dashcamFresh = false,
+                        dashcamPaired = false,
+                        radarBattery = null,
+                        dashcamBattery = null,
+                        haStatus = HaStatus.NOT_CONFIGURED,
+                        onRowClick = {},
                     )
                 }
             }

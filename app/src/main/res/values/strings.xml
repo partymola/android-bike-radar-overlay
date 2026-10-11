@@ -134,6 +134,10 @@
          branch; the button takes the "yes". -->
     <string name="main_status_ride_over_title">Finished your ride?</string>
     <string name="main_status_ride_over_sub">If not, turn your radar back on</string>
+    <!-- The app holds or is opening a link to the radar and no data has arrived.
+         Also shown while a radar connects and fails its setup over and over. -->
+    <string name="main_status_connecting_title">Connecting to radar</string>
+    <string name="main_status_connecting_sub">If it stays here, turn your radar off and on</string>
 
     <!-- Hero status-card call-to-action buttons. -->
     <string name="main_cta_set_up">Set up</string>

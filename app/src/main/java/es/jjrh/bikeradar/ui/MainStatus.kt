@@ -89,6 +89,9 @@ data class MainStatusInputs(
     /** What stops the radar service starting, or null when nothing does
      *  ([es.jjrh.bikeradar.Permissions.missingForService]). */
     val missingPermission: MissingPermission? = null,
+    /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
+     *  System row reads, so the two cannot disagree about one radar. */
+    val radarConnecting: Boolean = false,
 )
 
 object MainStatusDeriver {
@@ -104,7 +107,14 @@ object MainStatusDeriver {
      *  7. Radar live but dashcam off  (rider-safety beats HA connectivity)
      *  8. Radar live but HA unreachable
      *  9. Radar live, all good
-     *  10. Paired but radar stale
+     *  10. Radar stale after a ride: "Finished your ride?"
+     *  11. Link up, no data yet: connecting
+     *  12. Radar stale: waiting
+     *
+     * The parked question beats connecting: a radar stuck failing its setup
+     * after a ride is both, and the question carries the only control that
+     * stops the drop cue repeating
+     * (`MainStatusDeriverTest.theParkedQuestionBeatsConnecting`).
      *
      * DashcamOff is intentionally ranked above HaDown: HA is background
      * telemetry, the dashcam is the rear-view recording the rider needs.
@@ -249,6 +259,16 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Neutral,
                 headlineRes = R.string.main_status_ride_over_title,
                 subtitleRes = R.string.main_status_ride_over_sub,
+            )
+        }
+        // Amber, like the row beside it: not cover yet, and possibly a radar
+        // that will never get past its setup.
+        if (inputs.radarConnecting) {
+            return MainStatusModel(
+                icon = MainStatusIcon.Sensors,
+                tone = MainStatusTone.Warn,
+                headlineRes = R.string.main_status_connecting_title,
+                subtitleRes = R.string.main_status_connecting_sub,
             )
         }
         return MainStatusModel(

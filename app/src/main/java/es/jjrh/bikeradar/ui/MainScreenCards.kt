@@ -122,6 +122,7 @@ private fun dotForStatus(
     // Map MainStatus to mockup's dot+pulse pairs.
     //   Service stopped     -> fgDim, no pulse  (matches `serviceOff`)
     //   Waiting for radar   -> fgDim, pulse     (matches `searching`)
+    //   Connecting to radar -> caution, pulse
     //   First-run setup     -> safe, no pulse   (matches `active` style - green welcome)
     //   Paused              -> fgDim, no pulse
     //   Not paired (BT on)  -> caution, no pulse
@@ -146,7 +147,11 @@ private fun dotForStatus(
             MainStatusTone.Warn -> br.caution to false
             else -> br.danger to false
         }
-        MainStatusIcon.Sensors -> br.fgDim to true
+        // Warn is connecting: the System row's amber for the same radar.
+        MainStatusIcon.Sensors -> when (tone) {
+            MainStatusTone.Warn -> br.caution to true
+            else -> br.fgDim to true
+        }
         MainStatusIcon.Warning -> br.caution to true
         MainStatusIcon.CheckCircle -> when (tone) {
             MainStatusTone.Good -> br.safe to false

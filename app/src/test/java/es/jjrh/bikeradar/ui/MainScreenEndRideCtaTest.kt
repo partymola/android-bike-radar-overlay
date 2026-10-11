@@ -81,7 +81,11 @@ class MainScreenEndRideCtaTest {
         // not ended.
         // The permissions state is checked the same way: the card naming a
         // missing permission and the button opening Permissions, together.
+        // Connecting is a ninth gate because a radar stuck failing its setup
+        // after a ride is both connecting and offerable, and the question must
+        // still be asked there; the connecting card itself has no button.
         val both = listOf(false, true)
+        val connectingTitle = R.string.main_status_connecting_title
         val grant = app.getString(R.string.main_cta_grant_permissions)
         var disagreed = listOf<String>()
         var visited = 0
@@ -97,7 +101,7 @@ class MainScreenEndRideCtaTest {
                             for (bt in both) {
                                 for (bond in both) {
                                     for (fresh in both) {
-                                        for (offerable in both) {
+                                        for ((offerable, connecting) in both.flatMap { o -> both.map { o to it } }) {
                                             val inputs = MainStatusInputs(
                                                 firstRunComplete = firstRun,
                                                 pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
@@ -112,6 +116,7 @@ class MainScreenEndRideCtaTest {
                                                 bluetoothEnabled = bt,
                                                 rideEndOfferable = offerable,
                                                 missingPermission = missing,
+                                                radarConnecting = connecting,
                                             )
                                             val headline = MainStatusDeriver.derive(inputs, now) { "" }.headlineRes
                                             val label = ctaFor(inputs, now, nav, app, prefs)?.label
@@ -119,10 +124,11 @@ class MainScreenEndRideCtaTest {
                                             val offers = label == "I've parked"
                                             val namesPermission = headline == R.string.main_status_permissions_title
                                             val opensPermissions = label == grant
-                                            if (asks != offers || namesPermission != opensPermissions) {
+                                            val connectingWithAButton = headline == connectingTitle && label != null
+                                            if (asks != offers || namesPermission != opensPermissions || connectingWithAButton) {
                                                 found += "firstRun=$firstRun service=$serviceOn missing=$missing " +
                                                     "paused=$paused bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
-                                                    "(hero=$headline, button=$label)"
+                                                    "connecting=$connecting (hero=$headline, button=$label)"
                                             }
                                             n++
                                         }
@@ -139,7 +145,7 @@ class MainScreenEndRideCtaTest {
         compose.waitForIdle()
         // Anti-vacuity: a loop that never ran would satisfy the emptiness
         // assertion below without checking anything.
-        assertEquals("every combination of the eight gates must be visited", 256, visited)
+        assertEquals("every combination of the nine gates must be visited", 512, visited)
         assertEquals("the card must never ask what the button cannot answer", emptyList<String>(), disagreed)
     }
 

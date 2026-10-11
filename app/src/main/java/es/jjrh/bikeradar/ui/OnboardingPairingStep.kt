@@ -2,9 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
-import android.content.Context
 import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
@@ -36,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,8 +53,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.DeviceNameMatcher
+import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
@@ -72,25 +72,33 @@ internal fun PairingStep(
     val ctx = LocalContext.current
     val prefsSnap by prefs.flow.collectAsState(initial = prefs.snapshot())
 
-    var radarBonded by remember { mutableStateOf(hasRadarBond(ctx)) }
-    var radarMac by remember { mutableStateOf(currentRadarMac(ctx)) }
-    var radarLocalName by remember { mutableStateOf(currentRadarLocalName(ctx)) }
+    // RadarSelection's answers, so a pinned radar whose name does not match
+    // reads as paired here too, and a front camera alone does not.
+    var allBonded by remember { mutableStateOf(RadarSelection.bondedDevices(ctx)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 delay(2_000)
-                radarBonded = hasRadarBond(ctx)
-                radarMac = currentRadarMac(ctx)
-                radarLocalName = currentRadarLocalName(ctx)
+                allBonded = RadarSelection.bondedDevices(ctx)
             }
         }
     }
+    val radarBonded = RadarSelection.setupHasRadar(allBonded, prefsSnap.radarMac)
+    val activeRadar = RadarSelection.activeRadar(allBonded, prefsSnap.radarMac)
+    val eBikeMac = remember(allBonded) { EBikeStatusReader.findBondedEBikeMac(ctx) }
 
     PairingStepContent(
         radarBonded = radarBonded,
-        radarLocalName = radarLocalName,
-        radarMac = radarMac,
+        radarLocalName = activeRadar?.name,
+        radarMac = activeRadar?.mac,
+        pickDevices = if (RadarSelection.setupOffersPick(allBonded, prefsSnap.radarMac)) {
+            RadarSelection.pickableDevices(allBonded, listOf(prefsSnap.dashcamMac, eBikeMac))
+        } else {
+            emptyList()
+        },
+        onPick = { RadarSelection.pin(prefs, it) },
+        pinnedMac = prefsSnap.radarMac,
         dashcamOwnership = prefsSnap.dashcamOwnership,
         dashcamMac = prefsSnap.dashcamMac,
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
@@ -115,6 +123,16 @@ internal fun PairingStepContent(
     radarBonded: Boolean,
     radarLocalName: String?,
     radarMac: String?,
+    /** The devices offered as the radar, or none
+     *  ([RadarSelection.setupOffersPick]): a rider whose radar's name can only
+     *  be a rear unit never meets the list of watches and headphones, and one
+     *  who picked from it keeps it, with the pick marked, until the pick is
+     *  such a radar. */
+    pickDevices: List<RadarSelection.BondedRadar> = emptyList(),
+    onPick: (RadarSelection.BondedRadar) -> Unit = {},
+    /** The rider's pick, marked in the list. Not [radarMac], which can be a
+     *  device the app chose by name. */
+    pinnedMac: String? = null,
     dashcamOwnership: DashcamOwnership,
     dashcamMac: String?,
     dashcamDisplayName: String?,
@@ -145,7 +163,9 @@ internal fun PairingStepContent(
                 // Radar device row (always required). When already bonded
                 // we hide the CTA and the detail-prefix - the chip alone
                 // signals state, and re-pairing belongs in Settings, not
-                // onboarding.
+                // onboarding. Bonded with no single radar to name (two
+                // paired, none picked), it says what Settings says.
+                val radarNamed = radarLocalName ?: radarMac
                 DeviceRow(
                     icon = Icons.Default.Sensors,
                     tint = br.brand,
@@ -153,10 +173,11 @@ internal fun PairingStepContent(
                     optionalLabel = false,
                     bonded = radarBonded,
                     detail = if (radarBonded) {
-                        (radarLocalName ?: radarMac ?: stringResource(R.string.onboarding_pair_radar_title))
+                        radarNamed ?: stringResource(R.string.settings_radardev_not_selected)
                     } else {
                         stringResource(R.string.onboarding_pair_radar_detail_unpaired)
                     },
+                    detailIsDeviceName = radarNamed != null,
                     detailHint = if (!radarBonded) {
                         stringResource(R.string.onboarding_pair_radar_hint)
                     } else {
@@ -165,6 +186,30 @@ internal fun PairingStepContent(
                     primaryCta = if (!radarBonded) stringResource(R.string.onboarding_pair_open_bt_settings) else null,
                     primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
                     onPrimary = onOpenBluetoothSettings,
+                )
+                var pickExpanded by rememberSaveable { mutableStateOf(false) }
+                RadarNotListedHatch(
+                    others = pickDevices,
+                    chosenMac = pinnedMac,
+                    expanded = pickExpanded,
+                    onToggle = { pickExpanded = !pickExpanded },
+                    onSelectRadar = onPick,
+                    // Once the card above reads PAIRED the pick is a choice of
+                    // which device, not a question of whether one is paired.
+                    title = if (radarBonded) {
+                        stringResource(R.string.settings_radardev_choose_radar)
+                    } else {
+                        stringResource(R.string.onboarding_pair_radar_other_title)
+                    },
+                    subtitle = if (radarBonded) {
+                        stringResource(R.string.onboarding_pair_radar_choose_sub)
+                    } else {
+                        stringResource(R.string.onboarding_pair_radar_other_sub)
+                    },
+                    bordered = true,
+                    // The step's column already pads and spaces its cards.
+                    paddingHorizontal = 0.dp,
+                    topGap = 0.dp,
                 )
 
                 // Dashcam row, three sub-states matching the JSX.
@@ -403,6 +448,9 @@ internal fun DeviceRow(
     subtitle: String? = null,
     bonded: Boolean,
     detail: String,
+    /** False when a bonded row's [detail] is a phrase, not a device name: it
+     *  then renders as prose and is not announced as "Paired with ...". */
+    detailIsDeviceName: Boolean = true,
     detailHint: String? = null,
     primaryCta: String?,
     primaryCtaIcon: ImageVector?,
@@ -459,14 +507,15 @@ internal fun DeviceRow(
                 .border(1.dp, if (bonded) br.safe.copy(alpha = 0.20f) else br.hairline, RoundedCornerShape(8.dp))
                 .padding(10.dp),
         ) {
+            val asName = bonded && detailIsDeviceName
             Text(
                 text = detail,
                 color = br.fgMuted,
-                fontFamily = if (bonded) FontFamily.Monospace else FontFamily.Default,
-                fontSize = if (bonded) 11.sp else 12.sp,
-                lineHeight = if (bonded) 16.sp else 17.sp,
-                letterSpacing = if (bonded) 0.3.sp else 0.sp,
-                modifier = if (bonded) {
+                fontFamily = if (asName) FontFamily.Monospace else FontFamily.Default,
+                fontSize = if (asName) 11.sp else 12.sp,
+                lineHeight = if (asName) 16.sp else 17.sp,
+                letterSpacing = if (asName) 0.3.sp else 0.sp,
+                modifier = if (asName) {
                     // Without context the screen-reader hears just the bare
                     // device name in monospace. The visual PairedChip
                     // alongside isn't part of this Text's a11y subtree.
@@ -530,36 +579,4 @@ internal fun DeviceRow(
             }
         }
     }
-}
-
-// ── BLE helpers ──────────────────────────────────────────────────────
-
-@SuppressLint("MissingPermission")
-private fun hasRadarBond(ctx: Context): Boolean = try {
-    val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    mgr?.adapter?.bondedDevices?.any { dev ->
-        DeviceNameMatcher.isRadarName(dev.name)
-    } == true
-} catch (_: Throwable) {
-    false
-}
-
-@SuppressLint("MissingPermission")
-private fun currentRadarMac(ctx: Context): String? = try {
-    val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
-        DeviceNameMatcher.isRadarName(dev.name)
-    }?.address
-} catch (_: Throwable) {
-    null
-}
-
-@SuppressLint("MissingPermission")
-private fun currentRadarLocalName(ctx: Context): String? = try {
-    val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    mgr?.adapter?.bondedDevices?.firstOrNull { dev ->
-        DeviceNameMatcher.isRadarName(dev.name)
-    }?.name
-} catch (_: Throwable) {
-    null
 }

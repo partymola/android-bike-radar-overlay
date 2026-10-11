@@ -33,6 +33,9 @@
     <string name="common_clear">Clear</string>
     <string name="common_back">Back</string>
     <string name="common_done">Done</string>
+    <!-- TalkBack state of a row that opens and closes a list in place. -->
+    <string name="common_expanded">Expanded</string>
+    <string name="common_collapsed">Collapsed</string>
 
     <!-- UI primitives (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -285,6 +288,12 @@
     <string name="onboarding_pair_radar_detail_unpaired">Not paired yet. The pairing screen is in Android\'s Bluetooth settings.</string>
     <string name="onboarding_pair_radar_hint">After pairing, press back to return here.</string>
     <string name="onboarding_pair_open_bt_settings">Open Bluetooth settings</string>
+    <string name="onboarding_pair_radar_other_title">Already paired your radar?</string>
+    <string name="onboarding_pair_radar_other_sub">If it shows up under another name, pick it from your paired devices.</string>
+    <!-- Under settings_radardev_choose_radar, in place of the pair above once
+         the card above already reads PAIRED: after a pick, with two radars
+         paired, or with a radar the app knows only by a wider name. -->
+    <string name="onboarding_pair_radar_choose_sub">Pick it from your paired devices.</string>
     <string name="onboarding_pair_dashcam_title">Front dashcam</string>
     <string name="onboarding_pair_dashcam_no_subtitle">You said you don\'t have one</string>
     <string name="onboarding_pair_dashcam_no_detail">Change your mind any time from Settings → Dashcam.</string>
@@ -301,7 +310,7 @@
     <string name="onboarding_pair_comeback">You can come back to this later in <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
     <string name="onboarding_pair_privacy_heading">What this can access</string>
     <string name="onboarding_pair_bullet_devices">Reads your paired-device list to find the radar and dashcam</string>
-    <string name="onboarding_pair_bullet_saves">Saves which dashcam you ride with, on your phone</string>
+    <string name="onboarding_pair_bullet_saves">Saves the radar or dashcam you pick, on your phone</string>
     <string name="onboarding_pair_bullet_nothing_sent">Nothing from pairing is sent anywhere</string>
     <string name="onboarding_pair_more_features">More features in Settings -> Experimental once you\'re set up.</string>
     <string name="onboarding_pair_radar_later">You can pair the radar later from Bluetooth settings.</string>
@@ -512,6 +521,12 @@
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>
     <string name="settings_radardev_not_listed_title">My radar isn\'t listed</string>
     <string name="settings_radardev_not_listed_subtitle">Pick any paired device to use as this bike\'s radar.</string>
+    <!-- Under a paired device offered as the radar: in Settings one the app
+         does not know as a radar, such as a watch; in setup any device but a
+         front camera, the saved dashcam and the eBike. -->
+    <string name="settings_radardev_tap_to_use_as_radar">Tap to use as the radar</string>
+    <string name="settings_radardev_show_devices">Show paired devices</string>
+    <string name="settings_radardev_hide_devices">Hide paired devices</string>
     <string name="settings_radardev_section_actions">Actions</string>
     <string name="settings_radardev_pair_different_title">Pair a different radar</string>
     <string name="settings_radardev_open">Open</string>

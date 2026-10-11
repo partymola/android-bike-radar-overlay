@@ -156,7 +156,8 @@ to its file. The notes below are the working summary.
   bonded can pin this bike's (`Prefs.radarMac`), and a pinned-and-still-bonded
   MAC overrides the name-match in `scheduleRead` so the app never streams from
   the wrong rear unit. Pure decider in `RadarSelection.shouldLinkRadar`;
-  managed in Settings -> Connections -> Radar.
+  managed in Settings -> Connections -> Radar, and in setup's pairing step
+  until the radar's name can only be a rear unit (`setupOffersPick`).
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by

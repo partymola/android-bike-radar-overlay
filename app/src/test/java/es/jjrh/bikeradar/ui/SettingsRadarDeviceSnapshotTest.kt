@@ -35,6 +35,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.LIVE,
                     batteryPct = 78,
+                    offerChooser = false,
                 )
             }
         }
@@ -56,6 +57,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.LIMITED,
                     batteryPct = 78,
+                    offerChooser = false,
                 )
             }
         }
@@ -74,6 +76,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.LIVE,
                     batteryPct = 78,
+                    offerChooser = false,
                     offsetCm = 15,
                 )
             }
@@ -93,6 +96,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.LIVE,
                     batteryPct = 78,
+                    offerChooser = false,
                     firmwareRev = "6.70",
                 )
             }
@@ -112,6 +116,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.CONNECTING,
                     batteryPct = null,
+                    offerChooser = false,
                 )
             }
         }
@@ -128,6 +133,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.NO_SIGNAL,
                     batteryPct = null,
+                    offerChooser = false,
                 )
             }
         }
@@ -144,6 +150,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = null,
                     link = DeviceLinkState.NOT_PAIRED,
                     batteryPct = null,
+                    offerChooser = false,
                 )
             }
         }
@@ -162,6 +169,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.NO_SIGNAL,
                     batteryPct = null,
+                    offerChooser = false,
                     others = listOf(
                         RadarSelection.BondedRadar("CC:CC:CC:CC:CC:CC", "Pixel Watch"),
                         RadarSelection.BondedRadar("DD:DD:DD:DD:DD:DD", "OffBrandRadar"),
@@ -188,6 +196,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = null,
                     link = DeviceLinkState.LIVE,
                     batteryPct = 82,
+                    offerChooser = true,
                 )
             }
         }
@@ -204,6 +213,7 @@ class SettingsRadarDeviceSnapshotTest {
                     activeName = radarA.name,
                     link = DeviceLinkState.LIVE,
                     batteryPct = 82,
+                    offerChooser = true,
                 )
             }
         }

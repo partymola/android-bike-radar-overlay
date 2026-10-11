@@ -18,14 +18,18 @@ package es.jjrh.bikeradar
  *    advert matcher misses can still be pinned explicitly
  *    ([es.jjrh.bikeradar.data.Prefs.radarMac]); the pin overrides this
  *    matcher in the link path.
- *  - [isRadarName] is the bonded-device superset: enumeration, the pin
- *    picker, and every UI "is a radar paired?" affordance. Wider is
- *    safe here - the worst case is a stray green dot, not a wrong link.
+ *  - [isRadarName] is the bonded-device superset: enumeration, the radar
+ *    chooser (minus [isFrontCamera]), and every UI "is a radar paired?"
+ *    affordance. Wider is safe here - the worst case is a stray green dot,
+ *    not a wrong link.
  *  - [isUnambiguousRadar] excludes rear units from the DASHCAM picker
  *    without excluding the front cameras that share the same vendor
  *    word ("Varia Vue" must stay offerable as a dashcam). The battery
- *    read uses the same predicate to decide what counts as a radar, so
- *    that no name passes both: widening it for one widens it for both.
+ *    read uses the same predicate to decide what counts as a radar, and
+ *    [isFrontCamera] is built on it, so widening it changes all three.
+ *  - [isFrontCamera] keeps those same cameras out of the radar pick lists.
+ *    It also excludes every [isRearAdvert] name, so widening that matcher
+ *    changes the pick lists too.
  *  - [isKnownAccessory] is the widest: which advert sightings wake the
  *    battery-read path at all (radar or dashcam). A pinned radar MAC
  *    bypasses it (see [BatteryScanReceiver]).
@@ -43,7 +47,7 @@ object DeviceNameMatcher {
         return n.contains("rear") || n.contains("rtl")
     }
 
-    /** Bonded-device radar heuristic: enumeration, pin picker, UI
+    /** Bonded-device radar heuristic: enumeration, the radar chooser, UI
      *  paired/battery checks. Superset of [isRearAdvert]. */
     fun isRadarName(name: String?): Boolean {
         val n = name?.lowercase() ?: return false
@@ -59,6 +63,11 @@ object DeviceNameMatcher {
             n.contains("rtl") ||
             (n.contains("varia") && !n.contains("vue"))
     }
+
+    /** A "...Vue..." name that is not a rear unit: a front camera. Kept out of
+     *  every list a rider picks the RADAR from. A name the live link accepts
+     *  is never one, however "rear" and "vue" are spaced. */
+    fun isFrontCamera(name: String): Boolean = name.lowercase().contains("vue") && !isUnambiguousRadar(name) && !isRearAdvert(name)
 
     /** Any device class the battery-scan path cares about (rear radar
      *  or front camera/light), by advertised name. */

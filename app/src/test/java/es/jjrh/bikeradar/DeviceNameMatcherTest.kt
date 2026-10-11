@@ -7,11 +7,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the four name-heuristic predicates and, critically, their
- * RELATIVE widths: the live-advert gate must stay the narrowest, the
- * accessory matcher the widest, and the radar/dashcam disambiguation
- * must keep front cameras offerable. Device-name literals below are
- * real advertised local names (allowed per the repo naming rules).
+ * Pins the name-heuristic predicates and, critically, their RELATIVE
+ * widths: the live-advert gate must stay the narrowest, the accessory
+ * matcher the widest, and the radar/dashcam disambiguation must keep
+ * front cameras offerable. Most device-name literals below are real
+ * advertised local names (allowed per the repo naming rules); the
+ * spaced "Rear Vue" names are made up to probe a boundary.
  */
 class DeviceNameMatcherTest {
 
@@ -36,7 +37,7 @@ class DeviceNameMatcherTest {
                 !DeviceNameMatcher.isRearAdvert(name) || DeviceNameMatcher.isRadarName(name),
             )
         }
-        // Plus the vendor word for bonded enumeration / the pin picker.
+        // Plus the vendor word for bonded enumeration / the radar chooser.
         assertTrue(DeviceNameMatcher.isRadarName("Varia RTL515"))
         assertTrue(DeviceNameMatcher.isRadarName("Varia Radar"))
         assertFalse(DeviceNameMatcher.isRadarName(null))
@@ -52,6 +53,15 @@ class DeviceNameMatcherTest {
         assertFalse(DeviceNameMatcher.isUnambiguousRadar("Varia Vue 49548"))
         assertFalse(DeviceNameMatcher.isUnambiguousRadar("Vue-123"))
         assertFalse(DeviceNameMatcher.isUnambiguousRadar("JBL Headphones"))
+    }
+
+    @Test fun aNameTheLiveLinkAcceptsIsNeverAFrontCamera() {
+        // "rear" and "vue" spaced apart: the link streams from it, so it
+        // must stay choosable as the radar.
+        assertTrue(DeviceNameMatcher.isRearAdvert("Varia Rear Vue"))
+        assertFalse(DeviceNameMatcher.isFrontCamera("Varia Rear Vue"))
+        assertFalse(DeviceNameMatcher.isFrontCamera("Rear Vue 2"))
+        assertTrue(DeviceNameMatcher.isFrontCamera("Vue-123"))
     }
 
     @Test fun knownAccessoryIsTheWidest() {

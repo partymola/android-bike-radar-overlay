@@ -30,13 +30,15 @@ class DashcamOwnershipGateTest {
      * the picker writes it, and the dashcam settings screen shows the rider
      * which device is remembered - which is the whole point of keeping it.
      *
-     * The last three RENDER and never act, and each already resolves its
+     * The next three RENDER and never act, and each already resolves its
      * rider-facing state through the ownership value at the point of use
      * (`deviceLinkState` answers NOT_PAIRED whenever `linked` is false, the
-     * battery chip is gated on that answer, and the onboarding step reads the
-     * pick inside a `when (dashcamOwnership)` arm). They are here deliberately
-     * rather than migrated, because the gating they do is a fact about those
-     * expressions; a new FILE reading the raw value is what this test is for.
+     * battery chip is gated on that answer, and the onboarding step shows the
+     * pick inside a `when (dashcamOwnership)` arm). The onboarding step and the
+     * radar screen also read it to keep the remembered camera out of the radar
+     * pick, which acts on nothing. They are here deliberately rather than
+     * migrated, because the gating they do is a fact about those expressions;
+     * a new FILE reading the raw value is what this test is for.
      */
     private val mayReadTheRawMac = setOf(
         "Prefs.kt",
@@ -45,6 +47,7 @@ class DashcamOwnershipGateTest {
         "MainScreen.kt",
         "SettingsScreen.kt",
         "OnboardingPairingStep.kt",
+        "SettingsRadarDevice.kt",
         // The Debug scenario player swaps in a synthetic device for the run and
         // puts the rider's own back afterwards, so it has to touch the raw
         // value. Which device it demos against goes through the gate.

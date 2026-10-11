@@ -137,7 +137,8 @@ hardware yet.
 Riding anything but an 820? A works or doesn't-work
 [report](../../issues) is the most valuable thing you can send. The Debug
 screen records what your radar offered, which makes it far more useful. If
-the app does not spot your radar by name, pick it in **Settings → Radar**.
+the app does not spot your radar by name, pick it during setup or in
+**Settings → Radar**.
 Front camera, eBike, Android versions and the reason behind each row are in
 [`COMPATIBILITY.md`](COMPATIBILITY.md).
 
@@ -422,7 +423,8 @@ versión 1.4.0 y nadie la ha confirmado aún con hardware real.
 
 Si tu radar no es un 820, lo más útil que puedes enviar es un
 [informe](../../issues) diciendo si funciona o no. Puedes escribirlo en español.
-Si la app no reconoce tu radar por el nombre, elígelo en Ajustes → Radar.
+Si la app no reconoce tu radar por el nombre, elígelo durante la configuración
+o en Ajustes → Radar.
 
 ### Instalación
 

@@ -10,8 +10,8 @@ import org.junit.Test
 /**
  * "Does this bike have a radar" must agree with what the app actually does.
  *
- * [RadarSelection.shouldLinkRadar] decides whether to stream; every status
- * surface asks [RadarSelection.hasLinkableRadar]. When the two disagree the
+ * [RadarSelection.shouldLinkRadar] decides whether to stream; the status
+ * surfaces ask [RadarSelection.hasLinkableRadar]. When the two disagree the
  * app reports "Not paired" about a radar delivering targets, drops the home
  * card to an error tone and offers a "Pair" button, all while beeping at
  * traffic. Each case below is a way a narrower test gets that wrong.

@@ -22,6 +22,9 @@
     <string name="common_clear">Borrar</string>
     <string name="common_back">Atrás</string>
     <string name="common_done">Hecho</string>
+    <!-- Estado que lee TalkBack en una fila que abre y cierra una lista. -->
+    <string name="common_expanded">Desplegado</string>
+    <string name="common_collapsed">Contraído</string>
 
     <!-- Primitivas de UI (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -257,6 +260,9 @@
     <string name="onboarding_pair_radar_detail_unpaired">Aún sin emparejar. La pantalla de emparejamiento está en los ajustes de Bluetooth de Android.</string>
     <string name="onboarding_pair_radar_hint">Tras emparejar, pulsa Atrás para volver aquí.</string>
     <string name="onboarding_pair_open_bt_settings">Abrir ajustes de Bluetooth</string>
+    <string name="onboarding_pair_radar_other_title">¿Ya has emparejado el radar?</string>
+    <string name="onboarding_pair_radar_other_sub">Si aparece con otro nombre, elígelo entre tus dispositivos emparejados.</string>
+    <string name="onboarding_pair_radar_choose_sub">Elígelo entre tus dispositivos emparejados.</string>
     <string name="onboarding_pair_dashcam_title">Cámara delantera</string>
     <string name="onboarding_pair_dashcam_no_subtitle">Dijiste que no tienes</string>
     <string name="onboarding_pair_dashcam_no_detail">Cambia de opinión cuando quieras en Ajustes → Cámara delantera.</string>
@@ -273,7 +279,7 @@
     <string name="onboarding_pair_comeback">Puedes volver a esto más tarde en <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
     <string name="onboarding_pair_privacy_heading">A qué puede acceder</string>
     <string name="onboarding_pair_bullet_devices">Lee tu lista de dispositivos emparejados para encontrar el radar y la cámara delantera</string>
-    <string name="onboarding_pair_bullet_saves">Guarda en tu teléfono qué cámara delantera usas</string>
+    <string name="onboarding_pair_bullet_saves">Guarda en tu teléfono el radar o la cámara delantera que elijas</string>
     <string name="onboarding_pair_bullet_nothing_sent">Nada del emparejamiento se envía a ningún sitio</string>
     <string name="onboarding_pair_more_features">Más funciones en Ajustes → Experimental cuando termines la configuración.</string>
     <string name="onboarding_pair_radar_later">Puedes emparejar el radar más tarde desde los ajustes de Bluetooth.</string>
@@ -479,6 +485,13 @@
     <string name="settings_radardev_tap_to_use">Toca para usar este radar</string>
     <string name="settings_radardev_not_listed_title">Mi radar no aparece</string>
     <string name="settings_radardev_not_listed_subtitle">Elige cualquier dispositivo emparejado para usarlo como radar de esta bici.</string>
+    <!-- Bajo un dispositivo emparejado que se ofrece como radar: en Ajustes,
+         uno que la app no reconoce como radar, como un reloj; en la
+         configuración, cualquiera salvo una cámara delantera, la cámara
+         guardada y la eBike. -->
+    <string name="settings_radardev_tap_to_use_as_radar">Toca para usarlo como radar</string>
+    <string name="settings_radardev_show_devices">Mostrar dispositivos emparejados</string>
+    <string name="settings_radardev_hide_devices">Ocultar dispositivos emparejados</string>
     <string name="settings_radardev_section_actions">Acciones</string>
     <string name="settings_radardev_pair_different_title">Emparejar un radar distinto</string>
     <string name="settings_radardev_open">Abrir</string>

@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -41,12 +43,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
+import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
@@ -66,7 +70,8 @@ import kotlin.math.roundToInt
  *
  * The radar is found by name-match by default; this screen lets a rider with
  * more than one bonded radar pin THIS bike's unit ([Prefs.radarMac]) so the
- * app never streams from the wrong one. Pairing itself happens in Android's
+ * app never streams from the wrong one, pin a radar the name-match misses, and
+ * take back a pin made on the wrong device. Pairing itself happens in Android's
  * Bluetooth settings (the platform blocks programmatic LESC bonding), so the
  * only action here is a deep-link to it. See [RadarSelection].
  */
@@ -94,10 +99,11 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // sent them to do. `getBondedDevices` also returns an empty set while the
     // adapter is off, so this is how the screen tracks the radio at all.
     val allBonded = remember(prefsSnap.radarMac, tickNowMs) { RadarSelection.bondedDevices(ctx) }
-    val bonded = remember(allBonded) { allBonded.filter { RadarSelection.isRadarName(it.name) } }
-    // Escape hatch: every bonded device the radar heuristic does NOT
-    // recognise, offered behind "My radar isn't listed".
-    val others = remember(allBonded) { allBonded.filterNot { RadarSelection.isRadarName(it.name) } }
+    val bonded = remember(allBonded) { RadarSelection.choosableRadars(allBonded) }
+    val eBikeMac = remember(allBonded) { EBikeStatusReader.findBondedEBikeMac(ctx) }
+    val others = remember(allBonded, prefsSnap.dashcamMac, eBikeMac) {
+        RadarSelection.unlistedDevices(allBonded, listOf(prefsSnap.dashcamMac, eBikeMac))
+    }
 
     // Radar battery is matched by name across the bus (same heuristic the home
     // Quick Status card uses); a recent read is the proxy for connected.
@@ -171,16 +177,8 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
                 Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         },
-        onSelectRadar = { radar ->
-            if (!radar.mac.equals(prefs.radarMac, ignoreCase = true)) {
-                // Different unit: the stored firmware revision described the
-                // old radar. Drop it so the display line doesn't show stale
-                // firmware for the new one until the first successful read.
-                prefs.radarFirmwareRev = null
-            }
-            prefs.radarMac = radar.mac
-            prefs.radarDisplayName = radar.name
-        },
+        offerChooser = RadarSelection.shouldOfferChooser(allBonded, chosen),
+        onSelectRadar = { radar -> RadarSelection.pin(prefs, radar) },
         offsetCm = offsetCm,
         onOffsetChange = { offsetCm = it },
         onOffsetCommit = { prefs.radarLateralOffsetCm = offsetCm },
@@ -207,6 +205,9 @@ internal fun SettingsRadarDeviceContent(
     batteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     others: List<RadarSelection.BondedRadar> = emptyList(),
+    /** [RadarSelection.shouldOfferChooser]: two named radars, or a pin on
+     *  another device that the one named radar must be able to replace. */
+    offerChooser: Boolean,
     onPairDifferent: () -> Unit = {},
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit = {},
     offsetCm: Int = 0,
@@ -228,10 +229,12 @@ internal fun SettingsRadarDeviceContent(
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (bonded.isEmpty()) {
-                // Never paired: the radar is required, so prompt pairing. The
-                // escape hatch still renders - a radar the name heuristic
+            if (link == DeviceLinkState.NOT_PAIRED) {
+                // No radar to link: the radar is required, so prompt pairing.
+                // The escape hatch still renders - a radar the name heuristic
                 // doesn't recognise lands exactly here, bonded but unlisted.
+                // A pinned one is linkable and gets the device card below
+                // (`SettingsRadarWrongPinTest`).
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     IntentCard(
                         title = stringResource(R.string.settings_radardev_pair_title),
@@ -240,7 +243,7 @@ internal fun SettingsRadarDeviceContent(
                         onClick = onPairDifferent,
                     )
                 }
-                OthersEscapeHatch(
+                RadarNotListedHatch(
                     others = others,
                     chosenMac = chosenMac,
                     expanded = othersExpanded,
@@ -338,9 +341,9 @@ internal fun SettingsRadarDeviceContent(
                 }
             }
 
-            // Ambiguity: more than one bonded radar -> let the rider pin which
-            // one is on this bike (RadarSelection honours the pinned MAC).
-            if (bonded.size > 1) {
+            // Let the rider pin which radar is on this bike (RadarSelection
+            // honours the pinned MAC).
+            if (offerChooser) {
                 SettingsSectionLabel(stringResource(R.string.settings_radardev_choose_radar))
                 SettingsRowGroup {
                     bonded.forEachIndexed { i, radar ->
@@ -362,7 +365,7 @@ internal fun SettingsRadarDeviceContent(
                 }
             }
 
-            OthersEscapeHatch(
+            RadarNotListedHatch(
                 others = others,
                 chosenMac = chosenMac,
                 expanded = othersExpanded,
@@ -428,26 +431,36 @@ internal fun snapOffsetCm(raw: Float): Int {
 /** "My radar isn't listed" - the pick-any-bonded-device escape hatch for
  *  radars the name heuristic doesn't know. Collapsed by default so
  *  headphones/watches don't clutter the common path; hidden entirely when
- *  every bonded device already matched the heuristic. */
+ *  there is nothing to list. Shared with the setup pairing step, which
+ *  passes its own wording and a border to match the cards around it. */
 @Composable
-private fun OthersEscapeHatch(
+internal fun RadarNotListedHatch(
     others: List<RadarSelection.BondedRadar>,
     chosenMac: String?,
     expanded: Boolean,
     onToggle: () -> Unit,
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit,
+    title: String = stringResource(R.string.settings_radardev_not_listed_title),
+    subtitle: String = stringResource(R.string.settings_radardev_not_listed_subtitle),
+    bordered: Boolean = false,
+    paddingHorizontal: Dp = 16.dp,
+    topGap: Dp = 8.dp,
 ) {
     if (others.isEmpty()) return
     val br = LocalBrColors.current
-    Spacer(modifier = Modifier.height(8.dp))
-    SettingsRowGroup {
+    if (topGap > 0.dp) Spacer(modifier = Modifier.height(topGap))
+    SettingsRowGroup(paddingHorizontal = paddingHorizontal, bordered = bordered) {
         SettingsRow(
             icon = Icons.Default.Bluetooth,
             iconTint = br.fgMuted,
-            title = stringResource(R.string.settings_radardev_not_listed_title),
-            subtitle = stringResource(R.string.settings_radardev_not_listed_subtitle),
+            title = title,
+            subtitle = subtitle,
             onClick = onToggle,
-            chevron = !expanded,
+            chevronIcon = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            stateDescription = stringResource(if (expanded) R.string.common_expanded else R.string.common_collapsed),
+            onClickLabel = stringResource(
+                if (expanded) R.string.settings_radardev_hide_devices else R.string.settings_radardev_show_devices,
+            ),
             isLast = !expanded,
         )
         if (expanded) {
@@ -460,7 +473,7 @@ private fun OthersEscapeHatch(
                     subtitle = if (isChosen) {
                         stringResource(R.string.settings_radardev_selected)
                     } else {
-                        stringResource(R.string.settings_radardev_tap_to_use)
+                        stringResource(R.string.settings_radardev_tap_to_use_as_radar)
                     },
                     onClick = { onSelectRadar(dev) },
                     chevron = false,

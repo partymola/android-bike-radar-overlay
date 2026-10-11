@@ -110,8 +110,8 @@ fun SettingsSectionLabel(text: String) {
 
 /**
  * Tappable settings home row: icon (in tinted-bg square), title +
- * subtitle, chevron-right at the end. Mirrors JSX `Row` in
- * settings-screens.jsx.
+ * subtitle, and at the end a chevron-right, or [chevronIcon] for a row that
+ * expands in place. Mirrors JSX `Row` in settings-screens.jsx.
  */
 @Composable
 fun SettingsRow(
@@ -125,11 +125,19 @@ fun SettingsRow(
     chevron: Boolean = true,
     clickable: Boolean = true,
     enabled: Boolean = true,
+    /** For a row that expands in place: the down or up arrow instead of the
+     *  navigating chevron, and the state and action TalkBack reads. */
+    chevronIcon: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+    stateDescription: String? = null,
+    onClickLabel: String? = null,
 ) {
     val br = LocalBrColors.current
     Column(
         modifier = if (clickable) {
-            Modifier.fillMaxWidth().clickable(onClick = onClick)
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = onClickLabel, onClick = onClick)
+                .then(if (stateDescription != null) Modifier.semantics { this.stateDescription = stateDescription } else Modifier)
         } else {
             Modifier.fillMaxWidth()
         },
@@ -167,12 +175,12 @@ fun SettingsRow(
                 }
             }
             if (rightContent != null) rightContent()
-            // A chevron implies the row navigates somewhere, so suppress
-            // it on non-clickable rows even if the caller forgot to pair
-            // the two flags.
+            // The end icon implies the row does something when tapped, so
+            // suppress it on non-clickable rows even if the caller forgot
+            // to pair the two flags.
             if (chevron && clickable) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    imageVector = chevronIcon,
                     contentDescription = null,
                     tint = br.fgFaint,
                     modifier = Modifier.size(18.dp),
@@ -198,15 +206,20 @@ fun SettingsRow(
 @Composable
 fun SettingsRowGroup(
     modifier: Modifier = Modifier,
+    paddingHorizontal: Dp = 16.dp,
+    /** A hairline edge, for a group set among bordered cards. */
+    bordered: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val br = LocalBrColors.current
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(br.bgElev1),
+            .padding(horizontal = paddingHorizontal)
+            .clip(shape)
+            .background(br.bgElev1)
+            .then(if (bordered) Modifier.border(1.dp, br.hairline, shape) else Modifier),
     ) {
         content()
     }

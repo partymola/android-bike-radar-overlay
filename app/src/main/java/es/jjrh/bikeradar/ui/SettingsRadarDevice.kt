@@ -51,6 +51,8 @@ import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.EBikeStatusReader
+import es.jjrh.bikeradar.MissingPermission
+import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
@@ -103,6 +105,11 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     val eBikeMac = remember(allBonded) { EBikeStatusReader.findBondedEBikeMac(ctx) }
     val others = remember(allBonded, prefsSnap.dashcamMac, eBikeMac) {
         RadarSelection.unlistedDevices(allBonded, listOf(prefsSnap.dashcamMac, eBikeMac))
+    }
+    // Without it the bonded list reads empty, so "pair your radar" would send
+    // the rider to a Bluetooth list where the radar already is.
+    val nearbyMissing = remember(tickNowMs) {
+        Permissions.missingForService(ctx) == MissingPermission.NEARBY_DEVICES
     }
 
     // Radar battery is matched by name across the bus (same heuristic the home
@@ -177,6 +184,8 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
                 Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         },
+        nearbyMissing = nearbyMissing,
+        onGrantPermissions = { navController.navigate("settings/permissions") },
         offerChooser = RadarSelection.shouldOfferChooser(allBonded, chosen),
         onSelectRadar = { radar -> RadarSelection.pin(prefs, radar) },
         offsetCm = offsetCm,
@@ -209,6 +218,10 @@ internal fun SettingsRadarDeviceContent(
      *  another device that the one named radar must be able to replace. */
     offerChooser: Boolean,
     onPairDifferent: () -> Unit = {},
+    /** Nearby devices is denied, so an empty bonded list says nothing about
+     *  pairing; the card asks for the permission instead. */
+    nearbyMissing: Boolean = false,
+    onGrantPermissions: () -> Unit = {},
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit = {},
     offsetCm: Int = 0,
     onOffsetChange: (Int) -> Unit = {},
@@ -228,6 +241,20 @@ internal fun SettingsRadarDeviceContent(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
             Spacer(modifier = Modifier.height(10.dp))
+
+            if (link == DeviceLinkState.NOT_PAIRED && nearbyMissing) {
+                // The same words as the home card that sent the rider here.
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    IntentCard(
+                        title = stringResource(R.string.main_status_permissions_title),
+                        subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
+                        filled = true,
+                        onClick = onGrantPermissions,
+                    )
+                }
+                Spacer(modifier = Modifier.height(28.dp))
+                return@Column
+            }
 
             if (link == DeviceLinkState.NOT_PAIRED) {
                 // No radar to link: the radar is required, so prompt pairing.

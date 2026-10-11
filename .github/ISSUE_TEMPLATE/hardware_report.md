@@ -7,7 +7,8 @@ assignees: ''
 ---
 
 <!-- Works or doesn't - both reports are valuable. The compatibility
-     matrix is built from these. -->
+     matrix is built from these.
+     You can write this in English or Spanish. / Puedes escribir en inglés o en español. -->
 
 ## Hardware
 
@@ -45,8 +46,9 @@ support or diagnose a decode problem. Long-press the "Bike Radar"
 wordmark on the home screen three times to unlock Developer options,
 then Settings -> Debug -> enable **Write capture logs**, power-cycle the
 device so it reconnects, wait a minute, and Share the newest log from
-the same screen. Capture logs record exact packet timing (so they
-reveal when you rode) but no location or account data.
+the same screen. Capture logs record exact packet timing, so they
+reveal when you rode. They record no location or account data, but your
+turns and speeds together can suggest where you rode.
 
 **For a rear radar only:** if it pairs but never shows as connected,
 also enable **Record connection setup** next to it before the

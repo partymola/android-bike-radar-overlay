@@ -6,6 +6,8 @@ labels: bug
 assignees: ''
 ---
 
+<!-- You can write this in English or Spanish. / Puedes escribir en inglés o en español. -->
+
 ## What happened
 
 A clear description of the bug.
@@ -26,6 +28,7 @@ What you expected to happen instead.
 - Android version and phone model:
 - Radar / eBike / front-camera hardware and firmware version (if relevant):
 - Home Assistant integration in use? yes / no
+- Sound output, if the problem is with the alerts: phone speaker / wired headphones / Bluetooth headset
 
 ## Diagnostics (optional, very helpful)
 
@@ -42,4 +45,6 @@ unlock Developer options, then open Settings -> Debug:
   reproduce on a ride, then Share the log from the same screen (stored
   gzipped under `Android/data/es.jjrh.bikeradar/files/captures/`).
   Capture logs record exact packet timing, so anyone holding one can
-  work out when you rode - share only if you're comfortable with that.
+  work out when you rode. They record no location, but your turns and
+  speeds together can suggest where you rode. Share only if you're
+  comfortable with that.

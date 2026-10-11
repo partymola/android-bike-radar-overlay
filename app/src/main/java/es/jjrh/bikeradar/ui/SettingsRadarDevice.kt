@@ -383,7 +383,16 @@ internal fun SettingsRadarDeviceContent(
             SettingsSliderRow(
                 title = stringResource(R.string.settings_radardev_position_title),
                 valueDisplay = offsetDisplay,
-                helper = stringResource(R.string.settings_radardev_position_helper),
+                // A range-only radar's decoder never reads the offset, so the
+                // slider says so rather than promising an effect
+                // (`SettingsRadarDeviceStatusTest`).
+                helper = stringResource(
+                    if (link == DeviceLinkState.LIMITED) {
+                        R.string.settings_radardev_position_no_effect
+                    } else {
+                        R.string.settings_radardev_position_helper
+                    },
+                ),
                 value = offsetCm.toFloat(),
                 valueRange = -maxCm.toFloat()..maxCm.toFloat(),
                 // Continuous track (no fixed step grid), snapped in code to the

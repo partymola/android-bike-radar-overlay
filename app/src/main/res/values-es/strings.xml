@@ -503,6 +503,7 @@
     <string name="settings_radardev_section_position">Posición del radar</string>
     <string name="settings_radardev_position_title">Desfase lateral</string>
     <string name="settings_radardev_position_helper">Desliza hacia el lado donde está montado el radar.</string>
+    <string name="settings_radardev_position_no_effect">Sin efecto con este radar: solo mide la distancia.</string>
     <string name="settings_radardev_position_centred">Centrado</string>
     <string name="settings_radardev_position_left">%1$d cm izda.</string>
     <string name="settings_radardev_position_right">%1$d cm dcha.</string>

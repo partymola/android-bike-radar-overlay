@@ -242,6 +242,9 @@ class SettingsRadarDeviceStatusTest {
         composeRule
             .onNodeWithText(limitedSourceNote)
             .assertIsDisplayed()
+        // Its stream has no lateral position, so the mount offset does nothing.
+        composeRule.onNodeWithText("No effect on this radar: it reports distance only.").assertExists()
+        composeRule.onNodeWithText("Slide toward the side your radar is mounted.").assertDoesNotExist()
     }
 
     @Test
@@ -263,6 +266,8 @@ class SettingsRadarDeviceStatusTest {
         composeRule
             .onNodeWithText(limitedSourceNote)
             .assertDoesNotExist()
+        composeRule.onNodeWithText("Slide toward the side your radar is mounted.").assertExists()
+        composeRule.onNodeWithText("No effect on this radar: it reports distance only.").assertDoesNotExist()
     }
 
     @Test

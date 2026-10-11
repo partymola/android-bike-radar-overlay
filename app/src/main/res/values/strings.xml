@@ -540,6 +540,9 @@
     <string name="settings_radardev_section_position">Radar position</string>
     <string name="settings_radardev_position_title">Mount offset</string>
     <string name="settings_radardev_position_helper">Slide toward the side your radar is mounted.</string>
+    <!-- In place of the helper above on a range-only radar, whose stream has no
+         lateral position for the offset to move. -->
+    <string name="settings_radardev_position_no_effect">No effect on this radar: it reports distance only.</string>
     <string name="settings_radardev_position_centred">Centred</string>
     <string name="settings_radardev_position_left">%1$d cm left</string>
     <string name="settings_radardev_position_right">%1$d cm right</string>

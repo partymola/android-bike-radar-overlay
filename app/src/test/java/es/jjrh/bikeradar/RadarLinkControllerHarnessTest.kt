@@ -1042,6 +1042,68 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    /** Settings away from every default, so a header written from defaults,
+     *  or from a different snapshot, cannot match. */
+    private fun riderSettings(p: Prefs) {
+        p.alertMaxDistanceM = 33
+        p.closingSpeedCeilingMs = 40
+    }
+
+    /** The capture header carries the alert settings beside the firmware line,
+     *  so a replay knows which settings the ride was decided with. */
+    @Test fun theCaptureHeaderRecordsTheAlertSettings() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-alert-settings").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        riderSettings(p)
+        val capture = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        val controller = controller(link, prefs = p, captureLog = capture)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+
+        capture.flushNow()
+        val lines = File(root, CaptureLogManager.CAPTURE_DIR).listFiles()!!.single().readLines()
+        val fw = lines.indexOfFirst { it.startsWith("# radar_fw ") }
+        assertTrue("no firmware line: $lines", fw >= 0)
+        val settings = lines[fw + 1]
+        assertTrue(settings, settings.startsWith("# settings alert_max_m=33 "))
+        assertTrue(settings, settings.endsWith(" ceiling_mps=40"))
+        controller.forceReconnect()
+    }
+
+    /** The legacy stream's capture carries the same header: a range-only
+     *  radar's ride is replayed too, and its reports come from hardware
+     *  nobody here owns. */
+    @Test fun theLegacyCaptureHeaderRecordsTheAlertSettings() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-legacy-settings").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        riderSettings(p)
+        val capture = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        val controller = controller(link, prefs = p, captureLog = capture, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+
+        capture.flushNow()
+        val lines = File(root, CaptureLogManager.CAPTURE_DIR).listFiles()!!.single().readLines()
+        assertTrue("no firmware line: $lines", lines.any { it.startsWith("# radar_fw rev=") })
+        val settings = lines.single { it.startsWith("# settings ") }
+        assertTrue(settings, settings.startsWith("# settings alert_max_m=33 "))
+        assertTrue(settings, settings.endsWith(" ceiling_mps=40"))
+        controller.forceReconnect()
+    }
+
     /**
      * A radar whose handshake aborts AFTER the battery step still reports its
      * battery.

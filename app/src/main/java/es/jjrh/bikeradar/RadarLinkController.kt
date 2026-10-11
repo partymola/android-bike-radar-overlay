@@ -633,6 +633,8 @@ internal class RadarLinkController(
                     // artefact a reporter sends back.
                     captureLog.open()
                     captureLog.clog("# handshake aborted at $handshakeAbort; no V2 char, trying the legacy stream")
+                    captureLog.clog("# radar_fw rev=${firmwareRev ?: prefs.radarFirmwareRev ?: "unknown"}")
+                    captureLog.clog(OverlayPipeline.alertSettingsLine(prefs.snapshot()))
                     journal("radar legacy stream attempt after $handshakeAbort")
                     // The probe keeps the ABORT token, not a legacy marker:
                     // the token is the diagnostic, and the journal line above
@@ -661,6 +663,7 @@ internal class RadarLinkController(
                 "# radar_fw rev=${firmwareRev ?: prefs.radarFirmwareRev ?: "unknown"}" +
                     " lateral_offset_cm=${prefs.radarLateralOffsetCm}",
             )
+            captureLog.clog(OverlayPipeline.alertSettingsLine(prefs.snapshot()))
             val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm)
             var v2FrameCount = 0
 

@@ -477,6 +477,16 @@ internal class OverlayPipeline(
     companion object {
         private const val TAG = "BikeRadar.Overlay"
 
+        /** The capture header's record of the settings [fireAlertCue] passes
+         *  the decider, as they stood when the radar connected. A setting
+         *  changed mid-ride is not recorded: `# alert` lines carry only some of
+         *  them, and only on some events. Not prefixed `# alert`, which
+         *  readers of the log count as cue lines (`AlertSettingsHeaderTest`). */
+        internal fun alertSettingsLine(s: PrefsSnapshot): String = "# settings alert_max_m=${s.alertMaxDistanceM}" +
+            " turn_aware=${s.turnAwareAlertsEnabled} urgent_low_speed=${s.urgentLowSpeedEnabled}" +
+            " unconf_wait=${s.urgentUnconfidentWaitEnabled} pass_clearance_m=${s.urgentPassClearanceM}" +
+            " ceiling_mps=${s.closingSpeedCeilingMs ?: "none"}"
+
         /** Key names are kept for riders' existing Home Assistant automations:
          *  `min_range_x_m` is the pass-point clearance and `range_y_at_min_m`
          *  that frame's distance behind, whatever the names say. */

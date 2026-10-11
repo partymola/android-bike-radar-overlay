@@ -19,14 +19,13 @@ import es.jjrh.bikeradar.data.Prefs
  *
  * Every caller-supplied field is treated as untrusted: the link journal
  * interpolates BLE device names, and a crash report carries whatever string
- * threw. Both go through the address strip HERE rather than at the caller, so
- * a new caller cannot forget.
+ * threw. Both go through [strip] HERE rather than at the caller, so a new
+ * caller cannot forget.
  *
- * What that strip removes is ADDRESSES ONLY - see [Prefs.redactAddresses], a
- * regex over the colon-separated MAC shape. Device names survive on purpose,
- * because they are what makes a link journal readable, and
- * `DiagnosticBundleTest` pins that. Do not describe this bundle as redacted
- * without saying which half.
+ * That strip removes addresses ([Prefs.redactAddresses]) and any run of four or
+ * more digits joined to letters, which is where some radars put the unit's
+ * serial ("XYZ12345"). Device names otherwise survive on purpose, because they
+ * are what makes a link journal readable, and `DiagnosticBundleTest` pins both.
  */
 object DiagnosticBundle {
 
@@ -86,16 +85,22 @@ object DiagnosticBundle {
         appendLine("--- Capture logs (${captureLogs.size} on disk) ---")
         captureLogs.take(MAX_FILES_LISTED).forEach { appendLine("${it.name}  ${it.sizeKb}KB") }
         appendLine("--- Link journal (newest ${journal.size.coerceAtMost(MAX_JOURNAL_LINES)}) ---")
-        journal.take(MAX_JOURNAL_LINES).forEach { appendLine(Prefs.redactAddresses(it)) }
+        journal.take(MAX_JOURNAL_LINES).forEach { appendLine(strip(it)) }
         appendLine()
         appendLine("--- Crash reports (${crashLogs.size} on disk) ---")
         crashLogs.take(MAX_FILES_LISTED).forEach { appendLine(it.name) }
         if (newestCrashText != null) {
             appendLine()
             appendLine("--- Newest crash report ---")
-            append(Prefs.redactAddresses(newestCrashText))
+            append(strip(newestCrashText))
         }
     }
+
+    private fun strip(text: String): String = NAME_DIGITS.replace(Prefs.redactAddresses(text)) { "#".repeat(it.value.length) }
+
+    /** A digit run joined to a letter, directly or across one hyphen or
+     *  underscore. Timestamps, counts and `key=value` numbers stand alone. */
+    private val NAME_DIGITS = Regex("""(?<=[A-Za-z][-_]?)\d{4,}""")
 
     /** Files named in the listing. The counts above them are the full totals. */
     const val MAX_FILES_LISTED = 3

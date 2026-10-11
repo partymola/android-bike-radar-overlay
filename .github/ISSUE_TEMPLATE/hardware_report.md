@@ -14,7 +14,9 @@ assignees: ''
 - Device type: rear radar / front camera-light / eBike
 - Brand and model:
 - Firmware version (from the vendor app, if available):
-- Bluetooth name as shown in Android's Bluetooth settings:
+- Bluetooth name as shown in Android's Bluetooth settings (if four or more
+  digits follow the letters, replace them with #, as they can be the serial
+  number):
 
 ## What works
 

@@ -53,6 +53,61 @@ class DiagnosticBundleTest {
     }
 
     @Test
+    fun `a serial inside a device name does not survive`() {
+        // Some radars advertise a name that ends in the unit's serial.
+        val out = build(journal = listOf("radar link start XYZ12345"))
+
+        assertFalse("a serial reached the bundle:\n$out", out.contains("12345"))
+        assertTrue(out.contains("radar link start XYZ#####"))
+    }
+
+    @Test
+    fun `a serial after a hyphen in a device name does not survive`() {
+        val out = build(journal = listOf("camera link start CAM-54321"))
+
+        assertFalse(out.contains("54321"))
+        assertTrue(out.contains("camera link start CAM-#####"))
+    }
+
+    @Test
+    fun `a serial after an underscore or in a lowercase name does not survive`() {
+        val out = build(journal = listOf("radar link start XYZ_123456", "radar link start xyz12345"))
+
+        assertTrue(out.contains("radar link start XYZ_######"))
+        assertTrue(out.contains("radar link start xyz#####"))
+    }
+
+    @Test
+    fun `four joined digits are masked and a three-digit model number is not`() {
+        val out = build(journal = listOf("radar link start XYZ1234", "radar link start ABC315"))
+
+        assertTrue(out.contains("radar link start XYZ####"))
+        assertTrue(out.contains("radar link start ABC315"))
+    }
+
+    @Test
+    fun `numbers that are not part of a name survive`() {
+        // Timestamps, durations and key=value counts, in the shapes the
+        // journal writes them.
+        val lines = listOf(
+            "12:34:56 radar legacy stream ended frames=12345 hb=4000 threat=1234 unparsed=0",
+            "12:34:56 radar reconnect in 8000ms (backoff=8000ms)",
+            "12:34:56 service started 123456",
+        )
+        val out = build(journal = lines)
+
+        lines.forEach { assertTrue("a number was masked in: $it\n$out", out.contains(it)) }
+    }
+
+    @Test
+    fun `a serial in a crash report does not survive`() {
+        val out = build(crashText = "java.lang.IllegalStateException: gatt XYZ12345 closed")
+
+        assertFalse(out.contains("12345"))
+        assertTrue(out.contains("gatt XYZ##### closed"))
+    }
+
+    @Test
     fun `an address in a crash report does not survive`() {
         // An exception message carries whatever string threw, which is not a
         // fixed vocabulary and cannot be reasoned about in advance.

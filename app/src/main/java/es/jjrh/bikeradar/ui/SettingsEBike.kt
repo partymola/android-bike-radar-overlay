@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
+import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.ServiceNotifications
 import es.jjrh.bikeradar.data.EBikeOwnership
@@ -90,7 +91,9 @@ private fun SettingsEBikeBody(navController: NavController, prefs: Prefs) {
         }
     }
     val receiving = eBikeDataIsFresh(lastUpdated, tickNowMs)
-    val stage by EBikeStateBus.stage.collectAsState()
+    val busStage by EBikeStateBus.stage.collectAsState()
+    val missingPermission = remember(tickNowMs) { Permissions.missingForService(ctx) }
+    val stage = shownEBikeStage(busStage, missingPermission)
     val dataOnMsg = stringResource(R.string.settings_ebike_data_on_toast)
     val dataOffMsg = stringResource(R.string.settings_ebike_data_off_toast)
     var forgotToLock by rememberSaveable { mutableStateOf(prefs.forgotToLockAlertEnabled) }

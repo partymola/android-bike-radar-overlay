@@ -66,6 +66,7 @@ import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
+import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.PermissionsSummary
 import es.jjrh.bikeradar.PermissionsSummaryDeriver
 import es.jjrh.bikeradar.R
@@ -158,6 +159,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     // Bluetooth process. The 5 s cadence matches the home screen's.
     var radarSelected by remember { mutableStateOf(radarIsSelected(ctx, prefs.radarMac)) }
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
+    var missingPermission by remember { mutableStateOf(Permissions.missingForService(ctx)) }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             // Resume-first, then loop, like the tick above. A delay-first loop
@@ -166,20 +168,23 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
             // system Bluetooth screen the banner itself sent them to.
             radarSelected = radarIsSelected(ctx, prefs.radarMac)
             btEnabled = bluetoothIsOn(ctx)
+            missingPermission = Permissions.missingForService(ctx)
             while (true) {
                 delay(5_000)
                 radarSelected = radarIsSelected(ctx, prefs.radarMac)
                 btEnabled = bluetoothIsOn(ctx)
+                missingPermission = Permissions.missingForService(ctx)
             }
         }
     }
+    val radioUp = radioUsable(btEnabled, missingPermission)
 
     val radarLink = deviceLinkState(
         // Bonded AND the transport up, per deviceLinkState's contract. The
         // radar cannot opt out of the transport half even if we wanted it to:
         // `getBondedDevices` returns an empty set with the adapter off, so
         // `radarSelected` is already false there.
-        linked = btEnabled && radarSelected,
+        linked = radioUp && radarSelected,
         fresh = radarStreamIsLive(radarState, tickNowMs),
         limited = radarState.source == DataSource.V1,
         connecting = RadarLinkStatus.isConnecting(radarLinkSnap, SystemClock.elapsedRealtime()),
@@ -188,7 +193,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         // The camera's pairing lives in prefs, which outlive the radio, so
         // the transport half is spelled out here to match the radar rather
         // than letting the two rows give one cause two different words.
-        linked = btEnabled &&
+        linked = radioUp &&
             prefsSnap.dashcamOwnership == DashcamOwnership.YES &&
             prefsSnap.dashcamMac != null,
         fresh = dashcamBattery != null,
@@ -209,7 +214,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         radarBattery = radarBattery,
         dashcamBattery = dashcamBattery,
         ebikeReceiving = eBikeDataIsFresh(ebikeLastUpdated, SystemClock.elapsedRealtime()),
-        ebikeStage = ebikeStage,
+        ebikeStage = shownEBikeStage(ebikeStage, missingPermission),
         haConfigured = haConfigured,
         haHealth = haHealth,
         permissionsGrantedCount = grantedCount,

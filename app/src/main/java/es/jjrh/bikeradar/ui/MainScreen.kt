@@ -172,10 +172,6 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // another of the app's screens, reaches here without a resume. The rule
     // inside decides; this only asks it again.
     LaunchedEffect(missingPermission) { ServiceAutoStart.startIfAllowed(ctx, prefs) }
-    // Without Nearby devices the bonded list reads empty and the app does not
-    // start the service, so every device row would describe a cause the card
-    // above names.
-    val nearbyMissing = missingPermission == MissingPermission.NEARBY_DEVICES
 
     // Polled, not read once: a first ride is saved minutes after the radar
     // goes off, often with this screen already open. Stops once a ride
@@ -349,18 +345,13 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         MainScreenContent(
             status = status,
             cta = cta,
-            // The rows' "transport up": with Nearby missing they read "Not
-            // paired", as with Bluetooth off, and the card names the reason.
-            btEnabled = btEnabled && !nearbyMissing,
+            btEnabled = radioUsable(btEnabled, missingPermission),
             showBtOffBanner = showBtOffBanner,
             showDashcamPrompt = showDashcamPrompt,
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
-            // The service publishes NOT_PERMITTED only once it runs, and the
-            // app does not start it without the permission; the row would
-            // blame Flow.
-            ebikeStage = if (nearbyMissing) EBikeStage.NOT_PERMITTED else ebikeStage,
+            ebikeStage = shownEBikeStage(ebikeStage, missingPermission),
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
             hasBond = hasBond,
@@ -859,6 +850,23 @@ private fun SettingsButton(onClick: () -> Unit) {
  * so no surface can report "Not paired" about a radar that is delivering.
  */
 internal fun radarIsSelected(ctx: Context, chosenMac: String?): Boolean = RadarSelection.hasLinkableRadar(RadarSelection.bondedDevices(ctx), chosenMac)
+
+/**
+ * Whether the device rows may treat the radio as usable: Bluetooth on and
+ * Nearby devices granted. Without Bluetooth connect the bonded list reads
+ * empty, so the radar and dashcam rows read it as they read Bluetooth off
+ * ("Not paired"), the eBike row names the permission ([shownEBikeStage]), and
+ * the home card names the cause. Every screen that classifies a device link asks
+ * this, so a row and the screen it opens cannot disagree
+ * (`NearbyDeniedScreensAgreeTest`). Bluetooth-off banners keep reading the
+ * adapter alone.
+ */
+internal fun radioUsable(bluetoothOn: Boolean, missing: MissingPermission?): Boolean = bluetoothOn && missing != MissingPermission.NEARBY_DEVICES
+
+/** The eBike stage to show. The service publishes NOT_PERMITTED only once it
+ *  runs, and the app does not start it without Nearby devices, so the bus
+ *  alone would say "Waiting for Flow" and send the rider to Flow. */
+internal fun shownEBikeStage(busStage: EBikeStage, missing: MissingPermission?): EBikeStage = if (missing == MissingPermission.NEARBY_DEVICES) EBikeStage.NOT_PERMITTED else busStage
 
 internal fun bluetoothIsOn(ctx: Context): Boolean = try {
     val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager

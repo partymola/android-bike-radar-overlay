@@ -320,7 +320,9 @@ internal fun SystemCard(
     // `linked` means bonded AND the transport is up, per deviceLinkState's
     // own contract. Bluetooth off therefore reads NOT_PAIRED, and the reason
     // is named exactly once above this card - by the banner, or by the hero
-    // when the hero is already the Bluetooth-off card - never per-row.
+    // when the hero is already the Bluetooth-off card - never per-row. The
+    // eBike row is the one exception, for a missing Nearby devices grant only:
+    // its stage names it (`shownEBikeStage`), as its own screen does.
     //
     // The radar gets the transport half for free and cannot be given anything
     // else: `getBondedDevices` returns an EMPTY SET with the adapter off, so

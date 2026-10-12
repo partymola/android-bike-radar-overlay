@@ -58,6 +58,13 @@ class DashcamStatusWordTest {
         // so leaving this out tests the Bluetooth-off state under four names
         // that all claim to be about something else.
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
+        // And Nearby devices granted, for the same reason: without it the card
+        // reads "Not paired" as it does with the radio off
+        // (`NearbyDeniedScreensAgreeTest`).
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+        )
     }
 
     @After

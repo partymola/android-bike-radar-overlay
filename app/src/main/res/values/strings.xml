@@ -192,7 +192,7 @@
     <string name="device_status_cam_limited">Limited</string>
     <!-- eBike forms. Spanish inflects for the feminine "la eBike". -->
     <string name="device_status_ebike_live">Live</string>
-    <string name="device_status_ebike_no_permission">Needs Bluetooth permission</string>
+    <string name="device_status_ebike_no_permission">Needs Nearby devices</string>
     <!-- No "eBike" in the value: every row that shows it is already labelled
          "eBike", so naming it again reads as a stutter. -->
     <string name="device_status_ebike_not_bonded">Not paired</string>
@@ -594,7 +594,7 @@
          to do about each state. -->
     <string name="settings_ebike_receiving_subtitle">Battery and ride status from your bike.</string>
     <string name="settings_ebike_waiting_subtitle">Open Flow and ride - data appears here automatically.</string>
-    <string name="settings_ebike_no_permission_subtitle">Grant Bluetooth access in Settings → Permissions.</string>
+    <string name="settings_ebike_no_permission_subtitle">Grant Nearby devices in Settings → Permissions.</string>
     <string name="settings_ebike_not_bonded_subtitle">Pair your eBike in Android\'s Bluetooth settings first.</string>
     <string name="settings_ebike_alerts_label">Alerts</string>
     <string name="settings_ebike_forgot_lock_title">Forgot-to-lock reminder</string>

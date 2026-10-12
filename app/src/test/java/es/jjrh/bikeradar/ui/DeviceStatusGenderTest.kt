@@ -98,10 +98,11 @@ class DeviceStatusGenderTest {
     @Test
     fun `the eBike names which precondition failed`() {
         // Distinct words, not one shared "waiting": telling a rider to open
-        // Flow about a missing Bluetooth grant sends them where nothing can
-        // help them.
+        // Flow about a missing Nearby devices grant sends them where nothing
+        // can help them. The permission needs no gender: a state, named as on
+        // the Permissions screen.
         assertEquals(
-            "Falta permiso de Bluetooth",
+            "Sin Dispositivos cercanos",
             app.getString(ebikeStatusLabel(receiving = false, stage = EBikeStage.NOT_PERMITTED)),
         )
         assertEquals(

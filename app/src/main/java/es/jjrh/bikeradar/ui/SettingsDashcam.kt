@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.ServiceNotifications
 import es.jjrh.bikeradar.batteryReadIsFresh
@@ -94,11 +95,11 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
         dashcamConnected = dashcamConnected,
-        // Re-read on the same tick as the freshness above. Without it this
-        // screen calls the camera paired while the row that opened it calls
-        // it not paired, which is the disagreement the shared vocabulary
-        // exists to remove.
-        btEnabled = remember(tickNowMs) { bluetoothIsOn(ctx) },
+        // Re-read on the same tick as the freshness above, through the same
+        // helper as the row that opened this screen. Without it this screen
+        // calls the camera paired while that row calls it not paired, which
+        // is the disagreement the shared vocabulary exists to remove.
+        btEnabled = remember(tickNowMs) { radioUsable(bluetoothIsOn(ctx), Permissions.missingForService(ctx)) },
         dashcamBatteryPct = if (dashcamConnected) dashcamBattery.pct else null,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
@@ -146,9 +147,10 @@ internal fun SettingsDashcamContent(
     dashcamDisplayName: String?,
     dashcamWarnWhenOff: Boolean,
     dashcamConnected: Boolean,
-    /** Deliberately no default: a caller that forgets it would render a
-     *  camera as paired while the radio is off, which is the exact
-     *  disagreement with the home row this parameter exists to prevent. */
+    /** [radioUsable]: Bluetooth on and Nearby devices granted. Deliberately no
+     *  default: a caller that forgets it would render a camera as paired
+     *  while the radio is off, which is the exact disagreement with the home
+     *  row this parameter exists to prevent. */
     btEnabled: Boolean,
     dashcamBatteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,

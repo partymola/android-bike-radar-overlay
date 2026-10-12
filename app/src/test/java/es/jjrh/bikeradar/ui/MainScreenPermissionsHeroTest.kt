@@ -105,7 +105,7 @@ class MainScreenPermissionsHeroTest {
         assertEquals("radar and dashcam rows", 2, count("Not paired"))
         assertEquals(0, count("No signal"))
         assertEquals(0, count("Waiting for Flow"))
-        assertEquals(1, count("Needs Bluetooth permission"))
+        assertEquals(1, count("Needs Nearby devices"))
     }
 
     @Test

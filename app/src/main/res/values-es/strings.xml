@@ -159,9 +159,11 @@
     <string name="device_status_cam_not_paired">No emparejada</string>
     <string name="device_status_cam_live">Activa</string>
     <string name="device_status_cam_limited">Limitada</string>
-    <!-- Formas de la eBike: femenino, para "la eBike". -->
+    <!-- Formas de la eBike: femenino, para "la eBike". El permiso va como un
+         estado sin género, con el nombre de la tarjeta de Permisos; el
+         subtítulo de la pantalla eBike dice qué hacer. -->
     <string name="device_status_ebike_live">Activa</string>
-    <string name="device_status_ebike_no_permission">Falta permiso de Bluetooth</string>
+    <string name="device_status_ebike_no_permission">Sin Dispositivos cercanos</string>
     <!-- Sin "eBike" en el valor: la fila ya se llama "eBike". Y en femenino,
          como la cámara: un mismo estado no puede tener tres redacciones. -->
     <string name="device_status_ebike_not_bonded">No emparejada</string>
@@ -550,7 +552,7 @@
     <!-- Los títulos salen del vocabulario compartido; esto dice qué hacer. -->
     <string name="settings_ebike_receiving_subtitle">Batería y estado de la ruta de tu bici.</string>
     <string name="settings_ebike_waiting_subtitle">Abre Flow y ponte en marcha: los datos aparecen aquí automáticamente.</string>
-    <string name="settings_ebike_no_permission_subtitle">Concede acceso a Bluetooth en Ajustes → Permisos.</string>
+    <string name="settings_ebike_no_permission_subtitle">Concede Dispositivos cercanos en Ajustes → Permisos.</string>
     <string name="settings_ebike_not_bonded_subtitle">Empareja tu eBike en los ajustes de Bluetooth de Android.</string>
     <string name="settings_ebike_alerts_label">Avisos</string>
     <string name="settings_ebike_forgot_lock_title">Aviso de olvido de bloqueo</string>

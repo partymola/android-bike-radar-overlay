@@ -92,7 +92,18 @@ data class MainStatusInputs(
     /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
      *  System row reads, so the two cannot disagree about one radar. */
     val radarConnecting: Boolean = false,
+    /** Connecting with no data for [CONNECTING_ADVICE_AFTER_MS] or more since
+     *  the home screen first saw it, so the card may tell the rider to turn the
+     *  radar off and on. */
+    val connectingAdviceDue: Boolean = false,
 )
+
+/** How long connecting without data runs before the card advises turning the
+ *  radar off and on. Longer than an ordinary connect
+ *  (`MainScreenEndRideWiringTest.thePowerCycleAdviceWaitsOutAnOrdinaryConnect`)
+ *  and than the 5 s a closed link still reads as connecting, so switching the
+ *  radar off at the end of a ride does not show it either. */
+internal const val CONNECTING_ADVICE_AFTER_MS = 15_000L
 
 object MainStatusDeriver {
 
@@ -269,13 +280,14 @@ object MainStatusDeriver {
             )
         }
         // Amber, like the row beside it: not cover yet, and possibly a radar
-        // that will never get past its setup.
+        // that will never get past its setup. The advice waits until that is
+        // likely.
         if (inputs.radarConnecting) {
             return MainStatusModel(
                 icon = MainStatusIcon.Sensors,
                 tone = MainStatusTone.Warn,
                 headlineRes = R.string.main_status_connecting_title,
-                subtitleRes = R.string.main_status_connecting_sub,
+                subtitleRes = if (inputs.connectingAdviceDue) R.string.main_status_connecting_sub else null,
             )
         }
         notificationsCard(inputs)?.let { return it }

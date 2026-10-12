@@ -120,6 +120,53 @@ class MainScreenEndRideWiringTest {
     }
 
     @Test
+    fun thePowerCycleAdviceWaitsOutAnOrdinaryConnect() {
+        // An ordinary connect must not tell the rider to power-cycle the
+        // radar; one still connecting with no data at 15 s gets the advice.
+        val advice = "If this doesn't change, turn your radar off and on"
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState(radarGattActive = true))
+        composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Connecting to radar").assertIsDisplayed()
+        composeRule.onNodeWithText(advice).assertDoesNotExist()
+
+        // Whole seconds: the shadow clock creeps while Compose idles, so a
+        // millisecond either side of 15 s would not hold.
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(14))
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(advice).assertDoesNotExist()
+
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(advice).assertIsDisplayed()
+    }
+
+    @Test
+    fun eachConnectStartsThePowerCycleWaitAgain() {
+        // A radar that connected, dropped out of connecting and is connecting
+        // again starts a new wait rather than counting from the first.
+        val advice = "If this doesn't change, turn your radar off and on"
+        val link = MutableStateFlow(RadarLinkState(radarGattActive = true))
+        BikeRadarService.radarLinkStateForUi = link
+        composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        composeRule.waitForIdle()
+
+        link.value = RadarLinkState()
+        composeRule.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(20))
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+
+        link.value = RadarLinkState(radarGattActive = true)
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Connecting to radar").assertIsDisplayed()
+        composeRule.onNodeWithText(advice).assertDoesNotExist()
+    }
+
+    @Test
     fun aRadarFailingItsSetupAfterARideIsStillAsked() {
         // Connecting and offerable at once: the question must win, or a rider
         // with no eBike loses the only way to stop the drop cue repeating.

@@ -130,9 +130,10 @@ private fun dotForStatus(
     //   Connecting to radar -> caution, pulse
     //   First-run setup     -> safe, no pulse   (matches `active` style - green welcome)
     //   Paused              -> fgDim, no pulse
-    //   Not paired (BT on)  -> caution, no pulse
-    //   Not paired (BT off) -> danger, no pulse  (mockup's `noBluetooth`)
-    //   Permission missing  -> danger, pulse
+    //   Bluetooth off       -> caution, no pulse
+    //   Not paired          -> danger, no pulse
+    //   Nearby devices missing -> danger, pulse
+    //   Notifications missing  -> caution, pulse
     //   Live + dashcam off  -> caution, pulse  (matches `dashcamMissing`)
     //   Live + HA down      -> safe, no pulse  (still live; HA is a side-channel)
     //   Live + good         -> safe, no pulse
@@ -158,7 +159,7 @@ private fun dotForStatus(
             MainStatusTone.Warn -> br.caution to true
             else -> br.fgDim to true
         }
-        // Error is a missing permission: the service cannot run at all.
+        // Error is Nearby devices missing: the service cannot run at all.
         MainStatusIcon.Warning -> when (tone) {
             MainStatusTone.Error -> br.danger to true
             else -> br.caution to true

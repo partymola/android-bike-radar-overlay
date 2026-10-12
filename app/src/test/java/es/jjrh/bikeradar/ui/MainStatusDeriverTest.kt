@@ -387,7 +387,10 @@ class MainStatusDeriverTest {
         assertEquals(MainStatusIcon.Sensors, s.icon)
         assertEquals(MainStatusTone.Warn, s.tone)
         assertEquals(R.string.main_status_connecting_title, s.headlineRes)
-        assertEquals(R.string.main_status_connecting_sub, s.subtitleRes)
+        // No advice yet: an ordinary connect is over in seconds.
+        assertNull(s.subtitleRes)
+        val long = derive(baseInputs(radarFresh = false, radarConnecting = true).copy(connectingAdviceDue = true))
+        assertEquals(R.string.main_status_connecting_sub, long.subtitleRes)
     }
 
     @Test fun theParkedQuestionBeatsConnecting() {

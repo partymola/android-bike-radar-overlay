@@ -226,9 +226,17 @@ internal fun PermissionCard(
     // lifetime so we can disambiguate "never asked" (rationale=false)
     // from "tapped 'Don't ask again'" (rationale=false, but attempted).
     var requestAttempted by rememberSaveable(spec.titleRes) { mutableStateOf(false) }
+    var rationaleBefore by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { onChanged() }
+    ) { results ->
+        onChanged()
+        val rationaleAfter = activity != null &&
+            spec.permissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
+        if (refusedWithoutADialog(results.values.all { it }, rationaleBefore, rationaleAfter)) {
+            ctx.startActivity(permissionSettingsIntent(spec, ctx.packageName))
+        }
+    }
     val permanentlyDenied = !granted &&
         requestAttempted &&
         spec.permissions.isNotEmpty() &&
@@ -250,22 +258,36 @@ internal fun PermissionCard(
                         ),
                     )
                 }
-                permanentlyDenied -> {
-                    ctx.startActivity(
-                        Intent(
-                            AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:${ctx.packageName}"),
-                        ),
-                    )
-                }
+                permanentlyDenied -> ctx.startActivity(permissionSettingsIntent(spec, ctx.packageName))
                 else -> {
                     requestAttempted = true
+                    rationaleBefore = activity != null &&
+                        spec.permissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
                     launcher.launch(spec.permissions.toTypedArray())
                 }
             }
         },
         alternative = alternative,
     )
+}
+
+/**
+ * A request came back refused with no dialog on screen. Android stops showing
+ * the dialog once a permission has been refused twice, and the label here only
+ * learns that after a first tap, so without this the first tap of every visit
+ * did nothing visible. The rationale flag is false both before and after only
+ * then, or after a first-ever dialog dismissed without an answer, which lands
+ * in the same settings page (`PermissionSettingsRouteTest`).
+ */
+internal fun refusedWithoutADialog(granted: Boolean, rationaleBefore: Boolean, rationaleAfter: Boolean): Boolean = !granted && !rationaleBefore && !rationaleAfter
+
+/** Where a refused permission is turned on by hand: the notification switch
+ *  itself for Notifications, App info for everything else. */
+internal fun permissionSettingsIntent(spec: PermissionSpec, packageName: String): Intent = if (Manifest.permission.POST_NOTIFICATIONS in spec.permissions) {
+    Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, packageName)
+} else {
+    Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
 }
 
 /**

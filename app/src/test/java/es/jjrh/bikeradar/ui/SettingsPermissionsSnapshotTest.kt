@@ -36,12 +36,8 @@ class SettingsPermissionsSnapshotTest {
         required = true,
     )
 
-    private val notifications = PermissionSpec(
-        permissions = listOf("android.permission.POST_NOTIFICATIONS"),
-        titleRes = R.string.permission_notifications_title,
-        rationaleRes = R.string.permission_notifications_rationale,
-        required = true,
-    )
+    // The production spec, so the golden shows the mark the screen shows.
+    private val notifications = PERMISSIONS.single { it.titleRes == R.string.permission_notifications_title }
 
     private val overlay = PermissionSpec(
         permissions = emptyList(),

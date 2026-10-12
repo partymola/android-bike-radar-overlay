@@ -4,6 +4,7 @@ package es.jjrh.bikeradar
 
 import android.Manifest
 import android.app.Application
+import android.app.NotificationManager
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -47,8 +48,9 @@ class PermissionsTest {
 
     @Test
     fun theServiceRunsWithoutNotifications() {
-        // A refused Notifications grant costs the alarms' Dismiss and Snooze,
-        // not the beeps: refusing to run would silence every alert instead.
+        // A refused Notifications grant costs Pause and the walk-away alarm's
+        // Dismiss and Remind, not the beeps: refusing to run would silence
+        // every alert instead.
         // The card still asks for it.
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -56,6 +58,7 @@ class PermissionsTest {
         )
         assertTrue(Permissions.hasRequiredForService(app))
         assertEquals(MissingPermission.NOTIFICATIONS, Permissions.missingForService(app))
+        assertFalse(Permissions.notificationsGranted(app))
     }
 
     @Test
@@ -85,11 +88,15 @@ class PermissionsTest {
     @Config(sdk = [Build.VERSION_CODES.S])
     fun preTiramisuNeverAsksForNotifications() {
         // API 31 (S) has no notification permission to ask for. This drives
-        // the SDK_INT < TIRAMISU side of the version gate.
+        // the SDK_INT < TIRAMISU side of the version gate. Blocked, because
+        // there AndroidX answers the permission check from the block, so only
+        // a blocked app tells the version gate from that fall-through.
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
+        shadowOf(app.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(false)
         assertNull(Permissions.missingForService(app))
+        assertTrue(Permissions.notificationsGranted(app))
     }
 }

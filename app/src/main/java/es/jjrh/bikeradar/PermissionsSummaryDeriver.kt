@@ -19,7 +19,7 @@ enum class PermissionsSummary {
  *
  * The row used to pick between "needs action" and "all granted" on the
  * required-only count while printing the total count, so a fresh install with
- * both required permissions granted and the overlay and location ones not read
+ * every required permission granted and the overlay and location ones not read
  * "All granted (2 of 4)" - a sentence contradicted by its own numbers, in a row
  * whose whole job is telling the rider whether anything is outstanding. The
  * overlay is the app's primary surface, so that is not a cosmetic miscount.

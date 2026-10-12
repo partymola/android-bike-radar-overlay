@@ -49,12 +49,15 @@
     <string name="permission_nearby_title">Nearby devices</string>
     <string name="permission_nearby_rationale">Scan for and connect to your radar, dashcam and eBike over Bluetooth.</string>
     <string name="permission_notifications_title">Notifications</string>
-    <string name="permission_notifications_rationale">Post the silent service notification and any ride alerts.</string>
+    <string name="permission_notifications_rationale">See your ride summary and warnings, and pause alerts from the notification. Without this, alerts still play but you can\'t silence a dashcam\'s walk-away alarm.</string>
     <string name="permission_overlay_title">Draw over other apps</string>
     <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
     <string name="permission_location_title">Approximate location</string>
     <string name="permission_location_rationale">Used once per ride to set your front and radar lights by local sunset. Without a location or coordinates, sunset is estimated for London. Coordinates you enter take priority.</string>
     <string name="permission_mark_recommended">Recommended</string>
+    <!-- The same mark on the Notifications card; gendered languages agree it
+         with that title. -->
+    <string name="permission_mark_recommended_notifications">Recommended</string>
 
     <!-- Shared light-mode display names (SettingsAtoms.kt) -->
     <string name="settings_lightmode_high">High</string>
@@ -107,11 +110,14 @@
     <string name="main_status_service_off_sub">Tap Start to begin</string>
     <!-- The subtitle names the one missing, Nearby devices first. The app does
          not start the radar service without Nearby devices, so no alerts at
-         all; without Notifications it runs and beeps, but the walk-away alarm
-         has no Dismiss or Snooze. -->
+         all; without Notifications it runs and beeps, but Pause, which only
+         the notification offers, the ride summary and the warnings that live
+         in notifications are gone, and the walk-away alarm cannot be silenced.
+         The _alarm_ form is shown only to a rider whose alarm can sound. -->
     <string name="main_status_permissions_title">Permissions needed</string>
     <string name="main_status_permissions_nearby_sub">No alerts until you grant Nearby devices</string>
-    <string name="main_status_permissions_notifications_sub">Alarms can\'t be silenced without Notifications</string>
+    <string name="main_status_permissions_notifications_sub">Without Notifications you can\'t pause alerts</string>
+    <string name="main_status_permissions_notifications_alarm_sub">Without Notifications you can\'t pause alerts or silence the walk-away alarm</string>
     <string name="main_status_paused_title">Paused until <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
     <string name="main_status_paused_sub">Alerts are silenced</string>
     <string name="main_status_bt_off_title">Bluetooth is off</string>
@@ -258,10 +264,10 @@
 
     <!-- Step 1: permissions -->
     <string name="onboarding_perm_title">Grant permissions</string>
-    <string name="onboarding_perm_sub">System permissions so the app can find your devices, post a status notification, and draw the overlay.</string>
+    <string name="onboarding_perm_sub">System permissions so the app can find your devices, draw the overlay and show notifications.</string>
     <string name="onboarding_perm_privacy_heading">What these allow</string>
-    <string name="onboarding_perm_bullet_bluetooth">Bluetooth: finds and connects your radar, dashcam and eBike</string>
-    <string name="onboarding_perm_bullet_notifications">Notifications: shows ride status and alerts</string>
+    <string name="onboarding_perm_bullet_bluetooth">Nearby devices: finds and connects your radar, dashcam and eBike</string>
+    <string name="onboarding_perm_bullet_notifications">Notifications (recommended): shows a Pause button, your ride summary and warnings</string>
     <string name="onboarding_perm_bullet_location">Location (approx, optional): sets your front and radar lights by local sunset - never tracks you</string>
 
     <!-- Step 2: Home Assistant -->
@@ -672,7 +678,7 @@
     <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
     <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: ride status, alerts and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over the app underneath\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the drop alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: service status, the walk-away alarm\'s Dismiss and Remind buttons, Pause 1h and Resume, warnings and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over the app underneath\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the drop alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read once per ride to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 

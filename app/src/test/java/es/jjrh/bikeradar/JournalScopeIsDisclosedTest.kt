@@ -132,7 +132,7 @@ class JournalScopeIsDisclosedTest {
         "camera handshake failed at \$handshakeAbort (quick reconnect)",
         "camera handshake complete",
         "recovered a ride from the crash checkpoint (partial=\${leftover.partial})",
-        "service started (unclean restarts=\${prefs.dirtyRestartCount})",
+        "service started (unclean restarts=\${prefs.dirtyRestartCount} notifications=\$notificationState)",
         "audio tracks rebuilt after a play failure (gen=\$gen)",
         "bluetooth adapter off: links torn down, event scan dead",
         "bluetooth adapter on: scan re-registered, links kickstarted",

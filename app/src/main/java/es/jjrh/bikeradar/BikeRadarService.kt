@@ -25,6 +25,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -295,8 +296,13 @@ class BikeRadarService : Service() {
         if (diedUnclean) prefs.dirtyRestartCount += 1
         prefs.serviceRunningMarker = true
         // Service edges bracket the link events so a journal gap reads as
-        // "service wasn't running", not "links were silent".
-        linkJournal.log("service started (unclean restarts=${prefs.dirtyRestartCount})")
+        // "service wasn't running", not "links were silent". The service runs
+        // without Notifications, so a report of an alarm that would not stop
+        // needs to say which mode it ran in. A block in system settings counts
+        // as off, since below Android 13 it is the only way to refuse them.
+        val notificationsShown = Permissions.notificationsGranted(this) && NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val notificationState = if (notificationsShown) "on" else "off"
+        linkJournal.log("service started (unclean restarts=${prefs.dirtyRestartCount} notifications=$notificationState)")
         // The rider-facing "restarted mid-ride" flag needs BOTH signals: the
         // unclean death AND a ride left in flight (checkpoint recovered). The
         // debug counter above keeps counting every unclean death. Recovery

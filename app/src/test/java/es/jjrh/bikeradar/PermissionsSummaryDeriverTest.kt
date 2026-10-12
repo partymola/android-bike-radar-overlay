@@ -15,8 +15,8 @@ class PermissionsSummaryDeriverTest {
     }
 
     @Test fun requiredGrantedWithOptionalsOutstandingIsNotAllGranted() {
-        // The shipped defect: two of four granted, both of them the required
-        // ones, rendered as "All granted (2 of 4)".
+        // The shipped defect: two of four granted, every required one among
+        // them, rendered as "All granted (2 of 4)".
         assertEquals(
             PermissionsSummary.PARTIALLY_GRANTED,
             PermissionsSummaryDeriver.derive(grantedCount = 2, requiredMissing = 0, total = 4),

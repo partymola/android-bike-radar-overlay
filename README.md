@@ -188,15 +188,15 @@ Store-listing metadata lives under `fastlane/metadata/android/`
    Riders past onboarding find it under **Settings -> Alerts -> Alert sounds**.
 3. Play a test sound and set the alert volume. Riders past onboarding find it
    on the same Alert sounds page.
-4. Grant the requested permissions (Bluetooth scan, Bluetooth connect,
-   notifications, overlay, and optionally approximate location for the
-   lights).
+4. Grant Nearby devices (Bluetooth scan and connect), which the radar needs.
+   Notifications and the overlay are recommended, and approximate location
+   for the lights is optional.
 5. Enter your Home Assistant base URL and long-lived token (or skip).
 6. Pair your rear radar via Android's **Settings -> Connected devices ->
    Pair new device** while the radar is in pair mode. The app detects
    the bond automatically and starts tracking. If it doesn't recognise
-   your radar by name, pick it from your paired devices in **Settings ->
-   Radar**.
+   your radar by name, pick it from your paired devices on the same setup
+   step, or later in **Settings -> Radar**.
 
 ## Requirements
 

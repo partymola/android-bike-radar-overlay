@@ -22,8 +22,8 @@ import org.robolectric.annotation.GraphicsMode
  * a [LocalContext] or a real lifecycle observer.
  *
  * Variants exercise the three states the Continue button cares about:
- *  - all required perms granted (Continue enabled, optional still off)
- *  - mixed (one required granted, one not - Continue disabled)
+ *  - all granted (Continue enabled)
+ *  - mixed (Nearby devices granted, the recommended ones not - Continue enabled)
  *  - all pending (every card in denied state - Continue disabled)
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
@@ -60,12 +60,8 @@ class OnboardingPermissionsStepSnapshotTest {
         required = true,
     )
 
-    private val notifications = PermissionSpec(
-        permissions = listOf("android.permission.POST_NOTIFICATIONS"),
-        titleRes = R.string.permission_notifications_title,
-        rationaleRes = R.string.permission_notifications_rationale,
-        required = true,
-    )
+    // The production spec, so the golden shows the mark the screen shows.
+    private val notifications = PERMISSIONS.single { it.titleRes == R.string.permission_notifications_title }
 
     private val overlay = PermissionSpec(
         permissions = emptyList(),
@@ -110,7 +106,7 @@ class OnboardingPermissionsStepSnapshotTest {
                 UiTheme {
                     PermissionsStepContent(
                         states = states,
-                        requiredGranted = false,
+                        requiredGranted = true,
                         onContinue = {},
                         onPermissionChanged = {},
                     )

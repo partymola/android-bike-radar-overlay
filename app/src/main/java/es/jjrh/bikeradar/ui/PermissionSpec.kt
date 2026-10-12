@@ -42,13 +42,20 @@ internal val PERMISSIONS = buildList {
             required = true,
         ),
     )
+    // Recommended, not required: the radar runs and beeps without it
+    // (`Permissions.hasRequiredForService`), but the walk-away alarm cannot be
+    // silenced, and the notification's Pause and the ride summary go, so setup
+    // still asks without holding Continue (`OnboardingPermissionsGateTest`).
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(
             PermissionSpec(
                 listOf(Manifest.permission.POST_NOTIFICATIONS),
                 R.string.permission_notifications_title,
                 R.string.permission_notifications_rationale,
-                required = true,
+                required = false,
+                // Its own key, so a gendered language can agree the mark with
+                // this title (Spanish "Notificaciones" is feminine plural).
+                markLabelRes = R.string.permission_mark_recommended_notifications,
             ),
         )
     }

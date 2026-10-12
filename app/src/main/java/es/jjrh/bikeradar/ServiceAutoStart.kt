@@ -22,10 +22,10 @@ import es.jjrh.bikeradar.data.Prefs
  * action (a scan wake, the eBike setup step, a notification button, End ride,
  * the dev tools) do not come through here.
  *
- * Every caller today is exempt from Android 12's background-start limit (a
- * resumed activity, boot, package replace). A caller from a worker or alarm
- * would need to catch `ForegroundServiceStartNotAllowedException`, as
- * `BatteryScanReceiver` does.
+ * Every caller today is exempt from Android 12's background-start limit: an
+ * activity on screen (resumed, or composing the home screen), boot, or a
+ * package replace. A caller from a worker or alarm would need to catch
+ * `ForegroundServiceStartNotAllowedException`, as `BatteryScanReceiver` does.
  */
 object ServiceAutoStart {
 

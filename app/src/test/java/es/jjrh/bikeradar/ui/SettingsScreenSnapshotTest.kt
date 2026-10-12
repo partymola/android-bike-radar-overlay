@@ -176,8 +176,10 @@ class SettingsScreenSnapshotTest {
                     ebikeStage = EBikeStage.NOT_STARTED,
                     haConfigured = false,
                     haHealth = HaHealth.Unknown,
-                    permissionsGrantedCount = 1,
-                    permissionsRequiredMissing = 2,
+                    // Nearby devices, the one required permission, is the
+                    // one missing.
+                    permissionsGrantedCount = 2,
+                    permissionsRequiredMissing = 1,
                     permissionsTotal = 3,
                     radarGrants = emptyList(),
                 )

@@ -89,6 +89,40 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun withoutNotificationsTheServiceStillRunsAndSaysSoInTheJournal() {
+        // The service runs with Nearby devices alone, so everything onCreate
+        // builds must come up without the grant. Not reachable here: Android
+        // itself allowing startForeground without it on API 33+, and
+        // Robolectric posting notifications regardless.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        val journalDir = File(root, LinkEventJournal.JOURNAL_DIR)
+        journalDir.deleteRecursively()
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertTrue("the alert sounds must be built", service.alertBeeper != null)
+        assertTrue("the radar link must be up for the UI", BikeRadarService.radarLinkStateForUi != null)
+        controller.destroy()
+        val journal = File(journalDir, LinkEventJournal.FILE_NAME).readText()
+        assertTrue("the journal must say the grant is missing, got:\n$journal", journal.contains("notifications=off"))
+
+        journalDir.deleteRecursively()
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        Robolectric.buildService(BikeRadarService::class.java).create().destroy()
+        val granted = File(journalDir, LinkEventJournal.FILE_NAME).readText()
+        assertTrue("and when it is there, got:\n$granted", granted.contains("notifications=on"))
+
+        // Granted but blocked in system settings, the only refusal below
+        // Android 13: the alarm's buttons are gone just the same.
+        journalDir.deleteRecursively()
+        shadowOf(app.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(false)
+        Robolectric.buildService(BikeRadarService::class.java).create().destroy()
+        val blocked = File(journalDir, LinkEventJournal.FILE_NAME).readText()
+        assertTrue("a block must read as off, got:\n$blocked", blocked.contains("notifications=off"))
+    }
+
+    @Test
     fun onCreateRegistersNotificationChannel() {
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()

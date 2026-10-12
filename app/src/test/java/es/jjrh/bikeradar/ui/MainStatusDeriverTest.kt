@@ -202,6 +202,22 @@ class MainStatusDeriverTest {
         assertEquals(R.string.main_status_permissions_notifications_sub, notifications.subtitleRes)
     }
 
+    @Test fun theNotificationsCardNamesTheAlarmOnlyWhenOneCanSound() {
+        // Every rider loses Pause; only one whose walk-away alarm can sound
+        // loses the way to silence it.
+        val n = MissingPermission.NOTIFICATIONS
+        val plain = R.string.main_status_permissions_notifications_sub
+        val alarm = R.string.main_status_permissions_notifications_alarm_sub
+        fun sub(owned: Boolean, warn: Boolean, walkAway: Boolean) = derive(
+            baseInputs(missingPermission = n, dashcamOwned = owned, dashcamWarnWhenOff = warn, dashcamFresh = true)
+                .copy(walkAwayAlarmOn = walkAway),
+        ).subtitleRes
+        assertEquals(alarm, sub(owned = true, warn = true, walkAway = true))
+        assertEquals(plain, sub(owned = false, warn = true, walkAway = true))
+        assertEquals(plain, sub(owned = true, warn = false, walkAway = true))
+        assertEquals(plain, sub(owned = true, warn = true, walkAway = false))
+    }
+
     @Test fun missingNotificationsTakesOnlyTheQuietCards() {
         // It replaces "Radar live" and "Waiting for radar", which carry no
         // warning or button of their own, and nothing else.

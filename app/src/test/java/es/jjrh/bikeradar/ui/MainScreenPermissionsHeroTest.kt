@@ -51,6 +51,10 @@ class MainScreenPermissionsHeroTest {
             pausedUntilEpochMs = 0L
             dashcamOwnership = DashcamOwnership.YES
             dashcamMac = "AA:BB:CC:DD:EE:22"
+            // Everything the walk-away alarm needs, so the Notifications card
+            // has an alarm to name.
+            dashcamWarnWhenOff = true
+            walkAwayAlarmEnabled = true
             eBikeDataEnabled = true
         }
         val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -110,13 +114,33 @@ class MainScreenPermissionsHeroTest {
 
     @Test
     fun withoutNotificationsTheRadarStartsAndTheCardSaysWhatIsLost() {
-        // The service runs and beeps; what goes is the alarms' Dismiss and
-        // Snooze, so the card keeps asking, with a button to the fix.
+        // The service runs and beeps; what goes is Pause and the walk-away
+        // alarm's Dismiss and Remind, so the card keeps asking, with a button
+        // to the fix.
         grantBluetooth()
         show()
         assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
-        compose.onAllNodesWithText("Alarms can't be silenced without Notifications").assertCountEquals(1)
+        compose.onAllNodesWithText(ALARM_SUB).assertCountEquals(1)
         compose.onAllNodesWithText("Grant permissions").assertCountEquals(1)
+    }
+
+    @Test
+    fun aRiderWithNoDashcamIsNotToldAboutAnAlarm() {
+        prefs.dashcamOwnership = DashcamOwnership.NO
+        prefs.dashcamMac = null
+        grantBluetooth()
+        show()
+        compose.onAllNodesWithText("Without Notifications you can't pause alerts").assertCountEquals(1)
+        compose.onAllNodesWithText(ALARM_SUB).assertCountEquals(0)
+    }
+
+    @Test
+    fun aRiderWithTheWalkAwayAlarmOffIsNotToldAboutIt() {
+        prefs.walkAwayAlarmEnabled = false
+        grantBluetooth()
+        show()
+        compose.onAllNodesWithText("Without Notifications you can't pause alerts").assertCountEquals(1)
+        compose.onAllNodesWithText(ALARM_SUB).assertCountEquals(0)
     }
 
     @Test
@@ -124,7 +148,7 @@ class MainScreenPermissionsHeroTest {
         grantBluetooth()
         BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState())
         show()
-        compose.onAllNodesWithText("Alarms can't be silenced without Notifications").assertCountEquals(1)
+        compose.onAllNodesWithText(ALARM_SUB).assertCountEquals(1)
     }
 
     @Test
@@ -156,5 +180,9 @@ class MainScreenPermissionsHeroTest {
         compose.waitForIdle()
 
         assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
+    }
+
+    private companion object {
+        const val ALARM_SUB = "Without Notifications you can't pause alerts or silence the walk-away alarm"
     }
 }

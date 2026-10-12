@@ -109,6 +109,7 @@ private fun SettingsPermissionsBody(navController: NavController, prefs: Prefs) 
                         granted = granted,
                         onChanged = { refreshTick++ },
                         alternative = locationAlternativeFor(spec, manualLocation),
+                        openSettingsWhenNoDialog = true,
                     )
                 }
             }
@@ -219,6 +220,9 @@ internal fun PermissionCard(
     granted: Boolean,
     onChanged: () -> Unit,
     alternative: PermissionAlternative? = null,
+    /** Settings -> Permissions only: setup leaves a rider who backs out of the
+     *  dialog on the step rather than sending them into Android's settings. */
+    openSettingsWhenNoDialog: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val activity = ctx as? Activity
@@ -226,14 +230,16 @@ internal fun PermissionCard(
     // lifetime so we can disambiguate "never asked" (rationale=false)
     // from "tapped 'Don't ask again'" (rationale=false, but attempted).
     var requestAttempted by rememberSaveable(spec.titleRes) { mutableStateOf(false) }
-    var rationaleBefore by remember { mutableStateOf(false) }
+    // Saved like the flag above: rotated while the dialog is up, a refusal
+    // made in it would otherwise read as one made with no dialog.
+    var rationaleBefore by rememberSaveable(spec.titleRes) { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         onChanged()
         val rationaleAfter = activity != null &&
             spec.permissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
-        if (refusedWithoutADialog(results.values.all { it }, rationaleBefore, rationaleAfter)) {
+        if (openSettingsWhenNoDialog && refusedWithoutADialog(results.values.all { it }, rationaleBefore, rationaleAfter)) {
             ctx.startActivity(permissionSettingsIntent(spec, ctx.packageName))
         }
     }
@@ -272,12 +278,13 @@ internal fun PermissionCard(
 }
 
 /**
- * A request came back refused with no dialog on screen. Android stops showing
- * the dialog once a permission has been refused twice, and the label here only
- * learns that after a first tap, so without this the first tap of every visit
- * did nothing visible. The rationale flag is false both before and after only
- * then, or after a first-ever dialog dismissed without an answer, which lands
- * in the same settings page (`PermissionSettingsRouteTest`).
+ * A request came back refused with the rationale flag false both before and
+ * after it, which is what a refusal with no dialog on screen looks like.
+ * Android stops showing the dialog once a permission has been refused twice,
+ * and the label here only learns that after a first tap, so without this the
+ * first tap of every visit did nothing visible (`PermissionSettingsRouteTest`).
+ * A first-ever dialog dismissed without an answer may read the same way; the
+ * emulator run checks both, as no test here drives the system dialog.
  */
 internal fun refusedWithoutADialog(granted: Boolean, rationaleBefore: Boolean, rationaleAfter: Boolean): Boolean = !granted && !rationaleBefore && !rationaleAfter
 
@@ -390,6 +397,9 @@ internal fun PermissionCardContent(
             ) {
                 Text(
                     text = when {
+                        // Named for where permissionSettingsIntent goes.
+                        permanentlyDenied && Manifest.permission.POST_NOTIFICATIONS in spec.permissions ->
+                            stringResource(R.string.settings_perm_open_notification_settings)
                         permanentlyDenied -> stringResource(R.string.settings_perm_open_app_info)
                         spec.required -> stringResource(R.string.settings_perm_grant)
                         else -> stringResource(R.string.settings_perm_enable)

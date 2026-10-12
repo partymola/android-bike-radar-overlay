@@ -407,6 +407,7 @@
     <!-- Settings → Permissions chrome (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permissions</string>
     <string name="settings_perm_open_app_info">Open App info</string>
+    <string name="settings_perm_open_notification_settings">Open notification settings</string>
     <string name="settings_perm_grant">Grant</string>
     <string name="settings_perm_enable">Enable</string>
 

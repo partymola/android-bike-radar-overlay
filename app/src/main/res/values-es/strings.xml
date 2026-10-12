@@ -374,6 +374,7 @@
     <!-- Ajustes → Permisos (SettingsPermissions.kt) -->
     <string name="settings_perm_title">Permisos</string>
     <string name="settings_perm_open_app_info">Abrir información de la app</string>
+    <string name="settings_perm_open_notification_settings">Abrir ajustes de notificaciones</string>
     <string name="settings_perm_grant">Conceder</string>
     <string name="settings_perm_enable">Activar</string>
 

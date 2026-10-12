@@ -6,7 +6,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,7 +41,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -72,7 +74,8 @@ internal fun HeroStatusCard(status: MainStatus, cta: StatusCta?) {
                     StatusDot(color = dotColor, pulse = pulse, size = 10.dp)
                 }
                 Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                // One stop for TalkBack, announced as the screen's heading.
+                Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) { heading() }) {
                     Text(
                         text = status.headline,
                         color = br.fg,
@@ -91,14 +94,16 @@ internal fun HeroStatusCard(status: MainStatus, cta: StatusCta?) {
             }
             if (cta != null) {
                 Spacer(modifier = Modifier.height(14.dp))
+                // A button TalkBack names as one, at full touch height, like
+                // the dashcam prompt's two below (`HeroStatusCardA11yTest`).
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(br.bgElev2)
                         .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-                        .combinedClickable(onClick = cta.onClick),
+                        .clickable(role = Role.Button, onClick = cta.onClick),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -636,10 +641,10 @@ internal fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .weight(1.4f)
-                        .height(40.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(br.dashcam)
-                        .combinedClickable(onClick = onYes),
+                        .clickable(role = Role.Button, onClick = onYes),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -652,10 +657,10 @@ internal fun DashcamPromptCard(onYes: () -> Unit, onNo: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(40.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-                        .combinedClickable(onClick = onNo),
+                        .clickable(role = Role.Button, onClick = onNo),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

@@ -137,7 +137,8 @@ internal fun TopProgress(currentPage: Int, onSkip: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            // A minimum, so a large font grows the bar instead of clipping Skip.
+            .heightIn(min = 48.dp)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -283,8 +283,10 @@ internal fun PermissionCard(
  * Android stops showing the dialog once a permission has been refused twice,
  * and the label here only learns that after a first tap, so without this the
  * first tap of every visit did nothing visible (`PermissionSettingsRouteTest`).
- * A first-ever dialog dismissed without an answer may read the same way; the
- * emulator run checks both, as no test here drives the system dialog.
+ * A first-ever dialog dismissed without an answer may read the same way and
+ * open settings too. That test pins the decision given these flags; no test
+ * here drives the system dialog, so which flags Android reports in either case
+ * is not pinned.
  */
 internal fun refusedWithoutADialog(granted: Boolean, rationaleBefore: Boolean, rationaleAfter: Boolean): Boolean = !granted && !rationaleBefore && !rationaleAfter
 

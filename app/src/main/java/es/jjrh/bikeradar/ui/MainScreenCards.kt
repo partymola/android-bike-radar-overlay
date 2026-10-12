@@ -159,7 +159,7 @@ private fun dotForStatus(
             MainStatusTone.Warn -> br.caution to true
             else -> br.fgDim to true
         }
-        // Error is Nearby devices missing: the service cannot run at all.
+        // Error is Nearby devices missing: the app does not start the service.
         MainStatusIcon.Warning -> when (tone) {
             MainStatusTone.Error -> br.danger to true
             else -> br.caution to true

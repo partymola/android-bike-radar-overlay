@@ -166,14 +166,15 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             }
         }
     }
+    // Runs on every entry to this screen and every change in what is missing.
     // ON_RESUME starts the service after a grant made in App info, but a grant
-    // from the other half of a split screen leaves this activity resumed, and
-    // the poller would clear the card with no service running.
-    LaunchedEffect(missingPermission) {
-        if (missingPermission == null) ServiceAutoStart.startIfAllowed(ctx, prefs)
-    }
-    // Without Nearby devices the bonded list reads empty and the service never
-    // starts, so every device row would describe a cause the card above names.
+    // from the other half of a split screen, or made while the rider was on
+    // another of the app's screens, reaches here without a resume. The rule
+    // inside decides; this only asks it again.
+    LaunchedEffect(missingPermission) { ServiceAutoStart.startIfAllowed(ctx, prefs) }
+    // Without Nearby devices the bonded list reads empty and the app does not
+    // start the service, so every device row would describe a cause the card
+    // above names.
     val nearbyMissing = missingPermission == MissingPermission.NEARBY_DEVICES
 
     // Polled, not read once: a first ride is saved minutes after the radar
@@ -257,12 +258,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         serviceEnabled = prefsSnap.serviceEnabled,
         bluetoothEnabled = btEnabled,
         rideEndOfferable = canEndRide,
-        // A service already running, as after a sticky restart with
-        // Notifications revoked, still sounds every alert, so the card must
-        // not say otherwise. The tick re-reads the static.
-        missingPermission = missingPermission?.takeUnless {
-            it == MissingPermission.NOTIFICATIONS && BikeRadarService.radarLinkStateForUi != null
-        },
+        missingPermission = missingPermission,
         radarConnecting = radarConnecting,
     )
     val statusModel = MainStatusDeriver.derive(
@@ -361,8 +357,9 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             attentionItems = attentionItems,
             onAttentionDismiss = onAttentionDismiss,
             radarFresh = radarFresh,
-            // The service publishes NOT_PERMITTED only once it runs, which it
-            // cannot without the permission; the row would blame Flow.
+            // The service publishes NOT_PERMITTED only once it runs, and the
+            // app does not start it without the permission; the row would
+            // blame Flow.
             ebikeStage = if (nearbyMissing) EBikeStage.NOT_PERMITTED else ebikeStage,
             radarLimited = radarLimited,
             radarConnecting = radarConnecting,
@@ -770,7 +767,10 @@ internal fun ctaFor(
         if (!ServiceAutoStart.startIfAllowed(ctx, prefs)) navController.navigate("settings/permissions")
     }
 
-    inputs.missingPermission != null ->
+    // Asked of the card itself, which places Notifications low in its order:
+    // a second copy of that ranking here could put the button on a card that
+    // does not mention the permission, or hide "I've parked" behind it.
+    MainStatusDeriver.derive(inputs, nowMs) { "" }.headlineRes == R.string.main_status_permissions_title ->
         StatusCta(stringResource(R.string.main_cta_grant_permissions)) { navController.navigate("settings/permissions") }
 
     nowMs < inputs.pausedUntilEpochMs ->

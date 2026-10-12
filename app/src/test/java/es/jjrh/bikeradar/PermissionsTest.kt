@@ -17,11 +17,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * Covers [Permissions.missingForService] and the SDK-version branch in it.
+ * Covers [Permissions.missingForService], the SDK-version branch in it, and
+ * the service-start rule built on it.
  *
- * On Tiramisu (API 33) and above, POST_NOTIFICATIONS joins BLUETOOTH_SCAN
- * and BLUETOOTH_CONNECT in the required set; below it, only the two
- * Bluetooth permissions are checked.
+ * The service needs Nearby devices (BLUETOOTH_SCAN and BLUETOOTH_CONNECT).
+ * On Tiramisu (API 33) and above POST_NOTIFICATIONS is also asked for, but
+ * does not stop the service; below it, it is never asked for.
  *
  * The Tiramisu-and-above cases run at the project's default Robolectric SDK
  * (35, see robolectric.properties) so the JaCoCo agent attributes their
@@ -34,32 +35,32 @@ class PermissionsTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun tiramisuRequiresAllThreeIncludingPostNotifications() {
-        // Default SDK 35 (>= TIRAMISU): POST_NOTIFICATIONS is in the set.
+    fun everythingGrantedStartsTheServiceAndAsksForNothing() {
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.POST_NOTIFICATIONS,
         )
         assertTrue(Permissions.hasRequiredForService(app))
+        assertNull(Permissions.missingForService(app))
     }
 
     @Test
-    fun tiramisuMissingPostNotificationsFails() {
-        // Both Bluetooth permissions granted, notifications withheld: on
-        // Tiramisu+ this must fail because POST_NOTIFICATIONS is in the
-        // required set.
+    fun theServiceRunsWithoutNotifications() {
+        // A refused Notifications grant costs the alarms' Dismiss and Snooze,
+        // not the beeps: refusing to run would silence every alert instead.
+        // The card still asks for it.
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
-        assertFalse(Permissions.hasRequiredForService(app))
+        assertTrue(Permissions.hasRequiredForService(app))
+        assertEquals(MissingPermission.NOTIFICATIONS, Permissions.missingForService(app))
     }
 
     @Test
-    fun tiramisuMissingBluetoothFails() {
-        // Missing one Bluetooth permission must fail.
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+    fun missingBluetoothStopsTheService() {
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.POST_NOTIFICATIONS)
         assertFalse(Permissions.hasRequiredForService(app))
     }
 
@@ -82,14 +83,13 @@ class PermissionsTest {
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.S])
-    fun preTiramisuDoesNotRequirePostNotifications() {
-        // API 31 (S): only the two Bluetooth permissions are required. With
-        // notifications withheld it must still pass - this drives the
-        // SDK_INT < TIRAMISU side of the version gate.
+    fun preTiramisuNeverAsksForNotifications() {
+        // API 31 (S) has no notification permission to ask for. This drives
+        // the SDK_INT < TIRAMISU side of the version gate.
         shadowOf(app).grantPermissions(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
-        assertTrue(Permissions.hasRequiredForService(app))
+        assertNull(Permissions.missingForService(app))
     }
 }

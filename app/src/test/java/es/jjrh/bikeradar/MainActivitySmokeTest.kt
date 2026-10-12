@@ -159,13 +159,15 @@ class MainActivitySmokeTest {
 
     /** Permissions granted while the app was away (the system dialog, App
      *  info) start the service when the rider comes back, not at the next
-     *  launch or reboot. */
+     *  launch or reboot. The notice is left up so the home screen, which also
+     *  asks the rule, is not composed: only the activity's resume hook can
+     *  pass this. */
     @Test
     fun aPermissionGrantedWhileAwayStartsTheServiceOnReturn() {
         Prefs(app).apply {
             firstRunComplete = true
             serviceEnabled = true
-            safetyNoticeAcknowledged = true
+            safetyNoticeAcknowledged = false
         }
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             controller.create().start().resume()

@@ -48,14 +48,25 @@ class ServiceAutoStartTest {
     }
 
     @Test
-    fun `a rider missing a permission is not started`() {
+    fun `a rider missing Nearby devices is not started`() {
+        val prefs = Prefs(app).apply {
+            firstRunComplete = true
+            serviceEnabled = true
+        }
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.POST_NOTIFICATIONS)
+        assertFalse(ServiceAutoStart.startIfAllowed(app, prefs))
+        assertNull(shadowOf(app).peekNextStartedService())
+    }
+
+    @Test
+    fun `a rider missing only Notifications is started`() {
         val prefs = Prefs(app).apply {
             firstRunComplete = true
             serviceEnabled = true
         }
         shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
-        assertFalse(ServiceAutoStart.startIfAllowed(app, prefs))
-        assertNull(shadowOf(app).peekNextStartedService())
+        assertTrue(ServiceAutoStart.startIfAllowed(app, prefs))
+        assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
     }
 
     @Test

@@ -9,13 +9,16 @@ import es.jjrh.bikeradar.data.Prefs
 
 /**
  * The one rule for starting [BikeRadarService] on the rider's behalf: setup
- * finished, the service not stopped by the rider, and the permissions it needs
- * granted. Activity launch and resume, the end of setup, boot and package
- * replace, and the home screen's Start button all go through [startIfAllowed].
+ * finished, the service not stopped by the rider, and Nearby devices granted
+ * ([Permissions.hasRequiredForService]). Every activity resume, the home
+ * screen on entry and on a change in what is missing, the end of setup, boot
+ * and package replace, and the home screen's Start button all go through
+ * [startIfAllowed].
  *
  * The [Prefs.serviceEnabled] gate is what keeps "Stop scanning" stopped across
  * app opens; drop it and every resume restarts a service the rider turned off
- * (`ServiceAutoStartTest`, `MainActivitySmokeTest`). Starts that carry an
+ * (`ServiceAutoStartTest`, `MainActivitySmokeTest`,
+ * `MainScreenPermissionsHeroTest`). Starts that carry an
  * action (a scan wake, the eBike setup step, a notification button, End ride,
  * the dev tools) do not come through here.
  *

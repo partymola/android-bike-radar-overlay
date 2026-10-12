@@ -86,7 +86,7 @@ data class MainStatusInputs(
      *  instruction to a question. Defaults false so every existing call site
      *  and test keeps the plain waiting copy. */
     val rideEndOfferable: Boolean = false,
-    /** What stops the radar service starting, or null when nothing does
+    /** The permission the card asks for, or null
      *  ([es.jjrh.bikeradar.Permissions.missingForService]). */
     val missingPermission: MissingPermission? = null,
     /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
@@ -100,16 +100,24 @@ object MainStatusDeriver {
      * Priority order, first match wins:
      *  1. First-run setup
      *  2. Service stopped (user toggled the foreground service off)
-     *  3. A permission the service needs is missing
+     *  3. Nearby devices missing
      *  4. User-paused
      *  5. Bluetooth disabled (adapter off at the OS level)
      *  6. Radar not paired
-     *  7. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  8. Radar live but HA unreachable
-     *  9. Radar live, all good
-     *  10. Radar stale after a ride: "Finished your ride?"
-     *  11. Link up, no data yet: connecting
-     *  12. Radar stale: waiting
+     *  7. Radar live, distance only
+     *  8. Radar live but dashcam off  (rider-safety beats HA connectivity)
+     *  9. Notifications missing, in place of 10, 11 or 14
+     *  10. Radar live but HA unreachable
+     *  11. Radar live, all good
+     *  12. Radar stale after a ride: "Finished your ride?"
+     *  13. Link up, or closed under 5 s ago, no data yet: connecting
+     *  14. Radar stale: waiting
+     *
+     * Notifications takes only the cards that carry no warning or button of
+     * their own. The service runs without it, so it must not hide the radar's
+     * own problems, and above all not the parked question, whose button is
+     * the only way to stop the drop cue repeating
+     * (`MainStatusDeriverTest.missingNotificationsTakesOnlyTheQuietCards`).
      *
      * The parked question beats connecting: a radar stuck failing its setup
      * after a ride is both, and the question carries the only control that
@@ -125,12 +133,10 @@ object MainStatusDeriver {
      * rider the radar is "not paired" when the real cause is that they
      * turned the whole thing off would be misdirection.
      *
-     * A missing permission beats everything after it for the same reason:
+     * Nearby devices missing beats everything after it for the same reason:
      * the app will not start the service without it, and with Bluetooth
      * connect denied the bonded list reads empty, so "not paired" would send
-     * the rider to Android's Bluetooth list where the radar already is. The
-     * screen leaves Notifications out while a service is already running,
-     * since that one still sounds every alert.
+     * the rider to Android's Bluetooth list where the radar already is.
      *
      * BtOff beats NotPaired because the bond persists across BT toggles;
      * the right prompt is "turn BT back on", not "go pair".
@@ -161,16 +167,13 @@ object MainStatusDeriver {
                 subtitleRes = R.string.main_status_service_off_sub,
             )
         }
-        inputs.missingPermission?.let { missing ->
+        if (inputs.missingPermission == MissingPermission.NEARBY_DEVICES) {
             // Red, as on Settings -> Permissions: no alerts at all.
             return MainStatusModel(
                 icon = MainStatusIcon.Warning,
                 tone = MainStatusTone.Error,
                 headlineRes = R.string.main_status_permissions_title,
-                subtitleRes = when (missing) {
-                    MissingPermission.NEARBY_DEVICES -> R.string.main_status_permissions_nearby_sub
-                    MissingPermission.NOTIFICATIONS -> R.string.main_status_permissions_notifications_sub
-                },
+                subtitleRes = R.string.main_status_permissions_nearby_sub,
             )
         }
         if (nowMs < inputs.pausedUntilEpochMs) {
@@ -227,6 +230,7 @@ object MainStatusDeriver {
                     subtitleArgs = listOfNotNull(name),
                 )
             }
+            notificationsCard(inputs)?.let { return it }
             if (inputs.haErrorRecent) {
                 return MainStatusModel(
                     icon = MainStatusIcon.CheckCircle,
@@ -274,11 +278,25 @@ object MainStatusDeriver {
                 subtitleRes = R.string.main_status_connecting_sub,
             )
         }
+        notificationsCard(inputs)?.let { return it }
         return MainStatusModel(
             icon = MainStatusIcon.Sensors,
             tone = MainStatusTone.Neutral,
             headlineRes = R.string.main_status_waiting_title,
             subtitleRes = R.string.main_status_waiting_sub,
         )
+    }
+
+    /** Amber, not red: the radar still beeps without it; what goes is the
+     *  alarms' Dismiss and Snooze. */
+    private fun notificationsCard(inputs: MainStatusInputs): MainStatusModel? = if (inputs.missingPermission == MissingPermission.NOTIFICATIONS) {
+        MainStatusModel(
+            icon = MainStatusIcon.Warning,
+            tone = MainStatusTone.Warn,
+            headlineRes = R.string.main_status_permissions_title,
+            subtitleRes = R.string.main_status_permissions_notifications_sub,
+        )
+    } else {
+        null
     }
 }

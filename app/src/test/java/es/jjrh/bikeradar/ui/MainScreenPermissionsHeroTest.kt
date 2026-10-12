@@ -109,21 +109,37 @@ class MainScreenPermissionsHeroTest {
     }
 
     @Test
-    fun aRunningServiceIsNotToldItHasNoAlerts() {
-        // Notifications revoked under a running service: the alerts still
-        // sound, so the card must not say otherwise.
+    fun withoutNotificationsTheRadarStartsAndTheCardSaysWhatIsLost() {
+        // The service runs and beeps; what goes is the alarms' Dismiss and
+        // Snooze, so the card keeps asking, with a button to the fix.
         grantBluetooth()
-        BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState())
         show()
-        compose.onAllNodesWithText("Permissions needed").assertCountEquals(0)
-        compose.onAllNodesWithText("Waiting for radar").assertCountEquals(1)
+        assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
+        compose.onAllNodesWithText("Alarms can't be silenced without Notifications").assertCountEquals(1)
+        compose.onAllNodesWithText("Grant permissions").assertCountEquals(1)
     }
 
     @Test
-    fun withTheServiceDownMissingNotificationsIsShown() {
+    fun aRunningServiceIsStillAskedForNotifications() {
         grantBluetooth()
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState())
         show()
-        compose.onAllNodesWithText("No alerts until you grant Notifications").assertCountEquals(1)
+        compose.onAllNodesWithText("Alarms can't be silenced without Notifications").assertCountEquals(1)
+    }
+
+    @Test
+    fun aRiderWhoStoppedScanningIsNotRestartedByThisScreen() {
+        // The screen asks the start rule on every entry; the rule's
+        // serviceEnabled gate is what keeps "Stop scanning" stopped here.
+        prefs.serviceEnabled = false
+        grantBluetooth()
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        compose.mainClock.advanceTimeBy(6_000)
+        compose.waitForIdle()
+        assertNull(shadowOf(app).peekNextStartedService())
+        compose.onAllNodesWithText("Service stopped").assertCountEquals(1)
     }
 
     @Test
@@ -136,7 +152,6 @@ class MainScreenPermissionsHeroTest {
         assertNull(shadowOf(app).peekNextStartedService())
 
         grantBluetooth()
-        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         compose.mainClock.advanceTimeBy(6_000)
         compose.waitForIdle()
 

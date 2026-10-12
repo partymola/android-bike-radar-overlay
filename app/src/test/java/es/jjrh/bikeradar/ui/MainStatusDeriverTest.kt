@@ -195,12 +195,53 @@ class MainStatusDeriverTest {
         assertEquals(R.string.main_status_permissions_title, nearby.headlineRes)
         assertEquals(R.string.main_status_permissions_nearby_sub, nearby.subtitleRes)
         val notifications = derive(baseInputs(missingPermission = MissingPermission.NOTIFICATIONS))
+        assertEquals(MainStatusIcon.Warning, notifications.icon)
+        // Amber: the radar runs and beeps without it.
+        assertEquals(MainStatusTone.Warn, notifications.tone)
+        assertEquals(R.string.main_status_permissions_title, notifications.headlineRes)
         assertEquals(R.string.main_status_permissions_notifications_sub, notifications.subtitleRes)
     }
 
+    @Test fun missingNotificationsTakesOnlyTheQuietCards() {
+        // It replaces "Radar live" and "Waiting for radar", which carry no
+        // warning or button of their own, and nothing else.
+        val n = MissingPermission.NOTIFICATIONS
+        val title = R.string.main_status_permissions_title
+        assertEquals(title, derive(baseInputs(missingPermission = n)).headlineRes)
+        assertEquals(title, derive(baseInputs(missingPermission = n, haErrorRecent = true)).headlineRes)
+        assertEquals(title, derive(baseInputs(missingPermission = n, radarFresh = false)).headlineRes)
+        // Above all the parked question: its button is the only way to stop
+        // the drop cue repeating for a rider with no eBike.
+        assertEquals(
+            R.string.main_status_ride_over_title,
+            derive(baseInputs(missingPermission = n, radarFresh = false, rideEndOfferable = true)).headlineRes,
+        )
+        assertEquals(
+            R.string.main_status_connecting_title,
+            derive(baseInputs(missingPermission = n, radarFresh = false, radarConnecting = true)).headlineRes,
+        )
+        assertEquals(
+            R.string.main_status_limited_title,
+            derive(baseInputs(missingPermission = n, radarLimited = true)).headlineRes,
+        )
+        assertEquals(
+            R.string.main_status_dashcam_off_title,
+            derive(baseInputs(missingPermission = n, dashcamOwned = true, dashcamWarnWhenOff = true)).headlineRes,
+        )
+        assertEquals(
+            R.string.main_status_bt_off_title,
+            derive(baseInputs(missingPermission = n, bluetoothEnabled = false)).headlineRes,
+        )
+        assertEquals(R.string.main_status_not_paired_title, derive(baseInputs(missingPermission = n, hasBond = false)).headlineRes)
+        assertEquals(
+            R.string.main_status_paused_title,
+            derive(baseInputs(missingPermission = n, pausedUntilEpochMs = 200L), now = 100L).headlineRes,
+        )
+    }
+
     @Test fun aMissingPermissionBeatsPausedBluetoothAndPairing() {
-        // Without it the service never starts, and with Nearby devices denied
-        // the bonded list reads empty, so "not paired" would be the wrong fix.
+        // Without Nearby devices the app does not start the service, and the
+        // bonded list reads empty, so "not paired" would be the wrong fix.
         val s = derive(
             baseInputs(
                 missingPermission = MissingPermission.NEARBY_DEVICES,

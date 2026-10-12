@@ -105,11 +105,13 @@
     <string name="main_status_setup_sub">Tap Settings to begin</string>
     <string name="main_status_service_off_title">Service stopped</string>
     <string name="main_status_service_off_sub">Tap Start to begin</string>
-    <!-- The radar service cannot start without these, so no alerts at all.
-         The subtitle names the one missing, Nearby devices first. -->
+    <!-- The subtitle names the one missing, Nearby devices first. The app does
+         not start the radar service without Nearby devices, so no alerts at
+         all; without Notifications it runs and beeps, but the walk-away alarm
+         has no Dismiss or Snooze. -->
     <string name="main_status_permissions_title">Permissions needed</string>
     <string name="main_status_permissions_nearby_sub">No alerts until you grant Nearby devices</string>
-    <string name="main_status_permissions_notifications_sub">No alerts until you grant Notifications</string>
+    <string name="main_status_permissions_notifications_sub">Alarms can\'t be silenced without Notifications</string>
     <string name="main_status_paused_title">Paused until <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
     <string name="main_status_paused_sub">Alerts are silenced</string>
     <string name="main_status_bt_off_title">Bluetooth is off</string>

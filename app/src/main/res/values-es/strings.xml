@@ -93,7 +93,7 @@
     <string name="main_status_service_off_sub">Toca Iniciar para empezar</string>
     <string name="main_status_permissions_title">Faltan permisos</string>
     <string name="main_status_permissions_nearby_sub">Sin alertas hasta que concedas Dispositivos cercanos</string>
-    <string name="main_status_permissions_notifications_sub">Sin alertas hasta que concedas Notificaciones</string>
+    <string name="main_status_permissions_notifications_sub">Sin Notificaciones no puedes silenciar las alarmas</string>
     <string name="main_status_paused_title">En pausa hasta las <xliff:g id="time" example="14:32">%1$s</xliff:g></string>
     <string name="main_status_paused_sub">Alertas silenciadas</string>
     <string name="main_status_bt_off_title">Bluetooth apagado</string>

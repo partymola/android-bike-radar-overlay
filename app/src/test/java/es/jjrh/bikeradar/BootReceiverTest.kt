@@ -61,6 +61,20 @@ class BootReceiverTest {
     }
 
     @Test
+    fun bootCompletedStartsServiceWithoutNotifications() {
+        Prefs(app).apply {
+            firstRunComplete = true
+            serviceEnabled = true
+        }
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+        )
+        receiver.onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
+        assertEquals(BikeRadarService::class.java.name, shadowOf(app).peekNextStartedService()?.component?.className)
+    }
+
+    @Test
     fun bootCompletedStartsServiceWhenAllGatesPass() {
         Prefs(app).apply {
             firstRunComplete = true

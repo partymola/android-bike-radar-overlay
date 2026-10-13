@@ -32,7 +32,8 @@ by which side it is on, coloured by how much it needs watching. The
 dashed line is the alert distance you set: a vehicle beyond it is drawn
 and stays silent. The red border marks a vehicle closing fast, and a
 radar that reports range only cannot raise it at all. It beeps as a car
-closes in behind you, the tier rising as the closest gets nearer, and a
+closes in behind you, the tier rising as it gets nearer. By default
+another car near you gets its own beeps too, and you can turn that off. A
 distinct urgent tone fires if an impact looks imminent. The rest of your
 screen stays yours.
 
@@ -43,10 +44,11 @@ screen stays yours.
 - **Radar overlay on any app.** A thin strip shows each vehicle behind
   you: distance, closing speed, and which side it's on. It stays on
   screen whatever else you are running.
-- **Alerts you don't have to look at.** Beeps rise in tiers as the
-  closest car nears, a distinct urgent tone fires if an impact looks
-  imminent, and a clear chime sounds when the radar sees nothing left
-  within your alert distance.
+- **Alerts you don't have to look at.** Beeps rise in tiers as a car
+  nears. Another car near you gets its own beeps too. This is on by default,
+  and you can turn it off. A distinct urgent tone fires if an impact looks
+  imminent, and a clear chime sounds when the radar sees nothing left within
+  your alert distance.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
   summary, and keeps per-ride stats - distance, overtakes, close passes, how
@@ -348,8 +350,9 @@ Garmin or Bosch.
 detrás usando el radar trasero de tu bici. Dibuja una barra lateral en el
 borde de la pantalla, encima de cualquier app que tengas abierta, y pita
 cuando se acerca un coche. El número de pitidos
-aumenta según se aproxima, y suena un aviso distinto si el impacto parece
-inminente.
+aumenta según se aproxima. Por defecto también pita por otro coche cercano, y
+puedes desactivarlo. Suena un aviso distinto si el
+impacto parece inminente.
 
 La app está totalmente traducida al español. Si tu teléfono está en español,
 Bike Radar se mostrará en español automáticamente. Si prefieres usar solo
@@ -363,8 +366,9 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
 ### Funciones principales
 
 - Radar en pantalla con la distancia, la velocidad de aproximación y la
-  posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
-  distinto para impacto inminente.
+  posición lateral de cada vehículo; pitidos que suben de nivel, también por
+  otro vehículo cercano (se puede desactivar), y un aviso urgente distinto
+  para impacto inminente.
 - Recuento de adelantamientos cercanos e historial de rutas en el teléfono,
   sin necesidad de Home Assistant: cuenta en la pantalla de inicio los que el
   radar llega a medir y guarda un historial por ruta (distancia,

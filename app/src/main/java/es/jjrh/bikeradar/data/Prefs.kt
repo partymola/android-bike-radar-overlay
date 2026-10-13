@@ -82,6 +82,7 @@ data class PrefsSnapshot(
     val radarSettingsProbeEnabled: Boolean,
     val captureLoggingEnabled: Boolean,
     val setupTranscriptEnabled: Boolean,
+    val nextCarCueEnabled: Boolean,
 ) {
     /** See [Prefs.activeDashcamMac]. */
     val activeDashcamMac: String?
@@ -491,6 +492,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_URGENT_LOW_SPEED, true)
         set(v) {
             sp.edit().putBoolean(KEY_URGENT_LOW_SPEED, v).apply()
+        }
+
+    /** Give each vehicle its own awareness beep, at its own tier, once it is
+     *  within two thirds of the alert distance, even when another vehicle is
+     *  closer (the next-car cue in [es.jjrh.bikeradar.AlertDecider]). Off gives
+     *  the closest-car-only beeps. Default on: without it a second vehicle can
+     *  pass the rider with no cue of its own. */
+    var nextCarCueEnabled: Boolean
+        get() = sp.getBoolean(KEY_NEXT_CAR_CUE, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_NEXT_CAR_CUE, v).apply()
         }
 
     /** Experimental. Hold the urgent cue for a vehicle already off to one
@@ -1020,6 +1032,7 @@ class Prefs(context: Context) {
         radarSettingsProbeEnabled = radarSettingsProbeEnabled,
         captureLoggingEnabled = captureLoggingEnabled,
         setupTranscriptEnabled = setupTranscriptEnabled,
+        nextCarCueEnabled = nextCarCueEnabled,
     )
 
     /** Snapshots are read in `map` on the collector, never in the producer or
@@ -1066,6 +1079,7 @@ class Prefs(context: Context) {
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("urgent_unconfident_wait_enabled=$urgentUnconfidentWaitEnabled")
+        appendLine("next_car_cue_enabled=$nextCarCueEnabled")
         appendLine("precog_enabled=$precogEnabled")
         appendLine("no_radar_ride_warning_enabled=$noRadarRideWarningEnabled")
         appendLine("radar_drop_track_fallback_enabled=$radarDropTrackFallbackEnabled")
@@ -1146,6 +1160,7 @@ class Prefs(context: Context) {
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_URGENT_UNCONFIDENT_WAIT = "urgent_unconfident_wait_enabled"
+        const val KEY_NEXT_CAR_CUE = "next_car_cue_enabled"
         const val KEY_PRECOG = "precog_enabled"
         const val KEY_RADAR_DROP_TRACK_FALLBACK = "radar_drop_track_fallback_enabled"
         const val KEY_RADAR_DROP_TRACK_WINDOW_SEC = "radar_drop_track_window_sec"

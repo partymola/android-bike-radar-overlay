@@ -53,13 +53,13 @@ package es.jjrh.bikeradar
  *
  * When a suppressed track later earns admission, [update] reports it so
  * the caller can re-arm the beep path and deliver the cue at the track's
- * CURRENT tier - the "car finally started closing" beep. One bounded
- * limitation: emission always describes the closest track, so if a
+ * CURRENT tier - the "car finally started closing" beep. When a
  * still-gated closer ghost coexists with the just-admitted farther track,
- * the re-armed cue stays silent until the admitted track produces its
- * next tier edge (it becomes the closest and its tier rises above the
- * last audible level). That direction only ever delays a tier beep - it can never fire a false cue or touch the all-clear/urgent
- * paths - matching the project's delayed-over-false asymmetry.
+ * the re-armed cue describes the closest track and stays silent; the
+ * admitted track is announced by the decider's next-car cue instead if it is
+ * within two thirds of the alert distance. Farther out, or with that cue off,
+ * it waits for its next tier edge. Either way the ghost is never voiced
+ * (`AlertDeciderGhostGateTest`, both settings).
  *
  * Not thread-safe; call from the decider's single coroutine.
  */

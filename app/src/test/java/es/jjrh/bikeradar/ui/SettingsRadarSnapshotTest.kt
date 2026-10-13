@@ -120,6 +120,8 @@ class SettingsRadarSnapshotTest {
             onAdaptiveChange = {},
             urgentLowSpeed = true,
             onUrgentLowSpeedChange = {},
+            nextCarCue = true,
+            onNextCarCueChange = {},
             turnAware = true,
             onTurnAwareChange = {},
             batteryThreshold = 20,

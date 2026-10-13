@@ -40,7 +40,9 @@ hears them often, and that is fine; they are a background sense of what is
 around, like mirror glances made audible.
 
 The beep tier (one, two, or three pulses) encodes the **distance band** of the
-closest vehicle behind, and nothing else.
+vehicle the beep is about, and nothing else. That is the closest vehicle,
+except for the next-car cue described under Parsimony, which is about the
+vehicle it announces.
 
 **Why tier must never encode speed or urgency.** This was tried and reverted. A
 rider hears the near-tier beeps constantly, so the count channel's salience
@@ -129,20 +131,40 @@ classic alarm-fatigue failure and the opposite of a safety feature. The awarenes
 channel is therefore managed with **episode semantics** rather than a beep per
 radar frame:
 
-- A beep describes the **closest** threat only. A new vehicle entering the close
-  set is silent unless it raises the closest-urgency tier; piling a beep on a
-  farther car while a closer one is already being announced adds noise, not
-  information.
+- With the next-car cue off, a beep describes the **closest** threat only. A
+  new vehicle entering the close set is silent unless it raises the
+  closest-urgency tier; re-beeping a farther car the rider has already heard
+  adds noise, not information.
+- **The next-car cue** is the one exception, behind the "Beep for other
+  vehicles too" setting, on by default. The rule above lets a second vehicle
+  reach the rider with no cue of its own, which a rider hears as a car passing
+  unannounced. With the setting on, a vehicle within two thirds of the alert
+  distance that has not yet been beeped for at its band gets one beep at its
+  own band, even when another vehicle is closer. It sounds again only when
+  that vehicle moves into a closer band. It waits for a pending closest-car
+  beep and for the cooldown, and in turn can hold a closest-car beep back by
+  one cooldown. It stays silent while the app knows the rider is stopped,
+  which needs a speed reading, so cars that queued behind a stopped rider get
+  their beeps one cooldown apart once the rider moves off. On recorded rides
+  it added about six beeps a ride. The single-truck scene below has six beeps
+  instead of three, the extra three for two other vehicles in it.
 - **Re-trigger suppression.** Once the app has beeped for a given track at a
   given tier it does not beep again for that same track at that same tier.
   Distance jitter that flaps a car across a tier boundary does not re-fire, and
   an overtaking car handing off to the remaining traffic only re-beeps if what
-  remains is strictly closer than the peak the departing car reached.
-- A short cooldown collapses a burst of triggers into one beep at the closest
-  urgency, so a multi-vehicle scene does not machine-gun the rider. The one
-  exception is a genuine tier *raise* (the closest car got closer), which is real
-  new information and fires immediately rather than being swallowed by the
-  cooldown window.
+  remains is strictly closer than the peak the departing car reached. With the
+  next-car cue on, a remaining car not yet beeped for at its band still gets
+  its own beep. One exception, kept on purpose: on a range-only radar, a car
+  the next-car cue announced can be beeped once more at the same band, for
+  example if, as the closest, it falls back a band and returns. Its data
+  cannot tell a new car under a reused track number from the one before it,
+  and suppressing the repeat would cost that new car its beeps.
+- A short cooldown collapses a burst of closest-car triggers into one beep at
+  the closest urgency. The one exception is a genuine tier *raise* (the closest
+  car got closer), which is real new information and fires immediately rather
+  than being swallowed by the cooldown window. Next-car cues are spaced by the
+  same cooldown, so in a busy scene they come one cooldown apart rather than
+  together.
 
 Parsimony has one hard exception, the **false-clear asymmetry**. A *false*
 all-clear - telling the rider the road is clear when a car is still behind - is
@@ -255,9 +277,12 @@ compliance claim.
   up as a failing, named test. A few load-bearing examples (do not rename or
   "simplify" these):
   - `cacophony scenario truck pass produces at most three audible beeps` - the
-    parsimony ceiling for a single overtake.
+    parsimony ceiling for a single overtake, with the next-car cue off. With it
+    on, the default, the same scene gives six.
   - `same-tier new entry while closer track still close is silent` and
     `overtake re-ack at same-or-lower tier is silent` - the closest-only model.
+  - `AlertDeciderNextCarCueTest` - the next-car cue, including the same truck
+    scene with it on.
   - `intra-tier distance flap does NOT re-fire` - the tier latch.
   - `platoon of new tids inside one episode fires once not per car` and
     `markedly faster closer bypasses episode pacing` - the urgent channel's

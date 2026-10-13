@@ -154,7 +154,8 @@ data class Vehicle(
      * When this track was first seen by the decoder (monotonic ms),
      * i.e. the decoder's own track birth - survives frame-to-frame
      * updates, resets when the track is pruned and re-acquired.
-     * 0L for synthetic sources.
+     * 0L for synthetic sources and the legacy stream, which stamp no birth;
+     * [AlertDecider]'s next-car cue reads 0L as "cannot tell a recycled tid".
      */
     val bornAtMs: Long = 0L,
     /**

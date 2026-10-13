@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -84,6 +85,7 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
     var urgentLowSpeed by rememberSaveable { mutableStateOf(prefs.urgentLowSpeedEnabled) }
+    var nextCarCue by rememberSaveable { mutableStateOf(prefs.nextCarCueEnabled) }
     var turnAware by rememberSaveable { mutableStateOf(prefs.turnAwareAlertsEnabled) }
     var batteryThreshold by rememberSaveable { mutableIntStateOf(prefs.batteryLowThresholdPct) }
     var batteryShowLabels by rememberSaveable { mutableStateOf(prefs.batteryShowLabels) }
@@ -137,6 +139,11 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         onUrgentLowSpeedChange = {
             urgentLowSpeed = it
             prefs.urgentLowSpeedEnabled = it
+        },
+        nextCarCue = nextCarCue,
+        onNextCarCueChange = {
+            nextCarCue = it
+            prefs.nextCarCueEnabled = it
         },
         turnAware = turnAware,
         onTurnAwareChange = {
@@ -279,6 +286,8 @@ internal fun SettingsRadarContent(
     onAdaptiveChange: (Boolean) -> Unit,
     urgentLowSpeed: Boolean,
     onUrgentLowSpeedChange: (Boolean) -> Unit,
+    nextCarCue: Boolean,
+    onNextCarCueChange: (Boolean) -> Unit,
     turnAware: Boolean,
     onTurnAwareChange: (Boolean) -> Unit,
     batteryThreshold: Int,
@@ -367,6 +376,14 @@ internal fun SettingsRadarContent(
                 onValueChangeFinished = onClosingCeilingFinished,
             )
             SettingsRowGroup {
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.DirectionsCar,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_radar_next_car_title),
+                    subtitle = stringResource(R.string.settings_radar_next_car_subtitle),
+                    checked = nextCarCue,
+                    onCheckedChange = onNextCarCueChange,
+                )
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.NotificationsActive,
                     leadingTint = br.danger,

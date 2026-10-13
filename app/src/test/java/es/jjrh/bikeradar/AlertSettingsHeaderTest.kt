@@ -29,10 +29,11 @@ class AlertSettingsHeaderTest {
             urgentUnconfidentWaitEnabled = true,
             urgentPassClearanceM = 1.8f,
             closingSpeedCeilingMs = 35,
+            nextCarCueEnabled = true,
         )
         assertEquals(
             "# settings alert_max_m=30 turn_aware=true urgent_low_speed=false" +
-                " unconf_wait=true pass_clearance_m=1.8 ceiling_mps=35",
+                " unconf_wait=true pass_clearance_m=1.8 next_car=true ceiling_mps=35",
             OverlayPipeline.alertSettingsLine(s),
         )
     }
@@ -46,10 +47,11 @@ class AlertSettingsHeaderTest {
             urgentUnconfidentWaitEnabled = false,
             urgentPassClearanceM = 2.5f,
             closingSpeedCeilingMs = 20,
+            nextCarCueEnabled = false,
         )
         assertEquals(
             "# settings alert_max_m=45 turn_aware=false urgent_low_speed=true" +
-                " unconf_wait=false pass_clearance_m=2.5 ceiling_mps=20",
+                " unconf_wait=false pass_clearance_m=2.5 next_car=false ceiling_mps=20",
             OverlayPipeline.alertSettingsLine(s),
         )
     }

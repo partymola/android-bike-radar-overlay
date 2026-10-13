@@ -606,6 +606,47 @@ class OverlayPipelineDrivingTest {
         assertFalse(shipped.toString(), shipped.any { it.startsWith("# gate ceiling") })
     }
 
+    /** Car 1 announced at tier 3, then car 2 holding tier 2 behind it, through
+     *  the pipeline under [nextCarOn]; the beep lines it logs. */
+    private suspend fun kotlinx.coroutines.test.TestScope.driveSecondCar(nextCarOn: Boolean): List<String> {
+        var mono = 1_000L
+        val clogLines = mutableListOf<String>()
+        val pipeline = buildPipeline(
+            clog = { clogLines += it },
+            clockMono = { mono },
+            overlayPrefsSnapshot = { prefs.snapshot().copy(alertMaxDistanceM = 21, nextCarCueEnabled = nextCarOn) },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val first = Vehicle(id = 1, distanceM = 4, speedMs = -2f, bornAtMs = 1L)
+        val second = Vehicle(id = 2, distanceM = 12, speedMs = -3f, bornAtMs = 1L)
+        for (i in 0 until 15) {
+            mono = 1_000L + i * 100L
+            val vehicles = if (i < 2) listOf(first) else listOf(first, second)
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = mono, vehicles = vehicles, bikeSpeedMs = 6f))
+            runCurrent()
+        }
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return clogLines.filter { it.contains("event=Beep") }
+    }
+
+    @Test
+    fun theNextCarSettingReachesTheDecider() = runTest {
+        // The decider's tests drive the parameter directly, so they stay green
+        // if the pipeline stops passing it. On, the second car gets its own
+        // beep and the line says which rule produced it, and that car's own
+        // closing speed beside the nearest car's; off, it gets none.
+        val on = driveSecondCar(nextCarOn = true)
+        assertEquals(on.toString(), 2, on.size)
+        assertTrue(on.toString(), on[0].contains("tier_tid=1") && on[0].contains("cue_rule=closest"))
+        assertTrue(on.toString(), on[1].contains("event=Beep(2)") && on[1].contains("tier_tid=2") && on[1].contains("cue_rule=next_car"))
+        assertTrue(on.toString(), on[1].contains(" closing_mps=2.0 ") && on[1].contains(" tier_closing_mps=3.0"))
+        val off = driveSecondCar(nextCarOn = false)
+        assertEquals(off.toString(), 1, off.size)
+    }
+
     /** Swap in a beeper that records what it actually played. */
     private fun recordingBeeper(): MutableList<String> {
         val cues = mutableListOf<String>()

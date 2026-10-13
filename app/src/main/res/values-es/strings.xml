@@ -440,6 +440,8 @@
     <string name="settings_radar_closing_ceiling_title">Avisar hasta</string>
     <string name="settings_radar_closing_ceiling_none">Sin límite</string>
     <string name="settings_radar_closing_ceiling_helper">Sin pitidos ni aviso urgente para lo que se acerque a más de la velocidad que elijas, sea real o no. Reduce las falsas alarmas cuando el radar da por error una velocidad muy alta. Esos vehículos se siguen viendo en la barra lateral.</string>
+    <string name="settings_radar_next_car_title">Pitar también por otros vehículos</string>
+    <string name="settings_radar_next_car_subtitle">Mientras circulas, la app pita por otros vehículos que se acercan, no solo por el más cercano. Con mucho tráfico pitará más.</string>
     <string name="settings_radar_urgent_low_speed_title">Aviso urgente a baja velocidad</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Hace sonar el aviso urgente cuando un vehículo se te echa encima mientras circulas despacio, no solo cuando estás parado.</string>
     <string name="settings_radar_turn_title">Retener «Carretera despejada» en curvas</string>
@@ -893,8 +895,8 @@
     <string name="sound_demo_radar_streaming">Solo se reproduce con el radar apagado.</string>
     <string name="sound_demo_caption_nothing">El radar no ve nada en tu distancia de alerta: sin sonido.</string>
     <string name="sound_demo_caption_one">Un coche detrás de ti: 1 pitido.</string>
-    <string name="sound_demo_caption_two">Más cerca: 2 pitidos.</string>
-    <string name="sound_demo_caption_three">Cerca: 3 pitidos.</string>
+    <string name="sound_demo_caption_two">A media distancia: 2 pitidos.</string>
+    <string name="sound_demo_caption_three">Muy cerca: 3 pitidos.</string>
     <string name="sound_demo_caption_clear">El radar ya no ve nada en tu distancia de alerta: «Carretera despejada».</string>
     <string name="sound_demo_caption_urgent">Se acerca rápido mientras estás parado o vas despacio: el aviso urgente (solo con radares que miden velocidad).</string>
     <string name="alert_volume_title">Ajusta el volumen de los avisos</string>
@@ -912,9 +914,9 @@
     <string name="alert_sound_one_title">1 pitido</string>
     <string name="alert_sound_one_meaning">Un vehículo detrás</string>
     <string name="alert_sound_two_title">2 pitidos</string>
-    <string name="alert_sound_two_meaning">Está más cerca</string>
+    <string name="alert_sound_two_meaning">Un vehículo a media distancia</string>
     <string name="alert_sound_three_title">3 pitidos</string>
-    <string name="alert_sound_three_meaning">Está cerca</string>
+    <string name="alert_sound_three_meaning">Un vehículo muy cerca</string>
     <string name="alert_sound_clear_title">Carretera despejada</string>
     <string name="alert_sound_clear_meaning">El radar ya no ve nada en tu distancia de alerta</string>
     <string name="alert_sound_urgent_title">Aviso urgente</string>

@@ -121,9 +121,9 @@ class AlertDeciderTrueRangeTierTest {
         // Selection and scoring must agree. Picking the closest by rangeY
         // would hand the audio to the ghost (5 < 6) and then score the
         // ghost's true range of 10.3 m as tier 2 - silencing the tier-3
-        // escalation the car dead behind at 6.08 m has earned. Audio voices
-        // the closest vehicle only, so that is a real tailgater going
-        // unannounced because clutter sat beside the rider.
+        // escalation the car dead behind at 6.08 m has earned. The
+        // closest-car rules voice the closest vehicle only, so that is a real
+        // tailgater's top-tier cue lost because clutter sat beside the rider.
         val ghost = car(1, 5, rangeXm = 9f)
         val real = car(2, 6, rangeXm = 1f)
         val d = AlertDecider()
@@ -177,8 +177,8 @@ class AlertDeciderTrueRangeTierTest {
     }
 
     @Test fun `a spike after the top tier has fired stays silent on recovery`() {
-        // The per-tid latch is cleared only on Clear, so a demote-and-recover
-        // cannot re-beep. Pinning it means per-frame lateral noise can never
+        // A demote does not clear the per-tid latch, so a recover cannot
+        // re-beep. Pinning it means per-frame lateral noise can never
         // become a new source of chatter. Only the true-range rule can reach
         // this path at all - under along-axis scoring the lateral spike never
         // moves the tier, so there is nothing to recover from.

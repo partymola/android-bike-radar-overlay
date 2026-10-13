@@ -29,7 +29,8 @@ import org.junit.Test
  * Wiring mirrors [OverlayPipeline.fireAlertCue] exactly on the
  * radar-only (no-eBike) path: `bikeSpeedMs` from the radar's
  * device-status field, `bikeNotDriving = null`, `climbing = false`,
- * `urgentLowSpeedEnabled = true` (the shipped default). [alertMaxM] is
+ * `urgentLowSpeedEnabled = true` and `nextCarCueEnabled = true` (the
+ * shipped defaults). [alertMaxM] is
  * pinned to the [data.Prefs] default of 20 m.
  *
  * Regenerating the golden (after an intentional cue change): run
@@ -73,6 +74,7 @@ class CueLedgerReplayTest {
         tierDistance: TierDistance = TierDistance.TRUE_RANGE,
         passClearanceM: Float = AlertDecider.DEFAULT_PASS_CLEARANCE_M,
         urgentUnconfidentWaitEnabled: Boolean = false,
+        nextCarCueEnabled: Boolean = true,
     ): List<String> {
         val frames = loadFixture()
         var clock = 0L
@@ -92,6 +94,7 @@ class CueLedgerReplayTest {
                 urgentLowSpeedEnabled = urgentLowSpeedEnabled,
                 urgentUnconfidentWaitEnabled = urgentUnconfidentWaitEnabled,
                 passClearanceM = passClearanceM,
+                nextCarCueEnabled = nextCarCueEnabled,
             )
             // Pin that the ledger's notion of "audible" matches production's:
             // describe() returns null exactly when AlertCue.forEvent treats the
@@ -180,6 +183,18 @@ class CueLedgerReplayTest {
         assertEquals(
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
             replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, urgentUnconfidentWaitEnabled = true),
+        )
+    }
+
+    @Test
+    fun nextCarCueIsNoOpForThisFixture() {
+        // The fixture never has a second car within two thirds of the alert
+        // distance while another is closer, so the next-car cue adds nothing
+        // here and a green run says nothing about it. `AlertDeciderNextCarCueTest`
+        // and the private corpus are what can.
+        assertEquals(
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
+            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, nextCarCueEnabled = false),
         )
     }
 

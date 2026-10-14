@@ -44,6 +44,16 @@ class BatteryScanReceiver : BroadcastReceiver() {
             return
         }
 
+        // A service that died uncleanly leaves the scan registered, so Stop
+        // scanning tapped afterwards cannot unregister it. Checked before any
+        // device read (`aRiderWhoStoppedScanningIsNotRestartedByAScanWake`,
+        // `aStoppedRidersWakeReadsNoDevice`).
+        val prefs = Prefs(ctx)
+        if (!prefs.serviceEnabled) {
+            Log.i(TAG, "scan wake ignored: scanning stopped by the rider")
+            return
+        }
+
         val callbackType = intent.getIntExtra(
             BluetoothLeScanner.EXTRA_CALLBACK_TYPE,
             ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
@@ -62,7 +72,7 @@ class BatteryScanReceiver : BroadcastReceiver() {
         // Escape hatch for radars the name heuristic doesn't know: a sighting
         // of the explicitly pinned radar MAC passes even with a foreign name,
         // so a pinned unit can reach the link path at all.
-        val pinnedRadarMac = Prefs(ctx).radarMac
+        val pinnedRadarMac = prefs.radarMac
 
         for (s in seen) {
             val name = s.name ?: continue

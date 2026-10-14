@@ -20,7 +20,8 @@ import es.jjrh.bikeradar.data.Prefs
  * (`ServiceAutoStartTest`, `MainActivitySmokeTest`,
  * `MainScreenPermissionsHeroTest`). Starts that carry an
  * action (a scan wake, the eBike setup step, a notification button, End ride,
- * the dev tools) do not come through here.
+ * the dev tools) do not come through here; the scan wake checks
+ * [Prefs.serviceEnabled] itself (`BatteryScanReceiverTest`).
  *
  * Every caller today is exempt from Android 12's background-start limit: an
  * activity on screen (resumed, or composing the home screen), boot, or a

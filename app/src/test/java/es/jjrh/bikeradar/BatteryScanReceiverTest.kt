@@ -298,6 +298,40 @@ class BatteryScanReceiverTest {
     }
 
     @Test
+    fun aRiderWhoStoppedScanningIsNotRestartedByAScanWake() {
+        val prefs = es.jjrh.bikeradar.data.Prefs(app)
+        prefs.serviceEnabled = false
+        try {
+            val ctx = ThrowingStartContext(app, refusal())
+            val r = scanResultFor("AA:BB:CC:DD:EE:FF", "RearVue8", BluetoothDevice.BOND_BONDED)
+            receiver.onReceive(ctx, batchIntent(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, r))
+            assertEquals("no start may even be attempted", 0, ctx.startAttempts)
+        } finally {
+            prefs.serviceEnabled = true
+        }
+    }
+
+    @Test
+    fun aStoppedRidersWakeReadsNoDevice() {
+        // With the read denied, a check placed after the reads would journal
+        // "permission revoked" for a rider who stopped scanning. Both branches
+        // read devices, so both are driven.
+        val prefs = es.jjrh.bikeradar.data.Prefs(app)
+        prefs.serviceEnabled = false
+        try {
+            val r = scanResultFor("AA:BB:CC:DD:EE:FF", "RearVue8", BluetoothDevice.BOND_BONDED)
+            denyConnectOn(r)
+            for (cb in listOf(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, ScanSettings.CALLBACK_TYPE_MATCH_LOST)) {
+                receiver.onReceive(app, batchIntent(cb, r))
+            }
+            assertNull(shadowOf(app).peekNextStartedService())
+            assertEquals(emptyList<String>(), journalLines())
+        } finally {
+            prefs.serviceEnabled = true
+        }
+    }
+
+    @Test
     fun refusedStartIsSwallowedAndRecordedInTheJournal() {
         // The scan PendingIntent outlives the process, so an advert can wake
         // the receiver with no service running and Android refuses the start.

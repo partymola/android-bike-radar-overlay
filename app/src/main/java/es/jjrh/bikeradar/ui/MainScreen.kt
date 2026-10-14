@@ -112,8 +112,8 @@ import android.provider.Settings as AndroidSettings
  *     real state buses. Every row NAVIGATES to the screen that owns that
  *     device; the destinations are [systemRowRoute] and are pinned by
  *     [SystemRowRouteTest] against the graph in `MainActivity`.
- *  4. CLOSE PASSES card: the session count, and a link to ride history
- *     that stays inert until there is history to see.
+ *  4. CLOSE PASSES card: the session count or why there is none, and a
+ *     link to ride history that stays inert until there is history to see.
  *     Body polls the history file for that; the leaf below does no IO.
  *  5. Full-width Settings button.
  *
@@ -616,6 +616,7 @@ private fun MainScreenPortrait(
             ClosePassStatsCard(
                 loggingEnabled = closePassLoggingEnabled,
                 rideStored = rideStored,
+                rangeOnly = radarLimited,
                 onClick = onClosePassCardClick,
             )
             if (showDashcamPrompt) {
@@ -697,7 +698,7 @@ private fun MainScreenLandscape(
                 ClosePassStatsCard(
                     loggingEnabled = closePassLoggingEnabled,
                     rideStored = rideStored,
-                    compact = true,
+                    rangeOnly = radarLimited,
                     onClick = onClosePassCardClick,
                 )
                 if (showBtOffBanner) {

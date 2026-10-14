@@ -547,12 +547,14 @@ private fun SystemRowRender(
 // ── Close-pass stats card ─────────────────────────────────────────────
 
 /** [rideStored] has no default: ride history is kept whether or not counting
- *  is on, so a stored ride alone offers the link (`ClosePassHistoryLinkTest`). */
+ *  is on, so a stored ride alone offers the link (`ClosePassHistoryLinkTest`).
+ *  [rangeOnly]: a radar that reports distance only is connected, so nothing
+ *  can be counted. The app knows this only while that radar streams. */
 @Composable
 internal fun ClosePassStatsCard(
     loggingEnabled: Boolean,
     rideStored: Boolean,
-    compact: Boolean = false,
+    rangeOnly: Boolean,
     onClick: () -> Unit = {},
 ) {
     val br = LocalBrColors.current
@@ -579,23 +581,26 @@ internal fun ClosePassStatsCard(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            val countDesc = pluralStringResource(R.plurals.main_close_passes_count_desc, count, count)
-            Text(
-                text = count.toString(),
-                color = if (count > 0) br.fg else br.fgDim,
-                fontFamily = FontFamily.Default,
-                fontWeight = FontWeight.Light,
-                fontSize = 38.sp,
-                letterSpacing = (-1).sp,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics {
-                    contentDescription = countDesc
-                },
-            )
-            if (loggingEnabled || count > 0) {
+            // No figure while counting is off or a distance-only radar is
+            // connected, unless a pass was already counted this session
+            // (`ClosePassCardFigureTest`).
+            if (count > 0 || (loggingEnabled && !rangeOnly)) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val countDesc = pluralStringResource(R.plurals.main_close_passes_count_desc, count, count)
+                Text(
+                    text = count.toString(),
+                    color = if (count > 0) br.fg else br.fgDim,
+                    fontFamily = FontFamily.Default,
+                    fontWeight = FontWeight.Light,
+                    fontSize = 38.sp,
+                    letterSpacing = (-1).sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics {
+                        contentDescription = countDesc
+                    },
+                )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.main_close_passes_caption),
@@ -604,13 +609,15 @@ internal fun ClosePassStatsCard(
                     lineHeight = 15.sp,
                 )
             }
-            // Hidden in compact mode (landscape) so the card doesn't
-            // push the rest of the left column past the viewport on
-            // first-run installs that haven't enabled HA logging.
-            if (!loggingEnabled && count == 0 && !compact) {
+            val hint = when {
+                rangeOnly -> R.string.main_close_passes_range_only_hint
+                !loggingEnabled -> R.string.main_close_passes_empty_hint
+                else -> null
+            }
+            if (hint != null) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = stringResource(R.string.main_close_passes_empty_hint),
+                    text = stringResource(hint),
                     color = br.fgDim,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,

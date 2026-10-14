@@ -186,6 +186,7 @@
     <string name="main_close_passes_caption">esta ruta</string>
     <string name="main_close_passes_history_link">Historial ›</string>
     <string name="main_close_passes_empty_hint">Activa el recuento de adelantamientos ajustados en Ajustes → Alertas para contarlos aquí.</string>
+    <string name="main_close_passes_range_only_hint">Este radar solo mide la distancia, así que no puede contar adelantamientos ajustados.</string>
     <plurals name="main_close_passes_count_desc">
         <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> adelantamiento ajustado en esta ruta</item>
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> adelantamientos ajustados en esta ruta</item>

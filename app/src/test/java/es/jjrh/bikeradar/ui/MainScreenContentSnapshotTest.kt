@@ -291,6 +291,49 @@ class MainScreenContentSnapshotTest {
         }
     }
 
+    // The Spanish distance-only hint, with no figure, in the narrow
+    // landscape column.
+    @Test
+    @Config(qualifiers = "+es")
+    fun radarLimitedSourceLandscapeEs() {
+        captureRoboImage {
+            SnapshotTheme {
+                MainShell {
+                    MainScreenContent(
+                        status = MainStatus(
+                            icon = MainStatusIcon.Warning,
+                            tone = MainStatusTone.Warn,
+                            headline = stringResource(R.string.main_status_limited_title),
+                            subtitle = stringResource(R.string.main_status_limited_sub),
+                        ),
+                        cta = null,
+                        btEnabled = true,
+                        showBtOffBanner = false,
+                        showDashcamPrompt = false,
+                        radarFresh = true,
+                        radarLimited = true,
+                        hasBond = true,
+                        dashcamOwned = true,
+                        dashcamFresh = true,
+                        dashcamPaired = true,
+                        radarBattery = radarBattery,
+                        dashcamBattery = dashcamBattery,
+                        haStatus = HaStatus.READY,
+                        closePassLoggingEnabled = true,
+                        rideStored = false,
+                        isLandscape = true,
+                        onWordmarkLongPress = {},
+                        onBtBannerTap = {},
+                        onSettingsClick = {},
+                        onSystemRowClick = {},
+                        onDashcamYes = {},
+                        onDashcamNo = {},
+                    )
+                }
+            }
+        }
+    }
+
     @Test
     fun radarConnecting() {
         captureRoboImage {

@@ -80,7 +80,7 @@ class ClosePassHistoryLinkTest {
 
     private fun card(rideStored: Boolean) {
         composeRule.setContent {
-            UiTheme { ClosePassStatsCard(loggingEnabled = false, rideStored = rideStored, onClick = { opened++ }) }
+            UiTheme { ClosePassStatsCard(loggingEnabled = false, rideStored = rideStored, rangeOnly = false, onClick = { opened++ }) }
         }
         composeRule.waitForIdle()
     }

@@ -121,6 +121,9 @@ internal data class RideHistoryRecord(
      *  checkpoint write, not the whole ride. Absent (false) on every record
      *  written by the normal post-ride path. */
     val partial: Boolean = false,
+    /** Whether close-pass counting ran in this ride; null on records stored
+     *  before the app kept it. */
+    val closePassesCounted: Boolean? = null,
 ) {
     fun toJsonLine(): String = JSONObject()
         .put("v", SCHEMA_VERSION)
@@ -139,6 +142,7 @@ internal data class RideHistoryRecord(
         .putOpt("tightest_m", tightestPassClearanceM)
         .putOpt("tightest_kmh", tightestPassClosingKmh)
         .apply { if (partial) put("partial", true) }
+        .putOpt(COUNTED_KEY, closePassesCounted)
         .toString()
 
     companion object {
@@ -152,6 +156,8 @@ internal data class RideHistoryRecord(
          *  and judged where the vehicle drew level. Version 1 records hold
          *  earlier meanings of those fields (`v2RecordsSayVersionTwo`). */
         const val SCHEMA_VERSION = 2
+
+        private const val COUNTED_KEY = "close_passes_counted"
 
         fun fromSnapshot(snap: RideStatsSnapshot, endedAtMs: Long): RideHistoryRecord = RideHistoryRecord(
             startedAtMs = snap.rideStartedAtMs,
@@ -168,6 +174,7 @@ internal data class RideHistoryRecord(
             alertsPerKm = snap.alertsPerKm,
             tightestPassClearanceM = snap.tightestPass?.clearanceM,
             tightestPassClosingKmh = snap.tightestPass?.closingKmh,
+            closePassesCounted = snap.closePassesCounted,
         )
 
         /** Parse one stored line; null for blank or corrupt lines. */
@@ -191,6 +198,7 @@ internal data class RideHistoryRecord(
                     tightestPassClearanceM = o.optFloatOrNull("tightest_m"),
                     tightestPassClosingKmh = o.optIntOrNull("tightest_kmh"),
                     partial = o.optBoolean("partial", false),
+                    closePassesCounted = if (o.has(COUNTED_KEY) && !o.isNull(COUNTED_KEY)) o.getBoolean(COUNTED_KEY) else null,
                 )
             } catch (_: Throwable) {
                 null

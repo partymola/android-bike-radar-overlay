@@ -177,6 +177,7 @@ class ServiceNotificationsTest {
         rideStartedAtMs = 0L,
         alertsPerKm = null,
         alertsPerHourOfRide = null,
+        closePassesCounted = true,
     )
 
     private fun bigText(sbn: android.service.notification.StatusBarNotification) = sbn.notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
@@ -187,6 +188,13 @@ class ServiceNotificationsTest {
         assertEquals(app.getString(R.string.notif_ride_summary_title), title(sbn))
         // The stats body still leads with the overtakes/close-passes/km line.
         assertTrue(bigText(sbn)!!.contains("Close passes"))
+    }
+
+    @Test fun rideSummaryOfAnUncountedRideLeavesOutClosePasses() {
+        notifications().postRideSummary(blankSnapshot().copy(closePassesCounted = false), emptyList())
+        val body = bigText(nm.activeNotifications.single())!!
+        assertFalse(body, body.contains("Close passes"))
+        assertTrue(body, body.contains("Overtakes: 6") && body.contains("4.2 km"))
     }
 
     @Test fun rideSummaryLeadsWithAttentionWhenItemsExist() {

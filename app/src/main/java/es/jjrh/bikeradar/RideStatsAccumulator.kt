@@ -60,6 +60,7 @@ class RideStatsAccumulator(
     private var hgvClosePassCount: Int = 0
     private val closingSpeedSamples = ArrayList<Int>()
     private var tightestPass: TightestPass? = null
+    private var closePassesCounted = false
 
     // Alarm-cue tally. Counts only the close-pass ALARM cues that actually
     // sounded (beep + urgent); informational cues (clear, radar_drop,
@@ -258,7 +259,14 @@ class RideStatsAccumulator(
                 rangeYM = event.rangeYM,
             )
         }
+        closePassesCounted = true
         generation++
+    }
+
+    /** Close-pass counting ran at some point in this ride. */
+    fun markClosePassesCounted() {
+        if (!closePassesCounted) generation++
+        closePassesCounted = true
     }
 
     /**
@@ -321,6 +329,7 @@ class RideStatsAccumulator(
             rideStartedAtMs = rideStartedAtMs,
             alertsPerKm = alertsPerKm,
             alertsPerHourOfRide = alertsPerHour,
+            closePassesCounted = closePassesCounted,
         )
     }
 
@@ -380,6 +389,10 @@ data class RideStatsSnapshot(
     val alertsPerKm: Float?,
     /** Alarm cues per hour of ride elapsed time. Null for a zero-length ride. */
     val alertsPerHourOfRide: Float?,
+    /** False when close-pass counting never ran in this ride (counting off, a
+     *  range-only radar, or no rider speed), so [closePassCount] is not a
+     *  measurement. */
+    val closePassesCounted: Boolean = false,
 )
 
 data class TightestPass(

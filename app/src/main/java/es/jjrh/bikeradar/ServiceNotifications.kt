@@ -415,12 +415,12 @@ internal class ServiceNotifications(
             contentText = detailLines.first()
         } else {
             title = context.getString(R.string.notif_ride_summary_title)
-            contentText = context.getString(
-                R.string.notif_ride_summary_text,
-                snap.overtakesTotal,
-                snap.closePassCount,
-                String.format(Locale.getDefault(), "%.1f", snap.distanceRiddenKm),
-            )
+            val km = String.format(Locale.getDefault(), "%.1f", snap.distanceRiddenKm)
+            contentText = if (snap.closePassesCounted) {
+                context.getString(R.string.notif_ride_summary_text, snap.overtakesTotal, snap.closePassCount, km)
+            } else {
+                context.getString(R.string.notif_ride_summary_text_uncounted, snap.overtakesTotal, km)
+            }
             detailLines = buildList {
                 add(contentText)
                 snap.alertsPerKm?.let {

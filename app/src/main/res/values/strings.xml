@@ -848,6 +848,9 @@
     <string name="notif_ride_summary_channel_desc">A quiet recap of each ride once the radar powers down.</string>
     <string name="notif_ride_summary_title">Ride summary</string>
     <string name="notif_ride_summary_text">Overtakes: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Close passes: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km</string>
+    <!-- The same line for a ride with close-pass counting off, which has no
+         close-pass figure to give. -->
+    <string name="notif_ride_summary_text_uncounted">Overtakes: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • <xliff:g id="km" example="12.4">%2$s</xliff:g> km</string>
     <string name="notif_ride_summary_alerts">Alerts per km: <xliff:g id="rate" example="1.4">%1$s</xliff:g></string>
     <string name="notif_ride_summary_tightest">Tightest pass: <xliff:g id="m" example="0.8">%1$s</xliff:g> m at <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
     <!-- Needs-attention feed (end-of-trip): shared by the summary notification and the home-screen card. -->

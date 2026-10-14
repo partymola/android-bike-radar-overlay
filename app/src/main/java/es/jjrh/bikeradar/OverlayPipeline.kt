@@ -257,6 +257,11 @@ internal class OverlayPipeline(
                             closingSpeedFloorMs = closingFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
+                        // Only frames the detector can count from: none on a
+                        // range-only stream (`aRangeOnlyRideIsNotCounted`).
+                        if (cpCfg.enabled && state.source.hasLateral && state.bikeSpeedMs != null) {
+                            rideStats().markClosePassesCounted()
+                        }
                         val table = macToSlug()
                         val radarMac = currentRadarMac()
                         val radarSlug = radarMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }

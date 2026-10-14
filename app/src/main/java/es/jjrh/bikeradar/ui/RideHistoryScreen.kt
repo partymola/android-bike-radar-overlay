@@ -125,7 +125,11 @@ private fun RideHistoryRow(rec: RideHistoryRecord) {
     val timeRange = "${timeFmt.format(Date(rec.startedAtMs))}-${timeFmt.format(Date(rec.endedAtMs))}"
 
     val overtakes = pluralStringResource(R.plurals.ride_history_overtakes, rec.overtakes, rec.overtakes)
-    val passes = pluralStringResource(R.plurals.ride_history_close_passes, rec.closePasses, rec.closePasses)
+    val passes = if (rec.closePassesCounted == false) {
+        null
+    } else {
+        pluralStringResource(R.plurals.ride_history_close_passes, rec.closePasses, rec.closePasses)
+    }
     val tightest = rec.tightestPassClearanceM?.let {
         stringResource(R.string.ride_history_tightest, String.format(locale, "%.1f", it))
     }

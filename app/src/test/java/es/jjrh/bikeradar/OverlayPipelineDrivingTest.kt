@@ -1102,6 +1102,39 @@ class OverlayPipelineDrivingTest {
         }
     }
 
+    /** Whether a ride fed [frame] with counting [on] is marked counted. */
+    private suspend fun kotlinx.coroutines.test.TestScope.countedAfter(on: Boolean, frame: RadarState): Boolean {
+        prefs.closePassLoggingEnabled = on
+        val stats = RideStatsAccumulator()
+        val job = buildPipeline(rideStats = { stats }).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            RadarStateBus.publish(frame)
+            runCurrent()
+        } finally {
+            job.cancel()
+            job.join()
+            RadarStateBus.clear()
+            prefs.closePassLoggingEnabled = false
+        }
+        return stats.snapshot().closePassesCounted
+    }
+
+    @Test
+    fun theRideRecordsWhetherClosePassesWereCounted() = runTest {
+        assertEquals("counting off", false, countedAfter(on = false, frame = liveFrame(100L)))
+        assertEquals("counting on", true, countedAfter(on = true, frame = liveFrame(100L)))
+    }
+
+    @Test
+    fun aRangeOnlyRideIsNotCounted() = runTest {
+        // The detector cannot count without a lateral channel or the rider's
+        // speed, so neither frame may mark the ride as counted.
+        val rangeOnly = RadarState(source = DataSource.V1, timestamp = 100L, vehicles = emptyList(), bikeSpeedMs = 5f)
+        assertEquals("no lateral", false, countedAfter(on = true, frame = rangeOnly))
+        assertEquals("no rider speed", false, countedAfter(on = true, frame = liveFrame(100L).copy(bikeSpeedMs = null)))
+    }
+
     @Test
     fun aCarCutOffByARadarDropIsNotCountedAfterTheReconnect() = runTest {
         // The frames clearanceUnderFloor(5) counts at 0.9 m, but the link
@@ -1163,6 +1196,7 @@ class OverlayPipelineDrivingTest {
             job.join()
             val s = stats.snapshot()
             assertEquals("one close pass", 1, s.closePassCount)
+            assertEquals("a ride with a counted pass reads as counted", true, s.closePassesCounted)
             assertEquals("the ride's peak", 28, s.peakClosingKmh)
             assertEquals("the close passes' p90", 28, s.closingSpeedP90Kmh)
         } finally {

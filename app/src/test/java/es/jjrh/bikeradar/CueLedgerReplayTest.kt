@@ -28,7 +28,7 @@ import org.junit.Test
  *
  * Wiring mirrors [OverlayPipeline.fireAlertCue] exactly on the
  * radar-only (no-eBike) path: `bikeSpeedMs` from the radar's
- * device-status field, `bikeNotDriving = null`, `climbing = false`,
+ * device-status field, `bikeNotDriving = null`,
  * `urgentLowSpeedEnabled = true` and `nextCarCueEnabled = true` (the
  * shipped defaults). [alertMaxM] is
  * pinned to the [data.Prefs] default of 20 m.
@@ -90,7 +90,6 @@ class CueLedgerReplayTest {
                 nowMs = clock,
                 bikeSpeedMs = state.bikeSpeedMs,
                 bikeNotDriving = null,
-                climbing = false,
                 urgentLowSpeedEnabled = urgentLowSpeedEnabled,
                 urgentUnconfidentWaitEnabled = urgentUnconfidentWaitEnabled,
                 passClearanceM = passClearanceM,

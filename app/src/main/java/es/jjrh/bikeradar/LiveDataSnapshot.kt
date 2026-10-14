@@ -6,8 +6,9 @@ package es.jjrh.bikeradar
  * Running snapshot of eBike live-data fields, merged from the proprietary
  * status stream by [EBikeStatusDecoder]. Nullable means "not yet observed";
  * the decoder preserves any field absent from the current frame. Consumed by
- * the SYSTEM-card eBike row (battery), the AlertDecider stationary override,
- * [ClimbDetector], the walk-away arming gate and [RideEdgeDetector].
+ * the SYSTEM-card eBike row (battery), the AlertDecider stationary gate (speed
+ * and the wheel-at-rest flag), the walk-away arming gate, [RidingSpeedGate],
+ * [RideEdgeDetector] and [EBikeCaptureFormatter], which logs every field.
  *
  * (Field semantics originate in Bosch's public Live Data definition; the
  * proprietary status channel we actually read carries the same quantities.)

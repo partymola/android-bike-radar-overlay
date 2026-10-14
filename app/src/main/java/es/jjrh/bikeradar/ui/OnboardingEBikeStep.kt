@@ -184,7 +184,6 @@ private fun EBikeChooser(onHaveOne: () -> Unit, onDontHaveOne: () -> Unit) {
         Text(
             text = listOf(
                 stringResource(R.string.onboarding_ebike_bullet_status),
-                stringResource(R.string.onboarding_ebike_bullet_climb),
                 stringResource(R.string.onboarding_ebike_bullet_timing),
                 stringResource(R.string.onboarding_ebike_bullet_no_radar),
             ).joinToString("\n") { "•  $it" },

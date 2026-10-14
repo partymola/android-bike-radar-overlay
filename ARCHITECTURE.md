@@ -52,7 +52,7 @@ injected at `onCreate`:
   `BatteryStateBus`.
 - `EBikeStatusReader` + `EBikeSnapshotCoordinator` - a **read-only** GATT client
   that subscribes to the eBike's proprietary status stream (see below) and the
-  cache/derivation on top of it (odometer baseline, ride-edge, climb detection).
+  cache/derivation on top of it (odometer baseline, ride-edge, riding speed).
 - `OverlayPipeline` - the per-frame overlay/alert loop (see below).
 - `HaPublisher`, `ServiceNotifications`, `CaptureLogManager`,
   `TurnSensorController`, `RideCheckpointCoordinator`, `KnownDevices` - HA
@@ -197,6 +197,6 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
 | `app/src/main/java/es/jjrh/bikeradar/ScanGate.kt` | Pure accept/reject gate for an active BLE scan result (name-match AND bonded), used by the service's device discovery |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
-| `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge + climb detection); fed by the status reader's callback |
+| `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge detection, riding speed); fed by the status reader's callback |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusDecoder.kt` | TLV decoder for the proprietary status stream (add new object IDs here) |
 | `app/src/test/java/es/jjrh/bikeradar/RadarV2DecoderTest.kt` | JVM unit tests |

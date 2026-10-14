@@ -11,10 +11,10 @@ import org.junit.Test
 
 /**
  * Pure-JVM coverage of [EBikeSnapshotCoordinator] - the orchestration around
- * the (separately-tested) [RideEdgeDetector] / [ClimbDetector] / capture
- * formatter: snapshot caching, the once-per-session odometer baseline, the
- * ride-edge HA publish + clog wiring, and the climb-bit flip. Replaces the
- * inline service logic that had no test seam.
+ * the (separately-tested) [RideEdgeDetector] / [RidingSpeedGate] / capture
+ * formatter: snapshot caching, alert-path staleness, the once-per-session
+ * odometer baseline, the ride-edge HA publish + clog wiring and the
+ * riding-speed wiring. Replaces the inline service logic that had no test seam.
  */
 class EBikeSnapshotCoordinatorTest {
 
@@ -42,11 +42,6 @@ class EBikeSnapshotCoordinatorTest {
         return coord.snapshot()
     }
 
-    private fun climbingAt(atMs: Long): Boolean {
-        now = atMs
-        return coord.climbing()
-    }
-
     private fun ridingAt(atMs: Long): Boolean = coord.ridingSinceMs(atMs) != null
 
     @Test
@@ -63,7 +58,6 @@ class EBikeSnapshotCoordinatorTest {
         assertNull(snapshotAt(0L))
         assertNull(coord.lastSnapshotAnyAge())
         assertEquals(0L, coord.snapshotAtMs())
-        assertFalse(climbingAt(0L))
         assertFalse(coord.hasEverSeenSnapshot())
     }
 
@@ -145,40 +139,25 @@ class EBikeSnapshotCoordinatorTest {
 
     @Test
     fun forgettingStartsAgainAsIfNoBikeHadStreamed() {
-        // Riding, climbing, mid-ride and with an odometer baseline, then the
-        // rider switches eBike data off.
-        feed(LiveDataSnapshot(systemLocked = true, odometerM = 1_000L, riderPower = 300, speedRaw = riding), atMs = 0L)
-        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, riderPower = 300, speedRaw = riding), atMs = 30_000L)
+        // Riding, mid-ride and with an odometer baseline, then the rider
+        // switches eBike data off.
+        feed(LiveDataSnapshot(systemLocked = true, odometerM = 1_000L, speedRaw = riding), atMs = 0L)
+        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, speedRaw = riding), atMs = 30_000L)
         assertTrue(ridingAt(30_000L))
-        assertTrue(climbingAt(30_000L))
         assertEquals(listOf("started" to iso), rideEdges)
 
         coord.forget()
-        // The replay rebuilds the climb bit from these lines.
-        assertEquals("the climb in progress is logged as ended", 1, clogged("climbing=false"))
         assertNull(coord.lastSnapshotAnyAge())
         assertEquals(0L, coord.snapshotAtMs())
         assertFalse(coord.hasEverSeenSnapshot())
         assertFalse(ridingAt(30_000L))
-        assertFalse(climbingAt(30_000L))
 
-        // The next frames are a new bike's first: a fresh odometer baseline, a
-        // ride edge from scratch, and a full climb dwell.
-        val before = clogged("climbing=false")
-        feed(LiveDataSnapshot(systemLocked = true, odometerM = 5_000L, riderPower = 300), atMs = 31_000L)
+        // The next frames are a new bike's first: a fresh odometer baseline
+        // and a ride edge from scratch.
+        feed(LiveDataSnapshot(systemLocked = true, odometerM = 5_000L), atMs = 31_000L)
         assertTrue(clogLines.last { it.startsWith("ebike") }.contains("odo_delta_m=0"))
-        assertEquals("no stale climb to end", before, clogged("climbing=false"))
-        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false, riderPower = 300), atMs = 32_000L)
+        feed(LiveDataSnapshot(systemLocked = false, bikeNotDriving = false), atMs = 32_000L)
         assertEquals(listOf("started" to iso, "started" to iso), rideEdges)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 60_000L)
-        assertFalse("30 s of power before the forget must not count", coord.climbing())
-    }
-
-    @Test
-    fun forgettingWithNoClimbLogsNoClimbLine() {
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
-        coord.forget()
-        assertEquals(0, clogged("climbing="))
     }
 
     @Test
@@ -188,14 +167,6 @@ class EBikeSnapshotCoordinatorTest {
         val next = LiveDataSnapshot(speedRaw = 1800)
         feed(next, atMs = 20_000L)
         assertSame(next, coord.snapshot())
-    }
-
-    @Test
-    fun theClimbBitLapsesWhenTheSnapshotsStop() {
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L)
-        assertTrue(climbingAt(33_000L))
-        assertFalse("no low-power frame will ever arrive to clear it", climbingAt(33_001L))
     }
 
     @Test
@@ -263,51 +234,6 @@ class EBikeSnapshotCoordinatorTest {
         assertEquals(5_000L, coord.snapshotAtMs())
         feed(LiveDataSnapshot(batterySoc = 51), atMs = 9_000L)
         assertEquals(9_000L, coord.snapshotAtMs()) // freshness advances; the radar-drop gate relies on it
-    }
-
-    @Test
-    fun climbFlipLogsAndSetsFlag() {
-        // Rider power above the 250 W threshold, sustained 30 s, flips the climb bit.
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L) // run starts, not yet sustained
-        assertFalse(coord.climbing())
-        assertEquals(0, clogged("climbing="))
-
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L) // 30 s elapsed -> climbing
-        assertTrue(coord.climbing())
-        assertEquals(1, clogged("climbing=true"))
-    }
-
-    @Test
-    fun climbStableDoesNotReLog() {
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L) // flips true (1 log)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 40_000L) // still climbing, no re-log
-        assertTrue(coord.climbing())
-        assertEquals(1, clogged("climbing=true"))
-    }
-
-    @Test
-    fun climbDropClearsFlagAndLogsOnce() {
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L) // climbing=true
-        feed(LiveDataSnapshot(riderPower = 50), atMs = 31_000L) // below threshold -> reset
-        assertFalse(coord.climbing())
-        assertEquals(1, clogged("climbing=false"))
-    }
-
-    @Test
-    fun reClimbAfterDropRequiresFreshDwell() {
-        // After a drop, a new high-power run must re-accumulate the full 30 s
-        // dwell - it must not re-flip instantly off the previous run's start.
-        // Pins that climbState is threaded back after the reset.
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 0L)
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 30_000L) // climbing=true
-        feed(LiveDataSnapshot(riderPower = 50), atMs = 31_000L) // drop -> reset
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 31_000L) // new run starts here
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 45_000L) // 14 s into new run
-        assertFalse("must not re-flip before a fresh 30 s dwell", coord.climbing())
-        feed(LiveDataSnapshot(riderPower = 300), atMs = 61_000L) // 30 s into new run
-        assertTrue(coord.climbing())
     }
 
     // ── speed-based riding confirmation (RidingSpeedGate wiring) ─────────────

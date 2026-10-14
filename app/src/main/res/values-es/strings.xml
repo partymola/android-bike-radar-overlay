@@ -299,7 +299,6 @@
     <string name="onboarding_ebike_title">El estado de tu eBike</string>
     <string name="onboarding_ebike_sub">Muestra la batería y el estado de conexión de tu eBike durante la ruta - funciona junto con la app Bosch Flow.</string>
     <string name="onboarding_ebike_bullet_status">Batería y estado de la eBike en la pantalla de inicio</string>
-    <string name="onboarding_ebike_bullet_climb">Los pitidos de adelantamiento ajustado siguen activos en una subida lenta</string>
     <string name="onboarding_ebike_bullet_timing">El ritmo de los pitidos se ajusta a la velocidad de tu rueda</string>
     <string name="onboarding_ebike_bullet_no_radar">Un aviso si vas sin el radar encendido</string>
     <string name="onboarding_ebike_have_title">Tengo una</string>
@@ -572,7 +571,6 @@
     <string name="settings_ebike_open">Abrir</string>
     <string name="settings_ebike_what_it_does_label">Qué hace</string>
     <string name="settings_ebike_does_item_battery">Muestra la batería y el estado de conexión de la eBike en la pantalla de inicio</string>
-    <string name="settings_ebike_does_item_beeps">Mantiene los pitidos de adelantamiento ajustado activos en una subida lenta</string>
     <string name="settings_ebike_does_item_timing">Ajusta el ritmo de los pitidos a la velocidad de tu rueda</string>
     <string name="settings_ebike_does_item_no_radar">Te avisa si vas sin el radar encendido</string>
     <string name="settings_ebike_whats_collected_label">Qué se recopila</string>

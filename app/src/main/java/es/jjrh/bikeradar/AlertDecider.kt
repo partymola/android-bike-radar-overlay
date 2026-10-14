@@ -689,7 +689,6 @@ class AlertDecider(
         nowMs: Long,
         bikeSpeedMs: Float? = null,
         bikeNotDriving: Boolean? = null,
-        climbing: Boolean = false,
         urgentLowSpeedEnabled: Boolean = true,
         /** Experimental: hold an urgent candidate with no confident fit that
          *  is already off to one side, see [URGENT_UNCONFIDENT_WAIT_MS]. */
@@ -724,16 +723,7 @@ class AlertDecider(
         // is absent (no eBike, flag off, pre-bond, or Flow quiet past
         // EBikeSnapshotCoordinator.ALERT_FRESH_MS). Both null = no
         // signal, treated as "not below" so the dwell never triggers.
-        //
-        // Climb override: when the rider is grinding up a hill
-        // (rider_power sustained above threshold via ClimbDetector), the
-        // stationary gate is forced off regardless of speed. A 5 km/h
-        // climb up a steep hill is not a traffic-light stop; the
-        // rider is exposed to overtaking traffic and must still get
-        // alerts. The override is non-stateful here; the climb-state
-        // accumulator lives in EBikeSnapshotCoordinator.
         val isBelowThreshold = when {
-            climbing -> false
             bikeNotDriving != null -> bikeNotDriving
             else -> bikeSpeedMs != null && bikeSpeedMs <= stationaryMsThreshold
         }

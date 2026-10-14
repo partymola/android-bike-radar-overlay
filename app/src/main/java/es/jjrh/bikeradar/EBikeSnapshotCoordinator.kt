@@ -7,10 +7,8 @@ package es.jjrh.bikeradar
  * read-only [EBikeStatusReader] (lifecycle kept by [BikeRadarService]) pushes
  * each fresh snapshot here via [onSnapshot]; this class caches it (for the
  * AlertDecider stationary override, the radar-drop freshness gate and
- * [WalkAwayArmingGate]), logs a delta-only capture line, and threads the two
- * pure detectors - [RideEdgeDetector] (ride STARTED/ENDED -> HA) and
- * [ClimbDetector] (sustained rider power -> the climbing bit the AlertDecider
- * consults).
+ * [WalkAwayArmingGate]), logs a delta-only capture line, and threads the pure
+ * [RideEdgeDetector] (ride STARTED/ENDED -> HA) and [RidingSpeedGate].
  *
  * Extracted off the service so the orchestration around those detectors is
  * unit-testable without Android: the clock, capture-log writer, ride-edge
@@ -33,19 +31,14 @@ internal class EBikeSnapshotCoordinator(
     // (privacy hardening, see EBikeCaptureFormatter).
     @Volatile private var sessionStartOdometerM: Long? = null
 
-    // Ride-edge + climb detector state, mutated inside onSnapshot on the
-    // reader's thread, and by forget() once the reader has stopped. See
-    // RideEdgeDetector / ClimbDetector.
+    // Ride-edge detector state, mutated inside onSnapshot on the reader's
+    // thread, and by forget() once the reader has stopped. See RideEdgeDetector.
     @Volatile private var rideEdgeState: RideEdgeDetector.State = RideEdgeDetector.State()
-
-    @Volatile private var climbState: ClimbDetector.State = ClimbDetector.State()
-
-    @Volatile private var climbingFlag: Boolean = false
 
     // Speed-based riding confirmation (see RidingSpeedGate). An unlocked bike is
     // merely awake - a garage power-on looks identical to a mid-ride bike on the
     // lock bit alone - so the radar-drop cue asks this instead. Written like
-    // rideEdgeState/climbState.
+    // rideEdgeState.
     @Volatile private var ridingState: RidingSpeedGate.State = RidingSpeedGate.State()
 
     // Sticky: true once any snapshot has arrived, i.e. the rider has a Bosch
@@ -96,17 +89,13 @@ internal class EBikeSnapshotCoordinator(
      *  Bluetooth-off, which keeps the last reading
      *  (`BikeRadarServiceSmokeTest.switchingEBikeDataOffStopsARunningReader`).
      *  The caller must have stopped the reader first: a frame arriving after
-     *  this would put the reading back. A climb in progress is logged as
-     *  ended, since the corpus replay rebuilds the climb bit from those lines. */
+     *  this would put the reading back. */
     fun forget() = synchronized(this) {
-        if (climbingFlag) clog("# ebike climbing=false forgotten")
         lastSnapshot = null
         lastSnapshotMs = 0L
         everSeen = false
         sessionStartOdometerM = null
         rideEdgeState = RideEdgeDetector.State()
-        climbState = ClimbDetector.State()
-        climbingFlag = false
         ridingState = RidingSpeedGate.State()
     }
 
@@ -122,12 +111,6 @@ internal class EBikeSnapshotCoordinator(
      *  longer be believed. */
     fun snapshotAtMs(): Long = lastSnapshotMs
 
-    /** True while sustained rider power has the climb bit set (keeps alerts
-     *  firing on a slow climb the stationary-suppress gate would otherwise mute).
-     *  False once the snapshots stop, for the same reason as [snapshot]: the
-     *  bit is only cleared by a later low-power frame, which never comes. */
-    fun climbing(): Boolean = climbingFlag && isFresh()
-
     private fun isFresh(): Boolean = clock() - lastSnapshotMs <= ALERT_FRESH_MS
 
     /** When the current ride was first confirmed, or null unless the bike has
@@ -141,7 +124,8 @@ internal class EBikeSnapshotCoordinator(
     /**
      * Handle a fresh live-data snapshot: cache it for the AlertDecider
      * stationary override and the walk-away arming gate, append a delta-only
-     * line to the capture log, and drive ride-edge + climb detection.
+     * line to the capture log, and drive the riding-speed and ride-edge
+     * detectors.
      */
     fun onSnapshot(snap: LiveDataSnapshot) {
         synchronized(this) {
@@ -173,19 +157,6 @@ internal class EBikeSnapshotCoordinator(
             val nowIsoTime = nowIso()
             clog("# ebike ride_edge=$edgeName t=$nowIsoTime")
             publishRideEdge(edgeName, nowIsoTime)
-        }
-        // Thread the climb state. Sustained high rider_power (default >= 250 W
-        // for >= 30 s) flips the climbing bit, which the AlertDecider
-        // stationary override consults to keep alerts firing on a slow climb.
-        val (nextClimb, isClimbing) = ClimbDetector.classify(
-            prev = climbState,
-            nowMs = clock(),
-            riderPowerW = snap.riderPower,
-        )
-        climbState = nextClimb
-        if (isClimbing != climbingFlag) {
-            climbingFlag = isClimbing
-            clog("# ebike climbing=$isClimbing rider_power=${snap.riderPower}")
         }
     }
 

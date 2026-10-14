@@ -903,11 +903,11 @@ class OverlayPipelineDrivingTest {
 
     // ── eBike data on the alert path (real coordinator, controlled clock) ──
     //
-    // Each case runs the same frames twice: once with Flow still streaming,
-    // where the eBike reading must win, and once with Flow gone quiet, where
-    // the radar's own speed must. The first half is what makes the second
-    // mean anything - without it a pipeline ignoring the eBike entirely
-    // passes too.
+    // Each aStale* case runs the same frames twice: once with Flow still
+    // streaming, where the eBike reading must win, and once with Flow gone
+    // quiet, where the radar's own speed must. The first half is what makes
+    // the second mean anything - without it a pipeline ignoring the eBike
+    // entirely passes too.
 
     private class MonoClock(var ms: Long)
 
@@ -1011,29 +1011,30 @@ class OverlayPipelineDrivingTest {
     }
 
     @Test
-    fun aStaleClimbBitDoesNotBlockTheUrgentCue() = runTest {
-        // A climb set the bit, then Flow went quiet with the rider stopped at
-        // the top. The bit forces "not stationary", which shuts the stationary
-        // urgent path; an 8 m/s closer is under the moving path's 10 m/s floor.
+    fun hardPedallingDoesNotKeepTheUrgentCueShut() = runTest {
+        // Pins an absence, so instead of a quiet half it runs the same frames
+        // with and without a long spell of hard pedalling: a stopped rider,
+        // Flow streaming 300 W for over 30 s, and an 8 m/s closer. Rider power
+        // has no say in whether the rider is stationary, so the stationary
+        // urgent path opens on the radar's zero speed and every alert matches.
         val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
         val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
         val frames = listOf(31_000L to emptyList(), 33_500L to listOf(slowNear, fastFar), 33_600L to listOf(slowNear, fastFar))
-        val hard = LiveDataSnapshot(riderPower = 300)
-        fun climbed(clock: MonoClock) = coordinator(clock).also {
-            clock.ms = 0L
-            it.onSnapshot(hard)
-            clock.ms = 30_000L
-            it.onSnapshot(hard)
-            assertTrue("fixture must have set the climb bit", it.climbing())
+        suspend fun alertsWith(riderPower: Int?): List<String> {
+            val snap = LiveDataSnapshot(riderPower = riderPower)
+            val clock = MonoClock(0L)
+            val coord = coordinator(clock).also {
+                it.onSnapshot(snap)
+                clock.ms = 30_000L
+                it.onSnapshot(snap)
+            }
+            return driveWithEBike(clock, coord, 0f, frames, stillStreaming = snap)
+                .filter { it.startsWith("# alert") }
+                .map { it.replace(Regex("ts=\\d+ "), "") }
         }
-
-        val streaming = MonoClock(0L)
-        val live = driveWithEBike(streaming, climbed(streaming), 0f, frames, stillStreaming = hard)
-        assertEquals("a live climb still keeps it shut: $live", 0, live.count { it.contains("event=UrgentApproach") })
-
-        val quiet = MonoClock(0L)
-        val stale = driveWithEBike(quiet, climbed(quiet), 0f, frames, stillStreaming = null)
-        assertEquals("a stale climb must not: $stale", 1, stale.count { it.contains("event=UrgentApproach") })
+        val hard = alertsWith(300)
+        assertEquals("the urgent sounds: $hard", 1, hard.count { it.contains("event=UrgentApproach") })
+        assertEquals("rider power changes no alert", alertsWith(null), hard)
     }
 
     /** Drive one arming overtake (4 closing frames then track-drop) into

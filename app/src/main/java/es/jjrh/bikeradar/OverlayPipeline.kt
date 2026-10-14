@@ -57,9 +57,9 @@ internal class OverlayPipeline(
     private val phoneBattery: PhoneBatterySource,
     private val rideStats: () -> RideStatsAccumulator,
     private val overlayPrefsSnapshot: () -> PrefsSnapshot,
-    /** Read only through its age-checked [EBikeSnapshotCoordinator.snapshot]
-     *  and [EBikeSnapshotCoordinator.climbing], which age on the coordinator's
-     *  own clock. `OverlayPipelineDrivingTest.aStale*` pins the reads. */
+    /** Read only through its age-checked [EBikeSnapshotCoordinator.snapshot],
+     *  which ages on the coordinator's own clock.
+     *  `OverlayPipelineDrivingTest.aStale*` pins the reads. */
     private val ebike: EBikeSnapshotCoordinator,
     /** Turn-aware alerting: the rider's current turn state
      *  ([TurnSensorController]) - TURNING defers the all-clear, HOLD
@@ -374,7 +374,6 @@ internal class OverlayPipeline(
             nowMs = nowMonoMs,
             bikeSpeedMs = preferredBikeSpeedMs,
             bikeNotDriving = snap?.bikeNotDriving,
-            climbing = ebike.climbing(),
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
             urgentUnconfidentWaitEnabled = overlayPrefs.urgentUnconfidentWaitEnabled,
             turnState = if (overlayPrefs.turnAwareAlertsEnabled) {

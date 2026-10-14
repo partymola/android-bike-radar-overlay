@@ -83,10 +83,9 @@ class CorpusReplayGate {
         // like they do. `ebikeLines` counts the LINE PREFIX, so renaming the
         // prefix is caught while renaming `spd_raw` or `notdrv` inside it is
         // not: the count holds and every speed silently falls back to the
-        // radar's own field. The climb parser has no counter at all. Both are
-        // fixable only at a deliberate baseline re-record, since each counter
-        // is part of the compared line and adding one invalidates every
-        // existing entry.
+        // radar's own field. That is fixable only at a deliberate baseline
+        // re-record, since each counter is part of the compared line and
+        // adding one invalidates every existing entry.
         var ebikeLines: Int = 0,
         var turnLines: Int = 0,
         var offsetCm: Int = 0,
@@ -179,14 +178,6 @@ class CorpusReplayGate {
         // the raw `# turn yaw` trace would be a second implementation to keep
         // in step; the logged verdict is the decision that was actually made.
         var turnState = TurnStateDecider.State.IDLE
-        // Climb override as the app decided it, same argument as turn state.
-        // Re-deriving it here needed a monotonic clock the capture does not
-        // carry, and the obvious substitute manufactures a climb: rider power
-        // above the threshold on an `ebike` line before the first radar frame
-        // starts the run at zero, and the next line is then thirty seconds
-        // past it. No capture in the corpus carries this line yet, so the
-        // input is inert today and correct when one does.
-        var climbing = false
         // The rider-speed signal the URGENT path is gated on. What the gate
         // never read is the bonded eBike's wheel speed, which the live path
         // PREFERS over the radar's field and which carries the not-driving
@@ -204,11 +195,10 @@ class CorpusReplayGate {
         // newest one seen in file order is the snapshot in force - the same
         // interleaving the live service saw when it wrote them. Each is timed
         // by the next radar frame, so late by up to the gap to that frame,
-        // and both it and the climb verdict lapse after
-        // EBikeSnapshotCoordinator.ALERT_FRESH_MS as they do live. Across a
-        // radar outage that errs toward trusting the eBike line; timing by the
-        // previous frame would err the other way, reading a line written just
-        // before a reconnect as stale.
+        // and it lapses after EBikeSnapshotCoordinator.ALERT_FRESH_MS as it
+        // does live. Across a radar outage that errs toward trusting the
+        // eBike line; timing by the previous frame would err the other way,
+        // reading a line written just before a reconnect as stale.
         var ebike: EbikeState? = null
         var ebikeAtMs: Long? = null
         var ebikeLines = 0
@@ -220,10 +210,6 @@ class CorpusReplayGate {
                     ebike = parseEbike(line)
                     ebikeAtMs = null
                     ebikeLines++
-                    return@forEach
-                }
-                if (line.startsWith(CLIMB_PREFIX)) {
-                    climbing = line.removePrefix(CLIMB_PREFIX).startsWith("true")
                     return@forEach
                 }
                 turnStateOf(line)?.let {
@@ -248,7 +234,6 @@ class CorpusReplayGate {
                         nowMs = lineTs,
                         bikeSpeedMs = live?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs,
                         bikeNotDriving = live?.notDriving,
-                        climbing = climbing && ebikeFresh,
                         urgentUnconfidentWaitEnabled = unconfidentWait,
                         turnState = turnState,
                     )
@@ -387,8 +372,5 @@ class CorpusReplayGate {
             !baselineExists -> "the unconfident wait is compare-only: there is no baseline to compare with"
             else -> null
         }
-
-        /** What `EBikeSnapshotCoordinator` writes when the climb verdict flips. */
-        private const val CLIMB_PREFIX = "# ebike climbing="
     }
 }

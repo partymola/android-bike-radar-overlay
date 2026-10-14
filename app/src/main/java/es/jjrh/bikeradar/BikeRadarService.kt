@@ -143,7 +143,7 @@ class BikeRadarService : Service() {
 
     // ── Bosch eBike live-data snapshot ───────────────────────────────
     // The snapshot cache + everything derived from it (odometer baseline,
-    // ride-edge + climb detection) live in [EBikeSnapshotCoordinator], fed by
+    // ride-edge detection, riding speed) live in [EBikeSnapshotCoordinator], fed by
     // the status reader's callback. The service keeps only the reader lifecycle
     // (below). snapshot()==null when the feature is off, no eBike is bonded
     // or Flow has stopped streaming - the graceful-degradation path radar-only

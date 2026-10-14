@@ -28,7 +28,7 @@ package es.jjrh.bikeradar
  * block-read records use the same framing with `a2..` ids).
  *
  * Mapping reuses [LiveDataSnapshot] (the eb21-shaped model) so the existing
- * downstream pipeline (ride-edge, climb, capture log, overlay) is unchanged.
+ * downstream pipeline (ride-edge, capture log, overlay) is unchanged.
  */
 object EBikeStatusDecoder {
 

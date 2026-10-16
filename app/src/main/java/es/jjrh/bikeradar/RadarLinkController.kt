@@ -113,19 +113,26 @@ internal class RadarLinkController(
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
 
+    // Held by a connection loop from its first line to the end of its finally,
+    // so a loop started while a cancelled one still tears down waits for it
+    // rather than running beside it (`aStartDuringTheTeardownWaitsForIt`).
+    // Taken inside the launched coroutine, never in start(), which is
+    // @Synchronized and must not suspend.
+    private val loopLock = Mutex()
+
     // The radar [radarJob] was started for. Set in [start], unlike
     // [currentRadarMac], so [followPin] knows it before the loop runs.
     @Volatile private var jobMac: String? = null
 
-    // True while [followPin] waits for the old loop to finish: a sighting then
-    // must not start a second loop beside one still tearing down
-    // (`aSightingDuringTheCutStartsNothingBesideTheOldTeardown`).
+    // True while [followPin] waits for the old loop to finish: a sighting of
+    // the old radar then must not take the slot the pinned radar is about to
+    // start in (`aSightingDuringTheCutStartsNothingBesideTheOldTeardown`).
     @Volatile private var replacingLink = false
 
     private val followPinLock = Mutex()
 
-    // MAC currently driven by the link, exposed read-only so the bond receiver
-    // matches the right device and the overlay/HA lambdas can resolve the slug.
+    // MAC currently driven by the link, exposed read-only so the overlay/HA
+    // lambdas can resolve the slug.
     @Volatile var currentRadarMac: String? = null
         private set
 
@@ -255,6 +262,7 @@ internal class RadarLinkController(
      * peer that will refuse the LESC handshake) and posts a notification so
      * the user knows why the link went silent.
      */
+    @Synchronized
     private fun onRadarBondLost(mac: String) {
         Log.w(TAG, "radar bond removed (${LogRedaction.mac(mac)}); stopping reconnect loop")
         journal("radar bond removed; reconnect loop stopped")
@@ -266,10 +274,12 @@ internal class RadarLinkController(
         // the gate clear - and the NEXT genuine bond loss would then journal
         // nothing at all. Clearing here makes the invariant local.
         bondRefusalJournalled = false
-        radarJob?.cancel()
-        radarJob = null
+        // Under start()'s monitor, and only this radar's loop. The slot is left
+        // as it is: a cancelled job already reads inactive, and clearing it
+        // could orphan a loop another radar's start had just put there, which
+        // the loop lock would then make every later start wait behind.
+        if (jobMac.equals(mac, ignoreCase = true)) radarJob?.cancel()
         linkState.markDisconnected()
-        currentRadarMac = null
         notifications.postBondLost()
     }
 
@@ -299,7 +309,7 @@ internal class RadarLinkController(
         Log.i(TAG, "starting radar link to $name ${LogRedaction.mac(mac)}")
         journal("radar link start $name")
         jobMac = mac
-        radarJob = scope.launch { runRadarConnection(mac, name) }
+        radarJob = scope.launch { loopLock.withLock { runRadarConnection(mac, name) } }
     }
 
     /**
@@ -308,7 +318,8 @@ internal class RadarLinkController(
      * [RadarSelection.shouldReplaceLink] allows, so the same radar or a failed
      * bonded read leaves the link alone
      * (`aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone`). The old
-     * connection loop is joined before the pinned radar starts, so its
+     * connection loop is joined, or waited out by the loop lock when the job is
+     * a start still waiting for it, before the pinned radar starts, so its
      * teardown cannot land on the new link
      * (`aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
      *
@@ -386,7 +397,7 @@ internal class RadarLinkController(
     /** Cancel the whole connection coroutine (current attempt AND its
      *  reconnect loop); the cleanup path closes the GATT and marks the link
      *  disconnected. The next [start] - driven by a scan sighting or the
-     *  known-device kickstart - opens a fresh loop. */
+     *  known-device kickstart - opens a fresh loop once that cleanup is done. */
     fun forceReconnect() {
         radarJob?.cancel()
     }
@@ -480,7 +491,8 @@ internal class RadarLinkController(
         var overlayJob: Job? = null
         var watchdogJob: Job? = null
         var cacheRefreshed = false
-        var gattClosed = false
+        // Set from the binder callback thread and from this loop's finally.
+        val gattClosed = java.util.concurrent.atomic.AtomicBoolean(false)
         // The notify channel still drains frames buffered before the disconnect
         // callback closed it, so the first one can be read after that callback
         // ran. Marking the radar up then would start a stream on a dead link
@@ -494,8 +506,7 @@ internal class RadarLinkController(
             !linkDown
         }
         fun closeOnce() {
-            if (gattClosed) return
-            gattClosed = true
+            if (!gattClosed.compareAndSet(false, true)) return
             // Before the GATT goes: the handler installed below captures this
             // connection, and a stale one would write to a dead link. Absence
             // is the honest "no radar to talk to" a consumer should see.

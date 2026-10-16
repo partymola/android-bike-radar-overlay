@@ -621,7 +621,7 @@ a behaviour spec to keep in sync.
   claim while deleting what enforces it.** Before deleting a sentence, ask
   whether anything else in the repo still says it. Two here are load-bearing
   and easy to mistake for padding: `RadarControlBridge`'s "no two connection
-  attempts overlap", whose three enforcing properties live in
+  attempts overlap", whose enforcing properties live in
   `RadarLinkController`, and `onConsumerDied`'s lock-ordering argument, which
   rests on AOSP behaviour no test here drives. An external assumption about
   framework behaviour, and any invariant no test drives, both stay whatever

@@ -15,14 +15,21 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarControlBridge
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -39,6 +46,9 @@ import java.nio.file.Files
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Robolectric harness for [RadarLinkController.runRadarConnection] and its inner
@@ -154,11 +164,18 @@ class RadarLinkControllerHarnessTest {
         @Volatile var cb: BluetoothGattCallback? = null
 
         @Volatile var gatt: BluetoothGatt? = null
-        var openCount = 0
+
+        @Volatile var openCount = 0
+
+        /** The address of each connection opened, in order. */
+        val openedMacs: MutableList<String> = Collections.synchronizedList(mutableListOf())
     }
 
     private fun TestScope.controller(
         link: Link,
+        // A real thread pool for the tests that need two loops to overlap,
+        // which the single-threaded test dispatcher never lets happen.
+        scope: CoroutineScope = backgroundScope,
         prefs: Prefs = prefs(),
         gateway: FakeGateway = FakeGateway(),
         clock: () -> Long = { 0L },
@@ -176,7 +193,7 @@ class RadarLinkControllerHarnessTest {
         refreshGatt: (BluetoothGatt) -> Boolean = { true },
     ): RadarLinkController = RadarLinkController(
         context = app,
-        scope = backgroundScope,
+        scope = scope,
         prefs = prefs,
         captureLog = captureLog,
         overlayPipeline = overlayPipeline(prefs),
@@ -191,6 +208,7 @@ class RadarLinkControllerHarnessTest {
         refreshGatt = refreshGatt,
         openGatt = { ctx, dev, _, cb ->
             link.openCount++
+            link.openedMacs += dev.address
             link.cb = cb
             if (returnNull) {
                 null
@@ -548,6 +566,78 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    // ── a start while a cancelled loop still tears down ─────────────────────────
+
+    /** Polls in real time, for the tests whose loops run on [realPool]. */
+    private fun waitReal(ms: Long, cond: () -> Boolean): Boolean {
+        val end = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < end) {
+            if (cond()) return true
+            Thread.sleep(10)
+        }
+        return cond()
+    }
+
+    /** Runs [body] with a controller on a real pool, as production's IO
+     *  dispatcher is, and the old loop's teardown held at its first
+     *  disconnect edge until [body] releases it. */
+    private fun TestScope.withHeldTeardown(body: (RadarLinkController, Link, release: () -> Unit) -> Unit) {
+        val pool = Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+        val realPool = CoroutineScope(SupervisorJob() + pool)
+        val release = CountDownLatch(1)
+        try {
+            val link = Link()
+            val gateway = FakeGateway()
+            // Discovery never completes, so the first loop parks until cancelled.
+            val controller = controller(link, gateway = gateway, setUp = ::setUpNoDiscover, scope = realPool)
+            controller.start("TestRadar", mac)
+            assertTrue(waitReal(5_000) { link.cb != null })
+            val held = CountDownLatch(1)
+            gateway.onDisconnect = {
+                gateway.onDisconnect = {}
+                held.countDown()
+                check(release.await(30, TimeUnit.SECONDS)) { "the held teardown was never released" }
+            }
+            controller.forceReconnect()
+            assertTrue("the old loop's teardown must reach its disconnect edge", held.await(5, TimeUnit.SECONDS))
+            body(controller, link) { release.countDown() }
+        } finally {
+            release.countDown()
+            // Joined, so no loop's cleanup lands in the next test.
+            runBlocking { withTimeout(10_000) { realPool.coroutineContext.job.cancelAndJoin() } }
+            pool.close()
+        }
+    }
+
+    @Test fun aStartDuringTheTeardownWaitsForIt() = runTest {
+        withHeldTeardown { controller, link, release ->
+            controller.start("TestRadar", mac)
+            val openedBeside = waitReal(1_000) { link.openCount >= 2 }
+            release()
+            assertFalse("a second loop opened while the first was tearing down", openedBeside)
+            assertTrue("the start is not dropped", waitReal(5_000) { link.openCount == 2 })
+            waitReal(200) { false }
+            assertEquals("the old teardown must not unname the new link", mac, controller.currentRadarMac)
+        }
+    }
+
+    @Test fun aStartCancelledWhileItWaitsOpensNothing() = runTest {
+        withHeldTeardown { controller, link, release ->
+            controller.start("TestRadar", mac)
+            // Long enough for it to be waiting on the lock, not cancelled
+            // before it ever ran.
+            waitReal(300) { false }
+            controller.forceReconnect()
+            controller.start("Pinned", pinnedMac)
+            val openedBeside = waitReal(1_000) { link.openCount >= 2 }
+            release()
+            assertFalse("nothing may open while the first loop tears down", openedBeside)
+            // The lock orders the opens, so the last start's open comes last.
+            assertTrue(waitReal(5_000) { pinnedMac in link.openedMacs })
+            assertEquals("the cancelled start must never open a link", listOf(mac, pinnedMac), link.openedMacs.toList())
+        }
+    }
+
     @Test fun theNewRadarsLightIsNotHeldByAnOverrideOfTheOldOne() = runTest {
         // A manual press on the old radar's light is about that unit; carried
         // over, it would hold the pinned radar's auto-mode off for the deadband.
@@ -808,9 +898,8 @@ class RadarLinkControllerHarnessTest {
         // at all, which is the absent-radar case the journal is read for. The
         // single-loop assertion above cannot see this.
         controller.forceReconnect()
-        // start() returns early while the previous job is still active, and
-        // cancel() is not synchronous, so wait for the loop to actually stop
-        // rather than relying on the cancellation having landed.
+        // start() returns early while the previous job is still active, so
+        // wait for the cancellation to land.
         assertTrue(pumpUntil { !controller.isActive() })
         controller.start("TestRadar", mac)
         assertTrue(

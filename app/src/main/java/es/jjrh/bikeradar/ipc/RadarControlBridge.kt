@@ -14,10 +14,11 @@ import es.jjrh.bikeradar.RadarLightMode
  * from collection. No handler is the honest answer "no radar to talk to".
  *
  * One slot, last writer wins, which is safe only because no two connection
- * attempts overlap: the reconnect loop is a single sequential coroutine, its
- * `finally` resets before the next attempt installs, and `closeOnce` is behind
- * a guard so a late callback from a superseded GATT cannot wipe a newer
- * handler. A second concurrent link would need a generation token.
+ * attempts overlap: the reconnect loop is a single sequential coroutine, a loop
+ * started while a cancelled one tears down waits for it, its `finally` resets
+ * before the next attempt installs, and `closeOnce` is behind a guard so a late
+ * callback from a superseded GATT cannot wipe a newer handler. A second
+ * concurrent link would need a generation token.
  */
 object RadarControlBridge {
 

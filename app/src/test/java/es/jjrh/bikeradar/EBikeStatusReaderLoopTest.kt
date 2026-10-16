@@ -288,7 +288,7 @@ class EBikeStatusReaderLoopTest {
     }
 
     @Test fun findBondedEBikeMacReturnsNullWhenNoMatchOrName() {
-        // A non-matching device plus an unnamed one (exercises the null-name "" fallback).
+        // A non-matching device plus an unnamed one, whose null name never matches.
         setBonded(bondedDevice("AA:00:00:00:00:02", "Headphones"), bondedDevice("AA:00:00:00:00:03", null))
         assertNull(EBikeStatusReader.findBondedEBikeMac(app))
     }

@@ -53,7 +53,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -86,7 +85,7 @@ internal fun PairingStep(
     }
     val radarBonded = RadarSelection.setupHasRadar(allBonded, prefsSnap.radarMac)
     val activeRadar = RadarSelection.activeRadar(allBonded, prefsSnap.radarMac)
-    val eBikeMac = remember(allBonded) { EBikeStatusReader.findBondedEBikeMac(ctx) }
+    val eBikeMac = RadarSelection.eBikeMac(allBonded)
 
     PairingStepContent(
         radarBonded = radarBonded,

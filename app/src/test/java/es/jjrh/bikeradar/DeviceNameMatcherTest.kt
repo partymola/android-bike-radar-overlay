@@ -105,6 +105,14 @@ class DeviceNameMatcherTest {
         assertFalse("without 'rear' the rearvue token no longer matches", DeviceNameMatcher.isUnambiguousRadar("Vue8"))
     }
 
+    @Test fun eBikeNameMatchesEitherHalfOfTheBikesName() {
+        assertTrue(DeviceNameMatcher.isEBikeName("smart system eBike"))
+        assertTrue(DeviceNameMatcher.isEBikeName("My EBIKE"))
+        assertTrue(DeviceNameMatcher.isEBikeName("BOSCH SMART SYSTEM"))
+        assertFalse(DeviceNameMatcher.isEBikeName("RearVue8"))
+        assertFalse(DeviceNameMatcher.isEBikeName(null))
+    }
+
     @Test fun matchingIsCaseInsensitive() {
         assertTrue(DeviceNameMatcher.isRearAdvert("REARVUE8"))
         assertTrue(DeviceNameMatcher.isRadarName("VARIA rtl515"))

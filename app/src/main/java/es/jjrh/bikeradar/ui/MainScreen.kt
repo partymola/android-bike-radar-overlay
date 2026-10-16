@@ -68,7 +68,6 @@ import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
-import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
@@ -154,7 +153,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val firstBonded = remember { RadarSelection.bondedDevices(ctx) }
     var hasBond by remember { mutableStateOf(RadarSelection.hasLinkableRadar(firstBonded, prefs.radarMac)) }
-    var radarPickOffered by remember { mutableStateOf(radarHatchDevices(ctx, firstBonded, prefs.dashcamMac).isNotEmpty()) }
+    var radarPickOffered by remember { mutableStateOf(radarHatchDevices(firstBonded, prefs.dashcamMac).isNotEmpty()) }
     var pinnedOffRadarName by remember { mutableStateOf(RadarSelection.pinOffNamedRadars(firstBonded, prefs.radarMac)?.name) }
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
     var missingPermission by remember { mutableStateOf(Permissions.missingForService(ctx)) }
@@ -165,7 +164,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             while (true) {
                 val bonded = RadarSelection.bondedDevices(ctx)
                 hasBond = RadarSelection.hasLinkableRadar(bonded, prefs.radarMac)
-                radarPickOffered = radarHatchDevices(ctx, bonded, prefs.dashcamMac).isNotEmpty()
+                radarPickOffered = radarHatchDevices(bonded, prefs.dashcamMac).isNotEmpty()
                 pinnedOffRadarName = RadarSelection.pinOffNamedRadars(bonded, prefs.radarMac)?.name
                 btEnabled = bluetoothIsOn(ctx)
                 missingPermission = Permissions.missingForService(ctx)
@@ -884,10 +883,12 @@ internal fun radarIsSelected(ctx: Context, chosenMac: String?): Boolean = RadarS
  *  Pair opens that screen only when this is not empty, so it never sends the
  *  rider to a screen with nothing to pick (`MainScreenPairCtaTest`). */
 internal fun radarHatchDevices(
-    ctx: Context,
     allBonded: List<RadarSelection.BondedRadar>,
     dashcamMac: String?,
-): List<RadarSelection.BondedRadar> = RadarSelection.unlistedDevices(allBonded, listOf(dashcamMac, EBikeStatusReader.findBondedEBikeMac(ctx)))
+): List<RadarSelection.BondedRadar> = RadarSelection.unlistedDevices(
+    allBonded,
+    listOf(dashcamMac, RadarSelection.eBikeMac(allBonded)),
+)
 
 /**
  * Whether the device rows may treat the radio as usable: Bluetooth on and

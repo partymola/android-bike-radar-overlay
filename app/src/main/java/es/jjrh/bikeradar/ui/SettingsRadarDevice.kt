@@ -101,7 +101,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // adapter is off, so this is how the screen tracks the radio at all.
     val allBonded = remember(prefsSnap.radarMac, tickNowMs) { RadarSelection.bondedDevices(ctx) }
     val bonded = remember(allBonded) { RadarSelection.choosableRadars(allBonded) }
-    val others = remember(allBonded, prefsSnap.dashcamMac) { radarHatchDevices(ctx, allBonded, prefsSnap.dashcamMac) }
+    val others = remember(allBonded, prefsSnap.dashcamMac) { radarHatchDevices(allBonded, prefsSnap.dashcamMac) }
     // Without it the bonded list reads empty, so "pair your radar" would send
     // the rider to a Bluetooth list where the radar already is.
     val nearbyMissing = remember(tickNowMs) {

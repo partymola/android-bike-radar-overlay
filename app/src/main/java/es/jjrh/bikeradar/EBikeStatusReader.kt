@@ -272,8 +272,8 @@ class EBikeStatusReader(
                     // Per-device permission can revoke between bondedDevices
                     // and dev.name. Skip this entry, keep scanning the rest.
                     null
-                } ?: ""
-                name.contains("ebike", ignoreCase = true) || name.contains("smart system", ignoreCase = true)
+                }
+                DeviceNameMatcher.isEBikeName(name)
             }?.address
         }
     }

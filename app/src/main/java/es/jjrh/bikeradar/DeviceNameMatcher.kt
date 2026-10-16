@@ -33,6 +33,8 @@ package es.jjrh.bikeradar
  *  - [isKnownAccessory] is the widest: which advert sightings wake the
  *    battery-read path at all (radar or dashcam). A pinned radar MAC
  *    bypasses it (see [BatteryScanReceiver]).
+ *  - [isEBikeName] finds the Bosch eBike among bonded devices, for the
+ *    status reader and to keep it out of the radar pick lists.
  *
  * Vendor words appear here as device-name-matching literals only (the
  * hardware advertises them - e.g. the radar's local name is literally
@@ -79,4 +81,9 @@ object DeviceNameMatcher {
             n.contains("rtl") ||
             n.contains("garmin")
     }
+
+    /** A bonded Bosch eBike: it names itself "smart system eBike"; either
+     *  half matches, so naming variants still resolve. */
+    fun isEBikeName(name: String?): Boolean = name != null &&
+        (name.contains("ebike", ignoreCase = true) || name.contains("smart system", ignoreCase = true))
 }

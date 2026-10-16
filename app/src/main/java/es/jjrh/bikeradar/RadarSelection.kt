@@ -187,6 +187,10 @@ object RadarSelection {
      *  above them already lists. */
     fun unlistedDevices(allBonded: List<BondedRadar>, knownOtherMacs: List<String?>): List<BondedRadar> = pickableDevices(allBonded, knownOtherMacs) - choosableRadars(allBonded).toSet()
 
+    /** The eBike's address in [allBonded], kept out of the pick lists, from
+     *  the list a screen already holds rather than a second adapter read. */
+    fun eBikeMac(allBonded: List<BondedRadar>): String? = allBonded.firstOrNull { DeviceNameMatcher.isEBikeName(it.name) }?.mac
+
     /**
      * Whether setup offers its device pick: until the active radar's name can
      * only be a rear unit ([DeviceNameMatcher.isUnambiguousRadar]). So it stays

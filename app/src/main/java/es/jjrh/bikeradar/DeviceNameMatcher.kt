@@ -43,17 +43,22 @@ package es.jjrh.bikeradar
  */
 object DeviceNameMatcher {
 
+    // "rtl" only before a digit, after at most one separator (RTL515):
+    // ordinary words carry it too, "Turtle" among them
+    // (`rtlCountsOnlyBeforeADigit`).
+    private val RTL_MODEL = Regex("rtl[ _-]?[0-9]")
+
     /** Live-advert link gate for the rear radar (see class KDoc). */
     fun isRearAdvert(name: String): Boolean {
         val n = name.lowercase()
-        return n.contains("rear") || n.contains("rtl")
+        return n.contains("rear") || n.contains(RTL_MODEL)
     }
 
     /** Bonded-device radar heuristic: enumeration, the radar chooser, UI
      *  paired/battery checks. Superset of [isRearAdvert]. */
     fun isRadarName(name: String?): Boolean {
         val n = name?.lowercase() ?: return false
-        return n.contains("rear") || n.contains("rtl") || n.contains("varia")
+        return n.contains("rear") || n.contains(RTL_MODEL) || n.contains("varia")
     }
 
     /** True when the name can ONLY be a rear radar - used to keep rear
@@ -62,7 +67,7 @@ object DeviceNameMatcher {
     fun isUnambiguousRadar(name: String): Boolean {
         val n = name.lowercase()
         return n.contains("rearvue") ||
-            n.contains("rtl") ||
+            n.contains(RTL_MODEL) ||
             (n.contains("varia") && !n.contains("vue"))
     }
 
@@ -78,7 +83,7 @@ object DeviceNameMatcher {
         return n.contains("varia") ||
             n.contains("vue") ||
             n.contains("rearvue") ||
-            n.contains("rtl") ||
+            n.contains(RTL_MODEL) ||
             n.contains("garmin")
     }
 

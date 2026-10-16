@@ -12,7 +12,8 @@ import org.junit.Test
  * matcher the widest, and the radar/dashcam disambiguation must keep
  * front cameras offerable. Most device-name literals below are real
  * advertised local names (allowed per the repo naming rules); the
- * spaced "Rear Vue" names are made up to probe a boundary.
+ * spaced "Rear Vue" names and every name in [rtlCountsOnlyBeforeADigit]
+ * are made up or unmeasured, to probe a boundary.
  */
 class DeviceNameMatcherTest {
 
@@ -81,7 +82,6 @@ class DeviceNameMatcherTest {
     }
 
     @Test fun radarNameNullArmReturnsFalseDistinctlyFromEmptyString() {
-        // covers DeviceNameMatcher.kt:46
         // The `name?.lowercase() ?: return false` elvis short-circuits on a
         // genuinely null name BEFORE any contains() runs. Pair it against a
         // non-null empty string (which reaches the contains chain and also
@@ -94,7 +94,6 @@ class DeviceNameMatcherTest {
     }
 
     @Test fun unambiguousRadarMatchesOnRearvueTokenAlone() {
-        // covers DeviceNameMatcher.kt:55
         // "RearVue8" satisfies isUnambiguousRadar ONLY through the
         // contains("rearvue") disjunct: it does not contain "rtl", and the
         // `varia && !vue` arm fails (no "varia"). Stripping the "rear" prefix
@@ -103,6 +102,22 @@ class DeviceNameMatcherTest {
         // catching a mutant that deletes or negates it.
         assertTrue(DeviceNameMatcher.isUnambiguousRadar("RearVue8"))
         assertFalse("without 'rear' the rearvue token no longer matches", DeviceNameMatcher.isUnambiguousRadar("Vue8"))
+    }
+
+    @Test fun rtlCountsOnlyBeforeADigit() {
+        // A "Turtle Beach" headset paired would otherwise start a radar link.
+        for (name in listOf("Turtle Beach Stealth", "Myrtle", "Heartland", "RTL")) {
+            assertFalse(name, DeviceNameMatcher.isRearAdvert(name))
+            assertFalse(name, DeviceNameMatcher.isRadarName(name))
+            assertFalse(name, DeviceNameMatcher.isUnambiguousRadar(name))
+            assertFalse(name, DeviceNameMatcher.isKnownAccessory(name))
+        }
+        for (name in listOf("RTL12345", "eRTL615", "eRTL-12345", "Varia RTL 515")) {
+            assertTrue(name, DeviceNameMatcher.isRearAdvert(name))
+            assertTrue(name, DeviceNameMatcher.isRadarName(name))
+            assertTrue(name, DeviceNameMatcher.isUnambiguousRadar(name))
+            assertTrue(name, DeviceNameMatcher.isKnownAccessory(name))
+        }
     }
 
     @Test fun eBikeNameMatchesEitherHalfOfTheBikesName() {

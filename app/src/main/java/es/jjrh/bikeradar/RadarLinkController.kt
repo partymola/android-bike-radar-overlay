@@ -240,7 +240,11 @@ internal class RadarLinkController(
         if (bondReceiverRegistered) return
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(bondReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            // Exported: the Bluetooth app sends this broadcast, not the system
+            // uid, and a NOT_EXPORTED receiver never gets it. It is protected,
+            // so no ordinary app can send it
+            // (`theBondReceiverIsExportedSoTheBluetoothAppCanReachIt`).
+            context.registerReceiver(bondReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(bondReceiver, filter)

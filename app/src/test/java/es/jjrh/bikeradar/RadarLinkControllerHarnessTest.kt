@@ -1743,6 +1743,22 @@ class RadarLinkControllerHarnessTest {
         )
     }
 
+    /**
+     * The Bluetooth app, not the system uid, sends BOND_STATE_CHANGED, and a
+     * NOT_EXPORTED receiver never receives it. Robolectric delivers whatever
+     * the flag, so every bond test above passes either way; only the flag
+     * itself can be pinned.
+     */
+    @Test
+    fun theBondReceiverIsExportedSoTheBluetoothAppCanReachIt() = runTest {
+        controller(Link()).registerBondReceiver()
+        val bond = shadowOf(app).registeredReceivers.single {
+            it.intentFilter.hasAction(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        }
+        assertEquals(android.content.Context.RECEIVER_EXPORTED, bond.flags and android.content.Context.RECEIVER_EXPORTED)
+        assertEquals(0, bond.flags and android.content.Context.RECEIVER_NOT_EXPORTED)
+    }
+
     private fun setBonded(address: String) {
         val device = (
             app.getSystemService(android.content.Context.BLUETOOTH_SERVICE)

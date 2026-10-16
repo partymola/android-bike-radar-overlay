@@ -185,6 +185,42 @@ class RadarSelectionTest {
         assertNull(RadarSelection.activeRadar(listOf(watch), null))
     }
 
+    @Test fun `a pin off the named radars is the pinned device, while one is paired`() {
+        assertEquals(watch, RadarSelection.pinOffNamedRadars(listOf(radarA, watch), watch.mac.lowercase()))
+        // Two named radars and a third device pinned.
+        assertEquals(watch, RadarSelection.pinOffNamedRadars(listOf(radarA, radarB, watch), watch.mac))
+        // A stored pin on a front camera, which the hatch no longer offers.
+        assertEquals(frontCamera, RadarSelection.pinOffNamedRadars(listOf(radarA, frontCamera), frontCamera.mac))
+    }
+
+    @Test fun `a pin on a named radar, a pin gone, or no named radar is not off them`() {
+        assertNull(RadarSelection.pinOffNamedRadars(listOf(radarA, watch), macA.lowercase()))
+        assertNull(RadarSelection.pinOffNamedRadars(listOf(radarA, radarB, watch), macB))
+        assertNull(RadarSelection.pinOffNamedRadars(listOf(radarA, watch), "DD:DD:DD:DD:DD:DD"))
+        assertNull(RadarSelection.pinOffNamedRadars(listOf(radarA, watch), null))
+        // An unlisted radar pinned with nothing named beside it.
+        assertNull(RadarSelection.pinOffNamedRadars(listOf(unknownRadar, frontCamera), unknownRadar.mac))
+        assertNull(RadarSelection.pinOffNamedRadars(emptyList(), watch.mac))
+    }
+
+    @Test fun `a pin off the named radars is always offered the chooser`() {
+        // Home sends the rider to the radar screen for it, so that screen must
+        // have a radar to offer back.
+        val devices = listOf(radarA, radarB, watch, frontCamera, unknownRadar, eBike)
+        val pins = devices.map { it.mac } + listOf(null, "DD:DD:DD:DD:DD:DD")
+        var cases = 0
+        for (mask in 0 until (1 shl devices.size)) {
+            val bonded = devices.filterIndexed { i, _ -> mask and (1 shl i) != 0 }
+            for (pin in pins) {
+                if (RadarSelection.pinOffNamedRadars(bonded, pin) != null) {
+                    cases++
+                    assertTrue("$bonded pin=$pin", RadarSelection.shouldOfferChooser(bonded, pin))
+                }
+            }
+        }
+        assertTrue("the matrix must reach the state", cases > 0)
+    }
+
     @Test fun `isRadarName matches the family, rejects others`() {
         assertTrue(RadarSelection.isRadarName("RearVue8"))
         assertTrue(RadarSelection.isRadarName("RTL515"))

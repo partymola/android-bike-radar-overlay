@@ -103,6 +103,9 @@ data class MainStatusInputs(
      *  ([radarHatchDevices]), so Pair opens it rather than Android's Bluetooth
      *  list, and the not-paired card says so. */
     val radarPickOffered: Boolean = false,
+    /** The pinned device's name when [es.jjrh.bikeradar.RadarSelection.pinOffNamedRadars]
+     *  finds one: only it links, and it may be a watch pinned by mistake. */
+    val pinnedOffRadarName: String? = null,
 )
 
 /** How long connecting without data runs before the card advises turning the
@@ -124,12 +127,13 @@ object MainStatusDeriver {
      *  6. Radar not paired
      *  7. Radar live, distance only
      *  8. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  9. Notifications missing, in place of 10, 11 or 14
+     *  9. Notifications missing, in place of 10, 11 or 15
      *  10. Radar live but HA unreachable
      *  11. Radar live, all good
      *  12. Radar stale after a ride: "Finished your ride?"
-     *  13. Link up, or closed under 5 s ago, no data yet: connecting
-     *  14. Radar stale: waiting
+     *  13. Pin on a device other than the named radars: "Using the right radar?"
+     *  14. Link up, or closed under 5 s ago, no data yet: connecting
+     *  15. Radar stale: waiting
      *
      * Notifications takes only the cards that carry no warning or button of
      * their own. The service runs without it, so it must not hide the radar's
@@ -141,6 +145,12 @@ object MainStatusDeriver {
      * after a ride is both, and the question carries the only control that
      * stops the drop cue repeating
      * (`MainStatusDeriverTest.theParkedQuestionBeatsConnecting`).
+     *
+     * The pin question sits below the live cards and the parked question, and
+     * above connecting and Notifications (`MainStatusDeriverTest`'s
+     * `theParkedQuestionAndALiveRadarBeatAPinOffTheNamedRadars`,
+     * `aPinOffTheNamedRadarsBeatsConnectingAndItsAdvice`,
+     * `aPinOffTheNamedRadarsBeatsTheNotificationsCard`).
      *
      * DashcamOff is intentionally ranked above HaDown: HA is background
      * telemetry, the dashcam is the rear-view recording the rider needs.
@@ -285,6 +295,23 @@ object MainStatusDeriver {
                 tone = MainStatusTone.Neutral,
                 headlineRes = R.string.main_status_ride_over_title,
                 subtitleRes = R.string.main_status_ride_over_sub,
+            )
+        }
+        // A question, not a claim: the pin may be a radar the app does not know
+        // by name, switched off. Neutral like waiting, which it replaces. Ahead
+        // of connecting, whose advice would point at the wrong device.
+        inputs.pinnedOffRadarName?.let { name ->
+            return MainStatusModel(
+                icon = MainStatusIcon.Sensors,
+                tone = MainStatusTone.Neutral,
+                headlineRes = R.string.main_status_wrong_pin_title,
+                // Connecting means the device is on, so no "turn it on" then.
+                subtitleRes = when {
+                    inputs.radarConnecting && inputs.connectingAdviceDue -> R.string.main_status_wrong_pin_advice_sub
+                    inputs.radarConnecting -> R.string.main_status_wrong_pin_connecting_sub
+                    else -> R.string.main_status_wrong_pin_sub
+                },
+                subtitleArgs = listOf(name),
             )
         }
         // Amber, like the row beside it: not cover yet, and possibly a radar

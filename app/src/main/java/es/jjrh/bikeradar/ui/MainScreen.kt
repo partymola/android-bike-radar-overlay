@@ -155,6 +155,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val firstBonded = remember { RadarSelection.bondedDevices(ctx) }
     var hasBond by remember { mutableStateOf(RadarSelection.hasLinkableRadar(firstBonded, prefs.radarMac)) }
     var radarPickOffered by remember { mutableStateOf(radarHatchDevices(ctx, firstBonded, prefs.dashcamMac).isNotEmpty()) }
+    var pinnedOffRadarName by remember { mutableStateOf(RadarSelection.pinOffNamedRadars(firstBonded, prefs.radarMac)?.name) }
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
     var missingPermission by remember { mutableStateOf(Permissions.missingForService(ctx)) }
     LaunchedEffect(lifecycleOwner) {
@@ -165,6 +166,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
                 val bonded = RadarSelection.bondedDevices(ctx)
                 hasBond = RadarSelection.hasLinkableRadar(bonded, prefs.radarMac)
                 radarPickOffered = radarHatchDevices(ctx, bonded, prefs.dashcamMac).isNotEmpty()
+                pinnedOffRadarName = RadarSelection.pinOffNamedRadars(bonded, prefs.radarMac)?.name
                 btEnabled = bluetoothIsOn(ctx)
                 missingPermission = Permissions.missingForService(ctx)
                 delay(5_000)
@@ -274,6 +276,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         radarConnecting = radarConnecting,
         connectingAdviceDue = connectingAdviceDue,
         radarPickOffered = radarPickOffered,
+        pinnedOffRadarName = pinnedOffRadarName,
     )
     val statusModel = MainStatusDeriver.derive(
         inputs,
@@ -826,6 +829,12 @@ internal fun ctaFor(
             ContextCompat.startForegroundService(ctx, BikeRadarService.endRideIntent(ctx))
         },
     )
+
+    // Asked of the card, like Grant above, so it sits wherever the card ranks
+    // it. Opens the radar screen, whose chooser offers the named radar back;
+    // never a one-tap pin, since the named radar may be a spare.
+    MainStatusDeriver.derive(inputs, nowMs) { "" }.headlineRes == R.string.main_status_wrong_pin_title ->
+        StatusCta(stringResource(R.string.main_cta_choose_radar)) { navController.navigate(systemRowRoute(SystemRowTarget.RADAR)) }
 
     // Dashcam-off Warn: no CTA per DEC-002.
     // Live + good / Live + HA down / Waiting: no CTA.

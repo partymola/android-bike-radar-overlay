@@ -431,6 +431,59 @@ class MainStatusDeriverTest {
         assertEquals(R.string.main_status_live_title, s.headlineRes)
     }
 
+    // ── pin off the named radars ─────────────────────────────────────────────
+
+    @Test fun aPinOffTheNamedRadarsAsksWhichRadar() {
+        val s = derive(baseInputs(radarFresh = false).copy(pinnedOffRadarName = "Pixel Buds"))
+        assertEquals(MainStatusIcon.Sensors, s.icon)
+        assertEquals(MainStatusTone.Neutral, s.tone)
+        assertEquals(R.string.main_status_wrong_pin_title, s.headlineRes)
+        assertEquals(R.string.main_status_wrong_pin_sub, s.subtitleRes)
+        assertEquals(listOf("Pixel Buds"), s.subtitleArgs)
+    }
+
+    @Test fun aPinOffTheNamedRadarsBeatsConnectingAndItsAdvice() {
+        // A pin the app does connect to, such as a stale front-camera pin
+        // linked from the known-device cache, reads Connecting; the power-cycle
+        // advice alone would send the rider to the wrong device.
+        val s = derive(
+            baseInputs(radarFresh = false, radarConnecting = true)
+                .copy(pinnedOffRadarName = "Pixel Buds", connectingAdviceDue = true),
+        )
+        assertEquals(R.string.main_status_wrong_pin_title, s.headlineRes)
+        assertEquals(R.string.main_status_wrong_pin_advice_sub, s.subtitleRes)
+        assertEquals(listOf("Pixel Buds"), s.subtitleArgs)
+        // Before the advice is due the device is on, so no "turn it on".
+        val early = derive(
+            baseInputs(radarFresh = false, radarConnecting = true).copy(pinnedOffRadarName = "Pixel Buds"),
+        )
+        assertEquals(R.string.main_status_wrong_pin_connecting_sub, early.subtitleRes)
+        assertEquals(listOf("Pixel Buds"), early.subtitleArgs)
+        // A stretch past the threshold in a pause between attempts is not
+        // connecting, so the device may be off: no advice to power-cycle it.
+        val pause = derive(
+            baseInputs(radarFresh = false).copy(pinnedOffRadarName = "Pixel Buds", connectingAdviceDue = true),
+        )
+        assertEquals(R.string.main_status_wrong_pin_sub, pause.subtitleRes)
+    }
+
+    @Test fun aPinOffTheNamedRadarsBeatsTheNotificationsCard() {
+        val s = derive(
+            baseInputs(radarFresh = false, missingPermission = MissingPermission.NOTIFICATIONS)
+                .copy(pinnedOffRadarName = "Pixel Buds"),
+        )
+        assertEquals(R.string.main_status_wrong_pin_title, s.headlineRes)
+    }
+
+    @Test fun theParkedQuestionAndALiveRadarBeatAPinOffTheNamedRadars() {
+        // The parked question carries the only control that stops the drop cue
+        // repeating; a pinned device that streams is a radar.
+        val parked = derive(baseInputs(radarFresh = false, rideEndOfferable = true).copy(pinnedOffRadarName = "Pixel Buds"))
+        assertEquals(R.string.main_status_ride_over_title, parked.headlineRes)
+        val live = derive(baseInputs(radarFresh = true).copy(pinnedOffRadarName = "Unlisted radar"))
+        assertEquals(R.string.main_status_live_title, live.headlineRes)
+    }
+
     @Test fun anUnpairedRadarIsNotReportedAsConnecting() {
         val s = derive(baseInputs(hasBond = false, radarFresh = false, radarConnecting = true))
         assertEquals(R.string.main_status_not_paired_title, s.headlineRes)

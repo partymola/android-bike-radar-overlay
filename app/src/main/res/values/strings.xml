@@ -150,6 +150,16 @@
          The subtitle appears only after 15 s of that. -->
     <string name="main_status_connecting_title">Connecting to radar</string>
     <string name="main_status_connecting_sub">If this doesn\'t change, turn your radar off and on</string>
+    <!-- The radar is pinned to a paired device the app does not know as a
+         radar while one it does know is also paired, and nothing is arriving.
+         The pin may be a watch picked by mistake or a real radar switched off,
+         so the card asks rather than says. While the app is connecting to it
+         the _connecting_ form gives no instruction, and the _advice_ form
+         follows the connecting card's 15 s rule. -->
+    <string name="main_status_wrong_pin_title">Using the right radar?</string>
+    <string name="main_status_wrong_pin_sub">No data from <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. If it\'s your radar, turn it on</string>
+    <string name="main_status_wrong_pin_connecting_sub">No data from <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g> yet</string>
+    <string name="main_status_wrong_pin_advice_sub">No data from <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. If it\'s your radar, turn it off and on</string>
 
     <!-- Hero status-card call-to-action buttons. -->
     <string name="main_cta_set_up">Set up</string>
@@ -158,6 +168,7 @@
     <string name="main_cta_resume">Resume</string>
     <string name="main_cta_turn_on_bluetooth">Turn on Bluetooth</string>
     <string name="main_cta_pair">Pair</string>
+    <string name="main_cta_choose_radar">Choose radar</string>
     <!-- Not "End ride": it ends no ride. The summary and history still close
          on their own timer. What it declares is that the radar being off is
          expected, which is the rider-side twin of a Bosch lock. -->

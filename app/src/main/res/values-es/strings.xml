@@ -117,6 +117,10 @@
     <string name="main_status_ride_over_sub">Si no, enciende tu radar</string>
     <string name="main_status_connecting_title">Conectando con el radar</string>
     <string name="main_status_connecting_sub">Si no avanza, apaga y enciende el radar</string>
+    <string name="main_status_wrong_pin_title">¿Usas el radar correcto?</string>
+    <string name="main_status_wrong_pin_sub">Sin datos de <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. Si es tu radar, enciéndelo</string>
+    <string name="main_status_wrong_pin_connecting_sub">Aún sin datos de <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g></string>
+    <string name="main_status_wrong_pin_advice_sub">Sin datos de <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. Si es tu radar, apágalo y enciéndelo</string>
 
     <!-- Botones de acción de la tarjeta de estado principal. -->
     <string name="main_cta_set_up">Configurar</string>
@@ -125,6 +129,7 @@
     <string name="main_cta_resume">Reanudar</string>
     <string name="main_cta_turn_on_bluetooth">Activar Bluetooth</string>
     <string name="main_cta_pair">Emparejar</string>
+    <string name="main_cta_choose_radar">Elegir radar</string>
     <string name="main_cta_parked">He aparcado</string>
 
     <!-- Avisos (toast) de la pantalla de inicio. -->

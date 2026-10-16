@@ -105,6 +105,35 @@ class MainScreenSnapshotTest {
     }
 
     @Test
+    fun heroPinOffRadar() {
+        captureRoboImage { PinOffRadarHero() }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun heroPinOffRadarEs() {
+        captureRoboImage { PinOffRadarHero() }
+    }
+
+    /** The radar pinned to another paired device, with the longer subtitle. */
+    @Composable
+    private fun PinOffRadarHero() {
+        SnapshotTheme {
+            MainShell {
+                HeroStatusCard(
+                    status = MainStatus(
+                        icon = MainStatusIcon.Sensors,
+                        tone = MainStatusTone.Neutral,
+                        headline = stringResource(R.string.main_status_wrong_pin_title),
+                        subtitle = stringResource(R.string.main_status_wrong_pin_advice_sub, "Pixel Buds"),
+                    ),
+                    cta = StatusCta(label = stringResource(R.string.main_cta_choose_radar), onClick = {}),
+                )
+            }
+        }
+    }
+
+    @Test
     @Config(qualifiers = "+es")
     fun heroPermissionsEs() {
         captureRoboImage {

@@ -128,10 +128,19 @@ object RadarSelection {
      * made through "my radar isn't listed" can be undone
      * (`a pin on another bonded device offers the one named radar back`).
      */
-    fun shouldOfferChooser(allBonded: List<BondedRadar>, chosenMac: String?): Boolean {
+    fun shouldOfferChooser(allBonded: List<BondedRadar>, chosenMac: String?): Boolean = choosableRadars(allBonded).size > 1 || pinOffNamedRadars(allBonded, chosenMac) != null
+
+    /**
+     * The pinned device, when it is a bonded device other than the
+     * [choosableRadars] while one of those is paired; else null
+     * (`a pin off the named radars is the pinned device, while one is paired`).
+     * [shouldOfferChooser] then always has the named radar to offer back
+     * (`a pin off the named radars is always offered the chooser`).
+     */
+    fun pinOffNamedRadars(allBonded: List<BondedRadar>, chosenMac: String?): BondedRadar? {
+        val pinned = allBonded.firstOrNull { it.mac.equals(chosenMac, ignoreCase = true) } ?: return null
         val named = choosableRadars(allBonded)
-        val pinBonded = allBonded.any { it.mac.equals(chosenMac, ignoreCase = true) }
-        return named.size > 1 || (named.size == 1 && pinBonded && !named.single().mac.equals(chosenMac, ignoreCase = true))
+        return pinned.takeIf { named.isNotEmpty() && pinned !in named }
     }
 
     /** Every bonded device except the ones the app already knows are something

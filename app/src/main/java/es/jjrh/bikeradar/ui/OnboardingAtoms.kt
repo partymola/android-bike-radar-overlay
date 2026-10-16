@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -117,7 +118,7 @@ internal fun FooterCta(label: String, enabled: Boolean, onClick: () -> Unit) {
                     .height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (enabled) br.brand else br.bgElev2)
-                    .clickable(enabled = enabled, onClick = onClick),
+                    .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -159,7 +160,7 @@ internal fun FooterCtaDual(
                     .height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .border(1.dp, br.hairline2, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onSecondary),
+                    .clickable(role = Role.Button, onClick = onSecondary),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(text = secondary, color = br.fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -170,7 +171,7 @@ internal fun FooterCtaDual(
                     .height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (primaryEnabled) br.brand else br.bgElev2)
-                    .clickable(enabled = primaryEnabled, onClick = onPrimary),
+                    .clickable(enabled = primaryEnabled, role = Role.Button, onClick = onPrimary),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

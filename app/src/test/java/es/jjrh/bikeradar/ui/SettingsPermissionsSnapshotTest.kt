@@ -29,31 +29,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class SettingsPermissionsSnapshotTest {
 
-    private val nearby = PermissionSpec(
-        permissions = listOf("android.permission.BLUETOOTH_SCAN"),
-        titleRes = R.string.permission_nearby_title,
-        rationaleRes = R.string.permission_nearby_rationale,
-        required = true,
-    )
-
-    // The production spec, so the golden shows the mark the screen shows.
+    // The production specs, so the goldens show the marks the screen shows.
+    private val nearby = PERMISSIONS.single { Manifest.permission.BLUETOOTH_CONNECT in it.permissions }
     private val notifications = PERMISSIONS.single { it.titleRes == R.string.permission_notifications_title }
-
-    private val overlay = PermissionSpec(
-        permissions = emptyList(),
-        titleRes = R.string.permission_overlay_title,
-        rationaleRes = R.string.permission_overlay_rationale,
-        required = false,
-        markLabelRes = R.string.permission_mark_recommended,
-    )
-
-    private val location = PermissionSpec(
-        permissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
-        titleRes = R.string.permission_location_title,
-        rationaleRes = R.string.permission_location_rationale,
-        required = false,
-        markLabelRes = R.string.common_optional,
-    )
+    private val overlay = PERMISSIONS.single { it.permissions.isEmpty() }
+    private val location = PERMISSIONS.single { Manifest.permission.ACCESS_COARSE_LOCATION in it.permissions }
 
     @Test
     fun allGranted() {

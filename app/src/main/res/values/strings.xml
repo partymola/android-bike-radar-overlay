@@ -58,6 +58,9 @@
     <!-- The same mark on the Notifications card; gendered languages agree it
          with that title. -->
     <string name="permission_mark_recommended_notifications">Recommended</string>
+    <!-- The Nearby devices card's mark; gendered languages agree it with that
+         title only, so it is not reused on another card. -->
+    <string name="permission_mark_required">Required</string>
 
     <!-- Shared light-mode display names (SettingsAtoms.kt) -->
     <string name="settings_lightmode_high">High</string>
@@ -286,6 +289,9 @@
     <string name="onboarding_perm_bullet_bluetooth">Nearby devices: finds and connects your radar, dashcam and eBike</string>
     <string name="onboarding_perm_bullet_notifications">Notifications (recommended): shows a Pause button, your ride summary and warnings</string>
     <string name="onboarding_perm_bullet_location">Location (approx, optional): sets your front and radar lights by local sunset - never tracks you</string>
+    <!-- Above the held Continue while Nearby devices is not granted. "Skip
+         setup" is onboarding_skip_setup, the button at the top. -->
+    <string name="onboarding_perm_continue_hint">Grant Nearby devices to continue, or tap Skip setup.</string>
 
     <!-- Step 2: Home Assistant -->
     <string name="onboarding_ha_title">Connect to Home Assistant</string>
@@ -433,6 +439,11 @@
     <string name="settings_perm_open_notification_settings">Open notification settings</string>
     <string name="settings_perm_grant">Grant</string>
     <string name="settings_perm_enable">Enable</string>
+    <!-- What TalkBack says for a button on a permission card: the button's
+         own label first, as Voice Access users say it, then what it acts on
+         (the permission, or the manual location). -->
+    <string name="settings_perm_action_cd"><xliff:g id="action" example="Grant">%1$s</xliff:g>: <xliff:g id="subject" example="Nearby devices">%2$s</xliff:g></string>
+    <string name="settings_perm_granted_cd">Granted</string>
 
     <!-- Settings → About (SettingsAbout.kt) -->
     <string name="settings_about_title">About</string>

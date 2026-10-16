@@ -15,13 +15,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +50,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -305,6 +312,7 @@ internal fun permissionSettingsIntent(spec: PermissionSpec, packageName: String)
  * `LocalContext`. Callers derive [permanentlyDenied] and provide an
  * [onAction] that routes to the launcher or the Settings intent.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PermissionCardContent(
     spec: PermissionSpec,
@@ -338,7 +346,13 @@ internal fun PermissionCardContent(
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .padding(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val title = stringResource(spec.titleRes)
+        // One TalkBack stop: "Granted, Nearby devices, Required, ...".
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.semantics(mergeDescendants = true) {},
+        ) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -354,23 +368,27 @@ internal fun PermissionCardContent(
                     } else {
                         Icons.Default.Visibility
                     },
-                    contentDescription = null,
+                    // Not granted, the card's mark and button say so in words.
+                    contentDescription = if (granted) stringResource(R.string.settings_perm_granted_cd) else null,
                     tint = accentColor,
                     modifier = Modifier.size(18.dp),
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                // FlowRow, not Row: at large font sizes a long title left the
+                // mark too little width and it broke mid-word
+                // (`PermissionCardAccessibilityTest`). Wrapping moves it whole.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = stringResource(spec.titleRes),
+                        text = title,
                         color = br.fg,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
+                        modifier = Modifier.align(Alignment.CenterVertically),
                     )
-                    spec.markLabelRes?.let { Mark(text = stringResource(it)) }
+                    spec.markLabelRes?.let {
+                        Mark(text = stringResource(it), modifier = Modifier.align(Alignment.CenterVertically))
+                    }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
@@ -383,10 +401,19 @@ internal fun PermissionCardContent(
         }
         if (!granted) {
             Spacer(modifier = Modifier.height(12.dp))
+            val label = when {
+                // Named for where permissionSettingsIntent goes.
+                permanentlyDenied && Manifest.permission.POST_NOTIFICATIONS in spec.permissions ->
+                    stringResource(R.string.settings_perm_open_notification_settings)
+                permanentlyDenied -> stringResource(R.string.settings_perm_open_app_info)
+                spec.required -> stringResource(R.string.settings_perm_grant)
+                else -> stringResource(R.string.settings_perm_enable)
+            }
+            val actionCd = stringResource(R.string.settings_perm_action_cd, label, title)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (spec.required) br.brand else androidx.compose.ui.graphics.Color.Transparent)
                     .border(
@@ -394,18 +421,12 @@ internal fun PermissionCardContent(
                         if (spec.required) androidx.compose.ui.graphics.Color.Transparent else br.hairline2,
                         RoundedCornerShape(8.dp),
                     )
-                    .clickable(onClick = onAction),
+                    .semantics { contentDescription = actionCd }
+                    .clickable(role = Role.Button, onClick = onAction),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = when {
-                        // Named for where permissionSettingsIntent goes.
-                        permanentlyDenied && Manifest.permission.POST_NOTIFICATIONS in spec.permissions ->
-                            stringResource(R.string.settings_perm_open_notification_settings)
-                        permanentlyDenied -> stringResource(R.string.settings_perm_open_app_info)
-                        spec.required -> stringResource(R.string.settings_perm_grant)
-                        else -> stringResource(R.string.settings_perm_enable)
-                    },
+                    text = label,
                     color = if (spec.required) br.bg else br.fg,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -437,6 +458,7 @@ internal fun PermissionCardContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     PermissionOutlineButton(
                         label = stringResource(alt.actionLabelRes),
+                        permissionTitle = title,
                         onClick = alt.onEnter,
                     )
                 }
@@ -447,6 +469,7 @@ internal fun PermissionCardContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     PermissionOutlineButton(
                         label = stringResource(alt.actionLabelRes),
+                        permissionTitle = title,
                         onClick = alt.onEnter,
                     )
                 }
@@ -470,16 +493,18 @@ private fun PermissionOrDivider() {
 
 /** Peer of the optional-spec action button (transparent, hairline border). */
 @Composable
-private fun PermissionOutlineButton(label: String, onClick: () -> Unit) {
+private fun PermissionOutlineButton(label: String, permissionTitle: String, onClick: () -> Unit) {
     val br = LocalBrColors.current
+    val cd = stringResource(R.string.settings_perm_action_cd, label, permissionTitle)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(androidx.compose.ui.graphics.Color.Transparent)
             .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .semantics { contentDescription = cd }
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(text = label, color = br.fg, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -507,9 +532,10 @@ private fun PermissionAlternativeValueRow(alt: PermissionAlternative) {
             tint = br.safe,
             modifier = Modifier.size(14.dp),
         )
+        val setTitle = stringResource(alt.setTitleRes)
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(alt.setTitleRes),
+                text = setTitle,
                 color = br.fg,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
@@ -521,19 +547,26 @@ private fun PermissionAlternativeValueRow(alt: PermissionAlternative) {
                 fontFamily = FontFamily.Monospace,
             )
         }
-        Text(
-            text = stringResource(R.string.common_change),
-            color = br.brand,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clickable(onClick = alt.onEnter).padding(8.dp),
-        )
-        Text(
-            text = stringResource(R.string.common_clear),
-            color = br.fgMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clickable(onClick = alt.onClear).padding(8.dp),
-        )
+        // Named for what they change, the entered location, not the
+        // permission: "Clear: Approximate location" reads as a revoke.
+        RowTextButton(stringResource(R.string.common_change), setTitle, br.brand, alt.onEnter)
+        RowTextButton(stringResource(R.string.common_clear), setTitle, br.fgMuted, alt.onClear)
+    }
+}
+
+/** A text action in [PermissionAlternativeValueRow], at least 48 dp each way
+ *  and named for what it acts on. */
+@Composable
+private fun RowTextButton(label: String, subject: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    val cd = stringResource(R.string.settings_perm_action_cd, label, subject)
+    Box(
+        modifier = Modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { contentDescription = cd }
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }

@@ -50,17 +50,8 @@ class OnboardingPermissionsStepSnapshotTest {
         }
     }
 
-    private val nearby = PermissionSpec(
-        permissions = listOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-        ),
-        titleRes = R.string.permission_nearby_title,
-        rationaleRes = R.string.permission_nearby_rationale,
-        required = true,
-    )
-
-    // The production spec, so the golden shows the mark the screen shows.
+    // The production specs, so the goldens show the marks the screen shows.
+    private val nearby = PERMISSIONS.single { Manifest.permission.BLUETOOTH_CONNECT in it.permissions }
     private val notifications = PERMISSIONS.single { it.titleRes == R.string.permission_notifications_title }
 
     private val overlay = PermissionSpec(

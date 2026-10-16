@@ -40,6 +40,7 @@ internal val PERMISSIONS = buildList {
             R.string.permission_nearby_title,
             R.string.permission_nearby_rationale,
             required = true,
+            markLabelRes = R.string.permission_mark_required,
         ),
     )
     // Recommended, not required: the radar runs and beeps without it

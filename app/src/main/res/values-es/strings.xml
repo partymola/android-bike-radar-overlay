@@ -43,6 +43,8 @@
     <string name="permission_location_rationale">Se usa una vez por ruta para ajustar tu luz delantera y la del radar según el atardecer local. Sin ubicación ni coordenadas, el atardecer se estima para Londres. Las coordenadas que introduzcas tienen prioridad.</string>
     <string name="permission_mark_recommended">Recomendado</string>
     <string name="permission_mark_recommended_notifications">Recomendadas</string>
+    <!-- Concuerda solo con "Dispositivos cercanos"; no reutilizar en otra tarjeta. -->
+    <string name="permission_mark_required">Necesarios</string>
 
     <!-- Nombres de modos de luz compartidos (SettingsAtoms.kt) -->
     <string name="settings_lightmode_high">Alta</string>
@@ -239,6 +241,7 @@
     <string name="onboarding_perm_bullet_bluetooth">Dispositivos cercanos: encuentra y conecta tu radar, cámara delantera y eBike</string>
     <string name="onboarding_perm_bullet_notifications">Notificaciones (recomendadas): muestra el botón Pausar, el resumen de la ruta y los avisos</string>
     <string name="onboarding_perm_bullet_location">Ubicación (aprox., opcional): ajusta tu luz delantera y la del radar según el atardecer local - nunca te rastrea</string>
+    <string name="onboarding_perm_continue_hint">Concede Dispositivos cercanos para continuar o toca Omitir configuración.</string>
 
     <!-- Paso 2: Home Assistant -->
     <string name="onboarding_ha_title">Conectar con Home Assistant</string>
@@ -385,6 +388,8 @@
     <string name="settings_perm_open_notification_settings">Abrir ajustes de notificaciones</string>
     <string name="settings_perm_grant">Conceder</string>
     <string name="settings_perm_enable">Activar</string>
+    <string name="settings_perm_action_cd"><xliff:g id="action" example="Conceder">%1$s</xliff:g>: <xliff:g id="subject" example="Dispositivos cercanos">%2$s</xliff:g></string>
+    <string name="settings_perm_granted_cd">Permiso concedido</string>
 
     <!-- Ajustes → Acerca de (SettingsAbout.kt) -->
     <string name="settings_about_title">Acerca de</string>

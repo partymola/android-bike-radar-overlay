@@ -37,12 +37,8 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w448dp-h997dp-xxhdpi")
 class PermissionCardSnapshotTest {
 
-    private val nearby = PermissionSpec(
-        permissions = listOf("android.permission.BLUETOOTH_SCAN"),
-        titleRes = R.string.permission_nearby_title,
-        rationaleRes = R.string.permission_nearby_rationale,
-        required = true,
-    )
+    // The production spec, so the golden shows the mark the screen shows.
+    private val nearby = PERMISSIONS.single { "android.permission.BLUETOOTH_CONNECT" in it.permissions }
 
     private val overlay = PermissionSpec(
         permissions = emptyList(),

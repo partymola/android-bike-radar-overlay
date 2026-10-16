@@ -2679,7 +2679,9 @@ class RadarLinkCoordinatorTest {
         val counts = listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount)
         failingAttempts(from = 10_000L, until = 40_000L) { }
         val after = snap()
-        assertEquals(before.copy(radarLinkClosedAtMs = 39_000L), after)
+        // The connecting stretch is the only other field: the home card's
+        // advice reads it, and no alert does.
+        assertEquals(before.copy(radarLinkClosedAtMs = 39_000L, connectingSinceMs = 10_000L), after)
         assertEquals(counts, listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount))
         assertEquals(0, clogged("state=IDLE"))
         disconnectAt(45_000L) // an attempt that never opened the link
@@ -2710,7 +2712,7 @@ class RadarLinkCoordinatorTest {
         )
         val counts = effects()
         failingAttempts(from = fireAt + 3_000L, until = fireAt + 108_000L) { }
-        assertEquals(before.copy(radarLinkClosedAtMs = fireAt + 107_000L), snap())
+        assertEquals(before.copy(radarLinkClosedAtMs = fireAt + 107_000L, connectingSinceMs = fireAt + 3_000L), snap())
         assertEquals(counts, effects())
     }
 

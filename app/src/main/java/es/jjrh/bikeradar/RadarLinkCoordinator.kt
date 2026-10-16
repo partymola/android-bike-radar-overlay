@@ -172,6 +172,10 @@ internal class RadarLinkCoordinator(
     // and is closed when that ride ends with the radar still down.
     @Volatile private var latchIsNoRadarRide = false
 
+    // When the last connect attempt ended, opened or not. The connecting
+    // stretch continues across a gap no longer than [connectingStretchGapMs].
+    @Volatile private var lastAttemptEndedMs: Long? = null
+
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
     /** The service ticks at its fast cadence while this holds: the radar is
@@ -286,9 +290,24 @@ internal class RadarLinkCoordinator(
      *  attempt stays down (`aFailingRadarUndoesNothingTheRiderDid`). Intended
      *  for the new-ride gap too: an abort loop is the radar being down, so a
      *  stream after a loop longer than the gap starts a new ride
-     *  (`aStreamAfterAnAbortLoopLongerThanTheGapIsANewRide`). */
+     *  (`aStreamAfterAnAbortLoopLongerThanTheGapIsANewRide`). Also where the
+     *  connecting stretch starts, or continues when the last attempt ended no
+     *  more than [connectingStretchGapMs] ago (`ConnectingStretchTest`). */
     override fun markLinkOpen() {
-        _radarLinkState.update { it.copy(radarGattActive = true) }
+        val nowMs = clock()
+        val gapMs = connectingStretchGapMs(prefs.radarLongOfflineCapSec)
+        val lastEnded = lastAttemptEndedMs
+        _radarLinkState.update { current ->
+            // radarGattActive: a second open with no close between, which the
+            // controller does not produce; kept so it cannot restart the stretch
+            // (`aStretchStartsAtTheFirstLinkOpen`).
+            val sameStretch = current.connectingSinceMs != null &&
+                (current.radarGattActive || (lastEnded != null && nowMs - lastEnded <= gapMs))
+            current.copy(
+                radarGattActive = true,
+                connectingSinceMs = if (sameStretch) current.connectingSinceMs else nowMs,
+            )
+        }
     }
 
     /** Off-instant is stamped at the actual disconnect callback so it
@@ -325,6 +344,7 @@ internal class RadarLinkCoordinator(
                     lastWalkAwayFireMs = null,
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    connectingSinceMs = null,
                     lastRadarUpMs = nowMs,
                     rideEndedByRider = false,
                     rideEndedAtMs = null,
@@ -339,6 +359,7 @@ internal class RadarLinkCoordinator(
                 current.copy(
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
+                    connectingSinceMs = null,
                     lastRadarUpMs = nowMs,
                     rideEndedByRider = false,
                     rideEndedAtMs = null,
@@ -396,6 +417,10 @@ internal class RadarLinkCoordinator(
 
     override fun markDisconnected() {
         val nowMs = clock()
+        // Every attempt, including one that never opened the link, so a
+        // failure before discovery does not stretch the gap between opens
+        // (`attemptsThatFailBeforeTheLinkOpensDoNotBreakTheStretch`).
+        lastAttemptEndedMs = nowMs
         val prev = _radarLinkState.value
         val freshOffEpisode = prev.radarOffSinceMs == null
         // Computed once from prev and reused across any CAS retries below.
@@ -1001,7 +1026,7 @@ internal class RadarLinkCoordinator(
 
         /** Allowance for one connect attempt once the reconnect loop wakes. An
          *  estimate: how long a just-powered radar takes to connect is not
-         *  measured. */
+         *  measured. Read by [noRadarGraceMs] and [connectingStretchGapMs]. */
         const val NO_RADAR_CONNECT_MARGIN_MS = 30_000L
 
         /** The no-radar grace for a rider's long-offline reconnect cap. The loop
@@ -1019,6 +1044,16 @@ internal class RadarLinkCoordinator(
         /** [noRadarGraceMs] in whole seconds, rounded up, as Settings shows it
          *  and the journal records it (`theGraceRoundsUpToTheSecond`). */
         fun noRadarGraceSec(longOfflineCapSec: Int): Int = ((noRadarGraceMs(longOfflineCapSec) + 999) / 1_000).toInt()
+
+        /** The longest between the end of one connect attempt and the link
+         *  opening on the next: the reconnect loop's longest sleep, the larger
+         *  of its backoff ceiling and the rider's idle interval plus jitter, and
+         *  [NO_RADAR_CONNECT_MARGIN_MS] for the attempt. A link opened within it
+         *  continues the connecting stretch (`ConnectingStretchTest`). */
+        fun connectingStretchGapMs(longOfflineCapSec: Int): Long {
+            val ceilingMs = maxOf(RADAR_RECONNECT_BACKOFF_MAX_MS, longOfflineCapSec * 1_000L)
+            return ceilingMs + (ceilingMs * RECONNECT_JITTER_FRACTION).toLong() + NO_RADAR_CONNECT_MARGIN_MS
+        }
 
         /** Max age of the eBike snapshot for its `system_locked` to be trusted
          *  by the radar-drop cue. Older than this means the eBike link has

@@ -95,9 +95,10 @@ data class MainStatusInputs(
     /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
      *  System row reads, so the two cannot disagree about one radar. */
     val radarConnecting: Boolean = false,
-    /** Connecting with no data for [CONNECTING_ADVICE_AFTER_MS] or more since
-     *  the home screen first saw it, so the card may tell the rider to turn the
-     *  radar off and on. */
+    /** The service's connecting stretch
+     *  ([es.jjrh.bikeradar.RadarLinkState.connectingSinceMs]) has run
+     *  [CONNECTING_ADVICE_AFTER_MS] or more, so a card shown while
+     *  [radarConnecting] may tell the rider to turn the radar off and on. */
     val connectingAdviceDue: Boolean = false,
     /** The radar screen has a paired device to offer as the radar
      *  ([radarHatchDevices]), so Pair opens it rather than Android's Bluetooth
@@ -109,10 +110,10 @@ data class MainStatusInputs(
 )
 
 /** How long connecting without data runs before the card advises turning the
- *  radar off and on. Longer than an ordinary connect
- *  (`MainScreenEndRideWiringTest.thePowerCycleAdviceWaitsOutAnOrdinaryConnect`)
- *  and than the 5 s a closed link still reads as connecting, so switching the
- *  radar off at the end of a ride does not show it either. */
+ *  radar off and on (`MainScreenEndRideWiringTest.thePowerCycleAdviceWaitsOutAnOrdinaryConnect`).
+ *  Counted from the first link open of a failing stretch, pauses between
+ *  attempts included, so the connect and discovery before that open, and an
+ *  ordinary drop-to-reconnect, never count against it. */
 internal const val CONNECTING_ADVICE_AFTER_MS = 15_000L
 
 object MainStatusDeriver {

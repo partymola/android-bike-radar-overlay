@@ -215,16 +215,11 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val noRadarLinkFlow = remember { MutableStateFlow(RadarLinkState()) }
     val radarLinkSnap by (BikeRadarService.radarLinkStateForUi ?: noRadarLinkFlow).collectAsState()
     val radarConnecting = RadarLinkStatus.isConnecting(radarLinkSnap, SystemClock.elapsedRealtime())
-    // When this screen first saw connecting without data; it restarts when the
-    // screen is opened again. Re-read against the clock on the 5 s tick, so
-    // the advice lands within a tick of the threshold.
-    val connectingNoData = radarConnecting && !radarFresh
-    var connectingSinceMs by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(connectingNoData) {
-        connectingSinceMs = if (connectingNoData) SystemClock.elapsedRealtime() else null
-    }
-    val connectingAdviceDue = connectingSinceMs
-        ?.let { SystemClock.elapsedRealtime() - it >= CONNECTING_ADVICE_AFTER_MS } == true
+    // Counted by the service across failed attempts, so reopening this screen
+    // does not restart it (`thePowerCycleWaitIsTheServicesNotTheScreens`).
+    // Re-read against the clock on the 5 s tick.
+    val connectingFor = radarLinkSnap.connectingSinceMs?.let { SystemClock.elapsedRealtime() - it }
+    val connectingAdviceDue = connectingFor != null && connectingFor >= CONNECTING_ADVICE_AFTER_MS
     // Constructed once: HaCredentials' constructor runs the legacy-ciphertext
     // migration (AndroidKeyStore work on installs that still hold undecryptable
     // blobs), so it must not be rebuilt on every tick. Only the READ is keyed to

@@ -124,7 +124,9 @@ class MainScreenEndRideWiringTest {
         // An ordinary connect must not tell the rider to power-cycle the
         // radar; one still connecting with no data at 15 s gets the advice.
         val advice = "If this doesn't change, turn your radar off and on"
-        BikeRadarService.radarLinkStateForUi = MutableStateFlow(RadarLinkState(radarGattActive = true))
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(
+            RadarLinkState(radarGattActive = true, connectingSinceMs = SystemClock.elapsedRealtime()),
+        )
         composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Connecting to radar").assertIsDisplayed()
@@ -144,26 +146,38 @@ class MainScreenEndRideWiringTest {
     }
 
     @Test
-    fun eachConnectStartsThePowerCycleWaitAgain() {
-        // A radar that connected, dropped out of connecting and is connecting
-        // again starts a new wait rather than counting from the first.
+    fun thePowerCycleWaitIsTheServicesNotTheScreens() {
+        // A screen opened 20 s into a failing stretch advises at once, and a
+        // stretch the service has restarted does not, whatever the screen saw.
         val advice = "If this doesn't change, turn your radar off and on"
-        val link = MutableStateFlow(RadarLinkState(radarGattActive = true))
+        val link = MutableStateFlow(
+            RadarLinkState(radarGattActive = true, connectingSinceMs = SystemClock.elapsedRealtime() - 20_000L),
+        )
         BikeRadarService.radarLinkStateForUi = link
         composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
         composeRule.waitForIdle()
+        composeRule.onNodeWithText(advice).assertIsDisplayed()
 
-        link.value = RadarLinkState()
-        composeRule.waitForIdle()
-        ShadowSystemClock.advanceBy(Duration.ofSeconds(20))
-        composeRule.mainClock.advanceTimeBy(6_000)
-        composeRule.waitForIdle()
-
-        link.value = RadarLinkState(radarGattActive = true)
+        link.value = RadarLinkState(radarGattActive = true, connectingSinceMs = SystemClock.elapsedRealtime())
         composeRule.mainClock.advanceTimeBy(6_000)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Connecting to radar").assertIsDisplayed()
         composeRule.onNodeWithText(advice).assertDoesNotExist()
+    }
+
+    @Test
+    fun aStretchLeftByARadarSwitchedOffGivesNoAdvice() {
+        // The service keeps the stamp after the last attempt; with no link open
+        // the card waits rather than telling the rider to power-cycle a radar
+        // that is off.
+        val now = SystemClock.elapsedRealtime()
+        BikeRadarService.radarLinkStateForUi = MutableStateFlow(
+            RadarLinkState(radarLinkClosedAtMs = now - 60_000L, connectingSinceMs = now - 120_000L),
+        )
+        composeRule.setContent { MainScreen(navController = rememberNavController(), prefs = prefs) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Waiting for radar").assertIsDisplayed()
+        composeRule.onNodeWithText("If this doesn't change, turn your radar off and on").assertDoesNotExist()
     }
 
     @Test

@@ -74,9 +74,15 @@ screen stays yours.
   Flash) after, from the same device location. Sets the mode by type, so
   it leaves your radar's button-cycle configuration untouched; a manual
   button press wins for the rest of the ride. Off by default.
-- Bosch eBike live data (read-only): shows your eBike's live speed,
-  cadence, rider and motor power, battery state of charge, odometer and
-  assist mode while Bosch Flow is connected. Never writes to the bike.
+- Bosch eBike data (read-only), while Bosch Flow is connected to the bike:
+  shows the bike's battery and connection status on the home screen. Its speed
+  sets the beep timing and drives the no-radar warning, and the bike's own
+  stopped signal tells the app when you have stopped. Its lock state feeds the
+  walk-away alarm and a reminder if you walk off without locking it, and, with
+  the stopped signal, marks ride start and end for Home Assistant if you use
+  it. Cadence, rider and motor power, assist mode and the bike's own distance
+  count go only into the capture log, which is off by default. Never sends a
+  command to the bike.
 - Walk-away alarm: chirps a forgotten dashcam if it stays awake past
   the rider's leaving window after a parked-and-locked bike state.
 - No-radar warning: with a Bosch eBike, the app notices when you ride with no
@@ -384,9 +390,15 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   y distancia por detrás).
 - Luz delantera y luz trasera del radar en modo automático según el
   atardecer local.
-- Datos en vivo de la eBike Bosch (solo lectura) mientras Bosch Flow está
-  activo: velocidad, cadencia, potencia, batería, etc. Nunca envía nada a la
-  bici.
+- Datos de la eBike Bosch (solo lectura), mientras Bosch Flow está conectado a
+  la bici: la pantalla de inicio muestra la batería y el estado de conexión.
+  Con la velocidad, la app ajusta el ritmo de los pitidos y activa el aviso de
+  radar sin conectar, y la bici le indica cuándo estás parado. Según esté
+  bloqueada o no, ajusta el aviso de cámara olvidada, te avisa si te alejas sin
+  bloquearla y, si usas Home Assistant, marca allí, junto con la señal de
+  parada, el inicio y el fin de la ruta. La cadencia, la potencia, el modo de
+  asistencia y la distancia que cuenta la propia bici solo van al registro de
+  capturas, que está desactivado por defecto. Nunca envía órdenes a la bici.
 - Aviso de cámara olvidada: te avisa si la cámara delantera sigue encendida
   cuando te alejas de la bici después de aparcarla.
 - Aviso de radar sin conectar: con una eBike Bosch, la app nota si vas sin el

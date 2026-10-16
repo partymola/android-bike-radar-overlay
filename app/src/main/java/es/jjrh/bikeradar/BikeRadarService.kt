@@ -605,7 +605,7 @@ class BikeRadarService : Service() {
      * Bosch Flow app uses) over the existing bonded link, and pushes snapshots
      * into [EBikeSnapshotCoordinator] (for the AlertDecider stationary override +
      * walk-away gate) and [EBikeStateBus] (for the SYSTEM-card eBike row). It
-     * never writes to the bike.
+     * never writes the bike's command channel.
      *
      * Flag off / permission missing / no bonded eBike → reader not started,
      * the coordinator snapshot stays null, all downstream consumers fall back to

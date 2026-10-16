@@ -373,8 +373,8 @@
     <string name="onboarding_ebike_go_back">Don\'t have a Bosch eBike? Go back</string>
     <string name="onboarding_ebike_flow_open_failed">Couldn\'t open Flow. Install it from the Play Store and try again.</string>
     <string name="onboarding_ebike_privacy_heading">What\'s collected</string>
-    <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends anything to your bike</string>
-    <string name="onboarding_ebike_bullet_phone">Stays on your phone, saved to the ride log</string>
+    <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends a command to your bike</string>
+    <string name="onboarding_ebike_bullet_phone">Stays on your phone. Full readings go only into capture logs, which are off by default</string>
     <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride info is sent there</string>
 
     <!-- ════════════════════════════════════════════════════════════════
@@ -641,8 +641,8 @@
     <string name="settings_ebike_does_item_timing">Scales beep timing to your wheel speed</string>
     <string name="settings_ebike_does_item_no_radar">Warns you if you ride without the radar on</string>
     <string name="settings_ebike_whats_collected_label">What\'s collected</string>
-    <string name="settings_ebike_collected_item_reads">Reads battery, speed and pedalling - read-only, never sends anything to your bike</string>
-    <string name="settings_ebike_collected_item_phone">Stays on your phone, saved to the ride log</string>
+    <string name="settings_ebike_collected_item_reads">Reads battery, speed and pedalling - read-only, never sends a command to your bike</string>
+    <string name="settings_ebike_collected_item_phone">Stays on your phone. Full readings go only into capture logs, which are off by default</string>
     <string name="settings_ebike_collected_item_ha">Ride info goes to Home Assistant only if you set it up</string>
     <string name="settings_ebike_privacy_detail">Full detail in the Privacy screen.</string>
     <string name="settings_ebike_open_flow_failed_toast">Couldn\'t open Flow. Install it from the Play Store and try again.</string>

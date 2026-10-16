@@ -79,7 +79,7 @@ capture log (Debug screen) makes the report even more useful.
 
 | System | Status | Notes |
 |--------|--------|-------|
-| Bosch Smart System | ✅ Tested | Passive subscription to the status stream while Bosch Flow holds the link; never writes to the bike |
+| Bosch Smart System | ✅ Tested | Passive subscription to the status stream while Bosch Flow holds the link; never sends a command to the bike |
 | Bosch Classic / Active Line (pre-Smart System) | ❌ No | No BLE status stream |
 | Shimano STEPS, Brose, Yamaha, Fazua, Giant, ... | ❌ No | Different protocols |
 

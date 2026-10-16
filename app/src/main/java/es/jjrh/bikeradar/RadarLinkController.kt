@@ -109,6 +109,11 @@ internal class RadarLinkController(
      *  fallback. Without this seam the fallback's own success path is
      *  unreachable from a test. */
     private val refreshGatt: (BluetoothGatt) -> Boolean = { g -> refreshGattCacheByReflection(g) },
+    /** Any device newly paired, with its name if readable. The scan reports a
+     *  device on its first match only, until it is lost, so a radar advertising
+     *  before it was paired sends no new sighting; the service treats this as
+     *  one. */
+    private val onBonded: (mac: String, name: String?) -> Unit = { _, _ -> },
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
@@ -226,12 +231,22 @@ internal class RadarLinkController(
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
             val mac = device?.address ?: return
-            val expected = bondWatchMac ?: return
-            if (!mac.equals(expected, ignoreCase = true)) return
+            val watched = bondWatchMac?.equals(mac, ignoreCase = true) == true
             val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
             when (state) {
-                BluetoothDevice.BOND_NONE -> onRadarBondLost(mac)
-                BluetoothDevice.BOND_BONDED -> liftBondGate(mac, via = "broadcast", name = device.name)
+                BluetoothDevice.BOND_NONE -> if (watched) onRadarBondLost(mac)
+                BluetoothDevice.BOND_BONDED -> {
+                    val name = try {
+                        device.name
+                    } catch (_: SecurityException) {
+                        // Nearby devices revoked; a pin still matches by address.
+                        null
+                    }
+                    // The lift first, so the journal credits the broadcast and not
+                    // start()'s adapter query, which would lift it too.
+                    if (watched) liftBondGate(mac, via = "broadcast", name = name)
+                    onBonded(mac, name)
+                }
             }
         }
     }
@@ -268,6 +283,9 @@ internal class RadarLinkController(
      */
     @Synchronized
     private fun onRadarBondLost(mac: String) {
+        // Checked again under the monitor: the receiver read the watched radar
+        // before taking it, and a start for another radar may have run since.
+        if (!mac.equals(bondWatchMac, ignoreCase = true)) return
         Log.w(TAG, "radar bond removed (${LogRedaction.mac(mac)}); stopping reconnect loop")
         journal("radar bond removed; reconnect loop stopped")
         bondLost = true
@@ -278,11 +296,9 @@ internal class RadarLinkController(
         // the gate clear - and the NEXT genuine bond loss would then journal
         // nothing at all. Clearing here makes the invariant local.
         bondRefusalJournalled = false
-        // Under start()'s monitor, and only this radar's loop. The slot is left
-        // as it is: a cancelled job already reads inactive, and clearing it
-        // could orphan a loop another radar's start had just put there, which
-        // the loop lock would then make every later start wait behind.
-        if (jobMac.equals(mac, ignoreCase = true)) radarJob?.cancel()
+        // The slot is left as it is: a cancelled job reads inactive, so the
+        // next start() replaces it.
+        radarJob?.cancel()
         linkState.markDisconnected()
         notifications.postBondLost()
     }

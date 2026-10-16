@@ -159,7 +159,8 @@ to its file. The notes below are the working summary.
   `RadarSelection.shouldLinkRadar`; managed in Settings -> Connections -> Radar,
   and in setup's pairing step until the radar's name can only be a rear unit
   (`setupOffersPick`). A pin changed while a link to another radar runs moves
-  that link, and a pinned radar paired later moves it on its first sighting;
+  that link, and a pinned radar paired later moves it when it is paired or
+  sighted;
   the old loop is joined before the pinned radar starts
   (`RadarLinkController.followPin`,
   `BikeRadarServiceSmokeTest.aPin*`,

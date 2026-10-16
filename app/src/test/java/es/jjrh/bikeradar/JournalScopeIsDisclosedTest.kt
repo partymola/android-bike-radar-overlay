@@ -128,6 +128,8 @@ class JournalScopeIsDisclosedTest {
         "radar link moving to the pinned radar",
         // The link declining to follow a pin it cannot reach yet.
         "radar pin not bonded; link kept",
+        // The pairing is the rider's; this is the app acting on it.
+        "device paired; treated as a sighting \$shownName",
         "camera link start \$name",
         // Machinery: the rider's switch is the event, and this is the link
         // noticing it. No cue sounded and no device named.

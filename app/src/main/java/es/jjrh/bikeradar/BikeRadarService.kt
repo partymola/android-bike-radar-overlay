@@ -494,6 +494,7 @@ class BikeRadarService : Service() {
             slug = { name -> slug(name) },
             journal = linkJournal::log,
             clock = { SystemClock.elapsedRealtime() },
+            onBonded = ::onDeviceBonded,
         )
         cameraLink = CameraLightLinkController(
             context = this,
@@ -822,7 +823,7 @@ class BikeRadarService : Service() {
         }
         if (shouldLinkRadar) radarLink.start(name, mac)
         // A pin paired while a link to another radar runs writes no pref, so
-        // only its sighting can move the link
+        // its sighting or its pairing ([onDeviceBonded]) moves the link
         // (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting`).
         if (shouldLinkRadar && pinnedRadar != null && radarLink.isActive()) scope.launch { followRadarPin(name, mac) }
 
@@ -853,6 +854,22 @@ class BikeRadarService : Service() {
             return
         }
         batteryReader.launch(name, mac)
+    }
+
+    /** A device paired while the service runs, handled as its sighting, under
+     *  the scan wake's gate: a known accessory's name or the pin
+     *  (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkWhenItBonds`,
+     *  `aDevicePairedThatIsNotARadarIsLeftAlone`). */
+    private fun onDeviceBonded(mac: String, name: String?) {
+        val pinned = prefs.radarMac?.equals(mac, ignoreCase = true) == true
+        val shownName = if (pinned) {
+            RadarSelection.pinnedLinkName(mac, mac, name, RadarSelection.bondedDevices(this))
+        } else {
+            name?.takeIf { BatteryScanReceiver.matchesVariaName(it) } ?: return
+        }
+        if (prefs.isPaused) return
+        linkJournal.log("device paired; treated as a sighting $shownName")
+        scheduleRead(shownName, mac)
     }
 
     /** A sighting passes its own name and address; the pin collector passes

@@ -505,8 +505,8 @@ class BikeRadarServiceSmokeTest {
     @Test
     fun aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting() {
         // The pin was set before its radar was paired, so name-match linked the
-        // other one. Pairing writes no pref; the pinned radar's sighting is the
-        // only thing that can move the link.
+        // other one. The bonded list changes here with no broadcast, so only
+        // the pinned radar's sighting can move the link.
         val prefs = Prefs(app)
         RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
         val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
@@ -530,6 +530,186 @@ class BikeRadarServiceSmokeTest {
         readDevice(service, "RTL515", RADAR_B, 3)
         idleMainUntil { journal.starts("RTL515") == 1 }
         assertEquals("the pinned radar must be linked, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    /** [mac] newly paired under [name], or with no readable name, as Android's
+     *  Bluetooth app announces it. */
+    private fun pair(mac: String, name: String?) {
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        val device = adapter.getRemoteDevice(mac).also { if (name != null) shadowOf(it).setName(name) }
+        shadowOf(device).setBondState(android.bluetooth.BluetoothDevice.BOND_BONDED)
+        shadowOf(adapter).setBondedDevices(adapter.bondedDevices + device)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, device)
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, android.bluetooth.BluetoothDevice.BOND_BONDED),
+        )
+        shadowOf(app.mainLooper).idle()
+    }
+
+    @Test
+    fun aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkWhenItBonds() {
+        // The scan reports a device on its first match only, until it is lost,
+        // so a radar that was advertising before it was paired sends no new
+        // sighting.
+        val prefs = Prefs(app)
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        pair(RADAR_B, "RTL515")
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("the pinned radar must be linked, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        assertTrue(journal.readText().contains("radar link moving to the pinned radar"))
+        controller.destroy()
+    }
+
+    @Test
+    fun theLinkedRadarBondedAgainKeepsItsLink() {
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_A, "RearVue8"))
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        pair(RADAR_A, "RearVue8")
+        // The follow it may ask for runs off the main thread.
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("RearVue8"))
+        assertFalse(journal.readText().contains("moving to the pinned radar"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aNamelessPinnedRadarPairedIsNotNamedAfterItsAddress() {
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(NAMELESS, NAMELESS))
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair(NAMELESS, null)
+        idleMainUntil { journal.starts("radar") == 1 }
+        val text = journal.readText()
+        assertEquals("got:\n$text", 1, journal.starts("radar"))
+        assertFalse("an address reached the journal:\n$text", Regex("""(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}""").containsMatchIn(text))
+        controller.destroy()
+    }
+
+    @Test
+    fun aRadarPairedWhileNoLinkRunsStartsOnItsPairing() {
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair(RADAR_A, "RearVue8")
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("RearVue8"))
+        // A scan sighting writes the same start line, so the pairing says so.
+        assertTrue(journal.readText().contains("device paired; treated as a sighting RearVue8"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aDifferentRadarPairedAfterTheOldOneWasForgottenLinks() {
+        // What the radar screen tells a rider replacing their radar to do.
+        // The new radar is not the watched one, so start()'s adapter query
+        // is what lifts the gate.
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(emptySet())
+        shadowOf(adapter.getRemoteDevice(RADAR_A)).setBondState(android.bluetooth.BluetoothDevice.BOND_NONE)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, adapter.getRemoteDevice(RADAR_A))
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, android.bluetooth.BluetoothDevice.BOND_NONE),
+        )
+        idleMainUntil { journal.readText().contains("radar bond removed") }
+
+        pair(RADAR_B, "RTL515")
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        assertTrue(journal.readText().contains("radar re-paired (adapter) RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinnedRadarTheNameMatchDoesNotKnowStartsWhenItIsPaired() {
+        // The "my radar isn't listed" pin: only the pin lets it through.
+        val unlisted = "AA:BB:CC:DD:EE:55"
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(unlisted, "Tail unit"))
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair(unlisted, "Tail unit")
+        idleMainUntil { journal.starts("Tail unit") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
+    fun theLinkedRadarRePairedAfterItsPairingWasRemovedLinksAgain() {
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(emptySet())
+        shadowOf(adapter.getRemoteDevice(RADAR_A)).setBondState(android.bluetooth.BluetoothDevice.BOND_NONE)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, adapter.getRemoteDevice(RADAR_A))
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, android.bluetooth.BluetoothDevice.BOND_NONE),
+        )
+        idleMainUntil { journal.readText().contains("radar bond removed") }
+
+        pair(RADAR_A, "RearVue8")
+        idleMainUntil { journal.starts("RearVue8") == 2 }
+        assertEquals("got:\n${journal.readText()}", 2, journal.starts("RearVue8"))
+        assertTrue(journal.readText().contains("radar re-paired (broadcast) RearVue8"))
+        controller.destroy()
+    }
+
+    @Test
+    fun unpairingAnotherDeviceLeavesTheRadarLinkAlone() {
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, adapter.getRemoteDevice("AA:BB:CC:DD:EE:44"))
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE, android.bluetooth.BluetoothDevice.BOND_NONE),
+        )
+        shadowOf(app.mainLooper).idle()
+        assertFalse("got:\n${journal.readText()}", journal.readText().contains("radar bond removed"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aRadarPairedWhilePausedIsDroppedAsASightingWould() {
+        Prefs(app).pausedUntilEpochMs = Long.MAX_VALUE
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair(RADAR_A, "RearVue8")
+        assertEquals(0, journal.starts("RearVue8"))
+        assertFalse(journal.exists() && journal.readText().contains("device paired"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aFrontCameraPairedIsNotTakenForTheRadar() {
+        // Its name passes the gate a scan wake applies, so only the sighting's
+        // own radar match keeps it off the radar link.
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair("AA:BB:CC:DD:EE:44", "Varia Vue 49548")
+        assertTrue(journal.readText().contains("device paired; treated as a sighting Varia Vue 49548"))
+        assertEquals(0, journal.starts("Varia Vue 49548"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aDevicePairedThatIsNotARadarIsLeftAlone() {
+        // "Rear" is enough for the link's own name match but not for the gate a
+        // scan wake applies, so only that gate keeps this from linking.
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair("AA:BB:CC:DD:EE:44", "Rear light")
+        assertEquals(0, journal.starts("Rear light"))
         controller.destroy()
     }
 

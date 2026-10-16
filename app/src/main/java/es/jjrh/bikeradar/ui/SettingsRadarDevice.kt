@@ -50,7 +50,6 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
-import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
@@ -102,10 +101,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // adapter is off, so this is how the screen tracks the radio at all.
     val allBonded = remember(prefsSnap.radarMac, tickNowMs) { RadarSelection.bondedDevices(ctx) }
     val bonded = remember(allBonded) { RadarSelection.choosableRadars(allBonded) }
-    val eBikeMac = remember(allBonded) { EBikeStatusReader.findBondedEBikeMac(ctx) }
-    val others = remember(allBonded, prefsSnap.dashcamMac, eBikeMac) {
-        RadarSelection.unlistedDevices(allBonded, listOf(prefsSnap.dashcamMac, eBikeMac))
-    }
+    val others = remember(allBonded, prefsSnap.dashcamMac) { radarHatchDevices(ctx, allBonded, prefsSnap.dashcamMac) }
     // Without it the bonded list reads empty, so "pair your radar" would send
     // the rider to a Bluetooth list where the radar already is.
     val nearbyMissing = remember(tickNowMs) {
@@ -270,12 +266,16 @@ internal fun SettingsRadarDeviceContent(
                         onClick = onPairDifferent,
                     )
                 }
+                // No list above it here, so it carries setup's wording
+                // (`MainScreenPairCtaTest`).
                 RadarNotListedHatch(
                     others = others,
                     chosenMac = chosenMac,
                     expanded = othersExpanded,
                     onToggle = { othersExpanded = !othersExpanded },
                     onSelectRadar = onSelectRadar,
+                    title = stringResource(R.string.onboarding_pair_radar_other_title),
+                    subtitle = stringResource(R.string.onboarding_pair_radar_other_sub),
                 )
                 Spacer(modifier = Modifier.height(28.dp))
                 return@Column
@@ -468,7 +468,8 @@ internal fun snapOffsetCm(raw: Float): Int {
  *  radars the name heuristic doesn't know. Collapsed by default so
  *  headphones/watches don't clutter the common path; hidden entirely when
  *  there is nothing to list. Shared with the setup pairing step, which
- *  passes its own wording and a border to match the cards around it. */
+ *  passes its own wording and a border to match the cards around it; the
+ *  not-paired state above borrows that wording. */
 @Composable
 internal fun RadarNotListedHatch(
     others: List<RadarSelection.BondedRadar>,

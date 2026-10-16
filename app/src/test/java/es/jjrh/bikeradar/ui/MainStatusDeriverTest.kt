@@ -71,6 +71,14 @@ class MainStatusDeriverTest {
         assertEquals(R.string.main_status_not_paired_title, s.headlineRes)
     }
 
+    @Test fun theNotPairedCardSaysWherePairLeads() {
+        val android = derive(baseInputs(hasBond = false))
+        assertEquals(R.string.main_status_not_paired_sub, android.subtitleRes)
+        val pick = derive(baseInputs(hasBond = false).copy(radarPickOffered = true))
+        assertEquals(R.string.main_status_not_paired_title, pick.headlineRes)
+        assertEquals(R.string.main_status_not_paired_pick_sub, pick.subtitleRes)
+    }
+
     @Test fun dashcamOffBeatsHaDown() {
         // Both would fire — dashcam must win (rider safety).
         val s = derive(

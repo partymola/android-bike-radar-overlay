@@ -68,6 +68,7 @@ import es.jjrh.bikeradar.DataSource
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
+import es.jjrh.bikeradar.EBikeStatusReader
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
@@ -151,7 +152,9 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // ticking the bond check or wall-clock when the user can't see
     // the result, and it lets Doze idle the device cleanly.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasBond by remember { mutableStateOf(radarIsSelected(ctx, prefs.radarMac)) }
+    val firstBonded = remember { RadarSelection.bondedDevices(ctx) }
+    var hasBond by remember { mutableStateOf(RadarSelection.hasLinkableRadar(firstBonded, prefs.radarMac)) }
+    var radarPickOffered by remember { mutableStateOf(radarHatchDevices(ctx, firstBonded, prefs.dashcamMac).isNotEmpty()) }
     var btEnabled by remember { mutableStateOf(bluetoothIsOn(ctx)) }
     var missingPermission by remember { mutableStateOf(Permissions.missingForService(ctx)) }
     LaunchedEffect(lifecycleOwner) {
@@ -159,7 +162,9 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             // Read before the first wait, or a rider back from the Bluetooth
             // screen the banner sent them to still sees it for five seconds.
             while (true) {
-                hasBond = radarIsSelected(ctx, prefs.radarMac)
+                val bonded = RadarSelection.bondedDevices(ctx)
+                hasBond = RadarSelection.hasLinkableRadar(bonded, prefs.radarMac)
+                radarPickOffered = radarHatchDevices(ctx, bonded, prefs.dashcamMac).isNotEmpty()
                 btEnabled = bluetoothIsOn(ctx)
                 missingPermission = Permissions.missingForService(ctx)
                 delay(5_000)
@@ -268,6 +273,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         walkAwayAlarmOn = prefsSnap.walkAwayAlarmEnabled,
         radarConnecting = radarConnecting,
         connectingAdviceDue = connectingAdviceDue,
+        radarPickOffered = radarPickOffered,
     )
     val statusModel = MainStatusDeriver.derive(
         inputs,
@@ -787,7 +793,13 @@ internal fun ctaFor(
 
     !inputs.hasBond -> StatusCta(
         label = stringResource(R.string.main_cta_pair),
-        onClick = { ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) },
+        onClick = {
+            if (inputs.radarPickOffered) {
+                navController.navigate(systemRowRoute(SystemRowTarget.RADAR))
+            } else {
+                ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
+            }
+        },
     )
 
     // The radar is down in a session that had one, so the app cannot tell
@@ -863,6 +875,15 @@ private fun SettingsButton(onClick: () -> Unit) {
  * so no surface can report "Not paired" about a radar that is delivering.
  */
 internal fun radarIsSelected(ctx: Context, chosenMac: String?): Boolean = RadarSelection.hasLinkableRadar(RadarSelection.bondedDevices(ctx), chosenMac)
+
+/** The paired devices the radar screen offers to pick as the radar. Home's
+ *  Pair opens that screen only when this is not empty, so it never sends the
+ *  rider to a screen with nothing to pick (`MainScreenPairCtaTest`). */
+internal fun radarHatchDevices(
+    ctx: Context,
+    allBonded: List<RadarSelection.BondedRadar>,
+    dashcamMac: String?,
+): List<RadarSelection.BondedRadar> = RadarSelection.unlistedDevices(allBonded, listOf(dashcamMac, EBikeStatusReader.findBondedEBikeMac(ctx)))
 
 /**
  * Whether the device rows may treat the radio as usable: Bluetooth on and

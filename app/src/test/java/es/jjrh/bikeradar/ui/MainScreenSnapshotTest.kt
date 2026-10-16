@@ -30,8 +30,8 @@ import org.robolectric.annotation.GraphicsMode
  * lifecycle-driven pollers in [MainScreen].
  *
  * Variants picked to exercise the visually distinct states:
- *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error),
- *    permissions-missing in Spanish (Error) and
+ *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error) in both
+ *    locales, permissions-missing in Spanish (Error) and
  *    connecting in Spanish beside its System row
  *  - System: empty (nothing paired, HA not configured), populated (radar +
  *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
@@ -77,19 +77,29 @@ class MainScreenSnapshotTest {
 
     @Test
     fun heroNotPaired() {
-        captureRoboImage {
-            SnapshotTheme {
-                MainShell {
-                    HeroStatusCard(
-                        status = MainStatus(
-                            icon = MainStatusIcon.BluetoothDisabled,
-                            tone = MainStatusTone.Error,
-                            headline = "Radar not paired",
-                            subtitle = "Pair in Settings",
-                        ),
-                        cta = StatusCta(label = "Pair", onClick = {}),
-                    )
-                }
+        captureRoboImage { NotPairedPickHero() }
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun heroNotPairedEs() {
+        captureRoboImage { NotPairedPickHero() }
+    }
+
+    /** The not-paired card with the pick subtitle. */
+    @Composable
+    private fun NotPairedPickHero() {
+        SnapshotTheme {
+            MainShell {
+                HeroStatusCard(
+                    status = MainStatus(
+                        icon = MainStatusIcon.BluetoothDisabled,
+                        tone = MainStatusTone.Error,
+                        headline = stringResource(R.string.main_status_not_paired_title),
+                        subtitle = stringResource(R.string.main_status_not_paired_pick_sub),
+                    ),
+                    cta = StatusCta(label = stringResource(R.string.main_cta_pair), onClick = {}),
+                )
             }
         }
     }

@@ -125,7 +125,7 @@ private fun dotForStatus(
     br: BrColors,
 ): Pair<Color, Boolean> {
     // Map MainStatus to mockup's dot+pulse pairs.
-    //   Service stopped     -> fgDim, no pulse  (matches `serviceOff`)
+    //   Scanning stopped    -> fgDim, no pulse  (matches `serviceOff`)
     //   Waiting for radar   -> fgDim, pulse     (matches `searching`)
     //   Connecting to radar -> caution, pulse
     //   First-run setup     -> safe, no pulse   (matches `active` style - green welcome)
@@ -149,7 +149,7 @@ private fun dotForStatus(
         // BT-off (Warn tone) and Radar-not-paired (Error tone) share this
         // icon. The dot uses the tone so the two states are visually
         // distinct: caution amber for "fixable in two taps", danger red
-        // for "needs the system pair flow".
+        // for "no radar to talk to".
         MainStatusIcon.BluetoothDisabled -> when (tone) {
             MainStatusTone.Warn -> br.caution to false
             else -> br.danger to false

@@ -163,7 +163,7 @@ class MainScreenPermissionsHeroTest {
         compose.mainClock.advanceTimeBy(6_000)
         compose.waitForIdle()
         assertNull(shadowOf(app).peekNextStartedService())
-        compose.onAllNodesWithText("Service stopped").assertCountEquals(1)
+        compose.onAllNodesWithText("Scanning stopped").assertCountEquals(1)
     }
 
     @Test

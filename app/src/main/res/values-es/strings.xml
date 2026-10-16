@@ -89,9 +89,9 @@
 
     <!-- Tarjeta de estado principal. Título y subtítulo de cada estado. -->
     <string name="main_status_setup_title">Vamos a configurar tu radar</string>
-    <string name="main_status_setup_sub">Toca Ajustes para empezar</string>
-    <string name="main_status_service_off_title">Servicio detenido</string>
-    <string name="main_status_service_off_sub">Toca Iniciar para empezar</string>
+    <string name="main_status_setup_sub">Antes de tu primera ruta</string>
+    <string name="main_status_service_off_title">Búsqueda detenida</string>
+    <string name="main_status_service_off_sub">Sin alertas hasta que empieces a buscar</string>
     <string name="main_status_permissions_title">Faltan permisos</string>
     <string name="main_status_permissions_nearby_sub">Sin alertas hasta que concedas Dispositivos cercanos</string>
     <string name="main_status_permissions_notifications_sub">Sin Notificaciones no puedes pausar las alertas</string>
@@ -101,7 +101,8 @@
     <string name="main_status_bt_off_title">Bluetooth apagado</string>
     <string name="main_status_bt_off_sub">Radar desconectado</string>
     <string name="main_status_not_paired_title">Radar no emparejado</string>
-    <string name="main_status_not_paired_sub">Empareja en Ajustes</string>
+    <string name="main_status_not_paired_sub">Emparéjalo en los ajustes de Bluetooth</string>
+    <string name="main_status_not_paired_pick_sub">Emparéjalo o elígelo si ya lo está</string>
     <string name="main_status_dashcam_off_title">Radar activo, cámara delantera apagada</string>
     <string name="main_status_dashcam_off_sub">Enciende tu <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g></string>
     <string name="main_status_dashcam_off_sub_generic">Enciende tu cámara delantera</string>

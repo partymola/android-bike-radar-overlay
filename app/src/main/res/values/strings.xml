@@ -105,9 +105,9 @@
 
     <!-- Hero status card. Headline + subtitle for each derived state. -->
     <string name="main_status_setup_title">Let\'s set up your radar</string>
-    <string name="main_status_setup_sub">Tap Settings to begin</string>
-    <string name="main_status_service_off_title">Service stopped</string>
-    <string name="main_status_service_off_sub">Tap Start to begin</string>
+    <string name="main_status_setup_sub">Before your first ride</string>
+    <string name="main_status_service_off_title">Scanning stopped</string>
+    <string name="main_status_service_off_sub">No alerts until you start scanning</string>
     <!-- The subtitle names the one missing, Nearby devices first. The app does
          not start the radar service without Nearby devices, so no alerts at
          all; without Notifications it runs and beeps, but Pause, which only
@@ -123,7 +123,10 @@
     <string name="main_status_bt_off_title">Bluetooth is off</string>
     <string name="main_status_bt_off_sub">Radar is offline</string>
     <string name="main_status_not_paired_title">Radar not paired</string>
-    <string name="main_status_not_paired_sub">Pair in Settings</string>
+    <!-- Says where Pair leads: Android's Bluetooth list, or, when the radar
+         screen has a paired device to offer as the radar, that screen. -->
+    <string name="main_status_not_paired_sub">Pair it in Android\'s Bluetooth settings</string>
+    <string name="main_status_not_paired_pick_sub">Pair it, or pick it if it\'s already paired</string>
     <string name="main_status_dashcam_off_title">Radar live, dashcam off</string>
     <string name="main_status_dashcam_off_sub">Turn on your <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g></string>
     <string name="main_status_dashcam_off_sub_generic">Turn on your dashcam</string>

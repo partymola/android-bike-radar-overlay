@@ -70,7 +70,7 @@ data class MainStatusInputs(
     val dashcamDisplayName: String?,
     /** True when the user has the foreground service enabled (default).
      *  When false the rider has explicitly turned off all radar tracking
-     *  via Settings; the deriver surfaces a "Service stopped" status with
+     *  via Settings; the deriver surfaces a "Scanning stopped" status with
      *  a Start CTA so the rider can re-enable it from the home screen
      *  without digging through settings. Defaults to true to preserve
      *  existing call-site behaviour. */
@@ -99,6 +99,10 @@ data class MainStatusInputs(
      *  the home screen first saw it, so the card may tell the rider to turn the
      *  radar off and on. */
     val connectingAdviceDue: Boolean = false,
+    /** The radar screen has a paired device to offer as the radar
+     *  ([radarHatchDevices]), so Pair opens it rather than Android's Bluetooth
+     *  list, and the not-paired card says so. */
+    val radarPickOffered: Boolean = false,
 )
 
 /** How long connecting without data runs before the card advises turning the
@@ -113,7 +117,7 @@ object MainStatusDeriver {
     /**
      * Priority order, first match wins:
      *  1. First-run setup
-     *  2. Service stopped (user toggled the foreground service off)
+     *  2. Scanning stopped (user toggled the foreground service off)
      *  3. Nearby devices missing
      *  4. User-paused
      *  5. Bluetooth disabled (adapter off at the OS level)
@@ -142,7 +146,7 @@ object MainStatusDeriver {
      * telemetry, the dashcam is the rear-view recording the rider needs.
      * If both fire simultaneously the dashcam warning wins.
      *
-     * Service-stopped beats Paused/BtOff/NotPaired because if the service
+     * Scanning-stopped beats Paused/BtOff/NotPaired because if the service
      * isn't running there's no scanning happening at all — telling the
      * rider the radar is "not paired" when the real cause is that they
      * turned the whole thing off would be misdirection.
@@ -212,7 +216,8 @@ object MainStatusDeriver {
                 icon = MainStatusIcon.BluetoothDisabled,
                 tone = MainStatusTone.Error,
                 headlineRes = R.string.main_status_not_paired_title,
-                subtitleRes = R.string.main_status_not_paired_sub,
+                subtitleRes =
+                if (inputs.radarPickOffered) R.string.main_status_not_paired_pick_sub else R.string.main_status_not_paired_sub,
             )
         }
         if (inputs.radarFresh && inputs.radarLimited) {

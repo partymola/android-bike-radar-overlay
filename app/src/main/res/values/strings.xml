@@ -571,7 +571,7 @@
     <string name="settings_radardev_section_actions">Actions</string>
     <string name="settings_radardev_pair_different_title">Pair a different radar</string>
     <string name="settings_radardev_open">Open</string>
-    <string name="settings_radardev_pair_different_subtitle">Opens Bluetooth settings. Forget the old radar there first.</string>
+    <string name="settings_radardev_pair_different_subtitle">Opens Bluetooth settings. Replacing your radar? Forget the old one there first.</string>
     <string name="settings_radardev_section_position">Radar position</string>
     <string name="settings_radardev_position_title">Mount offset</string>
     <string name="settings_radardev_position_helper">Slide toward the side your radar is mounted.</string>

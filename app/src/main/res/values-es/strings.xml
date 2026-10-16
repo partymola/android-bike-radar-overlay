@@ -513,7 +513,7 @@
     <string name="settings_radardev_section_actions">Acciones</string>
     <string name="settings_radardev_pair_different_title">Emparejar un radar distinto</string>
     <string name="settings_radardev_open">Abrir</string>
-    <string name="settings_radardev_pair_different_subtitle">Abre los ajustes de Bluetooth. Olvida primero el radar antiguo allí.</string>
+    <string name="settings_radardev_pair_different_subtitle">Abre los ajustes de Bluetooth. ¿Sustituyes tu radar? Olvida allí primero el antiguo.</string>
     <string name="settings_radardev_section_position">Posición del radar</string>
     <string name="settings_radardev_position_title">Desfase lateral</string>
     <string name="settings_radardev_position_helper">Desliza hacia el lado donde está montado el radar.</string>

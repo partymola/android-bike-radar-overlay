@@ -71,6 +71,24 @@ class RadarSelectionTest {
         )
     }
 
+    @Test fun `a running link moves only to a pin bonded now and on another device`() {
+        assertTrue(RadarSelection.shouldReplaceLink(macA, macB, setOf(macA, macB)))
+        assertTrue(RadarSelection.shouldReplaceLink(macA, macB.lowercase(), setOf(macA, macB)))
+        // The same radar, in either case, is the link it already has.
+        assertFalse(RadarSelection.shouldReplaceLink(macA, macA.lowercase(), setOf(macA, macB)))
+        // No pin, or a pin no longer bonded: name-match chose the running one.
+        assertFalse(RadarSelection.shouldReplaceLink(macA, null, setOf(macA, macB)))
+        assertFalse(RadarSelection.shouldReplaceLink(macA, macB, setOf(macA)))
+        // Nothing running, nothing to move.
+        assertFalse(RadarSelection.shouldReplaceLink(null, macB, setOf(macA, macB)))
+    }
+
+    @Test fun `an empty bonded read never moves a running link`() {
+        // A permission hiccup or an adapter mid-toggle reads no bonds at all;
+        // the radar streaming now must keep streaming.
+        assertFalse(RadarSelection.shouldReplaceLink(macA, macB, emptySet()))
+    }
+
     @Test fun `ambiguous only when more than one radar bonded`() {
         assertFalse(RadarSelection.isAmbiguous(emptySet()))
         assertFalse(RadarSelection.isAmbiguous(setOf(macA)))

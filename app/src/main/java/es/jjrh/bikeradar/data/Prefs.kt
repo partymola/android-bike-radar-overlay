@@ -714,6 +714,17 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_DISPLAY_NAME, v).apply()
         }
 
+    /** Write a radar pin in ONE edit, so no observer sees the new address
+     *  under the old name, and drop [radarFirmwareRev] unless
+     *  [keepFirmwareRev] (`PrefsTest.pinningARadarIsOneChange`). */
+    fun setRadarPin(mac: String, name: String, keepFirmwareRev: Boolean) {
+        val e = sp.edit()
+            .putString(KEY_RADAR_MAC, mac)
+            .putString(KEY_RADAR_DISPLAY_NAME, name)
+        if (!keepFirmwareRev) e.remove(KEY_RADAR_FIRMWARE_REV)
+        e.apply()
+    }
+
     /** Lateral offset of the radar's mount from the bike centreline, in cm.
      *  Positive = mounted right of centre, negative = left, 0 = centred (no
      *  correction). The decoder adds this to every target's rangeX so a car

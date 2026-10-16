@@ -450,6 +450,76 @@ class BikeRadarServiceSmokeTest {
         return delay
     }
 
+    /** Two radars bonded, or only [bonded] of them; returns the service and
+     *  the journal file, cleared. */
+    private fun twoRadarService(bonded: List<String>): Triple<org.robolectric.android.controller.ServiceController<BikeRadarService>, BikeRadarService, File> {
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        val devices = mapOf(RADAR_A to "RearVue8", RADAR_B to "RTL515").mapValues { (mac, name) ->
+            adapter.getRemoteDevice(mac).also { shadowOf(it).setName(name) }
+        }
+        shadowOf(adapter).setBondedDevices(bonded.map { devices.getValue(it) }.toSet())
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        return Triple(controller, controller.get(), File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME))
+    }
+
+    private fun readDevice(service: BikeRadarService, name: String, mac: String, id: Int) = service.onStartCommand(
+        Intent().apply {
+            action = BikeRadarService.ACTION_READ_DEVICE
+            putExtra(BikeRadarService.EXTRA_NAME, name)
+            putExtra(BikeRadarService.EXTRA_MAC, mac)
+        },
+        0,
+        id,
+    )
+
+    private fun File.starts(name: String) = if (exists()) readLines().count { it.endsWith("radar link start $name") } else 0
+
+    @Test
+    fun aPinChangedWhileLinkedMovesTheLink() {
+        // Settings, setup and the home card write only the pref. The link to
+        // the old radar holds its loop for as long as it runs, so without the
+        // service following the pin it streams from the wrong rear unit.
+        val prefs = Prefs(app)
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_A, "RearVue8"))
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A, RADAR_B))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        assertEquals(1, journal.starts("RearVue8"))
+
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("the pinned radar must be linked, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+
+        // The same radar in another case is the link it already has.
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B.lowercase(), "RTL515"))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("re-pinning the linked radar must not relink", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting() {
+        // The pin was set before its radar was paired, so name-match linked the
+        // other one. Pairing writes no pref; the pinned radar's sighting is the
+        // only thing that can move the link.
+        val prefs = Prefs(app)
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        assertEquals(1, journal.starts("RearVue8"))
+
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(setOf(adapter.getRemoteDevice(RADAR_A), adapter.getRemoteDevice(RADAR_B)))
+        readDevice(service, "RTL515", RADAR_B, 2)
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("the pinned radar must be linked, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
     @Test
     fun aRideWithNoRadarTicksFastOnlyWhenARadarIsPaired() {
         // The service half of the no-radar warning: the loop's cadence comes
@@ -1061,5 +1131,10 @@ class BikeRadarServiceSmokeTest {
             "a capture-log file in the external-files root must be left untouched",
             rootSentinel.exists(),
         )
+    }
+
+    private companion object {
+        const val RADAR_A = "AA:BB:CC:DD:EE:11"
+        const val RADAR_B = "AA:BB:CC:DD:EE:22"
     }
 }

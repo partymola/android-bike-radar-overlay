@@ -157,7 +157,15 @@ to its file. The notes below are the working summary.
   MAC overrides the name-match in `scheduleRead` so the app never streams from
   the wrong rear unit. Pure decider in `RadarSelection.shouldLinkRadar`;
   managed in Settings -> Connections -> Radar, and in setup's pairing step
-  until the radar's name can only be a rear unit (`setupOffersPick`).
+  until the radar's name can only be a rear unit (`setupOffersPick`). A pin
+  changed while a link to another radar runs moves that link, and a pinned
+  radar paired later moves it on its first sighting; the old loop is joined
+  before the pinned radar starts (`RadarLinkController.followPin`,
+  `BikeRadarServiceSmokeTest.aPin*`,
+  `RadarLinkControllerHarnessTest.aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
+  A failed bonded read never moves a running link
+  (`RadarSelectionTest."an empty bonded read never moves a running link"`), so
+  on one the other radar keeps streaming until the pinned one is next sighted.
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by

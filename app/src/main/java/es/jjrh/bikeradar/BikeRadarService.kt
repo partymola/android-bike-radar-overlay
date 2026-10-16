@@ -545,6 +545,12 @@ class BikeRadarService : Service() {
             },
         )
         bluetoothStateMonitor.register()
+        // Settings, setup and the home card write only the pref, so a pin
+        // changed while a link runs is followed here
+        // (`BikeRadarServiceSmokeTest.aPinChangedWhileLinkedMovesTheLink`).
+        scope.launch {
+            prefs.flow.map { it.radarMac }.distinctUntilChanged().collect { followRadarPin() }
+        }
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
         launchDashcamRefresh()
@@ -815,6 +821,10 @@ class BikeRadarService : Service() {
             )
         }
         if (shouldLinkRadar) radarLink.start(name, mac)
+        // A pin paired while a link to another radar runs writes no pref, so
+        // only its sighting can move the link
+        // (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting`).
+        if (shouldLinkRadar && pinnedRadar != null && radarLink.isActive()) scope.launch { followRadarPin(name) }
 
         if (isRearDevice(name) && (radarGattActive || radarLink.isActive())) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
@@ -843,6 +853,14 @@ class BikeRadarService : Service() {
             return
         }
         batteryReader.launch(name, mac)
+    }
+
+    /** [advertisedName] when a sighting triggers it, so the link is named as a
+     *  scan-started one would be; else the pin's stored name. */
+    private suspend fun followRadarPin(advertisedName: String? = null) {
+        val pin = prefs.radarMac ?: return
+        val bonded = RadarSelection.bondedDevices(this).mapTo(HashSet()) { it.mac }
+        radarLink.followPin(advertisedName ?: prefs.radarDisplayName ?: pin, pin, bonded)
     }
 
     // ── capture log ───────────────────────────────────────────────────────────

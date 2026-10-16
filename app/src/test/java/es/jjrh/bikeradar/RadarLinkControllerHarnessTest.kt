@@ -33,6 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -128,6 +129,9 @@ class RadarLinkControllerHarnessTest {
         val events: MutableList<String> = Collections.synchronizedList(mutableListOf())
         val opens get() = events.count { it == "open" }
         val connects get() = events.count { it == "connected" }
+
+        /** Runs inside each disconnect edge, so a test can act mid-teardown. */
+        @Volatile var onDisconnect: () -> Unit = {}
         override fun markLinkOpen() {
             events += "open"
         }
@@ -136,6 +140,7 @@ class RadarLinkControllerHarnessTest {
         }
         override fun markDisconnected() {
             events += "disconnected"
+            onDisconnect()
         }
         override fun snapshot(): RadarLinkState = RadarLinkState()
     }
@@ -465,6 +470,128 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
 
         assertTrue("teardown must take the handler with it", pumpUntil { !RadarControlBridge.available })
+    }
+
+    // ── a pin moved while a link runs ───────────────────────────────────────────
+
+    private val pinnedMac = "11:22:33:44:55:66"
+
+    @Test fun aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens() = runTest {
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { gateway.connects == 1 })
+        val oldGatt = requireNotNull(link.gatt)
+        val oldCb = requireNotNull(link.cb)
+
+        controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))
+
+        // Joined: the old link's teardown is done before the pinned one opens,
+        // so it cannot mark the new radar down or take its tail-light handler.
+        assertEquals(listOf("open", "connected", "disconnected"), gateway.events.toList())
+        assertEquals(1, link.openCount)
+        assertFalse(RadarControlBridge.available)
+        assertTrue(journalHas("radar pin changed; relinking"))
+
+        assertTrue(pumpUntil { link.openCount == 2 })
+        assertEquals(pinnedMac, requireNotNull(link.gatt).device.address)
+        assertTrue(journalHas("radar link start Pinned"))
+        // A frame still arriving on the old link reaches nobody.
+        oldCb.onCharacteristicChanged(oldGatt, oldGatt.getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V2), v2TargetFrame.hexToBytes())
+        pumpUntil(timeoutMs = 300) { false }
+        assertTrue(RadarStateBus.state.value.vehicles.isEmpty())
+
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journal.count { it == "radar handshake complete" } >= 2 })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue("events=${gateway.events}", pumpUntil { gateway.connects == 2 })
+        assertEquals("the pinned radar's first frame is the last edge", "connected", gateway.events.last())
+        controller.forceReconnect()
+    }
+
+    @Test fun aSightingDuringTheCutStartsNothingBesideTheOldTeardown() = runTest {
+        // The pinned radar's own sighting can land while the old loop is still
+        // tearing down; a second loop then would race that teardown.
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        var startsDuringTeardown = -1
+        gateway.onDisconnect = {
+            gateway.onDisconnect = {}
+            controller.start("Pinned", pinnedMac)
+            startsDuringTeardown = journal.count { it == "radar link start Pinned" }
+        }
+
+        controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))
+
+        assertEquals("a start inside the old loop's teardown must wait", 0, startsDuringTeardown)
+        assertEquals(1, journal.count { it == "radar link start Pinned" })
+        controller.forceReconnect()
+    }
+
+    @Test fun theNewRadarsLightIsNotHeldByAnOverrideOfTheOldOne() = runTest {
+        // A manual press on the old radar's light is about that unit; carried
+        // over, it would hold the pinned radar's auto-mode off for the deadband.
+        ShadowLog.clear()
+        fun lightSets() = ShadowLog.getLogsForTag("BikeRadar.Radar").count { it.msg.startsWith("radar light ") && it.msg.contains(" applied=") }
+        val link = Link()
+        val controller = controller(link, prefs = prefs(radarLightAutoMode = true))
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("the first radar's light is set", pumpUntil { lightSets() == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff01") // baseline: slot 0
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff01") // the rider's press
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
+
+        controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))
+        assertTrue(pumpUntil { link.openCount == 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journal.count { it == "radar handshake complete" } >= 2 })
+        assertTrue("the pinned radar's light must be set too", pumpUntil { lightSets() == 2 })
+        controller.forceReconnect()
+    }
+
+    @Test fun aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone() = runTest {
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, gateway = gateway)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+
+        // The linked radar in another case, and a pin a failed bonded read
+        // cannot confirm: neither may cut a radar that is covering the rider.
+        controller.followPin("TestRadar", mac.lowercase(), setOf(mac))
+        controller.followPin("Pinned", pinnedMac, emptySet())
+
+        assertTrue(controller.isActive())
+        assertEquals(1, link.openCount)
+        assertFalse(gateway.events.contains("disconnected"))
+        assertFalse(journalHas("relinking"))
+
+        // A link that has ended is not moved: the scan path starts the pinned one.
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))
+        assertFalse(controller.isActive())
+        assertFalse(journalHas("radar link start Pinned"))
     }
 
     // ── radar-light auto-mode set + 2f14 override branch ────────────────────────

@@ -14,7 +14,9 @@ import es.jjrh.bikeradar.data.Prefs
  * bike) can pin THIS bike's radar explicitly; [es.jjrh.bikeradar.data.Prefs.radarMac]
  * then overrides the name-match so the app never silently streams from the
  * wrong rear-facing safety device (a confidently-wrong "all clear" from a
- * radar that isn't on this bike is the failure this guards against).
+ * radar that isn't on this bike is the failure this guards against). A pin
+ * changed while a link runs moves it, unless the bonded read fails
+ * ([shouldReplaceLink], `BikeRadarServiceSmokeTest.aPinChangedWhileLinkedMovesTheLink`).
  *
  * The override is a SOFT preference: if the chosen MAC is no longer bonded
  * (e.g. a re-pair changed the address), selection falls back to name-match
@@ -59,6 +61,18 @@ object RadarSelection {
         }
         return nameMatchesRadar
     }
+
+    /**
+     * Whether a link running to [linkedMac] must move to [pinMac]: only when a
+     * pin is set, bonded in [bondedMacs] now, and is another device. A failed
+     * bonded read is empty, so it never cuts a working link
+     * (`an empty bonded read never moves a running link`). Pinned in
+     * `RadarSelectionTest` and, on the live link, `RadarLinkControllerHarnessTest`.
+     */
+    fun shouldReplaceLink(linkedMac: String?, pinMac: String?, bondedMacs: Set<String>): Boolean = linkedMac != null &&
+        pinMac != null &&
+        !linkedMac.equals(pinMac, ignoreCase = true) &&
+        bondedMacs.any { it.equals(pinMac, ignoreCase = true) }
 
     /** More than one bonded radar means the name-match is ambiguous and the UI
      *  should prompt the rider to pick which one is on this bike. */
@@ -181,11 +195,11 @@ object RadarSelection {
 
     /** Pin [radar] as this bike's. The only path that writes a pin. A
      *  different unit drops the stored firmware revision, which described the
-     *  old one (`RadarSelectionPinTest`). */
+     *  old one (`RadarSelectionPinTest`). One edit, because a running service
+     *  moves its link on the change and must not start it under the old name
+     *  (`RadarSelectionPinTest.pinning is one change`). */
     fun pin(prefs: Prefs, radar: BondedRadar) {
-        if (!radar.mac.equals(prefs.radarMac, ignoreCase = true)) prefs.radarFirmwareRev = null
-        prefs.radarMac = radar.mac
-        prefs.radarDisplayName = radar.name
+        prefs.setRadarPin(radar.mac, radar.name, keepFirmwareRev = radar.mac.equals(prefs.radarMac, ignoreCase = true))
     }
 
     /** A bonded radar candidate: its address + readable local name. */

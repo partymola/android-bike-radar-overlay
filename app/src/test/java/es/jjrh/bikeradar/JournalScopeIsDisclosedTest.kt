@@ -122,6 +122,10 @@ class JournalScopeIsDisclosedTest {
         "radar legacy stream silent; tearing down",
         "radar legacy stream live",
         "radar legacy stream ended \$tally",
+        // Machinery, like the camera's exit below: the rider's pick is the
+        // event, and this is the link following it. No cue sounded and no
+        // device named.
+        "radar pin changed; relinking",
         "camera link start \$name",
         // Machinery: the rider's switch is the event, and this is the link
         // noticing it. No cue sounded and no device named.

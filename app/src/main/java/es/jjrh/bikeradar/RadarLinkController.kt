@@ -24,10 +24,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
@@ -109,6 +112,18 @@ internal class RadarLinkController(
 ) {
     // The connection coroutine; single-slot, guarded by start()'s @Synchronized.
     @Volatile private var radarJob: Job? = null
+
+    // The radar [radarJob] was started for. Set in [start], unlike
+    // [currentRadarMac], so [followPin] knows it before the loop runs.
+    @Volatile private var jobMac: String? = null
+
+    // True while [followPin] waits for the old loop to finish: a sighting then
+    // must not start a second loop beside one still tearing down
+    // (`aSightingDuringTheCutStartsNothingBesideTheOldTeardown`). Set and
+    // cleared under [start]'s monitor.
+    @Volatile private var replacingLink = false
+
+    private val followPinLock = Mutex()
 
     // MAC currently driven by the link, exposed read-only so the bond receiver
     // matches the right device and the overlay/HA lambdas can resolve the slug.
@@ -261,7 +276,7 @@ internal class RadarLinkController(
 
     @Synchronized
     fun start(name: String, mac: String) {
-        if (radarJob?.isActive == true) return
+        if (radarJob?.isActive == true || replacingLink) return
         // Ask the adapter, do not wait to be told. BOND_BONDED is an edge and
         // there are two ordinary ways to miss it: a re-pair can land on a
         // different address (the peer is free to change it), and a sighting of
@@ -284,7 +299,53 @@ internal class RadarLinkController(
         }
         Log.i(TAG, "starting radar link to $name ${LogRedaction.mac(mac)}")
         journal("radar link start $name")
+        jobMac = mac
         radarJob = scope.launch { runRadarConnection(mac, name) }
+    }
+
+    /**
+     * Move a running link to the radar the rider pinned, which [start] alone
+     * never does while a loop runs. Acts only while a link runs and as
+     * [RadarSelection.shouldReplaceLink] allows, so a null pin, the same radar
+     * or a failed bonded read leaves the link alone
+     * (`aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone`). The old loop is
+     * joined before the pinned radar starts, so the loop's own teardown cannot
+     * land on the new link
+     * (`aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
+     *
+     * The cut is an ordinary disconnect, deliberately: the rear is uncovered
+     * until the new radar's first frame, so the drop banner and cue run as for
+     * any drop, and a pinned radar slower to stream than the walk-away
+     * threshold can sound that alarm as any drop can.
+     */
+    suspend fun followPin(pinName: String, pinMac: String?, bondedMacs: Set<String>) = followPinLock.withLock {
+        val running = beginReplacement(pinMac, bondedMacs) ?: return@withLock
+        try {
+            running.cancelAndJoin()
+        } catch (t: Throwable) {
+            replacingLink = false
+            throw t
+        }
+        finishReplacement(pinName, requireNotNull(pinMac))
+    }
+
+    @Synchronized
+    private fun beginReplacement(pinMac: String?, bondedMacs: Set<String>): Job? {
+        val running = radarJob?.takeIf { it.isActive } ?: return null
+        if (!RadarSelection.shouldReplaceLink(jobMac, pinMac, bondedMacs)) return null
+        journal("radar pin changed; relinking")
+        replacingLink = true
+        return running
+    }
+
+    @Synchronized
+    private fun finishReplacement(name: String, mac: String) {
+        // A manual override of the old radar's light is not this one's
+        // (`theNewRadarsLightIsNotHeldByAnOverrideOfTheOldOne`).
+        radarLightUserOverride = false
+        radarLightOffSinceMs = null
+        replacingLink = false
+        start(name, mac)
     }
 
     /**

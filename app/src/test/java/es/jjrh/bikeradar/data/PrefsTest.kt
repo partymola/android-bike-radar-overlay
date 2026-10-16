@@ -585,6 +585,31 @@ class PrefsTest {
     }
 
     @Test
+    fun pinningARadarIsOneChange() {
+        prefs.radarMac = "AA:AA:AA:AA:AA:AA"
+        prefs.radarDisplayName = "RearVue8"
+        prefs.radarFirmwareRev = "6.70"
+        val sp = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        val seen = mutableListOf<PrefsSnapshot>()
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> seen += prefs.snapshot() }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+
+        prefs.setRadarPin("BB:BB:BB:BB:BB:BB", "RTL515", keepFirmwareRev = false)
+
+        // The first thing a running service sees: written one key at a time,
+        // it would start the new radar's link under the old one's name.
+        val first = seen.first()
+        assertEquals("BB:BB:BB:BB:BB:BB", first.radarMac)
+        assertEquals("RTL515", first.radarDisplayName)
+        assertNull(first.radarFirmwareRev)
+        sp.unregisterOnSharedPreferenceChangeListener(listener)
+
+        prefs.radarFirmwareRev = "6.80"
+        prefs.setRadarPin("BB:BB:BB:BB:BB:BB", "RTL515", keepFirmwareRev = true)
+        assertEquals("6.80", prefs.radarFirmwareRev)
+    }
+
+    @Test
     fun dumpAllRedactsIdentifiersButKeepsSettings() {
         prefs.dashcamMac = "AA:BB:CC:DD:EE:FF"
         prefs.dashcamDisplayName = "My dashcam"

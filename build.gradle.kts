@@ -1,6 +1,6 @@
 plugins {
     id("com.android.application") version "9.4.1" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21" apply false
     // Roborazzi renders screenshot tests through Robolectric Native Graphics,
     // so they run in cold-cache CI (unlike Paparazzi's layoutlib JNI loader,
     // which forced the old test-exclusion hack).

@@ -63,6 +63,7 @@ import es.jjrh.bikeradar.data.HaIntent
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ── Step 2 - Home Assistant ──────────────────────────────────────────
 
@@ -77,6 +78,7 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
     var tokenField by remember { mutableStateOf(creds.token) }
     var tokenVisible by remember { mutableStateOf(false) }
     var pingResult by remember { mutableStateOf<Result<String>?>(null) }
+    var mqttResult by remember { mutableStateOf<Result<String>?>(null) }
     var pinging by remember { mutableStateOf(false) }
     val canSubmit = urlField.isNotBlank() && tokenField.isNotBlank()
     val savedWithoutTestingMsg = stringResource(R.string.onboarding_ha_saved_without_testing)
@@ -141,24 +143,42 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                             // it, onContinueSaving would suppress the
                             // "Saved without testing" toast on stale creds.
                             pingResult = null
+                            mqttResult = null
                         },
                         tokenField = tokenField,
                         onTokenChange = {
                             tokenField = it
                             pingResult = null
+                            mqttResult = null
                         },
                         tokenVisible = tokenVisible,
                         onToggleTokenVisible = { tokenVisible = !tokenVisible },
                         pingResult = pingResult,
+                        mqttResult = mqttResult,
                         pinging = pinging,
                         canSubmit = canSubmit,
                         onTest = {
                             pinging = true
+                            // Taken before the test: a rider can edit the
+                            // fields while it runs, and that result belongs
+                            // to what was tested, not to what is typed now
+                            // (`HaStepConnectionTest`).
+                            val url = urlField.trim()
+                            val tok = tokenField.trim()
                             scope.launch(Dispatchers.IO) {
-                                val client = HaClient(urlField.trim(), tokenField.trim())
-                                pingResult = client.ping()
-                                if (pingResult?.isSuccess == true) {
-                                    creds.save(urlField.trim(), tokenField.trim())
+                                val result = HaClient(url, tok).testConnection()
+                                // On Main, where the fields are edited, so no
+                                // edit lands between the check and the chips.
+                                val stillTested = withContext(Dispatchers.Main) {
+                                    (urlField.trim() == url && tokenField.trim() == tok).also {
+                                        if (it) {
+                                            pingResult = result.ping
+                                            mqttResult = result.mqtt
+                                        }
+                                    }
+                                }
+                                if (stillTested && result.ping.isSuccess) {
+                                    creds.save(url, tok)
                                     prefs.haLastValidatedEpochMs = System.currentTimeMillis()
                                     prefs.haIntent = HaIntent.YES
                                 }
@@ -176,6 +196,7 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                             urlField = ""
                             tokenField = ""
                             pingResult = null
+                            mqttResult = null
                             prefs.haIntent = HaIntent.UNSET
                         },
                     )
@@ -310,6 +331,7 @@ internal fun HaFieldsBlock(
     canSubmit: Boolean,
     onTest: () -> Unit,
     onChangeIntent: () -> Unit,
+    mqttResult: Result<String>? = null,
 ) {
     val br = LocalBrColors.current
     // Selected-state pill: keeps the user's pick visible and one tap away
@@ -424,6 +446,21 @@ internal fun HaFieldsBlock(
                 )
             },
             color = if (r.isSuccess) br.safe else br.danger,
+        )
+    }
+    // The same chip Settings shows: Home Assistant answering is not enough,
+    // every publish goes through its MQTT integration.
+    mqttResult?.let { r ->
+        BrChip(
+            text = if (r.isSuccess) {
+                stringResource(R.string.settings_ha_chip_mqtt_ready)
+            } else {
+                stringResource(
+                    R.string.settings_ha_chip_mqtt_error,
+                    r.exceptionOrNull()?.message ?: stringResource(R.string.onboarding_ha_error_generic),
+                )
+            },
+            color = if (r.isSuccess) br.safe else br.caution,
         )
     }
     // When fields are incomplete, the dual footer shows a disabled

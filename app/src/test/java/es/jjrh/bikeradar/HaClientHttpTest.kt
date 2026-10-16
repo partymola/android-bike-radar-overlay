@@ -273,6 +273,32 @@ class HaClientHttpTest {
     }
 
     @Test
+    fun testConnectionProbesMqttAfterAGoodPing() = runTest {
+        respondAll(200)
+        val r = client().testConnection()
+        assertTrue(r.ping.isSuccess)
+        assertEquals("MQTT OK", r.mqtt?.getOrThrow())
+        assertEquals(listOf("/api/", "/api/services/mqtt/publish"), requests.map { it.path })
+    }
+
+    @Test
+    fun testConnectionReportsAMissingMqttIntegration() = runTest {
+        statusFor = { topic -> if (topic == null) 200 else 404 }
+        val r = client().testConnection()
+        assertTrue(r.ping.isSuccess)
+        assertTrue(r.mqtt!!.exceptionOrNull()!!.message!!.contains("MQTT integration is not enabled"))
+    }
+
+    @Test
+    fun testConnectionSkipsTheProbeAfterAFailedPing() = runTest {
+        respondAll(401)
+        val r = client().testConnection()
+        assertTrue(r.ping.isFailure)
+        assertNull(r.mqtt)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
     fun probeMqttServiceReturnsFailureOnConnectionRefused() = runTest {
         val r = HaClient(deadPortUrl(), "tok").probeMqttService()
         assertTrue(r.isFailure)

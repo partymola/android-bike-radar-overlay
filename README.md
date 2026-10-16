@@ -243,8 +243,10 @@ via MQTT Discovery on HA's default `homeassistant/` prefix, so
 entities appear automatically. Dashboards, automations and
 Grafana/InfluxDB are up to you.
 
-If the MQTT broker or the MQTT integration is missing, HA pushes
-silently no-op. The in-app "Test and save" button surfaces this.
+If the MQTT broker or the MQTT integration is missing, the app's pushes are
+silently dropped. "Test and save" in Settings and "Test connection" in setup
+both catch a missing integration, but not a broker that is down behind a
+working one, since HA still accepts the publish.
 
 ## Troubleshooting & FAQ
 

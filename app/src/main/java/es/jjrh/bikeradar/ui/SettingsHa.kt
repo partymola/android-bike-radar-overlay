@@ -139,17 +139,14 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
             }
             pinging = true
             scope.launch(Dispatchers.IO) {
-                val client = HaClient(url, tok)
-                val pr = client.ping()
-                pingResult = pr
-                if (pr.isSuccess) {
+                val result = HaClient(url, tok).testConnection()
+                pingResult = result.ping
+                mqttResult = result.mqtt
+                if (result.ping.isSuccess) {
                     creds.save(url, tok)
                     prefs.haLastValidatedEpochMs = System.currentTimeMillis()
                     prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
                     haConfigured = true
-                    mqttResult = client.probeMqttService()
-                } else {
-                    mqttResult = null
                 }
                 resultForCreds = url to tok
                 pinging = false

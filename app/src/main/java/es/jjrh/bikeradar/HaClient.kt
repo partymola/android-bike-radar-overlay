@@ -192,6 +192,19 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     /**
+     * What a rider's "test" button checks: that Home Assistant answers with
+     * this token, then, only if it does, that its MQTT integration is there,
+     * since every publish goes through it. Setup and Settings both test
+     * through here, so neither reports a Home Assistant as working without
+     * also checking MQTT (`HaClientHttpTest`, `HaStepConnectionTest`,
+     * `SettingsHaConnectionTest`).
+     */
+    suspend fun testConnection(): HaConnectionTest {
+        val ping = ping()
+        return HaConnectionTest(ping, if (ping.isSuccess) probeMqttService() else null)
+    }
+
+    /**
      * Read the response stream to completion so the underlying TCP socket
      * can be returned to the JDK keep-alive pool. Without this (or with
      * `disconnect()`) every publish opens a fresh TCP+TLS connection and
@@ -555,6 +568,10 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         private const val RIDE_SUMMARY_EXPIRE_AFTER_S = 600
     }
 }
+
+/** The outcome of [HaClient.testConnection]; [mqtt] is null when the ping
+ *  failed and the probe was not run. */
+data class HaConnectionTest(val ping: Result<String>, val mqtt: Result<String>?)
 
 /**
  * Single source of truth for every category of data Bike Radar sends

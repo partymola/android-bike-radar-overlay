@@ -342,6 +342,37 @@ class WalkAwayAlarmTest {
     }
 
     @Test
+    fun shutdown_stopsALiveAlarm_andRestoresTheVolume() {
+        val fake = FakeTone()
+        val a = alarm { fake }
+        a.start()
+        a.shutdown()
+        assertFalse(fake.isPlaying)
+        assertEquals(LOW_ALARM_VOLUME, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
+        assertNull(Prefs(context).walkAwaySavedAlarmVolume)
+    }
+
+    @Test
+    fun startAfterShutdown_doesNothing() {
+        // The service's tick can decide FIRE on another thread just before
+        // onDestroy shuts the alarm down, and reach start() after it. A tone
+        // started then has no owner left to stop it, and its cap job would
+        // be launched on a cancelled scope.
+        var built = 0
+        val a = alarm {
+            built++
+            FakeTone()
+        }
+        a.shutdown()
+        a.start()
+        assertEquals("no tone may be built after shutdown", 0, built)
+        assertEquals(LOW_ALARM_VOLUME, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
+        assertNull(Prefs(context).walkAwaySavedAlarmVolume)
+        assertNull("no focus may be requested after shutdown", shadowAm.lastAudioFocusRequest)
+        assertFalse("nor may it vibrate", shadowVibrator.isVibrating)
+    }
+
+    @Test
     fun start_withoutVibrator_skipsVibration_butStillPlays() {
         shadowVibrator.setHasVibrator(false)
         val fake = FakeTone()

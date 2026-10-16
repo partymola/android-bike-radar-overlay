@@ -52,7 +52,7 @@ internal interface AlarmTone {
  *  - it vibrates explicitly via the `Vibrator` service, because channel-level
  *    vibration is DND-suppressed when the channel doesn't bypass DND.
  *
- * [start] and [stop] are `@Synchronized` on this instance so the FIRE path, the
+ * [start], [stop] and [shutdown] are `@Synchronized` on this instance so the FIRE path, the
  * dismiss / snooze / auto-dismiss handlers, the self-capping job, and onDestroy
  * teardown can't interleave the ringtone / focus / saved-volume state. The tone
  * self-caps after [WALKAWAY_RINGTONE_CAP_MS]; the decider's rate limit then
@@ -110,6 +110,9 @@ internal class WalkAwayAlarm(
      *  notification, re-starting the tone for another bounded window. */
     private var ringtoneCapJob: Job? = null
 
+    /** Set by [shutdown]; every later [start] does nothing. */
+    private var shutDown = false
+
     init {
         // No alarm can be active at construction time (the tone dies with its
         // process), so the repair is safe here.
@@ -118,6 +121,7 @@ internal class WalkAwayAlarm(
 
     @Synchronized
     fun start() {
+        if (shutDown) return
         vibrate()
         if (tone?.isPlaying == true) return
 
@@ -265,6 +269,20 @@ internal class WalkAwayAlarm(
             prefs.walkAwaySavedAlarmVolume = null
         }
         savedAlarmVolume = null
+    }
+
+    /**
+     * [stop] for good, for the service's onDestroy. The service's tick runs
+     * off the main thread and can decide to fire just before onDestroy, then
+     * reach [start] after it; a tone started then would have no owner to stop
+     * it, and its cap job would land on a cancelled scope. So every [start]
+     * after this does nothing (`startAfterShutdown_doesNothing`,
+     * `BikeRadarServiceSmokeTest.aWalkAwayAlarmStartedAfterTheServiceStopsDoesNothing`).
+     */
+    @Synchronized
+    fun shutdown() {
+        shutDown = true
+        stop()
     }
 
     /**

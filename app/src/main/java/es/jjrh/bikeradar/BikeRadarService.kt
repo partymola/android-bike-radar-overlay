@@ -64,7 +64,10 @@ class BikeRadarService : Service() {
 
     private lateinit var haPublisher: HaPublisher
     private lateinit var notifications: ServiceNotifications
-    private lateinit var walkAwayAlarm: WalkAwayAlarm
+
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var walkAwayAlarm: WalkAwayAlarm
+        private set
     private lateinit var radarLink: RadarLinkController
     private lateinit var cameraLink: CameraLightLinkController
     private lateinit var batteryReader: BatteryReader
@@ -745,7 +748,7 @@ class BikeRadarService : Service() {
             reconnectBannerView?.let { reconnectHost.detach(it) }
             reconnectBannerView = null
         }
-        if (::walkAwayAlarm.isInitialized) walkAwayAlarm.stop()
+        if (::walkAwayAlarm.isInitialized) walkAwayAlarm.shutdown()
         if (::rideWakeLock.isInitialized) rideWakeLock.release()
         alertBeeper?.release()
         alertBeeper = null
@@ -761,8 +764,10 @@ class BikeRadarService : Service() {
         // behind. Prune clears those, but the last one written survives until
         // the next open.
         closeCaptureLog()
-        // Walk-away and bond-lost notifications survive stopForeground; clear
-        // after scope.cancel() so no in-flight coroutine can re-emit them.
+        // Walk-away and bond-lost notifications survive stopForeground, so
+        // clear them here. A walk-away tick already past its decision can
+        // still post after this; that alert's buttons then only clear it
+        // (`InternalControlReceiverTest`).
         notifications.cancelWalkAway()
         notifications.cancelBondLost()
         // Companion-object cache survives across service instances within the

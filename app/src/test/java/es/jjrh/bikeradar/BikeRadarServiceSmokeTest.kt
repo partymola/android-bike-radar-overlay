@@ -124,6 +124,20 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aWalkAwayAlarmStartedAfterTheServiceStopsDoesNothing() {
+        // The tick that fires the alarm runs off the main thread and can reach
+        // start() after onDestroy. Audio focus is requested before the tone is
+        // built, so a start that ran would leave a request here.
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        val audio = shadowOf(service.getSystemService(AudioManager::class.java))
+        controller.destroy()
+        service.walkAwayAlarm.start()
+        assertNull("the alarm started after the service stopped", audio.lastAudioFocusRequest)
+    }
+
+    @Test
     fun onCreateRegistersNotificationChannel() {
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()

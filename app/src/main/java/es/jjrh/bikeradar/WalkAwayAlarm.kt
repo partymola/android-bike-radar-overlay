@@ -48,8 +48,7 @@ internal interface AlarmTone {
  *    level in [stop], so a low bedside-alarm slider can't swallow a
  *    forgotten-dashcam alert; the saved level is also persisted
  *    ([Prefs.walkAwaySavedAlarmVolume]) before the force, so a process death
- *    mid-alarm cannot strand the phone's alarm stream at max - the next
- *    instance repairs the leaked override at construction;
+ *    mid-alarm leaves a record to repair from ([repairLeakedOverride]);
  *  - it vibrates explicitly via the `Vibrator` service, because channel-level
  *    vibration is DND-suppressed when the channel doesn't bypass DND.
  *
@@ -112,24 +111,9 @@ internal class WalkAwayAlarm(
     private var ringtoneCapJob: Job? = null
 
     init {
-        // Repair a leaked alarm-stream override. The persisted slot is only
-        // ever non-null between "force to max" and the matching restore, so
-        // finding a value here means the previous process died mid-alarm and
-        // the rider's alarm stream is still pinned at max. No alarm can be
-        // active at construction time (the tone dies with its process), so
-        // restoring unconditionally is safe. Best-effort, like every other
-        // volume write in this class.
-        prefs.walkAwaySavedAlarmVolume?.let { leaked ->
-            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            try {
-                val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-                am.setStreamVolume(AudioManager.STREAM_ALARM, leaked.coerceIn(0, max), 0)
-                Log.i(TAG, "restored alarm volume leaked by a mid-alarm process death")
-            } catch (t: Throwable) {
-                Log.w(TAG, "leaked alarm-volume restore failed: $t")
-            }
-            prefs.walkAwaySavedAlarmVolume = null
-        }
+        // No alarm can be active at construction time (the tone dies with its
+        // process), so the repair is safe here.
+        repairLeakedOverride(context, prefs)
     }
 
     @Synchronized
@@ -299,6 +283,33 @@ internal class WalkAwayAlarm(
          *  re-fires the notification, re-starting the tone for another bounded
          *  window. */
         private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
+
+        /**
+         * Restore an alarm-stream override a process death left behind. The
+         * persisted slot is written just before "force to max" and cleared by
+         * the matching restore, so a value here means a process died mid-alarm
+         * and the stream is likely still pinned at max. Callers must hold no
+         * live alarm: the service's alarm at construction
+         * (`WalkAwayAlarmTest.construction_restoresVolumeLeakedByProcessDeath`),
+         * and the notification receiver only when no service is running
+         * (`InternalControlReceiverTest`). Best-effort, like every other
+         * volume write in this class. True when a volume was restored.
+         */
+        fun repairLeakedOverride(context: Context, prefs: Prefs): Boolean {
+            val leaked = prefs.walkAwaySavedAlarmVolume ?: return false
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val restored = try {
+                val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, leaked.coerceIn(0, max), 0)
+                Log.i(TAG, "restored alarm volume leaked by a mid-alarm process death")
+                true
+            } catch (t: Throwable) {
+                Log.w(TAG, "leaked alarm-volume restore failed: $t")
+                false
+            }
+            prefs.walkAwaySavedAlarmVolume = null
+            return restored
+        }
 
         /**
          * The production [AlarmTone]: the system default alarm sound, looped

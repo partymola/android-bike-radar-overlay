@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
 
 /**
@@ -19,6 +18,14 @@ import es.jjrh.bikeradar.data.Prefs
  * the safety actions off the dev receiver is defense-in-depth, so a future
  * re-export of that receiver could never let `am broadcast` silently pause
  * the overlay or dismiss a walk-away alarm.
+ *
+ * A button can outlive its service: the walk-away alert is a plain
+ * notification, so it can survive an unclean death, and swiping it counts as
+ * Dismiss. So no action here starts a service once its onDestroy has run.
+ * With none running, the walk-away buttons clear the alert and restore an
+ * alarm volume it left at maximum, and say so in the link journal as the
+ * service's own dismiss does; a running service always gets them, since it
+ * may be sounding the alarm (`InternalControlReceiverTest`).
  */
 class InternalControlReceiver : BroadcastReceiver() {
 
@@ -26,25 +33,39 @@ class InternalControlReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         Log.i(TAG, "received $action")
         val prefs = Prefs(ctx)
+        // Set in the service's onCreate and cleared in its onDestroy
+        // (`onCreatePublishesTheLinkStateAndDestroyRetractsIt`). Not
+        // serviceRunningMarker, which an unclean death leaves set.
+        val serviceRunning = BikeRadarService.radarLinkStateForUi != null
 
         when (action) {
             ACTION_PAUSE_1H -> {
                 prefs.pausedUntilEpochMs = System.currentTimeMillis() + 3_600_000L
                 Log.i(TAG, "paused until ${prefs.pausedUntilEpochMs}")
-                updateServiceNotification(ctx)
+                if (serviceRunning) updateServiceNotification(ctx)
             }
             ACTION_RESUME -> {
                 prefs.pausedUntilEpochMs = 0L
                 Log.i(TAG, "resumed")
-                updateServiceNotification(ctx)
+                if (serviceRunning) updateServiceNotification(ctx)
             }
-            ACTION_WALKAWAY_DISMISS -> {
-                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_DISMISS)
-            }
-            ACTION_WALKAWAY_SNOOZE -> {
-                forwardToService(ctx, BikeRadarService.ACTION_WALKAWAY_SNOOZE)
-            }
+            ACTION_WALKAWAY_DISMISS -> walkAway(ctx, prefs, serviceRunning, BikeRadarService.ACTION_WALKAWAY_DISMISS)
+            ACTION_WALKAWAY_SNOOZE -> walkAway(ctx, prefs, serviceRunning, BikeRadarService.ACTION_WALKAWAY_SNOOZE)
             else -> Log.w(TAG, "unknown action $action")
+        }
+    }
+
+    private fun walkAway(ctx: Context, prefs: Prefs, serviceRunning: Boolean, serviceAction: String) {
+        if (serviceRunning) {
+            forwardToService(ctx, serviceAction)
+            return
+        }
+        Log.i(TAG, "walk-away alert cleared; no service running")
+        ServiceNotifications(ctx) { prefs }.cancelWalkAway()
+        val journal = LinkEventJournal({ ctx.getExternalFilesDir(null) })
+        journal.log("walk-away alarm cleared by rider; no service running")
+        if (WalkAwayAlarm.repairLeakedOverride(ctx, prefs)) {
+            journal.log("walk-away alarm volume restored; the service stopped mid-alarm")
         }
     }
 
@@ -56,11 +77,9 @@ class InternalControlReceiver : BroadcastReceiver() {
         )
     }
 
+    // Reached only with the service running and already in the foreground.
     private fun forwardToService(ctx: Context, serviceAction: String) {
-        ContextCompat.startForegroundService(
-            ctx,
-            Intent(ctx, BikeRadarService::class.java).apply { action = serviceAction },
-        )
+        ctx.startService(Intent(ctx, BikeRadarService::class.java).apply { action = serviceAction })
     }
 
     companion object {

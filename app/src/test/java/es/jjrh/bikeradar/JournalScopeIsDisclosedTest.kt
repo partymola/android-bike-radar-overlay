@@ -64,6 +64,7 @@ class JournalScopeIsDisclosedTest {
             forwarders = mapOf("linkJournal.log(it)" to "RideCheckpoint.kt", "linkJournal.log(m)" to "EBikeStatusReader.kt"),
         ),
         Writer("BatteryScanReceiver.kt", """\.log\("""),
+        Writer("InternalControlReceiver.kt", """\.log\("""),
         Writer("EBikeStatusReader.kt", """(?<![\w.])log\("""),
     )
 
@@ -92,6 +93,9 @@ class JournalScopeIsDisclosedTest {
         Event("walk-away alarm snoozed by rider", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm dismissed by rider", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away snooze over, alarm re-armed", "walk-away alarm", "alarma al alejarte"),
+        // A walk-away alert's button tapped after its service stopped.
+        Event("walk-away alarm cleared by rider; no service running", "walk-away alarm", "alarma al alejarte"),
+        Event("walk-away alarm volume restored; the service stopped mid-alarm", "walk-away alarm", "alarma al alejarte"),
     )
 
     /**

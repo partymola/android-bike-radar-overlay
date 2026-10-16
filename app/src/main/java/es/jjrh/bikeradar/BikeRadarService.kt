@@ -1396,7 +1396,10 @@ class BikeRadarService : Service() {
 
         /** The radar link state, published for the home screen and the
          *  Settings radar surfaces so they can show a radar as connecting.
-         *  Null while the service is not running, when nothing is. */
+         *  Null while the service is not running, when nothing is: the
+         *  notification receiver reads it as "a service is running", so it is
+         *  non-null exactly from onCreate to onDestroy, in this one process
+         *  (`onCreatePublishesTheLinkStateAndDestroyRetractsIt`). */
         @Volatile var radarLinkStateForUi: kotlinx.coroutines.flow.StateFlow<RadarLinkState>? = null
             internal set
 

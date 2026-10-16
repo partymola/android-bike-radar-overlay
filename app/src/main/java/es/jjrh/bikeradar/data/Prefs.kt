@@ -931,7 +931,8 @@ class Prefs(context: Context) {
      *  is in effect. A non-null value at the NEXT service start means the
      *  process died mid-alarm and skipped the restore, leaving the phone's
      *  alarm stream pinned at max - the walk-away alarm repairs it from this
-     *  slot on construction. Runtime state like [serviceRunningMarker], so
+     *  slot on construction, and so does a walk-away notification button
+     *  tapped while no service runs. Runtime state like [serviceRunningMarker], so
      *  deliberately not part of [snapshot] / [flow] / [dumpAll]. */
     var walkAwaySavedAlarmVolume: Int?
         get() = if (sp.contains(KEY_WALKAWAY_SAVED_ALARM_VOLUME)) {

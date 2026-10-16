@@ -859,8 +859,11 @@ class BikeRadarService : Service() {
     /** A device paired while the service runs, handled as its sighting, under
      *  the scan wake's gate: a known accessory's name or the pin
      *  (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkWhenItBonds`,
-     *  `aDevicePairedThatIsNotARadarIsLeftAlone`). */
+     *  `aDevicePairedThatIsNotARadarIsLeftAlone`). An eBike paired with eBike
+     *  data on starts its reader, which looks for the bike only when it starts
+     *  (`anEBikePairedWhileTheServiceRunsStartsItsReader`). */
     private fun onDeviceBonded(mac: String, name: String?) {
+        if (DeviceNameMatcher.isEBikeName(name)) maybeStartEBikeReader()
         val pinned = prefs.radarMac?.equals(mac, ignoreCase = true) == true
         val shownName = if (pinned) {
             RadarSelection.pinnedLinkName(mac, mac, name, RadarSelection.bondedDevices(this))
@@ -1301,9 +1304,9 @@ class BikeRadarService : Service() {
         /**
          * Starts the reader, for the onboarding eBike step, whose
          * `startService` also brings the service up if it is not running. A
-         * running service follows `eBikeDataEnabled` on its own too;
-         * whichever of the two starts the reader first wins and the other
-         * bails.
+         * running service follows `eBikeDataEnabled` and the bike's pairing
+         * on its own too; whichever start runs first wins and the others
+         * bail.
          */
         const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
 

@@ -169,7 +169,8 @@ class BikeRadarServiceSmokeTest {
         controller.create()
         val service = controller.get()
         shadowOf(app.mainLooper).idle()
-        // Bluetooth coming back, and onboarding's action, both ask for a start.
+        // Bluetooth coming back, onboarding's action and the bike's pairing all
+        // ask for a start.
         for (state in listOf(android.bluetooth.BluetoothAdapter.STATE_OFF, android.bluetooth.BluetoothAdapter.STATE_ON)) {
             app.sendBroadcast(
                 Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
@@ -178,6 +179,7 @@ class BikeRadarServiceSmokeTest {
             shadowOf(app.mainLooper).idle()
         }
         service.onStartCommand(Intent().apply { action = BikeRadarService.ACTION_START_EBIKE_READER }, 0, 1)
+        pair(bike.address, "smart system eBike")
         assertNull("eBike data is off", service.ebikeStatusReader)
         assertEquals(EBikeStage.NOT_STARTED, EBikeStateBus.stage.value)
         val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME).readText()
@@ -427,6 +429,36 @@ class BikeRadarServiceSmokeTest {
         prefs.eBikeDataEnabled = true
         idleMainUntil { EBikeStateBus.stage.value != EBikeStage.NOT_STARTED }
         assertEquals(EBikeStage.NO_BONDED_BIKE, EBikeStateBus.stage.value)
+        controller.destroy()
+    }
+
+    @Test
+    fun anEBikePairedWhileTheServiceRunsStartsItsReader() {
+        // The reader looks for the eBike in the paired list only when it
+        // starts, so pairing the bike has to start it.
+        EBikeStateBus.reset()
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        Prefs(app).apply {
+            eBikeOwnership = EBikeOwnership.YES
+            eBikeDataEnabled = true
+        }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        idleMainUntil { EBikeStateBus.stage.value != EBikeStage.NOT_STARTED }
+        assertEquals(EBikeStage.NO_BONDED_BIKE, EBikeStateBus.stage.value)
+
+        // Any other device paired asks nothing of the reader.
+        pair("AA:BB:CC:DD:EE:44", "Pixel Buds")
+        val journal = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME)
+        assertEquals("got:\n${journal.readText()}", 1, journal.readLines().count { it.endsWith("ebike reader not started: NO_BONDED_BIKE") })
+
+        // A pause holds the alerts, not the eBike data.
+        Prefs(app).pausedUntilEpochMs = Long.MAX_VALUE
+        pair("11:22:33:44:55:66", "smart system eBike")
+        assertTrue("the paired eBike must be read", service.ebikeStatusReader != null)
+        assertEquals(EBikeStage.WAITING, EBikeStateBus.stage.value)
         controller.destroy()
     }
 

@@ -127,13 +127,17 @@ class RadarLinkControllerHarnessTest {
     /** A [RadarLinkStateGateway] double recording the link edges in order. */
     private class FakeGateway : RadarLinkStateGateway {
         val events: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+        /** The device each open was reported for, in order. */
+        val openMacs: MutableList<String> = Collections.synchronizedList(mutableListOf())
         val opens get() = events.count { it == "open" }
         val connects get() = events.count { it == "connected" }
 
         /** Runs inside each disconnect edge, so a test can act mid-teardown. */
         @Volatile var onDisconnect: () -> Unit = {}
-        override fun markLinkOpen() {
+        override fun markLinkOpen(mac: String) {
             events += "open"
+            openMacs += mac
         }
         override fun markConnected() {
             events += "connected"
@@ -498,7 +502,7 @@ class RadarLinkControllerHarnessTest {
         assertEquals(listOf("open", "connected", "disconnected"), gateway.events.toList())
         assertEquals(1, link.openCount)
         assertFalse(RadarControlBridge.available)
-        assertTrue(journalHas("radar pin changed; relinking"))
+        assertTrue(journalHas("radar link moving to the pinned radar"))
 
         assertTrue(pumpUntil { link.openCount == 2 })
         assertEquals(pinnedMac, requireNotNull(link.gatt).device.address)
@@ -514,6 +518,9 @@ class RadarLinkControllerHarnessTest {
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
         assertTrue("events=${gateway.events}", pumpUntil { gateway.connects == 2 })
         assertEquals("the pinned radar's first frame is the last edge", "connected", gateway.events.last())
+        // Each open names its own radar, so the pinned one starts its own
+        // connecting stretch rather than inheriting the old one's.
+        assertEquals(listOf(mac, pinnedMac), gateway.openMacs.toList())
         controller.forceReconnect()
     }
 
@@ -584,7 +591,7 @@ class RadarLinkControllerHarnessTest {
         assertTrue(controller.isActive())
         assertEquals(1, link.openCount)
         assertFalse(gateway.events.contains("disconnected"))
-        assertFalse(journalHas("relinking"))
+        assertFalse(journalHas("moving to the pinned radar"))
 
         // A link that has ended is not moved: the scan path starts the pinned one.
         controller.forceReconnect()

@@ -125,7 +125,9 @@ class JournalScopeIsDisclosedTest {
         // Machinery, like the camera's exit below: the rider's pick is the
         // event, and this is the link following it. No cue sounded and no
         // device named.
-        "radar pin changed; relinking",
+        "radar link moving to the pinned radar",
+        // The link declining to follow a pin it cannot reach yet.
+        "radar pin not bonded; link kept",
         "camera link start \$name",
         // Machinery: the rider's switch is the event, and this is the link
         // noticing it. No cue sounded and no device named.

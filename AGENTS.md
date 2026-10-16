@@ -154,13 +154,14 @@ to its file. The notes below are the working summary.
   camera/light. Each has its own AMV UUID pair (see Gotchas).
 - Radar selection is name-match by default; a rider with more than one radar
   bonded can pin this bike's (`Prefs.radarMac`), and a pinned-and-still-bonded
-  MAC overrides the name-match in `scheduleRead` so the app never streams from
-  the wrong rear unit. Pure decider in `RadarSelection.shouldLinkRadar`;
-  managed in Settings -> Connections -> Radar, and in setup's pairing step
-  until the radar's name can only be a rear unit (`setupOffersPick`). A pin
-  changed while a link to another radar runs moves that link, and a pinned
-  radar paired later moves it on its first sighting; the old loop is joined
-  before the pinned radar starts (`RadarLinkController.followPin`,
+  MAC overrides the name-match in `scheduleRead` so a sighting links only the
+  pinned radar, not another rear unit. Pure decider in
+  `RadarSelection.shouldLinkRadar`; managed in Settings -> Connections -> Radar,
+  and in setup's pairing step until the radar's name can only be a rear unit
+  (`setupOffersPick`). A pin changed while a link to another radar runs moves
+  that link, and a pinned radar paired later moves it on its first sighting;
+  the old loop is joined before the pinned radar starts
+  (`RadarLinkController.followPin`,
   `BikeRadarServiceSmokeTest.aPin*`,
   `RadarLinkControllerHarnessTest.aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
   A failed bonded read never moves a running link

@@ -89,6 +89,25 @@ class RadarSelectionTest {
         assertFalse(RadarSelection.shouldReplaceLink(macA, macB, emptySet()))
     }
 
+    @Test fun `a pinned link takes the sighting's name, else the bonded one`() {
+        val bonded = listOf(RadarSelection.BondedRadar(macB, "RTL515"))
+        assertEquals("Spare", RadarSelection.pinnedLinkName(macB, macB.lowercase(), "Spare", bonded))
+        // A sighting of another device names nothing about the pin.
+        assertEquals("RTL515", RadarSelection.pinnedLinkName(macB, macA, "RearVue8", bonded))
+        // The pref path has no sighting at all.
+        assertEquals("RTL515", RadarSelection.pinnedLinkName(macB, null, null, bonded))
+    }
+
+    @Test fun `a pinned link is never named after its address`() {
+        // A device with no readable name is listed under its address.
+        val nameless = listOf(RadarSelection.BondedRadar(macB, macB))
+        assertEquals("radar", RadarSelection.pinnedLinkName(macB, null, null, nameless))
+        assertEquals("radar", RadarSelection.pinnedLinkName(macB, macB, macB.lowercase(), nameless))
+        assertEquals("radar", RadarSelection.pinnedLinkName(macB, macB, " ", listOf(RadarSelection.BondedRadar(macB, ""))))
+        // Not bonded in this read either.
+        assertEquals("radar", RadarSelection.pinnedLinkName(macB, null, null, emptyList()))
+    }
+
     @Test fun `ambiguous only when more than one radar bonded`() {
         assertFalse(RadarSelection.isAmbiguous(emptySet()))
         assertFalse(RadarSelection.isAmbiguous(setOf(macA)))

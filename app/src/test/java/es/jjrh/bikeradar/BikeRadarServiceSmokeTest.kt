@@ -37,10 +37,11 @@ import java.time.Duration
  * capture-log prune, BroadcastReceiver registration, coroutine launches)
  * and the action dispatch in onStartCommand.
  *
- * What this does NOT cover: the BLE-touching paths under registerEventScan
- * and the GATT plumbing both bail out early in Robolectric because the
- * shadow BluetoothLeScanner is null. Live boot is the only place those
- * code paths execute.
+ * What this does NOT cover: registerEventScan bails out early in Robolectric
+ * because the shadow BluetoothLeScanner is null, and a radar link the pin
+ * tests start is real but no device answers it, so they see links start and
+ * stop, never a handshake. Live boot is the only place those paths run
+ * further.
  */
 @RunWith(RobolectricTestRunner::class)
 class BikeRadarServiceSmokeTest {
@@ -451,12 +452,13 @@ class BikeRadarServiceSmokeTest {
     }
 
     /** Two radars bonded, or only [bonded] of them; returns the service and
-     *  the journal file, cleared. */
+     *  the journal file, cleared. [NAMELESS] is a device with no readable
+     *  name. */
     private fun twoRadarService(bonded: List<String>): Triple<org.robolectric.android.controller.ServiceController<BikeRadarService>, BikeRadarService, File> {
         val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
         val devices = mapOf(RADAR_A to "RearVue8", RADAR_B to "RTL515").mapValues { (mac, name) ->
             adapter.getRemoteDevice(mac).also { shadowOf(it).setName(name) }
-        }
+        } + (NAMELESS to adapter.getRemoteDevice(NAMELESS))
         shadowOf(adapter).setBondedDevices(bonded.map { devices.getValue(it) }.toSet())
         val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
         File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
@@ -511,12 +513,68 @@ class BikeRadarServiceSmokeTest {
         readDevice(service, "RearVue8", RADAR_A, 1)
         idleMainUntil { journal.starts("RearVue8") == 1 }
         assertEquals(1, journal.starts("RearVue8"))
+        // Neither the service start, before any link, nor a sighting is the
+        // pin changing, so neither says the pin is unpaired. The sighting's
+        // follow runs off the main thread, so wait it out first.
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertFalse(journal.readText().contains("pin not bonded"))
 
         val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
         shadowOf(adapter).setBondedDevices(setOf(adapter.getRemoteDevice(RADAR_A), adapter.getRemoteDevice(RADAR_B)))
-        readDevice(service, "RTL515", RADAR_B, 2)
+        // A sighting of the radar the pin does not name moves nothing.
+        readDevice(service, "RearVue8", RADAR_A, 2)
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals(1, journal.starts("RearVue8"))
+        assertEquals("only the pinned radar's own sighting may move the link", 0, journal.starts("RTL515"))
+
+        readDevice(service, "RTL515", RADAR_B, 3)
         idleMainUntil { journal.starts("RTL515") == 1 }
         assertEquals("the pinned radar must be linked, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinNotYetPairedKeepsTheLinkAndSaysWhy() {
+        val prefs = Prefs(app)
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        // A failed bonded read is empty: it says nothing about the pin.
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(emptySet())
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertFalse(journal.readText().contains("pin not bonded"))
+        // B is unpaired, so a wrong move would start it as "radar", not "RTL515".
+        assertFalse(journal.readText().contains("moving to the pinned radar"))
+
+        shadowOf(adapter).setBondedDevices(setOf(adapter.getRemoteDevice(RADAR_A)))
+        // Another case, so the pin is a new value and the collector runs again.
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B.lowercase(), "RTL515"))
+        idleMainUntil { journal.readText().contains("radar pin not bonded; link kept") }
+        assertTrue("got:\n${journal.readText()}", journal.readText().contains("radar pin not bonded; link kept"))
+        // The line is written before the link is asked to move, so wait out
+        // a move before saying none came.
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertFalse(journal.readText().contains("moving to the pinned radar"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aLinkMovedToANamelessPinIsNotNamedAfterItsAddress() {
+        // The journal and logs carry the link's name; a device with no
+        // readable name is listed under its address.
+        val prefs = Prefs(app)
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A, NAMELESS))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(NAMELESS, NAMELESS))
+        idleMainUntil { journal.starts("radar") == 1 }
+        val text = journal.readText()
+        assertEquals("got:\n$text", 1, journal.starts("radar"))
+        assertFalse("an address reached the journal:\n$text", Regex("""(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}""").containsMatchIn(text))
         controller.destroy()
     }
 
@@ -1136,5 +1194,6 @@ class BikeRadarServiceSmokeTest {
     private companion object {
         const val RADAR_A = "AA:BB:CC:DD:EE:11"
         const val RADAR_B = "AA:BB:CC:DD:EE:22"
+        const val NAMELESS = "AA:BB:CC:DD:EE:33"
     }
 }

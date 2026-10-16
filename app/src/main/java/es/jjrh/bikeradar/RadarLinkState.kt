@@ -37,9 +37,10 @@ data class RadarLinkState(
      *  across the gap between a failing radar's attempts. */
     val radarLinkClosedAtMs: Long? = null,
     /** Monotonic (elapsedRealtime) ms the current stretch of connecting with no
-     *  data began: a link open, carried across the pauses between failed
-     *  attempts and restarted after a gap longer than
-     *  [RadarLinkCoordinator.connectingStretchGapMs] (`ConnectingStretchTest`).
+     *  data began: a link open, carried across the pauses between one device's
+     *  failed attempts, and restarted by another device, a gap longer than
+     *  [RadarLinkCoordinator.connectingStretchGapMs], or no open for the
+     *  new-ride gap (`ConnectingStretchTest`).
      *  Null once the radar streams. Read only by the home card's power-cycle
      *  advice, which then survives the screen being reopened
      *  (`MainScreenEndRideWiringTest.thePowerCycleWaitIsTheServicesNotTheScreens`). */

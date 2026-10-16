@@ -172,9 +172,17 @@ internal class RadarLinkCoordinator(
     // and is closed when that ride ends with the radar still down.
     @Volatile private var latchIsNoRadarRide = false
 
-    // When the last connect attempt ended, opened or not. The connecting
-    // stretch continues across a gap no longer than [connectingStretchGapMs].
+    // When the last connect attempt ended, opened or not. A gap since then no
+    // longer than [connectingStretchGapMs] is one of [markLinkOpen]'s
+    // conditions for continuing the connecting stretch.
     @Volatile private var lastAttemptEndedMs: Long? = null
+
+    // The last link open and the device it was to. A stretch is one device's
+    // (`anotherRadarStartsItsOwnStretch`) and ends once no link has opened
+    // for the new-ride gap (`aRadarAwayLongerThanTheNewRideGapStartsAfresh`).
+    @Volatile private var lastLinkOpenMs: Long? = null
+
+    @Volatile private var lastLinkOpenMac: String? = null
 
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
@@ -291,23 +299,32 @@ internal class RadarLinkCoordinator(
      *  for the new-ride gap too: an abort loop is the radar being down, so a
      *  stream after a loop longer than the gap starts a new ride
      *  (`aStreamAfterAnAbortLoopLongerThanTheGapIsANewRide`). Also where the
-     *  connecting stretch starts, or continues when the last attempt ended no
-     *  more than [connectingStretchGapMs] ago (`ConnectingStretchTest`). */
-    override fun markLinkOpen() {
+     *  connecting stretch starts, or continues when the open is to the same
+     *  device, the last attempt ended no more than [connectingStretchGapMs]
+     *  ago and the last open came within the new-ride gap
+     *  (`ConnectingStretchTest`). */
+    override fun markLinkOpen(mac: String) {
         val nowMs = clock()
         val gapMs = connectingStretchGapMs(prefs.radarLongOfflineCapSec)
+        val newRideGapMs = prefs.radarLongOfflineThresholdMinutes * 60_000L
         val lastEnded = lastAttemptEndedMs
+        val lastOpen = lastLinkOpenMs
+        val sameDevice = lastLinkOpenMac == null || mac.equals(lastLinkOpenMac, ignoreCase = true)
+        val recentOpen = lastOpen != null && nowMs - lastOpen <= newRideGapMs
         _radarLinkState.update { current ->
             // radarGattActive: a second open with no close between, which the
             // controller does not produce; kept so it cannot restart the stretch
             // (`aStretchStartsAtTheFirstLinkOpen`).
             val sameStretch = current.connectingSinceMs != null &&
-                (current.radarGattActive || (lastEnded != null && nowMs - lastEnded <= gapMs))
+                sameDevice &&
+                (current.radarGattActive || (recentOpen && lastEnded != null && nowMs - lastEnded <= gapMs))
             current.copy(
                 radarGattActive = true,
                 connectingSinceMs = if (sameStretch) current.connectingSinceMs else nowMs,
             )
         }
+        lastLinkOpenMs = nowMs
+        lastLinkOpenMac = mac
     }
 
     /** Off-instant is stamped at the actual disconnect callback so it
@@ -1049,7 +1066,8 @@ internal class RadarLinkCoordinator(
          *  opening on the next: the reconnect loop's longest sleep, the larger
          *  of its backoff ceiling and the rider's idle interval plus jitter, and
          *  [NO_RADAR_CONNECT_MARGIN_MS] for the attempt. A link opened within it
-         *  continues the connecting stretch (`ConnectingStretchTest`). */
+         *  is one condition for continuing the connecting stretch; [markLinkOpen]
+         *  lists the others (`ConnectingStretchTest`). */
         fun connectingStretchGapMs(longOfflineCapSec: Int): Long {
             val ceilingMs = maxOf(RADAR_RECONNECT_BACKOFF_MAX_MS, longOfflineCapSec * 1_000L)
             return ceilingMs + (ceilingMs * RECONNECT_JITTER_FRACTION).toLong() + NO_RADAR_CONNECT_MARGIN_MS

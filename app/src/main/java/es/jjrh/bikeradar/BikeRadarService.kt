@@ -824,7 +824,7 @@ class BikeRadarService : Service() {
         // A pin paired while a link to another radar runs writes no pref, so
         // only its sighting can move the link
         // (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting`).
-        if (shouldLinkRadar && pinnedRadar != null && radarLink.isActive()) scope.launch { followRadarPin(name) }
+        if (shouldLinkRadar && pinnedRadar != null && radarLink.isActive()) scope.launch { followRadarPin(name, mac) }
 
         if (isRearDevice(name) && (radarGattActive || radarLink.isActive())) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
@@ -855,12 +855,18 @@ class BikeRadarService : Service() {
         batteryReader.launch(name, mac)
     }
 
-    /** [advertisedName] when a sighting triggers it, so the link is named as a
-     *  scan-started one would be; else the pin's stored name. */
-    private suspend fun followRadarPin(advertisedName: String? = null) {
+    /** A sighting passes its own name and address; the pin collector passes
+     *  neither, and only it records a pin the bonded read cannot see, since it
+     *  runs once per change. An empty read while a link runs is a failed read,
+     *  not an unpaired pin, so it records nothing. */
+    private suspend fun followRadarPin(sightedName: String? = null, sightedMac: String? = null) {
         val pin = prefs.radarMac ?: return
-        val bonded = RadarSelection.bondedDevices(this).mapTo(HashSet()) { it.mac }
-        radarLink.followPin(advertisedName ?: prefs.radarDisplayName ?: pin, pin, bonded)
+        val bonded = RadarSelection.bondedDevices(this)
+        val bondedMacs = bonded.mapTo(HashSet()) { it.mac }
+        if (sightedMac == null && radarLink.isActive() && bonded.isNotEmpty() && bondedMacs.none { it.equals(pin, ignoreCase = true) }) {
+            linkJournal.log("radar pin not bonded; link kept")
+        }
+        radarLink.followPin(RadarSelection.pinnedLinkName(pin, sightedMac, sightedName, bonded), pin, bondedMacs)
     }
 
     // ── capture log ───────────────────────────────────────────────────────────

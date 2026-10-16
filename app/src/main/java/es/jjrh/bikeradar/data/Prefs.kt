@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.VisibleForTesting
 import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.CameraLightMode
 import es.jjrh.bikeradar.RadarLightMode
@@ -700,14 +701,17 @@ class Prefs(context: Context) {
     }
 
     /** MAC of the radar the rider explicitly pinned for this bike, or null to
-     *  use name-match. See [es.jjrh.bikeradar.RadarSelection]. */
+     *  use name-match. See [es.jjrh.bikeradar.RadarSelection]. Production
+     *  writes go through [setRadarPin]. */
+    @set:VisibleForTesting
     var radarMac: String?
         get() = sp.getString(KEY_RADAR_MAC, null)
         set(v) {
             sp.edit().putString(KEY_RADAR_MAC, v).apply()
         }
 
-    /** Display name of the pinned radar (for the Settings device card). */
+    /** Display name of the pinned radar, written with [radarMac]. */
+    @set:VisibleForTesting
     var radarDisplayName: String?
         get() = sp.getString(KEY_RADAR_DISPLAY_NAME, null)
         set(v) {

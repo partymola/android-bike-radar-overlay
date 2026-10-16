@@ -30,9 +30,10 @@ import org.robolectric.annotation.GraphicsMode
  * lifecycle-driven pollers in [MainScreen].
  *
  * Variants picked to exercise the visually distinct states:
- *  - Hero: live-good (CheckCircle / Good), not-paired-bt-on (Error) in both
- *    locales, permissions-missing in Spanish (Error) and
- *    connecting in Spanish beside its System row
+ *  - Hero: live-good (CheckCircle / Good), not-paired with the pick subtitle
+ *    (Error) and the radar pinned to another paired device (Neutral) in both
+ *    locales, permissions-missing in Spanish (Error) and connecting in
+ *    Spanish beside its System row
  *  - System: empty (nothing paired, HA not configured), populated (radar +
  *    dashcam + eBike + HA all green with battery chips), eBike-waiting (the
  *    eBike row in its amber "Waiting for Flow" state with no stale battery

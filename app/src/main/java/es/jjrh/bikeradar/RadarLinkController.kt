@@ -42,9 +42,9 @@ import java.util.UUID
  * reconnect-backoff cap).
  */
 internal interface RadarLinkStateGateway {
-    /** Service discovery succeeded: the link is open. Nothing more; its
-     *  readers are listed on [RadarLinkState.radarGattActive]. */
-    fun markLinkOpen()
+    /** Service discovery succeeded: the link to [mac] is open. Nothing more;
+     *  its readers are listed on [RadarLinkState.radarGattActive]. */
+    fun markLinkOpen(mac: String)
 
     /** The radar's first data frame on this connection, called once. A radar
      *  that opens the link and never streams must not reach this, or the
@@ -119,8 +119,7 @@ internal class RadarLinkController(
 
     // True while [followPin] waits for the old loop to finish: a sighting then
     // must not start a second loop beside one still tearing down
-    // (`aSightingDuringTheCutStartsNothingBesideTheOldTeardown`). Set and
-    // cleared under [start]'s monitor.
+    // (`aSightingDuringTheCutStartsNothingBesideTheOldTeardown`).
     @Volatile private var replacingLink = false
 
     private val followPinLock = Mutex()
@@ -306,19 +305,20 @@ internal class RadarLinkController(
     /**
      * Move a running link to the radar the rider pinned, which [start] alone
      * never does while a loop runs. Acts only while a link runs and as
-     * [RadarSelection.shouldReplaceLink] allows, so a null pin, the same radar
-     * or a failed bonded read leaves the link alone
-     * (`aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone`). The old loop is
-     * joined before the pinned radar starts, so the loop's own teardown cannot
-     * land on the new link
+     * [RadarSelection.shouldReplaceLink] allows, so the same radar or a failed
+     * bonded read leaves the link alone
+     * (`aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone`). The old
+     * connection loop is joined before the pinned radar starts, so its
+     * teardown cannot land on the new link
      * (`aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
      *
      * The cut is an ordinary disconnect, deliberately: the rear is uncovered
      * until the new radar's first frame, so the drop banner and cue run as for
      * any drop, and a pinned radar slower to stream than the walk-away
-     * threshold can sound that alarm as any drop can.
+     * threshold can sound that alarm as any drop can (the same test pins the
+     * disconnect edge).
      */
-    suspend fun followPin(pinName: String, pinMac: String?, bondedMacs: Set<String>) = followPinLock.withLock {
+    suspend fun followPin(pinName: String, pinMac: String, bondedMacs: Set<String>) = followPinLock.withLock {
         val running = beginReplacement(pinMac, bondedMacs) ?: return@withLock
         try {
             running.cancelAndJoin()
@@ -326,14 +326,15 @@ internal class RadarLinkController(
             replacingLink = false
             throw t
         }
-        finishReplacement(pinName, requireNotNull(pinMac))
+        finishReplacement(pinName, pinMac)
     }
 
     @Synchronized
-    private fun beginReplacement(pinMac: String?, bondedMacs: Set<String>): Job? {
+    private fun beginReplacement(pinMac: String, bondedMacs: Set<String>): Job? {
         val running = radarJob?.takeIf { it.isActive } ?: return null
         if (!RadarSelection.shouldReplaceLink(jobMac, pinMac, bondedMacs)) return null
-        journal("radar pin changed; relinking")
+        Log.i(TAG, "moving radar link to the pinned radar ${LogRedaction.mac(pinMac)}")
+        journal("radar link moving to the pinned radar")
         replacingLink = true
         return running
     }
@@ -343,7 +344,6 @@ internal class RadarLinkController(
         // A manual override of the old radar's light is not this one's
         // (`theNewRadarsLightIsNotHeldByAnOverrideOfTheOldOne`).
         radarLightUserOverride = false
-        radarLightOffSinceMs = null
         replacingLink = false
         start(name, mac)
     }
@@ -625,7 +625,7 @@ internal class RadarLinkController(
                 return false
             }
 
-            linkState.markLinkOpen()
+            linkState.markLinkOpen(device.address)
             Log.i(TAG, "connected, running handshake")
             journal("radar connected, running handshake")
 

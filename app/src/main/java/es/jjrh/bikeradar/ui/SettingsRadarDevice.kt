@@ -71,7 +71,7 @@ import kotlin.math.roundToInt
  *
  * The radar is found by name-match by default; this screen lets a rider with
  * more than one bonded radar pin THIS bike's unit ([Prefs.radarMac]) so the
- * app never streams from the wrong one, pin a radar the name-match misses, and
+ * app links that unit rather than another, pin a radar the name-match misses, and
  * take back a pin made on the wrong device. Pairing itself happens in Android's
  * Bluetooth settings (the platform blocks programmatic LESC bonding), so the
  * only action here is a deep-link to it. See [RadarSelection].

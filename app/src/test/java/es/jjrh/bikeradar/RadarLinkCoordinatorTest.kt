@@ -152,7 +152,7 @@ class RadarLinkCoordinatorTest {
      *  first frame marks the radar up. */
     private fun connectAt(t: Long) {
         now = t
-        coordinator.markLinkOpen()
+        coordinator.markLinkOpen(RADAR)
         coordinator.markConnected()
     }
 
@@ -2662,7 +2662,7 @@ class RadarLinkCoordinatorTest {
         var t = from
         while (t < until) {
             now = t
-            coordinator.markLinkOpen()
+            coordinator.markLinkOpen(RADAR)
             eachTick(t + 1_000L)
             disconnectAt(t + 2_000L)
             t += 3_000L
@@ -2793,7 +2793,7 @@ class RadarLinkCoordinatorTest {
     fun aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm() {
         val off = armForFire()
         now = off + 30_000L
-        coordinator.markLinkOpen()
+        coordinator.markLinkOpen(RADAR)
         val fireAt = off + 31_000L
         BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
         coordinator.evaluateWalkAway(fireAt)
@@ -2928,5 +2928,9 @@ class RadarLinkCoordinatorTest {
         coordinator.clearWalkAwayDismissalForReArm()
         assertFalse(snap().walkAwayDismissed)
         assertNull(snap().lastWalkAwayFireMs)
+    }
+
+    private companion object {
+        const val RADAR = "AA:AA:AA:AA:AA:01"
     }
 }

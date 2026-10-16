@@ -71,9 +71,9 @@ class ConnectingStretchTest {
         app.getSharedPreferences("bike_radar_prefs", Context.MODE_PRIVATE).edit().clear().apply()
     }
 
-    private fun open(t: Long) {
+    private fun open(t: Long, mac: String = RADAR_A) {
         now = t
-        coordinator.markLinkOpen()
+        coordinator.markLinkOpen(mac)
     }
 
     private fun close(t: Long) {
@@ -179,5 +179,59 @@ class ConnectingStretchTest {
         close(1_060_000L)
         open(1_061_000L)
         assertEquals(1_061_000L, since())
+    }
+
+    @Test
+    fun anotherRadarStartsItsOwnStretch() {
+        // A pin moved off a device that kept failing: the radar picked next
+        // has not been failing at all.
+        open(1_000_000L, RADAR_A)
+        close(1_002_000L)
+        open(1_003_500L, RADAR_B)
+        assertEquals(1_003_500L, since())
+        // The same radar in another case is the same device.
+        close(1_005_000L)
+        open(1_006_000L, RADAR_B.lowercase())
+        assertEquals(1_003_500L, since())
+    }
+
+    /** One open at [OPEN], then attempts that end before the link opens, every
+     *  30 s, until [reopenAt]. */
+    private fun absentUntil(reopenAt: Long) {
+        open(OPEN)
+        var t = OPEN + 2_000L
+        while (t < reopenAt) {
+            close(t)
+            t += 30_000L
+        }
+        open(reopenAt)
+    }
+
+    @Test
+    fun aRadarAwayForTheNewRideGapIsStillTheSameStretch() {
+        // The default new-ride gap, 30 minutes, after the last open.
+        absentUntil(OPEN + 1_800_000L)
+        assertEquals(OPEN, since())
+    }
+
+    @Test
+    fun aRadarAwayLongerThanTheNewRideGapStartsAfresh() {
+        // While attempts keep ending inside the retry gap, only the opens can
+        // tell a ride later from a pause.
+        absentUntil(OPEN + 1_800_001L)
+        assertEquals(OPEN + 1_800_001L, since())
+    }
+
+    @Test
+    fun theNoOpenGapFollowsTheRidersNewRideGap() {
+        prefs.radarLongOfflineThresholdMinutes = 5
+        absentUntil(OPEN + 300_001L)
+        assertEquals(OPEN + 300_001L, since())
+    }
+
+    private companion object {
+        const val RADAR_A = "AA:AA:AA:AA:AA:01"
+        const val RADAR_B = "AA:AA:AA:AA:AA:02"
+        const val OPEN = 1_000_000L
     }
 }

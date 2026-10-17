@@ -62,7 +62,9 @@ What won't crash the app but makes a translation better:
 What CI checks on a translation PR: the full build runs, and `lintDebug`
 treats missing strings and broken format arguments as errors (`MissingTranslation`,
 the `StringFormat` checks). So a PR either has every string and valid
-placeholders, or it fails - there's no way to half-break the app. Reviews are
+placeholders, or it fails - there's no way to half-break the app. An edit to
+the Spanish Privacy screen strings is also checked by
+`scripts/privacy-disclosure-check.sh`. Reviews are
 manual; PRs aren't auto-merged. A locale doesn't have to be 100% complete to be
 useful, but the more complete the better.
 

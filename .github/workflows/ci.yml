@@ -115,6 +115,12 @@ jobs:
       - name: Run lint and ktlint
         run: ./gradlew :app:lintDebug :app:ktlintCheck --console=plain --no-daemon
 
+      # Blocking, for the same reason as the licence step below: it reads only
+      # the working tree. It fails when the Privacy copy drops a disclosure the
+      # script checks for; the script's comments list each check.
+      - name: Privacy disclosure
+        run: bash scripts/privacy-disclosure-check.sh
+
       # Non-blocking on purpose. The goldens re-record on any UI change, so
       # failing the build here would turn every UI pull request red until the
       # README and store copies were refreshed in the same commit, and a check

@@ -136,6 +136,21 @@ the coverage, lint or R8 configuration in `app/build.gradle.kts` or
     real legal question deliberately not pre-vetted. It is not enabled
     (`minSdk 31`), and `SettingsLicencesCoverageTest` watches for the
     declaration appearing.
+- **Privacy disclosure** (`scripts/privacy-disclosure-check.sh`; the
+  comments above each check are the reference): fails when the Privacy copy
+  drops a disclosure the script checks for, or the backup configuration stops
+  matching what that copy claims. It checks the outbound MQTT flows in the
+  `DataDisclosure` anchor in `HaClient.kt`, the permissions the manifest uses
+  and declares, the cross-app sharing paragraph, HTTPS, the About screen's
+  "not affiliated" title, and empty Spanish paragraphs. The paragraphs about
+  values stored in SharedPreferences must name the backup and must not claim
+  to stay on the phone. It also checks the backup rules themselves: exactly
+  two excludes, external storage excluded, and encryption required.
+  **Blocking in `ci.yml`**, since it reads only the working tree. The sharing
+  check runs only while `access/RadarAccess.kt` exists, so moving that file
+  switches it off silently. Mostly it checks coverage: a paragraph that keeps
+  its tokens while saying less still passes. The Privacy screen bullet in
+  `WRITING_COPY.md` says which checks run in which locale.
 - **detekt** is intentionally not wired: no stable release targets the
   pinned Kotlin 2.4 yet (only alpha builds do), and an alpha doesn't belong
   in a public build. Revisit when a stable detekt supports the toolchain.

@@ -355,12 +355,12 @@ side.
 ## Static analysis & coverage
 
 CI runs ktlint, lint, JaCoCo (a project ratchet plus a diff-coverage gate),
-a release DEX keep gate, `boot-smoke`, licence-header and transitive-licence
-checks, and CodeQL. **Before changing a workflow under `.github/`,
-`.editorconfig`, the coverage, lint or R8 configuration, `proguard-rules.pro`,
-or a gate script, read [`QUALITY_GATES.md`](QUALITY_GATES.md)**: what each
-gate checks and what must not be changed about it. Four that bite in
-ordinary work:
+a release DEX keep gate, `boot-smoke`, licence-header, transitive-licence and
+privacy-disclosure checks, and CodeQL. **Before changing a workflow under
+`.github/`, `.editorconfig`, the coverage, lint or R8 configuration,
+`proguard-rules.pro`, or a gate script, read
+[`QUALITY_GATES.md`](QUALITY_GATES.md)**: what each gate checks and what
+must not be changed about it. Four that bite in ordinary work:
 
 - ktlint's baseline is empty and all code must be clean; `:app:ktlintFormat`
   fixes most findings. Never regenerate the baseline to silence one.

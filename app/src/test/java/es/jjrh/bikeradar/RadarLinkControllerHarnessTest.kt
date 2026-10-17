@@ -747,6 +747,7 @@ class RadarLinkControllerHarnessTest {
             "a silent V2 stream must be torn down by the watchdog",
             pumpUntil { journalHas("V2 stream silent") },
         )
+        assertTrue("journal=$journal", journalHas("last received never; tearing down"))
         // A radar that completes the handshake and never streams cycles this
         // way, and covers nothing.
         assertEquals(0, gateway.connects)
@@ -806,6 +807,45 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { !controller.isActive() })
         assertEquals("events=${gateway.events}", 0, gateway.connects)
         assertFalse("nor does the journal say it went live", journalHas("radar V2 stream live"))
+    }
+
+    // ── how long before the disconnect the stream stopped ───────────────────────
+
+    @Test fun aStreamingLinkLostJournalsHowLongAfterItsLastFrame() = runTest {
+        // A radar left on and walked away from stops streaming 3 to 4 s before
+        // the disconnect callback; a switch-off within about a second.
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(10_000L)
+        val controller = controller(link, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        clockMs.set(13_990L)
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue("journal=$journal", journalHas("radar link lost 3990ms after its last frame"))
+        controller.forceReconnect()
+    }
+
+    @Test fun aLinkThatNeverStreamedJournalsNoGap() = runTest {
+        // No frame, nothing to measure from: a failing handshake is not a
+        // radar walked away from.
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertFalse("journal=$journal", journalHas("radar link lost"))
+        controller.forceReconnect()
     }
 
     // ── reconnect loop continues after a healthy session disconnects ────────────
@@ -1581,6 +1621,7 @@ class RadarLinkControllerHarnessTest {
             "a silent legacy stream must be torn down by the watchdog",
             pumpUntil { journalHas("radar legacy stream silent") },
         )
+        assertTrue("journal=$journal", journalHas("radar legacy stream silent, last received never; tearing down"))
         controller.forceReconnect()
     }
 

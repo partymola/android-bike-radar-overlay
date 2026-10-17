@@ -182,9 +182,11 @@ fi
 # reports / link journal / screenshots depend on the external-storage excludes
 # (Auto Backup includes getExternalFilesDir() by DEFAULT), and the "encrypted
 # with your screen lock" claim depends on refusing un-encryptable cloud backups.
-if [ "$(grep -cF '<exclude' "$RULES")" -ne 2 ] || ! grep -qF 'domain="external"' "$RULES"; then
-    blocker "external storage must be excluded from BOTH cloud backup and device transfer (data_extraction_rules.xml)"
-fi
+# Per section, since the rules exclude other files too.
+for section in cloud-backup device-transfer; do
+    awk "/<$section/,/<\/$section>/" "$RULES" | grep -qF 'domain="external"' \
+        || blocker "external storage must be excluded from BOTH cloud backup and device transfer (data_extraction_rules.xml): not from $section"
+done
 grep -qF 'disableIfNoEncryptionCapabilities="true"' "$RULES" \
     || blocker "cloud backup must refuse devices without a lock-screen secret (the screen-lock encryption claim depends on it)"
 # Anything stored in SharedPreferences rides the backup, so a paragraph about

@@ -15,7 +15,8 @@ enum class WalkAwayAlarmKind {
     /** The radar was left on and walked away from. */
     RADAR,
 
-    /** Both were left on: the camera was heard just before the radar went. */
+    /** The radar was left on, and the phone heard the front camera just
+     *  before it went: left on too, or carried switched on. */
     RADAR_AND_DASHCAM,
 }
 
@@ -23,22 +24,27 @@ enum class WalkAwayAlarmKind {
  * Pure decisions for the radar-left-on alarm: the rider walked out of range
  * with the radar still on, with or without the front camera.
  *
- * The one signal is how long before Android's disconnect callback the radar's
- * stream stopped ([Drop]). A radar switched off ends its stream within about
- * a second of the callback; one still on and out of range goes silent and the
- * link times out 3 to 4 s later. Measured on one phone and one radar model,
- * which is why a radar has to show [CALIBRATION_SWITCH_OFFS] clean
- * switch-offs before the alarm can sound for it: a phone or radar whose
- * switch-offs look like walk-aways then stays silent rather than sounding at
- * every ride end. A gap between [CLEAN_SWITCH_OFF_GAP_MS] and
- * [WALKED_AWAY_GAP_MS] counts as neither, so a pair in that band stays
- * silent too (`RadarLeftOnDeciderTest`).
+ * Two signals from how the link ended ([LinkLoss]). A radar switched off ends
+ * its link itself, within about a second of its last frame; one still on and
+ * out of range goes silent and the link times out 3 to 4 s later. Measured on
+ * one phone and one radar model, so both are default-deny: a walk-away only
+ * on a timeout status ([TIMEOUT_STATUSES]), a switch-off only on the statuses
+ * seen for one ([REMOTE_END_STATUSES]), anything else neither. And a radar has
+ * to show [CALIBRATION_SWITCH_OFFS] clean switch-offs on this phone before the
+ * alarm can sound for it; an ending that fits neither pattern sends the count
+ * back to 0 (`RadarLeftOnDeciderTest`).
  *
  * Mid-ride link losses look the same as a walk-away, so the drop must also
- * come with the alarm armed ([WalkAwayArmingGate]) and no riding seen just
- * before it. A radar battery under [BATTERY_FLOOR_PCT] can end the stream
- * the same way, and does not qualify. Nor does an ending the phone produced
- * ([PHONE_SIDE_STATUSES]), which counts toward calibration neither.
+ * come with the alarm armed ([WalkAwayArmingGate]), no riding seen just before
+ * it, and a link that streamed for [MIN_STREAMED_MS] (a radar that connects
+ * and drops as the ride starts). A radar battery under [BATTERY_FLOOR_PCT] can
+ * end the stream the same way, and does not qualify.
+ *
+ * Silent by design where the link cannot say: an unlocked or powered eBike
+ * drops its own link with the radar's, so its last reading is a fresh
+ * "unlocked" and the arming gate holds; a phone whose link takes longer to
+ * time out than the stream watchdog's stall window records no gap at all
+ * (`StreamReceipts`); a range-only radar never reaches here.
  */
 object RadarLeftOnDecider {
 
@@ -59,38 +65,55 @@ object RadarLeftOnDecider {
     /** A radar battery below this can die the way a walk-away looks. */
     const val BATTERY_FLOOR_PCT = 10
 
-    /** Disconnect statuses the phone itself produces (0 success, 22 the local
-     *  host ending the link), as when Bluetooth is switched off or the bond
-     *  is removed. Such an ending says nothing about the radar. */
-    val PHONE_SIDE_STATUSES = setOf(0, 22)
+    /** A link must have streamed this long before its drop can qualify. */
+    const val MIN_STREAMED_MS = 15_000L
+
+    /** Link timeouts: 8 (supervision), 34 (link layer) and 147 (connection),
+     *  the last being what both measured walk-aways reported. */
+    val TIMEOUT_STATUSES = setOf(8, 34, 147)
+
+    /** The radar ending the link itself: 19, and 257 on the same phone after
+     *  an OS update. */
+    val REMOTE_END_STATUSES = setOf(19, 257)
 
     enum class Drop { SWITCHED_OFF, UNCLEAR, WALKED_AWAY }
 
     /** The drop, from what the radar link measured at its disconnect
-     *  callback, or null when it measured none (no stream on that link, or a
-     *  teardown the app chose) or the phone ended the link. */
+     *  callback; null when it measured none (no stream, or a teardown the app
+     *  chose) or the status is neither a timeout nor the radar ending it. */
     fun classify(loss: LinkLoss?): Drop? = when {
-        loss == null || loss.status in PHONE_SIDE_STATUSES -> null
-        loss.gapMs < CLEAN_SWITCH_OFF_GAP_MS -> Drop.SWITCHED_OFF
-        loss.gapMs >= WALKED_AWAY_GAP_MS -> Drop.WALKED_AWAY
-        else -> Drop.UNCLEAR
+        loss == null -> null
+        loss.status in TIMEOUT_STATUSES -> if (loss.gapMs >= WALKED_AWAY_GAP_MS) Drop.WALKED_AWAY else Drop.UNCLEAR
+        loss.status in REMOTE_END_STATUSES -> if (loss.gapMs < CLEAN_SWITCH_OFF_GAP_MS) Drop.SWITCHED_OFF else Drop.UNCLEAR
+        else -> null
     }
 
-    /** The radar's clean switch-off count after [drop]. */
-    fun switchOffsAfter(drop: Drop?, count: Int): Int = if (drop == Drop.SWITCHED_OFF) minOf(count + 1, CALIBRATION_SWITCH_OFFS) else count
+    /** The radar's clean switch-off count after [drop]: one more for a clean
+     *  switch-off, back to 0 for an ending that fits neither pattern. */
+    fun switchOffsAfter(drop: Drop?, count: Int): Int = when (drop) {
+        Drop.SWITCHED_OFF -> minOf(count + 1, CALIBRATION_SWITCH_OFFS)
+        Drop.UNCLEAR -> 0
+        else -> count
+    }
 
-    /** Whether this off-episode can sound the alarm, decided once at the drop. */
+    /** Whether this off-episode can sound the alarm, decided once at the
+     *  drop. [dismissedUntilRide]: the rider dismissed this alarm and has not
+     *  ridden since. */
     fun qualifies(
         drop: Drop?,
         cleanSwitchOffs: Int,
         armed: Boolean,
         ridingAtDrop: Boolean,
         radarBatteryPct: Int?,
+        streamedMs: Long,
+        dismissedUntilRide: Boolean,
     ): Boolean = drop == Drop.WALKED_AWAY &&
         cleanSwitchOffs >= CALIBRATION_SWITCH_OFFS &&
         armed &&
         !ridingAtDrop &&
-        (radarBatteryPct == null || radarBatteryPct >= BATTERY_FLOOR_PCT)
+        (radarBatteryPct == null || radarBatteryPct >= BATTERY_FLOOR_PCT) &&
+        streamedMs >= MIN_STREAMED_MS &&
+        !dismissedUntilRide
 
     /** Whether to sound now. Once per episode: [fired] and [dismissed] both
      *  stop it, and so does the dashcam alarm having sounded for the same

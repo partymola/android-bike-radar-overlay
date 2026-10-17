@@ -13,25 +13,23 @@ class RadarLeftOnDeciderTest {
 
     // ── the gap ──────────────────────────────────────────────────────────────
 
-    /** A radar-side ending; 147 is what the measured walk-aways reported. */
-    private fun gap(ms: Long, status: Int = 147) = RadarLeftOnDecider.classify(LinkLoss(ms, status))
+    private fun gap(ms: Long, status: Int) = RadarLeftOnDecider.classify(LinkLoss(ms, status))
 
     @Test
-    fun aGapUnderOneSecondIsASwitchOff() {
+    fun theRadarEndingItsLinkPromptlyIsASwitchOff() {
         assertEquals(Drop.SWITCHED_OFF, gap(0L, status = 19))
         assertEquals(Drop.SWITCHED_OFF, gap(999L, status = 257))
+        assertEquals(Drop.UNCLEAR, gap(1_000L, status = 19))
+        assertEquals("the radar ended a link that was already silent", Drop.UNCLEAR, gap(3_500L, status = 257))
     }
 
     @Test
-    fun aGapOfTwoSecondsOrMoreIsAWalkAway() {
-        assertEquals(Drop.WALKED_AWAY, gap(2_000L))
+    fun aTimeoutTwoSecondsAfterTheLastFrameIsAWalkAway() {
+        assertEquals(Drop.WALKED_AWAY, gap(2_000L, status = 147))
         assertEquals(Drop.WALKED_AWAY, gap(3_990L, status = 8))
-    }
-
-    @Test
-    fun aGapBetweenIsNeither() {
-        assertEquals(Drop.UNCLEAR, gap(1_000L))
-        assertEquals(Drop.UNCLEAR, gap(1_999L))
+        assertEquals(Drop.WALKED_AWAY, gap(3_500L, status = 34))
+        assertEquals(Drop.UNCLEAR, gap(1_999L, status = 147))
+        assertEquals("a timeout on a link still streaming", Drop.UNCLEAR, gap(300L, status = 8))
     }
 
     @Test
@@ -40,23 +38,24 @@ class RadarLeftOnDeciderTest {
     }
 
     @Test
-    fun anEndingThePhoneProducedIsNoDrop() {
-        // Bluetooth switched off or the bond removed: neither a switch-off to
-        // learn from nor a walk-away, whatever the gap.
-        assertNull(gap(300L, status = 0))
-        assertNull(gap(3_500L, status = 0))
-        assertNull(gap(300L, status = 22))
-        assertNull(gap(3_500L, status = 22))
+    fun anyOtherStatusIsNoDrop() {
+        // Bluetooth switched off, the bond removed, a stack error: neither a
+        // switch-off to learn from nor a walk-away, whatever the gap.
+        for (status in listOf(0, 22, 59, 133)) {
+            assertNull("status $status", gap(300L, status))
+            assertNull("status $status", gap(3_500L, status))
+        }
     }
 
     // ── calibration ──────────────────────────────────────────────────────────
 
     @Test
-    fun onlyACleanSwitchOffCounts() {
+    fun aCleanSwitchOffCountsAndAnUnclearEndingStartsAgain() {
         assertEquals(1, RadarLeftOnDecider.switchOffsAfter(Drop.SWITCHED_OFF, 0))
-        assertEquals(0, RadarLeftOnDecider.switchOffsAfter(Drop.UNCLEAR, 0))
-        assertEquals(0, RadarLeftOnDecider.switchOffsAfter(Drop.WALKED_AWAY, 0))
-        assertEquals(0, RadarLeftOnDecider.switchOffsAfter(null, 0))
+        assertEquals(0, RadarLeftOnDecider.switchOffsAfter(Drop.UNCLEAR, 2))
+        assertEquals(0, RadarLeftOnDecider.switchOffsAfter(Drop.UNCLEAR, 3))
+        assertEquals(3, RadarLeftOnDecider.switchOffsAfter(Drop.WALKED_AWAY, 3))
+        assertEquals(2, RadarLeftOnDecider.switchOffsAfter(null, 2))
     }
 
     @Test
@@ -73,7 +72,9 @@ class RadarLeftOnDeciderTest {
         armed: Boolean = true,
         ridingAtDrop: Boolean = false,
         radarBatteryPct: Int? = 60,
-    ) = RadarLeftOnDecider.qualifies(drop, cleanSwitchOffs, armed, ridingAtDrop, radarBatteryPct)
+        streamedMs: Long = 600_000L,
+        dismissedUntilRide: Boolean = false,
+    ) = RadarLeftOnDecider.qualifies(drop, cleanSwitchOffs, armed, ridingAtDrop, radarBatteryPct, streamedMs, dismissedUntilRide)
 
     @Test
     fun aWalkAwayFromACalibratedRadarQualifies() {
@@ -104,6 +105,17 @@ class RadarLeftOnDeciderTest {
         assertFalse(qualifies(radarBatteryPct = 9))
         assertTrue(qualifies(radarBatteryPct = 10))
         assertTrue(qualifies(radarBatteryPct = null))
+    }
+
+    @Test
+    fun aLinkThatStreamedUnderFifteenSecondsDoesNotQualify() {
+        assertFalse(qualifies(streamedMs = 14_999L))
+        assertTrue(qualifies(streamedMs = 15_000L))
+    }
+
+    @Test
+    fun aDismissHoldsUntilTheNextRide() {
+        assertFalse(qualifies(dismissedUntilRide = true))
     }
 
     // ── when it sounds ───────────────────────────────────────────────────────

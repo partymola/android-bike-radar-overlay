@@ -5,7 +5,10 @@
      setup. The transient diagnostic prefs riding along (restart markers,
      counters) are self-healing after a restore. The saved approximate area
      (LocationCache) is internal storage too, but lives under
-     getNoBackupFilesDir(), which Android leaves out of both.
+     getNoBackupFilesDir(), which Android leaves out of both. What this phone
+     learned about how the radar's switch-offs end (bike_radar_learned.xml,
+     Prefs.radarLeftOnSwitchOffs) is about this phone, so it is excluded from
+     both below and a new phone learns it again.
 
      App-specific EXTERNAL storage is explicitly excluded from both: it holds
      the ride history, capture logs, crash reports, the link journal and debug
@@ -27,10 +30,16 @@
         <exclude
             domain="external"
             path="." />
+        <exclude
+            domain="sharedpref"
+            path="bike_radar_learned.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude
             domain="external"
             path="." />
+        <exclude
+            domain="sharedpref"
+            path="bike_radar_learned.xml" />
     </device-transfer>
 </data-extraction-rules>

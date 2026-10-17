@@ -544,8 +544,9 @@ class BikeRadarService : Service() {
             context = this,
             onAdapterOff = {
                 linkJournal.log("bluetooth adapter off: links torn down, event scan dead")
-                // First, so the drop the teardown below produces starts no
-                // radar-left-on check.
+                // Ends a radar-left-on check the stack's own disconnect may
+                // already have started; the teardown below ends the link from
+                // the app's side and starts none.
                 radarLinkCoordinator.markAdapterOff()
                 // Cancelling the link coroutines runs their cleanup paths
                 // (close the orphaned GATT, mark disconnected); the links
@@ -767,7 +768,6 @@ class BikeRadarService : Service() {
         }
         if (::walkAwayAlarm.isInitialized) walkAwayAlarm.shutdown()
         if (::rideWakeLock.isInitialized) rideWakeLock.release()
-        if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -776,6 +776,8 @@ class BikeRadarService : Service() {
         // not crash here.
         stopEBikeReader()
         scope.cancel()
+        // After the cancel: a radar drop until then can still take it.
+        if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
         // After scope.cancel(), not before: the reconnect loop opens the file at
         // the top of every attempt in transcript mode, so closing it while that
         // loop can still resume from its backoff leaves a stray header-only file

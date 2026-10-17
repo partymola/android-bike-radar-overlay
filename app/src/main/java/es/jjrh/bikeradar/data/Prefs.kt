@@ -100,6 +100,12 @@ class Prefs(context: Context) {
     private val sp: SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
+    /** What this phone has learned, which a new phone must learn again: kept
+     *  out of the Android backup and the phone-to-phone transfer
+     *  (`data_extraction_rules.xml`). */
+    private val learned: SharedPreferences =
+        context.applicationContext.getSharedPreferences(LEARNED_FILE, Context.MODE_PRIVATE)
+
     var firstRunComplete: Boolean
         get() = sp.getBoolean(KEY_FIRST_RUN_COMPLETE, false)
         set(v) {
@@ -468,20 +474,23 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_RADAR_LEFT_ON_ALARM, v).apply()
         }
 
-    /** Clean switch-offs seen from the radar at [mac], toward the
-     *  [es.jjrh.bikeradar.RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS] the alarm
-     *  needs before it can sound. One radar is remembered at a time, so a
-     *  different radar starts from 0. */
-    fun radarLeftOnSwitchOffs(mac: String): Int = if (sp.getString(KEY_RADAR_LEFT_ON_CAL_MAC, null).equals(mac, ignoreCase = true)) {
-        sp.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)
-    } else {
-        0
+    /** Clean switch-offs this phone has seen from the radar at [mac], toward
+     *  the [es.jjrh.bikeradar.RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS] the
+     *  alarm needs before it can sound. One radar is remembered at a time, so
+     *  a different radar starts from 0, and so does the same one after a
+     *  system update, which has changed how a switch-off ends before
+     *  (`RadarLeftOnCalibrationPrefsTest`). */
+    fun radarLeftOnSwitchOffs(mac: String): Int {
+        val sameRadar = learned.getString(KEY_RADAR_LEFT_ON_CAL_MAC, null).equals(mac, ignoreCase = true)
+        val sameSystem = learned.getString(KEY_RADAR_LEFT_ON_CAL_BUILD, null) == android.os.Build.FINGERPRINT
+        return if (sameRadar && sameSystem) learned.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0) else 0
     }
 
-    /** One edit, so the count is never read against another radar's address. */
+    /** One edit, so the count is never read against another radar or build. */
     fun setRadarLeftOnSwitchOffs(mac: String, count: Int) {
-        sp.edit()
+        learned.edit()
             .putString(KEY_RADAR_LEFT_ON_CAL_MAC, mac)
+            .putString(KEY_RADAR_LEFT_ON_CAL_BUILD, android.os.Build.FINGERPRINT)
             .putInt(KEY_RADAR_LEFT_ON_CAL_COUNT, count)
             .apply()
     }
@@ -1141,7 +1150,7 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("radar_left_on_alarm_enabled=$radarLeftOnAlarmEnabled")
         // The count only: the address it belongs to stays out of the bundle.
-        appendLine("radar_left_on_switch_offs=${sp.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)}")
+        appendLine("radar_left_on_switch_offs=${learned.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)}")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("urgent_unconfident_wait_enabled=$urgentUnconfidentWaitEnabled")
@@ -1225,7 +1234,12 @@ class Prefs(context: Context) {
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
         const val KEY_RADAR_LEFT_ON_ALARM = "radar_left_on_alarm_enabled"
         const val KEY_RADAR_LEFT_ON_CAL_MAC = "radar_left_on_cal_mac"
+        const val KEY_RADAR_LEFT_ON_CAL_BUILD = "radar_left_on_cal_build"
         const val KEY_RADAR_LEFT_ON_CAL_COUNT = "radar_left_on_cal_count"
+
+        /** The file of [learned]; `data_extraction_rules.xml` names it
+         *  (`RadarLeftOnCalibrationPrefsTest.theBackupRulesLeaveItOutOfBoth`). */
+        const val LEARNED_FILE = "bike_radar_learned"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_URGENT_UNCONFIDENT_WAIT = "urgent_unconfident_wait_enabled"

@@ -1335,7 +1335,13 @@ class BikeRadarServiceSmokeTest {
         val titles = shadowOf(nm).allNotifications.map { it.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() }
         assertTrue("got $titles", "Radar still on?" in titles)
         assertFalse(service.radarLeftOnWakeLock.isHeld())
+
+        // A check still running when the service stops ends with it.
+        coordinator.markWalkAwayDismissed(snoozed = true)
+        walkAway()
+        assertTrue(service.radarLeftOnWakeLock.isHeld())
         controller.destroy()
+        assertFalse("the service stopping must release it", service.radarLeftOnWakeLock.isHeld())
         BatteryStateBus.clearForTest()
         BikeRadarService.macToSlug.clear()
     }

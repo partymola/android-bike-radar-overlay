@@ -31,9 +31,10 @@ internal interface AlarmTone {
 }
 
 /**
- * The walk-away ("forgotten dashcam") alarm tone: a looping alarm-stream
- * ringtone plus an explicit vibration pattern, raised by the walk-away decider
- * when the rider leaves a still-streaming radar/dashcam behind on the bike.
+ * The walk-away alarm tone: a looping alarm-stream ringtone plus an explicit
+ * vibration pattern, raised when the rider walks off with a device still on:
+ * a dashcam the phone still hears ([WalkAwayDecider]), or a radar that went
+ * out of range still on ([RadarLeftOnDecider]).
  *
  * Off the radar-decode hot path, but it IS the safety dismount alarm, so it
  * deliberately overrides the rider's quiet-hours posture:
@@ -45,8 +46,8 @@ internal interface AlarmTone {
  *    listener, so it never ducks or pauses for transient focus loss - the whole
  *    point is to keep alerting until the rider acts;
  *  - it forces `STREAM_ALARM` to max for the duration and restores the saved
- *    level in [stop], so a low bedside-alarm slider can't swallow a
- *    forgotten-dashcam alert; the saved level is also persisted
+ *    level in [stop], so a low bedside-alarm slider can't swallow the
+ *    alert; the saved level is also persisted
  *    ([Prefs.walkAwaySavedAlarmVolume]) before the force, so a process death
  *    mid-alarm leaves a record to repair from ([repairLeakedOverride]);
  *  - it vibrates explicitly via the `Vibrator` service, because channel-level
@@ -55,10 +56,10 @@ internal interface AlarmTone {
  * [start], [stop] and [shutdown] are `@Synchronized` on this instance so the
  * FIRE path, the dismiss / snooze / auto-dismiss handlers, the radar-reconnect
  * stop, the self-capping job, and onDestroy teardown can't interleave the
- * ringtone / focus / saved-volume state. The tone
- * self-caps after [WALKAWAY_RINGTONE_CAP_MS]; the decider's rate limit then
- * re-fires the notification for another bounded window if the rider still hasn't
- * acted.
+ * ringtone / focus / saved-volume state. The tone self-caps after
+ * [WALKAWAY_RINGTONE_CAP_MS]. The dashcam alarm's rate limit then re-fires it
+ * while the camera is still heard; the radar-left-on alarm sounds once per
+ * off-episode, and again after each Snooze (`RadarLeftOnAlarmTest`).
  *
  * The orchestration - focus request, alarm-volume save / force-max / restore,
  * the play-failure rollback, and the self-capping job - is unit-tested by
@@ -95,8 +96,8 @@ internal class WalkAwayAlarm(
     @Volatile private var audioFocusRequest: AudioFocusRequest? = null
 
     /** Pre-alert STREAM_ALARM volume, captured before the walk-away tone
-     *  forces the alarm stream to max so the rider can't sleep through a
-     *  forgotten-dashcam alert just because their alarm slider was low.
+     *  forces the alarm stream to max so the rider can't sleep through the
+     *  alert just because their alarm slider was low.
      *  Restored in [stop]. Null when no override is in effect. */
     @Volatile private var savedAlarmVolume: Int? = null
 
@@ -107,8 +108,7 @@ internal class WalkAwayAlarm(
 
     /** Single-slot job that stops the alarm tone after
      *  [WALKAWAY_RINGTONE_CAP_MS]. Without this cap a forgotten alert
-     *  would loop forever; the decider's rate limit then re-fires the
-     *  notification, re-starting the tone for another bounded window. */
+     *  would loop forever. */
     private var ringtoneCapJob: Job? = null
 
     /** Set by [shutdown]; every later [start] does nothing. */
@@ -154,7 +154,7 @@ internal class WalkAwayAlarm(
         }
         // Force the alarm stream to max for the duration of the alert.
         // Mirrors the alarm-clock pattern: a rider whose phone alarm
-        // volume is set low for sleep shouldn't lose a £200 dashcam to
+        // volume is set low for sleep shouldn't lose a device left on to
         // their bedside-tone preference. Saved level is restored in
         // stop(). Best-effort; some OEMs reject volume writes from
         // background services and that's fine.
@@ -297,10 +297,8 @@ internal class WalkAwayAlarm(
     companion object {
         private const val TAG = "BikeRadar"
 
-        /** Hard cap on a single alarm-tone episode. Without this cap a
-         *  forgotten alert would loop forever; the decider's rate limit then
-         *  re-fires the notification, re-starting the tone for another bounded
-         *  window. */
+        /** Hard cap on a single alarm-tone episode; see the class KDoc for
+         *  what sounds it again. */
         private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
 
         /**

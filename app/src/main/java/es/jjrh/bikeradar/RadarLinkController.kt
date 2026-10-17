@@ -51,9 +51,10 @@ internal interface RadarLinkStateGateway {
      *  dead-radar warnings read it as up (`RadarLinkControllerHarnessTest`). */
     fun markConnected()
 
-    /** [loss] is what the disconnect callback measured on a link that
+    /** [loss] is what the disconnect callback measured on a V2 link that
      *  streamed and that the app did not end; every other edge has none
-     *  (`theDisconnectCallbackHandsTheLossToTheGateway`). */
+     *  (`theDisconnectCallbackHandsTheLossToTheGateway`,
+     *  `aLegacyLinkLostJournalsItsGapToo`). */
     fun markDisconnected(loss: LinkLoss? = null)
 
     fun snapshot(): RadarLinkState
@@ -1151,21 +1152,6 @@ internal class RadarLinkController(
     }
 
     /**
-     * Persist what this attempt found and where it stopped, for the
-     * diagnostic bundle.
-     *
-     * The debounce, the per-answer `since=` stamps and their eviction all live
-     * in [LinkProbeRecorder], which the front camera shares.
-     *
-     * [HANDSHAKE_OK] means the sequence completed, NOT that targets will
-     * stream: the battery read and subscribe inside the handshake ignore their
-     * own results, and that step is what keeps the radar off its legacy
-     * stream. The discovered table beside it is what shows a missing battery
-     * service, so record the table even on success.
-     *
-     * The two exits before service discovery reach [recordPreDiscoveryExit].
-     */
-    /**
      * Record an attempt that stopped BEFORE there was a service table to
      * describe.
      *
@@ -1183,6 +1169,21 @@ internal class RadarLinkController(
         linkProbe.record(LinkProbe.format(emptyList(), outcome))
     }
 
+    /**
+     * Persist what this attempt found and where it stopped, for the
+     * diagnostic bundle.
+     *
+     * The debounce, the per-answer `since=` stamps and their eviction all live
+     * in [LinkProbeRecorder], which the front camera shares.
+     *
+     * [HANDSHAKE_OK] means the sequence completed, NOT that targets will
+     * stream: the battery read and subscribe inside the handshake ignore their
+     * own results, and that step is what keeps the radar off its legacy
+     * stream. The discovered table beside it is what shows a missing battery
+     * service, so record the table even on success.
+     *
+     * The two exits before service discovery reach [recordPreDiscoveryExit].
+     */
     private fun recordLinkProbe(gatt: BluetoothGatt, outcome: String) {
         val body = try {
             LinkProbe.format(

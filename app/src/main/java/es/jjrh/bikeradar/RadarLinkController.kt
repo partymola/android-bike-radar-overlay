@@ -86,10 +86,11 @@ internal class RadarLinkController(
     /** Always-on link-event sink ([LinkEventJournal]); unlike the capture
      *  log it records the attempts that never produced a connection. */
     private val journal: (String) -> Unit,
-    /** Monotonic clock for the V2 data-flow watchdog, the frame receipt stamp
-     *  and the radar-light override deadband. Injected as elapsedRealtime so an NTP/DST wall-clock
-     *  jump can't make a silently-dead radar look alive or mis-clear the
-     *  rider's manual light override. */
+    /** Monotonic clock for the V2 data-flow watchdog, the frame receipt
+     *  stamp and the radar-light override deadband. Injected as
+     *  elapsedRealtime so an NTP/DST wall-clock jump can't make a
+     *  silently-dead radar look alive or mis-clear the rider's manual light
+     *  override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
     /** Wall clock, separate from [clock] because the connection probe's stamp
      *  has to survive a reboot and be comparable with the other timestamps in
@@ -555,15 +556,15 @@ internal class RadarLinkController(
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
-                        // Once per connection, on a link that streamed and that
-                        // the app did not end itself
+                        // On a link that streamed and that the app did not end
+                        // itself. Once per connection, because closeOnce below
+                        // marks the link app-ended
                         // (`aStreamingLinkLostJournalsHowLongAfterItsLastFrame`,
                         // `aWatchdogTeardownJournalsNoGap`).
                         val gapMs = synchronized(linkLock) {
-                            val first = !linkDown
                             linkDown = true
                             linkState.markDisconnected()
-                            if (first && streamed && !receipts.endedByApp) receipts.gapMs(now) else null
+                            if (streamed && !receipts.endedByApp) receipts.gapMs(now) else null
                         }
                         if (gapMs != null) journal("radar link lost status=$status ${gapMs}ms after its last frame")
                         queue.cancel()
@@ -1421,6 +1422,9 @@ internal class RadarLinkController(
  * Only [stream] counts: a V2 radar knocked into its legacy stream still sends
  * heartbeats there, and those must not make its silent V2 stream look alive.
  * A link the app ended has no gap worth recording, since the app chose when.
+ * That includes a watchdog teardown, so on a phone whose link takes longer to
+ * time out than the watchdog's stall window, a radar walked away from records
+ * no gap at all, deliberately (`aWatchdogTeardownJournalsNoGap`).
  */
 internal class StreamReceipts(private val clock: () -> Long) {
     @Volatile var stream: UUID = Uuids.RADAR_V2
@@ -1432,7 +1436,9 @@ internal class StreamReceipts(private val clock: () -> Long) {
         if (uuid == stream) lastMs.set(clock())
     }
 
-    /** Before every disconnect the app itself asks for. */
+    /** Before every disconnect the app itself asks for, and in closeOnce,
+     *  which also runs after the radar ended the link
+     *  (`aStreamingLinkCancelledByTheAppJournalsNoGap`). */
     fun endingByApp() = appEnded.set(true)
 
     val endedByApp: Boolean get() = appEnded.get()

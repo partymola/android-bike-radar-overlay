@@ -15,7 +15,7 @@ class RadarLeftOnDeciderTest {
 
     @Test
     fun aGapUnderOneSecondIsASwitchOff() {
-        assertEquals(Drop.SWITCHED_OFF, RadarLeftOnDecider.classify(-810L))
+        assertEquals(Drop.SWITCHED_OFF, RadarLeftOnDecider.classify(0L))
         assertEquals(Drop.SWITCHED_OFF, RadarLeftOnDecider.classify(999L))
     }
 

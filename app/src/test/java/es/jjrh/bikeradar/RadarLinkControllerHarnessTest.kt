@@ -872,6 +872,32 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aStreamingLinkCancelledByTheAppJournalsNoGap() = runTest {
+        // A forced reconnect, a pin move or Bluetooth going off cancels the
+        // loop; a disconnect callback arriving after that is the app's ending.
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(10_000L)
+        val controller = controller(link, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        val gatt = requireNotNull(link.gatt)
+        val cb = requireNotNull(link.cb)
+        controller.forceReconnect()
+        // The job reads inactive as soon as it is cancelled; its teardown runs
+        // after, and that is what marks the link.
+        assertTrue(pumpUntil { !controller.isActive() })
+        pumpUntil(timeoutMs = 300) { false }
+        clockMs.set(10_300L)
+        cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertFalse("journal=$journal", journalHas("radar link lost"))
+    }
+
     @Test fun aLinkThatNeverStreamedJournalsNoGap() = runTest {
         // The handshake completes and no frame follows: nothing to measure from.
         val link = Link()
@@ -1667,7 +1693,7 @@ class RadarLinkControllerHarnessTest {
 
     /** Starts a legacy link and receives one heartbeat at 1 s through the
      *  pre-Android-13 callback, which decodes at 2 s. */
-    private suspend fun TestScope.legacyLinkWithOneHeartbeat(clockMs: java.util.concurrent.atomic.AtomicLong): Link {
+    private suspend fun TestScope.legacyLinkWithOneHeartbeat(clockMs: java.util.concurrent.atomic.AtomicLong): Pair<Link, RadarLinkController> {
         val link = Link()
         val controller = controller(link, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
         startDriver(link)
@@ -1683,25 +1709,31 @@ class RadarLinkControllerHarnessTest {
         requireNotNull(link.cb).onCharacteristicChanged(gatt, v1)
         clockMs.set(2_000L)
         assertTrue(pumpUntil { journalHas("radar legacy stream live") })
-        return link
+        return link to controller
     }
 
     @Test fun aSilentLegacyStreamSaysWhenItLastReceived() = runTest {
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
-        legacyLinkWithOneHeartbeat(clockMs)
+        val (link, controller) = legacyLinkWithOneHeartbeat(clockMs)
         clockMs.set(9_000L)
         assertTrue(
             "journal=$journal",
             pumpUntil { journalHas("radar legacy stream silent 7000ms, last received 8000ms ago; tearing down") },
         )
+        // The watchdog chose this ending, so it records no gap.
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertFalse("journal=$journal", journalHas("radar link lost"))
+        controller.forceReconnect()
     }
 
     @Test fun aLegacyLinkLostJournalsItsGapToo() = runTest {
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
-        val link = legacyLinkWithOneHeartbeat(clockMs)
+        val (link, controller) = legacyLinkWithOneHeartbeat(clockMs)
         clockMs.set(4_500L)
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue("journal=$journal", journalHas("radar link lost status=147 3500ms after its last frame"))
+        controller.forceReconnect()
     }
 
     /**

@@ -158,6 +158,18 @@ class LocationCacheRefreshTest {
     }
 
     @Test
+    fun aMoveAlongOneAxisAloneIsSaved() {
+        liveFix(10.0, 20.0)
+        LocationCache.refreshIfStale(app, maxAgeMs = 0L)
+        liveFix(30.0, 20.0)
+        LocationCache.refreshIfStale(app, maxAgeMs = 0L)
+        assertEquals("latitude only", "300 200", slot.readText())
+        liveFix(30.0, 40.0)
+        LocationCache.refreshIfStale(app, maxAgeMs = 0L)
+        assertEquals("longitude only", "300 400", slot.readText())
+    }
+
+    @Test
     fun grantedButNoFixAndNothingSavedReturnsFalse() {
         noLiveFix()
         assertFalse(LocationCache.refreshIfStale(app))

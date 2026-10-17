@@ -398,6 +398,9 @@ internal class RadarLinkCoordinator(
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
             cancelWalkAwaySnooze()
             cancelWalkAwayNotification()
+            // The tone too, or it runs on at forced maximum to its 60 s cap
+            // (`theRadarComingBackStopsTheToneWithTheAlert`).
+            stopWalkAwayAlarm()
             // Radar back = rider returned to the bike: clear the forgot-to-lock
             // reminder and re-arm it for the next off-episode.
             forgotToLockFired = false

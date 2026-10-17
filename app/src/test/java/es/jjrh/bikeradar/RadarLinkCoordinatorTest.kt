@@ -283,6 +283,7 @@ class RadarLinkCoordinatorTest {
         connectAt(2_000L) // still no off-episode between the two
         assertEquals(0, snoozeCancelCount)
         assertEquals(0, cancelWalkAwayCount)
+        assertEquals(0, alarmStopCount)
         assertEquals(0, clogged("state=IDLE"))
         assertEquals(2_000L, snap().radarConnectStartMs)
         // dashcam-backoff clear + banner hide are unconditional, so they fire
@@ -366,6 +367,21 @@ class RadarLinkCoordinatorTest {
         assertEquals(1, cancelWalkAwayCount)
         assertEquals(1, alarmStopCount)
         assertNull(snap().lastWalkAwayFireMs)
+    }
+
+    @Test
+    fun theRadarComingBackStopsTheToneWithTheAlert() {
+        // The rider is back at the bike and the radar streams again. The tone
+        // must stop there, not run on at forced maximum to its 60 s cap.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(1, alarmStartCount)
+        assertEquals(0, alarmStopCount)
+        connectAt(fireAt + 5_000L)
+        assertEquals(1, cancelWalkAwayCount)
+        assertEquals(1, alarmStopCount)
     }
 
     @Test

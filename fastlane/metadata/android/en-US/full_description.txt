@@ -9,7 +9,7 @@ Features:
 - Live overlay with per-vehicle distance, closing speed and lateral position
 - Tiered proximity beeps, urgent imminent-impact tone, all-clear chime
 - Post-ride summary notification: overtakes, close passes, distance, tightest pass
-- Front camera/light auto mode by local sunset (one coarse location read per ride)
+- Front camera/light auto mode by local sunset (from a rough area, read while the app is open)
 - Bosch Smart System eBike telemetry, strictly read-only
 - Walk-away and forgot-to-lock reminders
 - Optional Home Assistant publishing: batteries, close passes, ride summaries

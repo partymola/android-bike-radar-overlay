@@ -742,9 +742,8 @@ internal class RadarLinkController(
 
             Log.i(TAG, "handshake complete, decoding frames")
             journal("radar handshake complete")
-            // First chance per ride to refresh the location cache used by
-            // SunsetCalculator (front- and radar-light auto-modes). 60-min staleness
-            // gate means quick stop-and-go reconnects don't re-poll.
+            // Gets a live area only with an app screen open; off screen Android
+            // refuses the read and the saved area stands (LocationCache).
             LocationCache.refreshIfStale(context)
             captureLog.open()
             // Overlay + alert coroutine, extracted into OverlayPipeline.
@@ -853,7 +852,7 @@ internal class RadarLinkController(
                 val controller = light
                 val nowMs = System.currentTimeMillis()
                 val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-                // Manual coordinates (if set) -> GPS last-known -> London. Log the
+                // Manual coordinates (if set) -> the approximate area -> London. Log the
                 // source only, never the coordinates (a manual location is the
                 // rider's home).
                 val resolved = RideLocationResolver.resolve(

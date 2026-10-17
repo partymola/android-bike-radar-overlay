@@ -651,10 +651,10 @@ class Prefs(context: Context) {
 
     /** Rider-entered manual location (latitude) for the sunrise/sunset light
      *  auto-mode, stored as exact [Double] bits. Null (key absent) = unset.
-     *  Feeds the GPS-decliner path only: [es.jjrh.bikeradar.RideLocationResolver]
-     *  prefers valid manual coordinates over a GPS fix over the London fallback,
+     *  Feeds the location-decliner path only: [es.jjrh.bikeradar.RideLocationResolver]
+     *  prefers valid manual coordinates over the approximate area over the London fallback,
      *  so a rider who declines location can still get accurate light-switch
-     *  times without an approximate region guess. Raw Double bits so a boundary
+     *  times without a timezone or country guess. Raw Double bits so a boundary
      *  value round-trips exactly; the resolver re-validates finiteness + range
      *  on read, so a corrupt pref can never reach the solar calc. Set both or
      *  neither - a single coordinate is not a point
@@ -697,6 +697,27 @@ class Prefs(context: Context) {
                 .putLong(KEY_MANUAL_LOCATION_LON, lon.toRawBits())
         }
         e.apply()
+    }
+
+    /** Calls [onChange] after any write to a setting the saved approximate area
+     *  depends on: either light auto-mode, the front camera, or the manual
+     *  coordinates ([es.jjrh.bikeradar.LocationCache]). Returns the listener,
+     *  which the caller must keep: SharedPreferences holds it weakly. */
+    fun onLocationSettingsChange(onChange: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
+        val keys = setOf(
+            KEY_AUTO_LIGHT_MODE,
+            KEY_RADAR_LIGHT_AUTO_MODE,
+            KEY_DASHCAM_OWNERSHIP,
+            KEY_DASHCAM_MAC,
+            KEY_MANUAL_LOCATION_LAT,
+            KEY_MANUAL_LOCATION_LON,
+        )
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            // A null key is a clear() of the whole file; none exists today.
+            if (key == null || key in keys) onChange()
+        }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        return listener
     }
 
     /** MAC of the radar the rider explicitly pinned for this bike, or null to

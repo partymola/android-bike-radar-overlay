@@ -193,8 +193,8 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarOverlayGate.kt` | Which apps are asking for our overlay to be hidden. Held per package so a crashed consumer cannot leave the rider without it |
 | `app/src/main/java/es/jjrh/bikeradar/ipc/RadarControlBridge.kt` | How the service reaches the live radar link for a tail-light write; install on connect, reset on teardown |
 | `app/src/main/java/es/jjrh/bikeradar/CameraLightController.kt` | Front camera/light mode-set writes and notify parser |
-| `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | One-fetch-per-ride GPS cache for SunsetCalculator |
-| `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> GPS -> London) + the coordinate input sanitize/parse/validate/format helpers |
+| `app/src/main/java/es/jjrh/bikeradar/LocationCache.kt` | The rider's approximate area for SunsetCalculator: read while a screen is visible, kept in one rounded slot outside backups, deleted when it stops being used |
+| `app/src/main/java/es/jjrh/bikeradar/RideLocationResolver.kt` | Pure location resolver for the light auto-modes (manual coordinates -> approximate area -> London) + the coordinate input sanitize/parse/validate/format helpers |
 | `app/src/main/java/es/jjrh/bikeradar/ScanGate.kt` | Pure accept/reject gate for an active BLE scan result (name-match AND bonded), used by the service's device discovery |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeStatusReader.kt` | Read-only GATT client subscribing to Bosch Flow's proprietary status stream |
 | `app/src/main/java/es/jjrh/bikeradar/EBikeSnapshotCoordinator.kt` | Owns the eBike snapshot cache + derived state (odometer baseline, ride-edge detection, riding speed); fed by the status reader's callback |

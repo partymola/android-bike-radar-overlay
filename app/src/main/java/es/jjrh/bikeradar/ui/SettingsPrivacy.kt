@@ -92,6 +92,7 @@ private fun SettingsPrivacyBody(navController: NavController) {
             PrivacySection(Icons.Default.PhoneAndroid, R.string.settings_privacy_on_phone_label) {
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_settings))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_location))
+                PrivacyP(stringResource(R.string.settings_privacy_on_phone_approx_location))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_creds))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_files))
                 PrivacyP(stringResource(R.string.settings_privacy_on_phone_rides))

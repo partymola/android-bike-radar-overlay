@@ -690,6 +690,17 @@ class PrefsTest {
     }
 
     @Test
+    fun dumpAllNeverEmitsTheManualCoordinates() {
+        // The Privacy screen says they never appear in a diagnostic bundle,
+        // and the MAC-shaped check above cannot see a decimal.
+        prefs.setManualLocation(51.5074, -0.1278)
+        val dump = prefs.dumpAll()
+        assertFalse(dump, dump.contains("51.5"))
+        assertFalse(dump, dump.contains("0.127"))
+        assertTrue(dump.contains("manual_location_set=true"))
+    }
+
+    @Test
     fun redactPresenceDistinguishesUnsetFromPresent() {
         assertEquals("<unset>", Prefs.redactPresence(null))
         assertEquals("<unset>", Prefs.redactPresence(""))

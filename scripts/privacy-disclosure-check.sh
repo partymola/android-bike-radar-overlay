@@ -12,7 +12,11 @@
 #   2. every user-facing manifest permission is named in that copy;
 #   3. the core posture claims (backup transfer, HTTPS, "Not affiliated")
 #      still appear in the user-facing copy and match the manifest's
-#      backup configuration.
+#      backup configuration;
+#   4. the saved approximate area's paragraph says it is not backed up, paired
+#      with LocationCache storing it under noBackupFilesDir, the location
+#      permission bullet keeps "never leaves the phone", and no Privacy
+#      paragraph says location is read once per ride.
 #
 # The disclosure copy is externalised for i18n, so the search reads the
 # `settings_privacy_*` strings of each locale, not the Composable source and not
@@ -220,6 +224,30 @@ backup_paragraph settings_privacy_on_phone_location "the manual coordinates"
 if [ -n "$(string_named "$STRINGS" settings_privacy_to_apps_body)" ]; then
     backup_paragraph settings_privacy_to_apps_body "the granted-app list"
 fi
+
+# The saved approximate area is the one value in internal storage left out of
+# the backup, which is what keeps "never leaves the phone" true for location. Its
+# paragraph must say so, paired with the code that makes it so. Checked on that
+# key alone: "left out of your Android backup" already appears in another
+# paragraph, and backup_paragraph() would pass on "not in your Android backup".
+LOCATION_CACHE="app/src/main/java/es/jjrh/bikeradar/LocationCache.kt"
+area_en="$(string_named "$STRINGS" settings_privacy_on_phone_approx_location)"
+area_es="$(string_named "$STRINGS_ES" settings_privacy_on_phone_approx_location)"
+has "$area_en" "not in your Android backup" \
+    || blocker "the saved-area paragraph (settings_privacy_on_phone_approx_location) must say it is not in your Android backup"
+has "$area_es" "no está en tu copia de seguridad de Android" \
+    || blocker "the Spanish saved-area paragraph must say it is not in the Android backup"
+grep -qF 'noBackupFilesDir' "$LOCATION_CACHE" \
+    || blocker "the Privacy copy says the saved area is not backed up, but $LOCATION_CACHE no longer stores it under noBackupFilesDir"
+perms_en="$(string_named "$STRINGS" settings_privacy_permissions_body)"
+perms_es="$(string_named "$STRINGS_ES" settings_privacy_permissions_body)"
+has "$perms_en" "never tracks you, never leaves the phone" \
+    || blocker "the location permission bullet lost 'never tracks you, never leaves the phone'"
+has "$perms_es" "nunca te rastrea ni sale del teléfono" \
+    || blocker "the Spanish location permission bullet lost 'nunca te rastrea ni sale del teléfono'"
+# Location is read while the app is open, not once per ride.
+case "${PRIVACY_EN,,}" in *"once per ride"*) blocker "the Privacy copy says location is read once per ride" ;; esac
+case "${PRIVACY_ES,,}" in *"una vez por ruta"*) blocker "the Spanish Privacy copy says location is read once per ride" ;; esac
 
 has "$PRIVACY_EN" "HTTPS" || blocker "network claim 'HTTPS' missing from the Privacy copy (settings_privacy_*)"
 has "$PRIVACY_ES" "HTTPS" || blocker "network claim 'HTTPS' missing from the Spanish Privacy copy"

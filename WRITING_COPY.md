@@ -76,8 +76,10 @@ adding or editing it, follow these principles:
   Of the app's copy, the script reads only the `settings_privacy_*` strings
   and the About screen's "not affiliated" title, in both locales. In Spanish
   it checks that every paragraph is non-empty, the literal tokens (permission
-  names, HTTPS), the backup statements, and the ban on stays-on-the-device
-  wording in the paragraphs about backed-up settings. The DataDisclosure
+  names, HTTPS), the backup statements, the ban on stays-on-the-device
+  wording in the paragraphs about backed-up settings, the saved approximate
+  area's not-in-the-backup phrase, the location bullet's "never leaves the
+  phone", and the ban on "once per ride". The DataDisclosure
   keywords and the sharing paragraph's phrases are English words and are
   checked in English only. A Privacy string missing from one locale is also
   caught by lint (`MissingTranslation` /

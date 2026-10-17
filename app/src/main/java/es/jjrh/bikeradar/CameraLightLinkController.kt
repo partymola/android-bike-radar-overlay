@@ -313,9 +313,8 @@ internal class CameraLightLinkController(
 
             Log.i(TAG, "handshake complete; subscribing mode-state notify")
             journal("camera handshake complete")
-            // Refresh the location cache for sunrise/sunset before scheduling
-            // the dusk/dawn flips below. Idempotent with the radar-side
-            // refresh: if either device handshook first, the cache is warm.
+            // As at the radar's handshake: a live area only with an app screen
+            // open, else the saved one (LocationCache).
             LocationCache.refreshIfStale(context)
             val ch14 = gatt.getService(Uuids.SVC_CONTROL)?.getCharacteristic(Uuids.SETTINGS_14)
             if (ch14 != null) queue.writeCccd(gatt, ch14)
@@ -332,7 +331,7 @@ internal class CameraLightLinkController(
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
             val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-            // Manual coordinates (if set) -> GPS last-known -> London. The
+            // Manual coordinates (if set) -> the approximate area -> London. The
             // resolver re-validates every input, so a corrupt pref can't reach
             // the solar calc.
             val resolved = RideLocationResolver.resolve(
@@ -343,11 +342,6 @@ internal class CameraLightLinkController(
             val sunriseMs = SunsetCalculator.sunriseEpochMs(today, resolved.lat, resolved.lon)
             val sunsetMs = SunsetCalculator.sunsetEpochMs(today, resolved.lat, resolved.lon)
             val isNight = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-            // Provenance only - never the coordinates. This line goes to release
-            // logcat via Log.i; a lat/lon would localise the rider's ride-start
-            // to a ~1 km cell for anything with READ_LOGS.
-            val locLog = resolved.source
-            val sunsetLog = if (sunsetMs != null) "${sunsetMs - nowMs}ms away ($locLog)" else "unknown ($locLog)"
 
             // Same time-of-day scheduling as the radar tail light, via the shared
             // pure LightAutoModeDecider: DAY -> cameraLightDayMode, NIGHT ->
@@ -355,7 +349,8 @@ internal class CameraLightLinkController(
             // the initial apply and the scheduled flip; the flip is also
             // re-checked at fire time in case the override or link changed.
             val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, isNight, cameraLightUserOverride)
-            Log.i(TAG, "auto-mode: night=$isNight override=$cameraLightUserOverride sunset=$sunsetLog")
+            // Provenance only, never the coordinates: this goes to release logcat.
+            Log.i(TAG, "auto-mode: night=$isNight override=$cameraLightUserOverride location=${resolved.source}")
             suspend fun applyPhase(phase: LightAutoModeDecider.Phase, label: String) {
                 val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
                     prefs.cameraLightNightMode

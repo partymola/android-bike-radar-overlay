@@ -286,13 +286,14 @@ the Home Assistant URL and token, and the list of apps you have allowed
 to use your radar - are part of your Android backup
 (encrypted by Android with your screen lock) and the new-phone transfer
 wizard (a direct phone-to-phone copy that never touches a server), so
-the app comes up configured on the new phone. Two things don't
+the app comes up configured on the new phone. Three things don't
 transfer: the radar pairing (Bluetooth bonds belong to the system;
-re-pair once in Android's Bluetooth settings) and the files in the app's
-own folder: ride history, capture logs, crash reports, the connection log
-and periodic screenshots (the app deliberately excludes them from backups -
-if you want long-term ride stats off the phone, the Home Assistant
-integration is the supported path).
+re-pair once in Android's Bluetooth settings), the rough area the light
+auto-mode uses (the app reads it again when you first open it on the new
+phone), and the files in the app's own folder: ride history, capture logs,
+crash reports, the connection log and periodic screenshots (the app
+deliberately excludes them from backups - if you want long-term ride stats
+off the phone, the Home Assistant integration is the supported path).
 
 ## Status
 

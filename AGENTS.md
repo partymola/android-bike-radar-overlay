@@ -172,12 +172,23 @@ to its file. The notes below are the working summary.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by
   `RideLocationResolver`: rider-entered manual coordinates if set, else
-  `LocationCache`'s one `getLastKnownLocation` read per ride via
-  `ACCESS_COARSE_LOCATION`, else a London fallback. A one-shot dawn/dusk
-  flip is scheduled for
-  the rest of the session. Skipped when `cameraLightUserOverride` is
-  set (manual side-button press during the session). See
-  `BikeRadarService.kt` connect path.
+  `LocationCache`'s approximate area, else a London fallback. A one-shot
+  dawn/dusk flip is scheduled for the rest of the session. Skipped when
+  `cameraLightUserOverride` is set (manual side-button press during the
+  session). See `CameraLightLinkController.kt` connect path.
+  **Android grants the while-in-use `ACCESS_COARSE_LOCATION` only while a
+  screen of the app is visible, never to the `connectedDevice` service**
+  (observed on a Pixel, Android 16: appop `Reject [fgsvc]`), and a refused
+  read returns null like "no fix", so the handshake reads alone would leave
+  most rides on London. `MainActivity`'s resume hook and the settings
+  listener in `BikeRadarApp` read it too, and
+  `LocationCache` keeps one area rounded to tenths of a degree under
+  `getNoBackupFilesDir()`, deleted whenever it stops being used: grant gone
+  (seen at the next process start), neither auto-mode in use (the front one
+  counts only with a front camera selected), or manual coordinates set.
+  Robolectric cannot model the refusal; `LocationCacheRefreshTest` and
+  `MainActivitySmokeTest.aScreenResumedAfterAFixArrivesSavesTheArea` pin the
+  rest.
 - Capture log is opt-in (off by default; `Prefs.captureLoggingEnabled`, toggled
   on the Debug screen). When enabled it is written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`

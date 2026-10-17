@@ -10,19 +10,19 @@ package es.jjrh.bikeradar
  *
  * ## Why this exists
  * The rear/front light day-night auto-switch needs a local sunrise/sunset,
- * which needs a location. GPS (`ACCESS_COARSE_LOCATION`) is optional; a rider
- * who declines it used to fall back silently to London, which is wrong for
- * everyone else. This resolver adds a manual-coordinate path so a decliner can
- * still get accurate times, WITHOUT an approximate timezone/country guess -
+ * which needs a location. Location (`ACCESS_COARSE_LOCATION`) is optional; a
+ * rider who declines it used to fall back silently to London, which is wrong
+ * for everyone else. This resolver adds a manual-coordinate path so a decliner
+ * can still get accurate times, WITHOUT an approximate timezone/country guess -
  * a coordinate that is hours wrong in wide zones would be false precision and
- * against the app's honest-signal spirit. Two precise options, London only as
- * an honest last resort.
+ * against the app's honest-signal spirit. London is only an honest last resort.
  *
  * ## Precedence (highest first)
  *   1. valid MANUAL coordinates (rider typed them)
- *   2. GPS last-known fix (permission granted)
+ *   2. the approximate area from [LocationCache] (permission granted)
  *   3. London fallback
- * MANUAL beats GPS on purpose: it is an explicit override the rider set.
+ * MANUAL beats the area on purpose: it is an explicit override the rider set.
+ * [Source.GPS] names the area, wherever [LocationCache] got it.
  *
  * ## Input safety
  * The rider-facing text field is defended in depth. [sanitizeCoordinateInput]

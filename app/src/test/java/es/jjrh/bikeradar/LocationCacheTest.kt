@@ -9,11 +9,9 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * State-machine tests for [LocationCache]. The actual `getLastKnownLocation`
- * read needs Android context + permissions and is covered by an instrumented
- * test if one is added later; the JVM tests here pin the cache semantics
- * around [LocationCache.overrideForTest] / [LocationCache.current] /
- * [LocationCache.lastFetchMs].
+ * The held value of [LocationCache] through [LocationCache.overrideForTest] /
+ * [LocationCache.current] / [LocationCache.lastFetchMs]. The read on a real
+ * Context is in `LocationCacheRefreshTest`.
  */
 class LocationCacheTest {
 

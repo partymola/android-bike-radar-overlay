@@ -52,10 +52,14 @@ class MainActivity : ComponentActivity() {
         // On every resume, the first included: re-launches the service after a
         // process kill (e.g. adb install -r), and a permission granted in the
         // system dialog or App info starts it without a relaunch. Boot is
-        // covered by BootReceiver.
+        // covered by BootReceiver. The location read is here because a visible
+        // screen is the only time Android allows it (LocationCache).
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) ServiceAutoStart.startIfAllowed(this, prefs)
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    ServiceAutoStart.startIfAllowed(this, prefs)
+                    LocationCache.refreshIfStale(this)
+                }
             },
         )
 

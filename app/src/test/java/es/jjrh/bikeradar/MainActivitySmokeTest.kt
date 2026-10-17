@@ -185,6 +185,40 @@ class MainActivitySmokeTest {
         }
     }
 
+    /** A visible screen is the only time Android allows the location read, so
+     *  the resume hook is what saves the area a closed-app ride uses: a fix
+     *  that arrives while the app is away is read when the rider comes back.
+     *  The notice is left up so only that hook can pass this. */
+    @Suppress("DEPRECATION") // ShadowLocationManager has no typed replacement for this seeding call
+    @Test
+    fun aScreenResumedAfterAFixArrivesSavesTheArea() {
+        val slot = java.io.File(app.noBackupFilesDir, LocationCache.FILE_NAME)
+        try {
+            shadowOf(app).grantPermissions(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            Prefs(app).radarLightAutoModeEnabled = true
+            Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+                controller.create().start().resume()
+                assertFalse("no fix yet, nothing saved", slot.exists())
+
+                controller.pause()
+                val lm = app.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+                shadowOf(lm).setLastKnownLocation(
+                    android.location.LocationManager.NETWORK_PROVIDER,
+                    android.location.Location(android.location.LocationManager.NETWORK_PROVIDER).apply {
+                        latitude = 51.5074
+                        longitude = -0.1278
+                        time = 1_000L
+                    },
+                )
+                controller.resume()
+                assertEquals("515 -1", slot.readText())
+            }
+        } finally {
+            LocationCache.overrideForTest(null, null, 0L)
+            slot.delete()
+        }
+    }
+
     /** "Stop scanning" stays stopped however often the rider opens the app. */
     @Test
     fun returningUserDoesNotStartServiceWhenServiceDisabled() {

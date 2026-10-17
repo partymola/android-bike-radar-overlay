@@ -73,8 +73,9 @@ internal val PERMISSIONS = buildList {
             markLabelRes = R.string.permission_mark_recommended,
         ),
     )
-    // Approximate location, read once per ride for the front- and radar-light
-    // day/night auto-modes (sunrise/sunset). Genuinely optional: skipped or
+    // Approximate location for the front- and radar-light day/night auto-modes
+    // (sunrise/sunset), read while a screen is visible and kept as one rounded
+    // area (LocationCache). Genuinely optional: skipped or
     // denied, the rider can still supply coordinates by hand, and only with
     // neither does SunsetCalculator fall back to London. Surfaced here so
     // onboarding and Settings -> Permissions both prompt for it.

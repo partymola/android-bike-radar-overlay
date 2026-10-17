@@ -9,7 +9,7 @@ Funciones:
 - Barra lateral en vivo con distancia, velocidad de aproximación y posición lateral por vehículo
 - Pitidos por niveles de proximidad, aviso urgente de impacto inminente, aviso de carretera despejada
 - Notificación de resumen al terminar la ruta: adelantamientos, adelantamientos ajustados, distancia, adelantamiento más ajustado
-- Modo automático de la cámara/luz delantera según el atardecer local (una lectura aproximada de ubicación por ruta)
+- Modo automático de la cámara/luz delantera según el atardecer local (a partir de una zona aproximada leída con la app abierta)
 - Telemetría de eBike Bosch Smart System, estrictamente de solo lectura
 - Recordatorios de alejamiento y de bici sin bloquear
 - Publicación opcional en Home Assistant: baterías, adelantamientos ajustados, resúmenes de ruta

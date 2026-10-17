@@ -144,7 +144,11 @@ the coverage, lint or R8 configuration in `app/build.gradle.kts` or
   and declares, the cross-app sharing paragraph, HTTPS, the About screen's
   "not affiliated" title, and empty Spanish paragraphs. The paragraphs about
   values stored in SharedPreferences must name the backup and must not claim
-  to stay on the phone. It also checks the backup rules themselves: exactly
+  to stay on the phone. The saved approximate area's paragraph must say it is
+  not in the backup, paired with `LocationCache` storing it under
+  `noBackupFilesDir`, the location permission bullet must keep "never
+  leaves the phone", and no Privacy paragraph may say location is read once
+  per ride. It also checks the backup rules themselves: exactly
   two excludes, external storage excluded, and encryption required.
   **Blocking in `ci.yml`**, since it reads only the working tree. The sharing
   check runs only while `access/RadarAccess.kt` exists, so moving that file

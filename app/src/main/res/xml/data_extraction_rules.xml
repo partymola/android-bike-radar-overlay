@@ -3,7 +3,9 @@
      credentials, known-device cache) is included in both cloud backup and
      device-to-device transfer, so a new phone starts with the rider's full
      setup. The transient diagnostic prefs riding along (restart markers,
-     counters) are self-healing after a restore.
+     counters) are self-healing after a restore. The saved approximate area
+     (LocationCache) is internal storage too, but lives under
+     getNoBackupFilesDir(), which Android leaves out of both.
 
      App-specific EXTERNAL storage is explicitly excluded from both: it holds
      the ride history, capture logs, crash reports, the link journal and debug

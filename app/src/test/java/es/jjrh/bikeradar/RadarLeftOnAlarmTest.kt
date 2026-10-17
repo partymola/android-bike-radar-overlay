@@ -462,6 +462,21 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
+    fun theDashcamAlarmDoesNotNeedTheOverlayWarning() {
+        dashcamAlarmDue()
+        assertFalse(prefs.dashcamWarnWhenOff)
+        stream()
+        now += 600_000L
+        drop(300L, status = 19)
+        val dropAt = now
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        now = dropAt + 15_000L
+        coordinator.evaluateWalkAway(now)
+        assertEquals(1, dashcamPosts)
+        assertEquals(1, starts)
+    }
+
+    @Test
     fun aDismissHoldsUntilTheRiderRidesAgain() {
         // A radar left on at the edge of range reconnects and drops again;
         // the rider has answered once.
@@ -551,9 +566,9 @@ class RadarLeftOnAlarmTest {
         assertEquals(stopsBefore + 1, stops)
     }
 
-    /** The dashcam alarm armed and due: camera heard, threshold passed. */
+    /** The dashcam alarm armed and due: camera heard, threshold passed. The
+     *  overlay's camera-off warning stays at its default, off. */
     private fun dashcamAlarmDue() {
-        prefs.dashcamWarnWhenOff = true
         prefs.walkAwayAlarmThresholdSec = 15
         dashcamSlug = "cam"
         BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))

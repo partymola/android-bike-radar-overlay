@@ -819,11 +819,10 @@ internal class RadarLinkCoordinator(
         val input = WalkAwayDecider.Input(
             nowMs = nowMs,
             config = WalkAwayDecider.Config(
-                // Gate on both the dedicated toggle AND the dashcam-warn
-                // master switch. If the rider explicitly said "don't
-                // warn me about the dashcam at all" we respect that.
+                // The rider's own switch only. The overlay's camera-off
+                // warning is a separate choice and does not gate the alarm
+                // (`theDashcamAlarmDoesNotNeedTheOverlayWarning`).
                 enabled = prefs.walkAwayAlarmEnabled &&
-                    prefs.dashcamWarnWhenOff &&
                     slug != null &&
                     // The radar-left-on alarm sounded first this off-episode
                     // (`theRadarLeftOnAlarmKeepsTheDashcamAlarmSilent`), or is

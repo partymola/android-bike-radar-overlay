@@ -605,16 +605,16 @@
     <string name="settings_dashcam_change">Cambiar</string>
     <string name="settings_dashcam_behaviour_label">Comportamiento</string>
     <string name="settings_dashcam_warn_off">Avisar en la barra lateral cuando la cámara delantera está apagada</string>
-    <string name="settings_dashcam_warn_off_subtitle">Muestra un icono de cámara apagada junto al ciclista cuando no se detecta ninguna emisión Vue.</string>
+    <string name="settings_dashcam_warn_off_subtitle">Muestra un icono de cámara apagada junto al ciclista cuando el teléfono no detecta la cámara delantera.</string>
     <string name="settings_dashcam_walkaway_label">Alarma al alejarte</string>
-    <string name="settings_dashcam_walkaway_alert">Avisar si la cámara delantera sigue encendida</string>
-    <string name="settings_dashcam_walkaway_alert_subtitle">El teléfono vibra y pita cuando te alejas fuera de alcance con la cámara delantera aún encendida (cámara, luz o ambas).</string>
+    <string name="settings_dashcam_walkaway_alert">Avisar si la cámara sigue encendida</string>
+    <string name="settings_dashcam_walkaway_alert_subtitle">Suena cuando el radar lleva desconectado el tiempo que elijas abajo y el teléfono sigue detectando la cámara delantera.\n• Usa el sonido de alarma del teléfono a todo volumen y vibra\n• Se repite cada 5 min hasta que la descartes\n• Se detiene si vuelve el radar o el teléfono deja de detectar la cámara\n• Con los datos de la eBike activados, no suena si la bici estaba sin bloquear cuando se desconectó el radar</string>
     <string name="settings_dashcam_override_dnd">Saltarse No molestar</string>
     <string name="settings_dashcam_override_dnd_subtitle_allowed">Permitido actualmente. La alarma sonará aunque No molestar esté activado.</string>
     <string name="settings_dashcam_override_dnd_subtitle_tap">Toca para permitir que esta alarma suene con No molestar activado en los ajustes del sistema.</string>
-    <string name="settings_dashcam_threshold_title">Umbral de fuera de alcance</string>
+    <string name="settings_dashcam_threshold_title">Tiempo sin radar</string>
     <string name="settings_dashcam_threshold_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
-    <string name="settings_dashcam_threshold_helper">Cuánto tiempo debe estar inaccesible la cámara delantera antes de que suene la alarma.</string>
+    <string name="settings_dashcam_threshold_helper">Cuánto tiempo debe estar desconectado el radar antes de que suene esta alarma.</string>
 
     <!-- Ajustes → Privacidad (SettingsPrivacy.kt) -->
     <string name="settings_privacy_title">Privacidad</string>
@@ -821,8 +821,8 @@
     <string name="attention_dismiss_cd">Descartar: <xliff:g id="item" example="Carga el radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Cámara dejada en la bici</string>
     <string name="svc_main_walkaway_channel_desc">Avisa cuando el radar se apaga pero la cámara delantera sigue emitiendo desde la bici.</string>
-    <string name="svc_main_walkaway_notif_title">Cámara dejada en la bici</string>
-    <string name="svc_main_walkaway_notif_text">El radar está apagado pero la cámara delantera sigue en tu bici. La batería se gasta y es fácil olvidarla.</string>
+    <string name="svc_main_walkaway_notif_title">Cámara aún encendida</string>
+    <string name="svc_main_walkaway_notif_text">El radar está desconectado y la cámara delantera sigue encendida. Apágala para no gastar su batería.</string>
     <string name="svc_main_walkaway_action_dismiss">Descartar</string>
     <string name="svc_main_walkaway_action_snooze">Recordar en 2 min</string>
     <!-- La alarma de radar olvidado: preguntas y "Parece", porque la app lo

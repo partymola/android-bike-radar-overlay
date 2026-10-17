@@ -304,7 +304,9 @@ internal fun SettingsDashcamContent(
                     )
                 }
 
-                if (dashcamMac != null && dashcamWarnWhenOff) {
+                // Shown whatever the overlay warning says: the alarm no longer
+                // depends on it (`theWalkAwaySectionShowsWithTheOverlayWarningOff`).
+                if (dashcamMac != null) {
                     SettingsSectionLabel(stringResource(R.string.settings_dashcam_walkaway_label))
                     SettingsRowGroup {
                         SettingsToggleRow(

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.R
@@ -145,6 +146,18 @@ class SettingsDashcamOwnershipUndoTest {
 
         composeRule.onNodeWithText("Clear").assertDoesNotExist()
         composeRule.onNodeWithText("Saved dashcam").assertDoesNotExist()
+    }
+
+    @Test
+    fun theWalkAwaySectionShowsWithTheOverlayWarningOff() {
+        val prefs = prefsWithACameraInUse().apply { dashcamWarnWhenOff = false }
+        show(prefs)
+
+        composeRule.onNodeWithText("Alert if the dashcam is still on").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertFalse("the row must reach the alarm's own switch", prefs.walkAwayAlarmEnabled)
+        assertFalse("and leave the overlay warning alone", prefs.dashcamWarnWhenOff)
     }
 
     @Test

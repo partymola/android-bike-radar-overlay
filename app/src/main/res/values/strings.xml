@@ -672,16 +672,16 @@
     <string name="settings_dashcam_change">Change</string>
     <string name="settings_dashcam_behaviour_label">Behaviour</string>
     <string name="settings_dashcam_warn_off">Warn on overlay when dashcam is off</string>
-    <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon next to the rider when no Vue advert is seen.</string>
+    <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon next to the rider when your phone can\'t pick up the dashcam.</string>
     <string name="settings_dashcam_walkaway_label">Walk-away alarm</string>
-    <string name="settings_dashcam_walkaway_alert">Alert if dashcam remains on</string>
-    <string name="settings_dashcam_walkaway_alert_subtitle">Phone vibrates + beeps when you walk out of range with the dashcam still powered up (camera, light, or both).</string>
+    <string name="settings_dashcam_walkaway_alert">Alert if the dashcam is still on</string>
+    <string name="settings_dashcam_walkaway_alert_subtitle">Sounds when the radar has been off for the time set below and your phone still picks up the dashcam.\n• Plays your phone\'s alarm sound at full volume and vibrates\n• Repeats every 5 min until you dismiss it\n• Stops if the radar comes back or your phone stops picking up the dashcam\n• With eBike data on, stays quiet if the bike was unlocked when the radar went off</string>
     <string name="settings_dashcam_override_dnd">Override Do Not Disturb</string>
     <string name="settings_dashcam_override_dnd_subtitle_allowed">Currently allowed. Alarm will sound even with DND on.</string>
     <string name="settings_dashcam_override_dnd_subtitle_tap">Tap to allow this alarm to play through DND in system settings.</string>
-    <string name="settings_dashcam_threshold_title">Out-of-range threshold</string>
+    <string name="settings_dashcam_threshold_title">Radar off for</string>
     <string name="settings_dashcam_threshold_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
-    <string name="settings_dashcam_threshold_helper">How long the dashcam must be unreachable before the alarm fires.</string>
+    <string name="settings_dashcam_threshold_helper">How long the radar must be off before this alarm sounds.</string>
 
     <!-- Settings → Privacy (SettingsPrivacy.kt) -->
     <string name="settings_privacy_title">Privacy</string>
@@ -890,8 +890,8 @@
     <string name="attention_dismiss_cd">Dismiss: <xliff:g id="item" example="Charge radar - 12%">%1$s</xliff:g></string>
     <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
     <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
-    <string name="svc_main_walkaway_notif_title">Dashcam left on bike</string>
-    <string name="svc_main_walkaway_notif_text">Radar is off but the dashcam is still on your bike. Battery draining, easy to forget.</string>
+    <string name="svc_main_walkaway_notif_title">Dashcam still on</string>
+    <string name="svc_main_walkaway_notif_text">The radar is off but the dashcam is still on. Turn it off to save its battery.</string>
     <string name="svc_main_walkaway_action_dismiss">Dismiss</string>
     <string name="svc_main_walkaway_action_snooze">Remind in 2 min</string>
     <!-- The radar-left-on alarm. Questions and "Looks like": the app infers

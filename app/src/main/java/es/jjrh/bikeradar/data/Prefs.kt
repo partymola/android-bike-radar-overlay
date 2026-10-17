@@ -457,12 +457,26 @@ class Prefs(context: Context) {
 
     /** Master toggle for the walk-away alarm (radar-off-while-dashcam-
      *  on notification). Default on: asymmetric cost - false positive
-     *  is one swipe, false negative is a drained or stolen dashcam. */
+     *  is one swipe, false negative is a drained or stolen dashcam.
+     *  It once also needed [dashcamWarnWhenOff];
+     *  [migrateWalkAwayAlarmOffTheOverlayWarning] keeps that rider's alarm
+     *  silent across the change. */
     var walkAwayAlarmEnabled: Boolean
         get() = sp.getBoolean(KEY_WALKAWAY_ENABLED, true)
         set(v) {
             sp.edit().putBoolean(KEY_WALKAWAY_ENABLED, v).apply()
         }
+
+    /** Once per install: a rider past setup with a front camera picked and
+     *  the overlay's camera-off warning off could not hear the walk-away
+     *  alarm while it needed that warning, so their alarm is switched off
+     *  rather than starting to sound now (`WalkAwayAlarmMigrationTest`). */
+    fun migrateWalkAwayAlarmOffTheOverlayWarning() {
+        if (sp.getBoolean(KEY_WALKAWAY_OFF_OVERLAY_WARNING_MIGRATED, false)) return
+        val e = sp.edit().putBoolean(KEY_WALKAWAY_OFF_OVERLAY_WARNING_MIGRATED, true)
+        if (firstRunComplete && dashcamMac != null && !dashcamWarnWhenOff) e.putBoolean(KEY_WALKAWAY_ENABLED, false)
+        e.apply()
+    }
 
     /** The radar-left-on alarm: the walk-away alarm, sounded once when the
      *  rider walks out of range with the radar still on, with or without a
@@ -1232,6 +1246,7 @@ class Prefs(context: Context) {
         const val KEY_HA_INTENT = "ha_intent"
         const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
+        const val KEY_WALKAWAY_OFF_OVERLAY_WARNING_MIGRATED = "walk_away_alarm_off_overlay_warning_migrated"
         const val KEY_RADAR_LEFT_ON_ALARM = "radar_left_on_alarm_enabled"
         const val KEY_RADAR_LEFT_ON_CAL_MAC = "radar_left_on_cal_mac"
         const val KEY_RADAR_LEFT_ON_CAL_BUILD = "radar_left_on_cal_build"

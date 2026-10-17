@@ -12,7 +12,8 @@ import es.jjrh.bikeradar.data.Prefs
  * an uncaught exception on ANY thread - including one during MainActivity /
  * Compose startup, before the foreground service ever runs - is recorded to
  * app storage for later diagnosis. It also trims debug screenshots to their
- * cap, which the Privacy screen states, and keeps the saved approximate area in
+ * cap, which the Privacy screen states, runs the one-time settings migrations
+ * the service relies on, and keeps the saved approximate area in
  * step with the settings: read when one starts needing it, deleted when none
  * does ([LocationCache]).
  */
@@ -26,6 +27,9 @@ class BikeRadarApp : Application() {
         // A throw here would crash every start, so a failed trim is logged and dropped.
         runCatching { ScreenshotCaptureService.pruneSaved(getExternalFilesDir(null)) }
             .onFailure { Log.w("BikeRadar.App", "screenshot trim failed: $it") }
+        // Before the service can start, so its first tick reads the result.
+        runCatching { Prefs(this).migrateWalkAwayAlarmOffTheOverlayWarning() }
+            .onFailure { Log.w("BikeRadar.App", "walk-away alarm migration failed: $it") }
         // Revoking location kills the process, so a start is where that is seen.
         runCatching { LocationCache.syncWithSettings(this) }
             .onFailure { Log.w("BikeRadar.App", "location sync failed: $it") }

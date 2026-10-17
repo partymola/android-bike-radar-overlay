@@ -83,8 +83,12 @@ screen stays yours.
   it. Cadence, rider and motor power, assist mode and the bike's own distance
   count go only into the capture log, which is off by default. Never sends a
   command to the bike.
-- Walk-away alarm: chirps a forgotten dashcam if it stays awake past
-  the rider's leaving window after a parked-and-locked bike state.
+- Walk-away alarm: if the radar goes off and the phone still picks up the
+  dashcam, the phone sounds its alarm at full volume and vibrates. It waits a
+  time you set, 30 seconds by default. It repeats every 5 minutes until you
+  dismiss it. It stops if the radar comes back or the phone stops picking up
+  the dashcam. With eBike data on, it stays quiet if the bike was unlocked
+  when the radar went off.
 - No-radar warning: with a Bosch eBike, the app notices when you ride with no
   radar connected. Once the bike has shown you riding for 90 seconds, you hear
   the drop alert (three low pulses), up to three times a ride. A banner on the
@@ -397,13 +401,17 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   la bici: la pantalla de inicio muestra la batería y el estado de conexión.
   Con la velocidad, la app ajusta el ritmo de los pitidos y activa el aviso de
   radar sin conectar, y la bici le indica cuándo estás parado. Según esté
-  bloqueada o no, ajusta el aviso de cámara olvidada, te avisa si te alejas sin
+  bloqueada o no, ajusta la alarma al alejarte, te avisa si te alejas sin
   bloquearla y, si usas Home Assistant, marca allí, junto con la señal de
   parada, el inicio y el fin de la ruta. La cadencia, la potencia, el modo de
   asistencia y la distancia que cuenta la propia bici solo van al registro de
   capturas, que está desactivado por defecto. Nunca envía órdenes a la bici.
-- Aviso de cámara olvidada: te avisa si la cámara delantera sigue encendida
-  cuando te alejas de la bici después de aparcarla.
+- Alarma al alejarte: si el radar se desconecta y el teléfono sigue
+  detectando la cámara delantera, el teléfono hace sonar su alarma a todo
+  volumen y vibra. Espera el tiempo que elijas, 30 s por defecto. Se repite
+  cada 5 min hasta que la descartes. Se detiene si vuelve el radar o el
+  teléfono deja de detectar la cámara. Con los datos de la eBike activados, no
+  suena si la bici estaba sin bloquear cuando se desconectó el radar.
 - Aviso de radar sin conectar: con una eBike Bosch, la app nota si vas sin el
   radar conectado. Cuando, según la bici, llevas 90 s en marcha, suena el aviso
   de desconexión, hasta 3 veces por ruta, y la barra lateral te pregunta si el

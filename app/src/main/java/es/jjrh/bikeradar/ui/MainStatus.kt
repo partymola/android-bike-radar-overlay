@@ -89,8 +89,8 @@ data class MainStatusInputs(
     /** The permission the card asks for, or null
      *  ([es.jjrh.bikeradar.Permissions.missingForService]). */
     val missingPermission: MissingPermission? = null,
-    /** The rider's walk-away alarm switch. It can sound only with a dashcam
-     *  that warns when off, and only it needs a notification to be silenced. */
+    /** The rider's walk-away alarm switch. It can sound only with a dashcam,
+     *  and only it needs a notification to be silenced. */
     val walkAwayAlarmOn: Boolean = false,
     /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
      *  System row reads, so the two cannot disagree about one radar. */
@@ -332,7 +332,7 @@ object MainStatusDeriver {
      *  walk-away alarm only for a rider who can hear one
      *  (`MainStatusDeriverTest.theNotificationsCardNamesTheAlarmOnlyWhenOneCanSound`). */
     private fun notificationsCard(inputs: MainStatusInputs): MainStatusModel? = if (inputs.missingPermission == MissingPermission.NOTIFICATIONS) {
-        val alarmCanSound = inputs.dashcamOwned && inputs.dashcamWarnWhenOff && inputs.walkAwayAlarmOn
+        val alarmCanSound = inputs.dashcamOwned && inputs.walkAwayAlarmOn
         MainStatusModel(
             icon = MainStatusIcon.Warning,
             tone = MainStatusTone.Warn,

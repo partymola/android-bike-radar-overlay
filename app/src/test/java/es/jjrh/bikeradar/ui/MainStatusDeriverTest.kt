@@ -204,7 +204,8 @@ class MainStatusDeriverTest {
         ).subtitleRes
         assertEquals(alarm, sub(owned = true, warn = true, walkAway = true))
         assertEquals(plain, sub(owned = false, warn = true, walkAway = true))
-        assertEquals(plain, sub(owned = true, warn = false, walkAway = true))
+        // The overlay's camera-off warning does not gate the alarm.
+        assertEquals(alarm, sub(owned = true, warn = false, walkAway = true))
         assertEquals(plain, sub(owned = true, warn = true, walkAway = false))
     }
 

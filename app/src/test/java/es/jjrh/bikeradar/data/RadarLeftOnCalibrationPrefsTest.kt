@@ -62,11 +62,13 @@ class RadarLeftOnCalibrationPrefsTest {
     }
 
     @Test
-    fun theBundleShowsTheCountAndNotTheRadar() {
+    fun theBundleShowsTheCountAndNotTheRadarOrTheBuild() {
+        ShadowBuild.setFingerprint("vendor/phone:16/XYZ123/4567")
         Prefs(app).setRadarLeftOnSwitchOffs(RADAR, 2)
         val dump = Prefs(app).dumpAll()
         assertTrue(dump, dump.contains("radar_left_on_switch_offs=2"))
         assertFalse(dump, dump.contains(RADAR))
+        assertFalse(dump, dump.contains("XYZ123"))
     }
 
     private companion object {

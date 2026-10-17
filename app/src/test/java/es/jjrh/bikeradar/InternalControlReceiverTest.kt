@@ -98,7 +98,7 @@ class InternalControlReceiverTest {
         for (scanning in listOf(true, false)) {
             Prefs(app).serviceEnabled = scanning
             for (action in listOf(InternalControlReceiver.ACTION_WALKAWAY_DISMISS, InternalControlReceiver.ACTION_WALKAWAY_SNOOZE)) {
-                ServiceNotifications(app) { Prefs(app) }.apply { ensureChannels() }.postWalkAway()
+                ServiceNotifications(app) { Prefs(app) }.apply { ensureChannels() }.postWalkAway(WalkAwayAlarmKind.DASHCAM)
                 assertEquals(2, shadowOf(nm).allNotifications.size)
                 receiver.onReceive(app, Intent(action))
                 assertNull("$action started a service (scanning=$scanning)", shadowOf(app).peekNextStartedService())

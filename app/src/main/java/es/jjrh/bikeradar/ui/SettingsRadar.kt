@@ -2,8 +2,10 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DoNotDisturbOn
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -48,11 +51,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.AlertDecider
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkCoordinator
+import es.jjrh.bikeradar.ServiceNotifications
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -97,6 +102,8 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var radarLongOfflineCap by rememberSaveable { mutableIntStateOf(prefs.radarLongOfflineCapSec) }
     var bannerPersistent by rememberSaveable { mutableStateOf(prefs.reconnectBannerPersistent) }
     var noRadarWarning by rememberSaveable { mutableStateOf(prefs.noRadarRideWarningEnabled) }
+    var radarLeftOnAlarm by rememberSaveable { mutableStateOf(prefs.radarLeftOnAlarmEnabled) }
+    val walkAwayCanBypassDnd = rememberWalkAwayCanBypassDnd()
     // serviceEnabled is binary and atomic — no in-progress drag state to mirror —
     // so derive from prefs.flow instead of a local rememberSaveable. Keeps the
     // Danger-zone row honest if anything else (future MainScreen action,
@@ -191,6 +198,21 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
             bannerPersistent = it
             prefs.reconnectBannerPersistent = it
         },
+        radarLeftOnAlarm = radarLeftOnAlarm,
+        onRadarLeftOnAlarmChange = {
+            radarLeftOnAlarm = it
+            prefs.radarLeftOnAlarmEnabled = it
+        },
+        walkAwayCanBypassDnd = walkAwayCanBypassDnd,
+        onWalkAwayDndClick = {
+            ctx.startActivity(
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                    putExtra(Settings.EXTRA_CHANNEL_ID, ServiceNotifications.WALKAWAY_CHANNEL_ID)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+        },
         onStopScanningClick = { showStopDialog = true },
     )
 
@@ -226,6 +248,23 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
             },
         )
     }
+}
+
+/** Whether the walk-away channel, which both alarms post on, may show during
+ *  Do Not Disturb. Re-read on every resume, since the rider changes it in
+ *  system settings and comes back to the screen that sent them there. */
+@Composable
+internal fun rememberWalkAwayCanBypassDnd(): Boolean {
+    val ctx = LocalContext.current
+    fun read() = ctx.getSystemService(NotificationManager::class.java)
+        ?.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID)
+        ?.canBypassDnd() == true
+    var allowed by remember { mutableStateOf(read()) }
+    LifecycleResumeEffect(Unit) {
+        allowed = read()
+        onPauseOrDispose { }
+    }
+    return allowed
 }
 
 /**
@@ -317,6 +356,10 @@ internal fun SettingsRadarContent(
     onNoRadarWarningChange: (Boolean) -> Unit,
     bannerPersistent: Boolean,
     onBannerPersistentChange: (Boolean) -> Unit,
+    radarLeftOnAlarm: Boolean,
+    onRadarLeftOnAlarmChange: (Boolean) -> Unit,
+    walkAwayCanBypassDnd: Boolean,
+    onWalkAwayDndClick: () -> Unit,
     onStopScanningClick: () -> Unit,
 ) {
     val br = LocalBrColors.current
@@ -443,6 +486,31 @@ internal fun SettingsRadarContent(
                     checked = adaptive,
                     onCheckedChange = onAdaptiveChange,
                 )
+            }
+
+            SettingsSectionLabel(stringResource(R.string.settings_radar_section_walkaway))
+            SettingsRowGroup {
+                SettingsToggleRow(
+                    title = stringResource(R.string.settings_radar_left_on_title),
+                    subtitle = stringResource(R.string.settings_radar_left_on_subtitle),
+                    checked = radarLeftOnAlarm,
+                    onCheckedChange = onRadarLeftOnAlarmChange,
+                    isLast = !radarLeftOnAlarm,
+                )
+                if (radarLeftOnAlarm) {
+                    SettingsRow(
+                        icon = Icons.Default.DoNotDisturbOn,
+                        iconTint = br.brand,
+                        title = stringResource(R.string.settings_walkaway_dnd_title),
+                        subtitle = if (walkAwayCanBypassDnd) {
+                            stringResource(R.string.settings_walkaway_dnd_allowed)
+                        } else {
+                            stringResource(R.string.settings_walkaway_dnd_tap)
+                        },
+                        onClick = onWalkAwayDndClick,
+                        isLast = true,
+                    )
+                }
             }
 
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_connection))

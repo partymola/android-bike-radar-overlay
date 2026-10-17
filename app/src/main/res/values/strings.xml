@@ -49,7 +49,7 @@
     <string name="permission_nearby_title">Nearby devices</string>
     <string name="permission_nearby_rationale">Scan for and connect to your radar, dashcam and eBike over Bluetooth.</string>
     <string name="permission_notifications_title">Notifications</string>
-    <string name="permission_notifications_rationale">See your ride summary and warnings, and pause alerts from the notification. Without this, alerts still play but you can\'t silence a dashcam\'s walk-away alarm.</string>
+    <string name="permission_notifications_rationale">See your ride summary and warnings, and pause alerts from the notification. Without this, alerts still play but you can\'t silence the walk-away alarm.</string>
     <string name="permission_overlay_title">Draw over other apps</string>
     <string name="permission_overlay_rationale">Draw the radar overlay on top of whatever\'s on screen. Without this, alerts still play but you won\'t see the overlay.</string>
     <string name="permission_location_title">Approximate location</string>
@@ -376,7 +376,7 @@
     <string name="onboarding_ebike_go_back">Don\'t have a Bosch eBike? Go back</string>
     <string name="onboarding_ebike_flow_open_failed">Couldn\'t open Flow. Install it from the Play Store and try again.</string>
     <string name="onboarding_ebike_privacy_heading">What\'s collected</string>
-    <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed and pedalling - read-only, never sends a command to your bike</string>
+    <string name="onboarding_ebike_bullet_reads">Reads your bike\'s battery, speed, pedalling and lock state: read-only, never sends a command to your bike</string>
     <string name="onboarding_ebike_bullet_phone">Stays on your phone. Full readings go only into capture logs, which are off by default</string>
     <string name="onboarding_ebike_bullet_ha">If Home Assistant is set up, ride info is sent there</string>
 
@@ -527,6 +527,21 @@
     <string name="settings_radar_overlay_dim_strong">Strong</string>
     <string name="settings_radar_adaptive_title">Adaptive alert colours</string>
     <string name="settings_radar_adaptive_subtitle">Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.</string>
+    <!-- The radar-left-on alarm (RadarLeftOnDecider). The 3 is
+         CALIBRATION_SWITCH_OFFS, the 30 s is
+         RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS and the 10% is
+         BATTERY_FLOOR_PCT. A lock read after the riding lifts that 30 s,
+         which the eBike bullet says. -->
+    <string name="settings_radar_section_walkaway">Walk-away alarm</string>
+    <string name="settings_radar_left_on_title">Alert if the radar is still on</string>
+    <string name="settings_radar_left_on_subtitle">Sounds once if you walk away with the radar still on.\n• Plays your phone\'s alarm sound at full volume and vibrates\n• Can sound only after your phone has seen your radar turned off 3 times, and 3 more after each system update or change of radar\n• Stays quiet if the radar drops while you ride or in the 30 s after you stop, or if its battery is below 10%\n• With eBike data on and Bosch Flow running, it also covers walking off straight after locking the bike, and stays quiet if the bike was unlocked when the radar dropped\n• Not available on radars that report distance only</string>
+    <!-- One notification channel carries both walk-away alarms, so this row
+         shows on Settings → Dashcam too. The alarm's sound plays on the alarm
+         stream whatever this says; the setting decides whether the
+         notification shows. -->
+    <string name="settings_walkaway_dnd_title">Show during Do Not Disturb</string>
+    <string name="settings_walkaway_dnd_allowed">Allowed. The alarm\'s notification shows even with Do Not Disturb on.</string>
+    <string name="settings_walkaway_dnd_tap">Tap to let the alarm\'s notification show with Do Not Disturb on. Its sound plays like your phone\'s alarms either way.</string>
     <string name="settings_radar_idle_after_title">Idle radar after</string>
     <string name="settings_radar_idle_after_helper">Once the radar\'s been out of range this long, retries slow to the interval below so Bluetooth can rest while the bike is parked.</string>
     <string name="settings_radar_idle_interval_title">Idle reconnect interval</string>
@@ -564,7 +579,7 @@
     <string name="settings_radardev_pair_title">Pair your radar</string>
     <string name="settings_radardev_pair_subtitle">Put the radar in pair mode, then pair it in Android\'s Bluetooth settings.</string>
     <string name="settings_radardev_not_selected">Not selected</string>
-    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning and no close-pass logging. With eBike data on and Bosch Flow running, the drop alert works from the bike as before; otherwise it sounds only if the radar was still seeing traffic behind you shortly before the link died.</string>
+    <string name="settings_radardev_limited_source">This radar reports distance only. You get approach beeps and the all-clear, and the overlay colours show distance rather than speed. No urgent warning, no close-pass logging, and no alarm for a radar left on. With eBike data on and Bosch Flow running, the drop alert works from the bike as before; otherwise it sounds only if the radar was still seeing traffic behind you shortly before the link died.</string>
     <string name="settings_radardev_choose_radar">Choose this bike\'s radar</string>
     <string name="settings_radardev_selected">Selected</string>
     <string name="settings_radardev_tap_to_use">Tap to use this radar</string>
@@ -649,7 +664,7 @@
     <string name="settings_ebike_does_item_timing">Scales beep timing to your wheel speed</string>
     <string name="settings_ebike_does_item_no_radar">Warns you if you ride without the radar on</string>
     <string name="settings_ebike_whats_collected_label">What\'s collected</string>
-    <string name="settings_ebike_collected_item_reads">Reads battery, speed and pedalling - read-only, never sends a command to your bike</string>
+    <string name="settings_ebike_collected_item_reads">Reads battery, speed, pedalling and lock state: read-only, never sends a command to your bike</string>
     <string name="settings_ebike_collected_item_phone">Stays on your phone. Full readings go only into capture logs, which are off by default</string>
     <string name="settings_ebike_collected_item_ha">Ride info goes to Home Assistant only if you set it up</string>
     <string name="settings_ebike_privacy_detail">Full detail in the Privacy screen.</string>
@@ -675,10 +690,7 @@
     <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon next to the rider when your phone can\'t pick up the dashcam.</string>
     <string name="settings_dashcam_walkaway_label">Walk-away alarm</string>
     <string name="settings_dashcam_walkaway_alert">Alert if the dashcam is still on</string>
-    <string name="settings_dashcam_walkaway_alert_subtitle">Sounds when the radar has been off for the time set below and your phone still picks up the dashcam.\n• Plays your phone\'s alarm sound at full volume and vibrates\n• Repeats every 5 min until you dismiss it\n• Stops if the radar comes back or your phone stops picking up the dashcam\n• With eBike data on, stays quiet if the bike was unlocked when the radar went off</string>
-    <string name="settings_dashcam_override_dnd">Override Do Not Disturb</string>
-    <string name="settings_dashcam_override_dnd_subtitle_allowed">Currently allowed. Alarm will sound even with DND on.</string>
-    <string name="settings_dashcam_override_dnd_subtitle_tap">Tap to allow this alarm to play through DND in system settings.</string>
+    <string name="settings_dashcam_walkaway_alert_subtitle">Sounds when the radar has been off for a time you set (30 s by default) and your phone still picks up the dashcam.\n• Plays your phone\'s alarm sound at full volume and vibrates\n• Repeats every 5 min until you dismiss it\n• Stops if the radar comes back or your phone stops picking up the dashcam\n• With eBike data on and Bosch Flow running, stays quiet if the bike was unlocked when the radar dropped\n• If the radar\'s own walk-away alarm sounds (Settings → Alerts), this one stays quiet, and the radar\'s alarm names the dashcam if your phone was picking it up</string>
     <string name="settings_dashcam_threshold_title">Radar off for</string>
     <string name="settings_dashcam_threshold_value"><xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
     <string name="settings_dashcam_threshold_helper">How long the radar must be off before this alarm sounds.</string>
@@ -687,7 +699,7 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_intro">Bike Radar collects no telemetry and runs no analytics. Your data goes only to the Home Assistant you set up, to any app on this phone you have allowed, and to your own rear radar, which is sent your phone\'s make and model.</string>
     <string name="settings_privacy_on_phone_label">What stays on your phone</string>
-    <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage, which no other app can read. They travel in your Android backup when you have it turned on, and in a direct phone-to-phone transfer, so they move with you to a new phone.</string>
+    <string name="settings_privacy_on_phone_settings">Your settings (alert volume, alert distance, paired-radar status, dashcam preferences, and similar) live in Android\'s app-private storage, which no other app can read. They travel in your Android backup when you have it turned on, and in a direct phone-to-phone transfer, so they move with you to a new phone. The exception is what the radar\'s walk-away alarm learns: a count, up to 3, of the times you have switched your radar off, kept with the radar\'s address and your phone\'s system build. The count starts over with another radar or after a system update. It is kept even with that alarm off, so the alarm can sound as soon as you turn it on, and it is not in your Android backup or the phone-to-phone transfer, so a new phone learns it again.</string>
     <string name="settings_privacy_on_phone_location">If you enter a manual location for the light auto-switch (instead of granting location access), those coordinates are saved in Android\'s app-private storage, which no other app can read. They are used only to compute your local sunrise and sunset: they are never published to Home Assistant and never appear in any log or diagnostic bundle. Like your other settings they travel in your Android backup when you have it turned on, and in a direct phone-to-phone transfer.</string>
     <string name="settings_privacy_on_phone_approx_location">If you grant approximate location and use light auto-mode, the app keeps one rough area, about 11 km north to south and narrower east to west, so your lights follow local sunset on rides that start with the app closed. Android lets the app read your location only while the app is open: when you open it, when you change light auto-mode, the dashcam you use or your coordinates, and when your radar or dashcam connects. Each new reading replaces it. It is kept in Android\'s app-private storage, which no other app can read, and is not in your Android backup or the phone-to-phone transfer. It never goes to Home Assistant or to other apps, and never appears in any log or diagnostic bundle. It is deleted when you enter coordinates or turn light auto-mode off for both lights, and the next time the app starts without its location permission. Turning off Location in your phone\'s settings does not delete it.</string>
     <string name="settings_privacy_on_phone_creds">Your Home Assistant URL and token live in the same app-private storage as your settings and move to a new phone with your Android backup (encrypted by Android with your screen lock) and the direct phone-to-phone transfer, which never touches a server. They go nowhere else.</string>
@@ -708,7 +720,7 @@
     <string name="settings_privacy_networking_destination">The only network destination is the HA URL you provide. No analytics endpoints, crash reporters, ad networks, or third-party libraries that send data out.</string>
     <string name="settings_privacy_networking_https">If your HA URL points outside your home network, the app requires HTTPS and refuses to send your token in cleartext. Plain HTTP is accepted only for LAN destinations: private IPv4 ranges (10.x, 172.16-31.x, 192.168.x), loopback, IPv6 unique-local and link-local, and `.local` / `.lan` hostnames.</string>
     <string name="settings_privacy_permissions_label">Permissions</string>
-    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: service status, the walk-away alarm\'s Dismiss and Remind buttons, Pause 1h and Resume, warnings and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over the app underneath\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: deliver the drop alert, walk-away alarm and post-ride summary on time if the radar drops mid-ride with the screen off\n• ACCESS_COARSE_LOCATION: read while the app is open to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
+    <string name="settings_privacy_permissions_body">The app uses these Android permissions:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: find and connect your radar, dashcam, eBike\n• POST_NOTIFICATIONS: service status, the walk-away alarm\'s Dismiss and Remind buttons, Pause 1h and Resume, warnings and the post-ride summary\n• SYSTEM_ALERT_WINDOW: draw the overlay over the app underneath\n• FOREGROUND_SERVICE: keep running during rides\n• WAKE_LOCK: with the screen off, keep the drop alert, the walk-away alarm and the post-ride summary on time when the radar drops mid-ride or may have been left on\n• ACCESS_COARSE_LOCATION: read while the app is open to set your lights by local sunset; never tracks you, never leaves the phone\n\nBike Radar also declares one permission of its own, es.jjrh.bikeradar.permission.RADAR. Another app names it to connect to Bike Radar. It is granted at install like any ordinary permission, so it decides nothing on its own: an app holding it still receives nothing until you say yes on a screen naming it, and you can stop sharing at any time in Settings.\n\nScreen capture (off by default) asks for MediaProjection each time and records the whole screen, including whatever\'s behind the overlay.</string>
     <string name="settings_privacy_source_label">Source</string>
     <string name="settings_privacy_source_body">The app is open-source under GPL-3.0-or-later. The full source code is at github.com/partymola/android-bike-radar-overlay. Verify any of the above by reading the code.</string>
 
@@ -888,10 +900,10 @@
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> alert sounds didn\'t play - restart the phone if this happens again</item>
     </plurals>
     <string name="attention_dismiss_cd">Dismiss: <xliff:g id="item" example="Charge radar - 12%">%1$s</xliff:g></string>
-    <string name="svc_main_walkaway_channel_name">Dashcam left on bike</string>
-    <string name="svc_main_walkaway_channel_desc">Alerts when the radar turns off but the dashcam is still broadcasting from the bike.</string>
+    <string name="svc_main_walkaway_channel_name">Walk-away alarm</string>
+    <string name="svc_main_walkaway_channel_desc">Sounds when your phone still picks up the dashcam after the radar goes off, or when you walk away with the radar still on.</string>
     <string name="svc_main_walkaway_notif_title">Dashcam still on</string>
-    <string name="svc_main_walkaway_notif_text">The radar is off but the dashcam is still on. Turn it off to save its battery.</string>
+    <string name="svc_main_walkaway_notif_text">The radar has disconnected but the dashcam is still on. Turn it off to save its battery.</string>
     <string name="svc_main_walkaway_action_dismiss">Dismiss</string>
     <string name="svc_main_walkaway_action_snooze">Remind in 2 min</string>
     <!-- The radar-left-on alarm. Questions and "Looks like": the app infers
@@ -899,9 +911,9 @@
          The _both_ form is also posted when the dashcam was carried, switched
          on, so it must not say the dashcam was left behind. -->
     <string name="svc_main_walkaway_radar_notif_title">Radar still on?</string>
-    <string name="svc_main_walkaway_radar_notif_text">Looks like it went out of range still on. Go back and turn it off.</string>
+    <string name="svc_main_walkaway_radar_notif_text">Looks like it went out of range while still on. Go back and turn it off.</string>
     <string name="svc_main_walkaway_both_notif_title">Radar and dashcam still on?</string>
-    <string name="svc_main_walkaway_both_notif_text">Looks like the radar went out of range still on, and the dashcam was on too. Turn them both off.</string>
+    <string name="svc_main_walkaway_both_notif_text">Looks like the radar went out of range while still on, and the dashcam was on too. Turn them both off.</string>
 
     <!-- ReplayService.kt -->
     <string name="svc_replay_channel_name">Replay</string>

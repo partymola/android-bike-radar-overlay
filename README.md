@@ -87,8 +87,20 @@ screen stays yours.
   dashcam, the phone sounds its alarm at full volume and vibrates. It waits a
   time you set, 30 seconds by default. It repeats every 5 minutes until you
   dismiss it. It stops if the radar comes back or the phone stops picking up
-  the dashcam. With eBike data on, it stays quiet if the bike was unlocked
-  when the radar went off.
+  the dashcam. With eBike data on and Bosch Flow running, it stays quiet if
+  the bike was unlocked when the radar dropped. If the radar's own alarm
+  sounds, this one stays quiet, and the radar's alarm names the dashcam if
+  the phone was picking it up.
+- Radar left on: if you walk away with the radar still on, the phone sounds
+  the same alarm once. Works with the radar alone. It learns your radar
+  first: it can sound only after the phone has seen your radar switched off
+  3 times, and 3 more after each system update or change of radar. It stays
+  quiet if the radar drops while you ride or in the 30 seconds after you
+  stop, or if its battery is below 10%. With eBike data on and Bosch Flow
+  running, it also covers walking off straight after locking the bike, and
+  stays quiet if the bike was unlocked when the radar dropped. A radar that
+  reports range only never gets it. The alarm is on by default. Turn it off
+  in **Settings → Alerts**, under Walk-away alarm.
 - No-radar warning: with a Bosch eBike, the app notices when you ride with no
   radar connected. Once the bike has shown you riding for 90 seconds, you hear
   the drop alert (three low pulses), up to three times a ride. A banner on the
@@ -132,7 +144,8 @@ lateral position, closing speed and size. Garmin announced those as new on
 the RearVue 820. Earlier radars are not expected to send them at all. On
 those the app reads the older range-only stream instead. You get the
 approach beeps, the all-clear, and overlay colours that show distance
-instead of speed. You do not get the urgent warning or close-pass counting.
+instead of speed. You do not get the urgent warning, close-pass counting or
+the alarm for a radar left on.
 With a Bosch eBike, eBike data switched on and Bosch Flow running, the sound
 when the radar drops works from the bike, as before. Otherwise it is expected
 to fire only if the radar was still seeing traffic behind you shortly before
@@ -290,14 +303,16 @@ the Home Assistant URL and token, and the list of apps you have allowed
 to use your radar - are part of your Android backup
 (encrypted by Android with your screen lock) and the new-phone transfer
 wizard (a direct phone-to-phone copy that never touches a server), so
-the app comes up configured on the new phone. Three things don't
+the app comes up configured on the new phone. Four things don't
 transfer: the radar pairing (Bluetooth bonds belong to the system;
 re-pair once in Android's Bluetooth settings), the rough area the light
 auto-mode uses (the app reads it again when you first open it on the new
-phone), and the files in the app's own folder: ride history, capture logs,
-crash reports, the connection log and periodic screenshots (the app
-deliberately excludes them from backups - if you want long-term ride stats
-off the phone, the Home Assistant integration is the supported path).
+phone), what the walk-away alarm has learned about your radar (it needs to
+see the radar switched off 3 times again before it can sound), and the
+files in the app's own folder: ride history, capture logs, crash reports,
+the connection log and periodic screenshots (the app
+deliberately excludes them from backups; for long-term ride stats off the
+phone, the Home Assistant integration is the supported path).
 
 ## Status
 
@@ -410,8 +425,21 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   detectando la cámara delantera, el teléfono hace sonar su alarma a todo
   volumen y vibra. Espera el tiempo que elijas, 30 s por defecto. Se repite
   cada 5 min hasta que la descartes. Se detiene si vuelve el radar o el
-  teléfono deja de detectar la cámara. Con los datos de la eBike activados, no
-  suena si la bici estaba sin bloquear cuando se desconectó el radar.
+  teléfono deja de detectar la cámara. Con los datos de la eBike activados y
+  Bosch Flow en segundo plano, no suena si la bici estaba sin bloquear cuando
+  se cortó el radar. Si suena la alarma del radar, esta no suena, y la del
+  radar nombra la cámara si el teléfono la estaba detectando.
+- Radar sin apagar: si te alejas con el radar aún encendido, el teléfono hace
+  sonar la misma alarma una vez. No necesita eBike ni cámara delantera. Antes
+  tiene que conocer tu radar: solo puede sonar cuando el teléfono te haya
+  visto apagar tu radar 3 veces, y otras 3 tras cada actualización del
+  sistema o cambio de radar. No suena si el radar se corta en marcha o en los
+  30 s siguientes a parar, ni si su batería está por debajo del 10%. Con los
+  datos de la eBike activados y Bosch Flow en segundo plano, también te avisa
+  si te alejas nada más bloquear la bici, y no suena si la bici estaba sin
+  bloquear cuando se cortó el radar. Un radar que solo mide la distancia no
+  tiene esta alarma. Viene activada por defecto. Puedes desactivarla en
+  Ajustes → Alertas → Alarma al alejarte.
 - Aviso de radar sin conectar: con una eBike Bosch, la app nota si vas sin el
   radar conectado. Cuando, según la bici, llevas 90 s en marcha, suena el aviso
   de desconexión, hasta 3 veces por ruta, y la barra lateral te pregunta si el
@@ -430,9 +458,9 @@ son opcionales.
 - **Otros radares Garmin Varia:** se espera que funcionen, pero solo midiendo
   la distancia. Tienes los pitidos de aproximación y el aviso de «Carretera
   despejada», y los colores de la barra lateral muestran la distancia en vez de
-  la velocidad. No tienes el aviso urgente ni el recuento de adelantamientos
-  cercanos. Nadie lo ha confirmado aún con hardware real. Un radar que solo
-  tenga ANT+ no puede conectarse.
+  la velocidad. No tienes el aviso urgente, el recuento de adelantamientos
+  cercanos ni la alarma si dejas el radar encendido. Nadie lo ha confirmado
+  aún con hardware real. Un radar que solo tenga ANT+ no puede conectarse.
 - **Radares de otras marcas** (Wahoo, Bryton, Magene, Trek...): no
   ([por qué](COMPATIBILITY.md), en inglés).
 

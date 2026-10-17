@@ -125,9 +125,19 @@ class MainScreenPermissionsHeroTest {
     }
 
     @Test
-    fun aRiderWithNoDashcamIsNotToldAboutAnAlarm() {
+    fun aRiderWithNoDashcamIsToldAboutTheRadarAlarm() {
         prefs.dashcamOwnership = DashcamOwnership.NO
         prefs.dashcamMac = null
+        grantBluetooth()
+        show()
+        compose.onAllNodesWithText(ALARM_SUB).assertCountEquals(1)
+    }
+
+    @Test
+    fun aRiderWithNoDashcamAndTheRadarAlarmOffIsNotToldAboutAnAlarm() {
+        prefs.dashcamOwnership = DashcamOwnership.NO
+        prefs.dashcamMac = null
+        prefs.radarLeftOnAlarmEnabled = false
         grantBluetooth()
         show()
         compose.onAllNodesWithText("Without Notifications you can't pause alerts").assertCountEquals(1)
@@ -135,8 +145,9 @@ class MainScreenPermissionsHeroTest {
     }
 
     @Test
-    fun aRiderWithTheWalkAwayAlarmOffIsNotToldAboutIt() {
+    fun aRiderWithBothAlarmsOffIsNotToldAboutThem() {
         prefs.walkAwayAlarmEnabled = false
+        prefs.radarLeftOnAlarmEnabled = false
         grantBluetooth()
         show()
         compose.onAllNodesWithText("Without Notifications you can't pause alerts").assertCountEquals(1)

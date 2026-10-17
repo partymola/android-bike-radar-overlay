@@ -13,8 +13,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** The walk-away alarm stopped needing the overlay's camera-off warning, and
- *  no rider who could not hear it before starts hearing it unasked. */
+/** The walk-away alarm stopped needing the overlay's camera-off warning and
+ *  the radar-left-on alarm arrived; no upgrader who could not hear an alarm
+ *  before starts hearing one unasked. */
 @RunWith(RobolectricTestRunner::class)
 class WalkAwayAlarmMigrationTest {
 
@@ -30,53 +31,80 @@ class WalkAwayAlarmMigrationTest {
 
     private fun upgrader(cameraPicked: Boolean, warnWhenOff: Boolean) {
         prefs.firstRunComplete = true
-        if (cameraPicked) prefs.dashcamMac = CAMERA
+        if (cameraPicked) {
+            prefs.dashcamOwnership = DashcamOwnership.YES
+            prefs.dashcamMac = CAMERA
+        }
         prefs.dashcamWarnWhenOff = warnWhenOff
     }
 
     @Test
-    fun aCameraWithTheWarningOffHasTheAlarmSwitchedOff() {
+    fun aCameraSwitchedOffWithItsPickKeptCountsAsNoneForTheRadarAlarm() {
         upgrader(cameraPicked = true, warnWhenOff = false)
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.dashcamOwnership = DashcamOwnership.NO
+        prefs.migrateWalkAwayAlarms()
+        assertTrue(prefs.radarLeftOnAlarmEnabled)
+        // Switched back on, the camera stays as silent as it was.
         assertFalse(prefs.walkAwayAlarmEnabled)
     }
 
     @Test
-    fun aCameraWithTheWarningOnKeepsTheAlarm() {
+    fun aCameraWithTheWarningOffHasBothAlarmsOff() {
+        upgrader(cameraPicked = true, warnWhenOff = false)
+        prefs.migrateWalkAwayAlarms()
+        assertFalse(prefs.walkAwayAlarmEnabled)
+        assertFalse(prefs.radarLeftOnAlarmEnabled)
+    }
+
+    @Test
+    fun aCameraWithTheWarningOnKeepsBoth() {
         upgrader(cameraPicked = true, warnWhenOff = true)
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)
+        assertTrue(prefs.radarLeftOnAlarmEnabled)
     }
 
     @Test
-    fun noCameraKeepsTheDefault() {
+    fun noCameraKeepsTheDefaults() {
         upgrader(cameraPicked = false, warnWhenOff = false)
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)
+        assertTrue(prefs.radarLeftOnAlarmEnabled)
     }
 
     @Test
-    fun anInstallStillInSetupKeepsTheDefault() {
+    fun aRiderWhoSwitchedTheWalkAwayAlarmOffGetsNoRadarAlarm() {
+        upgrader(cameraPicked = true, warnWhenOff = true)
+        prefs.walkAwayAlarmEnabled = false
+        prefs.migrateWalkAwayAlarms()
+        assertFalse(prefs.radarLeftOnAlarmEnabled)
+    }
+
+    @Test
+    fun anInstallStillInSetupKeepsTheDefaults() {
+        // A camera picked with the warning off would switch both off past setup.
         prefs.dashcamMac = CAMERA
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.dashcamWarnWhenOff = false
+        prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)
+        assertTrue(prefs.radarLeftOnAlarmEnabled)
     }
 
     @Test
     fun itRunsOnlyOnce() {
         upgrader(cameraPicked = true, warnWhenOff = false)
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
-        // The rider turns it back on; a later start must not undo that.
+        prefs.migrateWalkAwayAlarms()
+        // The rider turns them back on; a later start must not undo that.
         prefs.walkAwayAlarmEnabled = true
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)
     }
 
     @Test
     fun aCameraPickedAfterTheFirstStartKeepsTheDefault() {
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.migrateWalkAwayAlarms()
         upgrader(cameraPicked = true, warnWhenOff = false)
-        prefs.migrateWalkAwayAlarmOffTheOverlayWarning()
+        prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)
     }
 

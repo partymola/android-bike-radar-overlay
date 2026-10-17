@@ -59,7 +59,9 @@ internal interface AlarmTone {
  * ringtone / focus / saved-volume state. The tone self-caps after
  * [WALKAWAY_RINGTONE_CAP_MS]. The dashcam alarm's rate limit then re-fires it
  * while the camera is still heard; the radar-left-on alarm sounds once per
- * off-episode, and again after each Snooze (`RadarLeftOnAlarmTest`).
+ * off-episode, and again after each Snooze (`RadarLeftOnAlarmTest`), a fire
+ * that can come late with the screen off
+ * (`RadarLinkCoordinator.clearWalkAwayDismissalForReArm`).
  *
  * The orchestration - focus request, alarm-volume save / force-max / restore,
  * the play-failure rollback, and the self-capping job - is unit-tested by

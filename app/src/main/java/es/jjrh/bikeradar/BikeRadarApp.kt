@@ -28,7 +28,7 @@ class BikeRadarApp : Application() {
         runCatching { ScreenshotCaptureService.pruneSaved(getExternalFilesDir(null)) }
             .onFailure { Log.w("BikeRadar.App", "screenshot trim failed: $it") }
         // Before the service can start, so its first tick reads the result.
-        runCatching { Prefs(this).migrateWalkAwayAlarmOffTheOverlayWarning() }
+        runCatching { Prefs(this).migrateWalkAwayAlarms() }
             .onFailure { Log.w("BikeRadar.App", "walk-away alarm migration failed: $it") }
         // Revoking location kills the process, so a start is where that is seen.
         runCatching { LocationCache.syncWithSettings(this) }

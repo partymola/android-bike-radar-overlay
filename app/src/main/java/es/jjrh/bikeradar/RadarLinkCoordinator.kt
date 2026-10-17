@@ -315,7 +315,9 @@ internal class RadarLinkCoordinator(
      *  episode cleanly rather than re-firing immediately. */
     fun clearWalkAwayDismissalForReArm() {
         // The radar-left-on latch too: a snooze buys exactly one more fire
-        // (`aSnoozeGivesTheRadarLeftOnAlarmOneMoreFire`).
+        // (`aSnoozeGivesTheRadarLeftOnAlarmOneMoreFire`). That fire runs on
+        // the tick with no wakelock held, so with the screen off and no
+        // Bluetooth wakeups it can come late; accepted.
         _radarLinkState.update { it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null, radarLeftOnFired = false) }
         journal("walk-away snooze over, alarm re-armed")
     }
@@ -568,7 +570,7 @@ internal class RadarLinkCoordinator(
                 walkAwayArmed = current.walkAwayArmed || armOnDisconnect,
             )
         }
-        if (leftOn?.qualified == true && after.radarLeftOnQualified && !after.adapterOffInEpisode && prefs.radarLeftOnAlarmEnabled) {
+        if (leftOn?.qualified == true && after.radarLeftOnQualified && !after.adapterOffInEpisode) {
             acquireRadarLeftOnWakeLock()
             journal("walk-away alarm armed: the radar may have been left on")
         }
@@ -672,7 +674,11 @@ internal class RadarLinkCoordinator(
         val mac = lastLinkOpenMac ?: return LeftOnAtDrop(qualified = false, bothLeft = false)
         val drop = RadarLeftOnDecider.classify(loss)
         val switchOffs = prefs.radarLeftOnSwitchOffs(mac)
-        val counted = RadarLeftOnDecider.switchOffsAfter(drop, switchOffs)
+        // A link Bluetooth going off ended says nothing about how this radar
+        // switches off. Covers only a drop reported after the adapter-off
+        // broadcast; whether Android ever reports one before it is not
+        // measured.
+        val counted = if (adapterOff) switchOffs else RadarLeftOnDecider.switchOffsAfter(drop, switchOffs)
         if (counted > switchOffs) {
             prefs.setRadarLeftOnSwitchOffs(mac, counted)
             journal("walk-away alarm counted a radar switch-off ($counted of ${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})")
@@ -685,25 +691,33 @@ internal class RadarLinkCoordinator(
         val ridSinceDismiss = dismissedAt != null && lastRiding > dismissedAt
         if (ridSinceDismiss) radarLeftOnDismissedAtMs = null
         val lockedSinceRiding = eBikeSnapshot()?.systemLocked == true && eBikeSnapshotAtMs() > lastRiding
-        val qualified = RadarLeftOnDecider.qualifies(
+        val veto = RadarLeftOnDecider.veto(
             drop = drop,
             cleanSwitchOffs = switchOffs,
+            enabled = prefs.radarLeftOnAlarmEnabled,
             armed = armed,
             ridingAtDrop = radarActivityFreshAtDrop && !lockedSinceRiding,
             radarBatteryPct = radarBatteryPct(mac),
             streamedMs = streamedMs,
             dismissedUntilRide = dismissedAt != null && !ridSinceDismiss,
         )
+        if (drop == RadarLeftOnDecider.Drop.WALKED_AWAY) {
+            val reason = if (adapterOff) "bluetooth-off" else veto ?: "qualified"
+            clog("# walkaway radar_left_on=$reason switch_offs=$switchOffs")
+        }
+        val qualified = veto == null
         val cameraSeenMs = resolveDashcamSlug()?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs
         val bothLeft = cameraSeenMs != null && nowMs - cameraSeenMs <= RADAR_LEFT_ON_CAMERA_HEARD_MS
         return LeftOnAtDrop(qualified, bothLeft)
     }
 
-    /** This off-episode's drop qualified for the radar-left-on alarm, so the
-     *  dashcam alarm holds for it (`aPendingRadarCheckHoldsTheDashcamAlarm`).
-     *  Once that one sounds it owns the episode; with Bluetooth off neither
-     *  sounds. */
+    /** This off-episode's drop qualified for the radar-left-on alarm and no
+     *  alarm has sounded yet, so the dashcam alarm holds for it
+     *  (`aPendingRadarCheckHoldsTheDashcamAlarm`). Once either sounds it owns
+     *  the episode, so a dashcam alarm already sounding keeps its repeats and
+     *  its auto-dismiss; with Bluetooth off neither sounds. */
     private fun radarLeftOnPending(link: RadarLinkState): Boolean = link.radarOffSinceMs != null &&
+        link.walkAwayAlarmOwner == null &&
         link.radarLeftOnQualified &&
         prefs.radarLeftOnAlarmEnabled
 
@@ -830,7 +844,10 @@ internal class RadarLinkCoordinator(
                     slug != null &&
                     // The radar-left-on alarm sounded first this off-episode
                     // (`theRadarLeftOnAlarmKeepsTheDashcamAlarmSilent`), or is
-                    // about to, and names the camera itself.
+                    // about to. It names the camera only if it was heard within
+                    // RADAR_LEFT_ON_CAMERA_HEARD_MS of the drop
+                    // (`aCameraLastHeardEarlierIsNotNamed`); a camera heard
+                    // again only after that stays unannounced for the episode.
                     link.walkAwayAlarmOwner.let { it == null || it == WalkAwayAlarmKind.DASHCAM } &&
                     !radarLeftOnPending(link),
                 thresholdMs = prefs.walkAwayAlarmThresholdSec * 1000L,

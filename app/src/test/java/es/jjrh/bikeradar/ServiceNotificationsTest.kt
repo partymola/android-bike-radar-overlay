@@ -68,6 +68,17 @@ class ServiceNotificationsTest {
         assertFalse("v2 forgot-lock channel must disable channel vibration", v2.shouldVibrate())
     }
 
+    @Test fun theWalkAwayChannelTakesTheCurrentName() {
+        // An upgrader's channel was created under an earlier name.
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID, "old", NotificationManager.IMPORTANCE_HIGH),
+        )
+        notifications().ensureChannels()
+        val ch = nm.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID)
+        assertEquals(app.getString(R.string.svc_main_walkaway_channel_name), ch.name.toString())
+        assertEquals(app.getString(R.string.svc_main_walkaway_channel_desc), ch.description)
+    }
+
     @Test fun ensureChannelsIsIdempotent() {
         val n = notifications()
         n.ensureChannels()
@@ -113,7 +124,7 @@ class ServiceNotificationsTest {
 
     @Test fun walkAwayPostsWithDismissAndSnoozeActionsThenCancels() {
         val n = notifications()
-        n.postWalkAway()
+        n.postWalkAway(WalkAwayAlarmKind.DASHCAM)
         val sbn = nm.activeNotifications.single()
         assertEquals(ServiceNotifications.WALKAWAY_CHANNEL_ID, sbn.notification.channelId)
         assertEquals(app.getString(R.string.svc_main_walkaway_notif_title), title(sbn))

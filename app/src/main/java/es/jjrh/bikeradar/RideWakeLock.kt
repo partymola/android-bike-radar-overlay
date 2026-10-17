@@ -6,8 +6,13 @@ import android.content.Context
 import android.os.PowerManager
 
 /**
- * A bounded PARTIAL_WAKE_LOCK held only during a LIVE-RIDE off-episode - the
- * window after the rear radar drops while the rider is still moving.
+ * A bounded, non-reference-counted PARTIAL_WAKE_LOCK. The service holds two:
+ * the default-tag ride lock, held only during a LIVE-RIDE off-episode (the
+ * window after the rear radar drops while the rider is still moving), and the
+ * [RADAR_LEFT_ON_TAG] lock, held through the radar-left-on check after a
+ * qualifying drop, when the rider has walked away
+ * (`BikeRadarServiceSmokeTest.aRadarLeftOnDropHoldsItsOwnWakeLock`). The rest
+ * of this KDoc is about the ride lock; the service sizes and releases each.
  *
  * Why it exists: a radar-only rider (no bonded dashcam, no eBike) has zero BLE
  * wakeups once the radar drops, so in deep Doze the coroutine `delay()` timers

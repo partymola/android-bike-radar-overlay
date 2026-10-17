@@ -77,12 +77,14 @@ adding or editing it, follow these principles:
   and the About screen's "not affiliated" title, in both locales. In Spanish
   it checks that every paragraph is non-empty, the literal tokens (permission
   names, HTTPS), the backup statements, the ban on stays-on-the-device
-  wording in the paragraphs about backed-up settings, the saved approximate
-  area's not-in-the-backup phrase, the location bullet's "never leaves the
-  phone", and the ban on "once per ride". The DataDisclosure
-  keywords and the sharing paragraph's phrases are English words and are
-  checked in English only. A Privacy string missing from one locale is also
-  caught by lint (`MissingTranslation` /
+  wording in the paragraphs about backed-up settings, the settings
+  paragraph's "viajan en tu copia de seguridad de Android" and its exception
+  ("alarma al alejarte aprende" ... "no está en tu copia de seguridad de
+  Android"), the saved approximate area's not-in-the-backup phrase, the
+  location bullet's "never leaves the phone", and the ban on "once per
+  ride". The DataDisclosure keywords and the sharing paragraph's phrases are
+  English words and are checked in English only. A Privacy string missing
+  from one locale is also caught by lint (`MissingTranslation` /
   `ExtraTranslation` are errors). **What nothing catches is a paragraph that
   keeps its key and its tokens in both locales while one of them says something
   narrower**, such as a list of data categories one item shorter. When a

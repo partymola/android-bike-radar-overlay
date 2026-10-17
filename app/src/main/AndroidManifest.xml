@@ -21,18 +21,21 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- WAKE_LOCK: held ONLY during a live-ride off-episode (the radar dropped
-         while the rider is still moving), bounded by a hard timeout cap and
-         released the moment the episode resolves. See the wakelock-posture
-         rationale on the service below, RideWakeLock, and the Privacy screen. -->
+    <!-- WAKE_LOCK: two bounded locks, each with a hard timeout cap and released
+         the moment its case resolves. One during a live-ride off-episode (the
+         radar dropped while the rider is still moving), one for the 20 s check
+         after a drop that may be a radar left on (cap 35 s). See the
+         wakelock-posture rationale on the service below, RideWakeLock, and the
+         Privacy screen. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Approximate location is used solely to compute sunrise/sunset for the
          front- and radar-light day/night auto-modes. Read via
          getLastKnownLocation when a screen resumes, when a light, dashcam or
          coordinates setting changes, and at each radar or camera handshake;
-         Android answers only while a screen of the app is visible. Kept as one area rounded to tenths of a
-         degree in no-backup storage for rides (LocationCache). No continuous
+         Android answers only while a screen of the app is visible. Kept as
+         one area rounded to tenths of a degree in no-backup storage for rides
+         (LocationCache). No continuous
          tracking, no background polling. If the permission is denied,
          auto-mode falls back to London-hardcoded times. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -78,7 +81,8 @@
          EXTERNAL storage, which @xml/data_extraction_rules explicitly EXCLUDES
          from both - Auto Backup would include it by default. The saved
          approximate area lives under getNoBackupFilesDir(), which Android
-         never backs up. -->
+         never backs up, and the rules exclude the radar-left-on alarm's
+         learned switch-offs (bike_radar_learned) from both too. -->
     <application
         android:name=".BikeRadarApp"
         android:allowBackup="true"
@@ -130,12 +134,16 @@
              next maintenance window - fine for a parked phone, but a rider whose
              radar drops MID-RIDE with no other BLE accessory (no dashcam probe
              loop, no eBike) then gets the dead-radar cue and walk-away alarm
-             minutes late. So a bounded PARTIAL_WAKE_LOCK (RideWakeLock) is held
-             ONLY during a live-ride off-episode: acquired when the radar drops
-             while the rider was recently moving, released on reconnect / walk-
-             away BLANK / ride summary, and hard-capped so it can never persist.
-             The old blanket "no wakelock" concern was the parked-phone idle
-             case, which the recent-activity acquire gate deliberately excludes. -->
+             minutes late. So the ride lock (RideWakeLock) is held only during a
+             live-ride off-episode: acquired when the radar drops while the
+             rider was recently moving, released on reconnect / walk-away BLANK /
+             ride summary, and hard-capped so it can never persist. The old
+             blanket "no wakelock" concern was the parked-phone idle case, which
+             the ride lock's recent-activity gate excludes. The one parked-phone
+             hold is the radar-left-on check's second instance: from a
+             qualifying drop until its alarm sounds, the radar comes back,
+             Bluetooth goes off or the switch is turned off, capped at 35 s per
+             drop; an ordinary switch-off never takes it. -->
         <service
             android:name=".BikeRadarService"
             android:exported="false"

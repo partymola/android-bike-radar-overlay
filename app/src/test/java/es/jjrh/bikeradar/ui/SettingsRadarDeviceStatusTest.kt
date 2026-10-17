@@ -52,7 +52,8 @@ class SettingsRadarDeviceStatusTest {
     private val limitedSourceNote =
         "This radar reports distance only. You get approach beeps and the " +
             "all-clear, and the overlay colours show distance rather than " +
-            "speed. No urgent warning and no close-pass logging. With eBike " +
+            "speed. No urgent warning, no close-pass logging, and no alarm for " +
+            "a radar left on. With eBike " +
             "data on and Bosch Flow running, the drop alert works from the " +
             "bike as before; otherwise it sounds only if the radar was still " +
             "seeing traffic behind you shortly before the link died."

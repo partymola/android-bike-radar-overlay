@@ -16,7 +16,9 @@
 #   4. the saved approximate area's paragraph says it is not backed up, paired
 #      with LocationCache storing it under noBackupFilesDir, the location
 #      permission bullet keeps "never leaves the phone", and no Privacy
-#      paragraph says location is read once per ride.
+#      paragraph says location is read once per ride; likewise the settings
+#      paragraph names the walk-away alarm's learned file as not backed up,
+#      paired with the rules excluding it.
 #
 # The disclosure copy is externalised for i18n, so the search reads the
 # `settings_privacy_*` strings of each locale, not the Composable source and not
@@ -183,8 +185,11 @@ fi
 # (Auto Backup includes getExternalFilesDir() by DEFAULT), and the "encrypted
 # with your screen lock" claim depends on refusing un-encryptable cloud backups.
 # Per section, since the rules exclude other files too.
+# The whole element, on the section joined to one line with comments dropped,
+# so an include or a commented-out exclude does not pass.
 for section in cloud-backup device-transfer; do
-    awk "/<$section/,/<\/$section>/" "$RULES" | grep -qF 'domain="external"' \
+    awk "/<$section/,/<\/$section>/" "$RULES" | tr '\n' ' ' | sed -E 's/<!--([^-]|-[^-])*-->//g' \
+        | grep -qE '<exclude[[:space:]]+domain="external"[[:space:]]+path="\."' \
         || blocker "external storage must be excluded from BOTH cloud backup and device transfer (data_extraction_rules.xml): not from $section"
 done
 grep -qF 'disableIfNoEncryptionCapabilities="true"' "$RULES" \
@@ -227,8 +232,9 @@ if [ -n "$(string_named "$STRINGS" settings_privacy_to_apps_body)" ]; then
     backup_paragraph settings_privacy_to_apps_body "the granted-app list"
 fi
 
-# The saved approximate area is the one value in internal storage left out of
-# the backup, which is what keeps "never leaves the phone" true for location. Its
+# The saved approximate area is one of two values in internal storage left out
+# of the backup (the walk-away alarm's learned file, checked below, is the
+# other), which is what keeps "never leaves the phone" true for location. Its
 # paragraph must say so, paired with the code that makes it so. Checked on that
 # key alone: "left out of your Android backup" already appears in another
 # paragraph, and backup_paragraph() would pass on "not in your Android backup".
@@ -241,6 +247,34 @@ has "$area_es" "no está en tu copia de seguridad de Android" \
     || blocker "the Spanish saved-area paragraph must say it is not in the Android backup"
 grep -qF 'noBackupFilesDir' "$LOCATION_CACHE" \
     || blocker "the Privacy copy says the saved area is not backed up, but $LOCATION_CACHE no longer stores it under noBackupFilesDir"
+# The walk-away alarm's learned switch-offs are the one value in the settings
+# store's neighbourhood left out of the backup. The settings paragraph, which
+# otherwise says everything there travels, must name the exception, paired
+# with the rules that make it true.
+settings_en="$(string_named "$STRINGS" settings_privacy_on_phone_settings)"
+settings_es="$(string_named "$STRINGS_ES" settings_privacy_on_phone_settings)"
+case "${settings_en,,}" in *"walk-away alarm learns"*"not in your android backup"*) ;; *)
+    blocker "the settings paragraph (settings_privacy_on_phone_settings) must say what the walk-away alarm learns is not in your Android backup" ;;
+esac
+case "${settings_es,,}" in *"alarma al alejarte aprende"*"no está en tu copia de seguridad de android"*) ;; *)
+    blocker "the Spanish settings paragraph must say what the walk-away alarm learns is not in the Android backup" ;;
+esac
+# The exception's "not in your backup" also satisfies backup_paragraph() above,
+# so the sentence saying the settings themselves travel is checked by name.
+case "${settings_en,,}" in *"travel in your android backup"*) ;; *)
+    blocker "the settings paragraph (settings_privacy_on_phone_settings) must still say your settings travel in your Android backup" ;;
+esac
+case "${settings_es,,}" in *"viajan en tu copia de seguridad de android"*) ;; *)
+    blocker "the Spanish settings paragraph must still say your settings travel in the Android backup" ;;
+esac
+# The whole element, on the section joined to one line with comments dropped:
+# a path alone would also match an include, another domain or a commented-out
+# exclude.
+for section in cloud-backup device-transfer; do
+    awk "/<$section/,/<\/$section>/" "$RULES" | tr '\n' ' ' | sed -E 's/<!--([^-]|-[^-])*-->//g' \
+        | grep -qE '<exclude[[:space:]]+domain="sharedpref"[[:space:]]+path="bike_radar_learned\.xml"' \
+        || blocker "the Privacy copy says the walk-away alarm's learned switch-offs are not backed up, but $section does not exclude bike_radar_learned.xml"
+done
 perms_en="$(string_named "$STRINGS" settings_privacy_permissions_body)"
 perms_es="$(string_named "$STRINGS_ES" settings_privacy_permissions_body)"
 has "$perms_en" "never tracks you, never leaves the phone" \

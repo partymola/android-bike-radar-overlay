@@ -56,8 +56,9 @@ internal class ServiceNotifications(
         // vibration pattern, importance) are immutable post-creation,
         // so any code change has to migrate to a fresh ID and delete
         // the old one. The user's per-channel preferences (e.g. Override
-        // Do Not Disturb) reset on this migration; the dashcam settings
-        // row deeplinks back to the new channel for re-grant.
+        // Do Not Disturb) reset on this migration; the Do Not Disturb rows
+        // on Settings -> Dashcam and -> Alerts deeplink back to the new
+        // channel for re-grant.
         WALKAWAY_CHANNEL_IDS_LEGACY.forEach { id ->
             if (nm.getNotificationChannel(id) != null) {
                 nm.deleteNotificationChannel(id)
@@ -119,17 +120,22 @@ internal class ServiceNotifications(
             )
         }
 
-        if (nm.getNotificationChannel(WALKAWAY_CHANNEL_ID) == null) {
-            // HIGH importance, no sound and no vibration on the channel.
-            // Both modalities are driven explicitly from the FIRE path:
-            // - audio: Ringtone with USAGE_ALARM (channel sound is
-            //   normalised to USAGE_NOTIFICATION, which DND silences).
-            // - haptics: Vibrator service (channel vibration is
-            //   suppressed under DND when canBypassDnd is false, and
-            //   the migration to v3 resets the user's bypass grant).
-            // Driving both explicitly means the alarm fires through DND
-            // regardless of the user's per-channel preferences.
-            val ch = NotificationChannel(
+        // Created on every call, not only when missing: for a channel that
+        // exists Android takes only the new name and description and keeps the
+        // rider's own settings, so an upgrader sees the current name
+        // (`theWalkAwayChannelTakesTheCurrentName`). Keep the ID: a new one
+        // would reset the rider's Do Not Disturb grant.
+        // HIGH importance, no sound and no vibration on the channel.
+        // Both modalities are driven explicitly from the FIRE path:
+        // - audio: Ringtone with USAGE_ALARM (channel sound is
+        //   normalised to USAGE_NOTIFICATION, which DND silences).
+        // - haptics: Vibrator service (channel vibration is
+        //   suppressed under DND when canBypassDnd is false, and
+        //   the migration to v3 resets the user's bypass grant).
+        // Driving both explicitly means the alarm fires through DND
+        // regardless of the user's per-channel preferences.
+        nm.createNotificationChannel(
+            NotificationChannel(
                 WALKAWAY_CHANNEL_ID,
                 context.getString(R.string.svc_main_walkaway_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
@@ -137,9 +143,8 @@ internal class ServiceNotifications(
                 description = context.getString(R.string.svc_main_walkaway_channel_desc)
                 enableVibration(false)
                 setSound(null, null)
-            }
-            nm.createNotificationChannel(ch)
-        }
+            },
+        )
     }
 
     fun buildForeground(): Notification {
@@ -293,7 +298,7 @@ internal class ServiceNotifications(
      *  (tapping or swiping the body counts as Dismiss). One ID for every
      *  kind, so the actions reach the alarm whichever one is sounding. The
      *  audible + haptic alarm tone is driven separately by the service. */
-    fun postWalkAway(kind: WalkAwayAlarmKind = WalkAwayAlarmKind.DASHCAM) {
+    fun postWalkAway(kind: WalkAwayAlarmKind) {
         val (titleRes, textRes) = when (kind) {
             WalkAwayAlarmKind.DASHCAM -> R.string.svc_main_walkaway_notif_title to R.string.svc_main_walkaway_notif_text
             WalkAwayAlarmKind.RADAR -> R.string.svc_main_walkaway_radar_notif_title to R.string.svc_main_walkaway_radar_notif_text

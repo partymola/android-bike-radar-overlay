@@ -2,7 +2,6 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
-import android.app.NotificationManager
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
@@ -25,7 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.DoNotDisturbOn
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -83,10 +82,7 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
 
     var walkAwayThreshold by rememberSaveable { mutableIntStateOf(prefs.walkAwayAlarmThresholdSec) }
 
-    val nm = remember(ctx) { ctx.getSystemService(NotificationManager::class.java) }
-    val canBypassDnd = nm
-        ?.getNotificationChannel(ServiceNotifications.WALKAWAY_CHANNEL_ID)
-        ?.canBypassDnd() == true
+    val canBypassDnd = rememberWalkAwayCanBypassDnd()
 
     SettingsDashcamContent(
         navController = navController,
@@ -304,8 +300,8 @@ internal fun SettingsDashcamContent(
                     )
                 }
 
-                // Shown whatever the overlay warning says: the alarm no longer
-                // depends on it (`theWalkAwaySectionShowsWithTheOverlayWarningOff`).
+                // Shown whatever the overlay warning says: the alarm does not
+                // depend on it (`theWalkAwaySectionShowsWithTheOverlayWarningOff`).
                 if (dashcamMac != null) {
                     SettingsSectionLabel(stringResource(R.string.settings_dashcam_walkaway_label))
                     SettingsRowGroup {
@@ -318,13 +314,13 @@ internal fun SettingsDashcamContent(
                         )
                         if (walkAwayAlarmEnabled) {
                             SettingsRow(
-                                icon = Icons.Default.NotificationsActive,
+                                icon = Icons.Default.DoNotDisturbOn,
                                 iconTint = br.dashcam,
-                                title = stringResource(R.string.settings_dashcam_override_dnd),
+                                title = stringResource(R.string.settings_walkaway_dnd_title),
                                 subtitle = if (canBypassDnd) {
-                                    stringResource(R.string.settings_dashcam_override_dnd_subtitle_allowed)
+                                    stringResource(R.string.settings_walkaway_dnd_allowed)
                                 } else {
-                                    stringResource(R.string.settings_dashcam_override_dnd_subtitle_tap)
+                                    stringResource(R.string.settings_walkaway_dnd_tap)
                                 },
                                 onClick = onOverrideDndClick,
                                 isLast = true,

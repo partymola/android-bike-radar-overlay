@@ -37,6 +37,7 @@ class RadarLeftOnAlarmTest {
     private var wakeLockHeld = false
     private var wakeLockAcquires = 0
     private val journal = mutableListOf<String>()
+    private val clogs = mutableListOf<String>()
 
     private var ridingActivityMs: Long? = null
     private var ridingSinceMs: Long? = null
@@ -61,7 +62,7 @@ class RadarLeftOnAlarmTest {
             startWalkAwayAlarm = { starts++ },
             stopWalkAwayAlarm = { stops++ },
             alertBeeper = { null },
-            clog = {},
+            clog = { clogs += it },
             journal = { journal += it },
             setReconnectBanner = {},
             resolveDashcamSlug = { dashcamSlug },
@@ -156,6 +157,7 @@ class RadarLeftOnAlarmTest {
         walkAway()
         val dropAt = now
         assertFalse(wakeLockHeld)
+        assertTrue("the capture log says why", clogs.contains("# walkaway radar_left_on=calibrating switch_offs=2"))
         tickAt(20_000L, dropAt)
         assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
         // The third clean switch-off arms the next walk-away.
@@ -164,6 +166,26 @@ class RadarLeftOnAlarmTest {
         walkAway()
         tickAt(20_000L, now)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+        assertTrue(clogs.contains("# walkaway radar_left_on=qualified switch_offs=3"))
+    }
+
+    @Test
+    fun aLinkBluetoothEndedLeavesCalibrationAlone() {
+        // The drop reported after the adapter-off broadcast, the one order the
+        // guard covers.
+        switchOffs(2)
+        coordinator.markAdapterOff()
+        stream()
+        now += 600_000L
+        drop(300L, status = 257)
+        assertEquals("not counted", 2, prefs.radarLeftOnSwitchOffs(RADAR_A))
+        coordinator.markAdapterOn()
+        now += 60_000L
+        coordinator.markAdapterOff()
+        stream()
+        now += 600_000L
+        drop(1_500L, status = 257)
+        assertEquals("nor restarted", 2, prefs.radarLeftOnSwitchOffs(RADAR_A))
     }
 
     @Test
@@ -434,6 +456,7 @@ class RadarLeftOnAlarmTest {
         coordinator.markAdapterOff()
         walkAway()
         assertEquals(0, wakeLockAcquires)
+        assertTrue("the capture log says why", clogs.contains("# walkaway radar_left_on=bluetooth-off switch_offs=3"))
         tickAt(20_000L, now)
         assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
         // Back on, the next episode is judged afresh.
@@ -542,6 +565,24 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
+    fun aDismissOfTheAlarmNamingTheCameraHoldsToo() {
+        switchOffs(3)
+        dashcamSlug = "cam"
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        tickAt(20_000L, now)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
+        coordinator.markWalkAwayDismissed(snoozed = false)
+        now += 60_000L
+        walkAway()
+        tickAt(20_000L, now)
+        assertEquals("the dismiss holds across reconnects", 1, posted.size)
+    }
+
+    @Test
     fun aDismissOfTheDashcamAlarmDoesNotHoldThisOne() {
         switchOffs(3)
         dashcamAlarmDue()
@@ -620,6 +661,28 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
+    fun theSwitchTurnedOnAfterTheDropDoesNotSoundIt() {
+        switchOffs(3)
+        prefs.radarLeftOnAlarmEnabled = false
+        walkAway()
+        val dropAt = now
+        prefs.radarLeftOnAlarmEnabled = true
+        tickAt(20_000L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        assertEquals(0, wakeLockAcquires)
+        assertTrue(clogs.contains("# walkaway radar_left_on=switched-off switch_offs=3"))
+    }
+
+    @Test
+    fun theDashcamSwitchOffDoesNotSilenceIt() {
+        prefs.walkAwayAlarmEnabled = false
+        switchOffs(3)
+        walkAway()
+        tickAt(20_000L, now)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
     fun aReconnectAsItSoundsLeavesItStopped() {
         switchOffs(3)
         walkAway()
@@ -670,6 +733,13 @@ class RadarLeftOnAlarmTest {
         now = dropAt + 30_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
+        // It owns the episode, so the switch turned off afterwards does not
+        // hand the camera to the other alarm.
+        prefs.radarLeftOnAlarmEnabled = false
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 59_000L)
+        now = dropAt + 60_000L
+        coordinator.evaluateWalkAway(now)
+        assertEquals(0, dashcamPosts)
     }
 
     @Test
@@ -693,20 +763,26 @@ class RadarLeftOnAlarmTest {
 
     @Test
     fun theDashcamAlarmSoundingFirstKeepsThisOneSilent() {
-        // Only reachable with the radar alarm off as the dashcam's sounds.
+        // Only reachable with the radar alarm switched off during its check,
+        // and on again once the dashcam's has sounded.
         switchOffs(3)
         dashcamAlarmDue()
-        prefs.radarLeftOnAlarmEnabled = false
         walkAway()
         val dropAt = now
+        prefs.radarLeftOnAlarmEnabled = false
         BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(1, dashcamPosts)
         prefs.radarLeftOnAlarmEnabled = true
-        // And still after the camera goes quiet and its alert auto-dismisses.
+        val cancelsBefore = cancels
+        val stopsBefore = stops
+        // The camera goes quiet: the dashcam alarm still owns the episode, so
+        // it auto-dismisses rather than being held for the radar's.
         now = dropAt + 60_000L
         coordinator.evaluateWalkAway(now)
+        assertEquals(cancelsBefore + 1, cancels)
+        assertEquals(stopsBefore + 1, stops)
         tickAt(62_000L, dropAt)
         assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
     }

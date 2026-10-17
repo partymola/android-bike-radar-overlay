@@ -51,7 +51,7 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w448dp-h2650dp-xxhdpi")
+    @Config(qualifiers = "w448dp-h3300dp-xxhdpi")
     fun closePassSectionNoHa() {
         captureRoboImage {
             UiTheme { RadarContent(haConfigured = false) }
@@ -59,7 +59,7 @@ class SettingsRadarSnapshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w448dp-h2650dp-xxhdpi")
+    @Config(qualifiers = "w448dp-h3300dp-xxhdpi")
     fun closePassSectionWithHa() {
         captureRoboImage {
             UiTheme { RadarContent(haConfigured = true) }
@@ -68,9 +68,9 @@ class SettingsRadarSnapshotTest {
 
     @Test
     // Taller than the en siblings on purpose: Spanish runs long enough that
-    // h2200dp cuts the danger zone off entirely, so a golden added to catch
-    // es overflow would stop covering the last section on the screen.
-    @Config(qualifiers = "es-w448dp-h2800dp-xxhdpi")
+    // their h3300dp cuts the danger zone off, so a golden added to catch es
+    // overflow would stop covering the last section on the screen.
+    @Config(qualifiers = "es-w448dp-h3600dp-xxhdpi")
     fun closePassSectionEs() {
         // The es toggle title is the longest string on this screen, and the
         // section header roughly doubled when the concept was renamed. The
@@ -151,6 +151,10 @@ class SettingsRadarSnapshotTest {
             onNoRadarWarningChange = {},
             bannerPersistent = false,
             onBannerPersistentChange = {},
+            radarLeftOnAlarm = true,
+            onRadarLeftOnAlarmChange = {},
+            walkAwayCanBypassDnd = false,
+            onWalkAwayDndClick = {},
             onStopScanningClick = {},
             // Literal, not the production constant: a fixture reading the
             // constant would render whatever it becomes, so the golden could

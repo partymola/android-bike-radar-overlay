@@ -148,8 +148,13 @@ the coverage, lint or R8 configuration in `app/build.gradle.kts` or
   not in the backup, paired with `LocationCache` storing it under
   `noBackupFilesDir`, the location permission bullet must keep "never
   leaves the phone", and no Privacy paragraph may say location is read once
-  per ride. It also checks the backup rules themselves: exactly
-  two excludes, external storage excluded, and encryption required.
+  per ride. The settings paragraph must still say settings travel in the
+  backup and must name what the walk-away alarm learns as the exception,
+  paired with an `<exclude domain="sharedpref">` for `bike_radar_learned.xml`
+  in each section; `RadarLeftOnCalibrationPrefsTest` pins the same exclusion
+  from the code side. It also checks the backup rules themselves: external
+  storage excluded from each section (the whole `<exclude>` element, with
+  comments ignored), and encryption required.
   **Blocking in `ci.yml`**, since it reads only the working tree. The sharing
   check runs only while `access/RadarAccess.kt` exists, so moving that file
   switches it off silently. Mostly it checks coverage: a paragraph that keeps

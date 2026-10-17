@@ -90,8 +90,9 @@ that take plain data and return a decision, with no Android or BLE dependency:
 - `AlertDecider` - the close-pass beep tiers and the imminent-impact override.
 - `BornCloseGate` - the ghost-beep filter (suppresses turn-sweep clutter born
   close, admits real closers).
-- `TurnStateDecider`, `RadarDropDecider`, `WalkAwayDecider`, `ForgotToLockDecider`,
-  `RideSummaryNotificationDecider`, the light/override deciders, and others.
+- `TurnStateDecider`, `RadarDropDecider`, `WalkAwayDecider`, `RadarLeftOnDecider`,
+  `ForgotToLockDecider`, `RideSummaryNotificationDecider`, the light/override
+  deciders, and others.
 - `RadarV2Decoder` - the vehicle-target stream decoder.
 
 These carry the tightest test coverage in the project (a branch-coverage ratchet

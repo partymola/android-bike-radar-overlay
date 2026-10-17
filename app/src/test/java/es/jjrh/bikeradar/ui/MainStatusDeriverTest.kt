@@ -207,6 +207,12 @@ class MainStatusDeriverTest {
         // The overlay's camera-off warning does not gate the alarm.
         assertEquals(alarm, sub(owned = true, warn = false, walkAway = true))
         assertEquals(plain, sub(owned = true, warn = true, walkAway = false))
+        // The radar-left-on alarm needs no camera.
+        fun radarSub(on: Boolean) = derive(
+            baseInputs(missingPermission = n).copy(radarLeftOnAlarmOn = on),
+        ).subtitleRes
+        assertEquals(alarm, radarSub(on = true))
+        assertEquals(plain, radarSub(on = false))
     }
 
     @Test fun missingNotificationsTakesOnlyTheQuietCards() {

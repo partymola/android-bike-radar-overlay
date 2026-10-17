@@ -266,6 +266,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
         rideEndOfferable = canEndRide,
         missingPermission = missingPermission,
         walkAwayAlarmOn = prefsSnap.walkAwayAlarmEnabled,
+        radarLeftOnAlarmOn = prefsSnap.radarLeftOnAlarmEnabled,
         radarConnecting = radarConnecting,
         connectingAdviceDue = connectingAdviceDue,
         radarPickOffered = radarPickOffered,

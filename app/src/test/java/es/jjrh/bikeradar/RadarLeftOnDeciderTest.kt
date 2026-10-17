@@ -66,19 +66,49 @@ class RadarLeftOnDeciderTest {
 
     // ── what qualifies a drop ────────────────────────────────────────────────
 
-    private fun qualifies(
+    private fun veto(
         drop: Drop? = Drop.WALKED_AWAY,
         cleanSwitchOffs: Int = 3,
+        enabled: Boolean = true,
         armed: Boolean = true,
         ridingAtDrop: Boolean = false,
         radarBatteryPct: Int? = 60,
         streamedMs: Long = 600_000L,
         dismissedUntilRide: Boolean = false,
-    ) = RadarLeftOnDecider.qualifies(drop, cleanSwitchOffs, armed, ridingAtDrop, radarBatteryPct, streamedMs, dismissedUntilRide)
+    ) = RadarLeftOnDecider.veto(drop, cleanSwitchOffs, enabled, armed, ridingAtDrop, radarBatteryPct, streamedMs, dismissedUntilRide)
+
+    private fun qualifies(
+        drop: Drop? = Drop.WALKED_AWAY,
+        cleanSwitchOffs: Int = 3,
+        enabled: Boolean = true,
+        armed: Boolean = true,
+        ridingAtDrop: Boolean = false,
+        radarBatteryPct: Int? = 60,
+        streamedMs: Long = 600_000L,
+        dismissedUntilRide: Boolean = false,
+    ) = veto(drop, cleanSwitchOffs, enabled, armed, ridingAtDrop, radarBatteryPct, streamedMs, dismissedUntilRide) == null
 
     @Test
     fun aWalkAwayFromACalibratedRadarQualifies() {
         assertTrue(qualifies())
+    }
+
+    @Test
+    fun theSwitchIsReadAtTheDrop() {
+        assertFalse(qualifies(enabled = false))
+    }
+
+    @Test
+    fun theFirstGateThatFailsIsNamed() {
+        assertEquals("not-walked-away", veto(drop = Drop.SWITCHED_OFF, cleanSwitchOffs = 0))
+        assertEquals("calibrating", veto(cleanSwitchOffs = 2, enabled = false))
+        assertEquals("switched-off", veto(enabled = false, armed = false))
+        assertEquals("ebike-unlocked", veto(armed = false, ridingAtDrop = true))
+        assertEquals("riding", veto(ridingAtDrop = true, radarBatteryPct = 5))
+        assertEquals("battery-low", veto(radarBatteryPct = 9, streamedMs = 1L))
+        assertEquals("short-stream", veto(streamedMs = 14_999L, dismissedUntilRide = true))
+        assertEquals("dismissed-until-ride", veto(dismissedUntilRide = true))
+        assertNull(veto())
     }
 
     @Test

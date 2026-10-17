@@ -106,24 +106,31 @@ object RadarLeftOnDecider {
         else -> count
     }
 
-    /** Whether this off-episode can sound the alarm, decided once at the
-     *  drop. [dismissedUntilRide]: the rider dismissed this alarm and has not
-     *  ridden since. */
-    fun qualifies(
+    /** Why this off-episode cannot sound the alarm, or null when it can,
+     *  decided once at the drop: a switch turned on later does not sound an
+     *  old drop. [dismissedUntilRide]: the rider dismissed this alarm and has
+     *  not ridden since. The first gate that fails is named, for the capture
+     *  log, so a silent walk-away says why. */
+    fun veto(
         drop: Drop?,
         cleanSwitchOffs: Int,
+        enabled: Boolean,
         armed: Boolean,
         ridingAtDrop: Boolean,
         radarBatteryPct: Int?,
         streamedMs: Long,
         dismissedUntilRide: Boolean,
-    ): Boolean = drop == Drop.WALKED_AWAY &&
-        cleanSwitchOffs >= CALIBRATION_SWITCH_OFFS &&
-        armed &&
-        !ridingAtDrop &&
-        (radarBatteryPct == null || radarBatteryPct >= BATTERY_FLOOR_PCT) &&
-        streamedMs >= MIN_STREAMED_MS &&
-        !dismissedUntilRide
+    ): String? = when {
+        drop != Drop.WALKED_AWAY -> "not-walked-away"
+        cleanSwitchOffs < CALIBRATION_SWITCH_OFFS -> "calibrating"
+        !enabled -> "switched-off"
+        !armed -> "ebike-unlocked"
+        ridingAtDrop -> "riding"
+        radarBatteryPct != null && radarBatteryPct < BATTERY_FLOOR_PCT -> "battery-low"
+        streamedMs < MIN_STREAMED_MS -> "short-stream"
+        dismissedUntilRide -> "dismissed-until-ride"
+        else -> null
+    }
 
     /** Whether to sound now. Once per episode: [fired] and [dismissed] both
      *  stop it, and so does the dashcam alarm having sounded for the same

@@ -125,7 +125,7 @@ data class RadarLinkState(
      *  `RadarLinkCoordinator.evaluateRadarDrop`. */
     val newRideAtConnect: Boolean = false,
     /** The radar-left-on alarm may sound for this off-episode: decided once,
-     *  at the drop that began it, by [RadarLeftOnDecider.qualifies], and
+     *  at the drop that began it, by [RadarLeftOnDecider.veto], and
      *  rewritten by the next one. */
     val radarLeftOnQualified: Boolean = false,
     /** The phone heard the front camera just before that drop

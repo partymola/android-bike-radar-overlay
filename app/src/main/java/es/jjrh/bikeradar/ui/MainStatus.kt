@@ -89,9 +89,16 @@ data class MainStatusInputs(
     /** The permission the card asks for, or null
      *  ([es.jjrh.bikeradar.Permissions.missingForService]). */
     val missingPermission: MissingPermission? = null,
-    /** The rider's walk-away alarm switch. It can sound only with a dashcam,
-     *  and only it needs a notification to be silenced. */
+    /** The dashcam walk-away alarm's switch; it can sound only with a dashcam.
+     *  The two alarms are the one sound that needs a notification to be
+     *  silenced. */
     val walkAwayAlarmOn: Boolean = false,
+    /** The radar-left-on alarm's switch; it needs no dashcam. A distance-only
+     *  radar never sounds it, but [radarLimited] reads false once the radar is
+     *  off, and while one streams the limited card outranks Notifications
+     *  (`MainStatusDeriverTest.missingNotificationsTakesOnlyTheQuietCards`),
+     *  so the switch alone decides. */
+    val radarLeftOnAlarmOn: Boolean = false,
     /** [es.jjrh.bikeradar.RadarLinkStatus.isConnecting]: the same input the
      *  System row reads, so the two cannot disagree about one radar. */
     val radarConnecting: Boolean = false,
@@ -329,10 +336,12 @@ object MainStatusDeriver {
     /** Amber, not red: the radar still beeps without it. What goes is listed
      *  on [MissingPermission]. The subtitle names Pause, which every rider
      *  loses, since it is offered only from the notification, and the
-     *  walk-away alarm only for a rider who can hear one
-     *  (`MainStatusDeriverTest.theNotificationsCardNamesTheAlarmOnlyWhenOneCanSound`). */
+     *  walk-away alarm only for a rider with one switched on that could sound
+     *  (`MainStatusDeriverTest.theNotificationsCardNamesTheAlarmOnlyWhenOneCanSound`);
+     *  a distance-only radar's rider with the radar switch on is named too,
+     *  since the card cannot tell that radar once it is off. */
     private fun notificationsCard(inputs: MainStatusInputs): MainStatusModel? = if (inputs.missingPermission == MissingPermission.NOTIFICATIONS) {
-        val alarmCanSound = inputs.dashcamOwned && inputs.walkAwayAlarmOn
+        val alarmCanSound = (inputs.dashcamOwned && inputs.walkAwayAlarmOn) || inputs.radarLeftOnAlarmOn
         MainStatusModel(
             icon = MainStatusIcon.Warning,
             tone = MainStatusTone.Warn,

@@ -95,7 +95,9 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *  - **Closest-tier rising edge.** A new track entering the close
  *    set is silent unless its arrival raises the *closest-urgency
  *    tier* above the highest tier we have audibly fired for on the
- *    new closest track.
+ *    new closest track. This is what hears the first car after an
+ *    empty road; a new car arriving in front of the closest is heard
+ *    under the next-car rule below.
  *  - **Escalation with per-track tier latch.** When the closest car
  *    crosses into a higher urgency bucket (further -> closer),
  *    re-beep at the new level — but only if we haven't already
@@ -104,12 +106,44 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    NOT re-fire. The tier-raise re-beep fires the SAME frame - it
  *    bypasses the beep cooldown ([escalationBypass]) so a fast
  *    closer's escalation is never swallowed by the window. [E1]
- *  - **Filtered overtake re-acknowledgement.** When a track that
- *    was close transitions to `isBehind` and others remain close,
- *    re-beep only if the remaining closest-urgency is *strictly
- *    greater* than the peak urgency the just-overtaking track ever
- *    reached. Same-or-lower tier re-statement is silent — the rider
- *    was already alerted at that tier by the now-overtaking track.
+ *  - **The next car once the closest changes.** When a different car is
+ *    the closest than on the previous frame (the previous one passed,
+ *    faded, was docked or vetoed, or was overtaken behind the rider),
+ *    that car beeps at its own tier unless it has already been heard at
+ *    it (`a car overtaking the closest one behind the rider is heard at
+ *    its band`); after a pass it beeps even then, since it is the car
+ *    still behind (`after a pass the car behind is announced again though
+ *    heard before`). Two cars swapping places are each heard once at a
+ *    tier, through the latch. A new car entering further back than the
+ *    closest is not the closest, so it stays silent.
+ *  - **No lower count without a pass.** A beep's count is never below
+ *    the highest one sounded since the last all-clear, pass, floor lapse
+ *    or [reset] (an urgent counts as 3): a lower count about another car
+ *    reads as the close car dropping back. A pass is the closest car
+ *    drawing level with the rider (`isBehind`), or, while the rider is
+ *    known to be moving, fading within [PASS_FADE_MAX_M] along the road;
+ *    the rider can see that car, so after it the next car beeps at its
+ *    own tier, a 2 after a 3 included. Another car drawing level is not
+ *    a pass, nor is a fade at a stop or with no speed reading, nor a
+ *    track the ghost filter ([BornCloseGate]) is still holding back. A
+ *    drawing level or fade not taken as a pass is logged as
+ *    `# gate pass-refused`, with why. A beep the floor holds back is
+ *    logged as `# gate step-down` and sounds once the car reaches the
+ *    floor (`AlertDeciderPassHandoverTest`).
+ *  - **The floor lapses where the rider's movement is unknown.** With no
+ *    speed reading and no eBike data (as on the legacy stream without an
+ *    eBike), no fade can be taken as a pass, and the legacy stream never
+ *    reports a car level. So once no car heard at or above the floor, nor
+ *    the trigger car of the last urgent, has been in the track list for
+ *    [FLOOR_LAPSE_MS], the floor drops and the closest car beeps at its
+ *    own tier unless already heard at it (`# gate floor-lapse`). Never
+ *    while such a car is still tracked, and never while the rider's
+ *    movement is known, stopped included (`with the rider's movement
+ *    known the band never lapses`, `with the rider known to be stopped
+ *    the band never lapses`). The legacy stream stamps no birth,
+ *    so a later car under the same tid is still taken for the one heard
+ *    (`on the legacy stream a later car under the same track id is taken
+ *    for the one heard`).
  *  - **Sustain debounce.** A track must be present in close for
  *    `sustainFrames` consecutive frames before it counts. Single-
  *    frame radar blips never fire.
@@ -324,7 +358,9 @@ class AlertDecider(
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
-     *  re-fire, the four urgent-pass verdicts, the unconfident wait's start
+     *  re-fire, a pass and a pass refused, a beep held below the
+     *  floor (`step-down`) and the floor lapsing, the four
+     *  urgent-pass verdicts, the unconfident wait's start
      *  and run-out, the fit expiry, and the closing-speed ceiling and rx
      *  veto; those two mark a track's first excluded frame, not each
      *  silenced cue (see [ceilingLogged]), so the rest of an exclusion is
@@ -339,7 +375,10 @@ class AlertDecider(
      *  on every frame: each verdict is deduped per track ([logPassGate],
      *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged],
      *  [unconfidentWaits]) and an expiry can
-     *  fire once per fit because the fit is removed as it is reported. */
+     *  fire once per fit because the fit is removed as it is reported. A
+     *  pass or refused pass is logged once per closest car leaving, a
+     *  floor lapse once per floor, and a step-down once per held trigger,
+     *  so again each time a held car climbs a band short of the floor. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
      *  filter's state machine); injectable for tests. */
@@ -450,39 +489,70 @@ class AlertDecider(
     internal var lastTierDistanceM: Float = -1f
         private set
 
+    /** The rule that armed the beep the last [decide] call returned, for the
+     *  capture log's `cue_rule=`: `new_entry`, `escalation`, `handover` (the
+     *  closest car changed), `refire` (the born-close gate let a car
+     *  through), `floor_lapse` (the floor lapsed, see [FLOOR_LAPSE_MS]) or
+     *  `urgent` (armed by an urgent that did not sound, which only
+     *  [UrgentCooldown.SHARED_WITH_BEEPS] allows). Null on
+     *  any other event; same read contract as
+     *  [lastTierTrigger]. */
+    internal var lastBeepRule: String? = null
+        private set
+
+    /** The rule that last set [beepPending], kept until the beep sounds. */
+    private var pendingRule: String = ""
+
     /**
-     * Per-track tier latch - tid -> urgency tier we have *audibly*
-     * fired for during this approach episode.
+     * Per-car tier latch - tid -> the birth and the urgency tier we have
+     * *audibly* fired for during this approach episode.
      *
-     * Used by both the new-entry gate and the escalation gate to
-     * suppress same-tier re-fires. Once we've played a Beep(N)
-     * attributable to tid T, subsequent frames where T is still the
-     * closest at tier N (or lower) are silent. A re-fire on T
-     * requires either:
-     *   - a true tier raise above the latched tier for that tid, or
+     * Used by the new-entry, escalation and next-car gates to suppress
+     * same-tier re-fires. Once we've played a Beep(N) attributable to a
+     * car, subsequent frames where it is still the closest at tier N (or
+     * lower) are silent. A re-fire requires either:
+     *   - a true tier raise above the latched tier for that car, or
      *   - the all-clear (Clear), which clears this map.
      *
-     * De-escalation does not rearm the latch: a tid that drops a full
+     * Keyed by birth as well as tid, so a recycled tid is a new car and is
+     * heard (`a recycled track id is a new car`); a track with no birth
+     * stamp (the legacy stream) is keyed by tid alone.
+     *
+     * De-escalation does not rearm the latch: a car that drops a full
      * tier and climbs back to N stays silent. `a spike after the top
      * tier has fired stays silent on recovery` pins it. (The born-close
      * gate's admission refire also removes a tid's entry, but a gated
      * track never fired audibly, so that path cannot unlatch a beep
      * the rider actually heard.)
      */
-    private val firedTierPerTid = HashMap<Int, Int>()
+    private val firedTier = HashMap<Int, Pair<Long, Int>>()
 
-    /**
-     * Per-track peak-urgency tracker — tid -> highest urgency tier
-     * observed for that tid since it entered the close set.
-     *
-     * Drives the filtered-overtake-reack gate: when a tid flips
-     * isBehind, the remaining closest's urgency must be strictly
-     * greater than `peakUrgencyPerTid[overtakenTid]` to fire. That is
-     * its only consumer.
-     *
-     * Cleared on Clear, same as [firedTierPerTid].
-     */
-    private val peakUrgencyPerTid = HashMap<Int, Int>()
+    private fun firedTierOf(v: Vehicle): Int = firedTier[v.id]?.takeIf { it.first == v.bornAtMs }?.second ?: 0
+
+    /** The closest car on the previous frame, by (tid, birth), and its
+     *  along-road distance: what the next-car and pass rules compare
+     *  against. Null when no stable car was close. */
+    private var prevClosestKey: Pair<Int, Long>? = null
+    private var prevClosestDistanceM: Int = Int.MAX_VALUE
+
+    /** Whether that car was a track the ghost filter was holding back, which
+     *  may be no car at all, so it cannot pass the rider. */
+    private var prevClosestGhost: Boolean = false
+
+    /** Highest count sounded since the last all-clear, pass, floor lapse or
+     *  [reset], an urgent counting as 3. A closest-car beep below it is
+     *  held back. */
+    private var stepFloor: Int = 0
+
+    /** The trigger car of the last urgent since the all-clear, by (tid,
+     *  birth). An urgent writes no latch, so this is what lets that car hold
+     *  off the floor lapse while it is tracked; cleared with the latches. */
+    private var urgentFloorCar: Pair<Int, Long>? = null
+
+    /** When a car heard at or above [stepFloor], or [urgentFloorCar], was
+     *  last in the track list, or a beep or an urgent last sounded:
+     *  what [FLOOR_LAPSE_MS] is timed from. */
+    private var floorSeenAtMs: Long = 0L
 
     /** Distance (m) of the closest vehicle physically behind on the most
      *  recent frame where any was present. Sizes the post-turn clear-
@@ -720,7 +790,6 @@ class AlertDecider(
                 onGateEvent("# gate rx-veto tid=${v.id} d=${v.distanceM} raw_rx=${v.rangeXmRaw}")
             }
         }
-        val behindTids = vehicles.filter { it.isBehind }.mapTo(HashSet()) { it.id }
         val currentCloseTids = close.mapTo(HashSet()) { it.id }
 
         // Raw physical-presence gate for the all-clear, decoupled from the
@@ -782,15 +851,7 @@ class AlertDecider(
             ?: 0
         lastTierTrigger = closestVehicle
         lastTierDistanceM = closestVehicle?.let { alertDistanceM(it) } ?: -1f
-
-        // Update peak urgency per tid for every stable-close track. Used by
-        // the D2b filtered overtake re-ack gate. Must be updated BEFORE the
-        // trigger gate since D2b reads `peakUrgencyPerTid[overtakenTid]`.
-        for (v in stableClose) {
-            val u = urgencyFor(alertDistanceM(v), alertMaxM)
-            val prevPeak = peakUrgencyPerTid[v.id] ?: 0
-            if (u > prevPeak) peakUrgencyPerTid[v.id] = u
-        }
+        lastBeepRule = null
 
         // Ghost-beep filter: tier Beeps whose trigger track was BORN inside
         // [BornCloseGate.BORN_CLOSE_MAX_M] stay silent until the track shows
@@ -806,37 +867,87 @@ class AlertDecider(
         // machinery (cooldown and stationary gates still apply).
         for (tid in bornCloseGate.update(vehicles, turnState, nowMs)) {
             if (tid !in stableTids) continue
-            firedTierPerTid.remove(tid)
+            firedTier.remove(tid)
             beepPending = true
+            pendingRule = "refire"
             onGateEvent("# gate refire tid=$tid")
         }
 
         val newEntries = stableTids - prevStableClose
-        val overtakes = prevStableClose intersect behindTids
 
-        // Trigger gate. Audio describes the closest threat only;
-        // additional tracks at the same or lower tier are silent.
+        // A pass: the closest car draws level with the rider, or, while the
+        // rider is known to be moving, fades right beside them (the radar
+        // often drops a car as it draws level). The rider can see that car,
+        // so it lifts the floor and the next car is heard at its own tier.
+        // Another car drawing level says nothing about the one heard, a fade
+        // at a stop, or with no speed reading, may be a car behind going
+        // quiet, and a track the ghost filter is still holding back may be no
+        // car at all. Evaluated before the triggers, so the next car's cue
+        // sees the lifted floor.
+        val prevKey = prevClosestKey
+        val prevClosestNow = prevKey?.let { (id, born) -> vehicles.firstOrNull { it.id == id && it.bornAtMs == born } }
+        val riderMoving: Boolean? = bikeNotDriving?.not() ?: bikeSpeedMs?.let { it > stationaryMsThreshold }
+        val prevClosestFaded = prevKey != null && prevClosestNow == null
+        val prevClosestLevel = prevClosestNow?.isBehind == true
+        val passed = !prevClosestGhost &&
+            (
+                prevClosestLevel ||
+                    (prevClosestFaded && prevClosestDistanceM <= PASS_FADE_MAX_M && riderMoving == true)
+                )
+        val via = if (prevClosestLevel) "behind" else "fade"
+        if ((prevClosestFaded || prevClosestLevel) && !passed) {
+            onGateEvent(
+                "# gate pass-refused tid=${prevKey.first} via=$via d=$prevClosestDistanceM" +
+                    " moving=${riderMoving ?: "unknown"} ghost=$prevClosestGhost",
+            )
+        }
+        if (passed) {
+            onGateEvent("# gate pass tid=${prevKey.first} via=$via d=$prevClosestDistanceM floor_was=$stepFloor")
+            stepFloor = 0
+        }
+
+        // With no movement signal no fade can be taken as a pass, so the
+        // floor lapses once no car heard at or above it, nor the urgent's
+        // trigger car, has been in the track list for FLOOR_LAPSE_MS, and
+        // the closest car is heard at its own tier unless already heard at it.
+        val urgentCar = urgentFloorCar
+        if (vehicles.any { firedTierOf(it) >= stepFloor || (it.id == urgentCar?.first && it.bornAtMs == urgentCar.second) }) {
+            floorSeenAtMs = nowMs
+        }
+        if (stepFloor > 0 && riderMoving == null && nowMs - floorSeenAtMs >= FLOOR_LAPSE_MS) {
+            val armed = closestVehicle != null && closestUrgency > firedTierOf(closestVehicle)
+            onGateEvent("# gate floor-lapse floor=$stepFloor after_ms=${nowMs - floorSeenAtMs} armed=$armed")
+            stepFloor = 0
+            if (armed) {
+                beepPending = true
+                pendingRule = "floor_lapse"
+            }
+        }
+
+        // Trigger gate. Audio describes the closest threat only; a car
+        // entering further back than the closest is silent.
         //
         //   Closest-tier rising edge: a new track entering the close
         //     set fires only if its arrival raises the closest-urgency
         //     tier above what we have already audibly fired for on
-        //     the current closest tid.
+        //     the current closest car.
         //
-        //   Filtered overtake re-ack: when a track flips isBehind and
-        //     others remain close, fire only if the remaining
-        //     closest-urgency is strictly greater than the peak
-        //     urgency the just-overtaking track ever reached.
+        //   Next car: when a different car is now the closest, because
+        //     the previous one passed, faded or was overtaken behind the
+        //     rider, it fires at its own tier unless already heard at it,
+        //     and after a pass even then. The floor below still holds a
+        //     lower count without a pass or a floor lapse.
         //
-        //   Per-track tier latch: once we have audibly fired at
-        //     urgency N for tid T, no re-fire for the same tid at the
-        //     same tier. Re-fire requires a true tier raise N->N+1, a
-        //     Clear (which resets all latches), or the born-close
-        //     gate admitting a track it had been silencing (above),
-        //     which drops that tid's latch. A full-tier de-escalation
-        //     does NOT rearm it.
-        // Latch-aware: a new entry whose closest tid has already been
+        //   Per-car tier latch: once we have audibly fired at
+        //     urgency N for a car, no re-fire for it at the same tier.
+        //     Re-fire requires a true tier raise N->N+1, a Clear
+        //     (which resets all latches), or the born-close gate
+        //     admitting a track it had been silencing (above), which
+        //     drops that tid's latch. A full-tier de-escalation does
+        //     NOT rearm it.
+        // Latch-aware: a new entry whose closest car has already been
         // audibly fired at this tier (its latch survived a deferred or
-        // cancelled clear-grace) must not re-fire. Genuinely new tids have
+        // cancelled clear-grace) must not re-fire. Genuinely new cars have
         // latch 0, so urgency >= 1 always passes - this only suppresses a
         // car that flapped out and back within the clear-grace.
         val newEntryRaisesTier =
@@ -844,19 +955,18 @@ class AlertDecider(
                 closestUrgency > prevClosestUrgency &&
                 (
                     closestVehicle == null ||
-                        closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
+                        closestUrgency > firedTierOf(closestVehicle)
                     )
-        val overtakeToHigher = if (overtakes.isNotEmpty() && stableTids.isNotEmpty()) {
-            val peakOvertaken = overtakes.maxOf { peakUrgencyPerTid[it] ?: 0 }
-            closestUrgency > peakOvertaken
-        } else {
-            false
-        }
+        val closestChanged = prevKey != null &&
+            closestVehicle != null &&
+            (closestVehicle.id to closestVehicle.bornAtMs) != prevKey
+        val nextCar = closestChanged &&
+            (passed || closestUrgency > firedTierOf(closestVehicle))
         // Escalation only counts if it's a true tier raise on the closest
-        // tid that we haven't already fired for at that tier.
+        // car that we haven't already fired for at that tier.
         val escalation = closestVehicle != null &&
             closestUrgency > prevClosestUrgency &&
-            closestUrgency > (firedTierPerTid[closestVehicle.id] ?: 0)
+            closestUrgency > firedTierOf(closestVehicle)
         // Imminent-impact safety override. While the rider is at or
         // below the stationary speed threshold - or, with the low-speed
         // extension on, still moving at <= URGENT_MOVING_MAX_KMH - and
@@ -899,7 +1009,7 @@ class AlertDecider(
         // holds, at a rate meaningful for a rider rather than per beep
         // cooldown, and a genuinely-faster new closer overrides the
         // pacing immediately. Known interaction: because UrgentApproach
-        // never writes firedTierPerTid, a car that de-escalates a full
+        // never writes firedTier, a car that de-escalates a full
         // tier after an urgent volley and then re-approaches can re-Beep
         // where the stationary-only behaviour stayed latched. Corpus
         // replay measured 11 such beeps across 105 rides - accepted,
@@ -988,8 +1098,16 @@ class AlertDecider(
             waited?.let { if (triggerClosingMs > it.peakClosing) it.peakClosing = triggerClosingMs }
         }
         val anyImminentImpact = urgentAllowedByEpisode
-        val triggered = newEntryRaisesTier || overtakeToHigher || escalation || anyImminentImpact
+        val triggered = newEntryRaisesTier || nextCar || escalation || anyImminentImpact
         if (triggered) beepPending = true
+        when {
+            nextCar -> pendingRule = "handover"
+            newEntryRaisesTier && closestVehicle?.id in newEntries -> pendingRule = "new_entry"
+            // A tier-raising new entry that is not the closest raises the
+            // closest's tier, which is an escalation.
+            escalation -> pendingRule = "escalation"
+            anyImminentImpact -> pendingRule = "urgent"
+        }
 
         // Scale the regular-Beep cooldown by rider speed. Do NOT
         // scale the UrgentApproach cadence; a slow / stationary rider in
@@ -1030,7 +1148,7 @@ class AlertDecider(
         // once a stable-close track existed this episode, the Clear still arms
         // when the car finally leaves, even though the docked window kept
         // stableClose (and prevStableClose) empty for many frames. The
-        // surviving firedTierPerTid latch suppresses any same-car re-beep
+        // surviving firedTier latch suppresses any same-car re-beep
         // through the latch-aware new-entry / escalation gates.
         // Turn-aware clear deferral: an empty behind-set mid-corner is a
         // radar blackout, not an empty road - cornering sweeps the rear cone
@@ -1084,8 +1202,9 @@ class AlertDecider(
             clearGraceElapsed -> {
                 lastBeepAtMs = nowMs
                 beepPending = false
-                firedTierPerTid.clear()
-                peakUrgencyPerTid.clear()
+                firedTier.clear()
+                stepFloor = 0
+                urgentFloorCar = null
                 bornCloseGate.onClear()
                 turnDeferUntilMs = Long.MIN_VALUE
                 clearPending = false
@@ -1101,6 +1220,9 @@ class AlertDecider(
                         beepPending = false
                         urgentLastFireMs = nowMs
                         urgentFiredThisEpisode = true
+                        stepFloor = 3
+                        urgentFloorCar = imminentImpactTrigger.id to imminentImpactTrigger.bornAtMs
+                        floorSeenAtMs = nowMs
                         Event.UrgentApproach(
                             viaMovingPath = urgentViaMoving,
                             triggerTid = imminentImpactTrigger.id,
@@ -1133,16 +1255,29 @@ class AlertDecider(
                                     " birth_d=${v.bornDistanceM} turn=$turnState",
                             )
                             Event.None
+                        } else if (closestUrgency < stepFloor) {
+                            // Held back like the veto above, with no audio
+                            // and no latch: the car is heard once it reaches
+                            // the floor, through the escalation rule.
+                            beepPending = false
+                            onGateEvent(
+                                "# gate step-down tid=${v?.id} tier=$closestUrgency floor=$stepFloor" +
+                                    " d=${v?.distanceM}",
+                            )
+                            Event.None
                         } else {
                             lastBeepAtMs = nowMs
                             beepPending = false
+                            stepFloor = maxOf(stepFloor, closestUrgency)
                             // The guard is defensive: beepPending should
                             // not reach here with no closest track, and
                             // the tier latch has nothing to key on if it
                             // does. The cue fires either way.
                             if (v != null) {
-                                firedTierPerTid[v.id] = closestUrgency
+                                firedTier[v.id] = v.bornAtMs to closestUrgency
+                                floorSeenAtMs = nowMs
                             }
+                            lastBeepRule = pendingRule
                             Event.Beep(count = closestUrgency)
                         }
                     }
@@ -1153,6 +1288,9 @@ class AlertDecider(
 
         prevStableClose = stableTids
         prevClosestUrgency = if (stableTids.isEmpty()) 0 else closestUrgency
+        prevClosestKey = closestVehicle?.let { it.id to it.bornAtMs }
+        prevClosestDistanceM = closestVehicle?.distanceM ?: Int.MAX_VALUE
+        prevClosestGhost = closestVehicle?.let { bornCloseGate.isGated(it) } ?: false
         prevCloseRaw = inRange.mapTo(HashSet()) { it.id }
         prevBehindRaw = behindPresentTids
         return event
@@ -1162,14 +1300,20 @@ class AlertDecider(
         bornCloseGate.reset()
         consecutiveClose.clear()
         framesSinceLastSeen.clear()
-        firedTierPerTid.clear()
-        peakUrgencyPerTid.clear()
+        firedTier.clear()
+        prevClosestKey = null
+        prevClosestDistanceM = Int.MAX_VALUE
+        prevClosestGhost = false
+        stepFloor = 0
+        urgentFloorCar = null
+        floorSeenAtMs = 0L
         lastBehindDistanceM = 0
         turnDeferUntilMs = Long.MIN_VALUE
         prevStableClose = emptySet()
         prevClosestUrgency = 0
         lastBeepAtMs = Long.MIN_VALUE / 2
         beepPending = false
+        pendingRule = ""
         clearPending = false
         clearPendingSinceMs = 0L
         closeEpisodeActive = false
@@ -1634,6 +1778,22 @@ class AlertDecider(
          *  order looser than any lane-discrimination gate on purpose: this
          *  never judges lane position. */
         const val RX_ABSURD_M = 10f
+
+        /** Along-road distance (m) within which the closest car fading while
+         *  the rider moves counts as a pass: the radar often drops a car as it
+         *  draws level instead of reporting it level. An allowance, not a
+         *  measurement. A car fading further back may have turned off or
+         *  dropped out while still behind, so it is not a pass. */
+        const val PASS_FADE_MAX_M = 3
+
+        /** How long the track list must hold no car heard at or above the
+         *  floor, nor the urgent's trigger car, before the floor lapses,
+         *  where the rider's movement is unknown. On the legacy stream a
+         *  track stays in the list for [RadarV1Decoder.STALE_MS] after its
+         *  last report, so the count drops that much later again. A design
+         *  choice that favours announcing a car, not a measurement of how
+         *  long a radar loses a car. */
+        const val FLOOR_LAPSE_MS = 2_000L
 
         /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`
          *  call has yet been processed this session". The first call

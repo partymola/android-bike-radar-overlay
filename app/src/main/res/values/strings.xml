@@ -1027,8 +1027,10 @@
     <string name="alert_sound_one_title">One beep</string>
     <string name="alert_sound_one_meaning">A vehicle behind you</string>
     <string name="alert_sound_two_title">Two beeps</string>
-    <!-- Each meaning names a band, not a change: three beeps can be followed
-         by two about a different vehicle further back. -->
+    <!-- Each meaning names a band, not a change: once the closer vehicle has
+         passed (or, with no speed reading, once the radar has lost the
+         vehicles heard at three for a few seconds), three beeps can be
+         followed by two about the one behind it. -->
     <string name="alert_sound_two_meaning">A vehicle at mid distance</string>
     <string name="alert_sound_three_title">Three beeps</string>
     <string name="alert_sound_three_meaning">A vehicle close to you</string>

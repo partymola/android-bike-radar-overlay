@@ -660,7 +660,7 @@ class OverlayPipelineDrivingTest {
         val pipeline = buildPipeline(clog = { clogLines += it }, clockMono = { mono })
         val job = pipeline.attach(this, "TestRadar")
         runCurrent()
-        val ghost = Vehicle(id = 4, distanceM = 5, speedMs = -3f, rangeXm = 9f)
+        val ghost = Vehicle(id = 4, distanceM = 5, speedMs = -1f, rangeXm = 9f)
         val real = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
         RadarStateBus.publish(
             RadarState(source = DataSource.V2, timestamp = 1_000L, vehicles = listOf(ghost, real), bikeSpeedMs = 5f),
@@ -679,7 +679,11 @@ class OverlayPipelineDrivingTest {
         )
         assertTrue(
             "and the nearest car must still be reported separately, got $beepLine",
-            beepLine.contains("frame_closest_tid=4"),
+            beepLine.contains("frame_closest_tid=4") && beepLine.contains("closing_mps=1.0"),
+        )
+        assertTrue(
+            "the line carries the tier car's own speed and the rule that fired, got $beepLine",
+            beepLine.contains("tier_closing_mps=3.0") && beepLine.contains("cue_rule=new_entry"),
         )
         job.cancel()
         job.join()

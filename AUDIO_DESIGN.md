@@ -130,14 +130,36 @@ channel is therefore managed with **episode semantics** rather than a beep per
 radar frame:
 
 - A beep describes the **closest** threat only. A new vehicle entering the close
-  set is silent unless it raises the closest-urgency tier; piling a beep on a
-  farther car while a closer one is already being announced adds noise, not
-  information.
+  set further back than the closest is silent; piling a beep on a farther car
+  while a closer one is already being announced adds noise, not information.
 - **Re-trigger suppression.** Once the app has beeped for a given track at a
   given tier it does not beep again for that same track at that same tier.
-  Distance jitter that flaps a car across a tier boundary does not re-fire, and
-  an overtaking car handing off to the remaining traffic only re-beeps if what
-  remains is strictly closer than the peak the departing car reached.
+  Distance jitter that flaps a car across a tier boundary does not re-fire.
+- **The next car once the closest changes.** When a different car becomes the
+  closest behind the rider, because the previous one passed, faded or was
+  overtaken by it, that car is announced at its own tier unless it has already
+  been heard at it. A car overtaking the one the rider heard about is the car
+  the rider cannot see, so it is announced even at the same tier, and after a
+  pass the car still behind is announced even if it was heard before.
+- **No lower count without a pass.** A lower count about another car sounds
+  like the close car dropping back, so it is held back until the closest car
+  passes the rider. A pass is the closest car drawing level with the rider, or
+  fading within 3 m along the road while the rider is known to be moving.
+  The radar often loses a car drawing level there; it can also lose one there
+  that is still behind, and the allowance accepts that. None of these is a
+  pass: another car drawing level, a fade at a stop or with no speed reading,
+  or a track the born-close ghost filter (`BornCloseGate`) is still holding
+  back. After a pass the next car is announced at its own tier, a 2 after a 3
+  included. Otherwise a car further back stays silent until it reaches the
+  highest tier heard since the last pass or all-clear, or the lapse below.
+- **With no movement signal, the count can drop.** With no speed reading and
+  no eBike data, as on a range-only radar without an eBike, a pass cannot be
+  told from a car going quiet. Once neither a car heard at that count or above
+  nor the car that last set off the urgent warning has been on the radar's
+  track list for 2 s, the next car is announced at its own tier, unless it has
+  already been heard at it. This favours announcing a car over keeping the
+  count from dropping. While such a car is still tracked, or whenever the
+  rider's movement is known, moving or stopped, a lower count stays held back.
 - A short cooldown collapses a burst of triggers into one beep at the closest
   urgency, so a multi-vehicle scene does not machine-gun the rider. The one
   exception is a genuine tier *raise* (the closest car got closer), which is real
@@ -255,9 +277,13 @@ compliance claim.
   up as a failing, named test. A few load-bearing examples (do not rename or
   "simplify" these):
   - `cacophony scenario truck pass produces at most three audible beeps` - the
-    parsimony ceiling for a single overtake.
-  - `same-tier new entry while closer track still close is silent` and
-    `overtake re-ack at same-or-lower tier is silent` - the closest-only model.
+    parsimony ceiling for a single overtake with a movement signal.
+  - `a lower-tier car entering further back while the closest is still close is silent` and
+    `a car passing while the closest is still behind changes nothing` - the
+    closest-only model.
+  - `AlertDeciderPassHandoverTest` - the next car after a pass, a car that
+    overtakes the closest one behind the rider, no lower count without a pass,
+    and the count dropping with no movement signal.
   - `intra-tier distance flap does NOT re-fire` - the tier latch.
   - `platoon of new tids inside one episode fires once not per car` and
     `markedly faster closer bypasses episode pacing` - the urgent channel's

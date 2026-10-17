@@ -449,10 +449,13 @@ internal class OverlayPipeline(
         // disagree is exactly the off-axis case worth reviewing. frame_closest_*
         // below stays as it is (nearest car, whatever the tier said), so
         // without these a tier decision cannot be audited from the log.
+        // cue_rule says which rule armed the beep; tier_closing_mps is the
+        // tier car's own speed, since closing_mps is the nearest car's.
         val tierTrigger = (ev as? AlertDecider.Event.Beep)?.let {
             alerts.lastTierTrigger?.let { v ->
                 " tier_tid=${v.id} tier_d=${v.distanceM} tier_rx=${v.rangeXm}" +
-                    " tier_true_d=${alerts.lastTierDistanceM}"
+                    " tier_true_d=${alerts.lastTierDistanceM}" +
+                    " tier_closing_mps=${-v.speedMs} cue_rule=${alerts.lastBeepRule}"
             }
         } ?: ""
         // Same reason as gate_clearance_m: a cue for a fast closer may be one

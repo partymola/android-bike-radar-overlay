@@ -177,7 +177,7 @@ class AlertDeciderTrueRangeTierTest {
     }
 
     @Test fun `a spike after the top tier has fired stays silent on recovery`() {
-        // A demote does not clear the per-tid latch, so a recover cannot
+        // A demote does not clear the car's tier latch, so a recover cannot
         // re-beep. Pinning it means per-frame lateral noise can never
         // become a new source of chatter. Only the true-range rule can reach
         // this path at all - under along-axis scoring the lateral spike never

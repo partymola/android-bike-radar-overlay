@@ -32,7 +32,7 @@ by which side it is on, coloured by how much it needs watching. The
 dashed line is the alert distance you set: a vehicle beyond it is drawn
 and stays silent. The red border marks a vehicle closing fast, and a
 radar that reports range only cannot raise it at all. It beeps as a car
-closes in behind you, the tier rising as the closest gets nearer, and a
+closes in behind you, the tier rising as the closest car gets nearer, and a
 distinct urgent tone fires if an impact looks imminent. The rest of your
 screen stays yours.
 

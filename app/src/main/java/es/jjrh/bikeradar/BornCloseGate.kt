@@ -58,8 +58,10 @@ package es.jjrh.bikeradar
  * still-gated closer ghost coexists with the just-admitted farther track,
  * the re-armed cue stays silent until the admitted track produces its
  * next tier edge (it becomes the closest and its tier rises above the
- * last audible level). That direction only ever delays a tier beep - it can never fire a false cue or touch the all-clear/urgent
- * paths - matching the project's delayed-over-false asymmetry.
+ * last audible level). That direction only ever delays a tier beep. It
+ * can never fire a false cue or touch the all-clear or urgent paths
+ * (`AlertDeciderGhostGateTest`), matching the project's
+ * delayed-over-false asymmetry.
  *
  * Not thread-safe; call from the decider's single coroutine.
  */

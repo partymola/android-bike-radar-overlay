@@ -77,6 +77,11 @@ class RadarLinkCoordinatorTest {
     private var cancelWalkAwayCount = 0
     private var alarmStartCount = 0
     private var alarmStopCount = 0
+
+    // Starts and stops in order, and a hook run as the alert is posted, so a
+    // test can land a reconnect between the FIRE decision and the tone.
+    private val alarmEvents = mutableListOf<String>()
+    private var onWalkAwayPosted: () -> Unit = {}
     private var snoozeCancelCount = 0
     private var dashcamBackoffClearCount = 0
     private var forgotToLockPostCount = 0
@@ -103,10 +108,19 @@ class RadarLinkCoordinatorTest {
         coordinator = RadarLinkCoordinator(
             clock = { now },
             prefs = prefs,
-            postWalkAwayNotification = { postWalkAwayCount++ },
+            postWalkAwayNotification = {
+                postWalkAwayCount++
+                onWalkAwayPosted()
+            },
             cancelWalkAwayNotification = { cancelWalkAwayCount++ },
-            startWalkAwayAlarm = { alarmStartCount++ },
-            stopWalkAwayAlarm = { alarmStopCount++ },
+            startWalkAwayAlarm = {
+                alarmStartCount++
+                alarmEvents += "start"
+            },
+            stopWalkAwayAlarm = {
+                alarmStopCount++
+                alarmEvents += "stop"
+            },
             alertBeeper = { beeper },
             clog = { clogLines += it },
             journal = { journalLines += it },
@@ -385,6 +399,26 @@ class RadarLinkCoordinatorTest {
         coordinator.markConnected()
         assertEquals(1, cancelWalkAwayCount)
         assertEquals(1, alarmStopCount)
+    }
+
+    @Test
+    fun aReconnectBetweenTheFireDecisionAndTheToneStillLeavesItStopped() {
+        // The tick decides FIRE on a snapshot with the radar off; the radar's
+        // first frame then lands before the tick posts and starts. Its cancel
+        // and stop run first, so the tick must undo what it started.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        onWalkAwayPosted = {
+            now = fireAt + 1L
+            coordinator.markLinkOpen(RADAR)
+            coordinator.markConnected()
+        }
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals("the tick still started it", 1, alarmStartCount)
+        assertEquals("the last word is a stop", "stop", alarmEvents.last())
+        assertEquals(2, cancelWalkAwayCount)
+        assertNull("no fire time left for the next episode's rate limit", snap().lastWalkAwayFireMs)
     }
 
     @Test

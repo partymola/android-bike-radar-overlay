@@ -691,7 +691,18 @@ internal class RadarLinkCoordinator(
             WalkAwayDecider.Action.FIRE -> {
                 postWalkAwayNotification()
                 startWalkAwayAlarm()
-                _radarLinkState.update { it.copy(lastWalkAwayFireMs = nowMs) }
+                // Decided on a snapshot taken with the radar off. Its first frame
+                // can land before the post and start above, and its cancel and
+                // stop then ran first; undo them for an episode that has ended
+                // (`aReconnectBetweenTheFireDecisionAndTheToneStillLeavesItStopped`).
+                val offAt = link.radarOffSinceMs
+                val after = _radarLinkState.updateAndGet {
+                    if (it.radarOffSinceMs == offAt) it.copy(lastWalkAwayFireMs = nowMs) else it
+                }
+                if (after.radarOffSinceMs != offAt) {
+                    cancelWalkAwayNotification()
+                    stopWalkAwayAlarm()
+                }
             }
             WalkAwayDecider.Action.AUTO_DISMISS -> {
                 cancelWalkAwayNotification()

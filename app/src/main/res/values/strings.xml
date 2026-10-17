@@ -107,8 +107,6 @@
          ════════════════════════════════════════════════════════════════ -->
 
     <!-- Hero status card. Headline + subtitle for each derived state. -->
-    <string name="main_status_setup_title">Let\'s set up your radar</string>
-    <string name="main_status_setup_sub">Before your first ride</string>
     <string name="main_status_service_off_title">Scanning stopped</string>
     <string name="main_status_service_off_sub">No alerts until you start scanning</string>
     <!-- The subtitle names the one missing, Nearby devices first. The app does
@@ -165,7 +163,6 @@
     <string name="main_status_wrong_pin_advice_sub">No data from <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. If it\'s your radar, turn it off and on</string>
 
     <!-- Hero status-card call-to-action buttons. -->
-    <string name="main_cta_set_up">Set up</string>
     <string name="main_cta_start_scanning">Start scanning</string>
     <string name="main_cta_grant_permissions">Grant permissions</string>
     <string name="main_cta_resume">Resume</string>

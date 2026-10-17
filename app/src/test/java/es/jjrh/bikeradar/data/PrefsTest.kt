@@ -61,7 +61,7 @@ class PrefsTest {
     @Test
     fun snapshotReportsDocumentedDefaultsOnAFreshStore() {
         val s = prefs.snapshot()
-        assertFalse(s.firstRunComplete)
+        assertFalse(prefs.firstRunComplete)
         assertTrue(s.serviceEnabled)
         assertEquals(50, s.alertVolume)
         assertEquals(20, s.alertMaxDistanceM)
@@ -172,7 +172,7 @@ class PrefsTest {
         // A new instance reads the same backing file: proves the setters
         // persisted rather than caching in the original object.
         val s = Prefs(context).snapshot()
-        assertTrue(s.firstRunComplete)
+        assertTrue(Prefs(context).firstRunComplete)
         assertFalse(s.serviceEnabled)
         assertEquals(80, s.alertVolume)
         assertEquals(25, s.alertMaxDistanceM)

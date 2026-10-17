@@ -252,7 +252,6 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     )
 
     val inputs = MainStatusInputs(
-        firstRunComplete = prefsSnap.firstRunComplete,
         pausedUntilEpochMs = prefsSnap.pausedUntilEpochMs,
         hasBond = hasBond,
         radarFresh = radarFresh,
@@ -765,9 +764,6 @@ internal fun ctaFor(
     ctx: Context,
     prefs: Prefs,
 ): StatusCta? = when {
-    !inputs.firstRunComplete ->
-        StatusCta(stringResource(R.string.main_cta_set_up)) { navController.navigate("onboarding") }
-
     // Pinned with the Grant route below by MainScreenStartCtaTest.
     !inputs.serviceEnabled -> StatusCta(stringResource(R.string.main_cta_start_scanning)) {
         prefs.serviceEnabled = true

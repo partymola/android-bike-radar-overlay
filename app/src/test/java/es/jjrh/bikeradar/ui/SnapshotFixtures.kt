@@ -20,7 +20,6 @@ internal object SnapshotFixtures {
 
     /** Mirrors the production [es.jjrh.bikeradar.data.Prefs] defaults. */
     fun defaultPrefsSnapshot(): PrefsSnapshot = PrefsSnapshot(
-        firstRunComplete = true,
         serviceEnabled = true,
         alertVolume = 50,
         alertMaxDistanceM = 20,

@@ -11,7 +11,6 @@ import org.junit.Test
 class MainStatusDeriverTest {
 
     private fun baseInputs(
-        firstRunComplete: Boolean = true,
         pausedUntilEpochMs: Long = 0L,
         hasBond: Boolean = true,
         radarFresh: Boolean = true,
@@ -30,7 +29,6 @@ class MainStatusDeriverTest {
         radarConnecting = radarConnecting,
         missingPermission = missingPermission,
         rideEndOfferable = rideEndOfferable,
-        firstRunComplete = firstRunComplete,
         pausedUntilEpochMs = pausedUntilEpochMs,
         hasBond = hasBond,
         radarFresh = radarFresh,
@@ -47,13 +45,6 @@ class MainStatusDeriverTest {
     // formatTime returns a fixed sentinel so tests can assert the clock
     // value is threaded into headlineArgs without depending on a real clock.
     private fun derive(inputs: MainStatusInputs, now: Long = 100L) = MainStatusDeriver.derive(inputs, now) { "HH:MM" }
-
-    @Test fun firstRunTopsEverything() {
-        val s = derive(baseInputs(firstRunComplete = false, hasBond = false))
-        assertEquals(MainStatusIcon.PlayCircle, s.icon)
-        assertEquals(MainStatusTone.Good, s.tone)
-        assertEquals(R.string.main_status_setup_title, s.headlineRes)
-    }
 
     @Test fun pausedBeatsBondCheck() {
         val s = derive(baseInputs(hasBond = false, pausedUntilEpochMs = 200L), now = 100L)
@@ -183,15 +174,6 @@ class MainStatusDeriverTest {
             now = 100L,
         )
         assertEquals(R.string.main_status_service_off_title, s.headlineRes)
-    }
-
-    @Test fun firstRunStillBeatsServiceStopped() {
-        // !firstRunComplete && !serviceEnabled is a corner case (a
-        // first-run user with service-disabled prefs from a previous
-        // install state) — first-run should still win so the user is
-        // walked through onboarding rather than seeing a Start CTA.
-        val s = derive(baseInputs(firstRunComplete = false, serviceEnabled = false))
-        assertEquals(R.string.main_status_setup_title, s.headlineRes)
     }
 
     // ── permissions missing ──────────────────────────────────────────────────
@@ -324,13 +306,6 @@ class MainStatusDeriverTest {
         // told "Radar live" while the adapter is actually off.
         val s = derive(baseInputs(bluetoothEnabled = false, radarFresh = true))
         assertEquals(R.string.main_status_bt_off_title, s.headlineRes)
-    }
-
-    @Test fun firstRunBeatsBtOff() {
-        // First-run is the top of the priority list; even with BT off
-        // the user should see onboarding rather than the BT prompt.
-        val s = derive(baseInputs(firstRunComplete = false, bluetoothEnabled = false))
-        assertEquals(R.string.main_status_setup_title, s.headlineRes)
     }
 
     @Test fun aLimitedRadarIsNotReportedAsAllGood() {

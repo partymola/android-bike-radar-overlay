@@ -34,7 +34,6 @@ enum class EBikeOwnership { UNANSWERED, YES, NO }
 enum class HaIntent { UNSET, YES, NO }
 
 data class PrefsSnapshot(
-    val firstRunComplete: Boolean,
     val serviceEnabled: Boolean,
     val alertVolume: Int,
     val alertMaxDistanceM: Int,
@@ -999,7 +998,6 @@ class Prefs(context: Context) {
     val isPaused: Boolean get() = System.currentTimeMillis() < pausedUntilEpochMs
 
     fun snapshot(): PrefsSnapshot = PrefsSnapshot(
-        firstRunComplete = firstRunComplete,
         serviceEnabled = serviceEnabled,
         alertVolume = alertVolume,
         alertMaxDistanceM = alertMaxDistanceM,

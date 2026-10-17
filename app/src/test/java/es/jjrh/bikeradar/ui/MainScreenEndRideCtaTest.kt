@@ -51,7 +51,6 @@ class MainScreenEndRideCtaTest {
     @Composable
     private fun ctaWith(rideEndOfferable: Boolean, radarFresh: Boolean): StatusCta? = ctaFor(
         inputs = MainStatusInputs(
-            firstRunComplete = true,
             pausedUntilEpochMs = 0L,
             hasBond = true,
             radarFresh = radarFresh,
@@ -73,7 +72,7 @@ class MainScreenEndRideCtaTest {
     @Test
     fun theHeroAndTheButtonAgreeInEveryState() {
         // The congruence as a biconditional rather than as points. Both
-        // surfaces keep their own copy of the five gates above End ride, so a
+        // surfaces keep their own copy of the gates above End ride, so a
         // reorder in either re-opens the defect in a state no point test
         // visits: lifted above the Bluetooth arm, a rider whose adapter
         // dropped is offered "I've parked" under a card telling them to turn
@@ -81,10 +80,10 @@ class MainScreenEndRideCtaTest {
         // not ended.
         // The permissions state is checked the same way: the card naming a
         // missing permission and the button opening Permissions, together.
-        // Connecting is a ninth gate because a radar stuck failing its setup
+        // Connecting is a gate too, because a radar stuck failing its setup
         // after a ride is both connecting and offerable, and the question must
         // still be asked there; the connecting card itself has no button. A pin
-        // off the named radars is a tenth: its question and its button together.
+        // off the named radars is another: its question and its button together.
         val both = listOf(false, true)
         val connectingTitle = R.string.main_status_connecting_title
         val grant = "Grant permissions"
@@ -95,51 +94,48 @@ class MainScreenEndRideCtaTest {
             val prefs = Prefs(app)
             val found = mutableListOf<String>()
             var n = 0
-            for (firstRun in both) {
-                for (serviceOn in both) {
-                    for (missing in listOf(null) + MissingPermission.entries) {
-                        for (paused in both) {
-                            for (bt in both) {
-                                for (bond in both) {
-                                    for (fresh in both) {
-                                        for ((offerable, connecting, pinned) in both.flatMap { o -> both.flatMap { c -> listOf(null, "Pixel Buds").map { Triple(o, c, it) } } }) {
-                                            val inputs = MainStatusInputs(
-                                                firstRunComplete = firstRun,
-                                                pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
-                                                hasBond = bond,
-                                                radarFresh = fresh,
-                                                haErrorRecent = false,
-                                                dashcamOwned = false,
-                                                dashcamWarnWhenOff = false,
-                                                dashcamFresh = false,
-                                                dashcamDisplayName = null,
-                                                serviceEnabled = serviceOn,
-                                                bluetoothEnabled = bt,
-                                                rideEndOfferable = offerable,
-                                                missingPermission = missing,
-                                                radarConnecting = connecting,
-                                                pinnedOffRadarName = pinned,
-                                            )
-                                            val headline = MainStatusDeriver.derive(inputs, now) { "" }.headlineRes
-                                            val label = ctaFor(inputs, now, nav, app, prefs)?.label
-                                            val asks = headline == R.string.main_status_ride_over_title
-                                            val offers = label == "I've parked"
-                                            val namesPermission = headline == R.string.main_status_permissions_title
-                                            val opensPermissions = label == grant
-                                            val connectingWithAButton = headline == connectingTitle && label != null
-                                            val asksWhichRadar = headline == R.string.main_status_wrong_pin_title
-                                            val offersChoice = label == "Choose radar"
-                                            val disagrees = asks != offers ||
-                                                namesPermission != opensPermissions ||
-                                                connectingWithAButton ||
-                                                asksWhichRadar != offersChoice
-                                            if (disagrees) {
-                                                found += "firstRun=$firstRun service=$serviceOn missing=$missing " +
-                                                    "paused=$paused bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
-                                                    "connecting=$connecting pinned=$pinned (hero=$headline, button=$label)"
-                                            }
-                                            n++
+            for (serviceOn in both) {
+                for (missing in listOf(null) + MissingPermission.entries) {
+                    for (paused in both) {
+                        for (bt in both) {
+                            for (bond in both) {
+                                for (fresh in both) {
+                                    for ((offerable, connecting, pinned) in both.flatMap { o -> both.flatMap { c -> listOf(null, "Pixel Buds").map { Triple(o, c, it) } } }) {
+                                        val inputs = MainStatusInputs(
+                                            pausedUntilEpochMs = if (paused) now + 1_000L else 0L,
+                                            hasBond = bond,
+                                            radarFresh = fresh,
+                                            haErrorRecent = false,
+                                            dashcamOwned = false,
+                                            dashcamWarnWhenOff = false,
+                                            dashcamFresh = false,
+                                            dashcamDisplayName = null,
+                                            serviceEnabled = serviceOn,
+                                            bluetoothEnabled = bt,
+                                            rideEndOfferable = offerable,
+                                            missingPermission = missing,
+                                            radarConnecting = connecting,
+                                            pinnedOffRadarName = pinned,
+                                        )
+                                        val headline = MainStatusDeriver.derive(inputs, now) { "" }.headlineRes
+                                        val label = ctaFor(inputs, now, nav, app, prefs)?.label
+                                        val asks = headline == R.string.main_status_ride_over_title
+                                        val offers = label == "I've parked"
+                                        val namesPermission = headline == R.string.main_status_permissions_title
+                                        val opensPermissions = label == grant
+                                        val connectingWithAButton = headline == connectingTitle && label != null
+                                        val asksWhichRadar = headline == R.string.main_status_wrong_pin_title
+                                        val offersChoice = label == "Choose radar"
+                                        val disagrees = asks != offers ||
+                                            namesPermission != opensPermissions ||
+                                            connectingWithAButton ||
+                                            asksWhichRadar != offersChoice
+                                        if (disagrees) {
+                                            found += "service=$serviceOn missing=$missing " +
+                                                "paused=$paused bt=$bt bond=$bond fresh=$fresh offerable=$offerable " +
+                                                "connecting=$connecting pinned=$pinned (hero=$headline, button=$label)"
                                         }
+                                        n++
                                     }
                                 }
                             }
@@ -153,7 +149,7 @@ class MainScreenEndRideCtaTest {
         compose.waitForIdle()
         // Anti-vacuity: a loop that never ran would satisfy the emptiness
         // assertion below without checking anything.
-        assertEquals("every combination of the gates must be visited", 1536, visited)
+        assertEquals("every combination of the gates must be visited", 768, visited)
         assertEquals("the card must never ask what the button cannot answer", emptyList<String>(), disagreed)
     }
 

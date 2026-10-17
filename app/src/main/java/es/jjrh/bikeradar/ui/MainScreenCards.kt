@@ -128,7 +128,6 @@ private fun dotForStatus(
     //   Scanning stopped    -> fgDim, no pulse  (matches `serviceOff`)
     //   Waiting for radar   -> fgDim, pulse     (matches `searching`)
     //   Connecting to radar -> caution, pulse
-    //   First-run setup     -> safe, no pulse   (matches `active` style - green welcome)
     //   Paused              -> fgDim, no pulse
     //   Bluetooth off       -> caution, no pulse
     //   Not paired          -> danger, no pulse
@@ -138,14 +137,7 @@ private fun dotForStatus(
     //   Live + HA down      -> safe, no pulse  (still live; HA is a side-channel)
     //   Live + good         -> safe, no pulse
     return when (icon) {
-        // PlayCircle is shared between First-run (Good) and Service-
-        // stopped (Neutral). Mockup: first-run is the green "active"
-        // welcome dot, service-stopped is the muted `serviceOff` dot.
-        MainStatusIcon.PlayCircle -> when (tone) {
-            MainStatusTone.Good -> br.safe to false
-            else -> br.fgDim to false
-        }
-        MainStatusIcon.PauseCircle -> br.fgDim to false
+        MainStatusIcon.PlayCircle, MainStatusIcon.PauseCircle -> br.fgDim to false
         // BT-off (Warn tone) and Radar-not-paired (Error tone) share this
         // icon. The dot uses the tone so the two states are visually
         // distinct: caution amber for "fixable in two taps", danger red

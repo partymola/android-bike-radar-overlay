@@ -90,8 +90,6 @@
          ════════════════════════════════════════════════════════════════ -->
 
     <!-- Tarjeta de estado principal. Título y subtítulo de cada estado. -->
-    <string name="main_status_setup_title">Vamos a configurar tu radar</string>
-    <string name="main_status_setup_sub">Antes de tu primera ruta</string>
     <string name="main_status_service_off_title">Búsqueda detenida</string>
     <string name="main_status_service_off_sub">Sin alertas hasta que empieces a buscar</string>
     <string name="main_status_permissions_title">Faltan permisos</string>
@@ -125,7 +123,6 @@
     <string name="main_status_wrong_pin_advice_sub">Sin datos de <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. Si es tu radar, apágalo y enciéndelo</string>
 
     <!-- Botones de acción de la tarjeta de estado principal. -->
-    <string name="main_cta_set_up">Configurar</string>
     <string name="main_cta_start_scanning">Empezar a buscar</string>
     <string name="main_cta_grant_permissions">Conceder permisos</string>
     <string name="main_cta_resume">Reanudar</string>

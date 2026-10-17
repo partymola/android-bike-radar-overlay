@@ -15,8 +15,9 @@ import es.jjrh.bikeradar.R
  */
 enum class MainStatusTone { Good, Warn, Error, Info, Neutral }
 
-/** Icon identifiers; resolved to concrete `ImageVector` at render time so
- *  the deriver stays Compose-free. */
+/** No icon is drawn: with the tone, this picks the home card's dot colour
+ *  (`dotForStatus`) and whether the Bluetooth banner shows, so the deriver
+ *  stays Compose-free. */
 enum class MainStatusIcon {
     PlayCircle,
     PauseCircle,
@@ -55,7 +56,6 @@ data class MainStatusModel(
 )
 
 data class MainStatusInputs(
-    val firstRunComplete: Boolean,
     val pausedUntilEpochMs: Long,
     val hasBond: Boolean,
     val radarFresh: Boolean,
@@ -120,21 +120,20 @@ object MainStatusDeriver {
 
     /**
      * Priority order, first match wins:
-     *  1. First-run setup
-     *  2. Scanning stopped (user toggled the foreground service off)
-     *  3. Nearby devices missing
-     *  4. User-paused
-     *  5. Bluetooth disabled (adapter off at the OS level)
-     *  6. Radar not paired
-     *  7. Radar live, distance only
-     *  8. Radar live but dashcam off  (rider-safety beats HA connectivity)
-     *  9. Notifications missing, in place of 10, 11 or 15
-     *  10. Radar live but HA unreachable
-     *  11. Radar live, all good
-     *  12. Radar stale after a ride: "Finished your ride?"
-     *  13. Pin on a device other than the named radars: "Using the right radar?"
-     *  14. Link up, or closed under 5 s ago, no data yet: connecting
-     *  15. Radar stale: waiting
+     *  1. Scanning stopped (user toggled the foreground service off)
+     *  2. Nearby devices missing
+     *  3. User-paused
+     *  4. Bluetooth disabled (adapter off at the OS level)
+     *  5. Radar not paired
+     *  6. Radar live, distance only
+     *  7. Radar live but dashcam off  (rider-safety beats HA connectivity)
+     *  8. Notifications missing, in place of 9, 10 or 14
+     *  9. Radar live but HA unreachable
+     *  10. Radar live, all good
+     *  11. Radar stale after a ride: "Finished your ride?"
+     *  12. Pin on a device other than the named radars: "Using the right radar?"
+     *  13. Link up, or closed under 5 s ago, no data yet: connecting
+     *  14. Radar stale: waiting
      *
      * Notifications takes only the cards that carry no warning or button of
      * their own. The service runs without it, so it must not hide the radar's
@@ -180,14 +179,6 @@ object MainStatusDeriver {
         nowMs: Long,
         formatTime: (Long) -> String,
     ): MainStatusModel {
-        if (!inputs.firstRunComplete) {
-            return MainStatusModel(
-                icon = MainStatusIcon.PlayCircle,
-                tone = MainStatusTone.Good,
-                headlineRes = R.string.main_status_setup_title,
-                subtitleRes = R.string.main_status_setup_sub,
-            )
-        }
         if (!inputs.serviceEnabled) {
             return MainStatusModel(
                 icon = MainStatusIcon.PlayCircle,

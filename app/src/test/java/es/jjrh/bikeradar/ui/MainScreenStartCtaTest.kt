@@ -46,7 +46,6 @@ class MainScreenStartCtaTest {
                 composable("main") {
                     cta = ctaFor(
                         inputs = MainStatusInputs(
-                            firstRunComplete = true,
                             pausedUntilEpochMs = 0L,
                             hasBond = true,
                             radarFresh = false,

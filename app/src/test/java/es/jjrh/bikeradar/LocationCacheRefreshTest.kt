@@ -103,6 +103,21 @@ class LocationCacheRefreshTest {
     }
 
     @Test
+    fun theAreaNeverReachesTheLog() {
+        // This runs in release builds, and logcat reaches bugreports and adb.
+        org.robolectric.shadows.ShadowLog.clear()
+        liveFix(51.5074, -0.1278)
+        LocationCache.refreshIfStale(app, maxAgeMs = 0L)
+        savedArea()
+        val lines = org.robolectric.shadows.ShadowLog.getLogs().map { it.msg }
+        assertTrue("the read must have logged something", lines.any { it.startsWith("refreshed provider=") })
+        // Decimal and saved forms only: the logged age is a long run of digits.
+        for (needle in listOf("51.5", "-0.1", "515 -1")) {
+            assertFalse("$needle in $lines", lines.any { needle in it })
+        }
+    }
+
+    @Test
     fun theSlotIsUnderTheDirectoryAndroidKeepsOutOfBackups() {
         liveFix(51.5074, -0.1278)
         LocationCache.refreshIfStale(app)

@@ -32,7 +32,8 @@ import kotlin.math.roundToInt
  * no manual coordinates (which win in [RideLocationResolver]).
  * Every refresh checks that first and deletes the slot otherwise. The app
  * start runs [syncWithSettings], and each change to those settings runs a
- * refresh (`LocationCacheRefreshTest`). The coordinate is never logged.
+ * refresh (`LocationCacheRefreshTest`). The coordinate is never logged
+ * (`theAreaNeverReachesTheLog`).
  */
 object LocationCache {
 

@@ -13,9 +13,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** The walk-away alarm stopped needing the overlay's camera-off warning and
- *  the radar-left-on alarm arrived; no upgrader who could not hear an alarm
- *  before starts hearing one unasked. */
+/** The walk-away alarm stopped needing the overlay's camera-off warning, so
+ *  no upgrader who could not hear it before starts hearing it unasked. The
+ *  radar-left-on alarm arrived, on for every upgrader who had not switched
+ *  the walk-away alarm off. */
 @RunWith(RobolectricTestRunner::class)
 class WalkAwayAlarmMigrationTest {
 
@@ -39,21 +40,21 @@ class WalkAwayAlarmMigrationTest {
     }
 
     @Test
-    fun aCameraSwitchedOffWithItsPickKeptCountsAsNoneForTheRadarAlarm() {
+    fun aCameraSwitchedOffWithItsPickKeptStaysSilentWhenSwitchedBackOn() {
         upgrader(cameraPicked = true, warnWhenOff = false)
         prefs.dashcamOwnership = DashcamOwnership.NO
         prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.radarLeftOnAlarmEnabled)
-        // Switched back on, the camera stays as silent as it was.
+        prefs.dashcamOwnership = DashcamOwnership.YES
         assertFalse(prefs.walkAwayAlarmEnabled)
     }
 
     @Test
-    fun aCameraWithTheWarningOffHasBothAlarmsOff() {
+    fun aCameraWithTheWarningOffGetsTheRadarAlarmButNotTheDashcamOne() {
         upgrader(cameraPicked = true, warnWhenOff = false)
         prefs.migrateWalkAwayAlarms()
         assertFalse(prefs.walkAwayAlarmEnabled)
-        assertFalse(prefs.radarLeftOnAlarmEnabled)
+        assertTrue(prefs.radarLeftOnAlarmEnabled)
     }
 
     @Test
@@ -81,8 +82,16 @@ class WalkAwayAlarmMigrationTest {
     }
 
     @Test
+    fun aRiderWithNoCameraWhoSwitchedTheWalkAwayAlarmOffGetsNoRadarAlarm() {
+        upgrader(cameraPicked = false, warnWhenOff = false)
+        prefs.walkAwayAlarmEnabled = false
+        prefs.migrateWalkAwayAlarms()
+        assertFalse(prefs.radarLeftOnAlarmEnabled)
+    }
+
+    @Test
     fun anInstallStillInSetupKeepsTheDefaults() {
-        // A camera picked with the warning off would switch both off past setup.
+        // A camera picked with the warning off would switch the dashcam alarm off past setup.
         prefs.dashcamMac = CAMERA
         prefs.dashcamWarnWhenOff = false
         prefs.migrateWalkAwayAlarms()
@@ -94,7 +103,7 @@ class WalkAwayAlarmMigrationTest {
     fun itRunsOnlyOnce() {
         upgrader(cameraPicked = true, warnWhenOff = false)
         prefs.migrateWalkAwayAlarms()
-        // The rider turns them back on; a later start must not undo that.
+        // The rider turns it back on; a later start must not undo that.
         prefs.walkAwayAlarmEnabled = true
         prefs.migrateWalkAwayAlarms()
         assertTrue(prefs.walkAwayAlarmEnabled)

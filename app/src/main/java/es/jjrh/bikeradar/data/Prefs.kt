@@ -472,17 +472,17 @@ class Prefs(context: Context) {
      *  they could not hear the walk-away alarm while it needed that warning,
      *  so it is switched off rather than starting to sound now. That reads the
      *  remembered pick, so a camera switched off in Settings stays silent when
-     *  it is switched back on. And the radar-left-on alarm, new to them,
-     *  starts as that alarm stood for the camera in use: a rider who had it
-     *  off is not given another, and one whose camera is switched off counts
-     *  as having none. */
+     *  it is switched back on. The radar-left-on alarm, new to them, starts
+     *  as their walk-away switch stood: a rider who had turned that off is
+     *  not given another alarm. The overlay warning does not reach it, since
+     *  that warning defaulted off and was never a choice about an alarm. */
     fun migrateWalkAwayAlarms() {
         if (sp.getBoolean(KEY_WALKAWAY_ALARMS_MIGRATED, false)) return
         val e = sp.edit().putBoolean(KEY_WALKAWAY_ALARMS_MIGRATED, true)
         if (firstRunComplete) {
-            val heard = walkAwayAlarmEnabled
-            if (heard && dashcamMac != null && !dashcamWarnWhenOff) e.putBoolean(KEY_WALKAWAY_ENABLED, false)
-            e.putBoolean(KEY_RADAR_LEFT_ON_ALARM, heard && (activeDashcamMac == null || dashcamWarnWhenOff))
+            val switchedOn = walkAwayAlarmEnabled
+            if (switchedOn && dashcamMac != null && !dashcamWarnWhenOff) e.putBoolean(KEY_WALKAWAY_ENABLED, false)
+            e.putBoolean(KEY_RADAR_LEFT_ON_ALARM, switchedOn)
         }
         e.apply()
     }

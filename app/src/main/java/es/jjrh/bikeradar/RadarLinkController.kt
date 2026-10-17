@@ -86,8 +86,8 @@ internal class RadarLinkController(
     /** Always-on link-event sink ([LinkEventJournal]); unlike the capture
      *  log it records the attempts that never produced a connection. */
     private val journal: (String) -> Unit,
-    /** Monotonic clock for the V2 data-flow watchdog and the radar-light
-     *  override deadband. Injected as elapsedRealtime so an NTP/DST wall-clock
+    /** Monotonic clock for the V2 data-flow watchdog, the frame receipt stamp
+     *  and the radar-light override deadband. Injected as elapsedRealtime so an NTP/DST wall-clock
      *  jump can't make a silently-dead radar look alive or mis-clear the
      *  rider's manual light override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
@@ -529,15 +529,10 @@ internal class RadarLinkController(
             }
             !linkDown
         }
-        // When the last radar frame was RECEIVED, on the callback thread. The
-        // decode loop's own stamp is when a frame was consumed, which a slow
-        // step before the loop can delay by seconds. A switch-off ends the
-        // stream within about a second of the disconnect callback, a radar
-        // left on and walked away from about 3 to 4 s before it.
-        val lastReceiptMs = java.util.concurrent.atomic.AtomicLong(0L)
-        fun receivedAgo(now: Long): String = lastReceiptMs.get().let { if (it == 0L) "never" else "${now - it}ms ago" }
+        val receipts = StreamReceipts(clock)
         fun closeOnce() {
             if (!gattClosed.compareAndSet(false, true)) return
+            receipts.endingByApp()
             // Before the GATT goes: the handler installed below captures this
             // connection, and a stale one would write to a dead link. Absence
             // is the honest "no radar to talk to" a consumer should see.
@@ -553,18 +548,24 @@ internal class RadarLinkController(
 
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+                // Before the journal write below, which can take a while.
+                val now = clock()
                 captureLog.clog("# conn state: status=$status newState=$newState")
                 journal("radar conn state status=$status newState=$newState")
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        // Once per connection, on a link that streamed and that
+                        // the app did not end itself
+                        // (`aStreamingLinkLostJournalsHowLongAfterItsLastFrame`,
+                        // `aWatchdogTeardownJournalsNoGap`).
                         val gapMs = synchronized(linkLock) {
+                            val first = !linkDown
                             linkDown = true
-                            val gap = if (streamed) clock() - lastReceiptMs.get() else null
                             linkState.markDisconnected()
-                            gap
+                            if (first && streamed && !receipts.endedByApp) receipts.gapMs(now) else null
                         }
-                        if (gapMs != null) journal("radar link lost ${gapMs}ms after its last frame")
+                        if (gapMs != null) journal("radar link lost status=$status ${gapMs}ms after its last frame")
                         queue.cancel()
                         notifyChannel.close()
                         if (!servicesReady.isCompleted) servicesReady.complete(false)
@@ -622,13 +623,13 @@ internal class RadarLinkController(
             override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
                 @Suppress("DEPRECATION")
                 val bytes = ch.value ?: ByteArray(0)
-                if (ch.uuid == Uuids.RADAR_V2 || ch.uuid == Uuids.RADAR_V1) lastReceiptMs.set(clock())
+                receipts.onNotify(ch.uuid)
                 captureLog.clogPacket(ch.uuid, bytes)
                 notifyChannel.trySend(ch.uuid to bytes)
             }
 
             override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
-                if (ch.uuid == Uuids.RADAR_V2 || ch.uuid == Uuids.RADAR_V1) lastReceiptMs.set(clock())
+                receipts.onNotify(ch.uuid)
                 captureLog.clogPacket(ch.uuid, value)
                 notifyChannel.trySend(ch.uuid to value)
             }
@@ -730,6 +731,7 @@ internal class RadarLinkController(
                     } else {
                         journal("radar legacy fallback unavailable (cache refresh failed)")
                     }
+                    receipts.endingByApp()
                     gatt.disconnect()
                     return true
                 }
@@ -748,10 +750,11 @@ internal class RadarLinkController(
                     // the token is the diagnostic, and the journal line above
                     // is what records that the fallback ran.
                     overlayJob = overlayPipeline.attach(scope, name)
-                    return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name, ::markStreaming, ::receivedAgo)
+                    return runLegacyStream(gatt, queue, notifyChannel, legacyChar, name, ::markStreaming, receipts)
                 }
                 captureLog.clog("# handshake aborted - closing gatt for quick reconnect")
                 journal("radar handshake aborted at $handshakeAbort (quick reconnect)")
+                receipts.endingByApp()
                 gatt.disconnect()
                 return true
             }
@@ -806,8 +809,9 @@ internal class RadarLinkController(
                         // Both clocks: the watchdog's is when a frame was
                         // consumed, so a receipt more recent than it means the
                         // decode loop was held up, not the radar silent.
-                        val received = receivedAgo(now)
+                        val received = receipts.receivedAgo(now)
                         journal("radar V2 stream silent ${ageMs}ms, last received $received; tearing down")
+                        receipts.endingByApp()
                         try {
                             capturedGatt.disconnect()
                         } catch (_: Throwable) {}
@@ -1038,12 +1042,14 @@ internal class RadarLinkController(
         v1Char: BluetoothGattCharacteristic,
         name: String,
         markStreaming: () -> Boolean,
-        receivedAgo: (Long) -> String,
+        receipts: StreamReceipts,
     ): Boolean {
+        receipts.stream = Uuids.RADAR_V1
         val subscribed = queue.writeCccd(gatt, v1Char)
         captureLog.clog("# legacy stream subscribe ok=$subscribed")
         journal("radar legacy stream subscribe ok=$subscribed")
         if (!subscribed) {
+            receipts.endingByApp()
             gatt.disconnect()
             return false
         }
@@ -1075,9 +1081,11 @@ internal class RadarLinkController(
                 delay(V2_WATCHDOG_TICK_MS)
                 val now = clock()
                 if (V2WatchdogDecider.isStale(now, lastV2FrameMs, V2_FRAME_STALL_MS)) {
-                    Log.w(TAG, "legacy stream silent for ${now - lastV2FrameMs}ms; tearing down")
-                    val received = receivedAgo(now)
-                    journal("radar legacy stream silent, last received $received; tearing down")
+                    val ageMs = now - lastV2FrameMs
+                    Log.w(TAG, "legacy stream silent for ${ageMs}ms; tearing down")
+                    val received = receipts.receivedAgo(now)
+                    journal("radar legacy stream silent ${ageMs}ms, last received $received; tearing down")
+                    receipts.endingByApp()
                     try {
                         capturedGatt.disconnect()
                     } catch (_: Throwable) {}
@@ -1402,6 +1410,37 @@ internal class RadarLinkController(
 
         private const val RADAR_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
     }
+}
+
+/**
+ * One connection's record of when it last RECEIVED a frame of the stream it
+ * runs, and whether the app chose to end the link.
+ *
+ * Stamped on the callback thread, not when the decode loop consumes the frame,
+ * which can be seconds later (`aStreamingLinkLostJournalsHowLongAfterItsLastFrame`).
+ * Only [stream] counts: a V2 radar knocked into its legacy stream still sends
+ * heartbeats there, and those must not make its silent V2 stream look alive.
+ * A link the app ended has no gap worth recording, since the app chose when.
+ */
+internal class StreamReceipts(private val clock: () -> Long) {
+    @Volatile var stream: UUID = Uuids.RADAR_V2
+
+    private val lastMs = java.util.concurrent.atomic.AtomicLong(0L)
+    private val appEnded = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    fun onNotify(uuid: UUID) {
+        if (uuid == stream) lastMs.set(clock())
+    }
+
+    /** Before every disconnect the app itself asks for. */
+    fun endingByApp() = appEnded.set(true)
+
+    val endedByApp: Boolean get() = appEnded.get()
+
+    /** Never negative: a frame landing after [now] was read means the link was up then. */
+    fun gapMs(now: Long): Long = maxOf(0L, now - lastMs.get())
+
+    fun receivedAgo(now: Long): String = lastMs.get().let { if (it == 0L) "never" else "${now - it}ms ago" }
 }
 
 /**

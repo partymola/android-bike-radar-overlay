@@ -121,9 +121,9 @@ class AlertDeciderTrueRangeTierTest {
         // Selection and scoring must agree. Picking the closest by rangeY
         // would hand the audio to the ghost (5 < 6) and then score the
         // ghost's true range of 10.3 m as tier 2 - silencing the tier-3
-        // escalation the car dead behind at 6.08 m has earned. The
-        // closest-car rules voice the closest vehicle only, so that is a real
-        // tailgater's top-tier cue lost because clutter sat beside the rider.
+        // escalation the car dead behind at 6.08 m has earned. Audio voices
+        // the closest vehicle only, so that is a real tailgater going
+        // unannounced because clutter sat beside the rider.
         val ghost = car(1, 5, rangeXm = 9f)
         val real = car(2, 6, rangeXm = 1f)
         val d = AlertDecider()

@@ -355,10 +355,6 @@ side.
     corpus can see a change there. Extending `replay-fixture.txt` with a
     real stationary off-axis window is what would close it; until then,
     never read a green CI as cover for an urgent-path change.
-  - **Nor does it hold a second car within two thirds of the alert distance
-    while another is closer**, so the next-car cue is invisible to it too
-    (`nextCarCueIsNoOpForThisFixture`). `AlertDeciderNextCarCueTest` covers
-    that rule; the corpus gate measures it.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

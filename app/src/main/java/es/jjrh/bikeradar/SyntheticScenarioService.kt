@@ -255,11 +255,10 @@ class SyntheticScenarioService : Service() {
                     // Vehicle.isAlongsideStationary). The scenario builds
                     // Vehicles directly and so bypasses that, and an undocked
                     // parked car sits at 4 m for its whole sixteen-second
-                    // life. As the closest track it then holds the top tier,
-                    // so the cars behind it get only their next-car cues and
-                    // nothing beyond the middle third is heard, which reads on
-                    // the bench as the app having gone half deaf. Dock it on
-                    // the same dwell the decoder uses.
+                    // life. Under the closest-only audio model it then
+                    // correctly mutes every car behind it that is further
+                    // away, which reads on the bench as the app having gone
+                    // deaf. Dock it on the same dwell the decoder uses.
                     isAlongsideStationary = t >= 15.0,
                 ),
             )

@@ -448,8 +448,6 @@
     <string name="settings_radar_closing_ceiling_title">Avisar hasta</string>
     <string name="settings_radar_closing_ceiling_none">Sin límite</string>
     <string name="settings_radar_closing_ceiling_helper">Sin pitidos ni aviso urgente para lo que se acerque a más de la velocidad que elijas, sea real o no. Reduce las falsas alarmas cuando el radar da por error una velocidad muy alta. Esos vehículos se siguen viendo en la barra lateral.</string>
-    <string name="settings_radar_next_car_title">Pitar también por otros vehículos</string>
-    <string name="settings_radar_next_car_subtitle">Mientras circulas, la app pita por otros vehículos que se acercan, no solo por el más cercano. Con mucho tráfico pitará más.</string>
     <string name="settings_radar_urgent_low_speed_title">Aviso urgente a baja velocidad</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Hace sonar el aviso urgente cuando un vehículo se te echa encima mientras circulas despacio, no solo cuando estás parado.</string>
     <string name="settings_radar_turn_title">Retener «Carretera despejada» en curvas</string>

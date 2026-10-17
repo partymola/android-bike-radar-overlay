@@ -46,7 +46,6 @@ class DebugOverlayService : Service() {
     private var maxDistanceM = DEFAULT_MAX_DISTANCE_M
     private var passClearanceM = AlertDecider.DEFAULT_PASS_CLEARANCE_M
     private var closingCeilingMs: Float? = null
-    private var nextCarCueEnabled = true
     private var visualMaxM = RadarOverlayView.DEFAULT_VISUAL_MAX_M
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -77,7 +76,6 @@ class DebugOverlayService : Service() {
         maxDistanceM = prefs.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
         passClearanceM = prefs.urgentPassClearanceM
         closingCeilingMs = prefs.closingSpeedCeilingMs?.toFloat()
-        nextCarCueEnabled = prefs.nextCarCueEnabled
         visualMaxM = prefs.visualMaxDistanceM
             .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
 
@@ -104,7 +102,6 @@ class DebugOverlayService : Service() {
                 maxDistanceM = snap.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
                 passClearanceM = snap.urgentPassClearanceM
                 closingCeilingMs = snap.closingSpeedCeilingMs?.toFloat()
-                nextCarCueEnabled = snap.nextCarCueEnabled
                 visualMaxM = snap.visualMaxDistanceM
                     .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
                 view.setVisualMaxM(visualMaxM)
@@ -149,7 +146,6 @@ class DebugOverlayService : Service() {
             System.currentTimeMillis(),
             passClearanceM = passClearanceM,
             closingCeilingMs = closingCeilingMs,
-            nextCarCueEnabled = nextCarCueEnabled,
         )
         b.playCue(AlertCue.forEvent(ev))
     }

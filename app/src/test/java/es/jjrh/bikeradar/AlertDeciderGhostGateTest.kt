@@ -87,44 +87,19 @@ class AlertDeciderGhostGateTest {
 
     @Test
     fun `admission delivers the cue at the current tier`() {
-        // With the next-car cue off: it would voice the admitted track on the
-        // same frame and hide a re-arm that never happened.
         val d = AlertDecider()
         val c = Clock()
         // Ghost-profile car: suppressed while not closing...
         repeat(5) {
             assertEquals(
                 AlertDecider.Event.None,
-                d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick(), nextCarCueEnabled = false),
+                d.decide(listOf(ghost(speedMs = -0.5f)), alertMax, c.tick()),
             )
         }
         // ...then it genuinely starts closing (2 clean frames at >= 2.5 m/s):
-        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), nextCarCueEnabled = false)
-        val ev = d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick(), nextCarCueEnabled = false)
+        d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
+        val ev = d.decide(listOf(ghost(speedMs = -3f)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
-    }
-
-    @Test
-    fun `a ghost held back from the next-car cue is logged once per birth`() {
-        fun gatedLines(on: Boolean, ghostAt: Int = 8, resetAt: Int = -1): List<String> {
-            val lines = mutableListOf<String>()
-            val d = AlertDecider(onGateEvent = { lines.add(it) })
-            val c = Clock()
-            val real = Vehicle(id = 1, distanceM = 3, speedMs = -2f, bornAtMs = 1L)
-            repeat(20) { i ->
-                if (i == resetAt) d.reset()
-                d.decide(listOf(real, ghost(distanceM = ghostAt)), alertMax, c.tick(), nextCarCueEnabled = on)
-            }
-            return lines.filter { it.startsWith("# gate next-car-gated ") }
-        }
-        val line = "# gate next-car-gated tid=9 tier=2 d=8 eff=8.0 birth_d=6"
-        assertEquals(listOf(line), gatedLines(on = true))
-        assertEquals(emptyList<String>(), gatedLines(on = false))
-        // At tier 1 the cue is not due, so nothing is held back.
-        assertEquals(emptyList<String>(), gatedLines(on = true, ghostAt = 18))
-        // A pause resets the decider every frame, so the same birth is
-        // logged again after one.
-        assertEquals(listOf(line, line), gatedLines(on = true, resetAt = 10))
     }
 
     @Test
@@ -294,51 +269,33 @@ class AlertDeciderGhostGateTest {
         assertEquals(AlertDecider.Event.Beep(2), ev)
     }
 
-    private val admittedFarther = Vehicle(
-        id = 11,
-        distanceM = 9,
-        speedMs = -3f,
-        bornDistanceM = 10,
-        bornInformative = true,
-        bornAtMs = 1L,
-    )
-
     @Test
     fun `still-gated closer ghost delays a farther admitted track's cue - never a false cue`() {
         val d = AlertDecider()
         val c = Clock()
+        val farther = Vehicle(
+            id = 11,
+            distanceM = 9,
+            speedMs = -3f,
+            bornDistanceM = 10,
+            bornInformative = true,
+            bornAtMs = 1L,
+        )
         val closerGhost = ghost(id = 12, distanceM = 4, speedMs = -0.5f)
         // Both present from the start: the ghost is the closest track, so
-        // with the next-car cue off everything stays silent - the admitted
-        // track's cue is delayed, never misattributed to the ghost.
+        // everything stays silent - the admitted track's cue is delayed,
+        // never misattributed to the ghost.
         repeat(10) {
-            val ev = d.decide(listOf(admittedFarther, closerGhost), alertMax, c.tick(), nextCarCueEnabled = false)
+            val ev = d.decide(listOf(farther, closerGhost), alertMax, c.tick())
             assertEquals(AlertDecider.Event.None, ev)
         }
         // Ghost dies; the admitted track speaks on its next tier edge
         // (de-escalate to its own tier, then raise into the top band).
-        repeat(2) { d.decide(listOf(admittedFarther), alertMax, c.tick(), nextCarCueEnabled = false) }
-        val closeNow = admittedFarther.copy(distanceM = 6)
+        repeat(2) { d.decide(listOf(farther), alertMax, c.tick()) }
+        val closeNow = farther.copy(distanceM = 6)
         // Escalation bypasses the cooldown, so the edge fires same-frame.
-        val ev = d.decide(listOf(closeNow), alertMax, c.tick(), nextCarCueEnabled = false)
+        val ev = d.decide(listOf(closeNow), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(3), ev)
-    }
-
-    @Test
-    fun `with the next-car cue a farther admitted track behind a gated ghost gets its own beep, the ghost none`() {
-        val lines = mutableListOf<String>()
-        val d = AlertDecider(onGateEvent = { lines.add(it) })
-        val c = Clock()
-        val closerGhost = ghost(id = 12, distanceM = 4, speedMs = -0.5f)
-        val voiced = mutableListOf<Int>()
-        val beeps = (1..10).map {
-            val ev = d.decide(listOf(admittedFarther, closerGhost), alertMax, c.tick())
-            if (ev is AlertDecider.Event.Beep) voiced += d.lastTierTrigger!!.id
-            ev
-        }.filterIsInstance<AlertDecider.Event.Beep>()
-        assertEquals(listOf(AlertDecider.Event.Beep(2)), beeps)
-        assertEquals(listOf(11), voiced)
-        assertEquals("the ghost is suppressed once, not per frame, got $lines", 1, lines.count { it.startsWith("# gate suppress tid=12") })
     }
 
     @Test
@@ -431,10 +388,9 @@ class AlertDeciderGhostGateTest {
 
     @Test
     fun `an off-road target closer than a real car changes nothing about the real car's beeps`() {
-        // The closest-car rules voice only the closest target, and the
-        // off-road one is nearer by true range until the car is inside
-        // 10.7 m. The veto must not depend on the closing-speed ceiling,
-        // which a rider can turn off.
+        // The audio voices only the closest target, and the off-road one is
+        // nearer by true range until the car is inside 10.7 m. The veto must
+        // not depend on the closing-speed ceiling, which a rider can turn off.
         val withOffRoad = approach.mapIndexed { i, vs -> if (i <= 22) vs + offRoad() else vs }
         for (ceiling in listOf(35f, null)) {
             val alone = events(approach, closingCeilingMs = ceiling)

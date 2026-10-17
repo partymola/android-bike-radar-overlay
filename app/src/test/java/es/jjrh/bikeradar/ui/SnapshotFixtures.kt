@@ -68,7 +68,6 @@ internal object SnapshotFixtures {
         radarDropTrackWindowSec = 30,
         urgentPassClearanceM = 1.5f,
         closingSpeedCeilingMs = null,
-        nextCarCueEnabled = true,
         radarLeftOnAlarmEnabled = true,
     )
 }

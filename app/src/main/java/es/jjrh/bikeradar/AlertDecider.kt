@@ -76,9 +76,7 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  * `Beep(urgency)` to acknowledge a new threat or a closer-distance escalation,
  * a `Clear` chime when the road empties, or `None`.
  *
- * Beep count maps to the proximity of the car the beep is about - the
- * closest one, except for a next-car cue (below), which is about the car it
- * announces:
+ * Beep count maps to the proximity of the **closest** car in the close zone:
  *   - urgency 1  : far third of the alert window (d > 2/3 alertMaxM)
  *   - urgency 2  : middle third
  *   - urgency 3  : near third (d <= 1/3 alertMaxM)
@@ -90,10 +88,10 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  * entry, the all-clear, the urgent-impact gates) still reads
  * `distanceM`.
  *
- * Triggers. The closest-car rules tell the rider about the *closest*
- * threat only: piling a beep for another track onto "the closest is
- * at tier N" is the cacophony pattern. The next-car cue is the one
- * exception, for a vehicle the rider has not yet heard:
+ * Triggers (closest-only audio model: a beep tells the rider about
+ * the *closest* threat only; piling on a beep for a track that
+ * doesn't change "the closest is at tier N" information is the
+ * cacophony pattern):
  *  - **Closest-tier rising edge.** A new track entering the close
  *    set is silent unless its arrival raises the *closest-urgency
  *    tier* above the highest tier we have audibly fired for on the
@@ -112,41 +110,15 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    greater* than the peak urgency the just-overtaking track ever
  *    reached. Same-or-lower tier re-statement is silent — the rider
  *    was already alerted at that tier by the now-overtaking track.
- *  - **Next-car cue** (`nextCarCueEnabled`, a rider setting, default
- *    on). The two rules above leave a second car silent when it
- *    arrives at the tier the first car already sounded, so it can
- *    pass the rider with no cue of its own. With the setting on, the
- *    nearest car within two thirds of the alert distance (tier
- *    [NEXT_CAR_MIN_TIER] or above) that has not yet been covered at
- *    its current tier gets one Beep at its own tier, even when it is
- *    not the closest. "Covered" is per vehicle birth, so a recycled
- *    tid is a new car. Any Beep about a car covers it at that tier and
- *    an urgent cue covers it at tier 3, so it re-sounds only on a tier
- *    raise. The closest-car rules win any frame both are due on. It
- *    skips born-close-gated tracks, stays silent while the rider is
- *    known to be stopped, and waits out the ordinary cooldown; a
- *    closest-car beep falling due inside the cooldown it started waits
- *    too, deliberately (`a closest-car beep falling due inside a
- *    next-car cue's cooldown waits for it`). A track with no birth
- *    stamp (the legacy stream, synthetic sources) cannot be told from a
- *    recycled tid, so the cue sets no closest-car latch for it (`a
- *    legacy-stream recycled tid keeps its closest-car beeps`). A car it
- *    announced there can be beeped once more at that tier, for example
- *    if, as the closest, it falls back a band and returns. That is
- *    deliberate: a latch would cost a recycled tid its beeps (`on the
- *    legacy stream a car announced by the cue is beeped once more at its
- *    tier as the closest`). With it off, no car is ever chosen for it, so
- *    nothing it records is read.
  *  - **Sustain debounce.** A track must be present in close for
  *    `sustainFrames` consecutive frames before it counts. Single-
  *    frame radar blips never fire.
- *  - **Beep cooldown.** No two beeps within `minBeepGapMs`, scaled by
- *    rider speed ([effectiveMinBeepGapMs]). Closest-car triggers in
- *    the cooldown window collapse into a single beep at the closest
- *    urgency *at the moment the cooldown expires* - except a strict
- *    tier raise, which bypasses the cooldown and fires the same frame
- *    ([escalationBypass]). The cooldown also spaces next-car cues, so
- *    vehicles waiting for theirs come one cooldown apart.
+ *  - **Beep cooldown.** No two beeps within `minBeepGapMs`. Triggers
+ *    in the cooldown window collapse into a single beep at the
+ *    closest urgency *at the moment the cooldown expires* - except a
+ *    strict tier raise, which bypasses the cooldown and fires the same
+ *    frame ([escalationBypass]). The cooldown therefore now only
+ *    gates same-tier re-statements and new lower-or-equal-tier entries.
  *  - **Clear chime.** Plays once when NO vehicle is physically present behind
  *    the rider in range (the raw radar read - any non-`isBehind` target within
  *    `alertMaxM`, INCLUDING alongside/parked-classified tracks, regardless of
@@ -292,10 +264,11 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  */
 class AlertDecider(
     private val sustainFrames: Int = 2,
-    /** Minimum elapsed (monotonic) milliseconds between two audible beeps,
-     *  scaled by rider speed ([effectiveMinBeepGapMs]). Spaces back-to-back
-     *  triggers on the closest track (e.g. a tier raise right after a
-     *  new-entry fire) and successive next-car cues. */
+    /** Minimum elapsed (monotonic) milliseconds between two audible beeps.
+     *  The closest-only trigger rule already filters multi-track
+     *  noise; this cooldown is for back-to-back triggers on the
+     *  closest track itself (e.g. tier raise immediately after a
+     *  new-entry fire). */
     private val minBeepGapMs: Long = 700,
     /** Rider's bike speed (m/s) at or below this counts as "stationary".
      *  0.5 m/s catches raw bytes 0..2 inclusive (0, 0.25, 0.5 m/s),
@@ -351,23 +324,21 @@ class AlertDecider(
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
-     *  re-fire, a born-close track held back from a next-car cue it was
-     *  due, the four urgent-pass verdicts, the unconfident wait's start
+     *  re-fire, the four urgent-pass verdicts, the unconfident wait's start
      *  and run-out, the fit expiry, and the closing-speed ceiling and rx
-     *  veto. The next-car, ceiling and rx-veto lines mark a track's first
-     *  gated or excluded frame, not each silenced cue (see
-     *  [ceilingLogged]), so the rest is recovered by replaying the
-     *  capture's packets. A wait's run-out is logged only if the car is
-     *  checked again, still qualifying with no confident fit, after the
-     *  wait ends. A start with no run-out can therefore be a car that
-     *  stopped qualifying, one a matured fit or a swing inside
-     *  [URGENT_PASS_LATERAL_MIN_M] judged, or one never checked again
-     *  behind a closer candidate; the urgent lines say which sounded.
+     *  veto; those two mark a track's first excluded frame, not each
+     *  silenced cue (see [ceilingLogged]), so the rest of an exclusion is
+     *  recovered by replaying the capture's packets. A wait's run-out is
+     *  logged only if the car is checked again, still qualifying with no
+     *  confident fit, after the wait ends. A start with no run-out can
+     *  therefore be a car that stopped qualifying, one a matured fit or a
+     *  swing inside [URGENT_PASS_LATERAL_MIN_M] judged, or one never checked
+     *  again behind a closer candidate; the urgent lines say which sounded.
      *
      *  Volume is bounded per TRACK, not per frame, though the hook is reached
      *  on every frame: each verdict is deduped per track ([logPassGate],
      *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged],
-     *  [nextCarGatedLogged], [unconfidentWaits]) and an expiry can
+     *  [unconfidentWaits]) and an expiry can
      *  fire once per fit because the fit is removed as it is reported. */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
@@ -376,10 +347,9 @@ class AlertDecider(
 ) {
 
     sealed class Event {
-        /** [count] is the urgency tier, 1 to 3 outward-in, of the closest
-         *  stable target, or of the car a next-car cue announces
-         *  ([lastCueWasNextCar]). It is the whole cue: tiers are told apart by
-         *  pulse count, never by pitch. */
+        /** [count] is the urgency tier of the closest stable target, 1 to 3
+         *  outward-in. It is the whole cue: tiers are told apart by pulse
+         *  count, never by pitch. */
         data class Beep(val count: Int) : Event()
         object Clear : Event()
 
@@ -494,46 +464,12 @@ class AlertDecider(
      *
      * De-escalation does not rearm the latch: a tid that drops a full
      * tier and climbs back to N stays silent. `a spike after the top
-     * tier has fired stays silent on recovery` pins it. Other paths
-     * remove or skip an entry. The born-close gate's admission
-     * refire removes one, but a gated track never fired audibly, so it
-     * cannot unlatch a beep the rider heard. A latch a next-car cue wrote
-     * is dropped when a new birth appears under the tid
-     * ([nextCarLatchBorn]). And a next-car cue about a track with no
-     * birth stamp writes none, so that car can be heard once more at its
-     * tier from the closest-car rules (class KDoc).
+     * tier has fired stays silent on recovery` pins it. (The born-close
+     * gate's admission refire also removes a tid's entry, but a gated
+     * track never fired audibly, so that path cannot unlatch a beep
+     * the rider actually heard.)
      */
     private val firedTierPerTid = HashMap<Int, Int>()
-
-    /** The highest tier one vehicle birth has been covered at by any cue. */
-    private class Covered(val bornAtMs: Long, val tier: Int)
-
-    /** tid -> the next-car cue's record for the birth last seen there; a new
-     *  birth under the tid replaces it, so the map is bounded by the tid space.
-     *  Cleared on Clear. */
-    private val nextCarCovered = HashMap<Int, Covered>()
-
-    private fun coveredTier(v: Vehicle): Int = nextCarCovered[v.id]?.takeIf { it.bornAtMs == v.bornAtMs }?.tier ?: 0
-
-    private fun cover(v: Vehicle, tier: Int) {
-        nextCarCovered[v.id] = Covered(v.bornAtMs, maxOf(tier, coveredTier(v)))
-    }
-
-    /** tid -> the birth of the car a next-car cue latched [firedTierPerTid]
-     *  for. A different birth under the tid drops that latch, so a recycled
-     *  tid keeps its closest-car beeps (`a recycled tid keeps its closest-car
-     *  beeps after a next-car cue`). A closest-car beep takes the latch over. */
-    private val nextCarLatchBorn = HashMap<Int, Long>()
-
-    /** tid -> the birth last logged as due a next-car cue but held by the
-     *  born-close gate, so each birth is logged once, on its first such frame,
-     *  whether or not the cue would have sounded then. */
-    private val nextCarGatedLogged = HashMap<Int, Long>()
-
-    /** True when the last [decide] returned a Beep from the next-car rule rather
-     *  than the closest-car rules. Same read contract as [lastTierTrigger]. */
-    internal var lastCueWasNextCar: Boolean = false
-        private set
 
     /**
      * Per-track peak-urgency tracker — tid -> highest urgency tier
@@ -706,8 +642,6 @@ class AlertDecider(
          *  reads as no limit, so such a value lets every cue through rather
          *  than silencing them. */
         closingCeilingMs: Float? = null,
-        /** The next-car cue (class KDoc). Defaults on, as the rider setting does. */
-        nextCarCueEnabled: Boolean = true,
     ): Event {
         // Rider-stationary gate. Track when the rider was last observed NOT
         // stationary; once that was more than stationaryDwellMs ago, Beep
@@ -762,10 +696,9 @@ class AlertDecider(
                 (it.id in prevCloseRaw && it.distanceM in 0..(alertMaxM + rangeBand))
         }
         // Closing-speed ceiling, applied HERE rather than where a cue is
-        // emitted: the closest-car rules voice only the closest target, so a
-        // phantom left in the running would take that place and the real car
-        // behind it would wait for a next-car cue, or with that off go
-        // unheard. Judged per frame, never latched per track, so a
+        // emitted: the audio voices only the closest target, so a phantom left
+        // in the running would take that place and the real car behind it
+        // would go unheard. Judged per frame, never latched per track, so a
         // spiked reading does not silence a real car for the rest of its
         // approach; a track not yet past `sustainFrames` does restart its
         // count. The exit band and the presence gate below both ignore it.
@@ -841,15 +774,14 @@ class AlertDecider(
         // closest by rangeY while tiering on true range lets an off-axis
         // track mask a real one: a ghost at ry 8 / rx 9 wins `minByOrNull`
         // over a car dead behind at ry 9.5, then scores tier 2 on its 12.0 m
-        // true range - and because the closest-car rules voice the closest
-        // vehicle only, the real car's tier-3 escalation never sounds from them.
+        // true range - and because audio voices the closest vehicle only, the
+        // real car's tier-3 escalation never sounds.
         val closestVehicle = stableClose.minByOrNull { alertDistanceM(it) }
         val closestUrgency = closestVehicle
             ?.let { urgencyFor(alertDistanceM(it), alertMaxM) }
             ?: 0
         lastTierTrigger = closestVehicle
         lastTierDistanceM = closestVehicle?.let { alertDistanceM(it) } ?: -1f
-        lastCueWasNextCar = false
 
         // Update peak urgency per tid for every stable-close track. Used by
         // the D2b filtered overtake re-ack gate. Must be updated BEFORE the
@@ -858,15 +790,6 @@ class AlertDecider(
             val u = urgencyFor(alertDistanceM(v), alertMaxM)
             val prevPeak = peakUrgencyPerTid[v.id] ?: 0
             if (u > prevPeak) peakUrgencyPerTid[v.id] = u
-        }
-
-        // A latch a next-car cue wrote belongs to that car's birth only.
-        for (v in stableClose) {
-            val born = nextCarLatchBorn[v.id] ?: continue
-            if (born != v.bornAtMs) {
-                firedTierPerTid.remove(v.id)
-                nextCarLatchBorn.remove(v.id)
-            }
         }
 
         // Ghost-beep filter: tier Beeps whose trigger track was BORN inside
@@ -892,8 +815,7 @@ class AlertDecider(
         val overtakes = prevStableClose intersect behindTids
 
         // Trigger gate. Audio describes the closest threat only;
-        // additional tracks at the same or lower tier are silent here and
-        // reach the rider only through the next-car cue further down.
+        // additional tracks at the same or lower tier are silent.
         //
         //   Closest-tier rising edge: a new track entering the close
         //     set fires only if its arrival raises the closest-urgency
@@ -908,12 +830,10 @@ class AlertDecider(
         //   Per-track tier latch: once we have audibly fired at
         //     urgency N for tid T, no re-fire for the same tid at the
         //     same tier. Re-fire requires a true tier raise N->N+1, a
-        //     Clear (which resets all latches), the born-close gate
-        //     admitting a track it had been silencing (above), or a
-        //     new birth under a tid whose latch a next-car cue wrote,
-        //     each of which drops that tid's latch. A next-car beep
-        //     about a track with no birth stamp writes none (class
-        //     KDoc). A full-tier de-escalation does NOT rearm it.
+        //     Clear (which resets all latches), or the born-close
+        //     gate admitting a track it had been silencing (above),
+        //     which drops that tid's latch. A full-tier de-escalation
+        //     does NOT rearm it.
         // Latch-aware: a new entry whose closest tid has already been
         // audibly fired at this tier (its latch survived a deferred or
         // cancelled clear-grace) must not re-fire. Genuinely new tids have
@@ -1110,9 +1030,8 @@ class AlertDecider(
         // once a stable-close track existed this episode, the Clear still arms
         // when the car finally leaves, even though the docked window kept
         // stableClose (and prevStableClose) empty for many frames. The
-        // surviving firedTierPerTid latch suppresses a same-car re-beep
-        // through the latch-aware new-entry / escalation gates, except for
-        // a car with no birth stamp that only a next-car cue has beeped.
+        // surviving firedTierPerTid latch suppresses any same-car re-beep
+        // through the latch-aware new-entry / escalation gates.
         // Turn-aware clear deferral: an empty behind-set mid-corner is a
         // radar blackout, not an empty road - cornering sweeps the rear cone
         // off every followed car. While the rider is TURNING with a live
@@ -1161,33 +1080,12 @@ class AlertDecider(
             !behindPresent &&
             (nowMs - clearPendingSinceMs) >= clearGraceMs
 
-        val nextCarSubject = if (!nextCarCueEnabled) {
-            null
-        } else {
-            stableClose
-                .filter { v ->
-                    val tier = urgencyFor(alertDistanceM(v), alertMaxM)
-                    val due = tier >= NEXT_CAR_MIN_TIER && tier > coveredTier(v)
-                    val gated = due && bornCloseGate.isGated(v)
-                    if (gated && nextCarGatedLogged.put(v.id, v.bornAtMs) != v.bornAtMs) {
-                        onGateEvent(
-                            "# gate next-car-gated tid=${v.id} tier=$tier d=${v.distanceM}" +
-                                " eff=${alertDistanceM(v)} birth_d=${v.bornDistanceM}",
-                        )
-                    }
-                    due && !gated
-                }
-                .minByOrNull { alertDistanceM(it) }
-        }
-
         val event: Event = when {
             clearGraceElapsed -> {
                 lastBeepAtMs = nowMs
                 beepPending = false
                 firedTierPerTid.clear()
                 peakUrgencyPerTid.clear()
-                nextCarCovered.clear()
-                nextCarLatchBorn.clear()
                 bornCloseGate.onClear()
                 turnDeferUntilMs = Long.MIN_VALUE
                 clearPending = false
@@ -1244,39 +1142,13 @@ class AlertDecider(
                             // does. The cue fires either way.
                             if (v != null) {
                                 firedTierPerTid[v.id] = closestUrgency
-                                nextCarLatchBorn.remove(v.id)
                             }
                             Event.Beep(count = closestUrgency)
                         }
                     }
                 }
             }
-            // Next-car cue. Below the closest-car branch, so that branch wins
-            // any frame both are due on.
-            nextCarSubject != null &&
-                !riderStationary &&
-                sinceLastBeep >= effectiveMinBeepGapMs(bikeSpeedMs) -> {
-                val tier = urgencyFor(alertDistanceM(nextCarSubject), alertMaxM)
-                lastBeepAtMs = nowMs
-                // A track with no birth stamp (bornAtMs 0: the legacy stream,
-                // synthetic sources) cannot be told from a recycled tid's, so
-                // no latch is written for it.
-                if (nextCarSubject.bornAtMs != 0L) {
-                    firedTierPerTid[nextCarSubject.id] = maxOf(firedTierPerTid[nextCarSubject.id] ?: 0, tier)
-                    nextCarLatchBorn[nextCarSubject.id] = nextCarSubject.bornAtMs
-                }
-                lastTierTrigger = nextCarSubject
-                lastTierDistanceM = alertDistanceM(nextCarSubject)
-                lastCueWasNextCar = true
-                Event.Beep(count = tier)
-            }
             else -> Event.None
-        }
-
-        when (event) {
-            is Event.Beep -> lastTierTrigger?.let { cover(it, event.count) }
-            is Event.UrgentApproach -> imminentImpactTrigger?.let { cover(it, 3) }
-            else -> {}
         }
 
         prevStableClose = stableTids
@@ -1292,9 +1164,6 @@ class AlertDecider(
         framesSinceLastSeen.clear()
         firedTierPerTid.clear()
         peakUrgencyPerTid.clear()
-        nextCarCovered.clear()
-        nextCarLatchBorn.clear()
-        nextCarGatedLogged.clear()
         lastBehindDistanceM = 0
         turnDeferUntilMs = Long.MIN_VALUE
         prevStableClose = emptySet()
@@ -1671,10 +1540,9 @@ class AlertDecider(
      *
      * Since E1 ([escalationBypass] = [EscalationCooldownBypass.ALL] by
      * default), a strict tier raise bypasses the cooldown entirely, so
-     * this scaling no longer gates tier raises - it governs the residual
-     * non-escalation pending-beep paths (e.g. a beep deferred across a
-     * stationary-suppress window, then released on roll-off) and the
-     * spacing of next-car cues.
+     * this scaling no longer gates tier raises - it governs only the
+     * residual non-escalation pending-beep paths (e.g. a beep deferred
+     * across a stationary-suppress window, then released on roll-off).
      * The band split is exercised directly by `effectiveMinBeepGapMs`
      * unit tests and end-to-end under [EscalationCooldownBypass.NONE].
      *
@@ -1766,12 +1634,6 @@ class AlertDecider(
          *  order looser than any lane-discrimination gate on purpose: this
          *  never judges lane position. */
         const val RX_ABSURD_M = 10f
-
-        /** Lowest tier at which a vehicle with no cue of its own gets one (the
-         *  next-car cue): 2 starts it at two thirds of the alert distance. On
-         *  corpus replay the cues it added landed a median ~1.25 s before their
-         *  vehicle reached the rider, against ~0.65 s with the near third alone. */
-        const val NEXT_CAR_MIN_TIER = 2
 
         /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`
          *  call has yet been processed this session". The first call
@@ -1886,9 +1748,7 @@ class AlertDecider(
          *  cooldown. Slow urban crawl is where flapping beeps come from
          *  as the queue creeps forward; the wider gap damps the residual
          *  re-statements the cooldown still governs (tier raises bypass
-         *  it since E1, so this no longer delays a genuine escalation). It
-         *  also spaces next-car cues, including those released as a rider
-         *  moves off from a stop. */
+         *  it since E1, so this no longer delays a genuine escalation). */
         const val SPEED_AWARE_COOLDOWN_SLOW_KMH = 15f
 
         /** Floor (m/s) on the rider speed used to size the post-turn

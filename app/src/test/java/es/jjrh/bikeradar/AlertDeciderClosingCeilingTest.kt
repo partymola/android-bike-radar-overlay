@@ -100,9 +100,8 @@ class AlertDeciderClosingCeilingTest {
     }
 
     @Test fun `a phantom closer than a real car changes nothing about the real car's beeps`() {
-        // The closest-car rules voice only the closest target, so a phantom left
-        // in the running would take that place and the real car would wait for
-        // a next-car cue, or with that off go unheard.
+        // The audio voices only the closest target, so a phantom that stayed in
+        // the running would take that place and the real car would go unheard.
         val real = (0..30).map { listOf(target(7, 40 - it, 5f)) } + List(15) { emptyList() }
         val withGhost = real.mapIndexed { i, vs -> if (i <= 30) vs + target(85, 8, 45f) else vs }
         val alone = run(real, bikeSpeedMs = 5f, ceiling = 40f)

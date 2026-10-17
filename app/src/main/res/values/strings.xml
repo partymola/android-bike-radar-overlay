@@ -507,12 +507,6 @@
     <string name="settings_radar_closing_ceiling_title">Warn up to</string>
     <string name="settings_radar_closing_ceiling_none">No limit</string>
     <string name="settings_radar_closing_ceiling_helper">No beeps or urgent warning for anything approaching faster than the speed you set, real or not. It cuts false alarms when the radar misreads a speed as very fast. Faster vehicles still show on the overlay.</string>
-    <!-- The next-car cue: a vehicle not yet beeped for at its distance band
-         gets its own beep once within two thirds of the alert distance, even
-         if another is closer. No distance figure: the bands follow the rider's
-         alert distance. -->
-    <string name="settings_radar_next_car_title">Beep for other vehicles too</string>
-    <string name="settings_radar_next_car_subtitle">While you ride, other vehicles that come close get their own beeps, not just the closest. More beeps on busy roads.</string>
     <string name="settings_radar_urgent_low_speed_title">Urgent warning at low speed</string>
     <string name="settings_radar_urgent_low_speed_subtitle">Sound the urgent warning when a vehicle bears down while you\'re riding slowly, not only when you\'re stopped.</string>
     <string name="settings_radar_turn_title">Hold the all-clear in corners</string>

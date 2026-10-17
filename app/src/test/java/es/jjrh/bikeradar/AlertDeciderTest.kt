@@ -188,35 +188,33 @@ class AlertDeciderTest {
         // are silent regardless of cooldown - adding cars at the same
         // closest-urgency tier as the already-alerted track does NOT
         // produce a follow-on beep. The cooldown gate is unrelated; D2a
-        // suppresses these entries even after cooldown expires. Pinned with
-        // the next-car cue off, which would announce car 6 at 14 m.
+        // suppresses these entries even after cooldown expires.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
-        val off = false
 
         // Car 7 enters and sustains at ~13m → Beep(2)
-        d.decide(listOf(car(7, 13)), alertMax, c.tick(), nextCarCueEnabled = off)
-        val first = d.decide(listOf(car(7, 13)), alertMax, c.tick(), nextCarCueEnabled = off)
+        d.decide(listOf(car(7, 13)), alertMax, c.tick())
+        val first = d.decide(listOf(car(7, 13)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), first)
 
         // Car 6 enters at ~18m a moment later - within cooldown:
         assertEquals(
             AlertDecider.Event.None,
-            d.decide(listOf(car(6, 18), car(7, 12)), alertMax, c.tick(), nextCarCueEnabled = off),
+            d.decide(listOf(car(6, 18), car(7, 12)), alertMax, c.tick()),
         )
         assertEquals(
             AlertDecider.Event.None,
-            d.decide(listOf(car(6, 17), car(7, 12)), alertMax, c.tick(), nextCarCueEnabled = off),
+            d.decide(listOf(car(6, 17), car(7, 12)), alertMax, c.tick()),
         )
 
         // Car 8 enters at ~18m - also within cooldown:
         assertEquals(
             AlertDecider.Event.None,
-            d.decide(listOf(car(6, 16), car(7, 11), car(8, 18)), alertMax, c.tick(), nextCarCueEnabled = off),
+            d.decide(listOf(car(6, 16), car(7, 11), car(8, 18)), alertMax, c.tick()),
         )
         assertEquals(
             AlertDecider.Event.None,
-            d.decide(listOf(car(6, 15), car(7, 11), car(8, 17)), alertMax, c.tick(), nextCarCueEnabled = off),
+            d.decide(listOf(car(6, 15), car(7, 11), car(8, 17)), alertMax, c.tick()),
         )
 
         // Cooldown expires. Closest is car 7 still at 10m (urgency 2).
@@ -227,7 +225,6 @@ class AlertDeciderTest {
             listOf(car(6, 14), car(7, 10), car(8, 16)),
             alertMax,
             c.tick(),
-            nextCarCueEnabled = off,
         )
         assertEquals(AlertDecider.Event.None, second)
     }
@@ -238,18 +235,16 @@ class AlertDeciderTest {
         // close is SILENT unless the remaining closest-urgency is strictly
         // greater than the peak the overtaking track ever reached. Here
         // car 1 was the close-tier (u=3) overtaker; car 2 remains at
-        // mid-tier (u=2). 2 > 3 is false - silent. Next-car cue off: with it
-        // on, car 2 would be announced in its own right.
+        // mid-tier (u=2). 2 > 3 is false - silent.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
-        d.decide(listOf(car(1, 4), car(2, 16)), alertMax, c.tick(), nextCarCueEnabled = false)
-        d.decide(listOf(car(1, 3), car(2, 16)), alertMax, c.tick(), nextCarCueEnabled = false) // Beep(3)
+        d.decide(listOf(car(1, 4), car(2, 16)), alertMax, c.tick())
+        d.decide(listOf(car(1, 3), car(2, 16)), alertMax, c.tick()) // Beep(3)
         c.jump(700)
         val ev = d.decide(
             listOf(car(1, 2, isBehind = true), car(2, 14)),
             alertMax,
             c.tick(),
-            nextCarCueEnabled = false,
         )
         assertEquals(AlertDecider.Event.None, ev)
     }
@@ -2044,15 +2039,14 @@ class AlertDeciderTest {
         // alertMaxM = 30 (matches real configs), so near-third = 10 m,
         // mid-third = 20 m. We pass no bike speed so the stationary-
         // suppress / urgent-override paths don't enter - this
-        // isolates the closest-only audio model, so the next-car cue is off;
-        // AlertDeciderNextCarCueTest replays the same scene with it on.
+        // isolates the closest-only audio model.
         val alertMaxTruck = 30
         val d = AlertDecider() // default minBeepGapMs = 700
         val audible = mutableListOf<AlertDecider.Event>()
         var t = 0L
 
         fun feed(vs: List<Vehicle>) {
-            val ev = d.decide(vs, alertMaxTruck, t, nextCarCueEnabled = false)
+            val ev = d.decide(vs, alertMaxTruck, t)
             if (ev !is AlertDecider.Event.None) audible.add(ev)
             t += 200
         }
@@ -2122,20 +2116,19 @@ class AlertDeciderTest {
         // rider must produce exactly ONE audible cue, not one per car.
         // The first cue describes "a car at tier N is closest"; the
         // second car at the same tier does not change that statement.
-        // That is the closest-car rules alone, so the next-car cue is off.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         // Car 1 enters at 13 m (alertMax=21, mid-third 7..14, so u=2).
-        d.decide(listOf(car(1, 13)), alertMax, c.tick(), nextCarCueEnabled = false)
-        val first = d.decide(listOf(car(1, 13)), alertMax, c.tick(), nextCarCueEnabled = false)
+        d.decide(listOf(car(1, 13)), alertMax, c.tick())
+        val first = d.decide(listOf(car(1, 13)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), first)
         // Wait past cooldown.
         c.jump(2000)
         // Car 2 enters at 12 m (also u=2). Car 1 still at 13 m. Closest
         // is now car 2 (12 < 13) but at the SAME tier as the alert that
         // already fired - must be silent.
-        d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick(), nextCarCueEnabled = false)
-        val ev = d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick(), nextCarCueEnabled = false)
+        d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick())
+        val ev = d.decide(listOf(car(1, 13), car(2, 12)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.None, ev)
     }
 
@@ -2293,15 +2286,14 @@ class AlertDeciderTest {
         // overtake (peaks 2 and 3); the remaining car is at u=3. The
         // overtaken max is 3, so closestUrgency 3 > 3 is false -> silent.
         // Confirms the reduction includes the HIGHER-peak overtaken track
-        // (car at peak 3), not just the first one iterated. Next-car cue off:
-        // car 3 was never announced, so with it on car 3 gets its own beep.
+        // (car at peak 3), not just the first one iterated.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
-        d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick(), nextCarCueEnabled = false)
+        d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick())
         // Closest car 2 (4 m, u=3) -> Beep(3). peaks: [1]=2, [2]=3, [3]=3.
         assertEquals(
             AlertDecider.Event.Beep(3),
-            d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick(), nextCarCueEnabled = false),
+            d.decide(listOf(car(1, 10), car(2, 4), car(3, 5)), alertMax, c.tick()),
         )
         c.jump(2000)
         // Cars 1 (peak 2) and 2 (peak 3) overtake; car 3 (u=3) remains.
@@ -2314,7 +2306,6 @@ class AlertDeciderTest {
             ),
             alertMax,
             c.tick(),
-            nextCarCueEnabled = false,
         )
         assertEquals(AlertDecider.Event.None, ev)
     }
@@ -2325,7 +2316,6 @@ class AlertDeciderTest {
         // peaks (1 then 2) must NOT replace the running max. peakOvertaken
         // stays 3; the remaining car is also u=3, so 3 > 3 is false ->
         // silent. Pins that the max is a true reduction, not last-wins.
-        // Next-car cue off: car 4 was never announced.
         val d = AlertDecider(minBeepGapMs = 700)
         val c = Clock()
         // peaks: car1 near (u=3), car2 far (u=1), car3 mid (u=2); car4 near.
@@ -2333,7 +2323,6 @@ class AlertDeciderTest {
             listOf(car(1, 4), car(2, 18), car(3, 10), car(4, 5)),
             alertMax,
             c.tick(),
-            nextCarCueEnabled = false,
         )
         // Closest is car 1 (4 m, u=3) -> Beep(3). peaks: [1]=3,[2]=1,[3]=2,[4]=3.
         assertEquals(
@@ -2342,7 +2331,6 @@ class AlertDeciderTest {
                 listOf(car(1, 4), car(2, 18), car(3, 10), car(4, 5)),
                 alertMax,
                 c.tick(),
-                nextCarCueEnabled = false,
             ),
         )
         c.jump(2000)
@@ -2357,7 +2345,6 @@ class AlertDeciderTest {
             ),
             alertMax,
             c.tick(),
-            nextCarCueEnabled = false,
         )
         assertEquals(AlertDecider.Event.None, ev)
     }

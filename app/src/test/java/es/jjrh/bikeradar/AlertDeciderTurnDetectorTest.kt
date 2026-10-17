@@ -38,9 +38,6 @@ class AlertDeciderTurnDetectorTest {
                     nowMs = t,
                     bikeSpeedMs = 5f,
                     turnState = turn.stateAt(t),
-                    // The next-car cue would voice the car on the same frame
-                    // and hide whether the gate's own re-arm happened.
-                    nextCarCueEnabled = false,
                 )
                 if (ev is AlertDecider.Event.Beep) beeps += t to ev
             }

@@ -383,7 +383,6 @@ internal class OverlayPipeline(
             },
             passClearanceM = overlayPrefs.urgentPassClearanceM,
             closingCeilingMs = closingCeilingMs,
-            nextCarCueEnabled = overlayPrefs.nextCarCueEnabled,
         )
         if (ev !is AlertDecider.Event.None) {
             logAlertEvent(
@@ -445,20 +444,15 @@ internal class OverlayPipeline(
                 " trigger_tid=${it.triggerTid} trigger_d=${it.triggerDistanceM}" +
                 " trigger_closing_mps=${it.triggerClosingMs} trigger_rx=${it.triggerRangeXm}"
         } ?: ""
-        // A beep's tier comes from the track the beep is about, scored on TRUE
-        // range, which is not always the nearest car by along-axis distance -
-        // and where the two disagree is exactly the case worth reviewing.
-        // frame_closest_* below stays the nearest car, so without these a tier
-        // decision cannot be audited from the log. A next_car beep can be
-        // about the closest track too: a new car arriving at the tier already
-        // sounded. tier_closing_mps is that track's own, as closing_mps is the
-        // nearest car's.
+        // A beep's tier comes from the closest track by TRUE range, which is
+        // not always the nearest by along-axis distance - and where the two
+        // disagree is exactly the off-axis case worth reviewing. frame_closest_*
+        // below stays as it is (nearest car, whatever the tier said), so
+        // without these a tier decision cannot be audited from the log.
         val tierTrigger = (ev as? AlertDecider.Event.Beep)?.let {
             alerts.lastTierTrigger?.let { v ->
                 " tier_tid=${v.id} tier_d=${v.distanceM} tier_rx=${v.rangeXm}" +
-                    " tier_true_d=${alerts.lastTierDistanceM}" +
-                    " cue_rule=${if (alerts.lastCueWasNextCar) "next_car" else "closest"}" +
-                    " tier_closing_mps=${-v.speedMs}"
+                    " tier_true_d=${alerts.lastTierDistanceM}"
             }
         } ?: ""
         // Same reason as gate_clearance_m: a cue for a fast closer may be one
@@ -495,7 +489,6 @@ internal class OverlayPipeline(
         internal fun alertSettingsLine(s: PrefsSnapshot): String = "# settings alert_max_m=${s.alertMaxDistanceM}" +
             " turn_aware=${s.turnAwareAlertsEnabled} urgent_low_speed=${s.urgentLowSpeedEnabled}" +
             " unconf_wait=${s.urgentUnconfidentWaitEnabled} pass_clearance_m=${s.urgentPassClearanceM}" +
-            " next_car=${s.nextCarCueEnabled}" +
             " ceiling_mps=${s.closingSpeedCeilingMs ?: "none"}"
 
         /** Key names are kept for riders' existing Home Assistant automations:

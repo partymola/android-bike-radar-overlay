@@ -342,12 +342,11 @@ class AlertBeeper(
      * would otherwise sound smeared into it. The action channel outranks the
      * awareness channel, so the urgent is the cue that has to arrive intact.
      *
-     * The truncated beep is not re-stated. It had already fired, so AlertDecider
-     * counts its car as told at that tier, and a same-tier re-fire stays silent
-     * until the tier rises or the all-clear sounds (the class KDoc there names
-     * the one exception, for tracks with no birth stamp). The trade is
-     * deliberate: the rider gets the act-now cue in place of part of a
-     * distance-band cue that demands no action.
+     * The truncated beep is not re-stated. It had already fired, so it set its
+     * per-track tier latch in AlertDecider, and a same-tier re-fire on that
+     * track stays silent until the tier rises or the all-clear clears the
+     * latch. The trade is deliberate: the rider gets the act-now cue in place
+     * of part of a distance-band cue that demands no action.
      *
      * Executor-confined like every other cue path. `stop()` on a track that
      * was never playing throws and says nothing useful, so it is ignored -

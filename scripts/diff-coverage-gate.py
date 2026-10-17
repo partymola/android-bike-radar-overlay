@@ -22,7 +22,7 @@
 #   - contributor PR -> the PR base SHA (gate the PR's own changed lines;
 #     diff-cover diffs three-dot from the merge-base by default).
 #   - push to main   -> github.event.before (gate the pushed batch).
-#   - local pre-push -> origin/main (gate the unpushed stack).
+#   - by hand        -> origin/main (gate the unpushed stack).
 # An empty / all-zero / unreachable base (first push, force-push, shallow
 # clone) SKIPS the gate rather than failing on a CI-history artefact - deepen
 # the checkout (fetch-depth: 0) to make the base reachable.

@@ -652,7 +652,8 @@ tasks.register<JacocoReport>("jacocoDiffReport") {
 // Coverage ratchet. Project floors on the whole testable layer catch gross
 // regressions (a disabled test class), and a tighter branch floor on the
 // safety-critical deciders holds the line where a regression is most
-// dangerous. Report-only stays the default; this gate is opt-in via CI/QC.
+// dangerous. Report-only stays the default; this gate runs only when a build
+// names it, as CI does.
 tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     dependsOn("testDebugUnitTest")
     group = "verification"

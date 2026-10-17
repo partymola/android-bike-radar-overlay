@@ -20,7 +20,7 @@ import org.robolectric.annotation.GraphicsMode
  * Roborazzi goldens for the three HA-step branches: the UNSET chooser,
  * the YES fields block (empty + populated), and the NO skipped card.
  * Locks the visual contract so a future refactor that breaks the
- * chooser, pill, or skipped-card layout fails the local QC gate.
+ * chooser, pill, or skipped-card layout fails the golden comparison.
  *
  * Tests render the leaf composables directly so no Prefs / HaCredentials
  * scaffolding is needed - those are exercised by ScreenSmokeTest. Here

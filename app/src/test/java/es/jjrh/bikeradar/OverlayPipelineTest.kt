@@ -26,10 +26,7 @@ class OverlayPipelineTest {
     @Test
     fun closePassJsonContainsRequiredHaFields() {
         val ev = ClosePassDetector.Event(
-            // Epoch 0 keeps the asserted ISO timestamp far away from any
-            // committable 20xx-xx-xx pattern (the pre-commit hook flags
-            // those as possible incident anchoring); the format is what
-            // matters here, not the absolute moment.
+            // Epoch 0: the format is what this pins, not the moment.
             timestampMs = 0L,
             clearanceM = 0.83f,
             side = ClosePassDetector.Side.LEFT,

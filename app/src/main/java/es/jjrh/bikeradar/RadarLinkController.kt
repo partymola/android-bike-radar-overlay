@@ -51,7 +51,10 @@ internal interface RadarLinkStateGateway {
      *  dead-radar warnings read it as up (`RadarLinkControllerHarnessTest`). */
     fun markConnected()
 
-    fun markDisconnected()
+    /** [loss] is what the disconnect callback measured on a link that
+     *  streamed and that the app did not end; every other edge has none
+     *  (`theDisconnectCallbackHandsTheLossToTheGateway`). */
+    fun markDisconnected(loss: LinkLoss? = null)
 
     fun snapshot(): RadarLinkState
 }
@@ -561,10 +564,16 @@ internal class RadarLinkController(
                         // marks the link app-ended
                         // (`aStreamingLinkLostJournalsHowLongAfterItsLastFrame`,
                         // `aWatchdogTeardownJournalsNoGap`).
+                        // Only a V2 link's loss reaches the gateway: a range-only
+                        // radar reports no rider speed, so a mid-ride drop on it
+                        // could not be told from a walk-away
+                        // (`aLegacyLinkLostJournalsItsGapToo`).
                         val gapMs = synchronized(linkLock) {
                             linkDown = true
-                            linkState.markDisconnected()
-                            if (streamed && !receipts.endedByApp) receipts.gapMs(now) else null
+                            val gap = if (streamed && !receipts.endedByApp) receipts.gapMs(now) else null
+                            val loss = gap?.takeIf { receipts.stream == Uuids.RADAR_V2 }?.let { LinkLoss(it, status) }
+                            linkState.markDisconnected(loss)
+                            gap
                         }
                         if (gapMs != null) journal("radar link lost status=$status ${gapMs}ms after its last frame")
                         queue.cancel()

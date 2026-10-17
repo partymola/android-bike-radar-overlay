@@ -96,6 +96,11 @@ class JournalScopeIsDisclosedTest {
         // A walk-away alert's button tapped after its service stopped.
         Event("walk-away alarm cleared by rider; no service running", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm volume restored; the service stopped mid-alarm", "walk-away alarm", "alarma al alejarte"),
+        // The radar-left-on alarm, which the disclosure calls the walk-away alarm too.
+        Event("walk-away alarm counted a radar switch-off (\$counted of \${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})", "walk-away alarm", "alarma al alejarte"),
+        Event("walk-away alarm armed: the radar may have been left on", "walk-away alarm", "alarma al alejarte"),
+        Event("walk-away alarm sounded: radar left on", "walk-away alarm", "alarma al alejarte"),
+        Event("walk-away alarm sounded: radar and dashcam left on", "walk-away alarm", "alarma al alejarte"),
     )
 
     /**

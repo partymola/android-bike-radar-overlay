@@ -288,11 +288,18 @@ internal class ServiceNotifications(
     /** Clear the bond-lost notification (service teardown). */
     fun cancelBondLost() = nm.cancel(NOTIF_BOND_LOST_ID)
 
-    /** Walk-away alarm notification ("you left the dashcam on the bike"): a
-     *  HIGH-priority reminder on the walk-away channel with Dismiss + Snooze
-     *  actions (tapping or swiping the body counts as Dismiss). The audible +
-     *  haptic alarm tone is driven separately by the service. */
-    fun postWalkAway() {
+    /** Walk-away alarm notification, worded for [kind]: a HIGH-priority
+     *  reminder on the walk-away channel with Dismiss + Snooze actions
+     *  (tapping or swiping the body counts as Dismiss). One ID for every
+     *  kind, so the actions reach the alarm whichever one is sounding. The
+     *  audible + haptic alarm tone is driven separately by the service. */
+    fun postWalkAway(kind: WalkAwayAlarmKind = WalkAwayAlarmKind.DASHCAM) {
+        val (titleRes, textRes) = when (kind) {
+            WalkAwayAlarmKind.DASHCAM -> R.string.svc_main_walkaway_notif_title to R.string.svc_main_walkaway_notif_text
+            WalkAwayAlarmKind.RADAR -> R.string.svc_main_walkaway_radar_notif_title to R.string.svc_main_walkaway_radar_notif_text
+            WalkAwayAlarmKind.RADAR_AND_DASHCAM -> R.string.svc_main_walkaway_both_notif_title to R.string.svc_main_walkaway_both_notif_text
+        }
+        val text = context.getString(textRes)
         val piFlags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val dismissPi = PendingIntent.getBroadcast(
             context,
@@ -311,9 +318,11 @@ internal class ServiceNotifications(
             piFlags,
         )
         val notif = NotificationCompat.Builder(context, WALKAWAY_CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.svc_main_walkaway_notif_title))
-            .setContentText(context.getString(R.string.svc_main_walkaway_notif_text))
-            .setSmallIcon(R.drawable.ic_videocam_off)
+            .setContentTitle(context.getString(titleRes))
+            .setContentText(text)
+            // The text is two sentences, so the collapsed line alone cuts it.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setSmallIcon(if (kind == WalkAwayAlarmKind.DASHCAM) R.drawable.ic_videocam_off else android.R.drawable.stat_sys_data_bluetooth)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)

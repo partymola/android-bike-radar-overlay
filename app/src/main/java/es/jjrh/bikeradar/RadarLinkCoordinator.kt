@@ -95,6 +95,16 @@ internal class RadarLinkCoordinator(
     // Bounded ride wakelock for a live-ride off-episode (see [RideWakeLock]).
     private val acquireRideWakeLock: () -> Unit,
     private val releaseRideWakeLock: () -> Unit,
+    // The radar-left-on alarm's collaborators, defaulted for the fixtures that
+    // do not exercise it; the service wires all four
+    // (`BikeRadarServiceSmokeTest.aRadarLeftOnDropHoldsItsOwnWakeLock`).
+    // The radar's last battery reading, by address.
+    private val radarBatteryPct: (mac: String) -> Int? = { null },
+    private val postRadarLeftOnNotification: (WalkAwayAlarmKind) -> Unit = {},
+    // Bounded by RADAR_LEFT_ON_WAKELOCK_CAP_MS, so the 20 s check is not
+    // slept through with the screen off and no Bluetooth wakeups.
+    private val acquireRadarLeftOnWakeLock: () -> Unit = {},
+    private val releaseRadarLeftOnWakeLock: () -> Unit = {},
 ) : RadarLinkStateGateway {
 
     private val _radarLinkState = MutableStateFlow(RadarLinkState())
@@ -183,6 +193,10 @@ internal class RadarLinkCoordinator(
     @Volatile private var lastLinkOpenMs: Long? = null
 
     @Volatile private var lastLinkOpenMac: String? = null
+
+    // Bluetooth is off now. A drop while it is off, or Bluetooth going off
+    // during the off-episode, silences the radar-left-on alarm.
+    @Volatile private var adapterOff = false
 
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
@@ -288,8 +302,22 @@ internal class RadarLinkCoordinator(
     /** Snooze window elapsed: clear both gates so the decider re-evaluates the
      *  episode cleanly rather than re-firing immediately. */
     fun clearWalkAwayDismissalForReArm() {
-        _radarLinkState.update { it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null) }
+        // The radar-left-on latch too: a snooze buys exactly one more fire
+        // (`aSnoozeGivesTheRadarLeftOnAlarmOneMoreFire`).
+        _radarLinkState.update { it.copy(walkAwayDismissed = false, lastWalkAwayFireMs = null, radarLeftOnFired = false) }
         journal("walk-away snooze over, alarm re-armed")
+    }
+
+    /** Bluetooth went off. Ends a pending radar-left-on check for this
+     *  off-episode, and a drop while it stays off starts none. */
+    fun markAdapterOff() {
+        adapterOff = true
+        _radarLinkState.update { if (it.radarOffSinceMs != null) it.copy(adapterOffInEpisode = true) else it }
+        releaseRadarLeftOnWakeLock()
+    }
+
+    fun markAdapterOn() {
+        adapterOff = false
     }
 
     /** Only the open-link flag ([RadarLinkState.radarGattActive] lists its
@@ -358,6 +386,11 @@ internal class RadarLinkCoordinator(
                     walkAwayArmed = false,
                     walkAwayDismissed = false,
                     lastWalkAwayFireMs = null,
+                    radarLeftOnQualified = false,
+                    radarLeftOnBothLeft = false,
+                    radarLeftOnFired = false,
+                    walkAwayAlarmOwner = null,
+                    adapterOffInEpisode = false,
                     radarConnectStartMs = nowMs,
                     radarGattActive = true,
                     connectingSinceMs = null,
@@ -424,6 +457,7 @@ internal class RadarLinkCoordinator(
             // figure documenting it, which was replayed without such a wipe.
             if (startsNewRide) clearTrackActivity()
             releaseRideWakeLock()
+            releaseRadarLeftOnWakeLock()
             clog(
                 "# walkaway state=IDLE transition_reason=radar-connected " +
                     "prev_state=$prevState new_ride=$startsNewRide",
@@ -434,7 +468,7 @@ internal class RadarLinkCoordinator(
         setReconnectBanner(RadarLinkVisualDecider.LinkVisual.LIVE)
     }
 
-    override fun markDisconnected() {
+    override fun markDisconnected(loss: LinkLoss?) {
         val nowMs = clock()
         // Every attempt, including one that never opened the link, so a
         // failure before discovery does not stretch the gap between opens
@@ -498,9 +532,14 @@ internal class RadarLinkCoordinator(
                 clog("# radar_drop_latch source=track-presence window_s=${trackWindowMs / 1000}")
             }
         }
-        _radarLinkState.update { current ->
+        val leftOn = if (freshOffEpisode) radarLeftOnAtDrop(nowMs, loss, armOnDisconnect) else null
+        val after = _radarLinkState.updateAndGet { current ->
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
+            val fresh = current.radarOffSinceMs == null
             current.copy(
+                radarLeftOnQualified = if (fresh) leftOn?.qualified == true else current.radarLeftOnQualified,
+                radarLeftOnBothLeft = if (fresh) leftOn?.bothLeft == true else current.radarLeftOnBothLeft,
+                adapterOffInEpisode = if (fresh) adapterOff else current.adapterOffInEpisode,
                 radarGattActive = false,
                 radarLinkClosedAtMs = if (current.radarGattActive) nowMs else current.radarLinkClosedAtMs,
                 radarConnectStartMs = null,
@@ -516,6 +555,10 @@ internal class RadarLinkCoordinator(
                 // off) falls through to the existing IDLE → ARMED path.
                 walkAwayArmed = current.walkAwayArmed || armOnDisconnect,
             )
+        }
+        if (leftOn?.qualified == true && after.radarLeftOnQualified && !after.adapterOffInEpisode && prefs.radarLeftOnAlarmEnabled) {
+            acquireRadarLeftOnWakeLock()
+            journal("walk-away alarm armed: the radar may have been left on")
         }
         if (freshOffEpisode) {
             // Flip the walk-away tick loop to its fast cadence immediately, so the
@@ -595,6 +638,81 @@ internal class RadarLinkCoordinator(
         }
     }
 
+    private class LeftOnAtDrop(val qualified: Boolean, val bothLeft: Boolean)
+
+    /**
+     * The radar-left-on decision for the drop that begins an off-episode,
+     * from inputs sampled now and never re-read: the arming bit goes BLANK at
+     * the same 20 s the check waits, and the radar's battery entry is keyed
+     * to a link that is gone. Also counts a clean switch-off toward this
+     * radar's calibration, which needs the radar that was last opened.
+     *
+     * Riding is the radar's own 30 s latches only, never the eBike's riding
+     * run: that stays open for about 110 s after the last movement, so it
+     * would silence every eBike rider's ride-end walk-away
+     * (`anEBikeRidingRunStillOpenDoesNotSilenceIt`).
+     */
+    private fun radarLeftOnAtDrop(nowMs: Long, loss: LinkLoss?, armed: Boolean): LeftOnAtDrop {
+        val mac = lastLinkOpenMac ?: return LeftOnAtDrop(qualified = false, bothLeft = false)
+        val drop = RadarLeftOnDecider.classify(loss)
+        val switchOffs = prefs.radarLeftOnSwitchOffs(mac)
+        val counted = RadarLeftOnDecider.switchOffsAfter(drop, switchOffs)
+        if (counted != switchOffs) {
+            prefs.setRadarLeftOnSwitchOffs(mac, counted)
+            journal("walk-away alarm counted a radar switch-off ($counted of ${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})")
+        }
+        val qualified = RadarLeftOnDecider.qualifies(
+            drop = drop,
+            cleanSwitchOffs = switchOffs,
+            armed = armed,
+            ridingAtDrop = radarActivityFreshAtDrop || trackFreshAtDrop,
+            radarBatteryPct = radarBatteryPct(mac),
+        )
+        val cameraSeenMs = resolveDashcamSlug()?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs
+        val bothLeft = cameraSeenMs != null && nowMs - cameraSeenMs <= RADAR_LEFT_ON_CAMERA_HEARD_MS
+        return LeftOnAtDrop(qualified, bothLeft)
+    }
+
+    /** Sound the radar-left-on alarm once its check has run. Same race
+     *  handling as the dashcam FIRE in [evaluateWalkAway], and the first of
+     *  the two alarms to sound owns the off-episode. */
+    fun evaluateRadarLeftOn(nowMs: Long) {
+        val link = _radarLinkState.value
+        val enabled = prefs.radarLeftOnAlarmEnabled
+        if (!enabled && link.radarLeftOnQualified) releaseRadarLeftOnWakeLock()
+        val fire = RadarLeftOnDecider.shouldFire(
+            enabled = enabled,
+            qualified = link.radarLeftOnQualified,
+            nowMs = nowMs,
+            radarOffSinceMs = link.radarOffSinceMs,
+            adapterOffSinceDrop = link.adapterOffInEpisode,
+            fired = link.radarLeftOnFired,
+            dismissed = link.walkAwayDismissed,
+            otherAlarmFired = link.walkAwayAlarmOwner == WalkAwayAlarmKind.DASHCAM,
+        )
+        if (!fire) return
+        val kind = if (link.radarLeftOnBothLeft) WalkAwayAlarmKind.RADAR_AND_DASHCAM else WalkAwayAlarmKind.RADAR
+        postRadarLeftOnNotification(kind)
+        startWalkAwayAlarm()
+        releaseRadarLeftOnWakeLock()
+        val offAt = link.radarOffSinceMs
+        val after = _radarLinkState.updateAndGet {
+            if (it.radarOffSinceMs == offAt) {
+                it.copy(radarLeftOnFired = true, walkAwayAlarmOwner = it.walkAwayAlarmOwner ?: kind)
+            } else {
+                it
+            }
+        }
+        if (after.radarOffSinceMs != offAt || after.walkAwayDismissed) {
+            cancelWalkAwayNotification()
+            stopWalkAwayAlarm()
+        } else if (kind == WalkAwayAlarmKind.RADAR_AND_DASHCAM) {
+            journal("walk-away alarm sounded: radar and dashcam left on")
+        } else {
+            journal("walk-away alarm sounded: radar left on")
+        }
+    }
+
     fun tickWalkAwayState(nowMs: Long, elapsedMs: Long) {
         // sessionRadarConnectedMs is integrated on connect→disconnect
         // transitions in [markDisconnected], not per-tick. The idle
@@ -671,7 +789,10 @@ internal class RadarLinkCoordinator(
                 // warn me about the dashcam at all" we respect that.
                 enabled = prefs.walkAwayAlarmEnabled &&
                     prefs.dashcamWarnWhenOff &&
-                    slug != null,
+                    slug != null &&
+                    // The radar-left-on alarm sounded first this off-episode
+                    // (`theRadarLeftOnAlarmKeepsTheDashcamAlarmSilent`).
+                    link.walkAwayAlarmOwner.let { it == null || it == WalkAwayAlarmKind.DASHCAM },
                 thresholdMs = prefs.walkAwayAlarmThresholdSec * 1000L,
             ),
             // Snapshot the cluster once so the decider sees a coherent set
@@ -699,7 +820,11 @@ internal class RadarLinkCoordinator(
                 // `aDismissBetweenTheFireDecisionAndTheToneStillLeavesItStopped`).
                 val offAt = link.radarOffSinceMs
                 val after = _radarLinkState.updateAndGet {
-                    if (it.radarOffSinceMs == offAt) it.copy(lastWalkAwayFireMs = nowMs) else it
+                    if (it.radarOffSinceMs == offAt) {
+                        it.copy(lastWalkAwayFireMs = nowMs, walkAwayAlarmOwner = it.walkAwayAlarmOwner ?: WalkAwayAlarmKind.DASHCAM)
+                    } else {
+                        it
+                    }
                 }
                 if (after.radarOffSinceMs != offAt || after.walkAwayDismissed) {
                     cancelWalkAwayNotification()
@@ -1165,5 +1290,14 @@ internal class RadarLinkCoordinator(
          *  backstop fires. Normal releases (reconnect / BLANK / ride summary)
          *  free it far sooner. Never unbounded. */
         const val RIDE_WAKELOCK_CAP_MS = 300_000L
+
+        /** The front camera counts as left on with the radar when the phone
+         *  heard it this recently before the drop: one missed 20 s battery
+         *  read of slack is the camera's own cadence. */
+        const val RADAR_LEFT_ON_CAMERA_HEARD_MS = 20_000L
+
+        /** Cap on the radar-left-on wakelock: its check plus slack for a
+         *  late tick. */
+        const val RADAR_LEFT_ON_WAKELOCK_CAP_MS = RadarLeftOnDecider.CHECK_MS + 15_000L
     }
 }

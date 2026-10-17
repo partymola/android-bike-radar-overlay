@@ -145,6 +145,9 @@ class RadarLinkControllerHarnessTest {
 
         /** Runs inside each disconnect edge, so a test can act mid-teardown. */
         @Volatile var onDisconnect: () -> Unit = {}
+
+        /** What each disconnect edge carried, in order. */
+        val losses: MutableList<LinkLoss?> = Collections.synchronizedList(mutableListOf())
         override fun markLinkOpen(mac: String) {
             events += "open"
             openMacs += mac
@@ -152,8 +155,9 @@ class RadarLinkControllerHarnessTest {
         override fun markConnected() {
             events += "connected"
         }
-        override fun markDisconnected() {
+        override fun markDisconnected(loss: LinkLoss?) {
             events += "disconnected"
+            losses += loss
             onDisconnect()
         }
         override fun snapshot(): RadarLinkState = RadarLinkState()
@@ -843,6 +847,29 @@ class RadarLinkControllerHarnessTest {
         // A repeated callback is the same loss, not a second one.
         cb.onConnectionStateChange(gatt, 147, BluetoothProfile.STATE_DISCONNECTED)
         assertEquals(1, journal.count { it.startsWith("radar link lost") })
+        controller.forceReconnect()
+    }
+
+    @Test fun theDisconnectCallbackHandsTheLossToTheGateway() = runTest {
+        // The callback's edge carries the measurement; the loop's duplicate
+        // edge and the teardown's carry none, so the coordinator sees it once.
+        val link = Link()
+        val gateway = FakeGateway()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(10_000L)
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { gateway.connects == 1 })
+        clockMs.set(13_500L)
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertEquals(LinkLoss(3_500L, 147), gateway.losses.first())
+        assertEquals("losses=${gateway.losses}", listOf(LinkLoss(3_500L, 147)), gateway.losses.filterNotNull())
         controller.forceReconnect()
     }
 
@@ -1693,9 +1720,12 @@ class RadarLinkControllerHarnessTest {
 
     /** Starts a legacy link and receives one heartbeat at 1 s through the
      *  pre-Android-13 callback, which decodes at 2 s. */
-    private suspend fun TestScope.legacyLinkWithOneHeartbeat(clockMs: java.util.concurrent.atomic.AtomicLong): Pair<Link, RadarLinkController> {
+    private suspend fun TestScope.legacyLinkWithOneHeartbeat(
+        clockMs: java.util.concurrent.atomic.AtomicLong,
+        gateway: FakeGateway = FakeGateway(),
+    ): Pair<Link, RadarLinkController> {
         val link = Link()
-        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
+        val controller = controller(link, gateway = gateway, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -1729,10 +1759,14 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun aLegacyLinkLostJournalsItsGapToo() = runTest {
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
-        val (link, controller) = legacyLinkWithOneHeartbeat(clockMs)
+        val gateway = FakeGateway()
+        val (link, controller) = legacyLinkWithOneHeartbeat(clockMs, gateway)
         clockMs.set(4_500L)
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue("journal=$journal", journalHas("radar link lost status=147 3500ms after its last frame"))
+        // Journalled, but never handed on: a range-only radar cannot show
+        // the rider was not riding, so it never feeds the radar-left-on alarm.
+        assertEquals("losses=${gateway.losses}", emptyList<LinkLoss>(), gateway.losses.filterNotNull())
         controller.forceReconnect()
     }
 

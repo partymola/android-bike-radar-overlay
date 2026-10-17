@@ -2,6 +2,23 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+/** How a radar link that streamed ended: the gap between its last received
+ *  frame and Android's disconnect callback, and the callback's status. */
+data class LinkLoss(val gapMs: Long, val status: Int)
+
+/** Which walk-away alarm is sounding, and so which notification it posts.
+ *  Never persisted or published. */
+enum class WalkAwayAlarmKind {
+    /** The radar went off and the phone still picks up the front camera. */
+    DASHCAM,
+
+    /** The radar was left on and walked away from. */
+    RADAR,
+
+    /** Both were left on: the camera was heard just before the radar went. */
+    RADAR_AND_DASHCAM,
+}
+
 /**
  * Pure decisions for the radar-left-on alarm: the rider walked out of range
  * with the radar still on, with or without the front camera.
@@ -20,7 +37,8 @@ package es.jjrh.bikeradar
  * Mid-ride link losses look the same as a walk-away, so the drop must also
  * come with the alarm armed ([WalkAwayArmingGate]) and no riding seen just
  * before it. A radar battery under [BATTERY_FLOOR_PCT] can end the stream
- * the same way, and does not qualify.
+ * the same way, and does not qualify. Nor does an ending the phone produced
+ * ([PHONE_SIDE_STATUSES]), which counts toward calibration neither.
  */
 object RadarLeftOnDecider {
 
@@ -41,15 +59,20 @@ object RadarLeftOnDecider {
     /** A radar battery below this can die the way a walk-away looks. */
     const val BATTERY_FLOOR_PCT = 10
 
+    /** Disconnect statuses the phone itself produces (0 success, 22 the local
+     *  host ending the link), as when Bluetooth is switched off or the bond
+     *  is removed. Such an ending says nothing about the radar. */
+    val PHONE_SIDE_STATUSES = setOf(0, 22)
+
     enum class Drop { SWITCHED_OFF, UNCLEAR, WALKED_AWAY }
 
-    /** The drop, from the gap the radar link measured at its disconnect
+    /** The drop, from what the radar link measured at its disconnect
      *  callback, or null when it measured none (no stream on that link, or a
-     *  teardown the app chose). */
-    fun classify(gapMs: Long?): Drop? = when {
-        gapMs == null -> null
-        gapMs < CLEAN_SWITCH_OFF_GAP_MS -> Drop.SWITCHED_OFF
-        gapMs >= WALKED_AWAY_GAP_MS -> Drop.WALKED_AWAY
+     *  teardown the app chose) or the phone ended the link. */
+    fun classify(loss: LinkLoss?): Drop? = when {
+        loss == null || loss.status in PHONE_SIDE_STATUSES -> null
+        loss.gapMs < CLEAN_SWITCH_OFF_GAP_MS -> Drop.SWITCHED_OFF
+        loss.gapMs >= WALKED_AWAY_GAP_MS -> Drop.WALKED_AWAY
         else -> Drop.UNCLEAR
     }
 

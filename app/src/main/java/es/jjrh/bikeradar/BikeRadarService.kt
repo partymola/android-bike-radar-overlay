@@ -186,6 +186,12 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var rideWakeLock: RideWakeLock
 
+    // Held from a drop that may be a radar left on until its alarm sounds or
+    // the off-episode ends, so the check is not slept through with the screen
+    // off. Bounded by RADAR_LEFT_ON_WAKELOCK_CAP_MS.
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var radarLeftOnWakeLock: RideWakeLock
+
     // Wakes launchWalkAwayTick out of its idle delay the instant the radar
     // drops, so the loop flips to its 2 s cadence and the first dead-radar
     // evaluation lands on time (not up to 30 s late). CONFLATED: a queued kick
@@ -320,6 +326,7 @@ class BikeRadarService : Service() {
         cachedOverlayPrefs = prefs.snapshot()
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
         rideWakeLock = RideWakeLock(this)
+        radarLeftOnWakeLock = RideWakeLock(this, RideWakeLock.RADAR_LEFT_ON_TAG)
         scope.launch {
             RadarStateBus.state.collect {
                 if (it.vehicles.isNotEmpty()) sawTrack = true
@@ -448,7 +455,7 @@ class BikeRadarService : Service() {
         radarLinkCoordinator = RadarLinkCoordinator(
             clock = { SystemClock.elapsedRealtime() },
             prefs = prefs,
-            postWalkAwayNotification = notifications::postWalkAway,
+            postWalkAwayNotification = { notifications.postWalkAway(WalkAwayAlarmKind.DASHCAM) },
             cancelWalkAwayNotification = notifications::cancelWalkAway,
             startWalkAwayAlarm = walkAwayAlarm::start,
             stopWalkAwayAlarm = walkAwayAlarm::stop,
@@ -481,6 +488,12 @@ class BikeRadarService : Service() {
             wakeTick = { walkAwayKick.trySend(Unit) },
             acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
             releaseRideWakeLock = { rideWakeLock.release() },
+            radarBatteryPct = { mac ->
+                (macToSlug[mac] ?: macToSlug[mac.uppercase(Locale.ROOT)])?.let { BatteryStateBus.entries.value[it]?.pct }
+            },
+            postRadarLeftOnNotification = notifications::postWalkAway,
+            acquireRadarLeftOnWakeLock = { radarLeftOnWakeLock.acquire(RadarLinkCoordinator.RADAR_LEFT_ON_WAKELOCK_CAP_MS) },
+            releaseRadarLeftOnWakeLock = { radarLeftOnWakeLock.release() },
         )
         radarLinkStateForUi = radarLinkCoordinator.radarLinkState
         flushCaptureLogForUi = { captureLog.flushNow() }
@@ -531,6 +544,9 @@ class BikeRadarService : Service() {
             context = this,
             onAdapterOff = {
                 linkJournal.log("bluetooth adapter off: links torn down, event scan dead")
+                // First, so the drop the teardown below produces starts no
+                // radar-left-on check.
+                radarLinkCoordinator.markAdapterOff()
                 // Cancelling the link coroutines runs their cleanup paths
                 // (close the orphaned GATT, mark disconnected); the links
                 // restart scan-driven once the adapter is back. The scan
@@ -543,6 +559,7 @@ class BikeRadarService : Service() {
             },
             onAdapterOn = {
                 linkJournal.log("bluetooth adapter on: scan re-registered, links kickstarted")
+                radarLinkCoordinator.markAdapterOn()
                 registerEventScan()
                 maybeStartEBikeReader()
                 scope.launch { kickstartFromCache() }
@@ -750,6 +767,7 @@ class BikeRadarService : Service() {
         }
         if (::walkAwayAlarm.isInitialized) walkAwayAlarm.shutdown()
         if (::rideWakeLock.isInitialized) rideWakeLock.release()
+        if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -1083,6 +1101,7 @@ class BikeRadarService : Service() {
                 prevTickMs = now
                 radarLinkCoordinator.tickWalkAwayState(now, elapsed)
                 radarLinkCoordinator.evaluateWalkAway(now)
+                radarLinkCoordinator.evaluateRadarLeftOn(now)
                 radarLinkCoordinator.evaluateRadarDrop(now)
                 maybePostRideSummary(now)
             }

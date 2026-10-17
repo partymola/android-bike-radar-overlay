@@ -1283,6 +1283,63 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    @Test
+    fun aRadarLeftOnDropHoldsItsOwnWakeLock() {
+        // Wiring pin for the four radar-left-on collaborators the coordinator
+        // tests replace with doubles: the wakelock, the battery lookup, the
+        // notification, and Bluetooth going off.
+        BatteryStateBus.clearForTest()
+        BikeRadarService.macToSlug.clear()
+        Prefs(app).setRadarLeftOnSwitchOffs(RADAR_A, 3)
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        val coordinator = service.radarLinkCoordinator
+        fun walkAway() {
+            coordinator.markLinkOpen(RADAR_A)
+            coordinator.markConnected()
+            ShadowSystemClock.advanceBy(Duration.ofMinutes(10))
+            coordinator.markDisconnected(LinkLoss(3_500L, 147))
+        }
+
+        walkAway()
+        assertTrue("a qualifying drop must hold its wakelock", service.radarLeftOnWakeLock.isHeld())
+        assertFalse("not the ride's, which BLANK releases at 20 s", service.rideWakeLock.isHeld())
+
+        // Bluetooth going off ends the check.
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.STATE_OFF),
+        )
+        shadowOf(app.mainLooper).idle()
+        assertFalse(service.radarLeftOnWakeLock.isHeld())
+        assertTrue(coordinator.radarLinkState.value.adapterOffInEpisode)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.STATE_ON),
+        )
+        shadowOf(app.mainLooper).idle()
+
+        // A nearly flat radar, found through the service's own lookup, starts none.
+        BikeRadarService.macToSlug[RADAR_A] = "rearvue8"
+        BatteryStateBus.update(BatteryEntry("rearvue8", "RearVue8", 5))
+        walkAway()
+        assertFalse("a radar at 5% must not qualify", service.radarLeftOnWakeLock.isHeld())
+
+        // With the battery fine it sounds, through the service's notification.
+        BatteryStateBus.update(BatteryEntry("rearvue8", "RearVue8", 60))
+        walkAway()
+        assertTrue(service.radarLeftOnWakeLock.isHeld())
+        coordinator.evaluateRadarLeftOn(android.os.SystemClock.elapsedRealtime() + 20_000L)
+        val nm = app.getSystemService(NotificationManager::class.java)
+        val titles = shadowOf(nm).allNotifications.map { it.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() }
+        assertTrue("got $titles", "Radar still on?" in titles)
+        assertFalse(service.radarLeftOnWakeLock.isHeld())
+        controller.destroy()
+        BatteryStateBus.clearForTest()
+        BikeRadarService.macToSlug.clear()
+    }
+
     // ── "restarted mid-ride" attention flag ──────────────────────────────────
 
     private fun midRideCheckpoint(): RideHistoryRecord = RideHistoryRecord(

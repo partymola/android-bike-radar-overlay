@@ -35,11 +35,11 @@ import android.os.PowerManager
  * check-and-act must be atomic, since a non-reference-counted `release()` on an
  * already-released lock throws.
  */
-internal class RideWakeLock(context: Context) {
+internal class RideWakeLock(context: Context, tag: String = WAKE_LOCK_TAG) {
 
     private val wakeLock: PowerManager.WakeLock =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, tag)
             .apply { setReferenceCounted(false) }
 
     /** Acquire with a hard timeout cap (ms). No-op if already held. */
@@ -57,7 +57,12 @@ internal class RideWakeLock(context: Context) {
     @Synchronized
     fun isHeld(): Boolean = wakeLock.isHeld
 
-    private companion object {
-        const val WAKE_LOCK_TAG = "es.jjrh.bikeradar:ride-off-episode"
+    companion object {
+        private const val WAKE_LOCK_TAG = "es.jjrh.bikeradar:ride-off-episode"
+
+        /** The radar-left-on check's own lock: a second instance, because
+         *  this one is not reference-counted and the ride's is released at
+         *  BLANK, 20 s into the same off-episode. */
+        const val RADAR_LEFT_ON_TAG = "es.jjrh.bikeradar:radar-left-on"
     }
 }

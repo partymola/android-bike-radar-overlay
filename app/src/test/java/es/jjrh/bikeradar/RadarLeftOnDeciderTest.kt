@@ -13,27 +13,40 @@ class RadarLeftOnDeciderTest {
 
     // ── the gap ──────────────────────────────────────────────────────────────
 
+    /** A radar-side ending; 147 is what the measured walk-aways reported. */
+    private fun gap(ms: Long, status: Int = 147) = RadarLeftOnDecider.classify(LinkLoss(ms, status))
+
     @Test
     fun aGapUnderOneSecondIsASwitchOff() {
-        assertEquals(Drop.SWITCHED_OFF, RadarLeftOnDecider.classify(0L))
-        assertEquals(Drop.SWITCHED_OFF, RadarLeftOnDecider.classify(999L))
+        assertEquals(Drop.SWITCHED_OFF, gap(0L, status = 19))
+        assertEquals(Drop.SWITCHED_OFF, gap(999L, status = 257))
     }
 
     @Test
     fun aGapOfTwoSecondsOrMoreIsAWalkAway() {
-        assertEquals(Drop.WALKED_AWAY, RadarLeftOnDecider.classify(2_000L))
-        assertEquals(Drop.WALKED_AWAY, RadarLeftOnDecider.classify(3_990L))
+        assertEquals(Drop.WALKED_AWAY, gap(2_000L))
+        assertEquals(Drop.WALKED_AWAY, gap(3_990L, status = 8))
     }
 
     @Test
     fun aGapBetweenIsNeither() {
-        assertEquals(Drop.UNCLEAR, RadarLeftOnDecider.classify(1_000L))
-        assertEquals(Drop.UNCLEAR, RadarLeftOnDecider.classify(1_999L))
+        assertEquals(Drop.UNCLEAR, gap(1_000L))
+        assertEquals(Drop.UNCLEAR, gap(1_999L))
     }
 
     @Test
     fun noGapIsNoDrop() {
         assertNull(RadarLeftOnDecider.classify(null))
+    }
+
+    @Test
+    fun anEndingThePhoneProducedIsNoDrop() {
+        // Bluetooth switched off or the bond removed: neither a switch-off to
+        // learn from nor a walk-away, whatever the gap.
+        assertNull(gap(300L, status = 0))
+        assertNull(gap(3_500L, status = 0))
+        assertNull(gap(300L, status = 22))
+        assertNull(gap(3_500L, status = 22))
     }
 
     // ── calibration ──────────────────────────────────────────────────────────

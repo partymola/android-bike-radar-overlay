@@ -894,6 +894,14 @@
     <string name="svc_main_walkaway_notif_text">Radar is off but the dashcam is still on your bike. Battery draining, easy to forget.</string>
     <string name="svc_main_walkaway_action_dismiss">Dismiss</string>
     <string name="svc_main_walkaway_action_snooze">Remind in 2 min</string>
+    <!-- The radar-left-on alarm. Questions and "Looks like": the app infers
+         the radar was left on from how its link ended, so it never states it.
+         The _both_ form is also posted when the dashcam was carried, switched
+         on, so it must not say the dashcam was left behind. -->
+    <string name="svc_main_walkaway_radar_notif_title">Radar still on?</string>
+    <string name="svc_main_walkaway_radar_notif_text">Looks like it went out of range still on. Go back and turn it off.</string>
+    <string name="svc_main_walkaway_both_notif_title">Radar and dashcam still on?</string>
+    <string name="svc_main_walkaway_both_notif_text">Looks like the radar went out of range still on, and the dashcam was on too. Turn them both off.</string>
 
     <!-- ReplayService.kt -->
     <string name="svc_replay_channel_name">Replay</string>

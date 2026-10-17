@@ -458,6 +458,34 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(KEY_WALKAWAY_ENABLED, v).apply()
         }
 
+    /** The radar-left-on alarm: the walk-away alarm, sounded once when the
+     *  rider walks out of range with the radar still on, with or without a
+     *  front camera ([es.jjrh.bikeradar.RadarLeftOnDecider]). Separate from
+     *  [walkAwayAlarmEnabled], which governs only the camera-heard alarm. */
+    var radarLeftOnAlarmEnabled: Boolean
+        get() = sp.getBoolean(KEY_RADAR_LEFT_ON_ALARM, true)
+        set(v) {
+            sp.edit().putBoolean(KEY_RADAR_LEFT_ON_ALARM, v).apply()
+        }
+
+    /** Clean switch-offs seen from the radar at [mac], toward the
+     *  [es.jjrh.bikeradar.RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS] the alarm
+     *  needs before it can sound. One radar is remembered at a time, so a
+     *  different radar starts from 0. */
+    fun radarLeftOnSwitchOffs(mac: String): Int = if (sp.getString(KEY_RADAR_LEFT_ON_CAL_MAC, null).equals(mac, ignoreCase = true)) {
+        sp.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)
+    } else {
+        0
+    }
+
+    /** One edit, so the count is never read against another radar's address. */
+    fun setRadarLeftOnSwitchOffs(mac: String, count: Int) {
+        sp.edit()
+            .putString(KEY_RADAR_LEFT_ON_CAL_MAC, mac)
+            .putInt(KEY_RADAR_LEFT_ON_CAL_COUNT, count)
+            .apply()
+    }
+
     /** Threshold in seconds for the walk-away alarm. Min 15 s (any
      *  tighter races the radar reconnect loop), max 120 s (beyond
      *  that the rider is too far from the bike to act). Default 30 s
@@ -1111,6 +1139,9 @@ class Prefs(context: Context) {
         appendLine("ha_intent=$haIntent")
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
+        appendLine("radar_left_on_alarm_enabled=$radarLeftOnAlarmEnabled")
+        // The count only: the address it belongs to stays out of the bundle.
+        appendLine("radar_left_on_switch_offs=${sp.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)}")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("urgent_unconfident_wait_enabled=$urgentUnconfidentWaitEnabled")
@@ -1192,6 +1223,9 @@ class Prefs(context: Context) {
         const val KEY_HA_INTENT = "ha_intent"
         const val KEY_WALKAWAY_ENABLED = "walk_away_alarm_enabled"
         const val KEY_WALKAWAY_THRESHOLD_SEC = "walk_away_alarm_threshold_sec"
+        const val KEY_RADAR_LEFT_ON_ALARM = "radar_left_on_alarm_enabled"
+        const val KEY_RADAR_LEFT_ON_CAL_MAC = "radar_left_on_cal_mac"
+        const val KEY_RADAR_LEFT_ON_CAL_COUNT = "radar_left_on_cal_count"
         const val KEY_ADAPTIVE_ALERTS = "adaptive_alerts_enabled"
         const val KEY_URGENT_LOW_SPEED = "urgent_low_speed_enabled"
         const val KEY_URGENT_UNCONFIDENT_WAIT = "urgent_unconfident_wait_enabled"

@@ -825,6 +825,12 @@
     <string name="svc_main_walkaway_notif_text">El radar está apagado pero la cámara delantera sigue en tu bici. La batería se gasta y es fácil olvidarla.</string>
     <string name="svc_main_walkaway_action_dismiss">Descartar</string>
     <string name="svc_main_walkaway_action_snooze">Recordar en 2 min</string>
+    <!-- La alarma de radar olvidado: preguntas y "Parece", porque la app lo
+         deduce de cómo se cortó la conexión. -->
+    <string name="svc_main_walkaway_radar_notif_title">¿Radar aún encendido?</string>
+    <string name="svc_main_walkaway_radar_notif_text">Parece que se ha quedado fuera de alcance encendido. Vuelve y apágalo.</string>
+    <string name="svc_main_walkaway_both_notif_title">¿Radar y cámara encendidos?</string>
+    <string name="svc_main_walkaway_both_notif_text">Parece que el radar se ha quedado fuera de alcance encendido, y la cámara también lo estaba. Apaga los dos.</string>
 
     <!-- ReplayService.kt -->
     <string name="svc_replay_channel_name">Reproducción</string>

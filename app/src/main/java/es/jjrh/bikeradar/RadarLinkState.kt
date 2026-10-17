@@ -124,6 +124,20 @@ data class RadarLinkState(
      *  acknowledgement pulse the reset exists to stop. Consumed and cleared in
      *  `RadarLinkCoordinator.evaluateRadarDrop`. */
     val newRideAtConnect: Boolean = false,
+    /** The radar-left-on alarm may sound for this off-episode: decided once,
+     *  at the drop that began it, by [RadarLeftOnDecider.qualifies]. */
+    val radarLeftOnQualified: Boolean = false,
+    /** The phone heard the front camera in the 20 s before that drop, so the
+     *  alarm names both devices. */
+    val radarLeftOnBothLeft: Boolean = false,
+    /** The radar-left-on alarm has sounded and not been re-armed by a snooze. */
+    val radarLeftOnFired: Boolean = false,
+    /** Which walk-away alarm sounded first this off-episode; the other stays
+     *  silent until the radar streams again. Survives the dashcam alarm's
+     *  auto-dismiss, unlike [lastWalkAwayFireMs]. */
+    val walkAwayAlarmOwner: WalkAwayAlarmKind? = null,
+    /** Bluetooth went off during this off-episode. */
+    val adapterOffInEpisode: Boolean = false,
 ) {
     /** The radar is sending data, which is what covers the rider. */
     val radarStreaming: Boolean get() = radarConnectStartMs != null

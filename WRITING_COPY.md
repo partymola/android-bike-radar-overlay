@@ -1,8 +1,7 @@
 # Writing copy (UI strings)
 
 User-facing text lives in `res/values/strings.xml` (en) + `values-es/`. When
-adding or editing it, follow these principles - the `/qc` copy reviewer
-enforces them, and CONTRIBUTING.md points contributors here:
+adding or editing it, follow these principles:
 
 - **Benefit, not mechanism.** Say what the rider gets, not how it works. "Set
   your lights by local sunset" beats "compute sunrise/sunset for the auto-mode

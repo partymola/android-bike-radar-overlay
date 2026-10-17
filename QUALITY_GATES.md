@@ -1,9 +1,8 @@
 # Quality gates: static analysis and coverage
 
-What each CI gate checks and what must not be changed about it; `/qc` runs
-the ktlint, lint, coverage and licence-header gates locally. Read this
-before changing a workflow under `.github/`, `.editorconfig`, the coverage,
-lint or R8 configuration in `app/build.gradle.kts` or
+This file says what each CI gate checks and what must not be changed about
+it. Read it before changing a workflow under `.github/`, `.editorconfig`,
+the coverage, lint or R8 configuration in `app/build.gradle.kts` or
 `app/proguard-rules.pro`, or a gate script under `scripts/`.
 
 - **ktlint** (`:app:ktlintCheck`, runs in CI) enforces the `intellij_idea`
@@ -20,20 +19,19 @@ lint or R8 configuration in `app/build.gradle.kts` or
   reports 0%.
   - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
     and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
-  - `:app:jacocoCoverageVerification` (runs in CI and `/qc`) is the ratchet:
+  - `:app:jacocoCoverageVerification` (runs in CI) is the ratchet:
     project floors LINE >= 0.80, INSTRUCTION >= 0.78, BRANCH >= 0.68 on the
     whole testable layer, plus a tighter BRANCH >= 0.93 on every `*Decider` /
     `*Deriver` (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
     `app/build.gradle.kts` as coverage grows.
-  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, CI and a
-    mandatory pre-push `/qc` gate - never leave it to CI alone): the changed
-    executable production lines in a PR or push must be >= 85% covered, so an
-    untested feature cannot hide behind the project average; a contributor PR
-    is the case it most guards. It reads `jacocoDiffReport`, which keeps
-    Compose UI in scope and depends on `verifyRoborazziDebug` rather than
-    `testDebugUnitTest`, because Roborazzi only composes when its task
-    property is set. Diffs under 10 executable changed lines are exempt, and
-    an unreachable base ref skips rather than fails.
+  - **Diff-coverage gate** (`scripts/diff-coverage-gate.py`, runs in CI):
+    the changed executable production lines in a PR or push must be >= 85%
+    covered, so an untested feature cannot hide behind the project average;
+    a contributor PR is the case it most guards. It reads `jacocoDiffReport`,
+    which keeps Compose UI in scope and depends on `verifyRoborazziDebug`
+    rather than `testDebugUnitTest`, because Roborazzi only composes when its
+    task property is set. Diffs under 10 executable changed lines are exempt,
+    and an unreachable base ref skips rather than fails.
   - **The script READS `jacocoDiffReport.xml` and does not build it, so run
     `:app:jacocoDiffReport` immediately before it, every time.** CI builds it
     in the same Gradle invocation as the tests; by hand, a stale report is

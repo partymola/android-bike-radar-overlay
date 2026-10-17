@@ -255,12 +255,12 @@ decoders in both Python and Kotlin live there.
 ## Writing copy (UI strings)
 
 **Before adding or editing any user-facing string, in either locale, read
-[`WRITING_COPY.md`](WRITING_COPY.md)**; the `/qc` copy reviewer enforces it.
-It holds the Spain-Spanish rules (never "rodar"; the percent sign takes no
-space), the Privacy screen exception, and what
-`scripts/privacy-disclosure-check.sh` checks in each locale. It cannot see a
-paragraph that keeps its tokens while saying less in one locale, so when a
-disclosure changes both locales are read side by side.
+[`WRITING_COPY.md`](WRITING_COPY.md)**. It holds the Spain-Spanish rules
+(never "rodar"; the percent sign takes no space), the Privacy screen
+exception, and what `scripts/privacy-disclosure-check.sh` checks in each
+locale. The script cannot see a paragraph that keeps its tokens while saying
+less in one locale, so when a disclosure changes both locales are read side by
+side.
 
 ## Testing
 
@@ -286,8 +286,7 @@ disclosure changes both locales are read side by side.
   [`QUALITY_GATES.md`](QUALITY_GATES.md)).
 - Roborazzi screenshot tests render via Robolectric Native Graphics and run
   as part of `testDebugUnitTest`. `:app:verifyRoborazziDebug` compares
-  against the golden PNGs; this gate runs in CI and before any push that
-  touches `app/src/main/**`.
+  against the golden PNGs.
 - To regenerate goldens: `:app:recordRoborazziDebug`. Commit the updated
   PNGs under `app/src/test/snapshots/images/`.
 - Writing a new screenshot test: Compose screens use
@@ -357,8 +356,7 @@ disclosure changes both locales are read side by side.
 
 CI runs ktlint, lint, JaCoCo (a project ratchet plus a diff-coverage gate),
 a release DEX keep gate, `boot-smoke`, licence-header and transitive-licence
-checks, and CodeQL; `/qc` runs the ktlint, lint, coverage and licence-header
-gates locally. **Before changing a workflow under `.github/`,
+checks, and CodeQL. **Before changing a workflow under `.github/`,
 `.editorconfig`, the coverage, lint or R8 configuration, `proguard-rules.pro`,
 or a gate script, read [`QUALITY_GATES.md`](QUALITY_GATES.md)**: what each
 gate checks and what must not be changed about it. Four that bite in
@@ -555,18 +553,6 @@ device and makes no compliance claim. The authoritative description of each
 cue and its rationale lives in the `AlertBeeper.kt` / `AlertDecider.kt` KDoc,
 which is kept current with the code - this note is the conceptual frame, not
 a behaviour spec to keep in sync.
-
-## Quality gates (pre-push, mandatory)
-
-- `/qc` skill spawns a panel of read-only reviewers (legal,
-  commit-message, diff hygiene; UX if UI changed; release-scope if
-  version bumped) and writes `.git/qc-marker` for HEAD on clean PASS.
-  The pre-push hook refuses to push without a valid marker.
-- `/release-review` skill reviews the `v*` tag's CHANGELOG section for
-  reader-perspective, leakage, truthfulness, migration-impact; writes
-  `.git/release-review-marker` on PASS.
-- Any amend, reset, or new commit invalidates both markers - re-run
-  before re-pushing.
 
 ## Contributing
 

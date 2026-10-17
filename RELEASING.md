@@ -1,8 +1,7 @@
 # Releasing
 
 Read this before bumping the version, writing a CHANGELOG section, or
-cutting a `v*` tag. The `/release-review` pass covers the section's wording;
-this file covers the mechanics.
+cutting a `v*` tag.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
 add a top-level entry to `CHANGELOG.md` (group changes under the

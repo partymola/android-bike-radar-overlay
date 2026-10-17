@@ -57,6 +57,8 @@ class RadarLeftOnCalibrationPrefsTest {
         assertEquals(3, Prefs(app).radarLeftOnSwitchOffs(RADAR))
         ShadowBuild.setFingerprint("phone/build:16/B")
         assertEquals(0, Prefs(app).radarLeftOnSwitchOffs(RADAR))
+        val dump = Prefs(app).dumpAll()
+        assertTrue("the bundle shows the count in effect", dump.contains("radar_left_on_switch_offs=0"))
     }
 
     @Test

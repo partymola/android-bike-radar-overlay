@@ -1347,6 +1347,24 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aRadarLeftOnDropAfterTheServiceStopsTakesNoWakeLock() {
+        // The cancelled link loop's teardown can still deliver a drop after
+        // onDestroy's release.
+        Prefs(app).setRadarLeftOnSwitchOffs(RADAR_A, 3)
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        val coordinator = service.radarLinkCoordinator
+        coordinator.markLinkOpen(RADAR_A)
+        coordinator.markConnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(10))
+        controller.destroy()
+        coordinator.markDisconnected(LinkLoss(3_500L, 147))
+        assertTrue("the drop must still qualify", coordinator.radarLinkState.value.radarLeftOnQualified)
+        assertFalse(service.radarLeftOnWakeLock.isHeld())
+    }
+
+    @Test
     fun theServicesOwnTickSoundsTheRadarLeftOnAlarm() {
         // Nothing else calls evaluateRadarLeftOn: dropped from the tick, the
         // alarm would be wired and never sound.

@@ -29,10 +29,11 @@ enum class WalkAwayAlarmKind {
  * out of range goes silent and the link times out 3 to 4 s later. Measured on
  * one phone and one radar model, so both are default-deny: a walk-away only
  * on a timeout status ([TIMEOUT_STATUSES]), a switch-off only on the statuses
- * seen for one ([REMOTE_END_STATUSES]), anything else neither. And a radar has
- * to show [CALIBRATION_SWITCH_OFFS] clean switch-offs on this phone before the
- * alarm can sound for it; an ending that fits neither pattern sends the count
- * back to 0 (`RadarLeftOnDeciderTest`).
+ * seen for one ([REMOTE_END_STATUSES]), and any other status changes nothing.
+ * A radar has to show [CALIBRATION_SWITCH_OFFS] clean switch-offs on this
+ * phone before the alarm can sound for it; one of those statuses with the
+ * other's gap ([Drop.UNCLEAR]) sends the count back to 0
+ * (`RadarLeftOnDeciderTest`).
  *
  * Mid-ride link losses look the same as a walk-away, so the drop must also
  * come with the alarm armed ([WalkAwayArmingGate]), no riding seen just before
@@ -44,15 +45,24 @@ enum class WalkAwayAlarmKind {
  * drops its own link with the radar's, so its last reading is a fresh
  * "unlocked" and the arming gate holds; a phone whose link takes longer to
  * time out than the stream watchdog's stall window records no gap at all
- * (`StreamReceipts`); a range-only radar never reaches here.
+ * (`StreamReceipts`); a range-only radar never reaches here. Also silent: a
+ * rider with no eBike who walks off within 30 s of riding, and a radar at the
+ * edge of range that reconnects inside the check and drops again before it has
+ * streamed [MIN_STREAMED_MS] (`anEdgeOfRangeReconnectStaysSilent`).
+ *
+ * It can sound wrongly where a switch-off loses its goodbye and ends as a
+ * timeout, and after a stop of over 30 s with no eBike whose drop does not
+ * recover within [CHECK_MS]; neither changes the count.
  */
 object RadarLeftOnDecider {
 
-    /** A gap at or above this reads as the radar left on. Frames arrive
-     *  about every 0.1 s and were never more than 1.35 s apart. */
+    /** On a [TIMEOUT_STATUSES] ending, a gap at or above this reads as the
+     *  radar left on. Frames arrive about every 0.1 s and were never more than
+     *  1.35 s apart. */
     const val WALKED_AWAY_GAP_MS = 2_000L
 
-    /** A gap under this reads as a switch-off. */
+    /** On a [REMOTE_END_STATUSES] ending, a gap under this reads as a
+     *  switch-off. */
     const val CLEAN_SWITCH_OFF_GAP_MS = 1_000L
 
     /** Clean switch-offs a radar must show before the alarm can sound. */
@@ -89,7 +99,7 @@ object RadarLeftOnDecider {
     }
 
     /** The radar's clean switch-off count after [drop]: one more for a clean
-     *  switch-off, back to 0 for an ending that fits neither pattern. */
+     *  switch-off, back to 0 for an unclear one, unchanged otherwise. */
     fun switchOffsAfter(drop: Drop?, count: Int): Int = when (drop) {
         Drop.SWITCHED_OFF -> minOf(count + 1, CALIBRATION_SWITCH_OFFS)
         Drop.UNCLEAR -> 0

@@ -274,6 +274,48 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
+    fun aStaleUnlockedEBikeRidingRunDoesNotSilenceItEither() {
+        // The same run with no lock reading to skip the window on.
+        switchOffs(3)
+        stream()
+        now += 600_000L
+        ebike = LiveDataSnapshot(systemLocked = false)
+        ebikeAtMs = now - 31_000L
+        ridingSinceMs = 1_000L
+        drop(3_500L)
+        tickAt(20_000L, now)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
+    fun aLockReadBeforeTheRidingDoesNotSkipIt() {
+        // Locked at an earlier stop, the unlock never heard, then ridden on.
+        switchOffs(3)
+        stream()
+        now += 600_000L
+        ebike = LiveDataSnapshot(systemLocked = true)
+        ebikeAtMs = now - 300_000L
+        ridingActivityMs = now - 10_000L
+        drop(3_500L)
+        tickAt(20_000L, now)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+    }
+
+    @Test
+    fun anEdgeOfRangeReconnectStaysSilent() {
+        // Accepted: the reconnect ends the first check, and the second link is
+        // too short to qualify.
+        switchOffs(3)
+        walkAway()
+        now += 10_000L
+        stream()
+        now += 10_000L
+        drop(3_500L)
+        tickAt(20_000L, now)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+    }
+
+    @Test
     fun aLockedBikeSkipsTheRidingWindow() {
         // Locked and walked straight off: the last moving frame is inside the
         // 30 s window, and a locked bike is not being ridden.
@@ -497,6 +539,44 @@ class RadarLeftOnAlarmTest {
         drop(3_500L)
         tickAt(20_000L, now)
         assertEquals(2, posted.size)
+    }
+
+    @Test
+    fun aDismissOfTheDashcamAlarmDoesNotHoldThisOne() {
+        switchOffs(3)
+        dashcamAlarmDue()
+        stream()
+        now += 600_000L
+        drop(300L, status = 19)
+        val dropAt = now
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        now = dropAt + 15_000L
+        coordinator.evaluateWalkAway(now)
+        assertEquals(1, dashcamPosts)
+        coordinator.markWalkAwayDismissed(snoozed = false)
+        now += 60_000L
+        walkAway()
+        tickAt(20_000L, now)
+        assertEquals(1, posted.size)
+    }
+
+    @Test
+    fun bluetoothOffHoldsTheDashcamAlarmToo() {
+        // The radar check is over, and the dashcam alarm stays held with it.
+        switchOffs(3)
+        dashcamAlarmDue()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        val dropAt = now
+        coordinator.markAdapterOff()
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        now = dropAt + 15_000L
+        coordinator.evaluateWalkAway(now)
+        tickAt(20_000L, dropAt)
+        assertEquals(0, dashcamPosts)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
     }
 
     @Test

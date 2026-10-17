@@ -659,9 +659,11 @@ internal class RadarLinkCoordinator(
      * opened, which the next attempt can move. Also counts this ending toward
      * that radar's calibration.
      *
-     * Riding is the radar's own 30 s speed latch, skipped when the eBike reads
-     * locked (a locked bike is not being ridden, and a rider who locks and walks
-     * straight off drops the radar inside that window). Never the eBike's
+     * Riding is the radar's own 30 s speed latch, skipped when the eBike read
+     * locked after the last riding frame (a rider who locks and walks straight
+     * off drops the radar inside that window). A lock read before it is an
+     * earlier stop's, whose unlock the reader may have missed
+     * (`aLockReadBeforeTheRidingDoesNotSkipIt`). Never the eBike's
      * riding run, which stays open for [RidingSpeedGate.FRESH_MS] after the
      * last confirmation and would silence every eBike rider's ride-end
      * walk-away (`anEBikeRidingRunStillOpenDoesNotSilenceIt`).
@@ -678,14 +680,16 @@ internal class RadarLinkCoordinator(
             prefs.setRadarLeftOnSwitchOffs(mac, counted)
             journal("walk-away alarm calibration restarted: the radar link ended unclearly")
         }
+        val lastRiding = lastRidingActivityMs() ?: Long.MIN_VALUE
         val dismissedAt = radarLeftOnDismissedAtMs
-        val ridSinceDismiss = dismissedAt != null && (lastRidingActivityMs() ?: Long.MIN_VALUE) > dismissedAt
+        val ridSinceDismiss = dismissedAt != null && lastRiding > dismissedAt
         if (ridSinceDismiss) radarLeftOnDismissedAtMs = null
+        val lockedSinceRiding = eBikeSnapshot()?.systemLocked == true && eBikeSnapshotAtMs() > lastRiding
         val qualified = RadarLeftOnDecider.qualifies(
             drop = drop,
             cleanSwitchOffs = switchOffs,
             armed = armed,
-            ridingAtDrop = radarActivityFreshAtDrop && eBikeSnapshot()?.systemLocked != true,
+            ridingAtDrop = radarActivityFreshAtDrop && !lockedSinceRiding,
             radarBatteryPct = radarBatteryPct(mac),
             streamedMs = streamedMs,
             dismissedUntilRide = dismissedAt != null && !ridSinceDismiss,
@@ -695,12 +699,12 @@ internal class RadarLinkCoordinator(
         return LeftOnAtDrop(qualified, bothLeft)
     }
 
-    /** A qualifying radar-left-on check is waiting to sound, so the dashcam
-     *  alarm holds for it (`aPendingRadarCheckHoldsTheDashcamAlarm`). */
-    private fun radarLeftOnPending(link: RadarLinkState): Boolean = link.radarLeftOnQualified &&
-        !link.radarLeftOnFired &&
-        !link.adapterOffInEpisode &&
-        !adapterOff &&
+    /** This off-episode's drop qualified for the radar-left-on alarm, so the
+     *  dashcam alarm holds for it (`aPendingRadarCheckHoldsTheDashcamAlarm`).
+     *  Once that one sounds it owns the episode; with Bluetooth off neither
+     *  sounds. */
+    private fun radarLeftOnPending(link: RadarLinkState): Boolean = link.radarOffSinceMs != null &&
+        link.radarLeftOnQualified &&
         prefs.radarLeftOnAlarmEnabled
 
     /** Sound the radar-left-on alarm once its check has run. Same race
@@ -712,15 +716,15 @@ internal class RadarLinkCoordinator(
     fun evaluateRadarLeftOn(nowMs: Long) {
         val link = _radarLinkState.value
         val enabled = prefs.radarLeftOnAlarmEnabled
-        val bluetoothOff = link.adapterOffInEpisode || adapterOff
-        val blocked = !enabled || bluetoothOff || link.walkAwayDismissed || link.walkAwayAlarmOwner == WalkAwayAlarmKind.DASHCAM
-        if (link.radarLeftOnQualified && blocked) releaseRadarLeftOnWakeLock()
+        // The other ends of a check release in their own edges: a fire here,
+        // the radar back in markConnected, Bluetooth off in markAdapterOff.
+        if (link.radarLeftOnQualified && !enabled) releaseRadarLeftOnWakeLock()
         val fire = RadarLeftOnDecider.shouldFire(
             enabled = enabled,
             qualified = link.radarLeftOnQualified,
             nowMs = nowMs,
             radarOffSinceMs = link.radarOffSinceMs,
-            adapterOffSinceDrop = bluetoothOff,
+            adapterOffSinceDrop = link.adapterOffInEpisode,
             fired = link.radarLeftOnFired,
             dismissed = link.walkAwayDismissed,
             otherAlarmFired = link.walkAwayAlarmOwner == WalkAwayAlarmKind.DASHCAM,

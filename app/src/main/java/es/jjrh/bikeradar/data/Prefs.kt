@@ -1163,8 +1163,11 @@ class Prefs(context: Context) {
         appendLine("walk_away_alarm_enabled=$walkAwayAlarmEnabled")
         appendLine("walk_away_alarm_threshold_sec=$walkAwayAlarmThresholdSec")
         appendLine("radar_left_on_alarm_enabled=$radarLeftOnAlarmEnabled")
-        // The count only: the address it belongs to stays out of the bundle.
-        appendLine("radar_left_on_switch_offs=${learned.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0)}")
+        // The count only, and 0 once a system update has reset it: the address
+        // it belongs to stays out of the bundle, so another radar can still
+        // read 0 where this shows a count.
+        val calibrationCurrent = learned.getString(KEY_RADAR_LEFT_ON_CAL_BUILD, null) == android.os.Build.FINGERPRINT
+        appendLine("radar_left_on_switch_offs=${if (calibrationCurrent) learned.getInt(KEY_RADAR_LEFT_ON_CAL_COUNT, 0) else 0}")
         appendLine("adaptive_alerts_enabled=$adaptiveAlertsEnabled")
         appendLine("urgent_low_speed_enabled=$urgentLowSpeedEnabled")
         appendLine("urgent_unconfident_wait_enabled=$urgentUnconfidentWaitEnabled")

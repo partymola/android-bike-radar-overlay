@@ -192,6 +192,12 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var radarLeftOnWakeLock: RideWakeLock
 
+    // Taken and released for good under one lock, so a drop racing onDestroy
+    // cannot take the lock after its last release
+    // (`aRadarLeftOnDropAfterTheServiceStopsTakesNoWakeLock`).
+    private val radarLeftOnWakeLockGate = Any()
+    private var stopping = false
+
     // Wakes launchWalkAwayTick out of its idle delay the instant the radar
     // drops, so the loop flips to its 2 s cadence and the first dead-radar
     // evaluation lands on time (not up to 30 s late). CONFLATED: a queued kick
@@ -492,7 +498,11 @@ class BikeRadarService : Service() {
                 (macToSlug[mac] ?: macToSlug[mac.uppercase(Locale.ROOT)])?.let { BatteryStateBus.entries.value[it]?.pct }
             },
             postRadarLeftOnNotification = notifications::postWalkAway,
-            acquireRadarLeftOnWakeLock = { radarLeftOnWakeLock.acquire(RadarLinkCoordinator.RADAR_LEFT_ON_WAKELOCK_CAP_MS) },
+            acquireRadarLeftOnWakeLock = {
+                synchronized(radarLeftOnWakeLockGate) {
+                    if (!stopping) radarLeftOnWakeLock.acquire(RadarLinkCoordinator.RADAR_LEFT_ON_WAKELOCK_CAP_MS)
+                }
+            },
             releaseRadarLeftOnWakeLock = { radarLeftOnWakeLock.release() },
         )
         radarLinkStateForUi = radarLinkCoordinator.radarLinkState
@@ -776,8 +786,10 @@ class BikeRadarService : Service() {
         // not crash here.
         stopEBikeReader()
         scope.cancel()
-        // After the cancel: a radar drop until then can still take it.
-        if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
+        synchronized(radarLeftOnWakeLockGate) {
+            stopping = true
+            if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
+        }
         // After scope.cancel(), not before: the reconnect loop opens the file at
         // the top of every attempt in transcript mode, so closing it while that
         // loop can still resume from its backoff leaves a stray header-only file

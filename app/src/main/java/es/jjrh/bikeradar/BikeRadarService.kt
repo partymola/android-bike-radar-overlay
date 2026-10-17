@@ -192,10 +192,11 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var radarLeftOnWakeLock: RideWakeLock
 
-    // Taken and released for good under one lock, so a drop racing onDestroy
-    // cannot take the lock after its last release
+    // Both wakelocks are taken and released for good under one lock, so a drop
+    // racing onDestroy, including the one the cancelled link loop reports,
+    // cannot take either after its last release
     // (`aRadarLeftOnDropAfterTheServiceStopsTakesNoWakeLock`).
-    private val radarLeftOnWakeLockGate = Any()
+    private val wakeLockGate = Any()
     private var stopping = false
 
     // Wakes launchWalkAwayTick out of its idle delay the instant the radar
@@ -492,14 +493,18 @@ class BikeRadarService : Service() {
                 if (ebikeSnapshotCoordinator.forgetSilentLock()) linkJournal.log("ebike lock reading dropped as the ride began")
             },
             wakeTick = { walkAwayKick.trySend(Unit) },
-            acquireRideWakeLock = { rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS) },
+            acquireRideWakeLock = {
+                synchronized(wakeLockGate) {
+                    if (!stopping) rideWakeLock.acquire(RadarLinkCoordinator.RIDE_WAKELOCK_CAP_MS)
+                }
+            },
             releaseRideWakeLock = { rideWakeLock.release() },
             radarBatteryPct = { mac ->
                 (macToSlug[mac] ?: macToSlug[mac.uppercase(Locale.ROOT)])?.let { BatteryStateBus.entries.value[it]?.pct }
             },
             postRadarLeftOnNotification = notifications::postWalkAway,
             acquireRadarLeftOnWakeLock = {
-                synchronized(radarLeftOnWakeLockGate) {
+                synchronized(wakeLockGate) {
                     if (!stopping) radarLeftOnWakeLock.acquire(RadarLinkCoordinator.RADAR_LEFT_ON_WAKELOCK_CAP_MS)
                 }
             },
@@ -777,7 +782,6 @@ class BikeRadarService : Service() {
             reconnectBannerView = null
         }
         if (::walkAwayAlarm.isInitialized) walkAwayAlarm.shutdown()
-        if (::rideWakeLock.isInitialized) rideWakeLock.release()
         alertBeeper?.release()
         alertBeeper = null
         // Lifecycle teardown: stop the eBike status reader and tear down the
@@ -786,8 +790,9 @@ class BikeRadarService : Service() {
         // not crash here.
         stopEBikeReader()
         scope.cancel()
-        synchronized(radarLeftOnWakeLockGate) {
+        synchronized(wakeLockGate) {
             stopping = true
+            if (::rideWakeLock.isInitialized) rideWakeLock.release()
             if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
         }
         // After scope.cancel(), not before: the reconnect loop opens the file at

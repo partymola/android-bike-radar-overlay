@@ -1365,6 +1365,43 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aRideDropAfterTheServiceStopsTakesNoWakeLock() {
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        service.lastRidingActivityMs = android.os.SystemClock.elapsedRealtime()
+        service.radarLinkCoordinator.markConnected()
+        service.radarLinkCoordinator.markDisconnected()
+        assertTrue(service.rideWakeLock.isHeld())
+        controller.destroy()
+        assertFalse("the service stopping must release it", service.rideWakeLock.isHeld())
+        service.radarLinkCoordinator.markConnected()
+        service.lastRidingActivityMs = android.os.SystemClock.elapsedRealtime()
+        service.radarLinkCoordinator.markDisconnected()
+        assertFalse("nor take it again after", service.rideWakeLock.isHeld())
+    }
+
+    @Test
+    fun theRadarLeftOnWakeLockLapsesAtItsCap() {
+        // A dismissed episode never sounds, so only the cap ends the hold.
+        Prefs(app).setRadarLeftOnSwitchOffs(RADAR_A, 3)
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        val coordinator = service.radarLinkCoordinator
+        coordinator.markLinkOpen(RADAR_A)
+        coordinator.markConnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(10))
+        coordinator.markDisconnected(LinkLoss(3_500L, 147))
+        coordinator.markWalkAwayDismissed(snoozed = true)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(34))
+        assertTrue(service.radarLeftOnWakeLock.isHeld())
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
+        assertFalse("held past 35 s", service.radarLeftOnWakeLock.isHeld())
+        controller.destroy()
+    }
+
+    @Test
     fun theServicesOwnTickSoundsTheRadarLeftOnAlarm() {
         // Nothing else calls evaluateRadarLeftOn: dropped from the tick, the
         // alarm would be wired and never sound.

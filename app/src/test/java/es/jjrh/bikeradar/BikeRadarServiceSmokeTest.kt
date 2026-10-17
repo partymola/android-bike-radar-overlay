@@ -401,11 +401,14 @@ class BikeRadarServiceSmokeTest {
         val cb = requireNotNull(cbRef.get())
         val gatt = requireNotNull(gattRef.get())
         cb.onConnectionStateChange(gatt, 0, android.bluetooth.BluetoothProfile.STATE_CONNECTED)
+        // The reader appends on its own thread, and iterating a synchronized
+        // list needs its lock or the iteration throws.
+        fun subscribed() = synchronized(logs) { logs.any { "subscribed" in it } }
         idleMainUntil {
             cb.onDescriptorWrite(gatt, status.getDescriptor(Uuids.CCCD), 0)
-            logs.any { "subscribed" in it }
+            subscribed()
         }
-        assertTrue("the reader must reach streaming; log=$logs", logs.any { "subscribed" in it })
+        assertTrue("the reader must reach streaming; log=$logs", subscribed())
 
         // Battery 72 %: the reader is now inside its handler with this frame.
         cb.onCharacteristicChanged(gatt, status, "300480880848".hexToBytes())

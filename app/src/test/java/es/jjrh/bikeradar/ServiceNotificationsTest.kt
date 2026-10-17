@@ -124,14 +124,31 @@ class ServiceNotificationsTest {
 
     @Test fun walkAwayPostsWithDismissAndSnoozeActionsThenCancels() {
         val n = notifications()
-        n.postWalkAway(WalkAwayAlarmKind.DASHCAM)
-        val sbn = nm.activeNotifications.single()
-        assertEquals(ServiceNotifications.WALKAWAY_CHANNEL_ID, sbn.notification.channelId)
-        assertEquals(app.getString(R.string.svc_main_walkaway_notif_title), title(sbn))
-        // Dismiss + Snooze: both actions must be present for the rider to act.
-        assertEquals(2, sbn.notification.actions.size)
-        n.cancelWalkAway()
-        assertEquals(0, nm.activeNotifications.size)
+        val expected = mapOf(
+            WalkAwayAlarmKind.DASHCAM to (
+                "Dashcam still on" to
+                    "The radar has disconnected but the dashcam is still on. Turn it off to save its battery."
+                ),
+            WalkAwayAlarmKind.RADAR to (
+                "Radar still on?" to
+                    "Looks like it went out of range while still on. Go back and turn it off."
+                ),
+            WalkAwayAlarmKind.RADAR_AND_DASHCAM to (
+                "Radar and dashcam still on?" to
+                    "Looks like the radar went out of range while still on, and the dashcam was on too. Turn them both off."
+                ),
+        )
+        for ((kind, words) in expected) {
+            n.postWalkAway(kind)
+            val sbn = nm.activeNotifications.single()
+            assertEquals(ServiceNotifications.WALKAWAY_CHANNEL_ID, sbn.notification.channelId)
+            assertEquals(words.first, title(sbn))
+            assertEquals(words.second, bigText(sbn))
+            // One alert slot, so the dismiss and snooze buttons answer whichever sounded.
+            assertEquals(listOf("Dismiss", "Remind in 2 min"), sbn.notification.actions.map { it.title.toString() })
+            n.cancelWalkAway()
+            assertEquals(0, nm.activeNotifications.size)
+        }
     }
 
     @Test fun forgotToLockPostsToForgotLockChannelAndVibrates() {

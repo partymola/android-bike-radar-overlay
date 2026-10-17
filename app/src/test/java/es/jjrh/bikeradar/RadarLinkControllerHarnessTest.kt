@@ -873,12 +873,38 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aWalkAwayGapOutlastsTheWatchdogsTicksBeforeTheTimeout() = runTest {
+        // A radar walked away from goes silent 3 to 4 s before its link times
+        // out. A watchdog stall shorter than that would end the link from the
+        // app's side first, and the loss would never reach the alarm.
+        val link = Link()
+        val gateway = FakeGateway()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(10_000L)
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { gateway.connects == 1 })
+        clockMs.set(14_500L)
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertFalse("journal=$journal", journalHas("V2 stream silent"))
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertEquals("losses=${gateway.losses}", listOf(LinkLoss(4_500L, 147)), gateway.losses.filterNotNull())
+        controller.forceReconnect()
+    }
+
     @Test fun aWatchdogTeardownJournalsNoGap() = runTest {
         // The app chose when this link ended, so its gap says nothing about
         // the radar. The watchdog line carries both clocks instead.
         val link = Link()
+        val gateway = FakeGateway()
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
-        val controller = controller(link, clock = { clockMs.get() })
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -896,6 +922,7 @@ class RadarLinkControllerHarnessTest {
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         assertFalse("journal=$journal", journalHas("radar link lost"))
+        assertEquals("losses=${gateway.losses}", emptyList<LinkLoss>(), gateway.losses.filterNotNull())
         controller.forceReconnect()
     }
 
@@ -903,8 +930,9 @@ class RadarLinkControllerHarnessTest {
         // A forced reconnect, a pin move or Bluetooth going off cancels the
         // loop; a disconnect callback arriving after that is the app's ending.
         val link = Link()
+        val gateway = FakeGateway()
         val clockMs = java.util.concurrent.atomic.AtomicLong(10_000L)
-        val controller = controller(link, clock = { clockMs.get() })
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -923,6 +951,7 @@ class RadarLinkControllerHarnessTest {
         clockMs.set(10_300L)
         cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertFalse("journal=$journal", journalHas("radar link lost"))
+        assertEquals("losses=${gateway.losses}", emptyList<LinkLoss>(), gateway.losses.filterNotNull())
     }
 
     @Test fun aLinkThatNeverStreamedJournalsNoGap() = runTest {

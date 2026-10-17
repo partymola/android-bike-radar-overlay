@@ -1383,7 +1383,11 @@ internal class RadarLinkController(
 
         // V2 data-flow watchdog: if no V2 notification arrives for
         // V2_FRAME_STALL_MS, the link is considered stuck and the GATT is torn
-        // down so the outer loop reconnects.
+        // down so the outer loop reconnects. The stall must outlast the silence
+        // before a walked-away radar's link times out (3 to 4 s on the one phone
+        // and radar measured), or the teardown ends the link first and the
+        // radar-left-on alarm never hears of it
+        // (`aWalkAwayGapOutlastsTheWatchdogsTicksBeforeTheTimeout`).
         const val V2_WATCHDOG_TICK_MS = 2_000L
         const val V2_FRAME_STALL_MS = 5_000L
 

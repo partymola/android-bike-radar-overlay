@@ -171,8 +171,8 @@ class RadarLeftOnAlarmTest {
 
     @Test
     fun aLinkBluetoothEndedLeavesCalibrationAlone() {
-        // The drop reported after the adapter-off broadcast, the one order the
-        // guard covers.
+        // The drop reported after the adapter-off broadcast; the other order
+        // is aBluetoothOffJustAfterADropUndoesItsCount.
         switchOffs(2)
         coordinator.markAdapterOff()
         stream()
@@ -186,6 +186,54 @@ class RadarLeftOnAlarmTest {
         now += 600_000L
         drop(1_500L, status = 257)
         assertEquals("nor restarted", 2, prefs.radarLeftOnSwitchOffs(RADAR_A))
+    }
+
+    @Test
+    fun aBluetoothOffJustAfterADropUndoesItsCount() {
+        // The other order: the link's end reported first, then the adapter.
+        switchOffs(2)
+        stream()
+        now += 600_000L
+        drop(300L, status = 257)
+        assertEquals(3, prefs.radarLeftOnSwitchOffs(RADAR_A))
+        now += 5_000L
+        coordinator.markAdapterOff()
+        assertEquals("a switch-off undone", 2, prefs.radarLeftOnSwitchOffs(RADAR_A))
+        assertTrue(journal.contains("walk-away alarm calibration change undone: Bluetooth went off"))
+        coordinator.markAdapterOn()
+        now += 60_000L
+        switchOffs(1)
+        stream()
+        now += 600_000L
+        drop(1_500L, status = 257)
+        assertEquals(0, prefs.radarLeftOnSwitchOffs(RADAR_A))
+        now += 1_000L
+        coordinator.markAdapterOff()
+        assertEquals("a restart undone", 3, prefs.radarLeftOnSwitchOffs(RADAR_A))
+    }
+
+    @Test
+    fun aBluetoothOffLaterLeavesTheCountAlone() {
+        switchOffs(2)
+        stream()
+        now += 600_000L
+        drop(300L, status = 257)
+        now += 5_001L
+        coordinator.markAdapterOff()
+        assertEquals(3, prefs.radarLeftOnSwitchOffs(RADAR_A))
+        assertFalse(journal.any { it.startsWith("walk-away alarm calibration change undone") })
+    }
+
+    @Test
+    fun aStreamAfterTheDropKeepsItsCount() {
+        switchOffs(2)
+        stream()
+        now += 600_000L
+        drop(300L, status = 257)
+        now += 1_000L
+        stream()
+        coordinator.markAdapterOff()
+        assertEquals(3, prefs.radarLeftOnSwitchOffs(RADAR_A))
     }
 
     @Test

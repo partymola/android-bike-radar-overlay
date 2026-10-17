@@ -201,6 +201,19 @@ internal class RadarLinkCoordinator(
     // during the off-episode, silences the radar-left-on alarm.
     @Volatile private var adapterOff = false
 
+    // The last calibration change a drop made: the radar, its count before it,
+    // and when. Bluetooth going off shortly after undoes it, so that radar's
+    // count does not depend on whether Android reports the link's end before
+    // or after the adapter (`aBluetoothOffJustAfterADropUndoesItsCount`). A
+    // different radar remembered before it is not brought back; it calibrates
+    // again. The drop arrives on the Bluetooth callback thread and the adapter
+    // edge on the main thread, so both take [calibrationLock].
+    private class CalibrationChange(val mac: String, val before: Int, val atMs: Long)
+
+    @Volatile private var lastCalibrationChange: CalibrationChange? = null
+
+    private val calibrationLock = Any()
+
     // When the rider last dismissed the radar-left-on alarm. Until the radar
     // next shows riding, no drop qualifies, so a radar left on at the edge of
     // range does not sound again at every reconnect
@@ -323,9 +336,19 @@ internal class RadarLinkCoordinator(
     }
 
     /** Bluetooth went off. Ends a pending radar-left-on check for this
-     *  off-episode, and a drop while it stays off starts none. */
+     *  off-episode, and a drop while it stays off starts none. A calibration
+     *  change a drop made within [ADAPTER_OFF_DROP_WINDOW_MS] before it is
+     *  undone, since that drop was most likely Bluetooth's. */
     fun markAdapterOff() {
-        adapterOff = true
+        synchronized(calibrationLock) {
+            adapterOff = true
+            val change = lastCalibrationChange
+            lastCalibrationChange = null
+            if (change != null && clock() - change.atMs <= ADAPTER_OFF_DROP_WINDOW_MS) {
+                prefs.setRadarLeftOnSwitchOffs(change.mac, change.before)
+                journal("walk-away alarm calibration change undone: Bluetooth went off")
+            }
+        }
         _radarLinkState.update { if (it.radarOffSinceMs != null) it.copy(adapterOffInEpisode = true) else it }
         releaseRadarLeftOnWakeLock()
     }
@@ -431,6 +454,8 @@ internal class RadarLinkCoordinator(
         // New radar presence episode: clear dashcam-probe backoff so the camera
         // is re-probed promptly this ride (the storm guard resets per ride).
         clearDashcamBackoff()
+        // The radar streamed again, so the last ending was not Bluetooth's.
+        lastCalibrationChange = null
         // A connect that begins a ride, the session's first or one past the
         // new-ride gap: a lock the bike stopped sending before it is an
         // earlier ride's. Not on every reconnect
@@ -673,18 +698,22 @@ internal class RadarLinkCoordinator(
     private fun radarLeftOnAtDrop(nowMs: Long, loss: LinkLoss?, armed: Boolean, streamedMs: Long): LeftOnAtDrop {
         val mac = lastLinkOpenMac ?: return LeftOnAtDrop(qualified = false, bothLeft = false)
         val drop = RadarLeftOnDecider.classify(loss)
-        val switchOffs = prefs.radarLeftOnSwitchOffs(mac)
         // A link Bluetooth going off ended says nothing about how this radar
-        // switches off. Covers only a drop reported after the adapter-off
-        // broadcast; whether Android ever reports one before it is not
-        // measured.
-        val counted = if (adapterOff) switchOffs else RadarLeftOnDecider.switchOffsAfter(drop, switchOffs)
-        if (counted > switchOffs) {
-            prefs.setRadarLeftOnSwitchOffs(mac, counted)
-            journal("walk-away alarm counted a radar switch-off ($counted of ${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})")
-        } else if (counted < switchOffs) {
-            prefs.setRadarLeftOnSwitchOffs(mac, counted)
-            journal("walk-away alarm calibration restarted: the radar link ended unclearly")
+        // switches off. A drop reported after the adapter-off broadcast is
+        // skipped here; one reported just before it is undone by
+        // [markAdapterOff].
+        val switchOffs = synchronized(calibrationLock) {
+            val before = prefs.radarLeftOnSwitchOffs(mac)
+            val counted = if (adapterOff) before else RadarLeftOnDecider.switchOffsAfter(drop, before)
+            if (counted > before) {
+                prefs.setRadarLeftOnSwitchOffs(mac, counted)
+                journal("walk-away alarm counted a radar switch-off ($counted of ${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})")
+            } else if (counted < before) {
+                prefs.setRadarLeftOnSwitchOffs(mac, counted)
+                journal("walk-away alarm calibration restarted: the radar link ended unclearly")
+            }
+            if (counted != before) lastCalibrationChange = CalibrationChange(mac, before, nowMs)
+            before
         }
         val lastRiding = lastRidingActivityMs() ?: Long.MIN_VALUE
         val dismissedAt = radarLeftOnDismissedAtMs
@@ -1357,5 +1386,14 @@ internal class RadarLinkCoordinator(
         /** Cap on the radar-left-on wakelock: its check plus slack for a
          *  late tick (`theRadarLeftOnWakeLockOutlastsTheCheck`). */
         const val RADAR_LEFT_ON_WAKELOCK_CAP_MS = RadarLeftOnDecider.CHECK_MS + 15_000L
+
+        /** A calibration change made this soon before Bluetooth goes off is
+         *  taken as Bluetooth's doing and undone. An allowance, not a
+         *  measurement: the stack ends its links as it turns off, moments
+         *  before it reports off. The cost runs both ways for an ending this
+         *  close before the rider turns Bluetooth off: a real switch-off loses
+         *  its count, which only delays the alarm, and a real unclear ending
+         *  keeps the count it would have reset. */
+        const val ADAPTER_OFF_DROP_WINDOW_MS = 5_000L
     }
 }

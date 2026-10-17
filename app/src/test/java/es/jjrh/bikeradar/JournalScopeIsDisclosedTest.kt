@@ -99,6 +99,7 @@ class JournalScopeIsDisclosedTest {
         // The radar-left-on alarm, which the disclosure calls the walk-away alarm too.
         Event("walk-away alarm counted a radar switch-off (\$counted of \${RadarLeftOnDecider.CALIBRATION_SWITCH_OFFS})", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm calibration restarted: the radar link ended unclearly", "walk-away alarm", "alarma al alejarte"),
+        Event("walk-away alarm calibration change undone: Bluetooth went off", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm armed: the radar may have been left on", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm sounded: radar left on", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm sounded: radar and dashcam left on", "walk-away alarm", "alarma al alejarte"),

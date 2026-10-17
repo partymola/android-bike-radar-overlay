@@ -1340,6 +1340,29 @@ class BikeRadarServiceSmokeTest {
         BikeRadarService.macToSlug.clear()
     }
 
+    @Test
+    fun theServicesOwnTickSoundsTheRadarLeftOnAlarm() {
+        // Nothing else calls evaluateRadarLeftOn: dropped from the tick, the
+        // alarm would be wired and never sound.
+        Prefs(app).setRadarLeftOnSwitchOffs(RADAR_A, 3)
+        val nm = app.getSystemService(NotificationManager::class.java)
+        nm.cancelAll()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val coordinator = controller.get().radarLinkCoordinator
+        coordinator.markLinkOpen(RADAR_A)
+        coordinator.markConnected()
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(10))
+        coordinator.markDisconnected(LinkLoss(3_500L, 147))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(21))
+        fun sounded() = shadowOf(nm).allNotifications.any { it.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() == "Radar still on?" }
+        // The loop's 2 s sleep is in real time.
+        val deadline = System.currentTimeMillis() + 8_000L
+        while (!sounded() && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        assertTrue("the tick never sounded it", sounded())
+        controller.destroy()
+    }
+
     // ── "restarted mid-ride" attention flag ──────────────────────────────────
 
     private fun midRideCheckpoint(): RideHistoryRecord = RideHistoryRecord(

@@ -371,16 +371,34 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun theRadarComingBackStopsTheToneWithTheAlert() {
-        // The rider is back at the bike and the radar streams again. The tone
-        // must stop there, not run on at forced maximum to its 60 s cap.
         val off = armForFire()
         val fireAt = off + 31_000L
         BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, alarmStartCount)
         assertEquals(0, alarmStopCount)
-        connectAt(fireAt + 5_000L)
+        // The first frame, not the link opening: a failing attempt opens the
+        // link too, and must not silence the alarm.
+        now = fireAt + 5_000L
+        coordinator.markLinkOpen(RADAR)
+        assertEquals(0, alarmStopCount)
+        coordinator.markConnected()
         assertEquals(1, cancelWalkAwayCount)
+        assertEquals(1, alarmStopCount)
+    }
+
+    @Test
+    fun aRadarBackPastTheNewRideGapStillStopsTheTone() {
+        // The tone re-fires every 5 min while the alarm stays armed, so it can
+        // be playing when the rider comes back after the new-ride gap.
+        prefs.radarLongOfflineThresholdMinutes = 5
+        val off = armForFire()
+        val fireAt = off + 310_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(1, alarmStartCount)
+        connectAt(fireAt + 5_000L)
+        assertTrue("a new ride", snap().newRideAtConnect)
         assertEquals(1, alarmStopCount)
     }
 
@@ -2692,13 +2710,13 @@ class RadarLinkCoordinatorTest {
         connectAt(1_000L)
         disconnectAt(4_000L)
         val before = snap()
-        val counts = listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount)
+        val counts = listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount, alarmStopCount)
         failingAttempts(from = 10_000L, until = 40_000L) { }
         val after = snap()
         // The connecting stretch is the only other field: the home card's
         // advice reads it, and no alert does.
         assertEquals(before.copy(radarLinkClosedAtMs = 39_000L, connectingSinceMs = 10_000L), after)
-        assertEquals(counts, listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount))
+        assertEquals(counts, listOf(wakeTickCount, wakeLockAcquireCount, wakeLockReleaseCount, snoozeCancelCount, dashcamBackoffClearCount, alarmStopCount))
         assertEquals(0, clogged("state=IDLE"))
         disconnectAt(45_000L) // an attempt that never opened the link
         assertEquals(39_000L, snap().radarLinkClosedAtMs)
@@ -2719,6 +2737,7 @@ class RadarLinkCoordinatorTest {
         val before = snap()
         fun effects() = listOf(
             cancelWalkAwayCount,
+            alarmStopCount,
             forgotToLockCancelCount,
             snoozeCancelCount,
             trackClearCount,

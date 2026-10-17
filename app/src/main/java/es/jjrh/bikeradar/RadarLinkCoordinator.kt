@@ -333,8 +333,8 @@ internal class RadarLinkCoordinator(
      *  cleanup likewise fires here, on the radar's first frame, not
      *  lazily on the next tick.
      *
-     *  Side effects (notification cancel, snooze-job cancel, clog) sit
-     *  OUTSIDE the [update] lambda - the lambda may run multiple times
+     *  Every side effect below sits OUTSIDE the [update] lambda - the
+     *  lambda may run multiple times
      *  on a CAS retry, but these effects must fire exactly once per
      *  observed transition. The snapshot read of the prior state is the
      *  arbiter for whether to fire the effects. */
@@ -398,7 +398,7 @@ internal class RadarLinkCoordinator(
             val prevState = if (prev.walkAwayArmed) "ARMED" else "BLANK"
             cancelWalkAwaySnooze()
             cancelWalkAwayNotification()
-            // The tone too, or it runs on at forced maximum to its 60 s cap
+            // The tone too, or it runs on at forced maximum to its cap
             // (`theRadarComingBackStopsTheToneWithTheAlert`).
             stopWalkAwayAlarm()
             // Radar back = rider returned to the bike: clear the forgot-to-lock

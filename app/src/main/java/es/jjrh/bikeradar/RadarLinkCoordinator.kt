@@ -333,11 +333,10 @@ internal class RadarLinkCoordinator(
      *  cleanup likewise fires here, on the radar's first frame, not
      *  lazily on the next tick.
      *
-     *  Every side effect below sits OUTSIDE the [update] lambda - the
-     *  lambda may run multiple times
-     *  on a CAS retry, but these effects must fire exactly once per
-     *  observed transition. The snapshot read of the prior state is the
-     *  arbiter for whether to fire the effects. */
+     *  Every side effect below sits OUTSIDE the [update] lambda, which may
+     *  run more than once on a CAS retry; the ones keyed to the off-episode
+     *  fire exactly once per observed transition. The snapshot read of the
+     *  prior state is the arbiter for whether to fire them. */
     override fun markConnected() {
         val nowMs = clock()
         val prev = _radarLinkState.value
@@ -691,15 +690,18 @@ internal class RadarLinkCoordinator(
             WalkAwayDecider.Action.FIRE -> {
                 postWalkAwayNotification()
                 startWalkAwayAlarm()
-                // Decided on a snapshot taken with the radar off. Its first frame
-                // can land before the post and start above, and its cancel and
-                // stop then ran first; undo them for an episode that has ended
-                // (`aReconnectBetweenTheFireDecisionAndTheToneStillLeavesItStopped`).
+                // Decided on a snapshot. The radar's first frame, or the
+                // rider's Dismiss or Snooze, can land before the post and
+                // start above, and its cancel and stop then ran first, so
+                // undo this tick's post and start when the episode has ended
+                // or been dismissed
+                // (`aReconnectBetweenTheFireDecisionAndTheToneStillLeavesItStopped`,
+                // `aDismissBetweenTheFireDecisionAndTheToneStillLeavesItStopped`).
                 val offAt = link.radarOffSinceMs
                 val after = _radarLinkState.updateAndGet {
                     if (it.radarOffSinceMs == offAt) it.copy(lastWalkAwayFireMs = nowMs) else it
                 }
-                if (after.radarOffSinceMs != offAt) {
+                if (after.radarOffSinceMs != offAt || after.walkAwayDismissed) {
                     cancelWalkAwayNotification()
                     stopWalkAwayAlarm()
                 }

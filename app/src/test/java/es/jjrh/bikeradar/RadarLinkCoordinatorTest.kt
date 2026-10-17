@@ -422,6 +422,39 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
+    fun aSecondDropBetweenTheFireDecisionAndTheToneStillLeavesItStopped() {
+        // The radar returns and drops again in the window: a new episode,
+        // which has not reached its own threshold.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        onWalkAwayPosted = {
+            now = fireAt + 1L
+            coordinator.markLinkOpen(RADAR)
+            coordinator.markConnected()
+            disconnectAt(fireAt + 2L)
+        }
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals("stop", alarmEvents.last())
+        assertNull(snap().lastWalkAwayFireMs)
+        assertEquals(fireAt + 2L, snap().radarOffSinceMs)
+    }
+
+    @Test
+    fun aDismissBetweenTheFireDecisionAndTheToneStillLeavesItStopped() {
+        // The rider taps Dismiss (or Snooze) as a re-fire is decided; the
+        // service stops the tone, then the tick would start it again.
+        val off = armForFire()
+        val fireAt = off + 31_000L
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        onWalkAwayPosted = { coordinator.markWalkAwayDismissed(snoozed = false) }
+        coordinator.evaluateWalkAway(fireAt)
+        assertEquals(1, alarmStartCount)
+        assertEquals("stop", alarmEvents.last())
+        assertEquals(1, cancelWalkAwayCount)
+    }
+
+    @Test
     fun aRadarBackPastTheNewRideGapStillStopsTheTone() {
         // The tone re-fires every 5 min while the alarm stays armed, so it can
         // be playing when the rider comes back after the new-ride gap.

@@ -52,9 +52,10 @@ internal interface AlarmTone {
  *  - it vibrates explicitly via the `Vibrator` service, because channel-level
  *    vibration is DND-suppressed when the channel doesn't bypass DND.
  *
- * [start], [stop] and [shutdown] are `@Synchronized` on this instance so the FIRE path, the
- * dismiss / snooze / auto-dismiss handlers, the radar-reconnect stop, the
- * self-capping job, and onDestroy teardown can't interleave the ringtone / focus / saved-volume state. The tone
+ * [start], [stop] and [shutdown] are `@Synchronized` on this instance so the
+ * FIRE path, the dismiss / snooze / auto-dismiss handlers, the radar-reconnect
+ * stop, the self-capping job, and onDestroy teardown can't interleave the
+ * ringtone / focus / saved-volume state. The tone
  * self-caps after [WALKAWAY_RINGTONE_CAP_MS]; the decider's rate limit then
  * re-fires the notification for another bounded window if the rider still hasn't
  * acted.

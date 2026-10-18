@@ -1,5 +1,75 @@
 # Changelog
 
+## v1.10.0 - 2026-10-18
+
+### Features
+
+- **The walk-away alarm sounds if you walk off with the radar still on.**
+  - It learns from 3 ordinary switch-offs first. It stays quiet if the radar drops while you ride or within 30 s of stopping. Not on radars that report distance only. Tried so far on one phone and one radar.
+  - On after installing this version, unless you had turned the dashcam's walk-away alarm off. The switch is in Settings -> Alerts.
+- **Setup can pick a radar the app doesn't recognise by name.**
+
+### Fixes
+
+- **After a car passes you, the app now beeps for the next car behind.** Before, that car could pass you without a sound. A few still can.
+  - The app also beeps for a car that overtakes the one you heard about, while both are behind you.
+  - It beeps for how far back that car is, so two beeps after three means it is at mid distance.
+- **The number of beeps no longer goes down until the app sees the car you heard about pass you.** Before, two beeps after three could be about a car further back, which sounded like the close car dropping back.
+  - A radar that reports distance only sees fewer passes. On one with no data from an eBike, the number can go down a few seconds after the radar loses the cars that got the higher number.
+- **Declining Notifications no longer turns off the beeps and the overlay.** On Android 13 and later, the radar needs only Nearby devices now.
+- **Allowing Nearby devices or Notifications in Android's settings starts the radar straight away.** Before, it stayed off until you restarted the app or the phone.
+- **Stop scanning now keeps the radar off.** If the app had closed unexpectedly, the radar could reconnect by itself while the app was open, or when you swiped away an old walk-away alert.
+- **The dashcam's walk-away alarm no longer needs the overlay's camera-off warning.** With that warning off, the alarm never sounded and its settings were hidden.
+  - If that warning was off, installing this version turns the dashcam's alarm off once. Turn it on in Settings -> Dashcam.
+- **The dashcam's walk-away alarm no longer keeps sounding after the radar comes back.** It could ring at full volume for up to a minute.
+  - It could also start just as the app stopped, with nothing left to stop it.
+  - Tapping Dismiss or Remind in 2 min could start it again.
+- **Light auto-mode uses your area, not London, even if you don't open the app before you ride.** Before, those rides used London's sunset.
+  - The app keeps one rough area on the phone, outside your backup.
+- **Choosing a different radar works straight away.** Before, the old radar stayed connected until you restarted the app.
+- **Unpairing the radar no longer leaves the app trying to connect to it**, on Android 13 and later.
+- **A headset with "rtl" in its name is no longer taken for a radar.** It could stop your real radar from connecting.
+- **An eBike paired while the app is running now sends data.** Before, it showed Not paired until you restarted the app or Bluetooth.
+- **Setup's Home Assistant test checks MQTT too.** It said connected even when MQTT was missing.
+- **A ride no longer shows twice in ride history**, or makes it crash.
+- **Ride history and the ride summary no longer say "0 close passes" when close passes weren't being counted.**
+- **A failed alert sound now suggests restarting the phone.** Before, it said to check the media volume, which was never the cause.
+- **The home screen links to ride history whenever you have one.** Before, it needed close-pass counting on.
+
+### Security
+
+- **The report you copy for a bug report hides serial numbers in device names.**
+
+### Improvements
+
+- **If Nearby devices or Notifications isn't allowed, the home screen says which and opens Permissions.** Before, it said "Radar not paired" or "Waiting for radar".
+- **The home screen says when it is still connecting to the radar.**
+- **Pair lets you pick your radar when it is paired under another name.**
+- **Bigger buttons, and clearer for screen readers.**
+- **Alert sounds and the example ride now say what two and three beeps mean: a vehicle at mid distance, and one close to you.**
+- **The eBike screens say what the app reads from the bike.**
+- **A rule meant to keep beeps on during slow climbs is gone.** On the developer's rides it never changed a beep.
+
+### Battery
+
+- **When the radar disconnects and may have been left on, the phone stays awake for up to 35 s.** This stops the phone's sleep from delaying the walk-away alarm.
+
+### Bug reports
+
+- The logs you can send with a bug report now include your alert settings and how each radar connection ended. They also say why each beep sounded.
+- Bug reports can be written in Spanish.
+
+### Upgrading
+
+- Still works on Android 12 and later.
+- On the developer's rides there were a few more beeps in traffic, so alerts per km and per hour rise a little, in the ride summary and in Home Assistant.
+- Nothing else changes in Home Assistant, in which radars work, or for other apps that use your radar.
+- On a new phone, and after a system update or a change of radar, the radar's walk-away alarm learns your switch-offs again.
+
+### For developers
+
+- The privacy check runs on every push. Kotlin Compose plugin 2.4.21, Gradle 9.8.1, actions/upload-artifact 7.0.2.
+
 ## v1.9.0 - 2026-10-09
 
 ### Fix

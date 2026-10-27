@@ -572,7 +572,9 @@ internal class RadarLinkCoordinator(
         }
         val streamedMs = prev.radarConnectStartMs?.let { nowMs - it } ?: 0L
         val leftOn = if (freshOffEpisode) radarLeftOnAtDrop(nowMs, loss, armOnDisconnect, streamedMs) else null
+        var closedALink = false
         val after = _radarLinkState.updateAndGet { current ->
+            closedALink = current.radarGattActive
             val addedMs = current.radarConnectStartMs?.let { nowMs - it } ?: 0L
             val fresh = current.radarOffSinceMs == null
             current.copy(
@@ -598,6 +600,14 @@ internal class RadarLinkCoordinator(
         if (leftOn?.qualified == true && after.radarLeftOnQualified && !after.adapterOffInEpisode) {
             acquireRadarLeftOnWakeLock()
             journal("walk-away alarm armed: the radar may have been left on")
+        }
+        // A link opened during the check closed without streaming: the check
+        // restarts from here, so the lock does too. Only an attempt's first
+        // disconnect edge closes its link; the later ones take nothing
+        // (`aLinkThatClosesAgainReArmsTheWakeLockOnce`).
+        if (!freshOffEpisode && closedALink && radarLeftOnPending(after) && !after.adapterOffInEpisode) {
+            releaseRadarLeftOnWakeLock()
+            acquireRadarLeftOnWakeLock()
         }
         if (freshOffEpisode) {
             // Flip the walk-away tick loop to its fast cadence immediately, so the
@@ -742,7 +752,10 @@ internal class RadarLinkCoordinator(
 
     /** This off-episode's drop qualified for the radar-left-on alarm and no
      *  alarm has sounded yet, so the dashcam alarm holds for it
-     *  (`aPendingRadarCheckHoldsTheDashcamAlarm`). Once either sounds it owns
+     *  (`aPendingRadarCheckHoldsTheDashcamAlarm`), including while an open
+     *  link holds or restarts that check
+     *  (`theDashcamAlarmStaysHeldWhileTheLinkIsOpen`,
+     *  `aRestartedCheckStillHoldsTheDashcamAlarm`). Once either sounds it owns
      *  the episode, so a dashcam alarm already sounding keeps its repeats and
      *  its auto-dismiss; with Bluetooth off neither sounds. */
     private fun radarLeftOnPending(link: RadarLinkState): Boolean = link.radarOffSinceMs != null &&
@@ -767,6 +780,8 @@ internal class RadarLinkCoordinator(
             qualified = link.radarLeftOnQualified,
             nowMs = nowMs,
             radarOffSinceMs = link.radarOffSinceMs,
+            linkOpen = link.radarGattActive,
+            linkClosedAtMs = link.radarLinkClosedAtMs,
             adapterOffSinceDrop = link.adapterOffInEpisode,
             fired = link.radarLeftOnFired,
             dismissed = link.walkAwayDismissed,

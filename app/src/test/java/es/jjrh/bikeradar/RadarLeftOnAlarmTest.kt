@@ -88,9 +88,13 @@ class RadarLeftOnAlarmTest {
                 posted += kind
                 onPost()
             },
+            // As RideWakeLock: acquiring a held lock does nothing, so its cap
+            // restarts only after a release.
             acquireRadarLeftOnWakeLock = {
-                wakeLockHeld = true
-                wakeLockAcquires++
+                if (!wakeLockHeld) {
+                    wakeLockHeld = true
+                    wakeLockAcquires++
+                }
             },
             releaseRadarLeftOnWakeLock = { wakeLockHeld = false },
         )
@@ -445,6 +449,152 @@ class RadarLeftOnAlarmTest {
         assertFalse(wakeLockHeld)
         tickAt(20_000L, dropAt)
         assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+    }
+
+    @Test
+    fun anOpenLinkHoldsTheAlarm() {
+        // The radar was heard again and is handshaking: it is on and in range.
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        now = dropAt + 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        tickAt(20_000L, dropAt)
+        tickAt(60_000L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+    }
+
+    @Test
+    fun aSlowHandshakeBesideTheBikeStaysSilent() {
+        // A timeout beside the bike, the link back at 5 s, the first frame
+        // after the 20 s check.
+        switchOffs(3)
+        stream()
+        now += 600_000L
+        drop(4_179L)
+        val dropAt = now
+        for (t in 2_000L..22_000L step 2_000L) {
+            now = dropAt + t
+            if (t == 6_000L) coordinator.markLinkOpen(RADAR_A)
+            if (t == 22_000L) coordinator.markConnected()
+            coordinator.evaluateRadarLeftOn(now)
+        }
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+    }
+
+    @Test
+    fun theCheckRestartsWhenAnOpenLinkClosesWithoutStreaming() {
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        now = dropAt + 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        now = dropAt + 8_000L
+        coordinator.markDisconnected(null)
+        tickAt(27_999L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        tickAt(28_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
+    fun anAttemptThatNeverOpenedTheLinkDoesNotRestartTheCheck() {
+        // Each failed attempt of the reconnect loop ends with a disconnect
+        // edge; only a link that opened says the radar was heard.
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        now = dropAt + 10_000L
+        coordinator.markDisconnected(null)
+        tickAt(20_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
+    fun anAbortLoopBesideTheBikeHoldsItUntilTheLinksStop() {
+        // Each attempt opens the link and fails before streaming. The last
+        // closes at 60 s.
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        flap(dropAt, untilMs = 60_000L)
+        tickAt(79_999L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        tickAt(80_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
+    fun linksThatKeepReopeningHoldItForTwoMinutesAtMost() {
+        // At the edge of range the phone keeps catching a radar left on.
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        flap(dropAt, untilMs = 119_000L)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        coordinator.markLinkOpen(RADAR_A)
+        tickAt(119_999L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        val cancelsBefore = cancels
+        val stopsBefore = stops
+        tickAt(120_000L, dropAt)
+        tickAt(122_000L, dropAt)
+        assertEquals("sounds once with a link open", listOf(WalkAwayAlarmKind.RADAR), posted)
+        assertEquals("and keeps sounding", cancelsBefore, cancels)
+        assertEquals(stopsBefore, stops)
+        assertTrue(journal.contains("walk-away alarm sounded: radar left on"))
+    }
+
+    /** A link opening every 3 s from 2 s after the drop and closing 1 s
+     *  later, ticking every second, to [untilMs] after it. */
+    private fun flap(dropAt: Long, untilMs: Long) {
+        for (t in 1_000L..untilMs step 1_000L) {
+            now = dropAt + t
+            if ((t - 2_000L) % 3_000L == 0L) coordinator.markLinkOpen(RADAR_A)
+            if ((t - 3_000L) % 3_000L == 0L) coordinator.markDisconnected(null)
+            coordinator.evaluateRadarLeftOn(now)
+        }
+    }
+
+    @Test
+    fun aLinkThatClosesAgainReArmsTheWakeLockOnce() {
+        switchOffs(3)
+        walkAway()
+        val dropAt = now
+        assertEquals(1, wakeLockAcquires)
+        now = dropAt + 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        now = dropAt + 8_000L
+        coordinator.markDisconnected(null)
+        assertEquals("held for the restarted check", 2, wakeLockAcquires)
+        assertTrue(wakeLockHeld)
+        // The reconnect loop's own disconnect edges close no link.
+        coordinator.markDisconnected(null)
+        coordinator.markDisconnected(null)
+        assertEquals(2, wakeLockAcquires)
+        tickAt(28_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+        // Sounded: a later link that closes takes no lock.
+        now = dropAt + 30_000L
+        coordinator.markLinkOpen(RADAR_A)
+        now = dropAt + 33_000L
+        coordinator.markDisconnected(null)
+        assertEquals(2, wakeLockAcquires)
+        assertFalse(wakeLockHeld)
+    }
+
+    @Test
+    fun aLinkThatClosesAfterBluetoothWentOffTakesNoLock() {
+        switchOffs(3)
+        walkAway()
+        coordinator.markAdapterOff()
+        coordinator.markAdapterOn()
+        now += 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        now += 3_000L
+        coordinator.markDisconnected(null)
+        assertEquals(1, wakeLockAcquires)
+        assertFalse(wakeLockHeld)
     }
 
     @Test
@@ -807,6 +957,51 @@ class RadarLeftOnAlarmTest {
         assertEquals(0, dashcamPosts)
         tickAt(20_000L, dropAt)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
+    }
+
+    @Test
+    fun aRestartedCheckStillHoldsTheDashcamAlarm() {
+        switchOffs(3)
+        dashcamAlarmDue()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        val dropAt = now
+        now = dropAt + 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        now = dropAt + 8_000L
+        coordinator.markDisconnected(null)
+        tickAt(20_000L, dropAt)
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 24_000L)
+        now = dropAt + 25_000L
+        coordinator.evaluateWalkAway(now)
+        assertEquals(0, dashcamPosts)
+        tickAt(27_999L, dropAt)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
+        tickAt(28_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
+    }
+
+    @Test
+    fun theDashcamAlarmStaysHeldWhileTheLinkIsOpen() {
+        // The phone hears the radar beside the bike, so the camera heard
+        // with it is no sign of a camera left behind either.
+        switchOffs(3)
+        dashcamAlarmDue()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        val dropAt = now
+        now = dropAt + 5_000L
+        coordinator.markLinkOpen(RADAR_A)
+        tickAt(20_000L, dropAt)
+        BatteryStateBus.markSeen("cam", 0L, dropAt + 24_000L)
+        now = dropAt + 25_000L
+        coordinator.evaluateWalkAway(now)
+        assertEquals(0, dashcamPosts)
+        assertEquals(emptyList<WalkAwayAlarmKind>(), posted)
     }
 
     @Test

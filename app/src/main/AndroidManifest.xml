@@ -24,7 +24,8 @@
     <!-- WAKE_LOCK: two bounded locks, each with a hard timeout cap and released
          the moment its case resolves. One during a live-ride off-episode (the
          radar dropped while the rider is still moving), one for the 20 s check
-         after a drop that may be a radar left on (cap 35 s). See the
+         after a drop that may be a radar left on (cap 35 s, taken again if the
+         check restarts). See the
          wakelock-posture rationale on the service below, RideWakeLock, and the
          Privacy screen. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -143,7 +144,8 @@
              hold is the radar-left-on check's second instance: from a
              qualifying drop until its alarm sounds, the radar comes back,
              Bluetooth goes off or the switch is turned off, capped at 35 s per
-             drop; an ordinary switch-off never takes it. -->
+             check (a link that opens and closes again restarts the check); an
+             ordinary switch-off never takes it. -->
         <service
             android:name=".BikeRadarService"
             android:exported="false"

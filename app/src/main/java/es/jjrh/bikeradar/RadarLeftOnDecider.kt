@@ -41,6 +41,18 @@ enum class WalkAwayAlarmKind {
  * and drops as the ride starts). A radar battery under [BATTERY_FLOOR_PCT] can
  * end the stream the same way, and does not qualify.
  *
+ * A link that opens to the radar after the drop holds the alarm, and the
+ * check restarts from the moment that link closes without streaming
+ * (`anOpenLinkHoldsTheAlarm`,
+ * `theCheckRestartsWhenAnOpenLinkClosesWithoutStreaming`). The radar
+ * reconnects with autoConnect, so an open link means the phone heard it
+ * again. Measured on one phone and one radar: after 4 timeouts beside the
+ * bike a link reopened within 1-7 s, and after 2 real walk-aways none did for
+ * 202 and 308 s, until the rider came back. While links keep reopening it
+ * stays silent until 20 s after the last one closes
+ * (`anAbortLoopBesideTheBikeHoldsItUntilTheLinksStop`), and at most
+ * [LINK_HOLD_MAX_MS] after the drop.
+ *
  * Silent by design where the link cannot say: an unlocked or powered eBike
  * drops its own link with the radar's, so its last reading is a fresh
  * "unlocked" and the arming gate holds; a phone whose link takes longer to
@@ -51,8 +63,12 @@ enum class WalkAwayAlarmKind {
  * streamed [MIN_STREAMED_MS] (`anEdgeOfRangeReconnectStaysSilent`).
  *
  * It can sound wrongly where a switch-off loses its goodbye and ends as a
- * timeout, and after a stop of over 30 s with no eBike whose drop does not
- * recover within [CHECK_MS]; neither changes the count.
+ * timeout, after a stop of over 30 s with no eBike where no link reopens
+ * within [CHECK_MS] of the drop or of the last close, and when the radar is
+ * switched off while a link opened after the drop is still being set up
+ * (that close carries no status), and, deliberately, when links to a radar
+ * beside the bike keep failing for [LINK_HOLD_MAX_MS]
+ * (`linksThatKeepReopeningHoldItForTwoMinutesAtMost`); none changes the count.
  */
 object RadarLeftOnDecider {
 
@@ -68,9 +84,17 @@ object RadarLeftOnDecider {
     /** Clean switch-offs a radar must show before the alarm can sound. */
     const val CALIBRATION_SWITCH_OFFS = 3
 
-    /** Radar-off time before the alarm sounds, so a link that drops and
-     *  comes straight back near the bike never reaches it. */
+    /** Time from the drop, or from the last close of a link opened after it,
+     *  to the alarm, capped by [LINK_HOLD_MAX_MS]. */
     const val CHECK_MS = 20_000L
+
+    /** The longest links opened after the drop can hold the alarm, counted
+     *  from the drop; from it on the alarm sounds with a link open
+     *  (`linksThatKeepReopeningHoldItForTwoMinutesAtMost`). The wakelock is
+     *  taken at the drop and again at each close, so that fire is unheld when
+     *  neither came within [RadarLinkCoordinator.RADAR_LEFT_ON_WAKELOCK_CAP_MS]
+     *  before it, which needs a link still open across it. */
+    const val LINK_HOLD_MAX_MS = 120_000L
 
     /** A radar battery below this can die the way a walk-away looks. */
     const val BATTERY_FLOOR_PCT = 10
@@ -134,24 +158,30 @@ object RadarLeftOnDecider {
 
     /** Whether to sound now. Once per episode: [fired] and [dismissed] both
      *  stop it, and so does the dashcam alarm having sounded for the same
-     *  episode ([otherAlarmFired]). */
+     *  episode ([otherAlarmFired]). Not while [linkOpen], and the wait counts
+     *  from [linkClosedAtMs] when that is later than the drop, both for at
+     *  most [LINK_HOLD_MAX_MS] after the drop. */
     fun shouldFire(
         enabled: Boolean,
         qualified: Boolean,
         nowMs: Long,
         radarOffSinceMs: Long?,
+        linkOpen: Boolean,
+        linkClosedAtMs: Long?,
         adapterOffSinceDrop: Boolean,
         fired: Boolean,
         dismissed: Boolean,
         otherAlarmFired: Boolean,
     ): Boolean {
         val off = radarOffSinceMs ?: return false
+        val since = maxOf(off, linkClosedAtMs ?: off)
+        val due = nowMs - off >= LINK_HOLD_MAX_MS || (!linkOpen && nowMs - since >= CHECK_MS)
         return enabled &&
             qualified &&
             !adapterOffSinceDrop &&
             !fired &&
             !dismissed &&
             !otherAlarmFired &&
-            nowMs - off >= CHECK_MS
+            due
     }
 }

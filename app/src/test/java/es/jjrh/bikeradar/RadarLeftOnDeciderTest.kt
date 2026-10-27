@@ -155,16 +155,64 @@ class RadarLeftOnDeciderTest {
         qualified: Boolean = true,
         nowMs: Long = 120_000L,
         offSinceMs: Long? = 100_000L,
+        linkOpen: Boolean = false,
+        linkClosedAtMs: Long? = 100_000L,
         adapterOff: Boolean = false,
         fired: Boolean = false,
         dismissed: Boolean = false,
         otherAlarmFired: Boolean = false,
-    ) = RadarLeftOnDecider.shouldFire(enabled, qualified, nowMs, offSinceMs, adapterOff, fired, dismissed, otherAlarmFired)
+    ) = RadarLeftOnDecider.shouldFire(
+        enabled,
+        qualified,
+        nowMs,
+        offSinceMs,
+        linkOpen,
+        linkClosedAtMs,
+        adapterOff,
+        fired,
+        dismissed,
+        otherAlarmFired,
+    )
 
     @Test
     fun itSoundsTwentySecondsAfterAQualifyingDrop() {
         assertFalse(fires(nowMs = 119_999L))
         assertTrue(fires(nowMs = 120_000L))
+    }
+
+    @Test
+    fun anOpenLinkHoldsIt() {
+        assertFalse(fires(nowMs = 219_999L, linkOpen = true))
+    }
+
+    @Test
+    fun aLinkClosedAfterTheDropRestartsTheWait() {
+        assertFalse(fires(nowMs = 129_999L, linkClosedAtMs = 110_000L))
+        assertTrue(fires(nowMs = 130_000L, linkClosedAtMs = 110_000L))
+    }
+
+    @Test
+    fun linksHoldItForTwoMinutesAfterTheDropAtMost() {
+        assertTrue(fires(nowMs = 220_000L, linkOpen = true))
+        assertFalse(fires(nowMs = 219_999L, linkClosedAtMs = 210_000L))
+        assertTrue(fires(nowMs = 220_000L, linkClosedAtMs = 210_000L))
+    }
+
+    @Test
+    fun theCapDoesNotGetPastTheOtherGates() {
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, enabled = false))
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, qualified = false))
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, adapterOff = true))
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, fired = true))
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, dismissed = true))
+        assertFalse(fires(nowMs = 220_000L, linkOpen = true, otherAlarmFired = true))
+    }
+
+    @Test
+    fun aLinkClosedBeforeTheDropLeavesTheWaitAtTheDrop() {
+        assertFalse(fires(nowMs = 119_999L, linkClosedAtMs = 50_000L))
+        assertTrue(fires(nowMs = 120_000L, linkClosedAtMs = 50_000L))
+        assertTrue(fires(nowMs = 120_000L, linkClosedAtMs = null))
     }
 
     @Test

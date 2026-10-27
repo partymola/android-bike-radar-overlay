@@ -5,7 +5,7 @@
 ### Features
 
 - **The walk-away alarm sounds if you walk off with the radar still on.**
-  - It learns from 3 ordinary switch-offs first. It stays quiet if the radar drops while you ride or within 30 s of stopping. Not on radars that report distance only. Tried so far on one phone and one radar.
+  - It learns from 3 ordinary switch-offs first. It stays quiet if the radar drops while you ride or within 30 s of stopping, and waits, for up to 2 minutes, while the phone keeps finding the radar. Not on radars that report distance only. Tried so far on one phone and one radar.
   - On after installing this version, unless you had turned the dashcam's walk-away alarm off. The switch is in Settings -> Alerts.
 - **Setup can pick a radar the app doesn't recognise by name.**
 
@@ -52,7 +52,7 @@
 
 ### Battery
 
-- **When the radar disconnects and may have been left on, the phone stays awake for up to 35 s.** This stops the phone's sleep from delaying the walk-away alarm.
+- **When the radar disconnects and may have been left on, the phone stays awake for up to 35 s, and up to 35 s again each time, within 2 minutes of the drop, the phone reaches the radar but loses it before it sends data.** This stops the phone's sleep from delaying the walk-away alarm.
 
 ### Bug reports
 

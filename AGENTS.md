@@ -443,9 +443,13 @@ must not be changed about it. Four that bite in ordinary work:
   `markConnected` once, on the first V2 or legacy frame. Moving
   `markConnected` earlier makes a radar that fails every handshake read as
   up: the drop cue and the no-radar warning go silent while the rider has no
-  rear cover. No alert reads `radarGattActive` directly; the
-  `RadarLinkState.radarGattActive` KDoc says what each one reads, and how the
-  flag reaches the walk-away alarm through the dashcam probe backoff.
+  rear cover. No alert about rear cover reads `radarGattActive`; the one
+  alert that reads it is the radar-left-on alarm, which holds while a link is
+  open, for up to `RadarLeftOnDecider.LINK_HOLD_MAX_MS` after the drop,
+  because an open link means the phone heard a radar again. The
+  `RadarLinkState.radarGattActive` KDoc says what each alert reads, and the
+  two ways the flag reaches the dashcam alarm: the radar-left-on check it
+  holds for, and the dashcam probe backoff.
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.

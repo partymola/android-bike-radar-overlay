@@ -24,17 +24,28 @@ data class RadarLinkState(
      *  discovery on, whether or not the radar has sent any data. For readers
      *  about the radio link: the "Connecting" status, the dashcam probe's gate
      *  and backoff, the battery-read piggyback guard and the tail-light flip
-     *  guard. No alert reads it: the no-radar warning and the walk-away alarm
-     *  read [radarStreaming] (`anAbortLoopDuringARideIsARideWithoutTheRadar`,
-     *  `aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`), and the drop cue reads
-     *  the off-episode, which only a first frame ends
-     *  (`anAbortLoopAfterADropStillCuesOnTime`). It reaches the walk-away
-     *  alarm only through the dashcam probe backoff, which can slow the
-     *  dashcam freshness that alarm reads (`BatteryProbeBackoff`). */
+     *  guard. The one alert that reads it is the radar-left-on alarm, which
+     *  asks the opposite question: an open link means the phone heard a radar
+     *  again, so the alarm holds while it is open, for up to
+     *  [RadarLeftOnDecider.LINK_HOLD_MAX_MS] after the drop
+     *  (`RadarLeftOnAlarmTest.anOpenLinkHoldsTheAlarm`,
+     *  `linksThatKeepReopeningHoldItForTwoMinutesAtMost`). The alerts about
+     *  rear cover do not read it: the no-radar warning reads [radarStreaming]
+     *  (`anAbortLoopDuringARideIsARideWithoutTheRadar`), and the drop cue the
+     *  off-episode, which only a first frame ends
+     *  (`anAbortLoopAfterADropStillCuesOnTime`). The dashcam walk-away alarm
+     *  reads [radarStreaming] too (`aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`,
+     *  a drop with no radar-left-on check), and this flag reaches it two ways:
+     *  it holds while a radar-left-on check is pending, which an open link
+     *  extends (`theDashcamAlarmStaysHeldWhileTheLinkIsOpen`,
+     *  `aRestartedCheckStillHoldsTheDashcamAlarm`), and through the
+     *  dashcam probe backoff, which can slow the dashcam freshness it reads
+     *  (`BatteryProbeBackoff`). */
     val radarGattActive: Boolean = false,
     /** Monotonic (elapsedRealtime) ms an open link last closed, streaming or
      *  not; null if none has this session. Bridges the "Connecting" status
-     *  across the gap between a failing radar's attempts. */
+     *  across the gap between a failing radar's attempts, and restarts the
+     *  radar-left-on check when a link opened during it closes. */
     val radarLinkClosedAtMs: Long? = null,
     /** Monotonic (elapsedRealtime) ms the current stretch of connecting with no
      *  data began: a link open, carried across the pauses between one device's

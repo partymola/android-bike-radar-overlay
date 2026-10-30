@@ -729,6 +729,157 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    // ── the connection log says what the tail light was told ────────────────────
+
+    /** Each auto-mode set away from its default and from the other: the phase
+     *  depends on the real clock, so a line must name the mode of its phase. */
+    private fun autoLightPrefs() = prefs(radarLightAutoMode = true).apply {
+        radarLightDayMode = RadarLightMode.SOLID
+        radarLightNightMode = RadarLightMode.PELOTON
+    }
+
+    private fun autoLightLine(applied: Boolean) = Regex("""radar light (DAY mode=SOLID|NIGHT mode=PELOTON) applied=$applied""")
+
+    private fun autoLightLines() = journal.toList().filter { it.startsWith("radar light ") && " applied=" in it && "another app" !in it }
+
+    private val heldLine = "radar light left alone: a slot change holds it"
+
+    @Test fun anAutoModeWriteIsJournalledWithItsModeAndResult() = runTest {
+        val link = Link()
+        val controller = controller(link, prefs = autoLightPrefs())
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
+        assertTrue("journal=$journal", autoLightLine(applied = true).matches(autoLightLines().single()))
+        assertFalse("nothing is holding the light; journal=$journal", journalHas(heldLine))
+        controller.forceReconnect()
+    }
+
+    /** The full radar table, with a control characteristic that refuses writes. */
+    private fun setUpRadarRefusingLightWrites(gatt: BluetoothGatt) {
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.HANDSHAKE_TX, propWriteNoResp or propWrite),
+            char(Uuids.HANDSHAKE_RX, propNotify, cccd = true),
+        )
+        addService(
+            gatt,
+            Uuids.SVC_CONTROL,
+            char(Uuids.SETTINGS_ACK, propIndicate, cccd = true),
+            char(Uuids.SETTINGS_14, propNotify, cccd = true),
+        )
+        addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propRead or propNotify, cccd = true))
+        addService(gatt, Uuids.SVC_RADAR, char(Uuids.RADAR_V2, propNotify, cccd = true))
+        addService(
+            gatt,
+            Uuids.SVC_DIS,
+            char(Uuids.DIS_MODEL_NUMBER, propRead),
+            char(Uuids.DIS_FIRMWARE_REV, propRead),
+            char(Uuids.DIS_SERIAL_NUMBER, propRead),
+        )
+        gatt.discoverServices()
+    }
+
+    @Test fun anAutoModeWriteTheRadarRefusesIsJournalledAsRefused() = runTest {
+        val link = Link()
+        val controller = controller(link, prefs = autoLightPrefs(), setUp = ::setUpRadarRefusingLightWrites)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
+        assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
+        controller.forceReconnect()
+    }
+
+    @Test fun autoModeOffJournalsNoLightLine() = runTest {
+        val link = Link()
+        val controller = controller(link, prefs = prefs(radarLightAutoMode = false))
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        assertFalse("journal=$journal", journalHas("radar light "))
+        controller.forceReconnect()
+    }
+
+    @Test fun aButtonPressAndTheReconnectItHoldsAreJournalled() = runTest {
+        val link = Link()
+        val controller = controller(link, prefs = autoLightPrefs())
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { autoLightLines().size == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        // First in, first out: the battery reading is the witness that the
+        // loop has read the baseline.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        assertFalse("a baseline is not a press; journal=$journal", journalHas("radar light slot changed"))
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        assertFalse("journal=$journal", journalHas(heldLine))
+
+        // Back inside the deadband, so the press still holds and nothing is set.
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journal.count { it == heldLine } == 1 })
+        assertEquals("journal=$journal", 1, autoLightLines().size)
+        controller.forceReconnect()
+    }
+
+    @Test fun aGrantedAppsWriteIsJournalledAsTheirs() = runTest {
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        // Blocks its caller as the binder thread is blocked, and the write
+        // needs this thread to pump the queue. Real time, because the caller
+        // runs on the real clock and pumpUntil's budget is virtual.
+        fun write(mode: RadarLightMode) {
+            val binder = Thread { RadarControlBridge.set(mode) }
+            binder.start()
+            val end = System.nanoTime() + 10_000_000_000L
+            while (binder.isAlive && System.nanoTime() < end) {
+                runCurrent()
+                Thread.sleep(1)
+            }
+            assertFalse("the write never returned", binder.isAlive)
+        }
+        fun lines() = journal.toList().filter { "another app" in it }
+        val peloton = "radar light set for another app mode=PELOTON applied=true"
+        val solid = "radar light set for another app mode=SOLID applied=true"
+        write(RadarLightMode.PELOTON)
+        write(RadarLightMode.PELOTON)
+        assertEquals(listOf(peloton), lines())
+        write(RadarLightMode.SOLID)
+        write(RadarLightMode.PELOTON)
+        assertEquals("a changed mode is logged, and so is a return to the earlier one", listOf(peloton, solid, peloton), lines())
+        // The same mode with a different answer is a change too.
+        requireNotNull(link.gatt).getService(Uuids.SVC_CONTROL).characteristics.removeAll { it.uuid == Uuids.SETTINGS_ACK }
+        write(RadarLightMode.PELOTON)
+        assertEquals("radar light set for another app mode=PELOTON applied=false", lines().last())
+        assertEquals(4, lines().size)
+        controller.forceReconnect()
+    }
+
     // ── data-flow watchdog tears down a silent V2 stream ────────────────────────
 
     @Test fun watchdogTearsDownSilentV2Stream() = runTest {

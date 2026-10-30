@@ -25,9 +25,9 @@ import java.util.Locale
  * Link lifecycle with device names, plus the app events that explain a
  * link's behaviour and would otherwise reach logcat alone - a service
  * start, a recovered ride, the dead-radar alert sounding (for a dropped
- * radar or a ride without one), and the rider
- * silencing it by declaring the ride over or dismissing or snoozing the
- * walk-away alarm. `JournalScopeIsDisclosedTest` holds every writer it
+ * radar or a ride without one), what the radar's tail light was told, and
+ * the rider silencing the alert by declaring the ride over or dismissing or
+ * snoozing the walk-away alarm. `JournalScopeIsDisclosedTest` holds every writer it
  * can see, which is any file that constructs the journal, names the
  * service's field, or takes a `journal` or `log` lambda, to the Privacy
  * screen's connection-log paragraph, in both languages: a

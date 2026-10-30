@@ -103,6 +103,10 @@ class JournalScopeIsDisclosedTest {
         Event("walk-away alarm armed: the radar may have been left on", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm sounded: radar left on", "walk-away alarm", "alarma al alejarte"),
         Event("walk-away alarm sounded: radar and dashcam left on", "walk-away alarm", "alarma al alejarte"),
+        Event("radar light \$phase mode=\$mode applied=\$okSet", "radar tail light being set", "se ajusta la luz trasera del radar"),
+        Event("radar light left alone: a slot change holds it", "radar tail light being set", "se ajusta la luz trasera del radar"),
+        Event("radar light slot changed on the radar: auto-mode holds off", "radar tail light being set", "se ajusta la luz trasera del radar"),
+        Event("radar light set for another app mode=\$mode applied=\$ok", "radar tail light being set", "se ajusta la luz trasera del radar"),
     )
 
     /**

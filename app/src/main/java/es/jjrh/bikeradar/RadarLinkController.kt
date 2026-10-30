@@ -878,8 +878,15 @@ internal class RadarLinkController(
             // mode set already in flight.
             val light = if (controlSvc != null) RadarLightController(gatt, queue) else null
             if (light != null) {
+                // Only a changed answer is logged: a consumer may set the light on
+                // every vehicle, which would push the rest out of the journal.
+                val lastGrantedWrite = java.util.concurrent.atomic.AtomicReference<Pair<RadarLightMode, Boolean>?>()
                 RadarControlBridge.install { mode ->
-                    writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
+                    val ok = writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
+                    if (lastGrantedWrite.getAndSet(mode to ok) != (mode to ok)) {
+                        journal("radar light set for another app mode=$mode applied=$ok")
+                    }
+                    ok
                 }
             }
 
@@ -908,9 +915,10 @@ internal class RadarLinkController(
                     }
                     val okSet = applyWithRetry { controller.setMode(mode) }
                     Log.i(TAG, "radar light $phase mode=$mode applied=$okSet")
+                    journal("radar light $phase mode=$mode applied=$okSet")
                     if (!okSet) postRadarLightModeFailNotification(mode)
                 }
-                plan.initial?.let { applyPhase(it) }
+                if (plan.initial != null) applyPhase(plan.initial) else journal("radar light left alone: a slot change holds it")
                 val flipAt = plan.flipAtMs
                 val flipTo = plan.flipTo
                 if (flipAt != null && flipTo != null) {
@@ -954,6 +962,7 @@ internal class RadarLinkController(
                                     radarSunsetJob?.cancel()
                                     radarSunriseJob?.cancel()
                                     captureLog.clog("# radar_light_override (2f14 slot change)")
+                                    journal("radar light slot changed on the radar: auto-mode holds off")
                                 }
                             }
                         }
@@ -1343,10 +1352,8 @@ internal class RadarLinkController(
          *
          * A named function rather than a lambda, because this is the only path in
          * the app that writes to the rider's hardware because a third-party app
-         * asked. Inside `install { }` no test can reach it: a connection harness
-         * can prove a handler was installed and never that the handler does what
-         * it says, so a handler that ignored the requested mode and wrote a
-         * constant would look the same from there.
+         * asked, and a handler that ignored the requested mode and wrote a constant
+         * would look the same from a connection harness.
          * `RadarLightWriteForGrantedAppTest` drives it.
          *
          * Blocking, because the AIDL call is synchronous and the consumer is

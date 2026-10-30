@@ -69,14 +69,18 @@ class HaCredentials(context: Context) {
      * Settings screen does whenever the rider presses save without editing -
      * is not new information about them, and wiping a good verdict for it
      * would put the row back to "nothing observed yet" for no reason.
+     *
+     * @return whether the values changed, for a caller keeping its own verdict
+     *   on the old ones.
      */
-    fun save(url: String, token: String) {
+    fun save(url: String, token: String): Boolean {
         val changed = url != baseUrl || token != this.token
         sp.edit()
             .putString(KEY_BASE_URL_V3, url)
             .putString(KEY_TOKEN_V3, token)
             .apply()
         if (changed) HaHealthBus.reset()
+        return changed
     }
 
     /**

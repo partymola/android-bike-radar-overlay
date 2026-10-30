@@ -93,7 +93,10 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
     }
     val onContinueSaving: () -> Unit = {
         if (canSubmit) {
-            creds.save(urlField.trim(), tokenField.trim())
+            val url = urlField.trim()
+            val token = tokenField.trim()
+            // A verified time belongs to the values it was earned on.
+            if (creds.save(url, token)) prefs.haLastValidatedEpochMs = 0L
             prefs.haIntent = HaIntent.YES
             // Confirm the silent save unless the user just tested - otherwise
             // a successful Test connection chip is followed by a redundant

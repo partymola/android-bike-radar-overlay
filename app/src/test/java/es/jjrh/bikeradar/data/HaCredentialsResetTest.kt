@@ -11,6 +11,7 @@ import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -87,6 +88,14 @@ class HaCredentialsResetTest {
         creds.save("https://ha.example:8123", "token-one")
 
         assertEquals(HaHealth.Ok, HaHealthBus.state.value)
+    }
+
+    @Test
+    fun `saving says whether anything changed`() {
+        assertTrue("a first save is a change", creds.save("https://ha.example:8123", "token-one"))
+        assertFalse("the same values are not", creds.save("https://ha.example:8123", "token-one"))
+        assertTrue("another address is", creds.save("https://other.example:8123", "token-one"))
+        assertTrue("another token is", creds.save("https://other.example:8123", "token-two"))
     }
 
     @Test

@@ -143,4 +143,54 @@ class HaStepConnectionTest {
         assertEquals("tok", HaCredentials(app).token)
         assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }
+
+    private fun waitForAVerifiedTime() {
+        // The chips first: reading the screen is what runs its main thread.
+        waitForText("MQTT: ready")
+        compose.waitUntil(timeoutMillis = 5_000) { Prefs(app).haLastValidatedEpochMs > 0L }
+    }
+
+    /** The verified time belongs to what was tested, not to what is saved after it. */
+    @Test
+    fun anAddressEditedAfterATestLosesItsVerifiedTimeOnContinue() {
+        testFromSetup()
+        waitForAVerifiedTime()
+        compose.onNodeWithText(baseUrl).performTextReplacement("http://127.0.0.1:1")
+        compose.onNodeWithText("Continue").performClick()
+        assertEquals("http://127.0.0.1:1", HaCredentials(app).baseUrl)
+        assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
+    }
+
+    @Test
+    fun aTokenEditedAfterATestLosesItsVerifiedTimeOnContinue() {
+        testFromSetup()
+        waitForAVerifiedTime()
+        compose.onNodeWithContentDescription("Show token").performClick()
+        compose.onNodeWithText("tok").performTextReplacement("other")
+        compose.onNodeWithText("Continue").performClick()
+        assertEquals("other", HaCredentials(app).token)
+        assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
+    }
+
+    @Test
+    fun continuingWithWhatWasTestedKeepsItsVerifiedTime() {
+        testFromSetup()
+        waitForAVerifiedTime()
+        val verifiedAt = Prefs(app).haLastValidatedEpochMs
+        compose.onNodeWithText("Continue").performClick()
+        assertEquals(verifiedAt, Prefs(app).haLastValidatedEpochMs)
+    }
+
+    /** Coming back to the step and leaving it unedited has tested nothing new, and changed nothing. */
+    @Test
+    fun continuingUnchangedOnALaterVisitKeepsItsVerifiedTime() {
+        HaCredentials(app).save(baseUrl, "tok")
+        val prefs = Prefs(app).apply {
+            haIntent = HaIntent.YES
+            haLastValidatedEpochMs = 1_234L
+        }
+        compose.setContent { UiTheme { HaStep(onContinue = {}, onSkip = {}, prefs = prefs) } }
+        compose.onNodeWithText("Continue").performClick()
+        assertEquals(1_234L, Prefs(app).haLastValidatedEpochMs)
+    }
 }

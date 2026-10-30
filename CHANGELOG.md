@@ -4,8 +4,8 @@
 
 ### Features
 
-- **The walk-away alarm sounds if you walk off with the radar still on.**
-  - It learns from 3 ordinary switch-offs first. It stays quiet if the radar drops while you ride or within 30 s of stopping, and waits, for up to 2 minutes, while the phone keeps finding the radar. Not on radars that report distance only. Tried so far on one phone and one radar.
+- **The walk-away alarm sounds if you walk off with the radar still on.** It learns from 3 ordinary switch-offs first. Not on radars that report distance only. Tried so far on one phone and one radar.
+  - It stays quiet if the radar drops while you ride or within 30 s of stopping, and waits, for up to 2 minutes, while the phone keeps finding the radar.
   - On after installing this version, unless you had turned the dashcam's walk-away alarm off. The switch is in Settings -> Alerts.
 - **Setup can pick a radar the app doesn't recognise by name.**
 
@@ -17,7 +17,8 @@
 - **The number of beeps no longer goes down until the app sees the car you heard about pass you.** Before, two beeps after three could be about a car further back, which sounded like the close car dropping back.
   - A radar that reports distance only sees fewer passes. On one with no data from an eBike, the number can go down a few seconds after the radar loses the cars that got the higher number.
 - **Declining Notifications no longer turns off the beeps and the overlay.** On Android 13 and later, the radar needs only Nearby devices now.
-- **Allowing Nearby devices or Notifications in Android's settings starts the radar straight away.** Before, it stayed off until you restarted the app or the phone.
+  - Without Notifications, you can't silence the walk-away alarm.
+- **Allowing Nearby devices in Android's settings starts the radar when you come back to the app.** Before, it stayed off until you restarted the app or the phone.
 - **Stop scanning now keeps the radar off.** If the app had closed unexpectedly, the radar could reconnect by itself while the app was open, or when you swiped away an old walk-away alert.
 - **The dashcam's walk-away alarm no longer needs the overlay's camera-off warning.** With that warning off, the alarm never sounded and its settings were hidden.
   - If that warning was off, installing this version turns the dashcam's alarm off once. Turn it on in Settings -> Dashcam.
@@ -27,6 +28,7 @@
 - **Light auto-mode uses your area, not London, even if you don't open the app before you ride.** Before, those rides used London's sunset.
   - The app keeps one rough area on the phone, outside your backup.
 - **Choosing a different radar works straight away.** Before, the old radar stayed connected until you restarted the app.
+- **A radar paired while the app is running now connects.** Before, it waited until the radar left range and came back.
 - **Unpairing the radar no longer leaves the app trying to connect to it**, on Android 13 and later.
 - **A headset with "rtl" in its name is no longer taken for a radar.** It could stop your real radar from connecting.
 - **An eBike paired while the app is running now sends data.** Before, it showed Not paired until you restarted the app or Bluetooth.
@@ -52,7 +54,8 @@
 
 ### Battery
 
-- **When the radar disconnects and may have been left on, the phone stays awake for up to 35 s, and up to 35 s again each time, within 2 minutes of the drop, the phone reaches the radar but loses it before it sends data.** This stops the phone's sleep from delaying the walk-away alarm.
+- **When the radar disconnects and may have been left on, the phone stays awake for up to 35 s.** This stops the phone's sleep from delaying the walk-away alarm.
+  - Within 2 minutes of the drop, it can stay awake for up to 35 s again each time the phone reaches the radar but loses it before it sends data.
 
 ### Bug reports
 

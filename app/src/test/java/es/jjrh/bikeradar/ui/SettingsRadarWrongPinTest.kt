@@ -97,6 +97,29 @@ class SettingsRadarWrongPinTest {
     }
 
     @Test
+    fun `a front camera alone is asked to pair, with nothing to pick`() {
+        // Without Nearby devices the card asks for that instead.
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
+        bond("AA:BB:CC:DD:EE:44" to "Varia Vue 10101")
+        show(Prefs(app))
+
+        composeRule.onAllNodesWithText("Pair your radar").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Not selected").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Already paired your radar?").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a radar named only by the vendor word and pinned stays marked in the list`() {
+        bond("AA:BB:CC:DD:EE:33" to "Varia RVR315")
+        show(Prefs(app).apply { radarMac = "AA:BB:CC:DD:EE:33" })
+
+        composeRule.onAllNodesWithText("Pair your radar").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Varia RVR315").assertCountEquals(1)
+        composeRule.onNodeWithText("My radar isn't listed").performScrollTo().performClick()
+        composeRule.onAllNodesWithText("Selected").assertCountEquals(1)
+    }
+
+    @Test
     fun `two radars named only by rear can be chosen between`() {
         bond("AA:BB:CC:DD:EE:55" to "Rear light 3", "AA:BB:CC:DD:EE:66" to "Rear unit 5")
         val prefs = Prefs(app)

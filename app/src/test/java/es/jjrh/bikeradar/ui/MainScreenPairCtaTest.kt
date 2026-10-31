@@ -179,4 +179,31 @@ class MainScreenPairCtaTest {
         assertEquals("main", landed)
         assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, shadowOf(app).nextStartedActivity?.action)
     }
+
+    @Test
+    fun aFrontCameraAloneReadsNotPairedAndOpensAndroidBluetooth() {
+        bond("AA:BB:CC:DD:EE:04" to "Varia Vue 84509")
+        show()
+        assertEquals("main", tapPair("Pair it in Android's Bluetooth settings"))
+        assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, shadowOf(app).nextStartedActivity?.action)
+    }
+
+    @Test
+    fun aRadarNamedOnlyByTheVendorWordIsPickedThroughPair() {
+        bond("AA:BB:CC:DD:EE:05" to "Varia RVR315")
+        show()
+        assertEquals("settings/radar-device", tapPair("Pair it, or pick it if it's already paired"))
+        compose.onNodeWithText("Pair your radar").assertExists()
+        compose.onNodeWithText("Already paired your radar?").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Varia RVR315").performClick()
+        compose.waitForIdle()
+        assertEquals("AA:BB:CC:DD:EE:05", prefs.radarMac)
+        compose.onNodeWithText("Pair your radar").assertDoesNotExist()
+
+        compose.runOnUiThread { nav.popBackStack() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Radar not paired").assertDoesNotExist()
+        compose.onNodeWithText("Waiting for radar").assertExists()
+    }
 }

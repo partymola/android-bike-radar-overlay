@@ -87,7 +87,7 @@ internal fun PairingStep(
             }
         }
     }
-    val radarBonded = RadarSelection.setupHasRadar(allBonded, prefsSnap.radarMac)
+    val radarBonded = RadarSelection.hasLinkableRadar(allBonded, prefsSnap.radarMac)
     val activeRadar = RadarSelection.activeRadar(allBonded, prefsSnap.radarMac)
     val eBikeMac = RadarSelection.eBikeMac(allBonded)
 

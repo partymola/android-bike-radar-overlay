@@ -14,7 +14,8 @@ import org.junit.Test
  * surfaces ask [RadarSelection.hasLinkableRadar]. When the two disagree the
  * app reports "Not paired" about a radar delivering targets, drops the home
  * card to an error tone and offers a "Pair" button, all while beeping at
- * traffic. Each case below is a way a narrower test gets that wrong.
+ * traffic. Each case below but the front camera's is a way a narrower test
+ * gets that wrong; that one is what a wider test gets wrong.
  *
  * [RadarSelection.activeRadarName] answers a different question - WHICH unit -
  * and is allowed to be null where `hasLinkableRadar` is true. That gap is the
@@ -31,6 +32,12 @@ class RadarSelectionHasRadarTest {
     fun `nothing bonded means no radar`() {
         assertFalse(RadarSelection.hasLinkableRadar(emptyList(), null))
         assertFalse(RadarSelection.hasLinkableRadar(listOf(watch), null))
+    }
+
+    @Test
+    fun `a front camera and a watch are no radar`() {
+        val camera = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:0E", "Varia Vue 84509")
+        assertFalse(RadarSelection.hasLinkableRadar(listOf(camera, watch), null))
     }
 
     @Test

@@ -26,7 +26,7 @@ import org.robolectric.Shadows.shadowOf
 
 /**
  * The pairing step counts a radar as paired by a bonded pin or a radar name
- * that is not a front camera ([es.jjrh.bikeradar.RadarSelection.setupHasRadar]),
+ * ([es.jjrh.bikeradar.RadarSelection.hasLinkableRadar]),
  * offers its device pick only while no
  * radar is settled by name, keeps the pick changeable after one is made, and
  * titles the pick by whether the card above already reads PAIRED.
@@ -132,6 +132,25 @@ class OnboardingPairingRadarPickTest {
         composeRule.onAllNodesWithText("Open Bluetooth settings").assertCountEquals(1)
         composeRule.onAllNodesWithText(pickTitle).assertCountEquals(1)
         composeRule.onAllNodesWithText(chooseTitle).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a radar named only by the vendor word is not paired until it is picked`() {
+        bond(unknownRadarMac to "Varia RVR315")
+        show()
+        composeRule.onAllNodesWithText("PAIRED").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Open Bluetooth settings").assertCountEquals(1)
+
+        composeRule.onNodeWithText(pickTitle).performScrollTo().performClick()
+        composeRule.onNodeWithText("Varia RVR315").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(unknownRadarMac, prefs.radarMac)
+        composeRule.onAllNodesWithText("PAIRED").assertCountEquals(1)
+        // A name that can only be a rear unit closes the list, as for any radar
+        // settled by name; Settings keeps it changeable.
+        composeRule.onAllNodesWithText(chooseTitle).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Varia RVR315").assertCountEquals(1)
     }
 
     @Test

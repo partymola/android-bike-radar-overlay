@@ -9,8 +9,8 @@ package es.jjrh.bikeradar
  * the service would happily link could simultaneously read as "Not
  * paired" on the home screen.
  *
- * The predicates deliberately differ in width because their consumers
- * carry different risk:
+ * Most differ in width because their consumers carry different risk;
+ * [isRadarName] and [isRearAdvert] are the same on purpose:
  *
  *  - [isRearAdvert] gates the LIVE radar link. Conservative on purpose:
  *    linking the wrong device streams a confidently-wrong "all clear",
@@ -18,10 +18,15 @@ package es.jjrh.bikeradar
  *    advert matcher misses can still be pinned explicitly
  *    ([es.jjrh.bikeradar.data.Prefs.radarMac]); the pin overrides this
  *    matcher in the link path.
- *  - [isRadarName] is the bonded-device superset: enumeration, the radar
- *    chooser (minus [isFrontCamera]), and every UI "is a radar paired?"
- *    affordance. Wider is safe here - the worst case is a stray green dot,
- *    not a wrong link.
+ *  - [isRadarName] is [isRearAdvert] for a name that may be absent: the radar
+ *    chooser, every UI "is a radar paired?" and the radar's battery rows. It
+ *    must not be wider: the no-radar warning reads it, so a wider name arms a
+ *    warning and shows "paired" over a radar that never links
+ *    (`aRadarNameEqualsWhatIsRearAdvertAccepts`). One name already does: a bare
+ *    "rear" passes here, while [isKnownAccessory], which gates every unpinned
+ *    route to the link, turns it away (`aDevicePairedThatIsNotARadarIsLeftAlone`).
+ *    A bonded name it misses is offered behind "my radar isn't listed", unless
+ *    it is a front camera, the saved dashcam or the eBike.
  *  - [isUnambiguousRadar] excludes rear units from the DASHCAM picker
  *    without excluding the front cameras that share the same vendor
  *    word ("Varia Vue" must stay offerable as a dashcam). The battery
@@ -30,9 +35,9 @@ package es.jjrh.bikeradar
  *  - [isFrontCamera] keeps those same cameras out of the radar pick lists.
  *    It also excludes every [isRearAdvert] name, so widening that matcher
  *    changes the pick lists too.
- *  - [isKnownAccessory] is the widest: which advert sightings wake the
- *    battery-read path at all (radar or dashcam). A pinned radar MAC
- *    bypasses it (see [BatteryScanReceiver]).
+ *  - [isKnownAccessory] decides which advert sightings wake the battery-read
+ *    path at all (radar or dashcam), and so which unpinned names can reach the
+ *    link. A pinned radar MAC bypasses it (see [BatteryScanReceiver]).
  *  - [isEBikeName] finds the Bosch eBike among bonded devices, for the
  *    status reader and to keep it out of the radar pick lists.
  *
@@ -54,16 +59,14 @@ object DeviceNameMatcher {
         return n.contains("rear") || n.contains(RTL_MODEL)
     }
 
-    /** Bonded-device radar heuristic: enumeration, the radar chooser, UI
-     *  paired/battery checks. Superset of [isRearAdvert]. */
-    fun isRadarName(name: String?): Boolean {
-        val n = name?.lowercase() ?: return false
-        return n.contains("rear") || n.contains(RTL_MODEL) || n.contains("varia")
-    }
+    /** Whether [name] is a radar's, meaning what [isRearAdvert] accepts (see
+     *  class KDoc). */
+    fun isRadarName(name: String?): Boolean = name != null && isRearAdvert(name)
 
-    /** True when the name can ONLY be a rear radar - used to keep rear
+    /** True when the name cannot be a front camera - used to keep rear
      *  units out of the dashcam picker while leaving "...Vue..." front
-     *  cameras offerable. */
+     *  cameras offerable. Says nothing about the link: it takes vendor-word
+     *  names [isRadarName] refuses. */
     fun isUnambiguousRadar(name: String): Boolean {
         val n = name.lowercase()
         return n.contains("rearvue") ||
@@ -72,7 +75,7 @@ object DeviceNameMatcher {
     }
 
     /** A "...Vue..." name that is not a rear unit: a front camera. Kept out of
-     *  every list a rider picks the RADAR from. A name the live link accepts
+     *  every list a rider picks the RADAR from. A name [isRearAdvert] accepts
      *  is never one, however "rear" and "vue" are spaced. */
     fun isFrontCamera(name: String): Boolean = name.lowercase().contains("vue") && !isUnambiguousRadar(name) && !isRearAdvert(name)
 

@@ -480,12 +480,14 @@ class BikeRadarServiceSmokeTest {
     }
 
     /** A ride confirmed by the service's own eBike path with the radar never
-     *  up, then the tick cadence the loop would sleep for. */
-    private fun tickDelayOnARideWithNoRadar(radarBonded: Boolean): Long {
+     *  up and only [bondedName] paired, picked as the radar or not, then the
+     *  tick cadence the loop would sleep for. */
+    private fun tickDelayOnARideWithNoRadar(bondedName: String?, picked: Boolean = false): Long {
         val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
-        val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
-        shadowOf(radar).setName("RearVue8")
-        shadowOf(adapter).setBondedDevices(if (radarBonded) setOf(radar) else emptySet())
+        val bonded = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        if (bondedName != null) shadowOf(bonded).setName(bondedName)
+        shadowOf(adapter).setBondedDevices(if (bondedName != null) setOf(bonded) else emptySet())
+        if (picked) Prefs(app).radarMac = bonded.address
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()
         val service = controller.get()
@@ -812,8 +814,46 @@ class BikeRadarServiceSmokeTest {
         // The service half of the no-radar warning: the loop's cadence comes
         // from the coordinator, and "a radar is paired" from the bonded list.
         // Either wired to a constant leaves the coordinator tests green.
-        assertEquals(2_000L, tickDelayOnARideWithNoRadar(radarBonded = true))
-        assertEquals(30_000L, tickDelayOnARideWithNoRadar(radarBonded = false))
+        assertEquals(2_000L, tickDelayOnARideWithNoRadar("RearVue8"))
+        assertEquals(30_000L, tickDelayOnARideWithNoRadar(null))
+    }
+
+    @Test
+    fun aRideWithOnlyAFrontCameraPairedStaysOnTheIdleTick() {
+        // Paired under a name that also carries the vendor word. The live link
+        // never streams from it, so there is no radar to warn about.
+        assertEquals(30_000L, tickDelayOnARideWithNoRadar("Varia Vue 84509"))
+    }
+
+    @Test
+    fun aRideWithAnUnpickedRadarNamedOnlyByTheVendorWordStaysOnTheIdleTick() {
+        // Reads "Radar not paired" at home, and carries no no-radar warning
+        // until it is picked; do not re-arm the warning on this name without
+        // also linking it.
+        assertEquals(30_000L, tickDelayOnARideWithNoRadar("Varia RVR315"))
+    }
+
+    @Test
+    fun aRideWithAPickedRadarNamedOnlyByTheVendorWordTicksFast() {
+        // The pin is what links it, so the warning has a radar to ask about.
+        assertEquals(2_000L, tickDelayOnARideWithNoRadar("Varia RVR315", picked = true))
+    }
+
+    @Test
+    fun aRadarNamedOnlyByTheVendorWordLinksOnlyOncePinned() {
+        val mac = "AA:BB:CC:DD:EE:55"
+        val name = "Varia RVR315"
+        val (controller, service, journal) = twoRadarService(emptyList())
+        pair(mac, name)
+        assertTrue(journal.readText().contains("device paired; treated as a sighting $name"))
+        readDevice(service, name, mac, 1)
+        assertEquals("got:\n${journal.readText()}", 0, journal.starts(name))
+
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(mac, name))
+        readDevice(service, name, mac, 2)
+        idleMainUntil { journal.starts(name) == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts(name))
+        controller.destroy()
     }
 
     @Test

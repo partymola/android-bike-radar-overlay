@@ -279,6 +279,16 @@ class RadarIpcServiceTest {
     }
 
     @Test
+    fun aFrontCamerasBatteryIsNotAnsweredAsTheRadars() {
+        val service = controller.create().get()
+        grantSelf()
+        Prefs(context).radarMac = null
+        BatteryStateBus.update(BatteryEntry("vue_84509", "Varia Vue 84509", 22))
+
+        assertEquals(-1, service.binder.batteryPercent)
+    }
+
+    @Test
     fun aStartedBindOnlyServiceStopsItselfAndDoesNotComeBack() {
         // Exported behind an install-granted permission, so any app can start
         // it. Left to the default it would be restarted after a kill with no

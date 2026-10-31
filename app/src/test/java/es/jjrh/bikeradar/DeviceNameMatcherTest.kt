@@ -2,18 +2,17 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Pins the name-heuristic predicates and, critically, their RELATIVE
- * widths: the live-advert gate must stay the narrowest, the accessory
- * matcher the widest, and the radar/dashcam disambiguation must keep
- * front cameras offerable. Most device-name literals below are real
- * advertised local names (allowed per the repo naming rules); the
- * spaced "Rear Vue" names and every name in [rtlCountsOnlyBeforeADigit]
- * are made up or unmeasured, to probe a boundary.
+ * widths: a radar name is exactly what [DeviceNameMatcher.isRearAdvert]
+ * accepts, and the radar/dashcam disambiguation must keep front cameras
+ * offerable. "RearVue8" is a measured local name (allowed per the repo naming
+ * rules); the other literals are made up or unmeasured, to probe a boundary.
  */
 class DeviceNameMatcherTest {
 
@@ -31,18 +30,50 @@ class DeviceNameMatcherTest {
         assertFalse(DeviceNameMatcher.isRearAdvert("JBL Headphones"))
     }
 
-    @Test fun radarNameIsSupersetOfRearAdvert() {
-        for (name in listOf("RearVue8", "RTL515 1234", "Rear Radar")) {
-            assertTrue(
-                "isRadarName must accept everything isRearAdvert accepts: $name",
-                !DeviceNameMatcher.isRearAdvert(name) || DeviceNameMatcher.isRadarName(name),
-            )
+    @Test fun theVendorWordAloneIsNotARadarName() {
+        for (name in listOf("Varia RVR315", "Varia Vue 84509", "Varia RTL")) {
+            assertFalse(name, DeviceNameMatcher.isRadarName(name))
         }
-        // Plus the vendor word for bonded enumeration / the radar chooser.
-        assertTrue(DeviceNameMatcher.isRadarName("Varia RTL515"))
-        assertTrue(DeviceNameMatcher.isRadarName("Varia Radar"))
         assertFalse(DeviceNameMatcher.isRadarName(null))
         assertFalse(DeviceNameMatcher.isRadarName("Pixel Watch"))
+    }
+
+    @Test fun aRadarNameEqualsWhatIsRearAdvertAccepts() {
+        val expected = listOf(
+            "RearVue8" to true,
+            "REARVUE8" to true,
+            "RTL12345" to true,
+            "rtl511" to true,
+            "RTL515 1234" to true,
+            "RTL_515" to true,
+            "eRTL615" to true,
+            "eRTL-12345" to true,
+            "Varia RTL515" to true,
+            "Varia RTL 515" to true,
+            "VARIA rtl515" to true,
+            "Rear Radar" to true,
+            "Rear light 3" to true,
+            "Varia Rear Vue" to true,
+            "Rear Vue 2" to true,
+            "Varia RVR315" to false,
+            "Varia Radar" to false,
+            "VARIA RADAR" to false,
+            "Varia RTL" to false,
+            "Varia Vue 84509" to false,
+            "Vue-123" to false,
+            "VUE-12345" to false,
+            "Vue8" to false,
+            "RTL" to false,
+            "RTL--5" to false,
+            "Garmin Edge" to false,
+            "Turtle Beach Stealth" to false,
+            "Pixel Watch" to false,
+            "" to false,
+        )
+        for ((name, isRadar) in expected) {
+            assertEquals("isRadarName($name)", isRadar, DeviceNameMatcher.isRadarName(name))
+            assertEquals("isRearAdvert($name)", isRadar, DeviceNameMatcher.isRearAdvert(name))
+        }
     }
 
     @Test fun unambiguousRadarKeepsFrontCamerasOfferable() {
@@ -65,7 +96,7 @@ class DeviceNameMatcherTest {
         assertTrue(DeviceNameMatcher.isFrontCamera("Vue-123"))
     }
 
-    @Test fun knownAccessoryIsTheWidest() {
+    @Test fun knownAccessoryTakesRadarsCamerasAndTheVendor() {
         for (
         name in listOf(
             "RearVue8",
@@ -81,16 +112,9 @@ class DeviceNameMatcherTest {
         assertFalse(DeviceNameMatcher.isKnownAccessory("JBL Headphones"))
     }
 
-    @Test fun radarNameNullArmReturnsFalseDistinctlyFromEmptyString() {
-        // The `name?.lowercase() ?: return false` elvis short-circuits on a
-        // genuinely null name BEFORE any contains() runs. Pair it against a
-        // non-null empty string (which reaches the contains chain and also
-        // returns false, but via a different path) so this pins the null arm
-        // specifically: a mutant changing the elvis default to `return true`
-        // is caught here, where the bundled null assertion alone could be
-        // mistaken for the empty-string false path.
-        assertFalse("null name must be rejected by the elvis arm", DeviceNameMatcher.isRadarName(null))
-        assertFalse("empty name reaches the contains chain and still fails", DeviceNameMatcher.isRadarName(""))
+    @Test fun aMissingOrEmptyNameIsNotARadarName() {
+        assertFalse(DeviceNameMatcher.isRadarName(null))
+        assertFalse(DeviceNameMatcher.isRadarName(""))
     }
 
     @Test fun unambiguousRadarMatchesOnRearvueTokenAlone() {

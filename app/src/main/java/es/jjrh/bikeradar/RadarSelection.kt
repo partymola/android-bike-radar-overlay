@@ -23,18 +23,12 @@ import es.jjrh.bikeradar.data.Prefs
  * rather than stranding the rider with no radar.
  *
  * The decision function [shouldLinkRadar] is pure so the fallback matrix is
- * unit-tested without a Bluetooth stack; [bondedRadars] is the thin Android
- * enumeration around it.
+ * unit-tested without a Bluetooth stack.
  */
 object RadarSelection {
 
-    /** True if [name] looks like a rear radar by its advertised/bonded local
-     *  name. Used for bonded-device enumeration and, minus front cameras, the
-     *  radar chooser ([choosableRadars]). Deliberately a
-     *  SUPERSET of the live advert matcher ([DeviceNameMatcher.isRearAdvert]):
-     *  the pin overrides the advert matcher anyway (a chosen MAC links
-     *  regardless of [shouldLinkRadar]'s `nameMatchesRadar`), so the wider
-     *  bonded matcher cannot strand a pinned radar. */
+    /** [DeviceNameMatcher.isRadarName]. Used for the status surfaces
+     *  ([hasLinkableRadar]) and the radar chooser ([choosableRadars]). */
     fun isRadarName(name: String?): Boolean = DeviceNameMatcher.isRadarName(name)
 
     /**
@@ -99,10 +93,9 @@ object RadarSelection {
      * Is there a radar for this bike to talk to at all?
      *
      * This is the ONE definition of "the rider has a radar", and every surface
-     * that reports link state must use it, because it is the question
-     * [shouldLinkRadar] answers when it decides whether to stream. Setup's
-     * PAIRED card is the one deliberate exception: it asks [setupHasRadar],
-     * which leaves out an unpinned front camera. Two ways a narrower test gets
+     * that reports link state must use it, because it follows [shouldLinkRadar]:
+     * a bonded pin wins, else a radar name, with the one exception
+     * [DeviceNameMatcher] states for a bare "rear". Two ways a narrower test gets
      * it wrong, and both report "Not paired" about a radar that is delivering
      * targets:
      *
@@ -146,12 +139,11 @@ object RadarSelection {
         return choosableRadars(allBonded).singleOrNull()
     }
 
-    /** The radars a rider chooses between: every name [isRadarName] accepts
-     *  except a front camera sharing the vendor word, which is never offered as
-     *  the radar (`a front camera is never offered as the radar`). A name the
-     *  live link accepts on "rear" alone is choosable too
+    /** The radars a rider chooses between: every name [isRadarName] accepts, so
+     *  a front camera never (`a front camera is never offered as the radar`)
+     *  and a name known only by "rear" does
      *  (`two radars named only by rear are offered the chooser`). */
-    fun choosableRadars(allBonded: List<BondedRadar>): List<BondedRadar> = allBonded.filter { isRadarName(it.name) && !DeviceNameMatcher.isFrontCamera(it.name) }
+    fun choosableRadars(allBonded: List<BondedRadar>): List<BondedRadar> = allBonded.filter { isRadarName(it.name) }
 
     /**
      * Whether to list the [choosableRadars]: when more than one is bonded, or
@@ -203,17 +195,6 @@ object RadarSelection {
         return !DeviceNameMatcher.isUnambiguousRadar(active.name)
     }
 
-    /**
-     * Whether setup's radar card reads PAIRED: a pin still bonded, or a
-     * [choosableRadars] name. Narrower than [hasLinkableRadar] by the front
-     * cameras, which the live link never streams from either, so a rider with
-     * only a front camera paired is sent to pair the radar rather than told
-     * one is paired (`a front camera alone is not a paired radar`).
-     * [hasLinkableRadar], which the dead-radar warnings read, still counts them.
-     */
-    fun setupHasRadar(allBonded: List<BondedRadar>, chosenMac: String?): Boolean = allBonded.any { it.mac.equals(chosenMac, ignoreCase = true) } ||
-        choosableRadars(allBonded).isNotEmpty()
-
     /** Pin [radar] as this bike's. The only path that writes a pin. A
      *  different unit drops the stored firmware revision, which described the
      *  old one (`RadarSelectionPinTest`). One edit, so no `Prefs` snapshot
@@ -225,11 +206,6 @@ object RadarSelection {
 
     /** A bonded radar candidate: its address + readable local name. */
     data class BondedRadar(val mac: String, val name: String)
-
-    /** Bonded devices whose name matches the radar heuristic. Empty on any
-     *  Bluetooth permission / adapter error (the caller then falls back to
-     *  name-match, preserving today's behaviour). */
-    fun bondedRadars(ctx: Context): List<BondedRadar> = bondedDevices(ctx).filter { isRadarName(it.name) }
 
     /** ALL bonded devices, regardless of name. Backs the "my radar isn't
      *  listed" escape hatch: a radar the name heuristic doesn't know can

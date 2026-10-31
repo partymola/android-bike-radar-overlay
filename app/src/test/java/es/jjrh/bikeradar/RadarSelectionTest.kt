@@ -148,9 +148,9 @@ class RadarSelectionTest {
     }
 
     @Test fun `a front camera is never offered as the radar`() {
-        // Its name carries the vendor word that also names radars. A correct
-        // pin on a radar the name-match misses must not put the camera up as
-        // the alternative, and the camera alone is nothing to choose.
+        // A correct pin on a radar the name-match misses must not put the
+        // camera up as the alternative, and the camera alone is nothing to
+        // choose.
         assertEquals(listOf(radarA), RadarSelection.choosableRadars(listOf(radarA, frontCamera, watch)))
         assertFalse(RadarSelection.shouldOfferChooser(listOf(unknownRadar, frontCamera), chosenMac = unknownRadar.mac))
         assertFalse(RadarSelection.shouldOfferChooser(listOf(radarA, frontCamera), chosenMac = null))
@@ -160,7 +160,7 @@ class RadarSelectionTest {
     private val rearUnit = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:08", "Rear unit 5")
 
     @Test fun `two radars named only by rear are offered the chooser`() {
-        // The live link accepts "rear" alone, so either can be the one streaming.
+        // Pinned, either can be the one streaming.
         assertTrue(RadarSelection.shouldOfferChooser(listOf(rearLight, rearUnit), chosenMac = null))
         assertTrue(RadarSelection.shouldOfferChooser(listOf(radarA, rearLight), chosenMac = null))
         assertEquals(listOf(radarA, rearLight), RadarSelection.choosableRadars(listOf(radarA, rearLight, watch)))
@@ -172,11 +172,28 @@ class RadarSelectionTest {
         assertTrue(RadarSelection.setupOffersPick(listOf(frontCamera, watch), chosenMac = null))
     }
 
-    @Test fun `setup counts a pin or a choosable radar as paired, never a front camera`() {
-        assertFalse(RadarSelection.setupHasRadar(listOf(frontCamera, watch), chosenMac = null))
-        assertFalse(RadarSelection.setupHasRadar(listOf(watch), chosenMac = "DD:DD:DD:DD:DD:DD"))
-        assertTrue(RadarSelection.setupHasRadar(listOf(frontCamera, rearLight), chosenMac = null))
-        assertTrue(RadarSelection.setupHasRadar(listOf(watch), chosenMac = watch.mac.lowercase()))
+    @Test fun `a pin or a radar name counts as paired, never a front camera`() {
+        assertFalse(RadarSelection.hasLinkableRadar(listOf(frontCamera, watch), chosenMac = null))
+        assertFalse(RadarSelection.hasLinkableRadar(listOf(watch), chosenMac = "DD:DD:DD:DD:DD:DD"))
+        assertTrue(RadarSelection.hasLinkableRadar(listOf(frontCamera, rearLight), chosenMac = null))
+        assertTrue(RadarSelection.hasLinkableRadar(listOf(watch), chosenMac = watch.mac.lowercase()))
+    }
+
+    private val vendorNamed = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:0A", "Varia RVR315")
+
+    @Test fun `a lone radar named only by the vendor word reads unpaired and can be picked`() {
+        val lone = listOf(vendorNamed)
+        assertFalse(RadarSelection.hasLinkableRadar(lone, chosenMac = null))
+        assertEquals(lone, RadarSelection.unlistedDevices(lone, emptyList()))
+        assertTrue(RadarSelection.setupOffersPick(lone, chosenMac = null))
+        assertNull(RadarSelection.activeRadar(lone, chosenMac = null))
+
+        // The pick is what makes it the radar, and what lets it link.
+        assertTrue(RadarSelection.hasLinkableRadar(lone, vendorNamed.mac))
+        assertEquals(vendorNamed, RadarSelection.activeRadar(lone, vendorNamed.mac))
+        assertTrue(
+            RadarSelection.shouldLinkRadar(vendorNamed.mac, nameMatchesRadar = false, chosenMac = vendorNamed.mac, bondedRadarMacs = setOf(vendorNamed.mac)),
+        )
     }
 
     @Test fun `setup keeps the pick for a radar known only by rear`() {
@@ -228,6 +245,8 @@ class RadarSelectionTest {
         assertEquals(watch, RadarSelection.pinOffNamedRadars(listOf(radarA, radarB, watch), watch.mac))
         // A stored pin on a front camera, which the hatch no longer offers.
         assertEquals(frontCamera, RadarSelection.pinOffNamedRadars(listOf(radarA, frontCamera), frontCamera.mac))
+        // Name-match links the named radar, so this pin is the one exception.
+        assertEquals(vendorNamed, RadarSelection.pinOffNamedRadars(listOf(radarA, vendorNamed), vendorNamed.mac))
     }
 
     @Test fun `a pin on a named radar, a pin gone, or no named radar is not off them`() {
@@ -243,7 +262,7 @@ class RadarSelectionTest {
     @Test fun `a pin off the named radars is always offered the chooser`() {
         // Home sends the rider to the radar screen for it, so that screen must
         // have a radar to offer back.
-        val devices = listOf(radarA, radarB, watch, frontCamera, unknownRadar, eBike)
+        val devices = listOf(radarA, radarB, watch, frontCamera, unknownRadar, eBike, vendorNamed)
         val pins = devices.map { it.mac } + listOf(null, "DD:DD:DD:DD:DD:DD")
         var cases = 0
         for (mask in 0 until (1 shl devices.size)) {
@@ -258,10 +277,10 @@ class RadarSelectionTest {
         assertTrue("the matrix must reach the state", cases > 0)
     }
 
-    @Test fun `isRadarName matches the family, rejects others`() {
+    @Test fun `isRadarName matches a rear advert, rejects others`() {
         assertTrue(RadarSelection.isRadarName("RearVue8"))
         assertTrue(RadarSelection.isRadarName("RTL515"))
-        assertTrue(RadarSelection.isRadarName("Varia RTL"))
+        assertFalse(RadarSelection.isRadarName("Varia RTL"))
         assertFalse(RadarSelection.isRadarName("Vue"))
         assertFalse(RadarSelection.isRadarName("Bosch eBike"))
         assertFalse(RadarSelection.isRadarName(null))

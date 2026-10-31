@@ -2,8 +2,10 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import es.jjrh.bikeradar.CrashLogger
 import es.jjrh.bikeradar.HaFamily
 import es.jjrh.bikeradar.HaHealth
+import es.jjrh.bikeradar.LogRedaction
 import es.jjrh.bikeradar.data.Prefs
 
 /**
@@ -19,13 +21,11 @@ import es.jjrh.bikeradar.data.Prefs
  *
  * Every caller-supplied field is treated as untrusted: the link journal
  * interpolates BLE device names, and a crash report carries whatever string
- * threw. Both go through [strip] HERE rather than at the caller, so a new
- * caller cannot forget.
- *
- * That strip removes addresses ([Prefs.redactAddresses]) and any run of four or
- * more digits joined to letters, which is where some radars put the unit's
- * serial ("XYZ12345"). Device names otherwise survive on purpose, because they
+ * threw. Both are masked HERE as well as by the classes that own them, so a new
+ * caller cannot forget. Device names otherwise survive on purpose, because they
  * are what makes a link journal readable, and `DiagnosticBundleTest` pins both.
+ * The settings dump and the file names are not masked: the first redacts its
+ * own, and neither takes a device name.
  */
 object DiagnosticBundle {
 
@@ -85,22 +85,16 @@ object DiagnosticBundle {
         appendLine("--- Capture logs (${captureLogs.size} on disk) ---")
         captureLogs.take(MAX_FILES_LISTED).forEach { appendLine("${it.name}  ${it.sizeKb}KB") }
         appendLine("--- Link journal (newest ${journal.size.coerceAtMost(MAX_JOURNAL_LINES)}) ---")
-        journal.take(MAX_JOURNAL_LINES).forEach { appendLine(strip(it)) }
+        journal.take(MAX_JOURNAL_LINES).forEach { appendLine(LogRedaction.shareable(it)) }
         appendLine()
         appendLine("--- Crash reports (${crashLogs.size} on disk) ---")
         crashLogs.take(MAX_FILES_LISTED).forEach { appendLine(it.name) }
         if (newestCrashText != null) {
             appendLine()
             appendLine("--- Newest crash report ---")
-            append(strip(newestCrashText))
+            append(CrashLogger.maskReport(newestCrashText))
         }
     }
-
-    private fun strip(text: String): String = NAME_DIGITS.replace(Prefs.redactAddresses(text)) { "#".repeat(it.value.length) }
-
-    /** A digit run joined to a letter, directly or across one hyphen or
-     *  underscore. Timestamps, counts and `key=value` numbers stand alone. */
-    private val NAME_DIGITS = Regex("""(?<=[A-Za-z][-_]?)\d{4,}""")
 
     /** Files named in the listing. The counts above them are the full totals. */
     const val MAX_FILES_LISTED = 3

@@ -1578,6 +1578,34 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    /** A capture log is shared as a file nothing masks, so it holds no device
+     *  name, even with the transcript on. */
+    @Test fun aCaptureLogNeverCarriesTheRadarsName() = runTest {
+        val link = Link()
+        val root = Files.createTempDirectory("radar-capture-name").toFile()
+        val p = prefs()
+        p.captureLoggingEnabled = true
+        p.setupTranscriptEnabled = true
+        val capture = CaptureLogManager(externalFilesDir = { root }, captureLoggingEnabled = { true })
+        val controller = controller(link, prefs = p, captureLog = capture)
+        startDriver(link)
+
+        controller.start("XYZ73521", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+
+        capture.flushNow()
+        val text = File(root, CaptureLogManager.CAPTURE_DIR).listFiles()!!.single().readText()
+        assertTrue("the transcript must have reached the handshake: $text", text.contains("# script: handshake complete"))
+        assertFalse(text, text.contains("XYZ"))
+        assertFalse(text, text.contains("73521"))
+        controller.forceReconnect()
+    }
+
     /** Settings away from every default, so a header written from defaults,
      *  or from a different snapshot, cannot match. */
     private fun riderSettings(p: Prefs) {

@@ -39,4 +39,14 @@ class LogRedactionTest {
         assertEquals("-", LogRedaction.mac(null, debug = true))
         assertEquals("-", LogRedaction.mac(null, debug = false))
     }
+
+    @Test(timeout = 5_000)
+    fun `the cost of a long run grows with its length`() {
+        // Each of these must not be rescanned from every position it holds.
+        val n = 300_000
+        for (run in listOf("a".repeat(n), "A".repeat(n), "_".repeat(n), "a_".repeat(n / 2), "a=".repeat(n / 2))) {
+            assertEquals(run, LogRedaction.shareable(run))
+        }
+        assertEquals("#".repeat(n), LogRedaction.shareable("1".repeat(n)))
+    }
 }

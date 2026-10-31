@@ -486,6 +486,15 @@ class Prefs(context: Context) {
         e.apply()
     }
 
+    /** Set once [es.jjrh.bikeradar.LogRedaction.maskStoredFilesOnce] has finished
+     *  on this phone's files, which do not travel in a backup, so this does not
+     *  either. Runtime state, not part of [snapshot] / [flow] / [dumpAll]. */
+    var storedFilesMasked: Boolean
+        get() = learned.getBoolean(KEY_STORED_FILES_MASKED, false)
+        set(v) {
+            learned.edit().putBoolean(KEY_STORED_FILES_MASKED, v).apply()
+        }
+
     /** The radar-left-on alarm: the walk-away alarm, sounded once when the
      *  rider walks out of range with the radar still on, with or without a
      *  front camera ([es.jjrh.bikeradar.RadarLeftOnDecider]). Separate from
@@ -1250,6 +1259,7 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LEFT_ON_CAL_MAC = "radar_left_on_cal_mac"
         const val KEY_RADAR_LEFT_ON_CAL_BUILD = "radar_left_on_cal_build"
         const val KEY_RADAR_LEFT_ON_CAL_COUNT = "radar_left_on_cal_count"
+        const val KEY_STORED_FILES_MASKED = "stored_files_masked"
 
         /** The file of [learned]; `data_extraction_rules.xml` names it
          *  (`RadarLeftOnCalibrationPrefsTest.theBackupRulesLeaveItOutOfBoth`). */

@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,6 +76,38 @@ class LinkEventJournalTest {
     @Test fun emptyDirReadsEmpty() {
         val root = Files.createTempDirectory("linkjournal").toFile()
         assertTrue(LinkEventJournal({ root }).readTail().isEmpty())
+    }
+
+    // -- device identifiers -----------------------------------------------------
+    // The tail is what the Debug screen shows and the bundle copies, and the file
+    // can be copied off the phone over USB.
+
+    private fun journalFile(root: File) = File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME)
+
+    @Test fun aSerialAndAnAddressNeverReachTheFile() {
+        val root = Files.createTempDirectory("linkjournal").toFile()
+        val j = LinkEventJournal({ root })
+        j.log("radar link start Cam 58213")
+        j.log("radar link start AA:BB:CC:DD:EE:FF")
+        val text = journalFile(root).readText()
+        assertTrue(text, text.contains("radar link start Cam #####"))
+        assertTrue(text, text.contains("radar link start <redacted>"))
+        assertFalse(text, text.contains("58213"))
+        assertFalse(text, text.contains("AA:BB"))
+    }
+
+    @Test fun whatIsAlreadyOnDiskIsMaskedWhenRead() {
+        // The file keeps months of lines, and the pass over it can fail.
+        val root = Files.createTempDirectory("linkjournal").toFile()
+        val file = journalFile(root).apply {
+            parentFile?.mkdirs()
+            writeText("1999-01-01 12:34:56 radar link start XYZ73521\n1999-01-01 12:34:57 radar link start AA:BB:CC:DD:EE:FF\n")
+        }
+        assertEquals(
+            listOf("1999-01-01 12:34:57 radar link start <redacted>", "1999-01-01 12:34:56 radar link start XYZ#####"),
+            LinkEventJournal({ root }).readTail(),
+        )
+        assertTrue("reading leaves the file alone", file.readText().contains("XYZ73521"))
     }
 
     // -- log-injection defence -------------------------------------------------

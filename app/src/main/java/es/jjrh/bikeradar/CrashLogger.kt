@@ -32,6 +32,11 @@ import java.util.Locale
  * are kept. The handler must never throw or block: it is the last code to run
  * before the process dies, so all I/O is wrapped and failures are swallowed -
  * crash logging must not mask the original crash.
+ *
+ * Share hands over the file itself, so what is on disk has to be fit to share:
+ * [formatReport] masks what it writes, and [LogRedaction.maskStoredFilesOnce]
+ * goes over what an upgraded install already holds at each app start until every
+ * file has passed. Share sends a report that pass could not rewrite as it is.
  */
 object CrashLogger {
     const val CRASH_DIR = "crashes"
@@ -85,6 +90,21 @@ object CrashLogger {
         }
     }
 
+    /** [LogRedaction.maskFilesIn] keeps each report's date, which the Debug list
+     *  and [prune] sort on. */
+    fun maskStoredReports(dir: File): Boolean = LogRedaction.maskFilesIn(dir, { it.isFile && it.name.startsWith(FILE_PREFIX) }, ::maskReport)
+
+    /**
+     * [report] through [LogRedaction.shareable], except the lines a device name
+     * cannot reach and a reader needs intact: code locations, and the version
+     * and time lines.
+     */
+    fun maskReport(report: String): String = report.lines().joinToString("\n") { line ->
+        if (OWN_LINE.matches(line)) line else LogRedaction.shareable(line)
+    }
+
+    private val OWN_LINE = Regex("""\s+at \S+\([^()]*\)|\s+\.\.\. [0-9]+ more|time_ms: [0-9]+|version: \S+ \([0-9]+\)""")
+
     /** Test seam: clear the install-once guard so a per-test harness can re-install. */
     @VisibleForTesting
     internal fun resetForTest() {
@@ -127,14 +147,16 @@ object CrashLogger {
         versionCode: Int,
     ): String {
         val trace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
-        return buildString {
-            appendLine("bike-radar crash report")
-            appendLine("time_ms: $nowMs")
-            appendLine("version: $versionName ($versionCode)")
-            appendLine("thread: $threadName")
-            appendLine("exception: ${throwable.javaClass.name}: ${throwable.message ?: ""}")
-            appendLine()
-            append(trace)
-        }
+        return maskReport(
+            buildString {
+                appendLine("bike-radar crash report")
+                appendLine("time_ms: $nowMs")
+                appendLine("version: $versionName ($versionCode)")
+                appendLine("thread: $threadName")
+                appendLine("exception: ${throwable.javaClass.name}: ${throwable.message ?: ""}")
+                appendLine()
+                append(trace)
+            },
+        )
     }
 }

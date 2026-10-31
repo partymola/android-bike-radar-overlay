@@ -203,8 +203,8 @@ to its file. The notes below are the working summary.
   under the test variant. The boundary is RAW BYTES: a decoded value the app
   already publishes to Home Assistant is not a payload, though some are
   guarded and pinned anyway because they sit beside one. Device names and
-  connection state still reach release logcat, deliberately, because the link
-  journal records them and the Privacy screen discloses it.
+  connection state still reach release logcat, deliberately: reading it takes
+  a developer tool, and no report template asks for it.
   By default a file opens per radar connection after the handshake, so a
   mid-ride radar drop splits one ride across files with the gap between them
   unrecorded, and an ordinary capture carries neither the DIS serial nor the
@@ -238,6 +238,17 @@ to its file. The notes below are the working summary.
   capture is NOT attributable to a tree**: two release APKs built from
   different code stamp identically. Why, and the `commit=unknown` fallback:
   `BuildStamp` KDoc.
+- **In the journal and crash reports, words with four or more digits are
+  masked.** That is where some devices put a serial in their name.
+  `LogRedaction.shareable` applies the rule and removes addresses.
+  `LinkEventJournal` uses it on write and on read, and `CrashLogger` in each
+  report (`LinkEventJournalTest`, `CrashLoggerTest`). A one-time pass at app
+  start covers files already on disk and retries until it succeeds
+  (`StoredFilesMaskTest`). A long number survives only in these shapes, so give a
+  new journal line's number one of them: a `key=` that is lowercase with no
+  digits, `ms` or ` s`, a date, or `0x` (`DiagnosticBundleTest`). A capture log
+  takes no device name (`aCaptureLogNeverCarriesTheRadarsName`); the serial in a
+  setup transcript is there on purpose, and the rider is told before sharing it.
 
 ## Protocol reference
 

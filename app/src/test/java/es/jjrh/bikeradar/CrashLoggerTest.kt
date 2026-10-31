@@ -33,6 +33,44 @@ class CrashLoggerTest {
         assertTrue(report.contains("java.lang.NullPointerException"))
     }
 
+    @Test fun aSerialOrAddressInTheMessageOrThreadIsMasked() {
+        val report = CrashLogger.formatReport(
+            nowMs = 1L,
+            threadName = "gatt XYZ73521",
+            throwable = IllegalStateException("gatt Cam 58213 at 11:22:33:44:55:66"),
+            versionName = "v",
+            versionCode = 1,
+        )
+        assertTrue(report, report.contains("thread: gatt XYZ#####"))
+        assertTrue(report, report.contains("exception: java.lang.IllegalStateException: gatt Cam ##### at <redacted>"))
+        assertTrue(report, report.contains("\njava.lang.IllegalStateException: gatt Cam ##### at <redacted>"))
+        for (raw in listOf("73521", "58213", "11:22")) assertFalse(report, report.contains(raw))
+    }
+
+    @Test fun aSerialInACauseIsMasked() {
+        val report = CrashLogger.formatReport(1L, "main", RuntimeException("outer", IllegalStateException("gatt XYZ73521")), "v", 1)
+        assertTrue(report, report.contains("Caused by: java.lang.IllegalStateException: gatt XYZ#####"))
+        assertFalse(report, report.contains("73521"))
+    }
+
+    @Test(timeout = 5_000)
+    fun aLongRunOfParenthesesInAMessageStaysCheap() {
+        val line = "\tat " + "(".repeat(300_000)
+        assertEquals(line, CrashLogger.maskReport(line))
+    }
+
+    @Test fun whatMakesAReportUsefulIsLeftAlone() {
+        val boom = IllegalStateException("gatt status 0x80000000").apply {
+            stackTrace = arrayOf(StackTraceElement("es.jjrh.bikeradar.Foo\$abc1234", "run", "Foo.kt", 1234))
+        }
+        val report = CrashLogger.formatReport(1_700_000_000_000L, "main", boom, "1.10.0", 4200)
+        assertTrue(report, report.contains("time_ms: 1700000000000"))
+        assertTrue(report, report.contains("version: 1.10.0 (4200)"))
+        assertTrue(report, report.contains("gatt status 0x80000000"))
+        assertTrue(report, report.contains("\tat es.jjrh.bikeradar.Foo\$abc1234.run(Foo.kt:1234)"))
+        assertFalse("a blank line stays blank:\n$report", report.contains("<unset>"))
+    }
+
     @Test fun writeReportToWritesAReadableFile() {
         val dir = Files.createTempDirectory("crashwrite").toFile()
         val file = CrashLogger.writeReportTo(dir, 1L, "main", RuntimeException("x"), "v", 1)

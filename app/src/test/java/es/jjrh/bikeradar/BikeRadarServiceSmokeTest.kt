@@ -747,8 +747,8 @@ class BikeRadarServiceSmokeTest {
         // own radar match keeps it off the radar link.
         val (controller, _, journal) = twoRadarService(emptyList())
         pair("AA:BB:CC:DD:EE:44", "Varia Vue 49548")
-        assertTrue(journal.readText().contains("device paired; treated as a sighting Varia Vue 49548"))
-        assertEquals(0, journal.starts("Varia Vue 49548"))
+        assertTrue(journal.readText().contains("device paired; treated as a sighting Varia Vue #####"))
+        assertEquals(0, journal.starts("Varia Vue #####"))
         controller.destroy()
     }
 

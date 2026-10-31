@@ -11,11 +11,13 @@ import es.jjrh.bikeradar.data.Prefs
  * Application entry point. It installs [CrashLogger] as early as possible, so
  * an uncaught exception on ANY thread - including one during MainActivity /
  * Compose startup, before the foreground service ever runs - is recorded to
- * app storage for later diagnosis. It also trims debug screenshots to their
- * cap, which the Privacy screen states, runs the one-time settings migrations
- * the service relies on, and keeps the saved approximate area in
- * step with the settings: read when one starts needing it, deleted when none
- * does ([LocationCache]).
+ * app storage for later diagnosis. At each start until every file has passed,
+ * it also goes over the files an upgraded install already holds and masks device
+ * identifiers in those it can rewrite ([LogRedaction.maskStoredFilesOnce]). It
+ * trims debug screenshots to their cap, which the Privacy screen states, runs
+ * the one-time settings migrations the service relies on, and keeps the saved
+ * approximate area in step with the settings: read when one starts needing it,
+ * deleted when none does ([LocationCache]).
  */
 class BikeRadarApp : Application() {
 
@@ -24,6 +26,9 @@ class BikeRadarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLogger.install(this)
+        // Before any screen can share a file.
+        runCatching { LogRedaction.maskStoredFilesOnce(Prefs(this), getExternalFilesDir(null)) }
+            .onFailure { Log.w("BikeRadar.App", "masking stored files failed: $it") }
         // A throw here would crash every start, so a failed trim is logged and dropped.
         runCatching { ScreenshotCaptureService.pruneSaved(getExternalFilesDir(null)) }
             .onFailure { Log.w("BikeRadar.App", "screenshot trim failed: $it") }

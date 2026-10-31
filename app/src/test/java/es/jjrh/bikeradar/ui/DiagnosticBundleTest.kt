@@ -86,17 +86,96 @@ class DiagnosticBundleTest {
     }
 
     @Test
-    fun `numbers that are not part of a name survive`() {
-        // Timestamps, durations and key=value counts, in the shapes the
-        // journal writes them.
+    fun `a serial after a space does not survive`() {
+        val out = build(journal = listOf("device paired; treated as a sighting Cam 58213"))
+
+        assertFalse(out.contains("58213"))
+        assertTrue(out.contains("treated as a sighting Cam #####"))
+    }
+
+    @Test
+    fun `a serial after a hash, two separators or an equals sign does not survive`() {
+        val out = build(
+            journal = listOf(
+                "radar link start XYZ#73521",
+                "radar link start XYZ--73522",
+                "radar link start XYZ-_73523",
+                "radar link start XYZ=73524",
+                "radar link start Cam=73525",
+                "radar link start a1b=73526",
+            ),
+        )
+
+        assertTrue(out.contains("radar link start XYZ######"))
+        assertTrue(out.contains("radar link start XYZ--#####"))
+        assertTrue(out.contains("radar link start XYZ-_#####"))
+        assertTrue(out.contains("radar link start XYZ=#####"))
+        assertTrue(out.contains("radar link start Cam=#####"))
+        assertTrue(out.contains("radar link start a1b=#####"))
+    }
+
+    @Test
+    fun `a serial with letters mixed in does not survive`() {
+        val out = build(journal = listOf("camera link start CAM-1A2B3C4D", "radar link start RTL A1B2C3D4"))
+
+        assertTrue(out.contains("camera link start CAM-########"))
+        assertTrue(out.contains("radar link start RTL A#######"))
+    }
+
+    @Test
+    fun `an identifier with under four digits stays visible`() {
+        // The limit of a rule that also has to leave model numbers alone.
+        val lines = listOf("radar link start CAM-12-34-56", "radar link start A1B2C3", "radar link start ABCDEF")
+        val out = build(journal = lines)
+
+        lines.forEach { assertTrue(out.contains(it)) }
+    }
+
+    @Test
+    fun `numbers in the shapes the journal writes survive`() {
         val lines = listOf(
-            "12:34:56 radar legacy stream ended frames=12345 hb=4000 threat=1234 unparsed=0",
-            "12:34:56 radar reconnect in 8000ms (backoff=8000ms)",
-            "12:34:56 service started 123456",
+            "1999-01-01 12:34:56 radar legacy stream ended frames=12345 hb=4000 threat=1234 unparsed=0",
+            "1999-01-01 12:34:56 radar reconnect in 8000ms (backoff=8000ms)",
+            "1999-01-01 12:34:56 radar V2 stream silent 12000ms, last received 13000ms ago; tearing down",
+            "1999-01-01 12:34:56 radar link lost status=147 3990ms after its last frame",
+            "1999-01-01 12:34:56 radar conn state status=133 newState=0",
+            "1999-01-01 12:34:56 no-radar alert sounded (cue 1, 4000 s into the ride, grace 3600 s)",
+            "1999-01-01 12:34:56 radar handshake aborted at amv-04 (quick reconnect)",
         )
         val out = build(journal = lines)
 
         lines.forEach { assertTrue("a number was masked in: $it\n$out", out.contains(it)) }
+    }
+
+    @Test
+    fun `a model number survives in every name shape`() {
+        val lines = listOf(
+            "radar link start RTL515",
+            "radar link start Varia RTL515",
+            "radar link start RearVue8",
+            "camera link start Vue 870",
+        )
+        val out = build(journal = lines)
+
+        lines.forEach { assertTrue(out.contains(it)) }
+    }
+
+    @Test
+    fun `the settings, build and file listings are left as they are`() {
+        // Firmware revisions, link probe tags and file stamps are what a report
+        // is read for, and none of them comes from a device name.
+        val probe = "radar_link_probe=since=1700000000000 svc=3200[3203,3204] 2800[2811] out=amv-04"
+        val out = build(
+            prefsDump = "radar_firmware_rev=2026.10\n$probe",
+            captureLogs = listOf(DiagnosticBundle.FileLine("bike-radar-capture-19990101-120000.log.gz", 12)),
+            crashLogs = listOf(DiagnosticBundle.FileLine("bike-radar-crash-19990101-120000.log", 1)),
+        )
+
+        assertTrue(out.contains("radar_firmware_rev=2026.10"))
+        assertTrue(out.contains(probe))
+        assertTrue(out.contains("bike-radar-capture-19990101-120000.log.gz  12KB"))
+        assertTrue(out.contains("bike-radar-crash-19990101-120000.log"))
+        assertTrue(out.contains("Generated: Mon Jan 01 00:00:00 GMT 2035"))
     }
 
     @Test
@@ -105,6 +184,46 @@ class DiagnosticBundleTest {
 
         assertFalse(out.contains("12345"))
         assertTrue(out.contains("gatt XYZ##### closed"))
+    }
+
+    @Test
+    fun `a serial after a space in a crash report's cause does not survive`() {
+        val out = build(crashText = "Caused by: java.io.IOException: gatt Cam 58213 closed")
+
+        assertTrue(out.contains("Caused by: java.io.IOException: gatt Cam ##### closed"))
+    }
+
+    @Test
+    fun `a crash report keeps its code locations, version, time and status codes`() {
+        val report = listOf(
+            "time_ms: 1700000000000",
+            "version: 1.10.0 (4200)",
+            "exception: java.lang.IllegalStateException: gatt status 0x80000000",
+            "\tat es.jjrh.bikeradar.Foo\$abc1234.run(Foo.kt:1234)",
+            "\t... 12345 more",
+        )
+        val out = build(crashText = report.joinToString("\n"))
+
+        report.forEach { assertTrue("masked: $it\n$out", out.contains(it)) }
+    }
+
+    @Test
+    fun `a message shaped like a report's own lines is still masked`() {
+        // An exception message can hold a newline. Only a line in the exact shape
+        // the report writes is left alone, so these near misses are masked; a
+        // message forging the exact shape would still get through.
+        val out = build(
+            crashText = listOf(
+                "version: gatt XYZ73521",
+                "time_ms: XYZ73522",
+                "\tat XYZ73523 closed",
+                "\t... XYZ73524 more",
+                "gatt XYZ73525 version: 1.0 (4)",
+            ).joinToString("\n"),
+        )
+
+        (21..25).forEach { assertFalse("XYZ735$it survived:\n$out", out.contains("735$it")) }
+        assertTrue(out.contains("version: gatt XYZ#####"))
     }
 
     @Test

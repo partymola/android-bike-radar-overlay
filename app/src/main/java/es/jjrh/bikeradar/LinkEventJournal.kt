@@ -39,6 +39,11 @@ import java.util.Locale
  * Capped at [MAX_BYTES] / trimmed to [KEEP_LINES], so it can't grow
  * unbounded under a flapping link.
  *
+ * Every line goes through [LogRedaction.shareable] on the way in, because the
+ * file can be copied over USB, and on the way out, because the pass over lines
+ * an upgraded install already holds ([maskStoredLines]) can fail. So no writer
+ * or reader can skip it.
+ *
  * Thread-safety: [log] is called from GATT callback threads and IO
  * coroutines; [readTail] from the Debug screen. The lock is on the
  * companion (one process-global monitor for the one process-global
@@ -55,7 +60,7 @@ internal class LinkEventJournal(
             try {
                 file.parentFile?.mkdirs()
                 val stamp = SimpleDateFormat(STAMP_FORMAT, Locale.ROOT).format(Date(nowMs()))
-                file.appendText("$stamp ${sanitizeEvent(event)}\n")
+                file.appendText("$stamp ${LogRedaction.shareable(sanitizeEvent(event))}\n")
                 if (file.length() > MAX_BYTES) {
                     val kept = file.readLines().takeLast(KEEP_LINES)
                     file.writeText(kept.joinToString("\n", postfix = "\n"))
@@ -72,7 +77,7 @@ internal class LinkEventJournal(
             val file = journalFile() ?: return emptyList()
             if (!file.exists()) return emptyList()
             return try {
-                file.readLines().filter { it.isNotBlank() }.takeLast(maxLines).asReversed()
+                file.readLines().filter { it.isNotBlank() }.takeLast(maxLines).asReversed().map(LogRedaction::shareable)
             } catch (t: Throwable) {
                 Log.w(TAG, "journal read failed: $t")
                 emptyList()
@@ -98,6 +103,11 @@ internal class LinkEventJournal(
         /** Process-global: the service's writer and the Debug screen's
          *  reader are separate instances contending on one file. */
         private val lock = Any()
+
+        /** For [LogRedaction.maskStoredFilesOnce]; [root] is the external files root. */
+        internal fun maskStoredLines(root: File): Boolean = synchronized(lock) {
+            LogRedaction.maskFilesIn(File(root, JOURNAL_DIR), { it.name == FILE_NAME }, LogRedaction::shareable)
+        }
 
         /**
          * Neutralise control characters before an event is written. Event

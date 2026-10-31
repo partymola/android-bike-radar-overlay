@@ -108,16 +108,12 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         Permissions.missingForService(ctx) == MissingPermission.NEARBY_DEVICES
     }
 
-    // Radar battery is matched by name across the bus (same heuristic the home
-    // Quick Status card uses); a recent read is the proxy for connected.
     // The tick is hoisted past the && below, whose short-circuit would skip the
     // read when no battery entry exists - and an unread tick means no
     // recomposition, so the status would freeze exactly in the aborting-radar
     // case it is for.
     val tickNow = tickNowMs
-    val radarBattery = batteryEntries.values.firstOrNull { entry ->
-        RadarSelection.isRadarName(entry.name)
-    }
+    val radarBattery = RadarSelection.radarBattery(batteryEntries, allBonded, prefsSnap.radarMac)
     // Frames outrank the battery proxy. A battery reading is evidence the link
     // works; decoded targets are evidence it is DOING its job, and the two come
     // apart in both directions. A legacy-stream radar may expose no battery at

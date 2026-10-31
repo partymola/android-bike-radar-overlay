@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import es.jjrh.bikeradar.data.Prefs
+import java.util.Locale
 
 /**
  * Radar device-selection policy (hybrid). The app finds the rear radar by
@@ -28,7 +29,8 @@ import es.jjrh.bikeradar.data.Prefs
 object RadarSelection {
 
     /** [DeviceNameMatcher.isRadarName]. Used for the status surfaces
-     *  ([hasLinkableRadar]) and the radar chooser ([choosableRadars]). */
+     *  ([hasLinkableRadar]), the radar chooser ([choosableRadars]) and the
+     *  unpinned battery reading ([radarBattery]). */
     fun isRadarName(name: String?): Boolean = DeviceNameMatcher.isRadarName(name)
 
     /**
@@ -138,6 +140,29 @@ object RadarSelection {
         // `a front camera alone is not named as the radar`).
         return choosableRadars(allBonded).singleOrNull()
     }
+
+    /**
+     * The battery reading of this bike's radar, for its battery rows and the
+     * cross-app answer. A pin answers with the reading under its own name, or
+     * nothing, since only it links (`RadarRowBatteryTest`); the bus is keyed by
+     * name, so two radars sharing a name share a reading. A pin the list shows gone
+     * falls back, as [shouldLinkRadar] does, to the first entry with a radar name
+     * (`aPinNoLongerBondedAnswersWithTheRadarThatLinks`). An empty list may be a
+     * failed read, so it deliberately keeps the pin where [shouldLinkRadar] falls
+     * back: with Bluetooth off the answer can be the pin's last figure, and a pin
+     * unpaired with nothing else paired keeps answering it
+     * (`anEmptyBondedReadKeepsThePin`).
+     */
+    fun radarBattery(entries: Map<String, BatteryEntry>, allBonded: List<BondedRadar>, chosenMac: String?): BatteryEntry? {
+        if (chosenMac == null || (allBonded.isNotEmpty() && allBonded.none { it.mac.equals(chosenMac, ignoreCase = true) })) {
+            return entries.values.firstOrNull { isRadarName(it.name) }
+        }
+        val slug = BikeRadarService.macToSlug[chosenMac] ?: BikeRadarService.macToSlug[chosenMac.uppercase(Locale.ROOT)]
+        return slug?.let { entries[it] }
+    }
+
+    /** The paired list for [radarBattery]: none without a pin, which never reads it. */
+    fun bondedForBattery(ctx: Context, chosenMac: String?): List<BondedRadar> = if (chosenMac == null) emptyList() else bondedDevices(ctx)
 
     /** The radars a rider chooses between: every name [isRadarName] accepts, so
      *  a front camera never (`a front camera is never offered as the radar`)

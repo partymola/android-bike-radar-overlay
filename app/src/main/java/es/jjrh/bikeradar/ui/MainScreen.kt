@@ -65,7 +65,6 @@ import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
-import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
@@ -322,9 +321,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     }
     val onDashcamNo = { prefs.dashcamOwnership = DashcamOwnership.NO }
 
-    val radarBattery = batteryEntries.values.firstOrNull { entry ->
-        DeviceNameMatcher.isRadarName(entry.name)
-    }
+    val bondedNow = remember(tickNowMs, prefsSnap.radarMac) { RadarSelection.bondedForBattery(ctx, prefsSnap.radarMac) }
+    val radarBattery = RadarSelection.radarBattery(batteryEntries, bondedNow, prefsSnap.radarMac)
     val dashcamBattery = dashcamSlug?.let { batteryEntries[it] }
     val haStatus = HaStatusDeriver.derive(haConfigured, haHealth)
     // eBike freshness samples elapsedRealtime() fresh on every recompose;

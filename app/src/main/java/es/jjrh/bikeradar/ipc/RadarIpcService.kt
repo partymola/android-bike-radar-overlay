@@ -9,8 +9,7 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import es.jjrh.bikeradar.BatteryStateBus
-import es.jjrh.bikeradar.BikeRadarService
-import es.jjrh.bikeradar.DeviceNameMatcher
+import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.access.PrefsRadarGrantStore
 import es.jjrh.bikeradar.access.StoredRadarAccessGate
@@ -23,7 +22,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * The bound service another app connects to.
@@ -67,11 +65,8 @@ class RadarIpcService : Service() {
                 // what makes that exact; without one, and with two radars
                 // bonded, this answers whichever the map happens to yield
                 // first, so the AIDL scopes the promise to the pinned case.
-                val entries = BatteryStateBus.entries.value
-                val pinned = prefs.radarMac
-                    ?.let { BikeRadarService.macToSlug[it] ?: BikeRadarService.macToSlug[it.uppercase(Locale.ROOT)] }
-                    ?.let { entries[it] }
-                (pinned ?: entries.values.firstOrNull { DeviceNameMatcher.isRadarName(it.name) })?.pct
+                val pin = prefs.radarMac
+                RadarSelection.radarBattery(BatteryStateBus.entries.value, RadarSelection.bondedForBattery(this, pin), pin)?.pct
             },
             setLightMode = { RadarControlBridge.set(it) },
             markUsed = { store.markUsed(it, System.currentTimeMillis()) },

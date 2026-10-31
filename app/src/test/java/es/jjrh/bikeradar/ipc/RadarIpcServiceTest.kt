@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar.ipc
 
 import android.app.Service
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -20,6 +21,7 @@ import es.jjrh.bikeradar.Vehicle
 import es.jjrh.bikeradar.access.PrefsRadarGrantStore
 import es.jjrh.bikeradar.access.RadarGrant
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -238,6 +240,7 @@ class RadarIpcServiceTest {
         // rider's pin is what makes it exact, so this is the case worth pinning.
         val service = controller.create().get()
         grantSelf()
+        bond("AA:BB:CC:DD:EE:FF")
         Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
         BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
         BatteryStateBus.update(BatteryEntry("other", "OtherRadar", 11))
@@ -254,6 +257,7 @@ class RadarIpcServiceTest {
         // answer falls back to whichever radar the map yields first.
         val service = controller.create().get()
         grantSelf()
+        bond("AA:BB:CC:DD:EE:FF")
         Prefs(context).radarMac = "aa:bb:cc:dd:ee:ff"
         BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
         BatteryStateBus.update(BatteryEntry("other", "OtherRadar", 11))
@@ -279,6 +283,60 @@ class RadarIpcServiceTest {
     }
 
     @Test
+    fun aPickedRadarWithNoReadingAnswersNoOtherRadarsFigure() {
+        // The AIDL: the pin is the primary radar, and -1 means no reading.
+        val service = controller.create().get()
+        grantSelf()
+        bond("AA:BB:CC:DD:EE:FF")
+        Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
+        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+
+        assertEquals(-1, service.binder.batteryPercent)
+    }
+
+    @Test
+    fun aPinNoLongerBondedAnswersWithTheRadarThatLinks() {
+        // Selection falls back to name-match then, so the pin's old reading is
+        // no longer the primary radar's. What a rider replacing a pinned radar
+        // reaches.
+        val service = controller.create().get()
+        grantSelf()
+        bond("AA:BB:CC:DD:EE:11")
+        Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
+        BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
+        BatteryStateBus.update(BatteryEntry("pinned", "OtherRadar", 88))
+        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+
+        assertEquals(66, service.binder.batteryPercent)
+    }
+
+    @Test
+    fun aFailedBondedReadKeepsThePin() {
+        // A failed read is empty. Taken for an unpaired pin, it would hand a
+        // granted app another radar's figure.
+        val service = controller.create().get()
+        grantSelf()
+        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(emptySet())
+        Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
+        BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
+        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+        BatteryStateBus.update(BatteryEntry("pinned", "TestRadar", 88))
+
+        assertEquals(88, service.binder.batteryPercent)
+    }
+
+    @Test
+    fun theAnswerGetsItsPairedListFromBondedForBattery() {
+        // By source: the answer is the same either way, and no shadow counts the
+        // read. It runs on a binder thread a consumer is blocked on, and
+        // `thePairedListIsReadOnlyForAPin` holds the helper to reading only for a pin.
+        val source = RepoFiles.mainSource("ipc/RadarIpcService.kt").readText()
+        assertTrue(source.contains("bondedForBattery(this, pin)"))
+        assertFalse(source.contains("bondedDevices("))
+    }
+
+    @Test
     fun aFrontCamerasBatteryIsNotAnsweredAsTheRadars() {
         val service = controller.create().get()
         grantSelf()
@@ -300,6 +358,11 @@ class RadarIpcServiceTest {
 
         assertEquals(Service.START_NOT_STICKY, mode)
         assertTrue("a start with no client must not pin the service", shadowOf(service).isStoppedBySelf)
+    }
+
+    private fun bond(mac: String) {
+        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(setOf(adapter.getRemoteDevice(mac)))
     }
 
     private fun liveState() = RadarState(

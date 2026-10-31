@@ -59,7 +59,6 @@ import es.jjrh.bikeradar.BatteryEntry
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
 import es.jjrh.bikeradar.DataSource
-import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.EBikeStage
 import es.jjrh.bikeradar.EBikeStateBus
 import es.jjrh.bikeradar.HaHealth
@@ -72,6 +71,7 @@ import es.jjrh.bikeradar.PermissionsSummaryDeriver
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.RadarLinkState
 import es.jjrh.bikeradar.RadarLinkStatus
+import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.RadarStateBus
 import es.jjrh.bikeradar.access.PrefsRadarGrantStore
 import es.jjrh.bikeradar.access.RadarAccessSummary
@@ -134,9 +134,9 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
     // Stale entries are dropped rather than rendered: BatteryStateBus is never
     // cleared in production, so an entry survives long after the device is off,
     // and every consumer below treats "present" as "connected".
-    val radarBattery: BatteryEntry? = batteryEntries.values.firstOrNull { entry ->
-        DeviceNameMatcher.isRadarName(entry.name)
-    }?.takeIf { batteryReadIsFresh(it.readAtMs, tickNowMs) }
+    val bondedNow = remember(tickNowMs, prefsSnap.radarMac) { RadarSelection.bondedForBattery(ctx, prefsSnap.radarMac) }
+    val radarBattery: BatteryEntry? = RadarSelection.radarBattery(batteryEntries, bondedNow, prefsSnap.radarMac)
+        ?.takeIf { batteryReadIsFresh(it.readAtMs, tickNowMs) }
     val dashcamSlug = prefsSnap.dashcamMac?.let { mac ->
         BikeRadarService.macToSlug[mac]
             ?: BikeRadarService.macToSlug[mac.uppercase(Locale.ROOT)]

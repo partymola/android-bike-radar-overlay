@@ -195,6 +195,7 @@ class RadarLinkControllerHarnessTest {
         // pin the refresh-FAILED branch - the one that refuses the fallback -
         // while appearing to test the fallback itself.
         refreshGatt: (BluetoothGatt) -> Boolean = { true },
+        macToSlug: MutableMap<String, String> = ConcurrentHashMap(),
     ): RadarLinkController = RadarLinkController(
         context = app,
         scope = scope,
@@ -204,7 +205,7 @@ class RadarLinkControllerHarnessTest {
         haPublisher = haPublisher(backgroundScope),
         notifications = ServiceNotifications(app) { Prefs(app) },
         linkState = gateway,
-        macToSlug = ConcurrentHashMap(),
+        macToSlug = macToSlug,
         slug = { it.lowercase() },
         journal = { journal += it },
         clock = clock,
@@ -472,6 +473,21 @@ class RadarLinkControllerHarnessTest {
         // life of the app, with the suite green.
         assertTrue("a connected radar must be reachable by a granted app", RadarControlBridge.available)
 
+        controller.forceReconnect()
+    }
+
+    @Test fun theHandshakesBatteryReadMapsTheRadarToItsSlug() = runTest {
+        // A picked radar finds its battery row through this entry.
+        val link = Link()
+        val slugs = ConcurrentHashMap<String, String>()
+        val controller = controller(link, macToSlug = slugs)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        assertEquals(mapOf(mac to "testradar"), slugs.toMap())
         controller.forceReconnect()
     }
 

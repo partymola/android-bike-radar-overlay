@@ -641,7 +641,7 @@ class BatteryScanReceiverTest {
 
     @Test
     fun matchesVariaNameAcceptsTheKnownHeuristicKeywords() {
-        for (n in listOf("Varia RTL515", "Vue 49548", "RearVue8", "RTL510", "Garmin Edge")) {
+        for (n in listOf("Varia RTL515", "Vue 84509", "RearVue8", "RTL510", "Garmin Edge")) {
             assertTrue("expected $n to match", BatteryScanReceiver.matchesVariaName(n))
         }
         // Case-insensitive.

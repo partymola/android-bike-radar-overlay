@@ -746,7 +746,7 @@ class BikeRadarServiceSmokeTest {
         // Its name passes the gate a scan wake applies, so only the sighting's
         // own radar match keeps it off the radar link.
         val (controller, _, journal) = twoRadarService(emptyList())
-        pair("AA:BB:CC:DD:EE:44", "Varia Vue 49548")
+        pair("AA:BB:CC:DD:EE:44", "Varia Vue 84509")
         assertTrue(journal.readText().contains("device paired; treated as a sighting Varia Vue #####"))
         assertEquals(0, journal.starts("Varia Vue #####"))
         controller.destroy()

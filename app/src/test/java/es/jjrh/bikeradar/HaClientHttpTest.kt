@@ -403,15 +403,15 @@ class HaClientHttpTest {
     @Test
     fun publishFrontModeDiscoveryAndStatePost() = runTest {
         respondAll(200)
-        assertTrue(client().publishFrontModeDiscovery("vue49548", "Vue 49548"))
-        assertTrue(client().publishFrontModeState("vue49548", "Day Flash"))
+        assertTrue(client().publishFrontModeDiscovery("vue84509", "Vue 84509"))
+        assertTrue(client().publishFrontModeState("vue84509", "Day Flash"))
         assertEquals(2, requests.size)
         assertEquals(
-            "homeassistant/sensor/bikeradar_vue49548_front_mode/config",
+            "homeassistant/sensor/bikeradar_vue84509_front_mode/config",
             JSONObject(requests[0].body).getString("topic"),
         )
         val state = JSONObject(requests[1].body)
-        assertEquals("bikeradar/vue49548/front_mode", state.getString("topic"))
+        assertEquals("bikeradar/vue84509/front_mode", state.getString("topic"))
         assertEquals("Day Flash", state.getString("payload"))
     }
 

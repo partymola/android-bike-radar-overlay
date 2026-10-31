@@ -26,7 +26,7 @@ class DeviceNameMatcherTest {
     @Test fun rearAdvertIsConservative() {
         // Vendor word alone must NOT open the live link (could be a front
         // camera) - the pin path covers vendor-named rear units.
-        assertFalse(DeviceNameMatcher.isRearAdvert("Varia Vue 49548"))
+        assertFalse(DeviceNameMatcher.isRearAdvert("Varia Vue 84509"))
         assertFalse(DeviceNameMatcher.isRearAdvert("Garmin Edge"))
         assertFalse(DeviceNameMatcher.isRearAdvert("JBL Headphones"))
     }
@@ -51,7 +51,7 @@ class DeviceNameMatcherTest {
         assertTrue(DeviceNameMatcher.isUnambiguousRadar("Varia Radar"))
         // Front cameras share the vendor word but must stay pickable as
         // dashcams.
-        assertFalse(DeviceNameMatcher.isUnambiguousRadar("Varia Vue 49548"))
+        assertFalse(DeviceNameMatcher.isUnambiguousRadar("Varia Vue 84509"))
         assertFalse(DeviceNameMatcher.isUnambiguousRadar("Vue-123"))
         assertFalse(DeviceNameMatcher.isUnambiguousRadar("JBL Headphones"))
     }
@@ -70,7 +70,7 @@ class DeviceNameMatcherTest {
         name in listOf(
             "RearVue8",
             "RTL515 1234",
-            "Varia Vue 49548",
+            "Varia Vue 84509",
             "Vue-123",
             "Garmin Edge",
         )

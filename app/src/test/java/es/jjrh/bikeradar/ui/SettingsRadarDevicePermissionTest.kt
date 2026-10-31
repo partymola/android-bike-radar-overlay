@@ -84,4 +84,17 @@ class SettingsRadarDevicePermissionTest {
         composeRule.onNodeWithText("Pair your radar").assertIsDisplayed()
         composeRule.onNodeWithText("Permissions needed").assertDoesNotExist()
     }
+
+    @Test
+    fun withScanAloneDeniedAndAWatchPairedItStillAsksForThePermission() {
+        // The list reads, and the screen still asks: the app cannot run on Connect alone.
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val watch = adapter.getRemoteDevice("AA:BB:CC:DD:EE:33")
+        shadowOf(watch).setName("Watch 7")
+        shadowOf(adapter).setBondedDevices(setOf(watch))
+        show()
+        composeRule.onNodeWithText("Pair your radar").assertDoesNotExist()
+        composeRule.onNodeWithText("No alerts until you grant Nearby devices").assertIsDisplayed()
+    }
 }

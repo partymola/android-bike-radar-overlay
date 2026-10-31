@@ -25,6 +25,7 @@ import org.robolectric.annotation.GraphicsMode
  *  - radarBondedNoneSelected (and its Spanish twin): two radars, none picked
  *  - radarBondedDashcamUnanswered: radar paired, dashcam still asking
  *  - radarBondedDashcamPicked: full happy path with both rows resolved
+ *  - nearbyDenied (and its Spanish twin): the radar's card asks for it
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -52,6 +53,37 @@ class OnboardingPairingStepSnapshotTest {
                     onFinish = {},
                 )
             }
+        }
+    }
+
+    @Test
+    fun nearbyDenied() {
+        captureRoboImage { NearbyDenied() }
+    }
+
+    @Test
+    @Config(qualifiers = "es-w448dp-h997dp-xxhdpi")
+    fun nearbyDeniedEs() {
+        captureRoboImage { NearbyDenied() }
+    }
+
+    @Composable
+    private fun NearbyDenied() {
+        UiTheme {
+            PairingStepContent(
+                radarBonded = false,
+                radarLocalName = null,
+                radarMac = null,
+                askForNearby = true,
+                dashcamOwnership = DashcamOwnership.UNANSWERED,
+                dashcamMac = null,
+                dashcamDisplayName = null,
+                onOpenBluetoothSettings = {},
+                onPickDashcam = {},
+                onDashcamSkip = {},
+                onDashcamReclaim = {},
+                onFinish = {},
+            )
         }
     }
 

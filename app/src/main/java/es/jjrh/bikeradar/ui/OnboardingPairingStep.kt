@@ -74,12 +74,16 @@ internal fun PairingStep(
     // RadarSelection's answers, so a pinned radar whose name does not match
     // reads as paired here too, and a front camera alone does not.
     var allBonded by remember { mutableStateOf(RadarSelection.bondedDevices(ctx)) }
+    var askForNearby by remember { mutableStateOf(RadarSelection.nearbyDeniedHidesPairedList(ctx, allBonded)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Read before the first wait, so a rider back from another app sees
+            // a fresh list at once.
             while (true) {
-                delay(2_000)
                 allBonded = RadarSelection.bondedDevices(ctx)
+                askForNearby = RadarSelection.nearbyDeniedHidesPairedList(ctx, allBonded)
+                delay(2_000)
             }
         }
     }
@@ -98,6 +102,8 @@ internal fun PairingStep(
         },
         onPick = { RadarSelection.pin(prefs, it) },
         pinnedMac = prefsSnap.radarMac,
+        askForNearby = askForNearby,
+        onGrantPermissions = { navController.navigate("settings/permissions") },
         dashcamOwnership = prefsSnap.dashcamOwnership,
         dashcamMac = prefsSnap.dashcamMac,
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
@@ -132,6 +138,10 @@ internal fun PairingStepContent(
     /** The rider's pick, marked in the list. Not [radarMac], which can be a
      *  device the app chose by name. */
     pinnedMac: String? = null,
+    /** [RadarSelection.nearbyDeniedHidesPairedList]: the card asks for the
+     *  permission in place of the radar's, since the radar may already be paired. */
+    askForNearby: Boolean = false,
+    onGrantPermissions: () -> Unit = {},
     dashcamOwnership: DashcamOwnership,
     dashcamMac: String?,
     dashcamDisplayName: String?,
@@ -153,7 +163,7 @@ internal fun PairingStepContent(
                 tint = br.brand,
                 mark = stringResource(R.string.onboarding_step_3_of_5),
                 title = stringResource(R.string.onboarding_pair_title),
-                sub = stringResource(R.string.onboarding_pair_sub),
+                sub = stringResource(if (askForNearby) R.string.onboarding_pair_sub_no_permission else R.string.onboarding_pair_sub),
             )
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -165,27 +175,36 @@ internal fun PairingStepContent(
                 // onboarding. Bonded with no single radar to name (two
                 // paired, none picked), it says what Settings says.
                 val radarNamed = radarLocalName ?: radarMac
-                DeviceRow(
-                    icon = Icons.Default.Sensors,
-                    tint = br.brand,
-                    title = stringResource(R.string.onboarding_pair_radar_title),
-                    optionalLabel = false,
-                    bonded = radarBonded,
-                    detail = if (radarBonded) {
-                        radarNamed ?: stringResource(R.string.settings_radardev_not_selected)
-                    } else {
-                        stringResource(R.string.onboarding_pair_radar_detail_unpaired)
-                    },
-                    detailIsDeviceName = radarNamed != null,
-                    detailHint = if (!radarBonded) {
-                        stringResource(R.string.onboarding_pair_radar_hint)
-                    } else {
-                        null
-                    },
-                    primaryCta = if (!radarBonded) stringResource(R.string.onboarding_pair_open_bt_settings) else null,
-                    primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
-                    onPrimary = onOpenBluetoothSettings,
-                )
+                if (askForNearby) {
+                    IntentCard(
+                        title = stringResource(R.string.main_status_permissions_title),
+                        subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
+                        filled = true,
+                        onClick = onGrantPermissions,
+                    )
+                } else {
+                    DeviceRow(
+                        icon = Icons.Default.Sensors,
+                        tint = br.brand,
+                        title = stringResource(R.string.onboarding_pair_radar_title),
+                        optionalLabel = false,
+                        bonded = radarBonded,
+                        detail = if (radarBonded) {
+                            radarNamed ?: stringResource(R.string.settings_radardev_not_selected)
+                        } else {
+                            stringResource(R.string.onboarding_pair_radar_detail_unpaired)
+                        },
+                        detailIsDeviceName = radarNamed != null,
+                        detailHint = if (!radarBonded) {
+                            stringResource(R.string.onboarding_pair_radar_hint)
+                        } else {
+                            null
+                        },
+                        primaryCta = if (!radarBonded) stringResource(R.string.onboarding_pair_open_bt_settings) else null,
+                        primaryCtaIcon = if (!radarBonded) Icons.Default.Bluetooth else null,
+                        onPrimary = onOpenBluetoothSettings,
+                    )
+                }
                 var pickExpanded by rememberSaveable { mutableStateOf(false) }
                 RadarNotListedHatch(
                     others = pickDevices,
@@ -331,7 +350,7 @@ internal fun PairingStepContent(
                 fontSize = 11.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
             )
-            if (!radarBonded) {
+            if (!radarBonded && !askForNearby) {
                 Text(
                     text = stringResource(R.string.onboarding_pair_radar_later),
                     color = br.fgDim,

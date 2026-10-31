@@ -235,7 +235,8 @@ object RadarSelection {
      *  listed" escape hatch: a radar the name heuristic doesn't know can
      *  still be pinned, and a pinned MAC must count as "still bonded" in
      *  [shouldLinkRadar] even though its name never matched. Empty on any
-     *  Bluetooth permission / adapter error. */
+     *  Bluetooth permission / adapter error, which the link path reads as none
+     *  paired (`an empty bonded read never moves a running link`). */
     @SuppressLint("MissingPermission")
     fun bondedDevices(ctx: Context): List<BondedRadar> = try {
         val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -250,4 +251,16 @@ object RadarSelection {
     } catch (_: Throwable) {
         emptyList()
     }
+
+    /**
+     * Whether [listed] is empty with Nearby devices denied, so the dashcam picker
+     * and setup's pairing step ask for the permission instead of offering pairing
+     * (`PairedListNearbyDeniedTest`). The permission decides, since a denied read
+     * can be refused or empty. With Scan alone denied an empty list is real, and
+     * they ask all the same. Bluetooth off with the permission granted
+     * deliberately reads as none paired (`thePickerReadsBluetoothOffAsNonePaired`).
+     * The radar screen keeps its own check: this one would offer pairing there on
+     * a Scan-only denial with a watch paired.
+     */
+    fun nearbyDeniedHidesPairedList(ctx: Context, listed: List<*>): Boolean = listed.isEmpty() && Permissions.missingForService(ctx) == MissingPermission.NEARBY_DEVICES
 }

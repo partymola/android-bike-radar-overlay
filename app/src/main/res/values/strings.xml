@@ -322,6 +322,9 @@
     <!-- Step 3: pairing -->
     <string name="onboarding_pair_title">Pair your devices</string>
     <string name="onboarding_pair_sub">Pairing happens in Android\'s Bluetooth settings, not here. Put the radar in pair mode, then tap Open Bluetooth settings.</string>
+    <!-- In place of the sub above while Nearby devices is denied. "Permissions
+         needed" is main_status_permissions_title, on the card below it. -->
+    <string name="onboarding_pair_sub_no_permission">Grant Nearby devices so the app can see what you\'ve paired. Tap Permissions needed, then press back to return here.</string>
     <string name="onboarding_pair_radar_title">Rear radar</string>
     <string name="onboarding_pair_radar_detail_unpaired">Not paired yet. The pairing screen is in Android\'s Bluetooth settings.</string>
     <string name="onboarding_pair_radar_hint">After pairing, press back to return here.</string>
@@ -763,6 +766,7 @@
     <string name="dashcam_picker_info_badge">i</string>
     <string name="dashcam_picker_explainer">Likely matches are paired devices whose name looks like a cycling dashcam or that have advertised battery this session.</string>
     <string name="dashcam_picker_refreshing">REFRESHING EVERY 2 s</string>
+    <string name="dashcam_picker_no_permission_sub">Grant Nearby devices to choose your dashcam</string>
     <string name="dashcam_picker_cancel">Cancel</string>
     <string name="dashcam_picker_save">Save</string>
 

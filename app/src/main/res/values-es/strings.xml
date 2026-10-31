@@ -272,6 +272,7 @@
     <!-- Paso 3: emparejamiento -->
     <string name="onboarding_pair_title">Empareja tus dispositivos</string>
     <string name="onboarding_pair_sub">El emparejamiento se hace en los ajustes de Bluetooth de Android, no aquí. Pon el radar en modo de emparejamiento y luego toca Abrir ajustes de Bluetooth.</string>
+    <string name="onboarding_pair_sub_no_permission">Concede Dispositivos cercanos para que la app vea lo que has emparejado. Toca «Faltan permisos» y pulsa Atrás para volver aquí.</string>
     <string name="onboarding_pair_radar_title">Radar trasero</string>
     <string name="onboarding_pair_radar_detail_unpaired">Aún sin emparejar. La pantalla de emparejamiento está en los ajustes de Bluetooth de Android.</string>
     <string name="onboarding_pair_radar_hint">Tras emparejar, pulsa Atrás para volver aquí.</string>
@@ -693,6 +694,7 @@
     <string name="dashcam_picker_info_badge">i</string>
     <string name="dashcam_picker_explainer">Las coincidencias probables son dispositivos emparejados cuyo nombre se parece al de una cámara delantera de ciclismo o que han emitido su nivel de batería en esta sesión.</string>
     <string name="dashcam_picker_refreshing">ACTUALIZANDO CADA 2 s</string>
+    <string name="dashcam_picker_no_permission_sub">Concede Dispositivos cercanos para elegir la cámara</string>
     <string name="dashcam_picker_cancel">Cancelar</string>
     <string name="dashcam_picker_save">Guardar</string>
 

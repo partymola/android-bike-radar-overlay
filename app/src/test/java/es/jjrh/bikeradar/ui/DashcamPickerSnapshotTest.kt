@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import androidx.compose.runtime.Composable
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
@@ -22,6 +23,8 @@ import org.robolectric.annotation.GraphicsMode
  *    "Other paired devices"
  *  - rowSelected: same as likelyMatchesPresent but with the matching
  *    row selected so Save flips to enabled
+ *  - nearbyDenied (and its Spanish twin): a route to Permissions in place
+ *    of the banner and the refresh and pair rows
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -58,6 +61,34 @@ class DashcamPickerSnapshotTest {
                     onBack = {},
                 )
             }
+        }
+    }
+
+    @Test
+    fun nearbyDenied() {
+        captureRoboImage { NearbyDenied() }
+    }
+
+    @Test
+    @Config(qualifiers = "es-w448dp-h997dp-xxhdpi")
+    fun nearbyDeniedEs() {
+        captureRoboImage { NearbyDenied() }
+    }
+
+    @Composable
+    private fun NearbyDenied() {
+        UiTheme {
+            DashcamPickerContent(
+                devices = emptyList(),
+                selectedMac = null,
+                saveEnabled = false,
+                onSelect = {},
+                onOpenBluetoothSettings = {},
+                askForNearby = true,
+                onCancel = {},
+                onSave = {},
+                onBack = {},
+            )
         }
     }
 

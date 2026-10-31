@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,6 +57,7 @@ import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.DeviceNameMatcher
 import es.jjrh.bikeradar.R
+import es.jjrh.bikeradar.RadarSelection
 import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.delay
@@ -71,6 +75,8 @@ import android.provider.Settings as AndroidSettings
  *      - "OTHER PAIRED DEVICES" section + rows
  *      - Refresh-every-2s indicator with pulsing dot
  *      - Optional "Pair a new device" CTA
+ *      - With Nearby devices denied, a route to Permissions after "None"
+ *        replaces everything below it, and the banner goes
  *  - Sticky footer: Cancel (ghost) + Save (brand)
  *
  * What Save writes is pinned by `DashcamPickerSaveTest`.
@@ -98,13 +104,16 @@ private fun DashcamPickerSheetBody(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var devices by remember { mutableStateOf(listBonded(ctx, batteryEntries.keys)) }
+    var askForNearby by remember { mutableStateOf(RadarSelection.nearbyDeniedHidesPairedList(ctx, devices)) }
     // Bonded-device list refreshes only while the picker is on
-    // screen — no point hitting BluetoothAdapter while paused.
+    // screen: no point hitting BluetoothAdapter while paused. Read before the
+    // first wait, so a rider back from another app sees a fresh list at once.
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                delay(2_000L)
                 devices = listBonded(ctx, batteryEntries.keys)
+                askForNearby = RadarSelection.nearbyDeniedHidesPairedList(ctx, devices)
+                delay(2_000L)
             }
         }
     }
@@ -128,6 +137,8 @@ private fun DashcamPickerSheetBody(
             onOpenBluetoothSettings = {
                 ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
             },
+            askForNearby = askForNearby,
+            onGrantPermissions = { navController.navigate("settings/permissions") },
             onCancel = { navController.popBackStack() },
             onSave = {
                 if (selectedMac == null) {
@@ -166,6 +177,11 @@ internal fun DashcamPickerContent(
     saveEnabled: Boolean,
     onSelect: (String?) -> Unit,
     onOpenBluetoothSettings: () -> Unit,
+    /** [RadarSelection.nearbyDeniedHidesPairedList]: the card asks for the
+     *  permission instead of offering pairing, which would send the rider to a
+     *  list the camera may already be in. */
+    askForNearby: Boolean = false,
+    onGrantPermissions: () -> Unit = {},
     onCancel: () -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
@@ -176,7 +192,7 @@ internal fun DashcamPickerContent(
         SettingsHeader(stringResource(R.string.dashcam_picker_title), onBack = onBack)
 
         // Explainer banner
-        ExplainerBanner()
+        if (!askForNearby) ExplainerBanner()
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -227,6 +243,19 @@ internal fun DashcamPickerContent(
                 }
             }
 
+            if (askForNearby) {
+                item("permissions") {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    IntentCard(
+                        title = stringResource(R.string.main_status_permissions_title),
+                        subtitle = stringResource(R.string.dashcam_picker_no_permission_sub),
+                        filled = true,
+                        onClick = onGrantPermissions,
+                    )
+                }
+                return@LazyColumn
+            }
+
             item("refresh") {
                 Spacer(modifier = Modifier.height(16.dp))
                 RefreshIndicator()
@@ -237,10 +266,10 @@ internal fun DashcamPickerContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-                        .clickable(onClick = onOpenBluetoothSettings),
+                        .clickable(role = Role.Button, onClick = onOpenBluetoothSettings),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(
@@ -341,10 +370,11 @@ private fun PickerRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 2.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickable(onClick = onSelect)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

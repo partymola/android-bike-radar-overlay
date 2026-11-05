@@ -433,8 +433,8 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * unit tests can assert on the JSON shape - notably the value_template's
      * no-value sentinel - without needing a live MQTT broker.
      *
-     * Nullable numeric fields (peak/p90 closing speed, tightest clearance)
-     * are omitted from the state JSON when they have no data yet, so the
+     * Fields with no data (the nullable ones, and the four close-pass figures
+     * on a ride that never counted them) are omitted from the state JSON, so the
      * value_template's `default('None')` renders the literal string "None".
      * That is the one sentinel HA's MQTT sensor maps to the Unknown state
      * (PAYLOAD_NONE); `default('unknown')` would instead make HA try to
@@ -473,20 +473,22 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * value_template) plus structured attributes (`tightest_pass`,
      * `ride_started_at`).
      */
-    suspend fun publishRideSummaryState(slug: String, snapshot: RideStatsSnapshot): Boolean {
-        // Nullable fields are omitted from the JSON when they have no data
-        // yet. The discovery template's `default('None')` then renders the
-        // entity as Unknown in HA rather than a misleading 0. ("None" is
-        // HA's PAYLOAD_NONE sentinel; "unknown" would fail numeric parsing.)
+    suspend fun publishRideSummaryState(slug: String, snapshot: RideStatsSnapshot): Boolean = publishMqtt("$NS/$slug/ride_summary", buildRideSummaryState(snapshot).toString(), retain = true)
+
+    internal fun buildRideSummaryState(snapshot: RideStatsSnapshot): JSONObject {
+        // Fields with no data are left out so HA reads them as Unknown; see
+        // [buildRideSummaryDiscoveryPayloads] (`RideSummaryUncountedPayloadTest`).
         val payload = JSONObject()
             .put("overtakes_total", snapshot.overtakesTotal)
-            .put("close_pass_count", snapshot.closePassCount)
-            .put("grazing_count", snapshot.grazingCount)
-            .put("hgv_close_pass_count", snapshot.hgvClosePassCount)
             .put("distance_ridden_km", snapshot.distanceRiddenKm.toDouble())
             .put("exposure_seconds", snapshot.exposureSeconds)
-            .put("close_pass_conversion_rate", snapshot.closePassConversionRatePct.toDouble())
             .put("ride_started_at", java.time.Instant.ofEpochMilli(snapshot.rideStartedAtMs).toString())
+        if (snapshot.closePassesCounted) {
+            payload.put("close_pass_count", snapshot.closePassCount)
+                .put("grazing_count", snapshot.grazingCount)
+                .put("hgv_close_pass_count", snapshot.hgvClosePassCount)
+                .put("close_pass_conversion_rate", snapshot.closePassConversionRatePct.toDouble())
+        }
         snapshot.peakClosingKmh?.let { payload.put("peak_closing_kmh", it) }
         snapshot.closingSpeedP90Kmh?.let { payload.put("closing_speed_p90_kmh", it) }
         snapshot.minLateralClearanceM?.let { payload.put("min_lateral_clearance_m", it.toDouble()) }
@@ -504,7 +506,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                     .put("range_y_m", tp.rangeYM.toDouble()),
             )
         }
-        return publishMqtt("$NS/$slug/ride_summary", payload.toString(), retain = true)
+        return payload
     }
 
     private data class RideSummarySensor(

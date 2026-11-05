@@ -459,7 +459,7 @@ class HaClientHttpTest {
         val snapshot = RideStatsSnapshot(
             overtakesTotal = 12,
             closePassCount = 3,
-            grazingCount = 1,
+            grazingCount = 2,
             hgvClosePassCount = 1,
             peakClosingKmh = 47,
             closingSpeedP90Kmh = 39,
@@ -478,10 +478,15 @@ class HaClientHttpTest {
             rideStartedAtMs = 1_716_533_000_000L,
             alertsPerKm = 0.32f,
             alertsPerHourOfRide = 11.3f,
+            closePassesCounted = true,
         )
         assertTrue(client().publishRideSummaryState("rearvue8", snapshot))
         val sent = JSONObject(JSONObject(requests.single().body).getString("payload"))
         assertEquals(12, sent.getInt("overtakes_total"))
+        assertEquals(3, sent.getInt("close_pass_count"))
+        assertEquals(2, sent.getInt("grazing_count"))
+        assertEquals(1, sent.getInt("hgv_close_pass_count"))
+        assertEquals(25.0, sent.getDouble("close_pass_conversion_rate"), 1e-4)
         assertEquals(47, sent.getInt("peak_closing_kmh"))
         assertEquals(0.32, sent.getDouble("alerts_per_km"), 1e-4)
         assertEquals(11.3, sent.getDouble("alerts_per_hour_of_ride"), 1e-4)

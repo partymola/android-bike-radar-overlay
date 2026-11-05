@@ -155,13 +155,13 @@ class HaClientGuardsTest {
 
     @Test
     fun rideSummaryDiscoveryUsesPayloadNoneSentinel() {
-        // Regression test for the ride-summary "no value" bug: three
-        // nullable numeric sensors (peak_closing_kmh, closing_speed_p90_kmh,
-        // min_lateral_clearance_m) are omitted from the state JSON until they
-        // have data. The value_template's default() must render HA's
+        // Regression test for the ride-summary "no value" bug: numeric
+        // sensors with no data (peak_closing_kmh and the other nullable ones,
+        // and the close-pass figures on an uncounted ride) are omitted from
+        // the state JSON. The value_template's default() must render HA's
         // PAYLOAD_NONE sentinel ("None") so the sensor goes Unknown. The
         // bare "unknown" sentinel makes HA try to parse it as a float for
-        // these speed/distance sensors and reject the payload.
+        // these numeric sensors and reject the payload.
         val payloads = HaClient(baseUrl = "https://h.example", token = "tok")
             .buildRideSummaryDiscoveryPayloads("rearvue8", "RearVue8")
         for ((_, payload) in payloads) {

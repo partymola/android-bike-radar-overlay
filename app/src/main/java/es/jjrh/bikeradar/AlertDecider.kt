@@ -359,8 +359,8 @@ class AlertDecider(
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
      *  re-fire, a pass and a pass refused, a beep held below the
-     *  floor (`step-down`) and the floor lapsing, the four
-     *  urgent-pass verdicts, the unconfident wait's start
+     *  floor (`step-down`) or at a stop (`stationary`), the floor
+     *  lapsing, the four urgent-pass verdicts, the unconfident wait's start
      *  and run-out, the fit expiry, and the closing-speed ceiling and rx
      *  veto; those two mark a track's first excluded frame, not each
      *  silenced cue (see [ceilingLogged]), so the rest of an exclusion is
@@ -378,7 +378,13 @@ class AlertDecider(
      *  fire once per fit because the fit is removed as it is reported. A
      *  pass or refused pass is logged once per closest car leaving, a
      *  floor lapse once per floor, and a step-down once per held trigger,
-     *  so again each time a held car climbs a band short of the floor. */
+     *  so again each time a held car climbs a band short of the floor. A
+     *  stationary hold is logged once per car and band at each stop, with
+     *  the floor beside it, since a beep held there may also be one the
+     *  floor would hold (`AlertDeciderStationaryHoldLogTest`). A track the
+     *  ghost filter is still holding back is logged there too, and on moving
+     *  off gives a `suppress` line rather than a beep (`a track the ghost
+     *  filter holds is logged at the stop and suppressed on moving off`). */
     private val onGateEvent: (String) -> Unit = {},
     /** Closing-evidence admission for born-close tracks (the ghost-beep
      *  filter's state machine); injectable for tests. */
@@ -576,6 +582,11 @@ class AlertDecider(
      *  satisfied. [NOT_INITIALIZED] until the first call of this session. */
     private var lastNotStationaryAtMs: Long = NOT_INITIALIZED
 
+    /** (tid, birth, band) of every beep logged as held during the current stop.
+     *  Cleared on any frame the rider is not stationary, which with a positive
+     *  [stationaryDwellMs] includes the first after [reset]. */
+    private val stationaryHoldsLogged = HashSet<Triple<Int, Long, Int>>()
+
     /** One (monotonic ms, distanceM, rangeXm) sighting for the
      *  predicted-pass veto's per-track fit. */
     private data class LateralSample(val atMs: Long, val distanceM: Int, val rangeXm: Float)
@@ -736,6 +747,7 @@ class AlertDecider(
         }
         val timeBelowStationaryMs = nowMs - lastNotStationaryAtMs
         val riderStationary = timeBelowStationaryMs >= stationaryDwellMs
+        if (!riderStationary) stationaryHoldsLogged.clear()
         // Short mini-dwell for the imminent-impact override (below).
         // The 2 s `stationaryDwellMs` exists to skip rolling stops
         // mid-turn for the ordinary-Beep suppress path; the override
@@ -1236,6 +1248,13 @@ class AlertDecider(
                         // ordinary beeps. Don't consume cooldown or
                         // beepPending: when the rider rolls off, the
                         // next decide() call can fire same-frame.
+                        val v = closestVehicle
+                        if (v != null && stationaryHoldsLogged.add(Triple(v.id, v.bornAtMs, closestUrgency))) {
+                            onGateEvent(
+                                "# gate stationary tid=${v.id} tier=$closestUrgency d=${v.distanceM}" +
+                                    " eff=${alertDistanceM(v)} floor=$stepFloor",
+                            )
+                        }
                         Event.None
                     }
                     else -> {

@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.11.0 - 2026-11-05
+
+### Fixes
+
+- **A radar you picked from the paired list shows its own battery.** Before, the home screen, Settings and apps that use your radar could show no battery for it, or another device's.
+- **With no radar paired, a dashcam no longer counts as your radar.** The home screen and Settings now ask you to pair a radar, and the dashcam's battery no longer shows on the radar row.
+  - With only a dashcam paired, the warning for riding without the radar no longer sounds.
+- **A radar whose Bluetooth name gives only the brand now shows as not paired until you pick it under Pair on the home screen.** Before, it showed as paired but never connected.
+  - Until you pick it, the warning for riding without the radar stays off.
+- **With Nearby devices not allowed, setup and the dashcam picker send you to Permissions.** Before, they said nothing was paired and sent you to pair again.
+
+### Breaking
+
+- **On a ride where close passes weren't counted, the Home Assistant close-pass sensors read Unknown, not 0.** If an automation reads them as 0, check it still does what you want.
+  - That is a ride with close-pass counting off, with a radar that reports distance only, or where the radar never reported your speed.
+  - The sensors are Close passes, Grazing passes, HGV close passes and Close-pass conversion rate (`close_pass_count`, `grazing_count`, `hgv_close_pass_count`, `close_pass_conversion_rate`), and on such a ride these fields are also missing from every ride-summary sensor's attributes.
+
+### Security
+
+- **Serial numbers in device names are hidden in more places.** The connection log on the Debug screen and the crash reports you share now hide them too, and more of the shapes a serial number takes are caught.
+  - The connection log and crash reports already on the phone are masked once after installing this version.
+
+### Improvements
+
+- **The dashcam picker's buttons are easier to tap, and screen readers announce its rows as choices.**
+
+### Bug reports
+
+- The connection log now records what the app sets the radar's tail light to, and whether the radar took it.
+- The capture log now records each beep held back while you were stopped.
+- The report you copy for a bug report no longer says a Home Assistant address was tested after you edited it in setup.
+
+### Upgrading
+
+- Still works on Android 12 and later.
+- If your radar shows as not paired after installing this version, pick it under Pair on the home screen. Until you do, the warning for riding without the radar stays off.
+- Beeps, the urgent warning and the all-clear are unchanged. Nothing else changes in Home Assistant.
+
+### For developers
+
+- Android Gradle plugin 9.5.0, Roborazzi 1.77.0, Gradle 9.8.2, actions/setup-java 6.1.0.
+
 ## v1.10.0 - 2026-10-30
 
 ### Features

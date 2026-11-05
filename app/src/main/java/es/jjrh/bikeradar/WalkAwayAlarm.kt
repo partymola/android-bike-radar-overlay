@@ -310,6 +310,8 @@ internal class WalkAwayAlarm(
          * and the stream is likely still pinned at max. Callers must hold no
          * live alarm: the service's alarm at construction
          * (`WalkAwayAlarmTest.construction_restoresVolumeLeakedByProcessDeath`),
+         * a service start that stops for want of Nearby devices before building
+         * one (`BikeRadarServiceSmokeTest.aServiceStartedWithoutNearbyDevicesStopsBeforeTouchingTheRadar`),
          * and the notification receiver only when no service is running
          * (`InternalControlReceiverTest`). Best-effort, like every other
          * volume write in this class. True when a volume was restored.

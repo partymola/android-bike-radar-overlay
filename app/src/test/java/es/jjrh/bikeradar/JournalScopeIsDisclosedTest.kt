@@ -167,6 +167,7 @@ class JournalScopeIsDisclosedTest {
         // reading for it. No cue sounded and no device named.
         "ebike data switched off",
         "service stopping",
+        "service start abandoned: Nearby devices not granted",
         "scan wake ignored: app not running, service start refused (\$name)",
         "scan wake ignored: Bluetooth permission revoked since the scan started - re-grant \$permission to restore the radar link",
         "eBike status: connect attempt",

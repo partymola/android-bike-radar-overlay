@@ -126,6 +126,63 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aServiceStartedWithoutNearbyDevicesStopsBeforeTouchingTheRadar() {
+        // Android restarts a sticky service after the grant is revoked, and that
+        // start skips ServiceAutoStart's check. startForeground, and the cached
+        // radar's connectGatt after it, throw without the grant.
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        val journalDir = File(root, LinkEventJournal.JOURNAL_DIR)
+        val journal = File(journalDir, LinkEventJournal.FILE_NAME)
+        KnownDevices(app.getSharedPreferences(PREFS_THROTTLE, android.content.Context.MODE_PRIVATE)).save(listOf("RearVue8" to RADAR_A))
+
+        // With the grant, the cache does reach the link.
+        journalDir.deleteRecursively()
+        val granted = Robolectric.buildService(BikeRadarService::class.java).create()
+        idleMainUntil { journal.exists() && journal.starts("RearVue8") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("RearVue8"))
+        granted.destroy()
+
+        journalDir.deleteRecursively()
+        // The Settings switch takes both, and startForeground throws then; a
+        // process killed mid-alarm leaves the alarm volume to repair.
+        shadowOf(app).denyPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_ALARM, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
+        Prefs(app).walkAwaySavedAlarmVolume = 2
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        val service = controller.get()
+        assertNull("startForeground ran", shadowOf(service).lastForegroundNotification)
+        assertNull("a stopped service must not read as running", BikeRadarService.radarLinkStateForUi)
+        assertEquals(2, audio.getStreamVolume(AudioManager.STREAM_ALARM))
+        assertNull(Prefs(app).walkAwaySavedAlarmVolume)
+        // The sticky restart's null-intent start, then a sighting, reach what
+        // onCreate skipped.
+        assertEquals(android.app.Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
+        readDevice(service, "RearVue8", RADAR_A, 2)
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertTrue("the service must stop itself", shadowOf(service).isStoppedBySelf)
+        val text = journal.readText()
+        assertEquals("got:\n$text", 0, journal.starts("RearVue8"))
+        assertTrue("got:\n$text", text.contains("service start abandoned: Nearby devices not granted"))
+        controller.destroy()
+
+        // One permission left is not enough either: with only Connect gone,
+        // startForeground passes and the radar connection throws.
+        for (left in listOf(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)) {
+            shadowOf(app).grantPermissions(left)
+            journalDir.deleteRecursively()
+            val one = Robolectric.buildService(BikeRadarService::class.java).create()
+            idleMainUntil(timeoutMs = 500L) { false }
+            assertNull("started with only $left granted", shadowOf(one.get()).lastForegroundNotification)
+            assertTrue("with only $left granted", shadowOf(one.get()).isStoppedBySelf)
+            assertEquals("with only $left granted", 0, journal.starts("RearVue8"))
+            one.destroy()
+            shadowOf(app).denyPermissions(left)
+        }
+    }
+
+    @Test
     fun aWalkAwayAlarmStartedAfterTheServiceStopsDoesNothing() {
         // The tick that fires the alarm runs off the main thread and can reach
         // start() after onDestroy. Audio focus is requested before the tone is

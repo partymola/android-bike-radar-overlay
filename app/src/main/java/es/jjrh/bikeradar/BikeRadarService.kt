@@ -199,6 +199,9 @@ class BikeRadarService : Service() {
     private val wakeLockGate = Any()
     private var stopping = false
 
+    // Set when onCreate stopped before building the links; read on Main only.
+    private var stoppedWithoutNearby = false
+
     // Wakes launchWalkAwayTick out of its idle delay the instant the radar
     // drops, so the loop flips to its 2 s cadence and the first dead-radar
     // evaluation lands on time (not up to 30 s late). CONFLATED: a queued kick
@@ -356,6 +359,21 @@ class BikeRadarService : Service() {
         notifications = ServiceNotifications(this) { prefs }
 
         notifications.ensureChannels()
+        // Before startForeground, which on Android 14 and later throws for this
+        // service type with both Nearby devices permissions gone; wherever
+        // Connect is gone, the radar connection throws too. A sticky restart
+        // after a revoke gets here
+        // (`aServiceStartedWithoutNearbyDevicesStopsBeforeTouchingTheRadar`).
+        // This repairs the walk-away alarm's leaked volume, as building that
+        // alarm below would. The beeper's floor lift, which lasts under a
+        // second, is deliberately left to the next full start.
+        if (!Permissions.hasRequiredForService(this)) {
+            linkJournal.log("service start abandoned: Nearby devices not granted")
+            WalkAwayAlarm.repairLeakedOverride(this, prefs)
+            stoppedWithoutNearby = true
+            stopSelf()
+            return
+        }
         startForeground(
             ServiceNotifications.NOTIF_ID,
             notifications.buildForeground(),
@@ -709,6 +727,7 @@ class BikeRadarService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (stoppedWithoutNearby) return START_NOT_STICKY
         when (intent?.action) {
             ACTION_READ_DEVICE -> {
                 val mac = intent.getStringExtra(EXTRA_MAC) ?: return START_STICKY
@@ -1347,10 +1366,11 @@ class BikeRadarService : Service() {
 
         /**
          * Starts the reader, for the onboarding eBike step, whose
-         * `startService` also brings the service up if it is not running. A
-         * running service follows `eBikeDataEnabled` and the bike's pairing
-         * on its own too; whichever start runs first wins and the others
-         * bail.
+         * `startService` also brings the service up if it is not running and
+         * Nearby devices is granted; without it the service stops at once and
+         * the reader could not run anyway. A running service follows
+         * `eBikeDataEnabled` and the bike's pairing on its own too; whichever
+         * start runs first wins and the others bail.
          */
         const val ACTION_START_EBIKE_READER = "es.jjrh.bikeradar.START_EBIKE_READER"
 
@@ -1443,7 +1463,8 @@ class BikeRadarService : Service() {
          *  Null while the service is not running, when nothing is: the
          *  notification receiver reads it as "a service is running", so it is
          *  non-null exactly from onCreate to onDestroy, in this one process
-         *  (`onCreatePublishesTheLinkStateAndDestroyRetractsIt`). */
+         *  (`onCreatePublishesTheLinkStateAndDestroyRetractsIt`), and never
+         *  set by a service that stops for want of Nearby devices. */
         @Volatile var radarLinkStateForUi: kotlinx.coroutines.flow.StateFlow<RadarLinkState>? = null
             internal set
 

@@ -22,6 +22,8 @@ class RadarSelectionTest {
         // chosenMac null -> behaviour is exactly the legacy name-match.
         assertTrue(RadarSelection.shouldLinkRadar(macA, nameMatchesRadar = true, chosenMac = null, bondedRadarMacs = setOf(macA)))
         assertFalse(RadarSelection.shouldLinkRadar(macA, nameMatchesRadar = false, chosenMac = null, bondedRadarMacs = setOf(macA)))
+        // An empty read with no pin is the name match too.
+        assertTrue(RadarSelection.shouldLinkRadar(macA, nameMatchesRadar = true, chosenMac = null, bondedRadarMacs = emptySet()))
     }
 
     @Test fun `chosen and bonded - only that MAC links`() {
@@ -43,6 +45,18 @@ class RadarSelectionTest {
         // radar is actually present (B).
         assertTrue(RadarSelection.shouldLinkRadar(macB, nameMatchesRadar = true, chosenMac = macA, bondedRadarMacs = setOf(macB)))
         assertFalse(RadarSelection.shouldLinkRadar(macB, nameMatchesRadar = false, chosenMac = macA, bondedRadarMacs = setOf(macB)))
+    }
+
+    @Test fun `an empty bonded read with a pin links no other radar`() {
+        // A failed read or Bluetooth off reads as nothing paired, which says
+        // nothing about the pin; another radar in range must not link.
+        assertFalse(RadarSelection.shouldLinkRadar(macB, nameMatchesRadar = true, chosenMac = macA, bondedRadarMacs = emptySet()))
+    }
+
+    @Test fun `an empty bonded read still links the pin, whatever its name`() {
+        // In lower case, as a sighting's address can be.
+        assertTrue(RadarSelection.shouldLinkRadar(macA.lowercase(), nameMatchesRadar = false, chosenMac = macA, bondedRadarMacs = emptySet()))
+        assertTrue(RadarSelection.shouldLinkRadar(macA, nameMatchesRadar = true, chosenMac = macA, bondedRadarMacs = emptySet()))
     }
 
     @Test fun `MAC comparison is case-insensitive`() {

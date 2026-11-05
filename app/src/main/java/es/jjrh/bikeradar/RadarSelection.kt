@@ -21,7 +21,8 @@ import java.util.Locale
  *
  * The override is a SOFT preference: if the chosen MAC is no longer bonded
  * (e.g. a re-pair changed the address), selection falls back to name-match
- * rather than stranding the rider with no radar.
+ * rather than stranding the rider with no radar. An empty bonded read is not
+ * that: it may be a failed read, so only the pin links then.
  *
  * The decision function [shouldLinkRadar] is pure so the fallback matrix is
  * unit-tested without a Bluetooth stack.
@@ -39,6 +40,9 @@ object RadarSelection {
      * - A [chosenMac] that is still present in [bondedRadarMacs] WINS: only that
      *   exact MAC links; other name-matching radars are ignored. This is the
      *   anti-wrong-radar guard for the multi-radar-bonded case.
+     * - An empty [bondedRadarMacs] with a choice stored links only the choice:
+     *   Bluetooth off and a refused read both list nothing, so it cannot say
+     *   the pin is gone (`an empty bonded read with a pin links no other radar`).
      * - Otherwise (no choice stored, or the stored choice is no longer bonded)
      *   fall back to name-match - identical to the pre-override behaviour.
      *
@@ -51,12 +55,13 @@ object RadarSelection {
         nameMatchesRadar: Boolean,
         chosenMac: String?,
         bondedRadarMacs: Set<String>,
-    ): Boolean {
-        if (chosenMac != null && bondedRadarMacs.any { it.equals(chosenMac, ignoreCase = true) }) {
-            return mac.equals(chosenMac, ignoreCase = true)
-        }
-        return nameMatchesRadar
-    }
+    ): Boolean = if (pinHolds(chosenMac, bondedRadarMacs)) mac.equals(chosenMac, ignoreCase = true) else nameMatchesRadar
+
+    /** Whether a stored pin still decides: it is in [bondedMacs], or the list is
+     *  empty, which may be a failed read rather than a pin gone. One rule for
+     *  [shouldLinkRadar] and [radarBattery], so the two cannot part. */
+    fun pinHolds(chosenMac: String?, bondedMacs: Collection<String>): Boolean = chosenMac != null &&
+        (bondedMacs.isEmpty() || bondedMacs.any { it.equals(chosenMac, ignoreCase = true) })
 
     /**
      * Whether a link running to [linkedMac] must move to [pinMac]: only when a
@@ -95,11 +100,11 @@ object RadarSelection {
      * Is there a radar for this bike to talk to at all?
      *
      * This is the ONE definition of "the rider has a radar", and every surface
-     * that reports link state must use it, because it follows [shouldLinkRadar]:
-     * a bonded pin wins, else a radar name, with the one exception
-     * [DeviceNameMatcher] states for a bare "rear". Two ways a narrower test gets
-     * it wrong, and both report "Not paired" about a radar that is delivering
-     * targets:
+     * that reports link state must use it, because on a readable paired list it
+     * follows [shouldLinkRadar]: a bonded pin wins, else a radar name, with the
+     * one exception [DeviceNameMatcher] states for a bare "rear". Two ways a
+     * narrower test gets it wrong, and both report "Not paired" about a radar
+     * that is delivering targets:
      *
      *  - A name-match over the bonded list misses the "my radar isn't listed"
      *    escape hatch, where the pinned device's name never matches.
@@ -113,7 +118,8 @@ object RadarSelection {
      * so with the radio down the app cannot tell a bondless phone from a
      * bonded one and this returns false either way. Callers that also gate on
      * the radio are agreeing with that rather than adding to it. Do not
-     * describe this as radio-independent.
+     * describe this as radio-independent. It is also where this parts from
+     * [shouldLinkRadar], which links a pin through an empty read.
      */
     fun hasLinkableRadar(allBonded: List<BondedRadar>, chosenMac: String?): Boolean = allBonded.any { it.mac.equals(chosenMac, ignoreCase = true) } ||
         allBonded.any { isRadarName(it.name) }
@@ -148,13 +154,12 @@ object RadarSelection {
      * name, so two radars sharing a name share a reading. A pin the list shows gone
      * falls back, as [shouldLinkRadar] does, to the first entry with a radar name
      * (`aPinNoLongerBondedAnswersWithTheRadarThatLinks`). An empty list may be a
-     * failed read, so it deliberately keeps the pin where [shouldLinkRadar] falls
-     * back: with Bluetooth off the answer can be the pin's last figure, and a pin
-     * unpaired with nothing else paired keeps answering it
-     * (`anEmptyBondedReadKeepsThePin`).
+     * failed read, so it keeps the pin, as [shouldLinkRadar] does: with Bluetooth
+     * off the answer can be the pin's last figure, and a pin unpaired with
+     * nothing else paired keeps answering it (`anEmptyBondedReadKeepsThePin`).
      */
     fun radarBattery(entries: Map<String, BatteryEntry>, allBonded: List<BondedRadar>, chosenMac: String?): BatteryEntry? {
-        if (chosenMac == null || (allBonded.isNotEmpty() && allBonded.none { it.mac.equals(chosenMac, ignoreCase = true) })) {
+        if (chosenMac == null || !pinHolds(chosenMac, allBonded.map { it.mac })) {
             return entries.values.firstOrNull { isRadarName(it.name) }
         }
         val slug = BikeRadarService.macToSlug[chosenMac] ?: BikeRadarService.macToSlug[chosenMac.uppercase(Locale.ROOT)]
@@ -236,8 +241,9 @@ object RadarSelection {
      *  listed" escape hatch: a radar the name heuristic doesn't know can
      *  still be pinned, and a pinned MAC must count as "still bonded" in
      *  [shouldLinkRadar] even though its name never matched. Empty on any
-     *  Bluetooth permission / adapter error, which the link path reads as none
-     *  paired (`an empty bonded read never moves a running link`). */
+     *  Bluetooth permission / adapter error, which the link path reads as
+     *  "cannot tell" (`an empty bonded read never moves a running link`,
+     *  `an empty bonded read with a pin links no other radar`). */
     @SuppressLint("MissingPermission")
     fun bondedDevices(ctx: Context): List<BondedRadar> = try {
         val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager

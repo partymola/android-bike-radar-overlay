@@ -870,7 +870,8 @@ private fun SettingsButton(onClick: () -> Unit) {
 /**
  * Does this bike have a radar to talk to? The same question
  * [RadarSelection.shouldLinkRadar] answers when it decides whether to stream,
- * so no surface can report "Not paired" about a radar that is delivering.
+ * so no surface can report "Not paired" about a radar that is delivering,
+ * apart from an empty paired-list read ([RadarSelection.hasLinkableRadar]).
  */
 internal fun radarIsSelected(ctx: Context, chosenMac: String?): Boolean = RadarSelection.hasLinkableRadar(RadarSelection.bondedDevices(ctx), chosenMac)
 

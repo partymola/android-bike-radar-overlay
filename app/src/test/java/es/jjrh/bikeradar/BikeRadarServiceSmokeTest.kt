@@ -14,6 +14,7 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import es.jjrh.bikeradar.ui.PairedListNearbyDeniedTest
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -26,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 import java.io.File
 import java.time.Duration
@@ -684,10 +686,9 @@ class BikeRadarServiceSmokeTest {
     @Test
     fun aPinnedRadarTheNameMatchDoesNotKnowStartsWhenItIsPaired() {
         // The "my radar isn't listed" pin: only the pin lets it through.
-        val unlisted = "AA:BB:CC:DD:EE:55"
-        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(unlisted, "Tail unit"))
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
         val (controller, _, journal) = twoRadarService(emptyList())
-        pair(unlisted, "Tail unit")
+        pair(UNLISTED, "Tail unit")
         idleMainUntil { journal.starts("Tail unit") == 1 }
         assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("Tail unit"))
         controller.destroy()
@@ -792,6 +793,55 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    /** [bonded] paired, by address and name, and the service started with the
+     *  known-device cache holding [cached]; returns it and its journal, cleared. */
+    private fun serviceWithPairedAndCached(bonded: Map<String, String>, cached: List<Pair<String, String>>): Triple<org.robolectric.android.controller.ServiceController<BikeRadarService>, BikeRadarService, File> {
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(bonded.map { (mac, name) -> adapter.getRemoteDevice(mac).also { shadowOf(it).setName(name) } }.toSet())
+        KnownDevices(app.getSharedPreferences(PREFS_THROTTLE, android.content.Context.MODE_PRIVATE)).save(cached)
+        val root = app.getExternalFilesDir(null) ?: error("Robolectric always provides an external files dir")
+        File(root, LinkEventJournal.JOURNAL_DIR).deleteRecursively()
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        return Triple(controller, controller.get(), File(File(root, LinkEventJournal.JOURNAL_DIR), LinkEventJournal.FILE_NAME))
+    }
+
+    @Test
+    @Config(shadows = [PairedListNearbyDeniedTest.BondedReadAsOnAndroid::class])
+    fun startingWithBluetoothOffAPinnedRiderLinksOnlyThePin() {
+        // Bluetooth off lists nothing paired, though both are, and the cache
+        // replays both at the start. The pin's name is one the match does not know.
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setEnabled(false)
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, _, journal) = serviceWithPairedAndCached(
+            mapOf(RADAR_A to "RearVue8", UNLISTED to "Tail unit"),
+            listOf("RearVue8" to RADAR_A, "Tail unit" to UNLISTED),
+        )
+        assertTrue("the read must come back empty", adapter.bondedDevices.isEmpty())
+        idleMainUntil { journal.exists() && journal.starts("Tail unit") == 1 }
+        val text = if (journal.exists()) journal.readText() else ""
+        assertEquals("another radar was linked, got:\n$text", 0, journal.starts("RearVue8"))
+        assertEquals("the pinned radar must link, got:\n$text", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
+    fun anUnlistedPinPairedBesideANamedRadarLinksOnlyThePin() {
+        // Every paired address counts towards "the pin is still paired", not
+        // only those with a radar name.
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, service, journal) = serviceWithPairedAndCached(mapOf(RADAR_A to "RearVue8", UNLISTED to "Tail unit"), emptyList())
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("the named radar was linked, got:\n${if (journal.exists()) journal.readText() else ""}", 0, journal.starts("RearVue8"))
+
+        readDevice(service, "Tail unit", UNLISTED, 2)
+        idleMainUntil { journal.starts("Tail unit") == 1 }
+        assertEquals("the pinned radar must link, got:\n${journal.readText()}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
     @Test
     fun aLinkMovedToANamelessPinIsNotNamedAfterItsAddress() {
         // The journal and logs carry the link's name; a device with no
@@ -841,7 +891,7 @@ class BikeRadarServiceSmokeTest {
 
     @Test
     fun aRadarNamedOnlyByTheVendorWordLinksOnlyOncePinned() {
-        val mac = "AA:BB:CC:DD:EE:55"
+        val mac = UNLISTED
         val name = "Varia RVR315"
         val (controller, service, journal) = twoRadarService(emptyList())
         pair(mac, name)
@@ -1605,5 +1655,6 @@ class BikeRadarServiceSmokeTest {
         const val RADAR_A = "AA:BB:CC:DD:EE:11"
         const val RADAR_B = "AA:BB:CC:DD:EE:22"
         const val NAMELESS = "AA:BB:CC:DD:EE:33"
+        const val UNLISTED = "AA:BB:CC:DD:EE:55"
     }
 }

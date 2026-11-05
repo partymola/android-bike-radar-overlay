@@ -155,7 +155,11 @@ to its file. The notes below are the working summary.
 - Radar selection is name-match by default; a rider with more than one radar
   bonded can pin this bike's (`Prefs.radarMac`), and a pinned-and-still-bonded
   MAC overrides the name-match in `scheduleRead` so a sighting links only the
-  pinned radar, not another rear unit. Pure decider in
+  pinned radar, not another rear unit. So does a pin when the paired list
+  reads empty, which Bluetooth off and a refused read both produce
+  (`RadarSelection.pinHolds`,
+  `RadarSelectionTest."an empty bonded read with a pin links no other radar"`).
+  Pure decider in
   `RadarSelection.shouldLinkRadar`; managed in Settings -> Connections -> Radar,
   and in setup's pairing step until the radar's name can only be a rear unit
   (`setupOffersPick`). A pin changed while a link to another radar runs moves

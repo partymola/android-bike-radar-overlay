@@ -844,10 +844,11 @@ class BikeRadarService : Service() {
     private fun scheduleRead(name: String, mac: String) {
         // Keep the radar link alive for the SELECTED radar. Default is
         // name-match (zero config); if the rider pinned a specific radar
-        // (radarMac, still bonded) only that exact device links - the guard
-        // against silently streaming the wrong rear-facing radar. See
-        // RadarSelection. The bonded-device enumeration only runs when a pin
-        // exists, so the common no-pin path stays a pure name-match.
+        // (radarMac, still bonded or the paired list unreadable) only that
+        // exact device links. That is the guard against silently streaming the
+        // wrong rear-facing radar; see RadarSelection. The bonded-device
+        // enumeration only runs when a pin exists, so the common no-pin path
+        // stays a pure name-match.
         val pinnedRadar = prefs.radarMac
         val shouldLinkRadar = if (pinnedRadar == null) {
             isRearDevice(name)
@@ -859,7 +860,7 @@ class BikeRadarService : Service() {
                 // ALL bonded MACs, not just radar-named ones: the pin must
                 // also work for a radar the name heuristic doesn't know (the
                 // "my radar isn't listed" escape hatch). The set only answers
-                // "is the chosen MAC still bonded?".
+                // "is the chosen MAC still bonded?", and empty "cannot tell".
                 bondedRadarMacs = RadarSelection.bondedDevices(this).mapTo(HashSet()) { it.mac },
             )
         }

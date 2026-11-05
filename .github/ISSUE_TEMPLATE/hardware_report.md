@@ -49,6 +49,12 @@ the same screen. Capture logs record exact packet timing, so they
 reveal when you rode. They record no location or account data, but your
 turns and speeds together can suggest where you rode.
 
+If the home screen says **Radar not paired** while Android's Bluetooth
+settings list the radar as paired, the app does not recognise its name.
+First open Settings -> Radar, tap **Already paired your radar?** and
+choose it from the list. Until you do, the app does not try to connect
+to it, so there is nothing to record.
+
 **For a rear radar only:** if it pairs but never shows as connected,
 also enable **Record connection setup** next to it before the
 power-cycle. The log then starts at the moment the radar is found and

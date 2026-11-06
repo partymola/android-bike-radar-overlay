@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -299,11 +300,18 @@ internal fun SettingsDashcamContent(
                                 }
                             }
                         }
+                        // Drawn under 48 dp; Compose extends its touch target to
+                        // 48 dp each way while nothing beside it takes touches
+                        // (`SettingsDashcamChipTest`).
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
-                                .clickable(onClick = onPickDeviceClick)
+                                .clickable(
+                                    onClickLabel = stringResource(R.string.dashcam_picker_title),
+                                    role = Role.Button,
+                                    onClick = onPickDeviceClick,
+                                )
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) {
                             Text(

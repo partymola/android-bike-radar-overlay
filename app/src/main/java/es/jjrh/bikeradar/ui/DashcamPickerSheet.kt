@@ -76,7 +76,8 @@ import android.provider.Settings as AndroidSettings
  *      - Refresh-every-2s indicator with pulsing dot
  *      - Optional "Pair a new device" CTA
  *      - With Nearby devices denied, a route to Permissions after "None"
- *        replaces everything below it, and the banner goes
+ *        replaces everything below it, and the banner goes; with Bluetooth
+ *        off, a route to Bluetooth settings does the same
  *  - Sticky footer: Cancel (ghost) + Save (brand)
  *
  * What Save writes is pinned by `DashcamPickerSaveTest`.
@@ -105,6 +106,7 @@ private fun DashcamPickerSheetBody(
     val lifecycleOwner = LocalLifecycleOwner.current
     var devices by remember { mutableStateOf(listBonded(ctx, batteryEntries.keys)) }
     var askForNearby by remember { mutableStateOf(RadarSelection.nearbyDeniedHidesPairedList(ctx, devices)) }
+    var bluetoothOff by remember { mutableStateOf(!bluetoothIsOn(ctx)) }
     // Bonded-device list refreshes only while the picker is on
     // screen: no point hitting BluetoothAdapter while paused. Read before the
     // first wait, so a rider back from another app sees a fresh list at once.
@@ -113,6 +115,7 @@ private fun DashcamPickerSheetBody(
             while (true) {
                 devices = listBonded(ctx, batteryEntries.keys)
                 askForNearby = RadarSelection.nearbyDeniedHidesPairedList(ctx, devices)
+                bluetoothOff = !bluetoothIsOn(ctx)
                 delay(2_000L)
             }
         }
@@ -138,6 +141,7 @@ private fun DashcamPickerSheetBody(
                 ctx.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
             },
             askForNearby = askForNearby,
+            bluetoothOff = bluetoothOff,
             onGrantPermissions = { navController.navigate("settings/permissions") },
             onCancel = { navController.popBackStack() },
             onSave = {
@@ -181,6 +185,12 @@ internal fun DashcamPickerContent(
      *  permission instead of offering pairing, which would send the rider to a
      *  list the camera may already be in. */
     askForNearby: Boolean = false,
+    /** The list reads empty with Bluetooth off, so a saved camera would look
+     *  gone; the card says Bluetooth is off and opens its settings
+     *  (`thePickerSaysBluetoothIsOffRatherThanOfferingPairing`). Ranked after
+     *  [askForNearby], as on the home card
+     *  (`thePickerAsksWhenTheReadIsEmptyWithBluetoothOff`). */
+    bluetoothOff: Boolean = false,
     onGrantPermissions: () -> Unit = {},
     onCancel: () -> Unit,
     onSave: () -> Unit,
@@ -192,7 +202,7 @@ internal fun DashcamPickerContent(
         SettingsHeader(stringResource(R.string.dashcam_picker_title), onBack = onBack)
 
         // Explainer banner
-        if (!askForNearby) ExplainerBanner()
+        if (!askForNearby && !bluetoothOff) ExplainerBanner()
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -251,6 +261,19 @@ internal fun DashcamPickerContent(
                         subtitle = stringResource(R.string.dashcam_picker_no_permission_sub),
                         filled = true,
                         onClick = onGrantPermissions,
+                    )
+                }
+                return@LazyColumn
+            }
+
+            if (bluetoothOff) {
+                item("bluetooth-off") {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    IntentCard(
+                        title = stringResource(R.string.main_status_bt_off_title),
+                        subtitle = stringResource(R.string.main_bt_banner_action),
+                        filled = true,
+                        onClick = onOpenBluetoothSettings,
                     )
                 }
                 return@LazyColumn

@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.Role
@@ -51,9 +52,10 @@ import org.robolectric.shadows.ShadowBluetoothAdapter
 
 /**
  * With Nearby devices denied, the dashcam picker and setup's pairing step ask
- * for the permission rather than reading the paired list as none paired. The
- * stock shadow answers a denied caller with its devices, which Android never
- * does, so these tests read through one that answers as Android does.
+ * for the permission rather than reading the paired list as none paired, and
+ * with Bluetooth off the picker says so. The stock shadow answers a denied
+ * caller with its devices, which Android never does, so these tests read
+ * through one that answers as Android does.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(shadows = [PairedListNearbyDeniedTest.BondedReadAsOnAndroid::class])
@@ -221,13 +223,37 @@ class PairedListNearbyDeniedTest {
     }
 
     @Test
-    fun thePickerReadsBluetoothOffAsNonePaired() {
+    fun thePickerSaysBluetoothIsOffRatherThanOfferingPairing() {
+        // The saved camera has no row, so nothing is selected; the card says
+        // why the list is empty.
+        grantNearby()
+        bondCamera()
+        prefs.dashcamMac = "AA:BB:CC:DD:EE:22"
+        shadowOf(adapter).setEnabled(false)
+        showPicker()
+        composeRule.onAllNodesWithText("VUE-12345").assertCountEquals(0)
+        composeRule.onNodeWithText(none).assertIsNotSelected()
+        composeRule.onAllNodesWithText(pairInSettings).assertCountEquals(0)
+        composeRule.onAllNodesWithText(banner).assertCountEquals(0)
+        assertEquals("the rider can still say they have no camera", 1, count(none))
+        composeRule.onNodeWithText("Tap to enable").assertIsDisplayed()
+        composeRule.onNodeWithText("Bluetooth is off").performClick()
+        assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, shadowOf(app).nextStartedActivity?.action)
+    }
+
+    @Test
+    fun thePickerListsTheCameraOnceBluetoothIsOnWhileOpen() {
         grantNearby()
         bondCamera()
         shadowOf(adapter).setEnabled(false)
         showPicker()
-        composeRule.onAllNodesWithText("VUE-12345").assertCountEquals(0)
-        assertThePickerOffersPairing()
+        assertEquals(1, count("Bluetooth is off"))
+
+        shadowOf(adapter).setEnabled(true)
+        advancePastThePoll()
+
+        composeRule.onAllNodesWithText("Bluetooth is off").assertCountEquals(0)
+        assertEquals(1, count("VUE-12345"))
     }
 
     @Test

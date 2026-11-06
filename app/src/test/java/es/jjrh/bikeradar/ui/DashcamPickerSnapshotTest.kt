@@ -25,6 +25,7 @@ import org.robolectric.annotation.GraphicsMode
  *    row selected so Save flips to enabled
  *  - nearbyDenied (and its Spanish twin): a route to Permissions in place
  *    of the banner and the refresh and pair rows
+ *  - bluetoothOff: a route to Bluetooth settings in the same place
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -89,6 +90,25 @@ class DashcamPickerSnapshotTest {
                 onSave = {},
                 onBack = {},
             )
+        }
+    }
+
+    @Test
+    fun bluetoothOff() {
+        captureRoboImage {
+            UiTheme {
+                DashcamPickerContent(
+                    devices = emptyList(),
+                    selectedMac = "AA:BB:CC:DD:EE:01",
+                    saveEnabled = false,
+                    onSelect = {},
+                    onOpenBluetoothSettings = {},
+                    bluetoothOff = true,
+                    onCancel = {},
+                    onSave = {},
+                    onBack = {},
+                )
+            }
         }
     }
 

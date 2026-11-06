@@ -41,6 +41,9 @@ class DashcamPickerSaveTest {
     fun setUp() {
         prefs = Prefs(app)
         val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        // On, as it is whenever Android lists a paired device; Robolectric
+        // starts it off, which the picker names.
+        shadowOf(adapter).setEnabled(true)
         val camera = adapter.getRemoteDevice(mac)
         shadowOf(camera).setName("VUE-12345")
         shadowOf(adapter).setBondedDevices(setOf(camera))

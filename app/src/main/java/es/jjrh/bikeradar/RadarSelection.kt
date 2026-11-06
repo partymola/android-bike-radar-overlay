@@ -297,10 +297,12 @@ object RadarSelection {
      * and setup's pairing step ask for the permission instead of offering pairing
      * (`PairedListNearbyDeniedTest`). The permission decides, since a denied read
      * can be refused or empty. With Scan alone denied an empty list is real, and
-     * they ask all the same. Bluetooth off with the permission granted
-     * deliberately reads as none paired (`thePickerReadsBluetoothOffAsNonePaired`).
-     * The radar screen keeps its own check: this one would offer pairing there on
-     * a Scan-only denial with a watch paired.
+     * they ask all the same. With the permission granted, setup's pairing step
+     * deliberately reads Bluetooth off as none paired
+     * (`setupReadsBluetoothOffAsNonePaired`); the picker says Bluetooth is off
+     * (`thePickerSaysBluetoothIsOffRatherThanOfferingPairing`). The radar
+     * screen keeps its own check: this one would offer pairing there on a
+     * Scan-only denial with a watch paired.
      */
     fun nearbyDeniedHidesPairedList(ctx: Context, listed: List<*>): Boolean = listed.isEmpty() && Permissions.missingForService(ctx) == MissingPermission.NEARBY_DEVICES
 }

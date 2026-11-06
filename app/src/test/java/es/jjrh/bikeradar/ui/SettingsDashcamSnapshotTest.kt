@@ -23,7 +23,8 @@ import org.robolectric.annotation.GraphicsMode
  * toggle, Walk-away alarm + DnD row + threshold slider). A picked
  * camera that is not advertising gets its own golden: it is the state
  * a rider arrives in from the home row, and while it had none the card
- * could stop naming the state without a pixel changing.
+ * could stop naming the state without a pixel changing. So does a picked
+ * camera with Bluetooth off, with the card above it naming the cause.
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -44,7 +45,10 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = null,
                     dashcamWarnWhenOff = false,
                     dashcamConnected = false,
-                    btEnabled = true,
+                    bluetoothOn = true,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = false,
                     walkAwayThreshold = 30,
@@ -79,7 +83,10 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = "Front cam",
                     dashcamWarnWhenOff = true,
                     dashcamConnected = false,
-                    btEnabled = true,
+                    bluetoothOn = true,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = true,
                     walkAwayThreshold = 30,
@@ -108,7 +115,10 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = null,
                     dashcamWarnWhenOff = false,
                     dashcamConnected = false,
-                    btEnabled = true,
+                    bluetoothOn = true,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = false,
                     walkAwayThreshold = 30,
@@ -137,7 +147,42 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = "Front cam",
                     dashcamWarnWhenOff = true,
                     dashcamConnected = false,
-                    btEnabled = true,
+                    bluetoothOn = true,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
+                    dashcamBatteryPct = null,
+                    walkAwayAlarmEnabled = true,
+                    walkAwayThreshold = 30,
+                    canBypassDnd = false,
+                    onOwnershipChange = {},
+                    onClearSavedClick = {},
+                    onPickDeviceClick = {},
+                    onWarnWhenOffChange = {},
+                    onWalkAwayEnabledChange = {},
+                    onWalkAwayThresholdChange = {},
+                    onWalkAwayThresholdFinished = {},
+                    onOverrideDndClick = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun bluetoothOff() {
+        captureRoboImage {
+            UiTheme {
+                SettingsDashcamContent(
+                    navController = rememberNavController(),
+                    ownership = DashcamOwnership.YES,
+                    dashcamMac = "00:11:22:33:44:55",
+                    dashcamDisplayName = "Front cam",
+                    dashcamWarnWhenOff = true,
+                    dashcamConnected = false,
+                    bluetoothOn = false,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
                     dashcamBatteryPct = null,
                     walkAwayAlarmEnabled = true,
                     walkAwayThreshold = 30,
@@ -166,7 +211,10 @@ class SettingsDashcamSnapshotTest {
                     dashcamDisplayName = "Front cam",
                     dashcamWarnWhenOff = true,
                     dashcamConnected = true,
-                    btEnabled = true,
+                    bluetoothOn = true,
+                    missing = null,
+                    onGrantPermissions = {},
+                    onOpenBluetoothSettings = {},
                     dashcamBatteryPct = 64,
                     walkAwayAlarmEnabled = true,
                     walkAwayThreshold = 30,

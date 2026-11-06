@@ -100,6 +100,7 @@ class NearbyDeniedScreensAgreeTest {
         show { SettingsDashcam(navController = rememberNavController(), prefs = prefs) }
         assertBlamesNothingElse()
         assertTrue(count("Not paired") > 0)
+        assertTrue(count("No alerts until you grant Nearby devices") > 0)
     }
 
     @Test

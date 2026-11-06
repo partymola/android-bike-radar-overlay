@@ -4,6 +4,8 @@ package es.jjrh.bikeradar.ui
 
 import android.app.Application
 import android.app.NotificationManager
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -22,6 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 /** The Dashcam screen's Do Not Disturb row reads the shared walk-away channel,
  *  and reads it again when the rider comes back from system settings. */
@@ -46,6 +49,10 @@ class SettingsDashcamDndTest {
             walkAwayAlarmEnabled = true
         }
         ServiceNotifications(app) { prefs }.ensureChannels()
+        // A usable radio, so this runs without the cause card above the
+        // camera (`SettingsDashcamRadioTest`).
+        shadowOf((app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter).setEnabled(true)
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
         val owner = FakeOwner()
         composeRule.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import es.jjrh.bikeradar.BatteryStateBus
 import es.jjrh.bikeradar.BikeRadarService
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.ServiceNotifications
@@ -91,11 +92,13 @@ private fun SettingsDashcamBody(navController: NavController, prefs: Prefs) {
         dashcamDisplayName = prefsSnap.dashcamDisplayName,
         dashcamWarnWhenOff = prefsSnap.dashcamWarnWhenOff,
         dashcamConnected = dashcamConnected,
-        // Re-read on the same tick as the freshness above, through the same
-        // helper as the row that opened this screen. Without it this screen
-        // calls the camera paired while that row calls it not paired, which
-        // is the disagreement the shared vocabulary exists to remove.
-        btEnabled = remember(tickNowMs) { radioUsable(bluetoothIsOn(ctx), Permissions.missingForService(ctx)) },
+        // Re-read on the same tick as the freshness above.
+        bluetoothOn = remember(tickNowMs) { bluetoothIsOn(ctx) },
+        missing = remember(tickNowMs) { Permissions.missingForService(ctx) },
+        onGrantPermissions = { navController.navigate("settings/permissions") },
+        onOpenBluetoothSettings = {
+            ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        },
         dashcamBatteryPct = if (dashcamConnected) dashcamBattery.pct else null,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         walkAwayAlarmEnabled = prefsSnap.walkAwayAlarmEnabled,
@@ -143,11 +146,15 @@ internal fun SettingsDashcamContent(
     dashcamDisplayName: String?,
     dashcamWarnWhenOff: Boolean,
     dashcamConnected: Boolean,
-    /** [radioUsable]: Bluetooth on and Nearby devices granted. Deliberately no
-     *  default: a caller that forgets it would render a camera as paired
-     *  while the radio is off, which is the exact disagreement with the home
-     *  row this parameter exists to prevent. */
-    btEnabled: Boolean,
+    /** The adapter and the missing permission, classified here by
+     *  [radioUsable], the helper the home row that opens this screen uses.
+     *  Deliberately no defaults: a caller that forgets them would render a
+     *  camera as paired while the radio is off, which is the exact
+     *  disagreement with that row they exist to prevent. */
+    bluetoothOn: Boolean,
+    missing: MissingPermission?,
+    onGrantPermissions: () -> Unit,
+    onOpenBluetoothSettings: () -> Unit,
     dashcamBatteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     walkAwayAlarmEnabled: Boolean,
@@ -203,6 +210,30 @@ internal fun SettingsDashcamContent(
 
             if (ownership == DashcamOwnership.YES) {
                 Spacer(modifier = Modifier.height(14.dp))
+                val radioUp = radioUsable(bluetoothOn, missing)
+                if (!radioUp) {
+                    // The card below says "Not paired", as the home row does;
+                    // this names why, ranked as on the home card, with the
+                    // settings below left in place (`SettingsDashcamRadioTest`).
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        if (missing == MissingPermission.NEARBY_DEVICES) {
+                            IntentCard(
+                                title = stringResource(R.string.main_status_permissions_title),
+                                subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
+                                filled = true,
+                                onClick = onGrantPermissions,
+                            )
+                        } else {
+                            IntentCard(
+                                title = stringResource(R.string.main_status_bt_off_title),
+                                subtitle = stringResource(R.string.main_bt_banner_action),
+                                filled = true,
+                                onClick = onOpenBluetoothSettings,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 // Device pairing card matching the JSX 'rich device summary'.
                 Column(
                     modifier = Modifier
@@ -242,7 +273,7 @@ internal fun SettingsDashcamContent(
                             // that row, so the state must survive the journey
                             // and must not be carried by colour alone.
                             val link = deviceLinkState(
-                                linked = btEnabled && dashcamMac != null,
+                                linked = radioUp && dashcamMac != null,
                                 fresh = dashcamConnected,
                             )
                             Row(
@@ -263,7 +294,7 @@ internal fun SettingsDashcamContent(
                                     color = br.fgMuted,
                                     fontSize = 12.sp,
                                 )
-                                if (dashcamConnected && dashcamBatteryPct != null) {
+                                if (link.isDelivering && dashcamBatteryPct != null) {
                                     BatteryChip(pct = dashcamBatteryPct, lowThresholdPct = batteryLowThresholdPct)
                                 }
                             }

@@ -3,6 +3,8 @@
 package es.jjrh.bikeradar.ui
 
 import android.app.Application
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -21,6 +23,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
 
 /**
@@ -53,6 +56,10 @@ class SettingsDashcamOwnershipUndoTest {
     private fun prefsWithARememberedCamera(ownership: DashcamOwnership) = prefsWithACameraInUse().apply { dashcamOwnership = ownership }
 
     private fun show(prefs: Prefs) {
+        // A usable radio, so these run without the cause card above the
+        // camera (`SettingsDashcamRadioTest`).
+        shadowOf((app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter).setEnabled(true)
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
         composeRule.setContent {
             UiTheme {
                 SettingsDashcam(navController = rememberNavController(), prefs = prefs)

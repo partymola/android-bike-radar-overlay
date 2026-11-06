@@ -48,6 +48,7 @@ class SettingsScreenSnapshotTest {
                         eBikeDataEnabled = true,
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
@@ -84,6 +85,7 @@ class SettingsScreenSnapshotTest {
                         eBikeDataEnabled = false,
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
@@ -126,6 +128,7 @@ class SettingsScreenSnapshotTest {
                         eBikeDataEnabled = true,
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.NO_SIGNAL,
                     dashcamLink = DeviceLinkState.NO_SIGNAL,
                     // PRESENT, not null, and that is the whole point: an
@@ -154,7 +157,8 @@ class SettingsScreenSnapshotTest {
      * renders: the radar row dropping its two-part form (there is no link to
      * describe until a radar exists, so "Not paired" is the whole answer),
      * and the Bluetooth-off banner that keeps that word from being read as a
-     * claim about the hardware.
+     * claim about the hardware. Nearby devices is granted: without it the
+     * permission card shows in the banner's place (`menuNearbyDevicesMissing`).
      */
     @Test
     fun menuNoRadarAndBluetoothOff() {
@@ -168,12 +172,51 @@ class SettingsScreenSnapshotTest {
                         eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.UNANSWERED,
                     ),
                     btEnabled = false,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.NOT_PAIRED,
                     dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = null,
                     dashcamBattery = null,
                     ebikeReceiving = false,
                     ebikeStage = EBikeStage.NOT_STARTED,
+                    haConfigured = false,
+                    haHealth = HaHealth.Unknown,
+                    permissionsGrantedCount = 3,
+                    permissionsRequiredMissing = 0,
+                    permissionsTotal = 3,
+                    radarGrants = emptyList(),
+                )
+            }
+        }
+    }
+
+    /**
+     * Nearby devices denied with Bluetooth on: both device rows read "Not
+     * paired", the eBike row names the permission, and the permission card
+     * above them says why.
+     */
+    @Test
+    fun menuNearbyDevicesMissing() {
+        captureRoboImage {
+            UiTheme {
+                SettingsMenuBody(
+                    navController = rememberNavController(),
+                    devUnlocked = false,
+                    prefsSnap = SnapshotFixtures.defaultPrefsSnapshot().copy(
+                        dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES,
+                        dashcamMac = "AA:BB:CC:DD:EE:FF",
+                        eBikeOwnership = es.jjrh.bikeradar.data.EBikeOwnership.YES,
+                        eBikeDataEnabled = true,
+                    ),
+                    btEnabled = true,
+                    missingPermission = es.jjrh.bikeradar.MissingPermission.NEARBY_DEVICES,
+                    radarLink = DeviceLinkState.NOT_PAIRED,
+                    dashcamLink = DeviceLinkState.NOT_PAIRED,
+                    radarBattery = null,
+                    dashcamBattery = null,
+                    ebikeReceiving = false,
+                    // What shownEBikeStage gives for this permission.
+                    ebikeStage = EBikeStage.NOT_PERMITTED,
                     haConfigured = false,
                     haHealth = HaHealth.Unknown,
                     // Nearby devices, the one required permission, is the
@@ -217,6 +260,7 @@ class SettingsScreenSnapshotTest {
                         eBikeDataEnabled = true,
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIMITED,
                     dashcamLink = DeviceLinkState.LIMITED,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
@@ -255,6 +299,7 @@ class SettingsScreenSnapshotTest {
                         dashcamMac = "AA:BB:CC:DD:EE:FF",
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIMITED,
                     dashcamLink = DeviceLinkState.LIVE,
                     // Shown on LIMITED: the percentage is a fact about the
@@ -299,6 +344,7 @@ class SettingsScreenSnapshotTest {
                     // LOW at the default and CRITICAL at 40. Both chips move
                     // only because the threshold was read.
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 30, readAtMs = 1_000L),
@@ -341,6 +387,7 @@ class SettingsScreenSnapshotTest {
                         eBikeDataEnabled = true,
                     ),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.LIVE,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),
@@ -367,6 +414,7 @@ class SettingsScreenSnapshotTest {
                     devUnlocked = false,
                     prefsSnap = SnapshotFixtures.defaultPrefsSnapshot(),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = null,

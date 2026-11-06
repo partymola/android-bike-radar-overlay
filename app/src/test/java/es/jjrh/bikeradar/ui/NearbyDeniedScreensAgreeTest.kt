@@ -93,6 +93,7 @@ class NearbyDeniedScreensAgreeTest {
         show { SettingsScreen(navController = rememberNavController(), prefs = prefs) }
         assertBlamesNothingElse()
         assertTrue(count("Needs Nearby devices") > 0)
+        assertTrue(count("No alerts until you grant Nearby devices") > 0)
     }
 
     @Test

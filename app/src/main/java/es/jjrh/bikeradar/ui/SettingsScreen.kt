@@ -65,6 +65,7 @@ import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
+import es.jjrh.bikeradar.MissingPermission
 import es.jjrh.bikeradar.Permissions
 import es.jjrh.bikeradar.PermissionsSummary
 import es.jjrh.bikeradar.PermissionsSummaryDeriver
@@ -92,6 +93,8 @@ import android.provider.Settings as AndroidSettings
  * matching `settings-screens.jsx`'s `SettingsHome` composition.
  *
  * Top: SettingsHeader with chevron-back.
+ * Then, while the radio is unusable: the Nearby devices card or the
+ *   Bluetooth-off banner.
  * Then: Quick Status card (compressed Radar + Cam status).
  * Then: RIDE (Alerts, Light auto-mode), CONNECTIONS (Dashcam, eBike,
  *   Home Assistant), SYSTEM (Permissions, Experimental, Debug, About).
@@ -209,6 +212,7 @@ private fun SettingsScreenBody(navController: NavController, prefs: Prefs) {
         devUnlocked = devUnlocked,
         prefsSnap = prefsSnap,
         btEnabled = btEnabled,
+        missingPermission = missingPermission,
         radarLink = radarLink,
         dashcamLink = dashcamLink,
         radarBattery = radarBattery,
@@ -235,11 +239,17 @@ internal fun SettingsMenuBody(
     devUnlocked: Boolean,
     prefsSnap: es.jjrh.bikeradar.data.PrefsSnapshot,
     /** Radio off makes both radio-backed rows read "Not paired", which is what
-     *  `linked` means: bonded AND the transport up. The banner names the cause
-     *  once, so the word is never left unexplained; the home screen shows the
-     *  same one, and suppresses it when its hero already says Bluetooth is
-     *  off. */
+     *  `linked` means: bonded AND the transport up. The banner, or the Nearby
+     *  devices card in its place, names the cause once, so the word is never
+     *  left unexplained; the home screen shows the same banner, and suppresses
+     *  it when its hero already says Bluetooth is off. */
     btEnabled: Boolean,
+    /** A missing Nearby devices grant reads "Not paired" too, so its card
+     *  takes the banner's place, ranked first and alone as on the radar and
+     *  dashcam screens (`SettingsHomeRadioTest`). No default: a caller that
+     *  forgot it would leave both rows reading "Not paired" with nothing
+     *  saying why. */
+    missingPermission: MissingPermission?,
     /** Classified by the same [deviceLinkState] the home System card uses, so
      *  the quick-status chip, the Connections row and the home row cannot
      *  give one device three different words. */
@@ -267,16 +277,25 @@ internal fun SettingsMenuBody(
         ) {
             SettingsHeader(title = stringResource(R.string.common_settings), onBack = { navController.popBackStack() })
 
-            if (!btEnabled) {
+            if (!radioUsable(btEnabled, missingPermission)) {
                 Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
-                    BluetoothOffBanner(
-                        onTap = {
-                            ctx.startActivity(
-                                Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        },
-                    )
+                    if (missingPermission == MissingPermission.NEARBY_DEVICES) {
+                        IntentCard(
+                            title = stringResource(R.string.main_status_permissions_title),
+                            subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
+                            filled = true,
+                            onClick = { navController.navigate("settings/permissions") },
+                        )
+                    } else {
+                        BluetoothOffBanner(
+                            onTap = {
+                                ctx.startActivity(
+                                    Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            },
+                        )
+                    }
                 }
             }
 

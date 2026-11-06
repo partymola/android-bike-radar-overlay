@@ -73,6 +73,7 @@ class SettingsRadarAccessControlOnlyTest {
                     devUnlocked = false,
                     prefsSnap = SnapshotFixtures.defaultPrefsSnapshot(),
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = null,

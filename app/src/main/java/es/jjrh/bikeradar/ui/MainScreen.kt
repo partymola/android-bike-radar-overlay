@@ -893,8 +893,9 @@ internal fun radarHatchDevices(
  * ("Not paired"), the eBike row names the permission ([shownEBikeStage]), and
  * the home card names the cause. Every screen that classifies a device link asks
  * this, so a row and the screen it opens cannot disagree
- * (`NearbyDeniedScreensAgreeTest`). Bluetooth-off banners keep reading the
- * adapter alone.
+ * (`NearbyDeniedScreensAgreeTest`). Bluetooth-off banners read the adapter
+ * alone, except on Settings home, where the Nearby devices card takes the
+ * banner's place (`SettingsHomeRadioTest`).
  */
 internal fun radioUsable(bluetoothOn: Boolean, missing: MissingPermission?): Boolean = bluetoothOn && missing != MissingPermission.NEARBY_DEVICES
 

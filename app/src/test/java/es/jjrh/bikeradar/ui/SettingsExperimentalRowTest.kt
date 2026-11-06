@@ -37,6 +37,7 @@ class SettingsExperimentalRowTest {
                     devUnlocked = true,
                     prefsSnap = snap,
                     btEnabled = true,
+                    missingPermission = null,
                     radarLink = DeviceLinkState.LIVE,
                     dashcamLink = DeviceLinkState.NOT_PAIRED,
                     radarBattery = BatteryEntry("radar", "RearVue8", 78, readAtMs = 1_000L),

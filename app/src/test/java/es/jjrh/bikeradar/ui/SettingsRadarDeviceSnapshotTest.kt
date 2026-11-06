@@ -12,9 +12,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Roborazzi goldens for the Radar device-link screen, via the stateless
- * [SettingsRadarDeviceContent] leaf. Locks the four states: live, no-signal
- * (offline), never-paired (pair prompt), and the ambiguous multi-radar
- * selection list.
+ * [SettingsRadarDeviceContent] leaf: the link states, the pair prompt and the
+ * Bluetooth-off card that stands in for it, and the multi-radar selection list.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -151,6 +150,24 @@ class SettingsRadarDeviceSnapshotTest {
                     link = DeviceLinkState.NOT_PAIRED,
                     batteryPct = null,
                     offerChooser = false,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun bluetoothOff() {
+        captureRoboImage {
+            UiTheme {
+                SettingsRadarDeviceContent(
+                    onBack = {},
+                    bonded = emptyList(),
+                    chosenMac = null,
+                    activeName = null,
+                    link = DeviceLinkState.NOT_PAIRED,
+                    batteryPct = null,
+                    offerChooser = false,
+                    bluetoothOff = true,
                 )
             }
         }

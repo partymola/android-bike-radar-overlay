@@ -97,16 +97,17 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
     // Android's Bluetooth settings, which this screen's only action deep-links
     // to, and coming back changes no pref - so keyed on radarMac alone this
     // was the ONE surface that did not notice the rider doing exactly what it
-    // sent them to do. `getBondedDevices` also returns an empty set while the
-    // adapter is off, so this is how the screen tracks the radio at all.
+    // sent them to do. It reads empty with Bluetooth off, which is why the
+    // adapter is read on the same tick below.
     val allBonded = remember(prefsSnap.radarMac, tickNowMs) { RadarSelection.bondedDevices(ctx) }
     val bonded = remember(allBonded) { RadarSelection.choosableRadars(allBonded) }
     val others = remember(allBonded, prefsSnap.dashcamMac) { radarHatchDevices(allBonded, prefsSnap.dashcamMac) }
-    // Without it the bonded list reads empty, so "pair your radar" would send
-    // the rider to a Bluetooth list where the radar already is.
-    val nearbyMissing = remember(tickNowMs) {
-        Permissions.missingForService(ctx) == MissingPermission.NEARBY_DEVICES
-    }
+    // With Nearby devices denied the bonded list reads empty, so "pair your
+    // radar" would send the rider to a Bluetooth list where the radar already is.
+    val missing = remember(tickNowMs) { Permissions.missingForService(ctx) }
+    val nearbyMissing = missing == MissingPermission.NEARBY_DEVICES
+    // Off, the bonded list reads empty too, which says nothing about pairing.
+    val bluetoothOff = remember(tickNowMs) { !bluetoothIsOn(ctx) }
 
     // The tick is hoisted past the && below, whose short-circuit would skip the
     // read when no battery entry exists - and an unread tick means no
@@ -155,8 +156,11 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         // Whether there IS a radar, not whether we can say WHICH: with two
         // bonded and none pinned the app still links one, so the card must
         // not read "Not paired" over a live stream. Naming it is the title's
-        // job, and the picker below is where the rider settles it.
-        linked = RadarSelection.hasLinkableRadar(allBonded, chosen),
+        // job, and the picker below is where the rider settles it. The radio
+        // first, as on the home row ([radioUsable]): with Scan alone denied the
+        // list still reads, and the screen asks for the permission as the row
+        // does (`SettingsRadarDevicePermissionTest`).
+        linked = radioUsable(!bluetoothOff, missing) && RadarSelection.hasLinkableRadar(allBonded, chosen),
         fresh = connected,
         limited = radarState.source == DataSource.V1,
         connecting = RadarLinkStatus.isConnecting(linkSnap, SystemClock.elapsedRealtime()),
@@ -177,6 +181,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
             )
         },
         nearbyMissing = nearbyMissing,
+        bluetoothOff = bluetoothOff,
         onGrantPermissions = { navController.navigate("settings/permissions") },
         offerChooser = RadarSelection.shouldOfferChooser(allBonded, chosen),
         onSelectRadar = { radar -> RadarSelection.pin(prefs, radar) },
@@ -188,9 +193,10 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
 }
 
 /**
- * Stateless leaf so snapshot tests can lock the four states (connected,
- * connecting, offline, never-paired) plus the ambiguous multi-radar selection
- * list, without a Bluetooth stack or `Prefs`.
+ * Stateless leaf so snapshot tests can lock the link states, the pair prompt,
+ * the Bluetooth-off card and the ambiguous multi-radar selection list without
+ * a Bluetooth stack or `Prefs`. The Nearby devices card is pinned by behaviour
+ * tests instead.
  */
 @Composable
 internal fun SettingsRadarDeviceContent(
@@ -213,6 +219,9 @@ internal fun SettingsRadarDeviceContent(
     /** Nearby devices is denied, so an empty bonded list says nothing about
      *  pairing; the card asks for the permission instead. */
     nearbyMissing: Boolean = false,
+    /** Bluetooth is off, so an empty bonded list says nothing about pairing
+     *  either; the card says so and opens Bluetooth settings. */
+    bluetoothOff: Boolean = false,
     onGrantPermissions: () -> Unit = {},
     onSelectRadar: (RadarSelection.BondedRadar) -> Unit = {},
     offsetCm: Int = 0,
@@ -242,6 +251,22 @@ internal fun SettingsRadarDeviceContent(
                         subtitle = stringResource(R.string.main_status_permissions_nearby_sub),
                         filled = true,
                         onClick = onGrantPermissions,
+                    )
+                }
+                Spacer(modifier = Modifier.height(28.dp))
+                return@Column
+            }
+
+            if (link == DeviceLinkState.NOT_PAIRED && bluetoothOff) {
+                // The home card's title and the Settings banner's action line;
+                // a paired radar must not be sent to pair
+                // (`SettingsRadarDeviceBluetoothOffTest`).
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    IntentCard(
+                        title = stringResource(R.string.main_status_bt_off_title),
+                        subtitle = stringResource(R.string.main_bt_banner_action),
+                        filled = true,
+                        onClick = onPairDifferent,
                     )
                 }
                 Spacer(modifier = Modifier.height(28.dp))

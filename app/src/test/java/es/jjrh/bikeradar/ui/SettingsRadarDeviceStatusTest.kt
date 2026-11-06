@@ -65,7 +65,14 @@ class SettingsRadarDeviceStatusTest {
     fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         prefs = Prefs(app)
+        // A readable paired list means Bluetooth on and Nearby devices granted,
+        // as on Android; the screen reads the radio before the list.
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+        )
         val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        shadowOf(adapter).setEnabled(true)
         val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
         shadowOf(radar).setName("RearVue8")
         shadowOf(adapter).setBondedDevices(setOf(radar))

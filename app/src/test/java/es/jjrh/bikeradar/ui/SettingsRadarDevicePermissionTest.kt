@@ -97,4 +97,28 @@ class SettingsRadarDevicePermissionTest {
         composeRule.onNodeWithText("Pair your radar").assertDoesNotExist()
         composeRule.onNodeWithText("No alerts until you grant Nearby devices").assertIsDisplayed()
     }
+
+    @Test
+    fun withScanAloneDeniedAndTheRadarPairedItAsksForThePermissionAsTheHomeRowDoes() {
+        // The list reads and holds the radar, but the app cannot run on Connect
+        // alone; the home row reads the radio as unusable (radioUsable).
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val radar = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        shadowOf(radar).setName("RearVue8")
+        shadowOf(adapter).setBondedDevices(setOf(radar))
+        show()
+        composeRule.onNodeWithText("No alerts until you grant Nearby devices").assertIsDisplayed()
+        composeRule.onNodeWithText("RearVue8").assertDoesNotExist()
+    }
+
+    @Test
+    fun withNearbyDevicesMissingAndBluetoothOffItStillAsksForThePermission() {
+        // Ranked as on the home card (aMissingPermissionBeatsPausedBluetoothAndPairing).
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        shadowOf(adapter).setEnabled(false)
+        show()
+        composeRule.onNodeWithText("Bluetooth is off").assertDoesNotExist()
+        composeRule.onNodeWithText("No alerts until you grant Nearby devices").assertIsDisplayed()
+    }
 }

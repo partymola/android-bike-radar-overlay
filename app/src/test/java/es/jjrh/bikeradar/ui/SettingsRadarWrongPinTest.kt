@@ -35,6 +35,10 @@ class SettingsRadarWrongPinTest {
 
     private fun bond(vararg devices: Pair<String, String>) {
         val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        // A readable paired list means Bluetooth on and Nearby devices granted,
+        // as on Android.
+        shadowOf(app).grantPermissions(android.Manifest.permission.BLUETOOTH_SCAN, android.Manifest.permission.BLUETOOTH_CONNECT)
+        shadowOf(adapter).setEnabled(true)
         shadowOf(adapter).setBondedDevices(
             devices.map { (mac, name) -> adapter.getRemoteDevice(mac).also { shadowOf(it).setName(name) } }.toSet(),
         )

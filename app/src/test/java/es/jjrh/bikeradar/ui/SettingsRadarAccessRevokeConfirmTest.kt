@@ -2,9 +2,11 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.assertTouchWidthIsEqualTo
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import es.jjrh.bikeradar.access.RadarGrant
 import org.junit.Assert.assertEquals
@@ -64,17 +67,22 @@ class SettingsRadarAccessRevokeConfirmTest {
 
     @Test
     fun theBinIsBigEnoughToHit() {
-        // The drawn box is 34dp, which is under Android's 48dp minimum, and the
-        // action is destructive. The confirmation dialog does not compensate:
-        // it catches a tap the rider did not mean, where this catches a tap
-        // they did mean and missed, which produces no dialog and no feedback.
-        // Nothing else in the repo asserts a touch target, so without this the
-        // modifier can be dropped and every gate stays green.
+        // The drawn box is 34dp, under Android's 48dp minimum. A tap the rider
+        // meant and missed produces no dialog and no feedback, which the
+        // confirmation cannot catch, so a tap 5dp above the drawn edge must
+        // still open it. That target comes from Compose itself; the modifier
+        // reserving its space is pinned by goldens: the radar-access ones for
+        // its width, `SettingsDashcamSnapshotTest.ownershipNoRemembered` for
+        // its height.
         show(listOf(trailBuddy))
 
-        composeRule.onAllNodesWithContentDescription("Stop sharing")[0]
+        val bin = composeRule.onAllNodesWithContentDescription("Stop sharing")[0]
             .assertTouchHeightIsEqualTo(48.dp)
             .assertTouchWidthIsEqualTo(48.dp)
+        composeRule.onNodeWithText("Stop sharing with Trail Buddy?").assertDoesNotExist()
+        bin.performTouchInput { click(Offset(centerX, -5.dp.toPx())) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Stop sharing with Trail Buddy?").assertExists()
     }
 
     @Test

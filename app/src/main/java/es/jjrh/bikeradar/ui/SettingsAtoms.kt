@@ -514,16 +514,15 @@ fun SettingsActionRow(
             // leading icon and a title block; the action lives on the right
             // edge like a chevron would.
             //
-            // minimumInteractiveComponentSize takes the touch bounds to the
-            // 48dp minimum while the drawn box stays 34dp, so the affordance
-            // stays visually compact without becoming a target a gloved rider
-            // misses. A miss produces no dialog and no feedback at all, which
-            // is the failure a confirmation cannot catch.
-            // It reports a 48dp minimum to the parent, so it also makes this
-            // ROW taller on all three callers. Measured: only the radar-access
-            // goldens move, because the other two screens' action rows sit
-            // below the captured viewport - so their 14dp is real and unseen.
-            // `theBinIsBigEnoughToHit` pins the bounds; nothing pins theirs.
+            // The drawn box is 34dp tall. Compose extends a clickable that
+            // small to a 48dp touch target by itself (`theBinIsBigEnoughToHit`
+            // taps outside the drawn edge); minimumInteractiveComponentSize
+            // reserves that 48dp in layout, so nothing beside the button can
+            // sit inside its target. It moves the layout only where the title
+            // block or the button is under 48dp: the saved-dashcam row grows
+            // taller and the radar-access bin takes 48dp of width, so those
+            // goldens change without it. In their goldens the eBike and radar
+            // rows are already bigger.
             Box(
                 modifier = Modifier
                     .minimumInteractiveComponentSize()

@@ -9,12 +9,12 @@ import android.content.Intent
 import android.media.AudioManager
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
+import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.EBikeOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
-import es.jjrh.bikeradar.ui.PairedListNearbyDeniedTest
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,7 +27,6 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 import java.io.File
 import java.time.Duration
@@ -864,18 +863,17 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
-    @Config(shadows = [PairedListNearbyDeniedTest.BondedReadAsOnAndroid::class])
     fun startingWithBluetoothOffAPinnedRiderLinksOnlyThePin() {
-        // Bluetooth off lists nothing paired, though both are, and the cache
-        // replays both at the start. The pin's name is one the match does not know.
+        // Bluetooth off, and an empty paired list, as Android's is with the
+        // adapter off. The cache replays both at the start. The pin's name is
+        // one the match does not know.
         val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
         shadowOf(adapter).setEnabled(false)
         RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
         val (controller, _, journal) = serviceWithPairedAndCached(
-            mapOf(RADAR_A to "RearVue8", UNLISTED to "Tail unit"),
+            emptyMap(),
             listOf("RearVue8" to RADAR_A, "Tail unit" to UNLISTED),
         )
-        assertTrue("the read must come back empty", adapter.bondedDevices.isEmpty())
         idleMainUntil { journal.exists() && journal.starts("Tail unit") == 1 }
         val text = if (journal.exists()) journal.readText() else ""
         assertEquals("another radar was linked, got:\n$text", 0, journal.starts("RearVue8"))
@@ -896,6 +894,145 @@ class BikeRadarServiceSmokeTest {
         readDevice(service, "Tail unit", UNLISTED, 2)
         idleMainUntil { journal.starts("Tail unit") == 1 }
         assertEquals("the pinned radar must link, got:\n${journal.readText()}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    private fun knownDevices() = KnownDevices(app.getSharedPreferences(PREFS_THROTTLE, android.content.Context.MODE_PRIVATE)).load()
+
+    @Test
+    fun aStaleCachedAddressDoesNotHoldTheLinkSlot() {
+        // The cache can name a radar since unpaired. Linked, its loop never
+        // ends: no bond-removed broadcast comes for an address already gone.
+        // The paired front camera cached beside it must stay and be replayed.
+        Prefs(app).apply {
+            dashcamMac = CAMERA
+            dashcamOwnership = DashcamOwnership.YES
+            autoLightModeEnabled = true
+        }
+        val (controller, service, journal) = serviceWithPairedAndCached(
+            mapOf(RADAR_B to "RTL515", CAMERA to "Varia Vue 84509"),
+            listOf("RearVue8" to RADAR_A, "Varia Vue 84509" to CAMERA),
+        )
+        // Before the sighting below, whose battery read caches what it sees.
+        idleMainUntil { knownDevices().none { it.second == RADAR_A } }
+        assertEquals("only the stale entry may leave the cache", listOf("Varia Vue 84509" to CAMERA), knownDevices())
+        idleMainUntil { journal.exists() && journal.readText().contains("camera link start Varia Vue #####") }
+        val replayed = if (journal.exists()) journal.readText() else ""
+        assertTrue("the kept camera must be replayed, got:\n$replayed", replayed.contains("camera link start Varia Vue #####"))
+        assertTrue("got:\n$replayed", replayed.contains("known devices dropped: not paired (dropped=1)"))
+        // A sighting of the stale address first, so the start gate is tested
+        // apart from the replay.
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        readDevice(service, "RTL515", RADAR_B, 2)
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = if (journal.exists()) journal.readText() else ""
+        assertEquals("the paired radar must link, got:\n$text", 1, journal.starts("RTL515"))
+        assertEquals("an unpaired address was linked, got:\n$text", 0, journal.starts("RearVue8"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinnedRiderStartsNoAddressTheReadablePairedListLacks() {
+        // The pin is not in the readable list, so name-match picks, and the
+        // list still gates the start.
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, service, journal) = serviceWithPairedAndCached(mapOf(RADAR_B to "RTL515"), emptyList())
+        // Both before the paired radar's, so no running loop refuses them.
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        // The pin's own sighting starts nothing either.
+        readDevice(service, "Tail unit", UNLISTED, 2)
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = if (journal.exists()) journal.readText() else ""
+        assertEquals("an unpaired radar was linked, got:\n$text", 0, journal.starts("RearVue8"))
+        assertEquals("the unpaired pin was linked, got:\n$text", 0, journal.starts("Tail unit"))
+
+        readDevice(service, "RTL515", RADAR_B, 3)
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("the paired radar must link, got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aRadarPairedBesideAnUnpairedPinsLoopTakesTheSlot() {
+        // With nothing paired the pin links through the empty read. Once a
+        // radar is paired the list is readable, and it lacks the pin.
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, _, journal) = serviceWithPairedAndCached(emptyMap(), listOf("Tail unit" to UNLISTED))
+        idleMainUntil { journal.starts("Tail unit") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("Tail unit"))
+
+        pair(RADAR_B, "RTL515")
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        // The pin follow the sighting asks for runs off the main thread.
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = journal.readText()
+        assertEquals("the paired radar must link, got:\n$text", 1, journal.starts("RTL515"))
+        assertTrue("got:\n$text", text.contains("radar link moving: the linked radar is not paired"))
+        assertEquals("the unpaired pin must not take the link back, got:\n$text", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aLoopStartedWithBluetoothOffGivesWayToThePairedRadar() {
+        // Bluetooth off lists nothing paired, so the cached radar starts. No
+        // adapter-off edge follows to end its loop once Bluetooth is on.
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setEnabled(false)
+        val (controller, service, journal) = serviceWithPairedAndCached(emptyMap(), listOf("RearVue8" to RADAR_A))
+        idleMainUntil { journal.exists() && journal.starts("RearVue8") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("RearVue8"))
+
+        // On, the adapter lists the radar that was paired all along.
+        val paired = adapter.getRemoteDevice(RADAR_B).also { shadowOf(it).setName("RTL515") }
+        shadowOf(adapter).setBondedDevices(setOf(paired))
+        shadowOf(adapter).setEnabled(true)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.STATE_ON),
+        )
+        shadowOf(app.mainLooper).idle()
+        readDevice(service, "RTL515", RADAR_B, 1)
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        val text = journal.readText()
+        assertEquals("the paired radar must link, got:\n$text", 1, journal.starts("RTL515"))
+        assertTrue("got:\n$text", text.contains("radar link moving: the linked radar is not paired"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPairedLinkNeverGivesWayToAnotherPairedRadar() {
+        // Two radars paired and none pinned: name-match linked one, and the
+        // other's sighting must not cut a radar that is still paired.
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A, RADAR_B))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("RearVue8"))
+
+        readDevice(service, "RTL515", RADAR_B, 2)
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = journal.readText()
+        assertEquals("got:\n$text", 0, journal.starts("RTL515"))
+        assertFalse("got:\n$text", text.contains("is not paired"))
+        controller.destroy()
+    }
+
+    @Test
+    fun anEmptyReadNeverReplacesARunningLink() {
+        // Bluetooth off and a refused read both list nothing, which says
+        // nothing about the radar streaming now.
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("RearVue8"))
+
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setBondedDevices(emptySet())
+        readDevice(service, "RTL515", RADAR_B, 2)
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = journal.readText()
+        assertEquals("got:\n$text", 0, journal.starts("RTL515"))
+        assertFalse("got:\n$text", text.contains("is not paired"))
         controller.destroy()
     }
 
@@ -1713,5 +1850,6 @@ class BikeRadarServiceSmokeTest {
         const val RADAR_B = "AA:BB:CC:DD:EE:22"
         const val NAMELESS = "AA:BB:CC:DD:EE:33"
         const val UNLISTED = "AA:BB:CC:DD:EE:55"
+        const val CAMERA = "AA:BB:CC:DD:EE:66"
     }
 }

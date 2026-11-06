@@ -76,6 +76,27 @@ object RadarSelection {
         bondedMacs.any { it.equals(pinMac, ignoreCase = true) }
 
     /**
+     * Whether a link to [mac] may start: [bondedMacs] holds it, or is empty.
+     * In AOSP, `getBondedDevices` returns an empty set unless the adapter is
+     * on, and a device joins the paired list before its pairing broadcast is
+     * sent, so a non-empty list is taken as complete; an empty one may be
+     * Bluetooth off or a refused read (`a radar starts only if a readable paired
+     * list holds it`).
+     */
+    fun mayStartLink(mac: String, bondedMacs: Set<String>): Boolean = bondedMacs.isEmpty() || bondedMacs.any { it.equals(mac, ignoreCase = true) }
+
+    /**
+     * Whether a link running to [linkedMac] gives way to [targetMac]: only when
+     * [bondedMacs] holds the target and the linked radar could not start now,
+     * which makes the list non-empty and the target another address. An empty
+     * list therefore never replaces
+     * (`a link gives way only to a listed radar while it is unlisted`).
+     */
+    fun shouldReplaceUnpairedLink(linkedMac: String?, targetMac: String, bondedMacs: Set<String>): Boolean = linkedMac != null &&
+        !mayStartLink(linkedMac, bondedMacs) &&
+        bondedMacs.any { it.equals(targetMac, ignoreCase = true) }
+
+    /**
      * The name a link to the pinned [pinMac] starts under: the sighting's own
      * name when the sighting is the pin, else the bonded name, else
      * [UNNAMED_RADAR]. Never an address: [bondedDevices] stands one in for a
@@ -257,6 +278,18 @@ object RadarSelection {
         }
     } catch (_: Throwable) {
         emptyList()
+    }
+
+    /** The addresses of ALL bonded devices, for the link gates that need no
+     *  name ([mayStartLink], [shouldLinkRadar]). Empty on any Bluetooth
+     *  permission or adapter error, as [bondedDevices] is, and never part of
+     *  the list: the set is filled locally and a throw returns empty. */
+    @SuppressLint("MissingPermission")
+    fun bondedMacs(ctx: Context): Set<String> = try {
+        val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        mgr?.adapter?.bondedDevices.orEmpty().mapTo(HashSet()) { it.address }
+    } catch (_: Throwable) {
+        emptySet()
     }
 
     /**

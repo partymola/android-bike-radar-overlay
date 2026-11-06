@@ -172,6 +172,18 @@ to its file. The notes below are the working summary.
   A failed bonded read never moves a running link
   (`RadarSelectionTest."an empty bonded read never moves a running link"`), so
   on one the other radar keeps streaming until the pinned one is next sighted.
+  In AOSP, `getBondedDevices` returns an empty set unless the adapter is on,
+  and a device joins the paired list before its pairing broadcast is sent, so
+  a non-empty list is taken as complete. A radar starts only if that list
+  holds it or the list is empty (`RadarSelection.mayStartLink`,
+  `BikeRadarServiceSmokeTest.aPinnedRiderStartsNoAddressTheReadablePairedListLacks`).
+  `kickstartFromCache` removes from the known-device cache every entry a
+  non-empty list lacks, so a replay never starts it. A running link to an
+  address the list lacks gives way to a radar the list holds, since no
+  bond-removed broadcast comes for an address already unpaired to end that
+  loop (`RadarSelection.shouldReplaceUnpairedLink`,
+  `BikeRadarServiceSmokeTest.aStaleCachedAddressDoesNotHoldTheLinkSlot`,
+  `RadarLinkControllerHarnessTest.aStartForAPairedRadarEndsALinkToAnUnpairedOne`).
 - HA integration is optional; the overlay works standalone.
 - Front-light mode is auto-set on every BLE connect: Day Flash before
   sunset, Night Flash after, using `SunsetCalculator` driven by

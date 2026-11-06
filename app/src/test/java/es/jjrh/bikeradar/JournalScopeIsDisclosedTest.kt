@@ -142,6 +142,13 @@ class JournalScopeIsDisclosedTest {
         // event, and this is the link following it. No cue sounded and no
         // device named.
         "radar link moving to the pinned radar",
+        // The paired list is the event, whether the rider unpaired the radar
+        // or never paired it; this is the link following it. No cue sounded
+        // and no device named.
+        "radar link moving: the linked radar is not paired",
+        // The cache following the paired list. A count only: no device named
+        // and no cue sounded.
+        "known devices dropped: not paired (dropped=\$dropped)",
         // The link declining to follow a pin it cannot reach yet.
         "radar pin not bonded; link kept",
         // The pairing is the rider's; this is the app acting on it.

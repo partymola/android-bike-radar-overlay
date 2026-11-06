@@ -10,7 +10,8 @@ import android.content.SharedPreferences
  * name, and so the ride-summary publish can label its HA entity. Pure
  * SharedPreferences I/O - extracted from [BikeRadarService] so the HA publisher
  * and the dashcam read path share one store instead of reaching back into the
- * service.
+ * service. Entries a readable paired list lacks are pruned at kickstart
+ * (`BikeRadarService.kickstartFromCache`).
  */
 internal class KnownDevices(private val prefs: SharedPreferences) {
 

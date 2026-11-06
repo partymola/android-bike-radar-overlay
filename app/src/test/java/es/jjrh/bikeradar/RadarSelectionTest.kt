@@ -103,6 +103,31 @@ class RadarSelectionTest {
         assertFalse(RadarSelection.shouldReplaceLink(macA, macB, emptySet()))
     }
 
+    @Test fun `a radar starts only if a readable paired list holds it`() {
+        assertTrue(RadarSelection.mayStartLink(macA, setOf(macA, macB)))
+        assertFalse(RadarSelection.mayStartLink(macA, setOf(macB)))
+        // An empty list may be Bluetooth off or a refused read.
+        assertTrue(RadarSelection.mayStartLink(macA, emptySet()))
+        // Either side in lower case.
+        assertTrue(RadarSelection.mayStartLink(macA.lowercase(), setOf(macA)))
+        assertTrue(RadarSelection.mayStartLink(macA, setOf(macA.lowercase())))
+    }
+
+    @Test fun `a link gives way only to a listed radar while it is unlisted`() {
+        assertTrue(RadarSelection.shouldReplaceUnpairedLink(macA, macB, setOf(macB)))
+        // Case differs on either side and still counts.
+        assertTrue(RadarSelection.shouldReplaceUnpairedLink(macA.lowercase(), macB, setOf(macB.lowercase())))
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(macA, macB, setOf(macB, macA.lowercase())))
+        // The linked radar still paired keeps its link.
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(macA, macB, setOf(macA, macB)))
+        // A target the list lacks, or an empty list, replaces nothing.
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(macA, macB, setOf("CC:CC:CC:CC:CC:CC")))
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(macA, macB, emptySet()))
+        // Nothing running, or the same radar in another case.
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(null, macB, setOf(macB)))
+        assertFalse(RadarSelection.shouldReplaceUnpairedLink(macB.lowercase(), macB, setOf(macB)))
+    }
+
     @Test fun `a pinned link takes the sighting's name, else the bonded one`() {
         val bonded = listOf(RadarSelection.BondedRadar(macB, "RTL515"))
         assertEquals("Spare", RadarSelection.pinnedLinkName(macB, macB.lowercase(), "Spare", bonded))

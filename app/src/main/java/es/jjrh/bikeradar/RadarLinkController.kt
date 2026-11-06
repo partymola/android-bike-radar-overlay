@@ -131,7 +131,8 @@ internal class RadarLinkController(
     private val loopLock = Mutex()
 
     // The radar [radarJob] was started for. Set in [start], unlike
-    // [currentRadarMac], so [followPin] knows it before the loop runs.
+    // [currentRadarMac], so [followPin] and [start]'s replace decision know
+    // it before the loop runs.
     @Volatile private var jobMac: String? = null
 
     // True while [followPin] waits for the old loop to finish: a sighting of
@@ -308,9 +309,28 @@ internal class RadarLinkController(
         notifications.postBondLost()
     }
 
+    /**
+     * Start the link to [mac], unless a loop already runs. A running loop gives
+     * way only when [bondedMacs] holds [mac] and not the linked radar
+     * ([RadarSelection.shouldReplaceUnpairedLink]), since no bond-removed
+     * broadcast comes for an address already unpaired to end that loop. The
+     * old loop is cancelled and an override of its light does not carry over
+     * (`aStartForAPairedRadarEndsALinkToAnUnpairedOne`); the new loop takes the
+     * loop lock, so it waits out the old one's teardown
+     * (`aStartDuringTheTeardownWaitsForIt`). The cut is an ordinary
+     * disconnect, as in [followPin]: the rear is uncovered until the new
+     * radar's first frame.
+     */
     @Synchronized
-    fun start(name: String, mac: String) {
-        if (radarJob?.isActive == true || replacingLink) return
+    fun start(name: String, mac: String, bondedMacs: Set<String> = emptySet()) {
+        if (replacingLink) return
+        val running = radarJob?.takeIf { it.isActive }
+        if (running != null) {
+            if (!RadarSelection.shouldReplaceUnpairedLink(jobMac, mac, bondedMacs)) return
+            Log.i(TAG, "moving radar link off an unpaired radar to ${LogRedaction.mac(mac)}")
+            journal("radar link moving: the linked radar is not paired")
+            running.cancel()
+        }
         // Ask the adapter, do not wait to be told. BOND_BONDED is an edge and
         // there are two ordinary ways to miss it: a re-pair can land on a
         // different address (the peer is free to change it), and a sighting of
@@ -334,14 +354,23 @@ internal class RadarLinkController(
         Log.i(TAG, "starting radar link to $name ${LogRedaction.mac(mac)}")
         journal("radar link start $name")
         jobMac = mac
-        radarJob = scope.launch { loopLock.withLock { runRadarConnection(mac, name) } }
+        val replaced = running != null
+        radarJob = scope.launch {
+            loopLock.withLock {
+                // Under the lock, so after the old loop's teardown: a slot change
+                // its decode loop still drained cannot set the override again.
+                // Only a replace clears it (`aPressHoldsAcrossARestartOfTheSameLink`).
+                if (replaced) radarLightUserOverride = false
+                runRadarConnection(mac, name)
+            }
+        }
     }
 
     /**
-     * Move a running link to the radar the rider pinned, which [start] alone
-     * never does while a loop runs. Acts only while a link runs and as
-     * [RadarSelection.shouldReplaceLink] allows, so the same radar or a failed
-     * bonded read leaves the link alone
+     * Move a running link to the radar the rider pinned, which [start] does
+     * only when the linked radar is not paired. Acts only while a link
+     * runs and as [RadarSelection.shouldReplaceLink] allows, so the same radar
+     * or a failed bonded read leaves the link alone
      * (`aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone`). The old
      * connection loop is joined, or waited out by the loop lock when the job is
      * a start still waiting for it, before the pinned radar starts, so its

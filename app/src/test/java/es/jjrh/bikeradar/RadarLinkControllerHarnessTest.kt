@@ -685,6 +685,43 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aStartForAPairedRadarEndsALinkToAnUnpairedOne() = runTest {
+        // An address the paired list no longer holds never ends its own loop.
+        // A press on its light is about that unit, so it does not carry over.
+        ShadowLog.clear()
+        fun lightSets() = ShadowLog.getLogsForTag("BikeRadar.Radar").count { it.msg.startsWith("radar light ") && it.msg.contains(" applied=") }
+        val link = Link()
+        val gateway = FakeGateway()
+        val controller = controller(link, prefs = prefs(radarLightAutoMode = true), gateway = gateway)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("the first radar's light is set", pumpUntil { lightSets() == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff01") // baseline: slot 0
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff01") // the rider's press
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
+
+        // Still listed, so it keeps its link.
+        controller.start("Other", pinnedMac, setOf(mac, pinnedMac))
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(1, link.openCount)
+        assertFalse(journalHas("is not paired"))
+
+        controller.start("Other", pinnedMac, setOf(pinnedMac))
+        assertTrue(journalHas("radar link moving: the linked radar is not paired"))
+        assertTrue("the old loop must end and the new one open", pumpUntil { link.openCount == 2 })
+        assertEquals(pinnedMac, requireNotNull(link.gatt).device.address)
+        assertEquals("the old teardown comes first", listOf("open", "connected", "disconnected"), gateway.events.toList().take(3))
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journal.count { it == "radar handshake complete" } >= 2 })
+        assertTrue("the new radar's light must be set too", pumpUntil { lightSets() == 2 })
+        controller.forceReconnect()
+    }
+
     @Test fun aPinTheLinkAlreadyHasOrCannotSeeLeavesTheLinkAlone() = runTest {
         val link = Link()
         val gateway = FakeGateway()
@@ -850,6 +887,32 @@ class RadarLinkControllerHarnessTest {
         // Back inside the deadband, so the press still holds and nothing is set.
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journal.count { it == heldLine } == 1 })
+        assertEquals("journal=$journal", 1, autoLightLines().size)
+        controller.forceReconnect()
+    }
+
+    @Test fun aPressHoldsAcrossARestartOfTheSameLink() = runTest {
+        // Only a start that replaced another radar's link clears the override;
+        // a fresh loop for the same radar keeps the press inside the deadband.
+        val link = Link()
+        val controller = controller(link, prefs = autoLightPrefs())
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { autoLightLines().size == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar light slot changed on the radar") })
+
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.openCount == 2 })
         bootstrap(link)
         feedHandshakeReplies(link)
         assertTrue("journal=$journal", pumpUntil { journal.count { it == heldLine } == 1 })

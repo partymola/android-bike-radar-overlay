@@ -842,13 +842,23 @@ class BikeRadarService : Service() {
     // ── battery scan kickstart ────────────────────────────────────────────────
 
     private suspend fun kickstartFromCache() {
-        val known = knownDevices.load()
+        // An entry a readable paired list lacks is a device not paired: it
+        // leaves the cache, so a replay never starts it; an empty list keeps
+        // them all (`aStaleCachedAddressDoesNotHoldTheLinkSlot`).
+        val cached = knownDevices.load()
+        val bondedMacs = RadarSelection.bondedMacs(this)
+        val known = cached.filter { (_, mac) -> RadarSelection.mayStartLink(mac, bondedMacs) }
+        val dropped = cached.size - known.size
+        if (dropped > 0) {
+            knownDevices.save(known)
+            linkJournal.log("known devices dropped: not paired (dropped=$dropped)")
+        }
         for ((name, mac) in known) scheduleRead(name, mac)
 
         // Always-on PendingIntent scan (registerEventScan) covers ongoing
         // discovery and post-pairing recovery via BatteryScanReceiver, so
-        // the active kickstart is only needed when the cache is empty
-        // (first-run or post-clear).
+        // the active scan runs only when no cached entry is kept: first run,
+        // after a clear, or every entry dropped above.
         if (known.isNotEmpty()) return
 
         val fresh = scanForDevices(timeoutMs = 3_000)
@@ -865,25 +875,28 @@ class BikeRadarService : Service() {
         // name-match (zero config); if the rider pinned a specific radar
         // (radarMac, still bonded or the paired list unreadable) only that
         // exact device links. That is the guard against silently streaming the
-        // wrong rear-facing radar; see RadarSelection. The bonded-device
-        // enumeration only runs when a pin exists, so the common no-pin path
-        // stays a pure name-match.
+        // wrong rear-facing radar; see RadarSelection. Either way an address a
+        // readable paired list lacks never starts, and the list lets a link to
+        // such an address give way (`aStaleCachedAddressDoesNotHoldTheLinkSlot`).
         val pinnedRadar = prefs.radarMac
-        val shouldLinkRadar = if (pinnedRadar == null) {
+        // ALL bonded MACs, not just radar-named ones: the pin must also work
+        // for a radar the name heuristic doesn't know (the "my radar isn't
+        // listed" escape hatch). Empty means "cannot tell". Read only by the
+        // pin and the start gate, so an unpinned sighting matching no radar
+        // never reads the list.
+        val bondedMacs by lazy { RadarSelection.bondedMacs(this) }
+        val selected = if (pinnedRadar == null) {
             isRearDevice(name)
         } else {
             RadarSelection.shouldLinkRadar(
                 mac = mac,
                 nameMatchesRadar = isRearDevice(name),
                 chosenMac = pinnedRadar,
-                // ALL bonded MACs, not just radar-named ones: the pin must
-                // also work for a radar the name heuristic doesn't know (the
-                // "my radar isn't listed" escape hatch). The set only answers
-                // "is the chosen MAC still bonded?", and empty "cannot tell".
-                bondedRadarMacs = RadarSelection.bondedDevices(this).mapTo(HashSet()) { it.mac },
+                bondedRadarMacs = bondedMacs,
             )
         }
-        if (shouldLinkRadar) radarLink.start(name, mac)
+        val shouldLinkRadar = selected && RadarSelection.mayStartLink(mac, bondedMacs)
+        if (shouldLinkRadar) radarLink.start(name, mac, bondedMacs)
         // A pin paired while a link to another radar runs writes no pref, so
         // its sighting or its pairing ([onDeviceBonded]) moves the link
         // (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting`).

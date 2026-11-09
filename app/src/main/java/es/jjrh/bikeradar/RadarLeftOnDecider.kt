@@ -16,7 +16,8 @@ enum class WalkAwayAlarmKind {
     RADAR,
 
     /** The radar was left on, and the phone heard the front camera just
-     *  before it went: left on too, or carried switched on. */
+     *  before it went and had not marked it switched off: left on too, or
+     *  carried switched on. */
     RADAR_AND_DASHCAM,
 }
 

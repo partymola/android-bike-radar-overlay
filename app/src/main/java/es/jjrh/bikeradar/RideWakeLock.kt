@@ -67,7 +67,8 @@ internal class RideWakeLock(context: Context, tag: String = WAKE_LOCK_TAG) {
 
         /** The radar-left-on check's own lock: a second instance, because
          *  this one is not reference-counted and the ride's is released at
-         *  BLANK, 20 s into the same off-episode. */
+         *  BLANK, 20 s into the same off-episode or within a tick of the
+         *  dashcam being reported switched off (camera light auto-switch on). */
         const val RADAR_LEFT_ON_TAG = "es.jjrh.bikeradar:radar-left-on"
     }
 }

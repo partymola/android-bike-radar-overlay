@@ -341,7 +341,7 @@ class RadarLinkCoordinatorTest {
         assertEquals(0, clogged("dashcam-stale"))
     }
 
-    // ── evaluateWalkAway FIRE / AUTO_DISMISS wiring ───────────────────────────
+    // ── evaluateWalkAway FIRE / auto-dismiss wiring ───────────────────────────
 
     /** Drive the coordinator to an ARMED, threshold-exceeded, fresh-dashcam
      *  state from which the decider returns FIRE. Returns the off-instant. */
@@ -375,7 +375,7 @@ class RadarLinkCoordinatorTest {
         coordinator.evaluateWalkAway(fireAt) // FIRE, lastFire set
         assertEquals(fireAt, snap().lastWalkAwayFireMs)
 
-        // Dashcam now goes stale (>20 s since last advert) -> AUTO_DISMISS.
+        // Dashcam now goes stale (>20 s since last advert) -> AUTO_DISMISS_NOT_HEARD.
         val dismissAt = fireAt + 25_000L
         coordinator.evaluateWalkAway(dismissAt)
         assertEquals(1, cancelWalkAwayCount)

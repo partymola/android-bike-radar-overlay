@@ -692,6 +692,72 @@ class RadarLeftOnAlarmTest {
         assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
     }
 
+    /** The camera the switch-off reports name, as the rider's selected one. */
+    private fun selectCamera() {
+        prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
+        prefs.dashcamMac = CAM
+        dashcamSlug = "cam"
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
+    }
+
+    @Test
+    fun aDashcamSwitchedOffBeforeTheDropIsNotNamed() {
+        // Heard 1 s before the drop, which alone would name it.
+        switchOffs(3)
+        selectCamera()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        coordinator.markDashcamSwitchedOff(CAM)
+        drop(3_500L)
+        tickAt(20_000L, now)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
+    }
+
+    @Test
+    fun aDashcamSwitchedOffAfterTheDropIsStillNamed() {
+        // Which devices the alarm names is decided at the drop.
+        switchOffs(3)
+        selectCamera()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        val dropAt = now
+        now = dropAt + 10_000L
+        coordinator.markDashcamSwitchedOff(CAM)
+        tickAt(20_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
+    }
+
+    @Test
+    fun switchingOffACarriedDashcamDoesNotStopTheRadarAlarm() {
+        // The rider walked off with the camera in hand, still on, and
+        // switches it off once the radar's alarm sounds.
+        switchOffs(3)
+        selectCamera()
+        stream()
+        now += 600_000L
+        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        drop(3_500L)
+        val dropAt = now
+        tickAt(20_000L, dropAt)
+        assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
+        val cancelsBefore = cancels
+        val stopsBefore = stops
+        now = dropAt + 25_000L
+        coordinator.markDashcamSwitchedOff(CAM)
+        for (t in 26_000L..60_000L step 2_000L) {
+            now = dropAt + t
+            coordinator.tickWalkAwayState(now, 2_000L)
+            coordinator.evaluateWalkAway(now)
+            coordinator.evaluateRadarLeftOn(now)
+        }
+        assertEquals(cancelsBefore, cancels)
+        assertEquals(stopsBefore, stops)
+        assertEquals(1, posted.size)
+    }
+
     @Test
     fun anAlarmInOneOffEpisodeDoesNotSilenceTheNext() {
         // The fired latch and the owner are the episode's, so the radar's next
@@ -848,7 +914,7 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
-    fun theSwitchOffSilencesItButCalibrationStillCounts() {
+    fun itsSettingOffSilencesItButCalibrationStillCounts() {
         prefs.radarLeftOnAlarmEnabled = false
         switchOffs(3)
         assertEquals(3, prefs.radarLeftOnSwitchOffs(RADAR_A))
@@ -872,7 +938,7 @@ class RadarLeftOnAlarmTest {
     }
 
     @Test
-    fun theDashcamSwitchOffDoesNotSilenceIt() {
+    fun theDashcamAlarmSettingOffDoesNotSilenceIt() {
         prefs.walkAwayAlarmEnabled = false
         switchOffs(3)
         walkAway()
@@ -1033,5 +1099,6 @@ class RadarLeftOnAlarmTest {
     private companion object {
         const val RADAR_A = "AA:AA:AA:AA:AA:01"
         const val RADAR_B = "AA:AA:AA:AA:AA:02"
+        const val CAM = "CC:CC:CC:CC:CC:01"
     }
 }

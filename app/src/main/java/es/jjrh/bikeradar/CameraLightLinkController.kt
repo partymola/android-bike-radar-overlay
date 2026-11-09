@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -21,15 +22,31 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** What the front camera link tells the dashcam walk-away alarm. Implemented by
+ *  [RadarLinkCoordinator]. */
+internal interface DashcamLinkGateway {
+    /** A handshake completed: the camera is on. */
+    fun markDashcamHeard()
+
+    /** The camera ended a link whose handshake completed
+     *  ([CameraLightLinkController.isSwitchOff]). */
+    fun markDashcamSwitchedOff(mac: String)
+
+    /** The link loop ended. Until a sighting starts it again, nothing reports the camera. */
+    fun markDashcamLinkGone()
+}
 
 /**
  * Owns the front camera/light BLE link: the start/reconnect lifecycle, the GATT
  * connect -> AMV handshake (FRONT_CAMERA variant) -> mode-state-notify loop, and
  * the time-of-day light auto-mode (the same pure [LightAutoModeDecider] the
  * radar tail-light uses). A parallel, near-mirror of [RadarLinkController];
- * unlike the radar it owns no shared service state - its only outward read is
- * the radar's off-time [radarOffSinceMs], used as the "bike parked" proxy for
- * the long-offline reconnect-backoff cap (shared with the radar loop).
+ * unlike the radar it owns no shared service state. It reads the radar's
+ * off-time [radarOffSinceMs], the "bike parked" proxy for the long-offline
+ * reconnect-backoff cap (shared with the radar loop), and reports the camera's
+ * switch-offs and handshakes, and its loop's end, to [dashcamLink].
  *
  * The service keeps `scope`; this controller launches its connection coroutine
  * on the injected scope, so the service's onDestroy scope.cancel() tears it down.
@@ -52,6 +69,10 @@ internal class CameraLightLinkController(
     /** Always-on link-event sink ([LinkEventJournal]); this link has no
      *  capture log at all, so the journal is its only persistent trace. */
     private val journal: (String) -> Unit,
+    /** No default: a link reporting to nothing would leave a switched-off
+     *  camera counted as on. */
+    @get:androidx.annotation.VisibleForTesting
+    internal val dashcamLink: DashcamLinkGateway,
     /** Monotonic clock for the camera-light override deadband; elapsedRealtime
      *  so a wall-clock jump can't mis-clear the rider's manual override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
@@ -118,6 +139,11 @@ internal class CameraLightLinkController(
 
     @Volatile private var cameraLightOffSinceMs: Long? = null
 
+    // The current connection's ended-by-app flag, so stop() can mark it before
+    // the cancel reaches the connection's own teardown
+    // (`theLoopEndingReportsTheLinkGoneAndALinkTheAppEndedIsNoSwitchOff`).
+    @Volatile private var connectionEndedByApp: AtomicBoolean? = null
+
     private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     @Synchronized
@@ -137,6 +163,7 @@ internal class CameraLightLinkController(
     /** Cancel the connection coroutine on service destroy (scope.cancel() would
      *  also stop it; this matches the original explicit onDestroy cancel). */
     fun stop() {
+        connectionEndedByApp?.set(true)
         cameraLightJob?.cancel()
     }
 
@@ -189,6 +216,7 @@ internal class CameraLightLinkController(
             }
         } finally {
             cameraLightGattActive = false
+            dashcamLink.markDashcamLinkGone()
         }
     }
 
@@ -197,6 +225,9 @@ internal class CameraLightLinkController(
         val notifyChannel = Channel<Pair<UUID, ByteArray>>(Channel.UNLIMITED)
         val queue = BleOpQueue()
         val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        // Read on the binder thread that delivers the disconnect.
+        val handshakeDone = AtomicBoolean(false)
+        val endedByApp = AtomicBoolean(false).also { connectionEndedByApp = it }
         var gatt: BluetoothGatt? = null
         var gattClosed = false
         fun closeOnce() {
@@ -217,6 +248,13 @@ internal class CameraLightLinkController(
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        // Before notifyChannel.close(), which lets the connection's
+                        // finally run and set endedByApp.
+                        val adapterOn = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+                            ?.adapter?.state == BluetoothAdapter.STATE_ON
+                        if (isSwitchOff(status, adapterOn, handshakeDone.get(), endedByApp.get())) {
+                            dashcamLink.markDashcamSwitchedOff(device.address)
+                        }
                         cameraLightGattActive = false
                         queue.cancel()
                         notifyChannel.close()
@@ -313,6 +351,10 @@ internal class CameraLightLinkController(
 
             Log.i(TAG, "handshake complete; subscribing mode-state notify")
             journal("camera handshake complete")
+            // Heard first: a switch-off landing between the two is then not
+            // counted, rather than counted and at once cleared.
+            dashcamLink.markDashcamHeard()
+            handshakeDone.set(true)
             // As at the radar's handshake: a live area only with an app screen
             // open, else the saved one (LocationCache).
             LocationCache.refreshIfStale(context)
@@ -407,6 +449,9 @@ internal class CameraLightLinkController(
             }
             false
         } finally {
+            // Whatever ended it, a callback after this is the app's close
+            // (`aLinkEndedByItsScopeIsNoSwitchOff`).
+            endedByApp.set(true)
             cameraLightGattActive = false
             if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = clock()
             sunsetJob?.cancel()
@@ -449,5 +494,17 @@ internal class CameraLightLinkController(
         // Override detection: a front link that has been down longer than this
         // clears the manual side-button override on the next connect.
         private const val CAMERA_LIGHT_OVERRIDE_DEADBAND_MS = 120_000L
+
+        /** What one phone reported for one camera ending the link itself: 19,
+         *  and 257 after an OS update (257 is also Android's GATT_FAILURE).
+         *  Kept apart from the radar's `RadarLeftOnDecider.REMOTE_END_STATUSES`. */
+        private val SWITCH_OFF_STATUSES = setOf(19, 257)
+
+        /** A disconnect counted as the camera switched off: one of those
+         *  statuses, with Bluetooth on, on a connection whose handshake
+         *  completed and that the app did not end. A link still in setup can
+         *  end the same way with the camera still on; any other status changes
+         *  nothing (`onlyTheCamerasOwnEndingCountsAsASwitchOff`). */
+        internal fun isSwitchOff(status: Int, adapterOn: Boolean, handshakeDone: Boolean, endedByApp: Boolean): Boolean = status in SWITCH_OFF_STATUSES && adapterOn && handshakeDone && !endedByApp
     }
 }

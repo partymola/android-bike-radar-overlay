@@ -84,8 +84,8 @@ data class RadarLinkState(
      *  warning. */
     val lastRadarUpMs: Long? = null,
     /** True after a radar disconnect when the walk-away decider is watching
-     *  the dashcam for a leave-behind. Disarmed when the dashcam goes stale
-     *  (BLANK) or the radar streams again (IDLE). */
+     *  the dashcam for a leave-behind. Disarmed when the dashcam is switched
+     *  off or goes stale (BLANK), or the radar streams again (IDLE). */
     val walkAwayArmed: Boolean = false,
     /** True once the rider has dismissed the walk-away alarm for the
      *  current off-episode (cleared when the radar streams again or after the
@@ -140,7 +140,8 @@ data class RadarLinkState(
      *  rewritten by the next one. */
     val radarLeftOnQualified: Boolean = false,
     /** The phone heard the front camera just before that drop
-     *  (`RadarLinkCoordinator.RADAR_LEFT_ON_CAMERA_HEARD_MS`), so the alarm
+     *  (`RadarLinkCoordinator.RADAR_LEFT_ON_CAMERA_HEARD_MS`), and was not
+     *  marked switched off at the drop ([dashcamSwitchedOffMac]), so the alarm
      *  names both devices. */
     val radarLeftOnBothLeft: Boolean = false,
     /** The radar-left-on alarm has sounded and not been re-armed by a snooze. */
@@ -152,6 +153,15 @@ data class RadarLinkState(
     /** Bluetooth was off at the drop that began this off-episode, or went off
      *  during it. */
     val adapterOffInEpisode: Boolean = false,
+    /** The front camera ended its own link after a completed handshake, so the
+     *  dashcam walk-away alarm counts it off at once and the radar-left-on
+     *  alarm does not name it. Read only for the selected dashcam. Cleared by
+     *  its next completed handshake, when its link loop ends, and when a new
+     *  ride starts, never by the radar streaming again within the ride
+     *  (`DashcamSwitchOffTest`). The loop-end clear needs `scheduleRead` to
+     *  stamp the camera seen only while its link is up, or a Bluetooth restart
+     *  re-stamps an off camera as heard (`DashcamSwitchOffServiceTest`). */
+    val dashcamSwitchedOffMac: String? = null,
 ) {
     /** The radar is sending data, which is what covers the rider. */
     val radarStreaming: Boolean get() = radarConnectStartMs != null

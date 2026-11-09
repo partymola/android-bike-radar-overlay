@@ -126,7 +126,13 @@ to its file. The notes below are the working summary.
   drive the dismount alarm + the dropped-radar cue. The radar controller
   reaches the state through a `RadarLinkStateGateway`, and the camera
   controller reads the radar off-time through an injected lambda for its
-  shared backoff cap.
+  shared backoff cap. The camera controller reports each completed
+  handshake, each link the camera itself ends after one, and its loop's end
+  to the coordinator through `DashcamLinkGateway`. That is what lets the
+  dashcam walk-away alarm count a switched-off camera as off at once, and
+  only while the camera link runs, which needs the Dashcam light's
+  auto-switch on (`CameraLightLinkControllerHarnessTest`,
+  `DashcamSwitchOffServiceTest`).
 - **The riding-aid notice is in front of EVERY other destination, and that
   ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
   answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,

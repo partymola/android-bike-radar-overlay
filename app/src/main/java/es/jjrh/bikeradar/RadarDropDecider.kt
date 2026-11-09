@@ -91,8 +91,8 @@ package es.jjrh.bikeradar
  *
  * Do not read the co-fire as rare. It needs the dashcam to stay FRESH, which is
  * the ordinary state at a ride end before the camera is switched off - a stale
- * dashcam is what PREVENTS the alarm (`WalkAwayDecider` returns NONE, then
- * AUTO_DISMISS, on `nowMs - dashcamLastAdvertMs > dashcamFreshMs`). The
+ * or switched-off dashcam is what PREVENTS the alarm (`WalkAwayDecider` returns
+ * NONE, then AUTO_DISMISS_NOT_HEARD or AUTO_DISMISS_SWITCHED_OFF). The
  * track-presence path widens it further: "moving at the drop" becomes "traffic
  * seen within the rider's traffic window of the drop", 30 s by default and up
  * to an hour, so a range-only rider with a dashcam who parks kerbside on a busy

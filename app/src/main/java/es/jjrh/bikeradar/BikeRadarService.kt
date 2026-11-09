@@ -69,7 +69,10 @@ class BikeRadarService : Service() {
     internal lateinit var walkAwayAlarm: WalkAwayAlarm
         private set
     private lateinit var radarLink: RadarLinkController
-    private lateinit var cameraLink: CameraLightLinkController
+
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var cameraLink: CameraLightLinkController
+        private set
     private lateinit var batteryReader: BatteryReader
     private lateinit var knownDevices: KnownDevices
 
@@ -556,6 +559,7 @@ class BikeRadarService : Service() {
             slug = { name -> slug(name) },
             radarOffSinceMs = { radarLinkCoordinator.snapshot().radarOffSinceMs },
             journal = linkJournal::log,
+            dashcamLink = radarLinkCoordinator,
             clock = { SystemClock.elapsedRealtime() },
         )
         batteryReader = BatteryReader(
@@ -911,8 +915,16 @@ class BikeRadarService : Service() {
         val isDashcam = prefs.activeDashcamMac?.equals(mac, ignoreCase = true) == true
         if (isDashcam && prefs.autoLightModeEnabled) cameraLink.start(name, mac)
         if (isDashcam && (cameraLink.isGattActive() || cameraLink.isActive())) {
-            BatteryStateBus.markSeen(slug(name), System.currentTimeMillis(), SystemClock.elapsedRealtime())
-            Log.d(TAG, "skip $name (camera light gatt active)")
+            // A live link only. The cache replay (kickstartFromCache) and a
+            // pairing (onDeviceBonded) arrive with no contact from the camera,
+            // and must not count a switched-off one as on while the loop only
+            // reconnects. A scan wake is held off too; the dashcam probe
+            // stamps a camera that answers (RadarLinkState.dashcamSwitchedOffMac,
+            // `DashcamSwitchOffServiceTest.aCameraLinkThatIsOnlyReconnectingDoesNotStampTheCameraSeen`).
+            if (cameraLink.isGattActive()) {
+                BatteryStateBus.markSeen(slug(name), System.currentTimeMillis(), SystemClock.elapsedRealtime())
+            }
+            Log.d(TAG, "skip $name (camera light link owns it)")
             return
         }
 

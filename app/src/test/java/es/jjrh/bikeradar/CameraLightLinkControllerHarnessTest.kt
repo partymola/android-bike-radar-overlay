@@ -60,9 +60,32 @@ class CameraLightLinkControllerHarnessTest {
     private val mac = "AA:BB:CC:DD:EE:FF"
     private val journal = Collections.synchronizedList(mutableListOf<String>())
 
+    /** What the controller told the walk-away alarm, in order. */
+    private val reports = Collections.synchronizedList(mutableListOf<String>())
+
+    /** Run as the handshake is reported, inside the controller's coroutine. */
+    private var onHeard: () -> Unit = {}
+    private val gateway = object : DashcamLinkGateway {
+        override fun markDashcamHeard() {
+            reports += "heard"
+            onHeard()
+        }
+
+        override fun markDashcamSwitchedOff(mac: String) {
+            reports += "off $mac"
+        }
+
+        override fun markDashcamLinkGone() {
+            reports += "gone"
+        }
+    }
+
+    private val adapter get() = requireNotNull(app.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter)
+
     @Before fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         BatteryStateBus.clearForTest()
+        shadowOf(adapter).setState(android.bluetooth.BluetoothAdapter.STATE_ON)
     }
 
     @After fun tearDown() {
@@ -109,9 +132,10 @@ class CameraLightLinkControllerHarnessTest {
         returnNull: Boolean = false,
         setUp: (BluetoothGatt) -> Unit = ::setUpFrontCameraServices,
         prefs: Prefs = prefs(),
+        scope: kotlinx.coroutines.CoroutineScope = backgroundScope,
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
-        scope = backgroundScope,
+        scope = scope,
         prefs = prefs,
         ha = { HaClient("", "") },
         haPublisher = haPublisher(backgroundScope),
@@ -120,6 +144,7 @@ class CameraLightLinkControllerHarnessTest {
         slug = { it.lowercase() },
         radarOffSinceMs = { null },
         journal = { journal += it },
+        dashcamLink = gateway,
         clock = { 0L },
         openGatt = { ctx, dev, _, cb ->
             link.openCount++
@@ -454,5 +479,159 @@ class CameraLightLinkControllerHarnessTest {
         assertTrue("a completed handshake records its table too, got: $probe", probe.endsWith(" out=handshake-ok"))
         assertTrue("the discovered table must be there, got: $probe", probe.contains("2800["))
         controller.stop()
+    }
+
+    // ── what the walk-away alarm is told ───────────────────────────────────────
+
+    private fun handshakesCompleted() = journal.toList().count { it == "camera handshake complete" }
+
+    /** Drive the current connection through a completed handshake, the [n]th. */
+    private suspend fun TestScope.handshake(link: Link, n: Int) {
+        assertTrue(pumpUntil { link.openCount >= n && link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("handshake $n must complete; journal=$journal", pumpUntil { handshakesCompleted() >= n })
+    }
+
+    private fun disconnect(link: Link, status: Int) {
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), status, BluetoothProfile.STATE_DISCONNECTED)
+    }
+
+    @Test fun aCameraEndingAnEstablishedLinkIsReportedSwitchedOff() = runTest {
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        disconnect(link, 257)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        handshake(link, 2)
+        disconnect(link, 19)
+        assertTrue("reports=$reports", pumpUntil { reports.size >= 4 })
+        assertEquals(listOf("heard", "off $mac", "heard", "off $mac"), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun aLinkStillInSetupThatEndsIsNotASwitchOff() = runTest {
+        // The camera can end a link it is still setting up and be back in
+        // seconds, still on.
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        disconnect(link, 257)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertEquals(emptyList<String>(), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun aTimeoutOnAnEstablishedLinkIsNotASwitchOff() = runTest {
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertEquals(listOf("heard"), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun onlyTheCamerasOwnEndingCountsAsASwitchOff() {
+        for (status in listOf(0, 8, 22, 34, 133, 147)) {
+            assertFalse("status $status", CameraLightLinkController.isSwitchOff(status, adapterOn = true, handshakeDone = true, endedByApp = false))
+        }
+        assertTrue(CameraLightLinkController.isSwitchOff(19, adapterOn = true, handshakeDone = true, endedByApp = false))
+        assertTrue(CameraLightLinkController.isSwitchOff(257, adapterOn = true, handshakeDone = true, endedByApp = false))
+        assertFalse(CameraLightLinkController.isSwitchOff(257, adapterOn = false, handshakeDone = true, endedByApp = false))
+        assertFalse(CameraLightLinkController.isSwitchOff(257, adapterOn = true, handshakeDone = false, endedByApp = false))
+        assertFalse(CameraLightLinkController.isSwitchOff(257, adapterOn = true, handshakeDone = true, endedByApp = true))
+    }
+
+    @Test fun aReopenThatFailsItsHandshakeReportsNothing() = runTest {
+        // A camera powering down can open one more link, which then fails.
+        val link = Link()
+        val controller = controller(
+            link,
+            setUp = { g -> if (link.openCount >= 2) setUpServicesMissingTx(g) else setUpFrontCameraServices(g) },
+        )
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        disconnect(link, 257)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("camera handshake failed at tx-char-missing (quick reconnect)") })
+        assertEquals(listOf("heard", "off $mac"), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun aLinkEndedAsBluetoothTurnsOffIsNotASwitchOff() = runTest {
+        // Assumed from AOSP's order: the adapter leaves STATE_ON before the stack ends its links.
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        shadowOf(adapter).setState(android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF)
+        disconnect(link, 257)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertEquals(listOf("heard"), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun aSwitchOffJustAfterTheHandshakeIsReported() = runTest {
+        // The camera ends the link at the controller's first suspension after
+        // the handshake, the mode-state subscribe, before anything after it
+        // has run.
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+        onHeard = { backgroundScope.launch { disconnect(link, 257) } }
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        assertTrue("reports=$reports", pumpUntil { reports.size >= 2 })
+        assertEquals(listOf("heard", "off $mac"), reports.toList())
+        controller.stop()
+    }
+
+    @Test fun aLinkEndedByItsScopeIsNoSwitchOff() = runTest {
+        // The connection's own teardown marks the link the app's, whatever
+        // ended it, so a callback after it is not the camera.
+        val link = Link()
+        val linkScope = kotlinx.coroutines.CoroutineScope(backgroundScope.coroutineContext + kotlinx.coroutines.Job(backgroundScope.coroutineContext[kotlinx.coroutines.Job]))
+        val controller = controller(link, scope = linkScope)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        linkScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        assertTrue("reports=$reports", pumpUntil { reports.lastOrNull() == "gone" })
+        disconnect(link, 257)
+        runCurrent()
+        assertEquals(listOf("heard", "gone"), reports.toList())
+    }
+
+    @Test fun theLoopEndingReportsTheLinkGoneAndALinkTheAppEndedIsNoSwitchOff() = runTest {
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        handshake(link, 1)
+        controller.stop()
+        // The stack's own callback, landing before the cancel has reached
+        // the connection's teardown.
+        disconnect(link, 257)
+        assertTrue("reports=$reports", pumpUntil { reports.lastOrNull() == "gone" })
+        assertEquals(listOf("heard", "gone"), reports.toList())
     }
 }

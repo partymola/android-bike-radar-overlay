@@ -42,6 +42,9 @@ class RadarLinkCoordinatorTest {
     private var ebike: LiveDataSnapshot? = null
     private var ebikeAtMs = 0L
     private var dashcamSlug: String? = null
+
+    // When the dashcam last answered a battery read; null, never.
+    private var answeredMs: Long? = null
     private var hasEBike = false
     private var sawTrack = true // default: a real ride where the radar saw traffic
 
@@ -126,6 +129,7 @@ class RadarLinkCoordinatorTest {
             journal = { journalLines += it },
             setReconnectBanner = { bannerStates += it },
             resolveDashcamSlug = { dashcamSlug },
+            dashcamAnsweredAtMs = { answeredMs },
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs },
             eBikeRidingSinceMs = { if (ebikeRiding) ridingSinceMs else null },
@@ -307,16 +311,14 @@ class RadarLinkCoordinatorTest {
 
     // ── tickWalkAwayState dashcam-stale BLANK disarm ──────────────────────────
 
-    private val tickFreshMs = WalkAwayDecider.Config(enabled = false, thresholdMs = 0).dashcamFreshMs
-
     @Test
     fun tickDisarmsArmedOnceDashcamStale() {
         ebike = null
-        dashcamSlug = "cam" // no BatteryStateBus entry -> lastAdvert = stale sentinel -> anchor = offAt
+        dashcamSlug = "cam" // never heard -> anchor = offAt
         connectAt(1_000L)
         disconnectAt(4_000L) // armed, off-instant 4000
-        // anchor = 4000; disarm once now - 4000 > tickFreshMs
-        coordinator.tickWalkAwayState(nowMs = 4_000L + tickFreshMs + 1, elapsedMs = 2_000L)
+        // anchor = 4000; disarm once now - 4000 > 20 s
+        coordinator.tickWalkAwayState(nowMs = 4_000L + 20_001L, elapsedMs = 2_000L)
         assertFalse(snap().walkAwayArmed)
         assertEquals(1, clogged("dashcam-stale"))
     }
@@ -328,9 +330,22 @@ class RadarLinkCoordinatorTest {
         connectAt(1_000L)
         disconnectAt(4_000L)
         // exactly at the window (strictly-greater-than), still armed
-        coordinator.tickWalkAwayState(nowMs = 4_000L + tickFreshMs, elapsedMs = 2_000L)
+        coordinator.tickWalkAwayState(nowMs = 4_000L + 20_000L, elapsedMs = 2_000L)
         assertTrue(snap().walkAwayArmed)
         assertEquals(0, clogged("dashcam-stale"))
+    }
+
+    @Test
+    fun aCameraHeardAfterTheDropMovesTheStaleWindow() {
+        ebike = null
+        dashcamSlug = "cam"
+        connectAt(1_000L)
+        disconnectAt(4_000L)
+        answeredMs = 10_000L
+        coordinator.tickWalkAwayState(nowMs = 30_000L, elapsedMs = 2_000L)
+        assertTrue(snap().walkAwayArmed)
+        coordinator.tickWalkAwayState(nowMs = 30_001L, elapsedMs = 2_000L)
+        assertFalse(snap().walkAwayArmed)
     }
 
     @Test
@@ -360,7 +375,7 @@ class RadarLinkCoordinatorTest {
     fun evaluateWalkAwayFireWiring() {
         val off = armForFire()
         val fireAt = off + 31_000L // off 31 s > 30 s threshold
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, postWalkAwayCount)
         assertEquals(1, alarmStartCount)
@@ -371,11 +386,11 @@ class RadarLinkCoordinatorTest {
     fun evaluateWalkAwayAutoDismissWiring() {
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt) // FIRE, lastFire set
         assertEquals(fireAt, snap().lastWalkAwayFireMs)
 
-        // Dashcam now goes stale (>20 s since last advert) -> AUTO_DISMISS_NOT_HEARD.
+        // Dashcam now goes unheard (>20 s since it last answered) -> AUTO_DISMISS_NOT_HEARD.
         val dismissAt = fireAt + 25_000L
         coordinator.evaluateWalkAway(dismissAt)
         assertEquals(1, cancelWalkAwayCount)
@@ -387,7 +402,7 @@ class RadarLinkCoordinatorTest {
     fun theRadarComingBackStopsTheToneWithTheAlert() {
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, alarmStartCount)
         assertEquals(0, alarmStopCount)
@@ -408,7 +423,7 @@ class RadarLinkCoordinatorTest {
         // and stop run first, so the tick must undo what it started.
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         onWalkAwayPosted = {
             now = fireAt + 1L
             coordinator.markLinkOpen(RADAR)
@@ -427,7 +442,7 @@ class RadarLinkCoordinatorTest {
         // which has not reached its own threshold.
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         onWalkAwayPosted = {
             now = fireAt + 1L
             coordinator.markLinkOpen(RADAR)
@@ -446,7 +461,7 @@ class RadarLinkCoordinatorTest {
         // service stops the tone, then the tick would start it again.
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         onWalkAwayPosted = { coordinator.markWalkAwayDismissed(snoozed = false) }
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, alarmStartCount)
@@ -461,7 +476,7 @@ class RadarLinkCoordinatorTest {
         prefs.radarLongOfflineThresholdMinutes = 5
         val off = armForFire()
         val fireAt = off + 310_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, alarmStartCount)
         connectAt(fireAt + 5_000L)
@@ -472,7 +487,7 @@ class RadarLinkCoordinatorTest {
     @Test
     fun evaluateWalkAwayDoesNothingBelowThreshold() {
         val off = armForFire()
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = off, lastSeenElapsedMs = off))
+        answeredMs = off
         coordinator.evaluateWalkAway(off + 1_000L) // 1 s off, well under 30 s
         assertEquals(0, postWalkAwayCount)
         assertEquals(0, alarmStartCount)
@@ -480,16 +495,14 @@ class RadarLinkCoordinatorTest {
     }
 
     @Test
-    fun evaluateWalkAwayReadsMonotonicAdvertNotWallReadAtMs() {
-        // Pins the monotonic field-switch: the alarm reads lastSeenElapsedMs
-        // (monotonic), NOT readAtMs (wall). Here readAtMs looks fresh (1 s) but
-        // the monotonic advert is 25 s stale (> the ~20 s window), so the alarm
-        // must NOT fire - reading the wall field would wrongly fire on a jump.
+    fun aSightingWithNoContactIsNotHeard() {
+        // The battery bus is also stamped by a cache replay or a pairing, with
+        // no word from the camera. Fresh there and unanswered for 25 s, the
+        // camera is not heard: the alarm reads only when it last answered.
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(
-            BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 25_000L),
-        )
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 25_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(0, postWalkAwayCount)
         assertEquals(0, alarmStartCount)
@@ -497,14 +510,9 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun evaluateWalkAwayNeverSeenDashcamDoesNotFire() {
-        // Radar-only rider: a dashcam slug is configured but the dashcam was
-        // never seen this session, so there is no BatteryStateBus entry and the
-        // freshness read falls through to the not-seen sentinel; the alarm must
-        // not fire. This pins the no-accessory behaviour. It does NOT distinguish
-        // the Long.MIN_VALUE/2 sentinel from 0L: the 60 s cold-start + 30 s off
-        // gates force nowMs well past the freshness window, so both read stale -
-        // the sentinel choice is defensive, documented at the read site.
-        val off = armForFire() // sets dashcamSlug = "cam" but adds no entry
+        // A dashcam is chosen but never answered this session, so it reads as
+        // never heard; the alarm must not fire.
+        val off = armForFire() // sets dashcamSlug = "cam", answeredMs stays null
         coordinator.evaluateWalkAway(off + 31_000L)
         assertEquals(0, postWalkAwayCount)
         assertEquals(0, alarmStartCount)
@@ -1457,13 +1465,15 @@ class RadarLinkCoordinatorTest {
 
     @Test
     fun rideWakeLockReleasedWhenOffEpisodeGoesBlank() {
-        lastRidingMs = 3_000L
+        // Moving 60 s before the drop: inside the wakelock's window, outside
+        // the 30 s riding gate, so the walk-away alarm arms.
+        lastRidingMs = 4_000L - 60_000L
         ebike = null
-        dashcamSlug = "cam" // no BatteryStateBus entry -> anchor = offAt
+        dashcamSlug = "cam" // never heard -> anchor = offAt
         connectAt(1_000L)
         disconnectAt(4_000L) // armed, wakelock held
         assertEquals(1, wakeLockAcquireCount)
-        coordinator.tickWalkAwayState(nowMs = 4_000L + tickFreshMs + 1, elapsedMs = 2_000L)
+        coordinator.tickWalkAwayState(nowMs = 4_000L + 20_001L, elapsedMs = 2_000L)
         assertFalse(snap().walkAwayArmed)
         assertEquals(1, wakeLockReleaseCount) // BLANK resolves the episode
     }
@@ -2795,7 +2805,7 @@ class RadarLinkCoordinatorTest {
         // attempt opening the link must leave all of it as it was.
         val off = armForFire()
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, postWalkAwayCount)
         coordinator.markWalkAwayDismissed(snoozed = false)
@@ -2897,7 +2907,7 @@ class RadarLinkCoordinatorTest {
         now = off + 30_000L
         coordinator.markLinkOpen(RADAR)
         val fireAt = off + 31_000L
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = fireAt - 1_000L, lastSeenElapsedMs = fireAt - 1_000L))
+        answeredMs = fireAt - 1_000L
         coordinator.evaluateWalkAway(fireAt)
         assertEquals(1, postWalkAwayCount)
     }

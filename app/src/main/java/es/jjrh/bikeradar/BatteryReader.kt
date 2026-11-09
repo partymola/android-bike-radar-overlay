@@ -4,6 +4,7 @@ package es.jjrh.bikeradar
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -19,7 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /** SharedPreferences store name (shared by the known-device cache and the
@@ -34,13 +37,14 @@ internal const val KEY_LAST_TS = "last_ts"
  * Connects out, reads the standard 0x2A19 battery characteristic, publishes to
  * [BatteryStateBus] + HA, then disconnects. BikeRadarService.scheduleRead (the
  * BLE-scan dispatch hub) owns the 5-minute SharedPrefs throttle and calls
- * [launch] when a read is due; this class owns only the in-flight cooldown and
+ * [launch] when a read is due; this class owns only the in-flight guard and
  * the actual GATT read. The dashcam-probe-failure counter is shared with the
- * service's dashcam-refresh loop, so it is injected rather than owned.
+ * service's dashcam-refresh loop, and the instant the selected dashcam last
+ * answered with the walk-away alarm, so both are injected rather than owned.
  *
  * The HA publish ([publishBattery]) and the GATT read ([readBatteryFn]) are
  * injected as function seams: production wires them to the real
- * [HaPublisher.publishBatteryToHa] and the private [readBattery], while tests
+ * [HaPublisher.publishBatteryIfChanged] and the private [readBattery], while tests
  * pass fakes so the whole post-read path (known-device upsert, failure counter,
  * display-name sync, publish-gated throttle) is exercisable without a device.
  * The clocks are injected so a test can run reads in virtual time.
@@ -51,40 +55,60 @@ internal class BatteryReader(
     private val scope: CoroutineScope,
     private val prefs: Prefs,
     private val knownDevices: KnownDevices,
-    private val publishBattery: suspend (String, Int) -> Boolean,
+    @get:androidx.annotation.VisibleForTesting
+    internal val publishBattery: suspend (String, Int) -> Boolean,
     private val macToSlug: MutableMap<String, String>,
     private val slug: (String) -> String,
     private val dashcamProbeFailures: MutableMap<String, Int>,
+    /** Monotonic instant each dashcam last answered a read, by upper-case
+     *  address: when the read ended, not when the bus entry was built. */
+    @get:androidx.annotation.VisibleForTesting
+    internal val dashcamAnsweredAtMs: MutableMap<String, Long>,
+    /** Called as that instant is written, so the walk-away tick can see the
+     *  hearing while the answer's callback still has the phone awake. */
+    @get:androidx.annotation.VisibleForTesting
+    internal val onDashcamAnswered: () -> Unit,
     private val readBatteryFn: (suspend (String) -> Int?)? = null,
     private val monoClock: () -> Long = { SystemClock.elapsedRealtime() },
     private val wallClock: () -> Long = { System.currentTimeMillis() },
+    /** Opens the read's GATT client; a test drives its callbacks
+     *  (`BatteryReaderGattTest`). */
+    private val connectGatt: (BluetoothDevice, BluetoothGattCallback) -> BluetoothGatt? =
+        { device, cb -> connectGattLe(context, device, false, cb) },
 ) {
-    // Per-mac in-flight guard: a read launched within ATTEMPT_COOLDOWN_MS is
-    // skipped so back-to-back fires from different paths don't stack.
-    private val attemptInFlight = ConcurrentHashMap<String, Long>()
+    // Per-mac in-flight guard, holding a token per read so one read's teardown
+    // never clears a later read's guard (`aLaunchInTheSameMillisecondIsGuardedToo`).
+    private val attemptInFlight = ConcurrentHashMap<String, Any>()
 
     /**
-     * Real GATT battery read, bypassing the SharedPrefs throttle but still
-     * gated by [ATTEMPT_COOLDOWN_MS] so back-to-back fires from different
+     * Real GATT battery read, bypassing the SharedPrefs throttle but skipped
+     * while a read of the same device is in flight, so fires from different
      * paths don't stack. Use this for liveness probes (e.g. dashcam
      * periodic refresh) where scheduleRead's `markSeen` shortcut
-     * would falsely keep the entry fresh without an actual sighting.
+     * would falsely keep the entry fresh without an actual sighting. Returns
+     * whether the read started.
+     *
+     * The guard ends with the GATT read, not the HA publish after it, so the
+     * dashcam alarm's armed probe can start the next read at once; two
+     * publishes for one device can then overlap
+     * (`aSlowPublishDoesNotHoldTheNextRead`), and an older value can land
+     * after a newer one until the value next changes or the 5 min heartbeat
+     * sends it again.
      */
-    fun launch(name: String, mac: String) {
-        val now = wallClock()
-        val lastAttempt = attemptInFlight[mac] ?: 0L
-        if (now - lastAttempt < ATTEMPT_COOLDOWN_MS) {
+    fun launch(name: String, mac: String): Boolean {
+        val token = Any()
+        if (attemptInFlight.putIfAbsent(mac, token) != null) {
             Log.d(TAG, "skip $name (attempt in flight)")
-            return
+            return false
         }
-        attemptInFlight[mac] = now
         scope.launch {
             try {
-                doReadBattery(name, mac)
+                doReadBattery(name, mac) { attemptInFlight.remove(mac, token) }
             } finally {
-                attemptInFlight.remove(mac)
+                attemptInFlight.remove(mac, token)
             }
         }
+        return true
     }
 
     /** A radar, or the camera the rider is using. Nothing else the name matcher
@@ -104,7 +128,7 @@ internal class BatteryReader(
         prefs.activeDashcamMac.equals(mac, ignoreCase = true)
 
     @SuppressLint("MissingPermission")
-    internal suspend fun doReadBattery(name: String, mac: String) {
+    internal suspend fun doReadBattery(name: String, mac: String, onReadEnded: () -> Unit = {}) {
         // Devices reach this path by advert NAME, so nothing upstream has
         // consulted what the rider chose and the refusal has to be here. Before
         // the GATT read, not after: the point is that this read stops touching
@@ -124,7 +148,10 @@ internal class BatteryReader(
         }
 
         val readFn = readBatteryFn ?: { m -> readBattery(m) }
-        val pct = readFn(mac) ?: run {
+        val read = readFn(mac)
+        val answeredAtMs = monoClock()
+        onReadEnded()
+        val pct = read ?: run {
             Log.w(TAG, "battery read failed: $name ${LogRedaction.mac(mac)}")
             // Count the consecutive failure so the dashcam ticker can back its
             // probe off. Scoped to the dashcam mac (the only one the ticker reads)
@@ -137,18 +164,20 @@ internal class BatteryReader(
         }
         // Successful read: the device answered, so clear any backoff.
         dashcamProbeFailures.remove(mac)
-        Log.i(TAG, "battery $name: $pct%")
+        Log.d(TAG, "battery $name: $pct%")
         val s = slug(name)
         macToSlug[mac] = s
-        if (prefs.activeDashcamMac.equals(mac, ignoreCase = true) && prefs.dashcamDisplayName != name) {
-            prefs.dashcamDisplayName = name
+        if (prefs.activeDashcamMac.equals(mac, ignoreCase = true)) {
+            dashcamAnsweredAtMs[mac.uppercase(Locale.ROOT)] = answeredAtMs
+            onDashcamAnswered()
+            if (prefs.dashcamDisplayName != name) prefs.dashcamDisplayName = name
         }
-        BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = monoClock()))
+        BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = answeredAtMs))
 
-        // Only arm the 5-min throttle if publish succeeded (or HA isn't
-        // configured at all). On a transient HA failure we want the next
-        // advert to retry within ATTEMPT_COOLDOWN_MS rather than waiting
-        // 5 minutes with no HA state update.
+        // Only arm the 5-min throttle if publish succeeded, had nothing new to
+        // send, or HA isn't configured at all. On a transient HA failure the
+        // next advert retries rather than waiting 5 minutes with no HA state
+        // update.
         if (publishBattery(name, pct)) {
             sp.edit().putLong("${KEY_LAST_TS}_$s", wallClock()).apply()
         }
@@ -173,13 +202,13 @@ internal class BatteryReader(
 
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->
-                var done = false
-                var gattClosed = false
-                var gatt: BluetoothGatt? = null
-                fun closeOnce() {
-                    if (gattClosed) return
-                    gattClosed = true
-                    val g = gatt ?: return
+                // The callbacks run on a binder thread and can end the read
+                // before connectGatt has returned the client.
+                val done = AtomicBoolean(false)
+                fun finish(pct: Int?) {
+                    if (done.compareAndSet(false, true)) cont.resume(pct)
+                }
+                val gattClose = CloseOnce<BluetoothGatt> { g ->
                     try {
                         g.disconnect()
                     } catch (_: Throwable) {}
@@ -192,11 +221,8 @@ internal class BatteryReader(
                         when (newState) {
                             BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                             BluetoothProfile.STATE_DISCONNECTED -> {
-                                closeOnce()
-                                if (!done) {
-                                    done = true
-                                    cont.resume(null)
-                                }
+                                gattClose.close()
+                                finish(null)
                             }
                         }
                     }
@@ -222,23 +248,18 @@ internal class BatteryReader(
 
                     private fun finishRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
                         if (ch.uuid == Uuids.CHAR_BATTERY && status == BluetoothGatt.GATT_SUCCESS && value.isNotEmpty()) {
-                            if (!done) {
-                                done = true
-                                cont.resume(value[0].toInt() and 0xFF)
-                            }
+                            finish(value[0].toInt() and 0xFF)
                         }
                         g.disconnect()
                     }
                 }
-                gatt = connectGattLe(context, device, false, cb)
+                val gatt = connectGatt(device, cb)
                 if (gatt == null) {
-                    if (!done) {
-                        done = true
-                        cont.resume(null)
-                    }
+                    finish(null)
                     return@suspendCancellableCoroutine
                 }
-                cont.invokeOnCancellation { closeOnce() }
+                gattClose.attach(gatt)
+                cont.invokeOnCancellation { gattClose.close() }
             }
         }
     }
@@ -246,11 +267,35 @@ internal class BatteryReader(
     companion object {
         private const val TAG = "BikeRadar"
 
-        // Minimum gap between battery-read attempts for one device, across all
-        // trigger paths (advert sighting, dashcam refresh ticker).
-        const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
-
         /** The longest one GATT battery read waits for an answer. */
         const val READ_TIMEOUT_MS = 15_000L
+    }
+}
+
+/**
+ * Closes a client exactly once, whichever comes first: the close, or the
+ * client being known. A close asked for before [attach] closes the client as
+ * it is attached, so a read ended before `connectGatt` returned does not leak
+ * it (`CloseOnceTest`).
+ */
+internal class CloseOnce<T : Any>(private val closeFn: (T) -> Unit) {
+    private var target: T? = null
+    private var closed = false
+
+    fun attach(t: T) {
+        val closeNow = synchronized(this) {
+            target = t
+            closed
+        }
+        if (closeNow) closeFn(t)
+    }
+
+    fun close() {
+        val t = synchronized(this) {
+            if (closed) return
+            closed = true
+            target
+        } ?: return
+        closeFn(t)
     }
 }

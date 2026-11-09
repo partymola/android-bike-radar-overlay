@@ -350,6 +350,7 @@ internal fun SettingsDashcamContent(
                             checked = walkAwayAlarmEnabled,
                             onCheckedChange = onWalkAwayEnabledChange,
                             isLast = !walkAwayAlarmEnabled,
+                            verticalAlignment = Alignment.Top,
                         )
                         if (walkAwayAlarmEnabled) {
                             SettingsRow(

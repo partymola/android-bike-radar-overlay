@@ -80,24 +80,28 @@ package es.jjrh.bikeradar
  *    caught. Read a "mid-ride drop" count against that: the corpus holds 6
  *    splits, 4 of them with a moving rider.
  *
- * WALK-AWAY EXCLUSIVITY (deliberately weakened for the radar-activity and
- * track-presence paths): the eBike path is mutually exclusive with the
- * walk-away alarm by construction (the alarm arms only when NOT
- * fresh-unlocked). The other two are NOT: a dashcam-owning, no-eBike rider
- * gets riding-confirmed here while `WalkAwayArmingGate` still arms, so both can
- * fire in one off-episode. Left as-is on purpose: suppressing arming on the
- * latch would remove leave-behind protection for a rider who parks within 30 s
- * of stopping, since their latch is still fresh at the disconnect.
+ * WALK-AWAY EXCLUSIVITY (deliberately weakened for the track-presence path):
+ * the eBike path is mutually exclusive with the dashcam walk-away alarm by
+ * construction (the alarm arms only when NOT fresh-unlocked), and so is the
+ * radar-activity path: a drop inside that latch does not arm the alarm unless
+ * the bike read locked after the last riding frame, and a locked bike vetoes
+ * this cue (`DashcamRidingGateTest`). The cost, accepted: a rider with no
+ * eBike who switches the radar off within 30 s of riding gets no dashcam
+ * alarm for that drop.
  *
- * Do not read the co-fire as rare. It needs the dashcam to stay FRESH, which is
- * the ordinary state at a ride end before the camera is switched off - a stale
- * or switched-off dashcam is what PREVENTS the alarm (`WalkAwayDecider` returns
- * NONE, then AUTO_DISMISS_NOT_HEARD or AUTO_DISMISS_SWITCHED_OFF). The
- * track-presence path widens it further: "moving at the drop" becomes "traffic
- * seen within the rider's traffic window of the drop", 30 s by default and up
- * to an hour, so a range-only rider with a dashcam who parks kerbside on a busy
- * road can take both, and the wider their window the likelier that is. That is
- * the case the Experimental toggle exists to switch off.
+ * The track-presence path is NOT exclusive: a range-only radar never reports
+ * riding, so a dashcam-owning rider with no eBike gets riding-confirmed here on
+ * traffic while `WalkAwayArmingGate` still arms, and both can fire in one
+ * off-episode (`DashcamRidingGateTest.trafficJustBeforeTheDropStillArmsIt`).
+ * Do not read that co-fire as rare. It needs the dashcam to stay
+ * heard, which is the ordinary state at a ride end before the camera is
+ * switched off: an unheard or switched-off dashcam is what PREVENTS the alarm
+ * (`WalkAwayDecider` returns NONE, then AUTO_DISMISS_NOT_HEARD or
+ * AUTO_DISMISS_SWITCHED_OFF). "Moving at the drop" becomes "traffic seen within
+ * the rider's traffic window of the drop", 30 s by default and up to an hour,
+ * so a rider who parks kerbside on a busy road can take both, and the wider
+ * their window the likelier that is. That is the case the Experimental toggle
+ * exists to switch off.
  *
  * Deliberately NOT part of the activity signal on a radar that reports rider
  * speed: the mere PRESENCE of tracked vehicles. A vehicle can be tracked while

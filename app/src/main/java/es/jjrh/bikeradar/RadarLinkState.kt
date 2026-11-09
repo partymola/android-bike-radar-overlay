@@ -84,8 +84,11 @@ data class RadarLinkState(
      *  warning. */
     val lastRadarUpMs: Long? = null,
     /** True after a radar disconnect when the walk-away decider is watching
-     *  the dashcam for a leave-behind. Disarmed when the dashcam is switched
-     *  off or goes stale (BLANK), or the radar streams again (IDLE). */
+     *  the dashcam for a leave-behind. Not armed when the radar showed riding
+     *  just before the drop and the bike was not locked after it, the
+     *  radar-left-on alarm's rule (`DashcamRidingGateTest`). Disarmed when the
+     *  dashcam is switched off or goes unheard (BLANK), or the radar streams
+     *  again (IDLE). */
     val walkAwayArmed: Boolean = false,
     /** True once the rider has dismissed the walk-away alarm for the
      *  current off-episode (cleared when the radar streams again or after the
@@ -158,10 +161,20 @@ data class RadarLinkState(
      *  alarm does not name it. Read only for the selected dashcam. Cleared by
      *  its next completed handshake, when its link loop ends, and when a new
      *  ride starts, never by the radar streaming again within the ride
-     *  (`DashcamSwitchOffTest`). The loop-end clear needs `scheduleRead` to
-     *  stamp the camera seen only while its link is up, or a Bluetooth restart
-     *  re-stamps an off camera as heard (`DashcamSwitchOffServiceTest`). */
+     *  (`DashcamSwitchOffTest`). The loop-end clear is safe because no sighting
+     *  counts the camera heard, only an answered read or its established link
+     *  ([dashcamLinkMac], `RadarLinkCoordinatorTest.aSightingWithNoContactIsNotHeard`). */
     val dashcamSwitchedOffMac: String? = null,
+    /** The front camera whose light link last completed a handshake. While
+     *  [dashcamLinkEndedAtMs] is null that link is up, and the dashcam
+     *  walk-away alarm counts the camera heard now; once it ends, heard as of
+     *  then. Read only for the selected dashcam, and below
+     *  [dashcamSwitchedOffMac] (`DashcamLinkHeardTest`). A camera that dies
+     *  without ending its link stays heard until Android times the link out. */
+    val dashcamLinkMac: String? = null,
+    /** Monotonic (elapsedRealtime) ms that camera's established link ended,
+     *  or null while it is up. */
+    val dashcamLinkEndedAtMs: Long? = null,
 ) {
     /** The radar is sending data, which is what covers the rider. */
     val radarStreaming: Boolean get() = radarConnectStartMs != null

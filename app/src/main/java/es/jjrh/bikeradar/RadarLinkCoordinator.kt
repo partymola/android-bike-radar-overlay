@@ -23,8 +23,8 @@ import kotlinx.coroutines.flow.updateAndGet
  * collaborators as constructor lambdas (clock, notifications, alarm, beeper,
  * capture-log writer, reconnect-banner toggle, dashcam-slug resolver, the eBike
  * snapshot reads), and routes the link-open, first-frame and disconnect edges
- * through it via [RadarLinkStateGateway], and the front camera's handshakes and
- * switch-offs via [DashcamLinkGateway]. The pure decisions live in [WalkAwayDecider],
+ * through it via [RadarLinkStateGateway], and the front camera's handshakes,
+ * switch-offs and link ends via [DashcamLinkGateway]. The pure decisions live in [WalkAwayDecider],
  * [WalkAwayArmingGate], [RadarLeftOnDecider], [RadarDropDecider] and [RadarLinkVisualDecider]; this
  * class is the stateful orchestration that feeds them and fires the effects.
  *
@@ -44,6 +44,11 @@ internal class RadarLinkCoordinator(
     private val journal: (String) -> Unit,
     private val setReconnectBanner: (RadarLinkVisualDecider.LinkVisual) -> Unit,
     private val resolveDashcamSlug: () -> String?,
+    // Monotonic instant the selected dashcam last answered a battery read, or
+    // null. The walk-away alarm's only read-based proof the camera is on: the
+    // battery bus is also stamped by sightings that involve no contact
+    // (`aSightingWithNoContactIsNotHeard`).
+    private val dashcamAnsweredAtMs: () -> Long?,
     private val eBikeSnapshot: () -> LiveDataSnapshot?,
     private val eBikeSnapshotAtMs: () -> Long,
     // When the eBike's own speed first confirmed the current ride, or null when it
@@ -92,9 +97,9 @@ internal class RadarLinkCoordinator(
     // (`aNewRideForgetsTheLastRidesLock`,
     // `theFirstRadarOfTheSessionForgetsAnEarlierLock`).
     private val forgetEBikeLock: () -> Unit,
-    // Wake the walk-away tick loop out of its idle delay so it flips to the
-    // fast cadence the instant the radar drops (no up-to-30 s lag on the first
-    // dead-radar evaluation).
+    // Wake the walk-away tick loop out of its delay so it runs at once: at the
+    // drop, so it flips to the fast cadence with no up-to-30 s lag on the
+    // first dead-radar evaluation, and on the other edges that call it.
     private val wakeTick: () -> Unit,
     // Bounded ride wakelock for a live-ride off-episode (see [RideWakeLock]).
     private val acquireRideWakeLock: () -> Unit,
@@ -109,6 +114,15 @@ internal class RadarLinkCoordinator(
     // slept through with the screen off and no Bluetooth wakeups.
     private val acquireRadarLeftOnWakeLock: () -> Unit = {},
     private val releaseRadarLeftOnWakeLock: () -> Unit = {},
+    // Taken at a drop the dashcam alarm can sound for ([dashcamAlarmCanSound])
+    // with a dashcam in use, and held until it sounds, the episode goes BLANK,
+    // the radar is back, the rider dismisses or snoozes it, the radar-left-on
+    // alarm sounds or Bluetooth goes off, so its threshold and the probe
+    // re-reads are not slept through. Capped at the threshold plus
+    // WALK_AWAY_WAKELOCK_SLACK_MS; the service's are pinned by
+    // `DashcamAlarmServiceTest.anArmedDropHoldsTheWalkAwayWakeLock`.
+    private val acquireWalkAwayWakeLock: (capMs: Long) -> Unit = {},
+    private val releaseWalkAwayWakeLock: () -> Unit = {},
 ) : RadarLinkStateGateway,
     DashcamLinkGateway {
 
@@ -222,6 +236,23 @@ internal class RadarLinkCoordinator(
     // (`aDismissHoldsUntilTheRiderRidesAgain`).
     @Volatile private var radarLeftOnDismissedAtMs: Long? = null
 
+    // The rider dismissed this off-episode's alarm, not snoozed it. Ends the
+    // dashcam probe's armed cadence; a snooze keeps it, so the camera is still
+    // heard when the snooze runs out (`aSnoozeEndsWithTheAlarmForACameraStillOn`).
+    @Volatile private var walkAwayDismissedForGood = false
+
+    // The last walk-away tick that came more than LATE_TICK_MS after the one
+    // before (both loops slept) and was honoured. The dashcam alarm's unheard
+    // time counts from here when later, giving a camera still on 20 s for its
+    // probe read to land before BLANK or a stop (`aLateWakeAfterTheAlarmSoundedDoesNotEndIt`).
+    // Honoured once per hearing: a later wake counts only once the camera has
+    // been heard since the last one, so repeated short wakes cannot hold off
+    // the stop of a camera that went off
+    // (`repeatedShortWakesDoNotHoldOffTheStopOfACameraThatWentOff`). The first
+    // tick after a drop is late too, from the loop's 30 s idle cadence. Never a
+    // FIRE: that still needs a real hearing.
+    @Volatile private var lateWakeAtMs = Long.MIN_VALUE
+
     override fun snapshot(): RadarLinkState = _radarLinkState.value
 
     /** The service ticks at its fast cadence while this holds: the radar is
@@ -290,6 +321,8 @@ internal class RadarLinkCoordinator(
      *  answers. */
     fun markWalkAwayDismissed(snoozed: Boolean) {
         val before = _radarLinkState.getAndUpdate { it.copy(walkAwayDismissed = true) }
+        if (!snoozed) walkAwayDismissedForGood = true
+        releaseWalkAwayWakeLock()
         if (!snoozed && before.walkAwayAlarmOwner.let { it == WalkAwayAlarmKind.RADAR || it == WalkAwayAlarmKind.RADAR_AND_DASHCAM }) {
             radarLeftOnDismissedAtMs = clock()
         }
@@ -338,9 +371,11 @@ internal class RadarLinkCoordinator(
     }
 
     /** Bluetooth went off. Ends a pending radar-left-on check for this
-     *  off-episode, and a drop while it stays off starts none. A calibration
-     *  change a drop made within [ADAPTER_OFF_DROP_WINDOW_MS] before it is
-     *  undone, since that drop was most likely Bluetooth's. */
+     *  off-episode, and a drop while it stays off starts none; the dashcam
+     *  alarm cannot sound for it either, and its wakelock goes
+     *  (`DashcamHeardWindowTest.bluetoothOffAfterTheDropKeepsItQuiet`). A
+     *  calibration change a drop made within [ADAPTER_OFF_DROP_WINDOW_MS]
+     *  before it is undone, since that drop was most likely Bluetooth's. */
     fun markAdapterOff() {
         synchronized(calibrationLock) {
             adapterOff = true
@@ -353,6 +388,7 @@ internal class RadarLinkCoordinator(
         }
         _radarLinkState.update { if (it.radarOffSinceMs != null) it.copy(adapterOffInEpisode = true) else it }
         releaseRadarLeftOnWakeLock()
+        releaseWalkAwayWakeLock()
     }
 
     fun markAdapterOn() {
@@ -373,16 +409,71 @@ internal class RadarLinkCoordinator(
         wakeTick()
     }
 
-    override fun markDashcamHeard() = forgetDashcamSwitchOff()
+    override fun markDashcamHeard(mac: String) {
+        _radarLinkState.update { it.copy(dashcamSwitchedOffMac = null, dashcamLinkMac = mac, dashcamLinkEndedAtMs = null) }
+    }
 
-    override fun markDashcamLinkGone() = forgetDashcamSwitchOff()
+    override fun markDashcamLinkDown() {
+        val nowMs = clock()
+        _radarLinkState.update {
+            if (it.dashcamLinkMac != null && it.dashcamLinkEndedAtMs == null) it.copy(dashcamLinkEndedAtMs = nowMs) else it
+        }
+    }
 
-    private fun forgetDashcamSwitchOff() {
+    override fun markDashcamLinkGone() {
+        markDashcamLinkDown()
         _radarLinkState.update { if (it.dashcamSwitchedOffMac == null) it else it.copy(dashcamSwitchedOffMac = null) }
     }
 
     /** The rider's selected dashcam counts as switched off. */
     private fun selectedDashcamSwitchedOff(link: RadarLinkState): Boolean = link.dashcamSwitchedOffMac?.equals(prefs.activeDashcamMac, ignoreCase = true) == true
+
+    /**
+     * Monotonic instant the selected dashcam was last heard: now while its
+     * light link is established, else the later of its last answered battery
+     * read and the end of that link. Nothing else counts, so a sighting with
+     * no contact cannot keep a switched-off camera on. Read by the dashcam
+     * alarm's BLANK, its decider and the radar-left-on alarm's naming, and by
+     * the probe's cadence; a switch-off ([dashcamSwitchedOffMac]) is checked
+     * first by each of the three.
+     */
+    fun dashcamHeardAtMs(nowMs: Long, link: RadarLinkState = _radarLinkState.value): Long {
+        val selected = prefs.activeDashcamMac
+        val linkHeard = if (selected != null && link.dashcamLinkMac.equals(selected, ignoreCase = true)) {
+            link.dashcamLinkEndedAtMs ?: nowMs
+        } else {
+            null
+        }
+        return maxOf(dashcamAnsweredAtMs() ?: NOT_HEARD, linkHeard ?: NOT_HEARD)
+    }
+
+    /** The dashcam alarm can still sound this off-episode: armed, not
+     *  dismissed for good (a snooze keeps it), switched on, Bluetooth not
+     *  gone since the drop, the radar-left-on alarm not the owner, and past
+     *  the decider's cold start. True while a radar-left-on check is pending,
+     *  since the dashcam alarm may sound after it. The probe re-reads the
+     *  camera at [DashcamProbe.ARMED_REFRESH_MS] while this holds, and a drop
+     *  takes the walk-away wakelock only when it does
+     *  (`DashcamHeardWindowTest.theRadarLeftOnAlarmSoundingEndsTheArmedProbingAndTheLock`,
+     *  `aDropInTheRadarsFirstMinuteTakesNoLockAndNoArmedProbing`). */
+    fun dashcamAlarmCanSound(link: RadarLinkState = _radarLinkState.value): Boolean = link.radarOffSinceMs != null &&
+        link.walkAwayArmed &&
+        !walkAwayDismissedForGood &&
+        prefs.walkAwayAlarmEnabled &&
+        !link.adapterOffInEpisode &&
+        link.walkAwayAlarmOwner.let { it == null || it == WalkAwayAlarmKind.DASHCAM } &&
+        link.sessionRadarConnectedMs >= WalkAwayDecider.COLD_START_RADAR_MS
+
+    /** The selected dashcam answered a read. While the alarm can still sound
+     *  the walk-away tick runs at once, so on a phone that sleeps between
+     *  reads a tick still sees the fresh hearing and the repeat can sound,
+     *  provided the answer's callback keeps the phone awake that long
+     *  (`DashcamHeardWindowTest.aCameraStillAnsweringAcrossRepeatedLongSleepsSoundsItsRepeat`).
+     *  Never otherwise, so a ride's reads leave the tick's cadence alone
+     *  (`anAnswerWakesTheTickOnlyWhileTheAlarmCanSound`). */
+    fun onDashcamAnswered() {
+        if (dashcamAlarmCanSound()) wakeTick()
+    }
 
     /** Only the open-link flag ([RadarLinkState.radarGattActive] lists its
      *  readers). The off-episode and everything keyed on it wait for the first
@@ -526,6 +617,7 @@ internal class RadarLinkCoordinator(
             if (startsNewRide) clearTrackActivity()
             releaseRideWakeLock()
             releaseRadarLeftOnWakeLock()
+            releaseWalkAwayWakeLock()
             clog(
                 "# walkaway state=IDLE transition_reason=radar-connected " +
                     "prev_state=$prevState new_ride=$startsNewRide",
@@ -600,8 +692,23 @@ internal class RadarLinkCoordinator(
                 clog("# radar_drop_latch source=track-presence window_s=${trackWindowMs / 1000}")
             }
         }
+        // Riding is the radar's own speed latch, skipped when the eBike read
+        // locked after the last riding frame (a rider who locks and walks
+        // straight off drops the radar inside that window). A lock read before
+        // it is an earlier stop's, whose unlock the reader may have missed
+        // (`aLockReadBeforeTheRidingDoesNotSkipIt`). Never the eBike's riding
+        // run, which stays open for [RidingSpeedGate.FRESH_MS] after the last
+        // confirmation and would silence every eBike rider's ride-end
+        // walk-away (`anEBikeRidingRunStillOpenDoesNotSilenceIt`). Both
+        // walk-away alarms keep quiet for a drop it holds at
+        // (`DashcamRidingGateTest`).
+        // Read only on a fresh drop, through armOnDisconnect and the
+        // radar-left-on decision, which is where the latch was just sampled.
+        val lockedSinceRiding = eBikeSnapshot()?.systemLocked == true && eBikeSnapshotAtMs() > (lastActivityMs ?: Long.MIN_VALUE)
+        val ridingAtDrop = radarActivityFreshAtDrop && !lockedSinceRiding
+        val armWalkAway = armOnDisconnect && !ridingAtDrop
         val streamedMs = prev.radarConnectStartMs?.let { nowMs - it } ?: 0L
-        val leftOn = if (freshOffEpisode) radarLeftOnAtDrop(nowMs, loss, armOnDisconnect, streamedMs) else null
+        val leftOn = if (freshOffEpisode) radarLeftOnAtDrop(nowMs, loss, armOnDisconnect, ridingAtDrop, streamedMs) else null
         var closedALink = false
         val after = _radarLinkState.updateAndGet { current ->
             closedALink = current.radarGattActive
@@ -621,11 +728,39 @@ internal class RadarLinkCoordinator(
                 radarOffSinceMs = current.radarOffSinceMs ?: nowMs,
                 // Consult the eBike snapshot before arming. When the bike
                 // reports system_locked=false the rider is on the bike
-                // (mid-ride radar BLE blip); arming would misfire. Any other
-                // case (locked, null systemLocked, null snapshot, eBike flag
-                // off) falls through to the existing IDLE → ARMED path.
-                walkAwayArmed = current.walkAwayArmed || armOnDisconnect,
+                // (mid-ride radar BLE blip); arming would misfire. Nor while
+                // the radar showed riding at the drop. Any other case
+                // (locked, null systemLocked, null snapshot, eBike flag off)
+                // falls through to the existing IDLE → ARMED path.
+                walkAwayArmed = current.walkAwayArmed || armWalkAway,
             )
+        }
+        if (freshOffEpisode) walkAwayDismissedForGood = false
+        // Watching: the rider has the alarm on and a dashcam in use, so the
+        // journal says what this drop did for it.
+        val watching = prefs.walkAwayAlarmEnabled && resolveDashcamSlug() != null
+        val walkAwayLockTaken = armWalkAway && watching && dashcamAlarmCanSound(after)
+        if (walkAwayLockTaken) {
+            acquireWalkAwayWakeLock(prefs.walkAwayAlarmThresholdSec * 1_000L + WALK_AWAY_WAKELOCK_SLACK_MS)
+            // The radar's first frame, a BLANK or Bluetooth going off can land
+            // between the state above and the acquire, and its release then ran
+            // first (`theRadarBackAsTheLockIsTakenLeavesItReleased`,
+            // `aSwitchOffBlankAsTheLockIsTakenLeavesItReleased`,
+            // `bluetoothOffAsTheLockIsTakenLeavesItReleased`).
+            val current = _radarLinkState.value
+            if (!dashcamAlarmCanSound(current) || current.radarOffSinceMs != after.radarOffSinceMs) releaseWalkAwayWakeLock()
+        }
+        if (freshOffEpisode && watching) {
+            if (walkAwayLockTaken) {
+                journal("walk-away alarm armed for the dashcam")
+            } else if (armWalkAway) {
+                // Cold start or Bluetooth off (`aDropInTheRadarsFirstMinuteTakesNoLockAndNoArmedProbing`).
+                journal("walk-away alarm armed but cannot sound")
+            } else if (armOnDisconnect && ridingAtDrop) {
+                journal("walk-away alarm not armed: the radar showed riding")
+            } else if (!armOnDisconnect) {
+                journal("walk-away alarm not armed: the eBike read unlocked")
+            }
         }
         if (leftOn?.qualified == true && after.radarLeftOnQualified && !after.adapterOffInEpisode) {
             acquireRadarLeftOnWakeLock()
@@ -662,12 +797,14 @@ internal class RadarLinkCoordinator(
             // describes, and the cue would fire late or not at all with the
             // screen off while looking correct on any bench test.
             //
-            // What this does NOT deliver, so nobody reads more into it: a rider
-            // with no dashcam loses the lock 20 s into the off-episode, because
-            // tickWalkAwayState disarms to BLANK at dashcamFreshMs when there is
-            // no advert to advance the anchor, and BLANK releases. A rider whose
-            // dashcam is reported switched off (camera light auto-switch on)
-            // loses it on the next tick, the same way.
+            // What this does NOT deliver, so nobody reads more into it: when
+            // the drop arms the walk-away alarm (no riding in the radar's last
+            // 30 s, which a range-only radar never reports), a rider with no
+            // dashcam heard loses the lock 20 s into the off-episode, because
+            // tickWalkAwayState disarms to BLANK at dashcamFreshMs and BLANK
+            // releases. A rider whose dashcam is reported switched off (the
+            // Dashcam light's auto-switch on) loses it on the next tick, the
+            // same way.
             // The first cue is at 60 s. Their exposure is Doze only - BLANK leaves
             // radarOffSinceMs set, so the 2 s tick cadence continues and the cue
             // is on time whenever the CPU is awake. The release path is
@@ -705,10 +842,16 @@ internal class RadarLinkCoordinator(
             // forgotten when this ride began, which the journal records), told
             // apart by these two.
             val ebikeAgeMs = nowMs - eBikeSnapshotAtMs()
-            if (armOnDisconnect) {
+            if (armWalkAway) {
                 clog(
                     "# walkaway state=ARMED transition_reason=radar-disconnected " +
                         "ebike_locked=${eBikeSnapshot()?.systemLocked} ebike_age_ms=$ebikeAgeMs",
+                )
+            } else if (armOnDisconnect) {
+                clog(
+                    "# walkaway state=BLANK transition_reason=radar-disconnected-while-riding " +
+                        "ebike_locked=${eBikeSnapshot()?.systemLocked} ebike_age_ms=$ebikeAgeMs " +
+                        "riding_age_ms=${lastActivityMs?.let { nowMs - it }}",
                 )
             } else {
                 clog(
@@ -728,16 +871,10 @@ internal class RadarLinkCoordinator(
      * opened, which the next attempt can move. Also counts this ending toward
      * that radar's calibration.
      *
-     * Riding is the radar's own 30 s speed latch, skipped when the eBike read
-     * locked after the last riding frame (a rider who locks and walks straight
-     * off drops the radar inside that window). A lock read before it is an
-     * earlier stop's, whose unlock the reader may have missed
-     * (`aLockReadBeforeTheRidingDoesNotSkipIt`). Never the eBike's
-     * riding run, which stays open for [RidingSpeedGate.FRESH_MS] after the
-     * last confirmation and would silence every eBike rider's ride-end
-     * walk-away (`anEBikeRidingRunStillOpenDoesNotSilenceIt`).
+     * [ridingAtDrop] is the rule [markDisconnected] states, shared with the
+     * dashcam alarm's arming.
      */
-    private fun radarLeftOnAtDrop(nowMs: Long, loss: LinkLoss?, armed: Boolean, streamedMs: Long): LeftOnAtDrop {
+    private fun radarLeftOnAtDrop(nowMs: Long, loss: LinkLoss?, armed: Boolean, ridingAtDrop: Boolean, streamedMs: Long): LeftOnAtDrop {
         val mac = lastLinkOpenMac ?: return LeftOnAtDrop(qualified = false, bothLeft = false)
         val drop = RadarLeftOnDecider.classify(loss)
         // A link Bluetooth going off ended says nothing about how this radar
@@ -761,13 +898,12 @@ internal class RadarLinkCoordinator(
         val dismissedAt = radarLeftOnDismissedAtMs
         val ridSinceDismiss = dismissedAt != null && lastRiding > dismissedAt
         if (ridSinceDismiss) radarLeftOnDismissedAtMs = null
-        val lockedSinceRiding = eBikeSnapshot()?.systemLocked == true && eBikeSnapshotAtMs() > lastRiding
         val veto = RadarLeftOnDecider.veto(
             drop = drop,
             cleanSwitchOffs = switchOffs,
             enabled = prefs.radarLeftOnAlarmEnabled,
             armed = armed,
-            ridingAtDrop = radarActivityFreshAtDrop && !lockedSinceRiding,
+            ridingAtDrop = ridingAtDrop,
             radarBatteryPct = radarBatteryPct(mac),
             streamedMs = streamedMs,
             dismissedUntilRide = dismissedAt != null && !ridSinceDismiss,
@@ -777,10 +913,9 @@ internal class RadarLinkCoordinator(
             clog("# walkaway radar_left_on=$reason switch_offs=$switchOffs")
         }
         val qualified = veto == null
-        val cameraSeenMs = resolveDashcamSlug()?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs
-        val bothLeft = !selectedDashcamSwitchedOff(_radarLinkState.value) &&
-            cameraSeenMs != null &&
-            nowMs - cameraSeenMs <= RADAR_LEFT_ON_CAMERA_HEARD_MS
+        val link = _radarLinkState.value
+        val bothLeft = !selectedDashcamSwitchedOff(link) &&
+            nowMs - dashcamHeardAtMs(nowMs, link) <= RADAR_LEFT_ON_CAMERA_HEARD_MS
         return LeftOnAtDrop(qualified, bothLeft)
     }
 
@@ -826,6 +961,8 @@ internal class RadarLinkCoordinator(
         postRadarLeftOnNotification(kind)
         startWalkAwayAlarm()
         releaseRadarLeftOnWakeLock()
+        // This alarm owns the episode now, so the dashcam alarm cannot sound.
+        releaseWalkAwayWakeLock()
         val offAt = link.radarOffSinceMs
         val after = _radarLinkState.updateAndGet {
             if (it.radarOffSinceMs == offAt) {
@@ -852,26 +989,30 @@ internal class RadarLinkCoordinator(
 
         // ARMED → BLANK transition: while the radar is still off, watch
         // for the dashcam being switched off, which is BLANK at once
-        // (`DashcamSwitchOffTest`), or going stale. The "stale window" is
-        // anchored at the LATER of (radarOffSinceMs, dashcamLastAdvertMs):
-        //   - if the dashcam has adverted since radar-off, the window
-        //     starts at the most recent advert (rider walked away from
-        //     a continuously-fresh dashcam, then dashcam dropped out);
-        //   - if the dashcam was already silent at radar-off, the window
+        // (`DashcamSwitchOffTest`), or going unheard. The "stale window" is
+        // anchored at the LATER of (radarOffSinceMs, dashcamHeardAtMs):
+        //   - if the dashcam has been heard since radar-off, the window
+        //     starts at the most recent hearing (rider walked away from
+        //     a dashcam left on, then it dropped out);
+        //   - if the dashcam was already unheard at radar-off, the window
         //     starts at the disconnect itself (rider stopped with the
         //     camera already off - never was a leave-behind risk).
         // Once the window exceeds dashcamFreshMs we declare BLANK; the
         // alarm is permanently disarmed for this off-episode regardless
-        // of whether the dashcam comes back later.
+        // of whether the dashcam comes back later. The probe's armed
+        // cadence re-reads a camera that answers inside that window
+        // (`DashcamHeardWindowTest`).
         //
         // Once disarmed, the rider has packed up the bike for now;
         // re-arming requires the next ride (radar power-on then off).
+        //
+        // A tick this late means the phone slept through both loops, so the
+        // window counts from the wake too, once per hearing ([lateWakeAtMs]).
         val snapshot = _radarLinkState.value
+        if (elapsedMs > LATE_TICK_MS && lateWakeAtMs < dashcamHeardAtMs(nowMs, snapshot)) lateWakeAtMs = nowMs
         val offAt = snapshot.radarOffSinceMs
         if (offAt != null && snapshot.walkAwayArmed) {
-            val slug = resolveDashcamSlug()
-            val lastAdvert = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: Long.MIN_VALUE / 2
-            val anchorMs = maxOf(offAt, lastAdvert)
+            val anchorMs = maxOf(offAt, dashcamHeardAtMs(nowMs, snapshot), lateWakeAtMs)
             val freshMs = WalkAwayDecider.Config(
                 enabled = false,
                 thresholdMs = 0,
@@ -895,6 +1036,7 @@ internal class RadarLinkCoordinator(
                 // wakelock - the drop cue / walk-away timers no longer need
                 // guaranteed on-time ticks.
                 releaseRideWakeLock()
+                releaseWalkAwayWakeLock()
                 if (switchedOff) {
                     clog("# walkaway state=BLANK transition_reason=dashcam-switched-off")
                 } else {
@@ -902,6 +1044,10 @@ internal class RadarLinkCoordinator(
                         "# walkaway state=BLANK transition_reason=dashcam-stale " +
                             "window_ms=${nowMs - anchorMs} fresh_ms=$freshMs",
                     )
+                    // The switch-off has its own line, at markDashcamSwitchedOff.
+                    if (prefs.walkAwayAlarmEnabled && resolveDashcamSlug() != null) {
+                        journal("walk-away alarm disarmed: dashcam not heard")
+                    }
                 }
             }
         }
@@ -909,15 +1055,8 @@ internal class RadarLinkCoordinator(
 
     fun evaluateWalkAway(nowMs: Long) {
         val slug = resolveDashcamSlug()
-        // Not-seen sentinel: Long.MIN_VALUE/2 (not 0L) so a dashcam never seen
-        // this session reads as unconditionally stale under the monotonic clock
-        // (0L is the boot instant, which could look "fresh" early in a session).
-        // Defensive/future-proof: WalkAwayDecider's 60 s cold-start + 30 s
-        // off-threshold gates mean a fire is never evaluated before ~90 s of
-        // uptime, where even 0L is already stale - but the sentinel keeps the
-        // not-seen semantics correct if those constants ever shrink.
-        val dashcamLastAdvertMs = slug?.let { BatteryStateBus.entries.value[it] }?.lastSeenElapsedMs ?: Long.MIN_VALUE / 2
         val link = _radarLinkState.value
+        val heardAtMs = dashcamHeardAtMs(nowMs, link)
         val input = WalkAwayDecider.Input(
             nowMs = nowMs,
             config = WalkAwayDecider.Config(
@@ -933,7 +1072,11 @@ internal class RadarLinkCoordinator(
                     // (`aCameraLastHeardEarlierIsNotNamed`); a camera heard
                     // again only after that stays unannounced for the episode.
                     link.walkAwayAlarmOwner.let { it == null || it == WalkAwayAlarmKind.DASHCAM } &&
-                    !radarLeftOnPending(link),
+                    !radarLeftOnPending(link) &&
+                    // Bluetooth off since the drop: nothing can be heard, so
+                    // no fire. An alarm already sounding keeps its stop
+                    // (`bluetoothOffWhileItSoundsStillLetsItStop`).
+                    !(link.adapterOffInEpisode && link.lastWalkAwayFireMs == null),
                 thresholdMs = prefs.walkAwayAlarmThresholdSec * 1000L,
             ),
             // Snapshot the cluster once so the decider sees a coherent set
@@ -942,7 +1085,8 @@ internal class RadarLinkCoordinator(
             // off the alarm (`aFailingAttemptDoesNotHoldOffTheWalkAwayAlarm`).
             radarConnected = link.radarStreaming,
             radarOffSinceMs = link.radarOffSinceMs,
-            dashcamLastAdvertMs = dashcamLastAdvertMs,
+            dashcamHeardAtMs = heardAtMs,
+            dashcamUnheardFromMs = maxOf(heardAtMs, lateWakeAtMs),
             dashcamSwitchedOff = selectedDashcamSwitchedOff(link),
             armed = link.walkAwayArmed,
             sessionTotalRadarConnectedMs = link.sessionRadarConnectedMs,
@@ -953,6 +1097,7 @@ internal class RadarLinkCoordinator(
             WalkAwayDecider.Action.FIRE -> {
                 postWalkAwayNotification()
                 startWalkAwayAlarm()
+                releaseWalkAwayWakeLock()
                 // Decided on a snapshot. The radar's first frame, or the
                 // rider's Dismiss or Snooze, can land before the post and
                 // start above, and its cancel and stop then ran first, so
@@ -985,8 +1130,6 @@ internal class RadarLinkCoordinator(
                 autoDismissWalkAway()
                 if (!link.walkAwayDismissed) journal("walk-away alarm stopped: dashcam no longer heard")
             }
-            // No line: the rider's dismiss, which always comes first, has one.
-            WalkAwayDecider.Action.AUTO_DISMISS_TIME_LIMIT -> autoDismissWalkAway()
             WalkAwayDecider.Action.NONE -> {}
         }
     }
@@ -1012,11 +1155,12 @@ internal class RadarLinkCoordinator(
      * the rider was moving above walking pace just before the link dropped, or
      * - where the radar cannot report that and no eBike can either - a vehicle
      * was reported just before it. The
-     * eBike path is mutually exclusive with the walk-away alarm; the
-     * radar-activity path reaches the radar-only / no-eBike rider without a
-     * ride-end false fire (a dismount's speed has been ~0 since the stop, so the
-     * latch is stale) but is deliberately NOT exclusive with walk-away arming -
-     * see the WALK-AWAY EXCLUSIVITY note in [RadarDropDecider]. Full design
+     * eBike path is mutually exclusive with the walk-away alarm, and so is the
+     * radar-activity speed latch, which reaches the radar-only / no-eBike rider
+     * without a ride-end false fire (a dismount's speed has been ~0 since the
+     * stop, so the latch is stale); the track-presence path is NOT exclusive
+     * (see the WALK-AWAY EXCLUSIVITY note in [RadarDropDecider], and
+     * `DashcamRidingGateTest.trafficJustBeforeTheDropStillArmsIt`). Full design
      * rationale + scenario matrix there too.
      *
      * A ride the radar has not been up during takes the same cue and latch,
@@ -1449,10 +1593,26 @@ internal class RadarLinkCoordinator(
         const val RIDE_WAKELOCK_CAP_MS = 300_000L
 
         /** The front camera counts as on with the radar when the phone heard
-         *  it this recently before the drop. The overlay's own camera freshness
-         *  (`BikeRadarService.DASHCAM_FRESH_MS`): the camera is read every 20 s
-         *  and a read takes seconds, so a live camera is often 20-25 s old. */
-        const val RADAR_LEFT_ON_CAMERA_HEARD_MS = 30_000L
+         *  it this recently before the drop ([dashcamHeardAtMs]): the most a
+         *  camera answering every read ages on the ride's probe cadence, which
+         *  reads at 20 s of heard age whatever sightings do to the shown one,
+         *  on a 2 s tick, within the read timeout. The same sum as the
+         *  overlay's camera freshness
+         *  (`DashcamHeardWindowTest.aCameraHeardWithinOneProbeCycleOfTheDropIsNamed`,
+         *  `sightingsDoNotHoldOffTheReadsThatNameTheCamera`). */
+        const val RADAR_LEFT_ON_CAMERA_HEARD_MS = BikeRadarService.DASHCAM_FRESH_MS
+
+        /** The walk-away wakelock's cap past the rider's threshold. */
+        const val WALK_AWAY_WAKELOCK_SLACK_MS = 15_000L
+
+        /** A walk-away tick more than this after the one before is a wake from
+         *  a sleep both loops slept through: two of the 2 s ticks
+         *  (`DashcamHeardWindowTest.aTickMoreThanTwoTicksAfterTheLastIsAWake`). */
+        const val LATE_TICK_MS = 2 * BikeRadarService.WALKAWAY_TICK_MS
+
+        /** "Never heard": far enough in the past that any window reads it
+         *  stale, without the overflow `Long.MIN_VALUE` would give. */
+        private const val NOT_HEARD = Long.MIN_VALUE / 2
 
         /** Cap on the radar-left-on wakelock: its check plus slack for a
          *  late tick (`theRadarLeftOnWakeLockOutlastsTheCheck`). */

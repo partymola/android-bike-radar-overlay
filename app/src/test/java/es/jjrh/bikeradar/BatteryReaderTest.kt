@@ -78,9 +78,13 @@ class BatteryReaderTest {
         prefs: Prefs = prefsWithDashcam(),
         knownDevices: KnownDevices = knownStore(),
         dashcamProbeFailures: MutableMap<String, Int> = mutableMapOf(),
+        dashcamAnsweredAtMs: MutableMap<String, Long> = mutableMapOf(),
+        onDashcamAnswered: () -> Unit = {},
         macToSlug: MutableMap<String, String> = mutableMapOf(),
         publishBattery: suspend (String, Int) -> Boolean = { _, _ -> true },
         readBatteryFn: suspend (String) -> Int? = { 100 },
+        monoClock: () -> Long = { 0L },
+        wallClock: () -> Long = { System.currentTimeMillis() },
     ) = BatteryReader(
         context = app,
         scope = scope,
@@ -90,7 +94,11 @@ class BatteryReaderTest {
         macToSlug = macToSlug,
         slug = { it.lowercase() },
         dashcamProbeFailures = dashcamProbeFailures,
+        dashcamAnsweredAtMs = dashcamAnsweredAtMs,
+        onDashcamAnswered = onDashcamAnswered,
         readBatteryFn = readBatteryFn,
+        monoClock = monoClock,
+        wallClock = wallClock,
     )
 
     private fun throttleArmed(slug: String): Boolean = app.getSharedPreferences(PREFS_THROTTLE, Context.MODE_PRIVATE)
@@ -322,19 +330,158 @@ class BatteryReaderTest {
             },
         )
 
-        r.launch("Cam", camAddr)
+        assertTrue(r.launch("Cam", camAddr))
         runCurrent() // first read enters readBatteryFn and suspends at release
         assertEquals(1, calls)
 
-        r.launch("Cam", camAddr) // a second read while the first is in flight
+        assertFalse("a skipped launch says so", r.launch("Cam", camAddr)) // a second read while the first is in flight
         runCurrent()
         assertEquals("a launch while a read is in flight must be skipped", 1, calls)
 
         release.complete(55)
         runCurrent() // first read finishes and clears the in-flight marker
 
-        r.launch("Cam", camAddr) // no longer in flight, so this proceeds
+        assertTrue(r.launch("Cam", camAddr)) // no longer in flight, so this proceeds
         runCurrent()
         assertEquals("a launch after the prior read completes must proceed", 2, calls)
+    }
+
+    @Test
+    fun aSlowPublishDoesNotHoldTheNextRead() = runTest {
+        // HA can take seconds to answer; the dashcam alarm's armed probe must
+        // still start its next read as soon as this one has ended.
+        var calls = 0
+        val r = reader(
+            scope = backgroundScope,
+            readBatteryFn = {
+                calls++
+                55
+            },
+            publishBattery = { _, _ ->
+                kotlinx.coroutines.delay(6_000L)
+                true
+            },
+        )
+        r.launch("Cam", camAddr)
+        runCurrent()
+        r.launch("Cam", camAddr)
+        runCurrent()
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun aReadStillInFlightAfterAnEarlierOnesPublishIsStillGuarded() = runTest {
+        // The first read's publish ends while the second read is in flight;
+        // that must not clear the second read's guard.
+        val release = CompletableDeferred<Int?>()
+        var calls = 0
+        val r = reader(
+            scope = backgroundScope,
+            readBatteryFn = {
+                calls++
+                if (calls == 1) 55 else release.await()
+            },
+            publishBattery = { _, _ ->
+                kotlinx.coroutines.delay(1_000L)
+                true
+            },
+            wallClock = { 1_000_000L + testScheduler.currentTime },
+        )
+        r.launch("Cam", camAddr)
+        runCurrent()
+        testScheduler.advanceTimeBy(100L)
+        r.launch("Cam", camAddr)
+        runCurrent()
+        testScheduler.advanceTimeBy(1_900L)
+        runCurrent()
+        r.launch("Cam", camAddr)
+        runCurrent()
+        assertEquals(2, calls)
+        release.complete(60)
+    }
+
+    @Test
+    fun aLaunchInTheSameMillisecondIsGuardedToo() = runTest {
+        // The same as above with a clock that does not move between the two
+        // launches: the first's teardown must still leave the second's guard.
+        val release = CompletableDeferred<Int?>()
+        var calls = 0
+        val r = reader(
+            scope = backgroundScope,
+            readBatteryFn = {
+                calls++
+                if (calls == 1) 55 else release.await()
+            },
+            publishBattery = { _, _ ->
+                kotlinx.coroutines.delay(1_000L)
+                true
+            },
+            wallClock = { 1_000_000L },
+        )
+        r.launch("Cam", camAddr)
+        runCurrent()
+        r.launch("Cam", camAddr)
+        runCurrent()
+        testScheduler.advanceTimeBy(1_000L)
+        runCurrent()
+        r.launch("Cam", camAddr)
+        runCurrent()
+        assertEquals(2, calls)
+        release.complete(60)
+    }
+
+    // ── when the dashcam answered ────────────────────────────────────────────
+
+    @Test
+    fun theDashcamsAnswerIsStampedWhenItsReadEnds() = runTest {
+        // An address with letters, read in another case: the answer is kept
+        // under the upper-case one the alarm looks up.
+        val answered = mutableMapOf<String, Long>()
+        // What the answer's callback sees: the stamp already written.
+        val seenByCallback = mutableListOf<Map<String, Long>>()
+        reader(
+            prefs = prefsWithDashcam().apply { dashcamMac = "AA:BB:CC:00:00:0F" },
+            dashcamAnsweredAtMs = answered,
+            onDashcamAnswered = { seenByCallback += answered.toMap() },
+            readBatteryFn = {
+                kotlinx.coroutines.delay(14_999L)
+                50
+            },
+            monoClock = { 1_000_000L + testScheduler.currentTime },
+        ).doReadBattery("Cam", "aa:bb:cc:00:00:0f")
+        assertEquals(mapOf("AA:BB:CC:00:00:0F" to 1_014_999L), answered)
+        assertEquals(listOf(mapOf("AA:BB:CC:00:00:0F" to 1_014_999L)), seenByCallback)
+        assertEquals(1_014_999L, BatteryStateBus.entries.value["cam"]?.lastSeenElapsedMs)
+    }
+
+    @Test
+    fun theAnswerIsStampedOnTheMonotonicClockByDefault() = runTest {
+        // The alarm compares it with elapsedRealtime; a wall-clock stamp would
+        // read as heard for ever.
+        val answered = mutableMapOf<String, Long>()
+        BatteryReader(
+            context = app,
+            scope = unusedScope,
+            prefs = prefsWithDashcam(),
+            knownDevices = knownStore(),
+            publishBattery = { _, _ -> true },
+            macToSlug = mutableMapOf(),
+            slug = { it.lowercase() },
+            dashcamProbeFailures = mutableMapOf(),
+            dashcamAnsweredAtMs = answered,
+            onDashcamAnswered = {},
+            readBatteryFn = { 50 },
+        ).doReadBattery("Cam", camAddr)
+        assertEquals(mapOf(camAddr to android.os.SystemClock.elapsedRealtime()), answered)
+    }
+
+    @Test
+    fun aFailedReadOrAnotherDeviceStampsNoAnswer() = runTest {
+        val answered = mutableMapOf<String, Long>()
+        var callbacks = 0
+        reader(dashcamAnsweredAtMs = answered, onDashcamAnswered = { callbacks++ }, readBatteryFn = { null }).doReadBattery("Cam", camAddr)
+        reader(dashcamAnsweredAtMs = answered, onDashcamAnswered = { callbacks++ }, readBatteryFn = { 77 }).doReadBattery("RearVue8", radarAddr)
+        assertTrue(answered.isEmpty())
+        assertEquals(0, callbacks)
     }
 }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -131,24 +132,12 @@ class IdleGateTest {
     }
 
     @Test
-    fun dashcamWindowCoversWalkAwayLifetime() {
-        // Walk-away threshold is capped at 120 s by the Settings slider
-        // (Prefs.kt). After the alarm fires, WalkAwayDecider keeps the
-        // notification live for autoDismissAfterFireMs (default 10 min)
-        // before auto-dismissing. The dashcam ticker must keep running
-        // for that full lifetime; if it stops earlier the dashcam
-        // entry's readAtMs goes stale (DASHCAM_FRESH_MS = 20 s) and
-        // the decider auto-dismisses for the wrong reason ("dashcam
-        // went silent" rather than the intended timeout).
-        val maxThresholdMs = 120_000L
-        // Config has required fields enabled / thresholdMs without defaults;
-        // their values are irrelevant — we only read autoDismissAfterFireMs.
-        val cfg = WalkAwayDecider.Config(enabled = true, thresholdMs = 0L)
-        val coverNeeded = maxThresholdMs + cfg.autoDismissAfterFireMs
-        assertTrue(
-            "DASHCAM_POST_DISCONNECT_WINDOW_MS=${IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS} must " +
-                "be >= walk-away cover ($coverNeeded ms = ${coverNeeded / 1000} s)",
-            IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS >= coverNeeded,
-        )
+    fun dashcamWindowLetsTheLongestThresholdSoundTwice() {
+        // A camera only the probe hears stops being heard soon after the
+        // window closes, which ends its walk-away alarm. At the Settings
+        // slider's longest threshold (120 s) it still sounds at the threshold
+        // and again 5 min later.
+        assertTrue(IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS >= 120_000L + 300_000L)
+        assertEquals(900_000L, IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS)
     }
 }

@@ -127,12 +127,13 @@ to its file. The notes below are the working summary.
   reaches the state through a `RadarLinkStateGateway`, and the camera
   controller reads the radar off-time through an injected lambda for its
   shared backoff cap. The camera controller reports each completed
-  handshake, each link the camera itself ends after one, and its loop's end
-  to the coordinator through `DashcamLinkGateway`. That is what lets the
-  dashcam walk-away alarm count a switched-off camera as off at once, and
-  only while the camera link runs, which needs the Dashcam light's
-  auto-switch on (`CameraLightLinkControllerHarnessTest`,
-  `DashcamSwitchOffServiceTest`).
+  handshake, each link the camera itself ends after one, each connection's
+  end and its loop's end to the coordinator through `DashcamLinkGateway`.
+  That is what lets the dashcam walk-away alarm count a switched-off camera
+  as off at once and a camera with its link up as heard, and only while the
+  camera link runs, which needs the Dashcam light's auto-switch on
+  (`CameraLightLinkControllerHarnessTest`, `DashcamSwitchOffServiceTest`,
+  `DashcamLinkHeardTest`).
 - **The riding-aid notice is in front of EVERY other destination, and that
   ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
   answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,
@@ -486,6 +487,31 @@ must not be changed about it. Four that bite in ordinary work:
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.
+- **The dashcam walk-away alarm hears the camera only through a battery read
+  it answered or its established light link, never through
+  `BatteryStateBus`**, which sightings with no contact also stamp
+  (`RadarLinkCoordinatorTest.aSightingWithNoContactIsNotHeard`). While the
+  alarm can still sound (`RadarLinkCoordinator.dashcamAlarmCanSound`) the
+  probe starts the next read on the first 2 s tick at least 2 s after the
+  camera was last heard, so a camera answering within the 15 s read timeout is
+  never older than the alarm's 20 s while both loops run on time
+  (`DashcamProbeTest.anArmedProbeKeepsACameraThatAnswersInsideTheAlarmsWindow`,
+  `DashcamHeardWindowTest`, whose harness runs both loops in virtual time).
+  The walk-away wakelock keeps them on time until the alarm first sounds;
+  after that a walk-away tick more than two ticks after the one before counts
+  as a wake, and the camera's unheard time counts from the first wake after
+  each hearing, giving its read 20 s to land
+  (`aLateWakeAfterTheAlarmSoundedDoesNotEndIt`,
+  `repeatedShortWakesDoNotHoldOffTheStopOfACameraThatWentOff`). Its answer runs
+  the walk-away tick at once while the alarm can sound, so the repeat can sound
+  on a phone that sleeps between reads, provided the answer's callback keeps it
+  awake that long (`RadarLinkCoordinator.onDashcamAnswered`,
+  `aCameraStillAnsweringAcrossRepeatedLongSleepsSoundsItsRepeat`). Failed reads with a radar
+  link open back off from 2 s and can pass the bound. It holds only because the
+  read's in-flight guard ends before its Home Assistant publish
+  (`BatteryReaderTest.aSlowPublishDoesNotHoldTheNextRead`); that publish goes
+  out only on a change or the 5 min heartbeat
+  (`HaPublisher.publishBatteryIfChanged`).
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

@@ -240,6 +240,9 @@ fun SettingsToggleRow(
     isLast: Boolean = true,
     leadingIcon: ImageVector? = null,
     leadingTint: Color? = null,
+    /** Top for a subtitle many lines long, so the switch sits by its title
+     *  rather than beside a line in the middle of the text. */
+    verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -256,7 +259,7 @@ fun SettingsToggleRow(
                     onValueChange = onCheckedChange,
                 )
                 .padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = verticalAlignment,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (leadingIcon != null) {

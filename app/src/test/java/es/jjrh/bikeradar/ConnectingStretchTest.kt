@@ -46,6 +46,7 @@ class ConnectingStretchTest {
             journal = {},
             setReconnectBanner = {},
             resolveDashcamSlug = { null },
+            dashcamAnsweredAtMs = { null },
             eBikeSnapshot = { null },
             eBikeSnapshotAtMs = { 0L },
             eBikeRidingSinceMs = { null },

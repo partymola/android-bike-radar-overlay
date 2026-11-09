@@ -186,6 +186,21 @@ class HaPublisherHttpTest {
         assertEquals("a pct change re-publishes", 2, topics.count { it == state })
     }
 
+    @Test fun aBatteryReadWithNothingNewSkipsThePublishAndArmsTheThrottle() = runBlocking {
+        // The dashcam probe reads every few seconds while its alarm waits; the
+        // reader arms its own throttle on true.
+        val p = publisher()
+        val state = "bikeradar/cam/battery"
+        assertTrue(p.publishBatteryIfChanged("Cam", 70))
+        assertTrue("nothing new: skipped, and still true", p.publishBatteryIfChanged("Cam", 70))
+        assertEquals(1, topics.count { it == state })
+        statusFor = { 500 }
+        assertFalse("a change that fails to send says so", p.publishBatteryIfChanged("Cam", 69))
+        statusFor = { 200 }
+        assertTrue(p.publishBatteryIfChanged("Cam", 69))
+        assertEquals("the failed value was not recorded, so it is sent again", 3, topics.count { it == state })
+    }
+
     // ── ride edge ────────────────────────────────────────────────────────────
 
     @Test fun rideEdgePublishesToTheRideEdgeTopic() {

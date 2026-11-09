@@ -31,12 +31,14 @@ class DashcamSwitchOffTest {
     private var now = 1_000_000L
 
     private var posts = 0
+    private val postTimes = mutableListOf<Long>()
     private var cancels = 0
     private var starts = 0
     private var stops = 0
     private var wakeTicks = 0
     private var rideWakeLockReleases = 0
     private var ridingActivityMs: Long? = null
+    private var answeredMs: Long? = null
     private var onPost: () -> Unit = {}
     private val clogs = mutableListOf<String>()
     private val journal = mutableListOf<String>()
@@ -51,12 +53,12 @@ class DashcamSwitchOffTest {
             dashcamOwnership = DashcamOwnership.YES
             dashcamMac = CAM
         }
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80, readAtMs = 0L, lastSeenElapsedMs = Long.MIN_VALUE / 2))
         coordinator = RadarLinkCoordinator(
             clock = { now },
             prefs = prefs,
             postWalkAwayNotification = {
                 posts++
+                postTimes += now
                 onPost()
             },
             cancelWalkAwayNotification = { cancels++ },
@@ -67,6 +69,7 @@ class DashcamSwitchOffTest {
             journal = { journal += it },
             setReconnectBanner = {},
             resolveDashcamSlug = { "cam" },
+            dashcamAnsweredAtMs = { answeredMs },
             eBikeSnapshot = { null },
             eBikeSnapshotAtMs = { 0L },
             eBikeRidingSinceMs = { null },
@@ -93,7 +96,10 @@ class DashcamSwitchOffTest {
         BatteryStateBus.clearForTest()
     }
 
-    private fun heardAt(t: Long) = BatteryStateBus.markSeen("cam", 0L, t)
+    /** The camera answers a battery read ending at [t]. */
+    private fun heardAt(t: Long) {
+        answeredMs = t
+    }
 
     /** 61 s of streaming, past the alarm's cold-start grace, then the drop.
      *  Returns the drop instant. */
@@ -177,6 +183,7 @@ class DashcamSwitchOffTest {
         assertEquals(1, posts)
         assertEquals(
             listOf(
+                "walk-away alarm armed for the dashcam",
                 "walk-away alarm sounded: dashcam still heard",
                 "walk-away alarm: dashcam counted switched off",
                 "walk-away alarm stopped: dashcam switched off",
@@ -207,7 +214,7 @@ class DashcamSwitchOffTest {
         switchOffAt(r + 10_000L)
         tickAt(r + 10_000L)
         now = r + 12_000L
-        coordinator.markDashcamHeard()
+        coordinator.markDashcamHeard(CAM)
         heardAt(r + 13_000L)
         tickAt(r + 16_000L)
         assertEquals(0, posts)
@@ -215,7 +222,9 @@ class DashcamSwitchOffTest {
 
     @Test
     fun aSwitchOffReleasesTheRideWakeLockWithTheBlank() {
-        ridingActivityMs = 1_000_000L - 1_000L
+        // Moving 60 s before the drop: the ride wakelock is held and the
+        // alarm, outside the 30 s riding gate, arms.
+        ridingActivityMs = 1_000_000L - 60_000L
         val r = radarOffAt(1_000_000L)
         switchOffAt(r + 1_000L)
         assertEquals(0, rideWakeLockReleases)
@@ -286,7 +295,7 @@ class DashcamSwitchOffTest {
     @Test
     fun theCamerasNextHandshakeClearsTheSwitchOff() {
         switchOffAt(1_000_000L)
-        coordinator.markDashcamHeard()
+        coordinator.markDashcamHeard(CAM)
         assertNull(coordinator.snapshot().dashcamSwitchedOffMac)
         assertTrue(soundsWithTheCameraHeard())
     }
@@ -345,7 +354,8 @@ class DashcamSwitchOffTest {
         tickAt(r + 15_000L)
         coordinator.markWalkAwayDismissed(snoozed = false)
         tickAt(r + 40_000L)
-        assertEquals("walk-away alarm dismissed by rider", journal.last())
+        // The disarm is logged, but no stop: the rider's dismiss has its line.
+        assertEquals(listOf("walk-away alarm dismissed by rider", "walk-away alarm disarmed: dashcam not heard"), journal.takeLast(2))
     }
 
     @Test
@@ -381,27 +391,29 @@ class DashcamSwitchOffTest {
     }
 
     @Test
-    fun theTimeLimitOnlyFollowsADismissAndAddsNoLine() {
-        // Heard throughout: undismissed it sounds again at 5 min, so the
-        // 10 min limit is reached only once the rider has dismissed it.
+    fun aCameraStillHeardSoundsEveryFiveMinutesUntilDismissed() {
         val r = radarOffAt(1_000_000L)
         var t = r + 15_000L
-        while (t <= r + 320_000L) {
-            heardAt(t - 1_000L)
-            tickAt(t)
-            t += 5_000L
-        }
-        assertEquals("sounded again at the rate limit", 2, posts)
-        coordinator.markWalkAwayDismissed(snoozed = false)
-        val linesBefore = journal.size
-        val stopsBefore = stops
         while (t <= r + 1_000_000L) {
             heardAt(t - 1_000L)
             tickAt(t)
             t += 5_000L
         }
-        assertEquals("the time limit stopped it once more", stopsBefore + 1, stops)
-        assertNull(coordinator.snapshot().lastWalkAwayFireMs)
+        assertEquals(
+            "at the threshold and every 5 min after, past 10 min too",
+            listOf(r + 15_000L, r + 315_000L, r + 615_000L, r + 915_000L),
+            postTimes,
+        )
+        assertEquals(0, stops)
+        coordinator.markWalkAwayDismissed(snoozed = false)
+        val linesBefore = journal.size
+        while (t <= r + 2_000_000L) {
+            heardAt(t - 1_000L)
+            tickAt(t)
+            t += 5_000L
+        }
+        assertEquals("a dismiss is the end of it", 4, posts)
+        assertEquals(0, stops)
         assertEquals(linesBefore, journal.size)
     }
 

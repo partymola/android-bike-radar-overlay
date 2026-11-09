@@ -13,12 +13,11 @@ internal object IdleGate {
     /**
      * Window opens when the radar's off-episode starts (`radarOffSinceMs`
      * set by `RadarLinkCoordinator.markDisconnected`, including a session's
-     * first failed attempt). Long enough to cover the walk-away
-     * alarm's full lifetime: threshold (max 120 s per the Settings
-     * slider) + auto-dismiss-after-fire (10 min default in
-     * `WalkAwayDecider.Config`) + margin. The constants sanity test
-     * `IdleGateTest.dashcamWindowCoversWalkAwayLifetime` fails loud
-     * if the walk-away cover ever drifts past this window.
+     * first failed attempt). A camera only the probe hears goes unheard soon
+     * after it closes, which ends the dashcam walk-away alarm for it; one
+     * whose light link stays up stays heard, and its alarm repeats past it
+     * (`DashcamHeardWindowTest`). Long enough for the longest threshold to
+     * sound twice (`IdleGateTest.dashcamWindowLetsTheLongestThresholdSoundTwice`).
      */
     const val DASHCAM_POST_DISCONNECT_WINDOW_MS: Long = 15 * 60 * 1000L
 

@@ -70,7 +70,9 @@ class DashcamSwitchOffServiceTest {
         // A ride ends with the radar dropping; the switch-off then reaches the
         // service's own tick, which goes BLANK and frees the ride wakelock.
         val coordinator = service.radarLinkCoordinator
-        service.lastRidingActivityMs = android.os.SystemClock.elapsedRealtime()
+        // Moving 60 s before the drop: the ride wakelock is held and the
+        // alarm, outside the 30 s riding gate, arms.
+        service.lastRidingActivityMs = android.os.SystemClock.elapsedRealtime() - 60_000L
         coordinator.markConnected()
         coordinator.markDisconnected()
         assertTrue(service.rideWakeLock.isHeld())
@@ -116,7 +118,7 @@ class DashcamSwitchOffServiceTest {
     @Test
     fun withTheAutoSwitchOffASightingStillStampsTheCameraSeen() {
         // No camera light link runs, so the sighting goes to the throttle,
-        // which stamps the camera as it always has.
+        // which stamps the camera seen.
         Prefs(app).autoLightModeEnabled = false
         val controller = Robolectric.buildService(BikeRadarService::class.java)
         controller.create()

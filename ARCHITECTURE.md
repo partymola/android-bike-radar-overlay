@@ -48,10 +48,14 @@ injected at `onCreate`:
 - `CameraLightLinkController` - the front camera/light BLE link (optional
   accessory): reconnect, AMV handshake for the front variant, mode-state loop,
   and time-of-day light auto-mode. It reports the camera's handshakes,
-  switch-offs and loop end to `RadarLinkCoordinator` through a
-  `DashcamLinkGateway`.
+  switch-offs, each connection's end and its loop's end to
+  `RadarLinkCoordinator` through a `DashcamLinkGateway`.
 - `BatteryReader` - one-shot GATT battery reads for radar/dashcam into
-  `BatteryStateBus`.
+  `BatteryStateBus`, and the instant the selected dashcam last answered one.
+  `DashcamProbe` runs those reads for the dashcam on a 2 s tick, and while
+  the dashcam walk-away alarm can still sound starts the next on the first
+  tick at least 2 s after the camera was last heard. Home Assistant gets the
+  value only when it changes, or every 5 min.
 - `EBikeStatusReader` + `EBikeSnapshotCoordinator` - a **read-only** GATT client
   that subscribes to the eBike's proprietary status stream (see below) and the
   cache/derivation on top of it (odometer baseline, ride-edge, riding speed).
@@ -154,8 +158,9 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/BikeRadarService.kt` | Foreground-service shell + sighting dispatch + battery reads; coordinators injected at onCreate |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkCoordinator.kt` | Owns `_radarLinkState` + the walk-away/radar-drop transitions (markLinkOpen/markConnected/markDisconnected/tick/evaluate*); the `RadarLinkStateGateway` and `DashcamLinkGateway` impl |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkController.kt` | Rear-radar BLE link: bond watch, reconnect loop, AMV handshake, decode->RadarStateBus, radar tail-light auto-mode (reaches the link state via `RadarLinkStateGateway`) |
-| `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda, reports switch-offs via `DashcamLinkGateway`) |
-| `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight cooldown. `scheduleRead` (in the service) owns the throttle and calls it |
+| `app/src/main/java/es/jjrh/bikeradar/CameraLightLinkController.kt` | Front camera/light BLE link: reconnect loop, AMV (FRONT_CAMERA) handshake, mode-state loop, time-of-day light auto-mode (optional accessory; reads the radar off-time via an injected lambda, reports handshakes, switch-offs and link ends via `DashcamLinkGateway`) |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryReader.kt` | One-shot GATT battery reads (0x2A19) for radar/dashcam -> BatteryStateBus + HA; the in-flight guard. `scheduleRead` (in the service) owns the throttle and calls it |
+| `app/src/main/java/es/jjrh/bikeradar/DashcamProbe.kt` | The dashcam liveness probe's tick and its pure launch decision, including the walk-away alarm's armed cadence |
 | `app/src/main/java/es/jjrh/bikeradar/CaptureLogManager.kt` | Per-ride capture-log lifecycle (open/close/gzip/prune); opt-in |
 | `app/src/main/java/es/jjrh/bikeradar/LinkProbe.kt` | Pure formatter and parser for the stored connection probe (discovered GATT table + abort token) the diagnostic bundle prints |
 | `app/src/main/java/es/jjrh/bikeradar/BuildStamp.kt` | Pure formatter for the capture header's build-provenance line, plus the BuildConfig binding; release builds carry no commit |

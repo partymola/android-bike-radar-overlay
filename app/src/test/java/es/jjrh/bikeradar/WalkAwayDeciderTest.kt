@@ -17,7 +17,7 @@ class WalkAwayDeciderTest {
         config: WalkAwayDecider.Config = this.config,
         radarConnected: Boolean = false,
         radarOffSinceMs: Long? = 0L,
-        dashcamLastAdvertMs: Long = nowMs - 5_000L,
+        dashcamHeardAtMs: Long = nowMs - 5_000L,
         dashcamSwitchedOff: Boolean = false,
         armed: Boolean = true,
         sessionTotalRadarConnectedMs: Long = 5 * 60_000L,
@@ -28,7 +28,7 @@ class WalkAwayDeciderTest {
         config = config,
         radarConnected = radarConnected,
         radarOffSinceMs = radarOffSinceMs,
-        dashcamLastAdvertMs = dashcamLastAdvertMs,
+        dashcamHeardAtMs = dashcamHeardAtMs,
         dashcamSwitchedOff = dashcamSwitchedOff,
         armed = armed,
         sessionTotalRadarConnectedMs = sessionTotalRadarConnectedMs,
@@ -93,10 +93,10 @@ class WalkAwayDeciderTest {
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(packedUp))
     }
 
-    @Test fun `does not fire if last dashcam advert is stale`() {
+    @Test fun `does not fire if the dashcam was last heard over 20 s ago`() {
         val now = 10 * 60_000L
-        val staleAdvert = input(nowMs = now, dashcamLastAdvertMs = now - 25_000L)
-        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(staleAdvert))
+        assertEquals(WalkAwayDecider.Action.FIRE, WalkAwayDecider.decide(input(nowMs = now, dashcamHeardAtMs = now - 20_000L)))
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(input(nowMs = now, dashcamHeardAtMs = now - 20_001L)))
     }
 
     @Test fun `a switched-off dashcam does not fire however recent its last read`() {
@@ -129,31 +129,25 @@ class WalkAwayDeciderTest {
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(dismissed))
     }
 
-    // ── auto-dismiss ─────────────────────────────────────────────────────────
+    // ── a fired alarm ────────────────────────────────────────────────────────
 
-    @Test fun `auto-dismisses stale fire after window`() {
-        val now = 20 * 60_000L
-        val stale = input(nowMs = now, lastFireMs = now - 11 * 60_000L)
-        assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_TIME_LIMIT, WalkAwayDecider.decide(stale))
-    }
-
-    @Test fun `auto-dismiss takes precedence over rate limit`() {
-        // A fire 2 min ago is inside the 5 min rate limit and past a 1 min
-        // time limit: the time limit must win.
-        val now = 20 * 60_000L
-        val both = input(nowMs = now, config = config.copy(autoDismissAfterFireMs = 60_000L), lastFireMs = now - 2 * 60_000L)
-        assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_TIME_LIMIT, WalkAwayDecider.decide(both))
+    @Test fun `a fire long ago with the dashcam still heard sounds again`() {
+        // No time limit: it repeats at the rate limit until the rider
+        // dismisses it or the dashcam goes.
+        val now = 60 * 60_000L
+        val longAgo = input(nowMs = now, radarOffSinceMs = now - 50 * 60_000L, lastFireMs = now - 45 * 60_000L)
+        assertEquals(WalkAwayDecider.Action.FIRE, WalkAwayDecider.decide(longAgo))
     }
 
     @Test fun `switching the dashcam off stops a fired alarm however recent its last read`() {
         val now = 11 * 60_000L
-        val fired = input(nowMs = now, lastFireMs = now - 6 * 60_000L, dashcamLastAdvertMs = now - 1_000L, dashcamSwitchedOff = true)
+        val fired = input(nowMs = now, lastFireMs = now - 6 * 60_000L, dashcamHeardAtMs = now - 1_000L, dashcamSwitchedOff = true)
         assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_SWITCHED_OFF, WalkAwayDecider.decide(fired))
     }
 
     @Test fun `switching the dashcam off inside the rate limit still stops it`() {
         val now = 11 * 60_000L
-        val justFired = input(nowMs = now, lastFireMs = now - 2_000L, dashcamLastAdvertMs = now - 3_000L, dashcamSwitchedOff = true)
+        val justFired = input(nowMs = now, lastFireMs = now - 2_000L, dashcamHeardAtMs = now - 3_000L, dashcamSwitchedOff = true)
         assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_SWITCHED_OFF, WalkAwayDecider.decide(justFired))
     }
 
@@ -163,10 +157,10 @@ class WalkAwayDeciderTest {
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(noFire))
     }
 
-    @Test fun `a switched-off dashcam past the time limit is named as switched off`() {
+    @Test fun `a switched-off dashcam long unheard is named as switched off`() {
         // Both reasons hold; the rider's own act is the one recorded.
         val now = 20 * 60_000L
-        val both = input(nowMs = now, lastFireMs = now - 11 * 60_000L, dashcamLastAdvertMs = now - 60_000L, dashcamSwitchedOff = true)
+        val both = input(nowMs = now, lastFireMs = now - 11 * 60_000L, dashcamHeardAtMs = now - 60_000L, dashcamSwitchedOff = true)
         assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_SWITCHED_OFF, WalkAwayDecider.decide(both))
     }
 
@@ -177,9 +171,22 @@ class WalkAwayDeciderTest {
         val firedThenSilenced = input(
             nowMs = now,
             lastFireMs = now - 60_000L,
-            dashcamLastAdvertMs = now - 21_000L,
+            dashcamHeardAtMs = now - 21_000L,
         )
         assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_NOT_HEARD, WalkAwayDecider.decide(firedThenSilenced))
+        val stillHeard = input(nowMs = now, lastFireMs = now - 60_000L, dashcamHeardAtMs = now - 20_000L)
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(stillHeard))
+    }
+
+    @Test fun `a late wake gives a sounding alarm the window again, but never a fire`() {
+        // The unheard time counts from a wake later than the last hearing, so
+        // the probe's next read can land first; a fire still needs a hearing.
+        val now = 11 * 60_000L
+        val woke = input(nowMs = now, lastFireMs = now - 60_000L, dashcamHeardAtMs = now - 200_000L)
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(woke.copy(dashcamUnheardFromMs = now - 20_000L)))
+        assertEquals(WalkAwayDecider.Action.AUTO_DISMISS_NOT_HEARD, WalkAwayDecider.decide(woke.copy(dashcamUnheardFromMs = now - 20_001L)))
+        val unfired = input(nowMs = now, dashcamHeardAtMs = now - 200_000L)
+        assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(unfired.copy(dashcamUnheardFromMs = now)))
     }
 
     @Test fun `dashcam-silent dismiss is gated on a prior fire`() {
@@ -190,7 +197,7 @@ class WalkAwayDeciderTest {
         val silentNoFire = input(
             nowMs = now,
             lastFireMs = null,
-            dashcamLastAdvertMs = now - 21_000L,
+            dashcamHeardAtMs = now - 21_000L,
         )
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(silentNoFire))
     }
@@ -218,7 +225,7 @@ class WalkAwayDeciderTest {
         val justGotFreshAdvert = input(
             nowMs = now,
             radarOffSinceMs = radarOffSeven,
-            dashcamLastAdvertMs = now - 1_000L, // fresh
+            dashcamHeardAtMs = now - 1_000L, // fresh
             armed = false, // BLANK - service disarmed
         )
         assertEquals(WalkAwayDecider.Action.NONE, WalkAwayDecider.decide(justGotFreshAdvert))
@@ -234,7 +241,7 @@ class WalkAwayDeciderTest {
             radarConnected = false,
             radarOffSinceMs = 0L,
             sessionTotalRadarConnectedMs = 5 * 60_000L,
-            dashcamLastAdvertMs = 10 * 60_000L - 5_000L,
+            dashcamHeardAtMs = 10 * 60_000L - 5_000L,
             lastFireMs = null,
             dismissedForEpisode = false,
         )

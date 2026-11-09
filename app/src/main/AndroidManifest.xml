@@ -21,13 +21,18 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- WAKE_LOCK: two bounded locks, each with a hard timeout cap and released
-         the moment its case resolves. One during a live-ride off-episode (the
-         radar dropped while the rider is still moving), one for the 20 s check
-         after a drop that may be a radar left on (cap 35 s, taken again if the
-         check restarts). See the
-         wakelock-posture rationale on the service below, RideWakeLock, and the
-         Privacy screen. -->
+    <!-- WAKE_LOCK: three bounded locks, each with a hard timeout cap and released
+         when its case resolves. One during a live-ride off-episode (the radar
+         dropped while the rider is still moving), one for the 20 s check after
+         a drop that may be a radar left on (cap 35 s, taken again if the check
+         restarts), and one, with the dashcam walk-away alarm on and a dashcam
+         chosen, from a drop that alarm can sound for until it sounds, the
+         dashcam is switched off or goes unheard, the radar comes back, the
+         rider dismisses or snoozes it, the radar-left-on alarm sounds or
+         Bluetooth goes off (cap the rider's threshold plus 15 s; switching
+         the alarm off or the dashcam out mid-wait leaves it to the cap). See
+         the wakelock-posture rationale on the service below, RideWakeLock, and
+         the Privacy screen. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Approximate location is used solely to compute sunrise/sunset for the
@@ -129,8 +134,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Wakelock posture: the FGS's implicit wakelock is sufficient while
-             the device is awake or dozing-light. In deep Doze, `delay()` ticks
+        <!-- Wakelock posture: a foreground service holds no wakelock of its
+             own. In deep Doze, `delay()` ticks
              driving the V2 watchdog and walk-away timer are deferred until the
              next maintenance window - fine for a parked phone, but a rider whose
              radar drops MID-RIDE with no other BLE accessory (no dashcam probe
@@ -140,12 +145,22 @@
              rider was recently moving, released on reconnect / walk-away BLANK /
              ride summary, and hard-capped so it can never persist. The old
              blanket "no wakelock" concern was the parked-phone idle case, which
-             the ride lock's recent-activity gate excludes. The one parked-phone
-             hold is the radar-left-on check's second instance: from a
+             the ride lock's recent-activity gate excludes. Two holds are for a
+             parked phone. The radar-left-on check's second instance: from a
              qualifying drop until its alarm sounds, the radar comes back,
              Bluetooth goes off or the switch is turned off, capped at 35 s per
              check (a link that opens and closes again restarts the check); an
-             ordinary switch-off never takes it. -->
+             ordinary switch-off never takes it. And the dashcam walk-away
+             alarm's third, with that alarm on and a dashcam chosen: from a
+             drop that alarm can sound for until it sounds, the dashcam is
+             switched off or goes unheard, the radar comes back, the rider
+             dismisses or snoozes it, the radar-left-on alarm sounds or
+             Bluetooth goes off, capped at the threshold plus 15 s (135 s at
+             the longest). It keeps the alarm's threshold and its re-reads of
+             the camera on time. After it sounds this lock is released: the
+             camera's unheard time then counts from the first wake after each
+             hearing, giving its read 20 s to land, and its answer runs the
+             alarm's tick at once. -->
         <service
             android:name=".BikeRadarService"
             android:exported="false"

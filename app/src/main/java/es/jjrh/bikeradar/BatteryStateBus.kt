@@ -13,9 +13,12 @@ data class BatteryEntry(
     val name: String,
     val pct: Int,
     val readAtMs: Long = System.currentTimeMillis(),
-    /** Monotonic (elapsedRealtime) sibling of [readAtMs]. Control-loop staleness
-     *  that must survive a wall-clock jump - the walk-away alarm's dashcam-advert
-     *  freshness - reads this; [readAtMs] stays wall for UI display. */
+    /** Monotonic (elapsedRealtime) sibling of [readAtMs], for staleness that
+     *  must survive a wall-clock jump: the dashcam probe's ride cadence reads
+     *  it, while the overlay's camera glyph and the screens read [readAtMs].
+     *  The walk-away alarm reads neither
+     *  (`RadarLinkCoordinator.dashcamHeardAtMs`,
+     *  `RadarLinkCoordinatorTest.aSightingWithNoContactIsNotHeard`). */
     val lastSeenElapsedMs: Long = SystemClock.elapsedRealtime(),
 )
 
@@ -46,12 +49,13 @@ object BatteryStateBus {
         _entries.update { it + (entry.slug to entry) }
     }
 
-    /** Refresh readAtMs (wall, UI) and lastSeenElapsedMs (monotonic, the
-     *  control-loop freshness the walk-away alarm reads) on an existing entry
-     *  without changing pct. Used when we see the device in an advert but the
-     *  throttle is skipping the actual GATT read - the advert proves liveness.
-     *  No-op if the slug has no prior entry (first sighting still goes through
-     *  a full read + [update]). */
+    /** Refresh readAtMs (wall, what the glyph and screens show) and
+     *  lastSeenElapsedMs (monotonic, the probe's ride cadence) on an existing
+     *  entry without changing pct. Used when we
+     *  see the device in an advert but the throttle is skipping the actual
+     *  GATT read: the advert proves liveness to the screen, and is no contact
+     *  as far as the walk-away alarm is concerned. No-op if the slug has no
+     *  prior entry (first sighting still goes through a full read + [update]). */
     fun markSeen(
         slug: String,
         nowMs: Long = System.currentTimeMillis(),

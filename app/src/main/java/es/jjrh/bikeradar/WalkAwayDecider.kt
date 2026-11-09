@@ -18,7 +18,7 @@ package es.jjrh.bikeradar
  *   IDLE        -- radar streaming, riding. No leave-behind possible.
  *   ARMED       -- radar just disconnected, dashcam still seen as alive.
  *                  This is the only state in which FIRE can be returned.
- *   BLANK       -- radar still off but dashcam switched off, or silent long
+ *   BLANK       -- radar still off but dashcam switched off, or unheard long
  *                  enough that the rider is judged to have intentionally
  *                  packed up (or the kit died). No alarm possible until
  *                  the radar streams again on a new ride; subsequent
@@ -26,10 +26,11 @@ package es.jjrh.bikeradar
  *                  next IDLE -> ARMED transition.
  *
  * Transitions:
- *   IDLE  -> ARMED : on radar disconnect (caller stamps).
+ *   IDLE  -> ARMED : on radar disconnect (caller stamps), unless the radar
+ *                    showed riding just before it.
  *   ARMED -> BLANK : caller observed dashcam switched off
- *                    ([Input.dashcamSwitchedOff]), or stale for
- *                    [Input.armed]'s full disarm window, with radar still off.
+ *                    ([Input.dashcamSwitchedOff]), or unheard for
+ *                    [Config.dashcamFreshMs], with radar still off.
  *   ARMED -> IDLE  : radar streams again (next ride begins).
  *   BLANK -> IDLE  : radar streams again (caller resets `armed` to true on
  *                    the next disconnect, NOT on advert returns within
@@ -63,12 +64,6 @@ object WalkAwayDecider {
         /** Cancel a fired alarm: the dashcam has not been heard for
          *  [Config.dashcamFreshMs]. */
         AUTO_DISMISS_NOT_HEARD,
-
-        /** [Config.autoDismissAfterFireMs] since the last fire. Reached only
-         *  after the rider dismissed it: undismissed, it sounds again at
-         *  [Config.rateLimitMs] first (at the defaults)
-         *  (`DashcamSwitchOffTest.theTimeLimitOnlyFollowsADismissAndAddsNoLine`). */
-        AUTO_DISMISS_TIME_LIMIT,
     }
 
     data class Config(
@@ -80,14 +75,15 @@ object WalkAwayDecider {
          *  decider is allowed to fire. Prevents alarms during the
          *  first few seconds after service start, where the radar is
          *  still going through the enabling sequence. */
-        val coldStartRadarMs: Long = 60_000L,
-        /** No new fire within this window after a previous fire. */
+        val coldStartRadarMs: Long = COLD_START_RADAR_MS,
+        /** No new fire within this window after a previous fire. Past it, a
+         *  dashcam still heard sounds again, until the rider dismisses it
+         *  (`DashcamHeardWindowTest`). */
         val rateLimitMs: Long = 300_000L,
-        /** Maximum time since the last dashcam advert for "dashcam
-         *  is still alive" to hold. */
+        /** How long after the dashcam was last heard it still counts as on.
+         *  The probe re-reads an armed episode's camera inside it
+         *  ([DashcamProbe.ARMED_REFRESH_MS]). */
         val dashcamFreshMs: Long = 20_000L,
-        /** Time from the last fire to [Action.AUTO_DISMISS_TIME_LIMIT]. */
-        val autoDismissAfterFireMs: Long = 600_000L,
     )
 
     data class Input(
@@ -102,10 +98,16 @@ object WalkAwayDecider {
          *  the radar is currently streaming or has never been off
          *  this session. */
         val radarOffSinceMs: Long?,
-        /** Monotonic timestamp of the last dashcam BLE advert. A fired
-         *  alarm whose dashcam has gone unheard this long stops at once
-         *  ([Action.AUTO_DISMISS_NOT_HEARD]). */
-        val dashcamLastAdvertMs: Long,
+        /** Monotonic instant the dashcam was last heard
+         *  (`RadarLinkCoordinator.dashcamHeardAtMs`). A FIRE needs a hearing
+         *  within [Config.dashcamFreshMs]. */
+        val dashcamHeardAtMs: Long,
+        /** Where a fired alarm's unheard time counts from: [dashcamHeardAtMs],
+         *  or a later wake from a sleep both loops slept through, so the
+         *  probe's next read can land first. Past [Config.dashcamFreshMs] of
+         *  it the alarm stops at once ([Action.AUTO_DISMISS_NOT_HEARD],
+         *  `DashcamHeardWindowTest.aLateWakeAfterTheAlarmSoundedDoesNotEndIt`). */
+        val dashcamUnheardFromMs: Long = dashcamHeardAtMs,
         /** [RadarLinkState.dashcamSwitchedOffMac] names the selected
          *  dashcam (that field lists what clears it): it counts as off,
          *  however recent its last read. No default, so no caller can
@@ -121,8 +123,8 @@ object WalkAwayDecider {
          *           dashcam still alive on the bike. FIRE is gated on
          *           this state.
          *    BLANK  (armed=false): radar still off but the rider has
-         *           clearly packed up: dashcam switched off, or silent
-         *           for ≥dashcamFreshMs since radar disconnect. The rider
+         *           clearly packed up: dashcam switched off, or unheard
+         *           for over dashcamFreshMs since radar disconnect. The rider
          *           has done something deliberate (turned the camera
          *           off, the kit died, etc.) so this off-episode is
          *           NOT a leave-behind risk. Stays BLANK until the
@@ -131,9 +133,10 @@ object WalkAwayDecider {
          *
          *  Caller transitions:
          *    IDLE  -> ARMED : on radar disconnect (`markDisconnected`).
-         *    ARMED -> BLANK : when the dashcam is switched off, or
-         *                     stale-since-or-before-radar-off exceeds the
-         *                     freshness window, during the tick
+         *    ARMED -> BLANK : when the dashcam is switched off, or goes
+         *                     unheard for longer than the freshness window
+         *                     since the later of the drop and its last
+         *                     hearing, during the tick
          *                     (see `RadarLinkCoordinator.tickWalkAwayState`).
          *    ARMED -> IDLE  : on the radar's first frame (`markConnected`).
          *    BLANK -> IDLE  : on the radar's first frame.
@@ -162,20 +165,13 @@ object WalkAwayDecider {
 
         // A fired alarm whose reason is gone stops at once: the
         // dashcam switched off, or not heard for dashcamFreshMs.
-        // Ahead of the rate limit and the time limit, and switched
-        // off ahead of not heard (`a switched-off dashcam past the
-        // time limit is named as switched off`).
+        // Ahead of the rate limit, and switched off ahead of not heard
+        // (`a switched-off dashcam long unheard is named as switched off`).
         if (i.lastFireMs != null && i.dashcamSwitchedOff) {
             return Action.AUTO_DISMISS_SWITCHED_OFF
         }
-        if (i.lastFireMs != null && i.nowMs - i.dashcamLastAdvertMs > c.dashcamFreshMs) {
+        if (i.lastFireMs != null && i.nowMs - i.dashcamUnheardFromMs > c.dashcamFreshMs) {
             return Action.AUTO_DISMISS_NOT_HEARD
-        }
-
-        // The time limit: at the defaults, reached only after the
-        // rider's dismiss ([Action.AUTO_DISMISS_TIME_LIMIT]).
-        if (i.lastFireMs != null && i.nowMs - i.lastFireMs >= c.autoDismissAfterFireMs) {
-            return Action.AUTO_DISMISS_TIME_LIMIT
         }
 
         // Rate limit: no second fire within the window.
@@ -209,16 +205,16 @@ object WalkAwayDecider {
         // already locked up next to a dashcam that's still on.
         if (i.sessionTotalRadarConnectedMs < c.coldStartRadarMs) return Action.NONE
 
-        // Dashcam must currently be alive. (The "has adverted since
-        // radar off" guard from the previous design is now subsumed
-        // by the `armed` state gate above: if `armed` is true, by
-        // construction the dashcam was alive at radar-off time and
-        // has been continuously sighted since — caller-side disarm
-        // logic flips `armed` to false the moment the dashcam goes
-        // stale during an off-episode.)
-        if (i.nowMs - i.dashcamLastAdvertMs > c.dashcamFreshMs) return Action.NONE
+        // Dashcam must currently be heard. While `armed` holds it has not
+        // gone unheard for the window since the drop; this checks the
+        // instant itself.
+        if (i.nowMs - i.dashcamHeardAtMs > c.dashcamFreshMs) return Action.NONE
         if (i.dashcamSwitchedOff) return Action.NONE
 
         return Action.FIRE
     }
+
+    /** [Config.coldStartRadarMs]'s default, which the coordinator also reads
+     *  to tell whether the alarm can still sound. */
+    const val COLD_START_RADAR_MS = 60_000L
 }

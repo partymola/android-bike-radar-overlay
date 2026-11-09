@@ -53,20 +53,32 @@ internal class HaPublisher(
 
     private fun client() = HaClient(creds.baseUrl, creds.token)
 
-    // Throttles HA publishes driven by the 2a19 notify stream (~5 s cadence).
-    // Publishes immediately on pct change; otherwise one heartbeat every
-    // BATTERY_HA_HEARTBEAT_MS to keep HA's last-update recent.
-    suspend fun maybePublishBatteryToHa(name: String, pct: Int) {
+    /**
+     * Publishes [pct] when it differs from the last value published for this
+     * device, or [BATTERY_HA_HEARTBEAT_MS] after it, so HA's last-update stays
+     * recent; records it on success. The notify streams and the battery reads
+     * (the dashcam probe reads every few seconds while its alarm waits) all
+     * come through here. True when nothing needed sending or the send
+     * succeeded, so a caller's throttle arms; false on a failed send.
+     */
+    suspend fun publishBatteryIfChanged(name: String, pct: Int): Boolean {
         val s = slug(name)
         val now = System.currentTimeMillis()
         val lastPct = lastPublishedPct[s]
         val lastMs = lastHaPublishMs[s] ?: 0L
         val shouldPublish = pct != lastPct || (now - lastMs) >= BATTERY_HA_HEARTBEAT_MS
-        if (!shouldPublish) return
-        if (publishBatteryToHa(name, pct)) {
+        if (!shouldPublish) return true
+        val ok = publishBatteryToHa(name, pct)
+        if (ok) {
             lastHaPublishMs[s] = now
             lastPublishedPct[s] = pct
         }
+        return ok
+    }
+
+    /** [publishBatteryIfChanged] for the notify streams, which keep no throttle. */
+    suspend fun maybePublishBatteryToHa(name: String, pct: Int) {
+        publishBatteryIfChanged(name, pct)
     }
 
     /**
@@ -95,10 +107,10 @@ internal class HaPublisher(
     }
 
     /**
-     * Publishes a battery percentage. Returns true on success - and also when
+     * Publishes a battery percentage. Returns true on success, and also when
      * HA isn't configured at all, so the caller's throttle arms instead of
      * retrying every advert. A transient HA failure returns false so the next
-     * advert retries within the cooldown rather than after the 5-min heartbeat.
+     * advert retries rather than waiting for the 5-min heartbeat.
      */
     suspend fun publishBatteryToHa(name: String, pct: Int): Boolean {
         val ha = client()

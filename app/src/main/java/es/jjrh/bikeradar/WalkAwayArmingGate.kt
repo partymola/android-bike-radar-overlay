@@ -8,9 +8,11 @@ package es.jjrh.bikeradar
  * stateless and unchanged; this gate is the caller-owned arming bit's
  * single point of eBike-aware decision.
  *
- * Semantics: arming is suppressed in exactly ONE case - a FRESH eBike
+ * Semantics: this gate suppresses arming in exactly ONE case: a FRESH eBike
  * snapshot reporting `system_locked = false` (rider is actively on the
- * bike, so a mid-ride radar BLE blip must not arm). Every other case
+ * bike, so a mid-ride radar BLE blip must not arm). The coordinator also
+ * withholds it for a drop the radar showed riding up to, unless the bike
+ * read locked after that (`DashcamRidingGateTest`). Every other case
  * arms (fail toward protecting the bike):
  *
  *   - FRESH `system_locked = false` → rider on the bike. Suppress.

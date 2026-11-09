@@ -83,12 +83,16 @@ screen stays yours.
   command to the bike.
 - Walk-away alarm: if the radar goes off and the phone still picks up the
   dashcam, the phone sounds its alarm at full volume and vibrates. It waits a
-  time you set, 30 seconds by default. It repeats every 5 minutes until you
+  time you set, 30 seconds by default, then repeats every 5 minutes until you
   dismiss it. It stops if the radar comes back or the phone stops picking up
-  the dashcam. With eBike data on and Bosch Flow running, it stays quiet if
-  the bike was unlocked when the radar dropped. If the radar's own alarm
-  sounds, this one stays quiet, and the radar's alarm names the dashcam if
-  the phone was picking it up.
+  the dashcam, and, without the front-camera light auto-mode, about 15
+  minutes after the radar went off. It stays quiet if the radar goes off
+  while you ride or in the 30 seconds after you stop; with a radar that
+  reports range only, it can sound while you ride. With eBike data on and
+  Bosch Flow running, it still sounds if you lock the bike and walk straight
+  off, and stays quiet if the bike was unlocked when the radar went off. If
+  the radar's own alarm sounds, this one stays quiet, and the radar's alarm
+  names the dashcam if the phone was picking it up.
 - Radar left on: if you walk away with the radar still on, the phone sounds
   the same alarm once. Works with the radar alone. It learns your radar
   first: it can sound only after the phone has seen your radar switched off
@@ -419,11 +423,15 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   capturas, que está desactivado por defecto. Nunca envía órdenes a la bici.
 - Alarma al alejarte: si el radar se desconecta y el teléfono sigue
   detectando la cámara delantera, el teléfono hace sonar su alarma a todo
-  volumen y vibra. Espera el tiempo que elijas, 30 s por defecto. Se repite
+  volumen y vibra. Espera el tiempo que elijas, 30 s por defecto, y se repite
   cada 5 min hasta que la descartes. Se detiene si vuelve el radar o el
-  teléfono deja de detectar la cámara. Con los datos de la eBike activados y
-  Bosch Flow en segundo plano, no suena si la bici estaba sin bloquear cuando
-  se cortó el radar. Si suena la alarma del radar, esta no suena, y la del
+  teléfono deja de detectar la cámara y, sin el modo automático de la luz
+  delantera, unos 15 min después de que se desconecte el radar. No suena si el
+  radar se desconecta en marcha o en los 30 s siguientes a parar; con un radar
+  que solo mide la distancia, puede sonar en marcha. Con los datos de la eBike
+  activados y Bosch Flow en segundo plano, sí suena si bloqueas la bici y te
+  alejas enseguida, y no suena si la bici estaba sin bloquear cuando se
+  desconectó el radar. Si suena la alarma del radar, esta no suena, y la del
   radar nombra la cámara si el teléfono la estaba detectando.
 - Radar sin apagar: si te alejas con el radar aún encendido, el teléfono hace
   sonar la misma alarma una vez. No necesita eBike ni cámara delantera. Antes

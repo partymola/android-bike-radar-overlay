@@ -62,7 +62,9 @@ class BikeRadarService : Service() {
             ha = HaClient(creds.baseUrl, creds.token)
         }
 
-    private lateinit var haPublisher: HaPublisher
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var haPublisher: HaPublisher
+        private set
     private lateinit var notifications: ServiceNotifications
 
     @androidx.annotation.VisibleForTesting
@@ -73,7 +75,10 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var cameraLink: CameraLightLinkController
         private set
-    private lateinit var batteryReader: BatteryReader
+
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var batteryReader: BatteryReader
+        private set
     private lateinit var knownDevices: KnownDevices
 
     // Dashcam-probe backoff state (BatteryProbeBackoff): guards against the
@@ -83,6 +88,11 @@ class BikeRadarService : Service() {
     // the radar's link is open; reset on a successful read and at ride start.
     private val lastDashcamProbeMs = ConcurrentHashMap<String, Long>()
     private val dashcamProbeFailures = ConcurrentHashMap<String, Int>()
+
+    // When each dashcam last answered a battery read, by upper-case address:
+    // written by BatteryReader, read by the walk-away alarm.
+    @androidx.annotation.VisibleForTesting
+    internal val dashcamAnsweredMs = ConcurrentHashMap<String, Long>()
 
     @Volatile private var scanRegistered = false
 
@@ -195,7 +205,13 @@ class BikeRadarService : Service() {
     @androidx.annotation.VisibleForTesting
     internal lateinit var radarLeftOnWakeLock: RideWakeLock
 
-    // Both wakelocks are taken and released for good under one lock, so a drop
+    // Held from a drop the dashcam alarm can sound for until it sounds or can
+    // no longer sound (RadarLinkCoordinator.dashcamAlarmCanSound lists when).
+    // Bounded by the threshold plus WALK_AWAY_WAKELOCK_SLACK_MS.
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var walkAwayWakeLock: RideWakeLock
+
+    // The wakelocks are taken and released for good under one lock, so a drop
     // racing onDestroy, including the one the cancelled link loop reports,
     // cannot take either after its last release
     // (`aRadarLeftOnDropAfterTheServiceStopsTakesNoWakeLock`).
@@ -205,9 +221,10 @@ class BikeRadarService : Service() {
     // Set when onCreate stopped before building the links; read on Main only.
     private var stoppedWithoutNearby = false
 
-    // Wakes launchWalkAwayTick out of its idle delay the instant the radar
-    // drops, so the loop flips to its 2 s cadence and the first dead-radar
-    // evaluation lands on time (not up to 30 s late). CONFLATED: a queued kick
+    // Wakes launchWalkAwayTick out of its delay: the instant the radar drops,
+    // so the loop flips to its 2 s cadence and the first dead-radar
+    // evaluation lands on time (not up to 30 s late), and on the coordinator's
+    // other edges, the dashcam's answer among them. CONFLATED: a queued kick
     // during the tick body coalesces to one early wake, never a backlog.
     private val walkAwayKick = Channel<Unit>(Channel.CONFLATED)
 
@@ -340,6 +357,7 @@ class BikeRadarService : Service() {
         scope.launch { prefs.flow.collect { cachedOverlayPrefs = it } }
         rideWakeLock = RideWakeLock(this)
         radarLeftOnWakeLock = RideWakeLock(this, RideWakeLock.RADAR_LEFT_ON_TAG)
+        walkAwayWakeLock = RideWakeLock(this, RideWakeLock.WALK_AWAY_TAG)
         scope.launch {
             RadarStateBus.state.collect {
                 if (it.vehicles.isNotEmpty()) sawTrack = true
@@ -492,6 +510,7 @@ class BikeRadarService : Service() {
             journal = linkJournal::log,
             setReconnectBanner = ::setReconnectBanner,
             resolveDashcamSlug = ::resolveDashcamSlug,
+            dashcamAnsweredAtMs = { prefs.activeDashcamMac?.let { dashcamAnsweredMs[it.uppercase(Locale.ROOT)] } },
             eBikeSnapshot = { ebikeSnapshotCoordinator.lastSnapshotAnyAge() },
             eBikeSnapshotAtMs = { ebikeSnapshotCoordinator.snapshotAtMs() },
             eBikeRidingSinceMs = { nowMs -> ebikeSnapshotCoordinator.ridingSinceMs(nowMs) },
@@ -530,6 +549,12 @@ class BikeRadarService : Service() {
                 }
             },
             releaseRadarLeftOnWakeLock = { radarLeftOnWakeLock.release() },
+            acquireWalkAwayWakeLock = { capMs ->
+                synchronized(wakeLockGate) {
+                    if (!stopping) walkAwayWakeLock.acquire(capMs)
+                }
+            },
+            releaseWalkAwayWakeLock = { walkAwayWakeLock.release() },
         )
         radarLinkStateForUi = radarLinkCoordinator.radarLinkState
         flushCaptureLogForUi = { captureLog.flushNow() }
@@ -567,10 +592,12 @@ class BikeRadarService : Service() {
             scope = scope,
             prefs = prefs,
             knownDevices = knownDevices,
-            publishBattery = haPublisher::publishBatteryToHa,
+            publishBattery = haPublisher::publishBatteryIfChanged,
             macToSlug = macToSlug,
             slug = { name -> slug(name) },
             dashcamProbeFailures = dashcamProbeFailures,
+            dashcamAnsweredAtMs = dashcamAnsweredMs,
+            onDashcamAnswered = radarLinkCoordinator::onDashcamAnswered,
         )
 
         pruneCaptureLogs()
@@ -817,6 +844,7 @@ class BikeRadarService : Service() {
             stopping = true
             if (::rideWakeLock.isInitialized) rideWakeLock.release()
             if (::radarLeftOnWakeLock.isInitialized) radarLeftOnWakeLock.release()
+            if (::walkAwayWakeLock.isInitialized) walkAwayWakeLock.release()
         }
         // After scope.cancel(), not before: the reconnect loop opens the file at
         // the top of every attempt in transcript mode, so closing it while that
@@ -917,10 +945,12 @@ class BikeRadarService : Service() {
         if (isDashcam && (cameraLink.isGattActive() || cameraLink.isActive())) {
             // A live link only. The cache replay (kickstartFromCache) and a
             // pairing (onDeviceBonded) arrive with no contact from the camera,
-            // and must not count a switched-off one as on while the loop only
+            // and must not show a switched-off one as on while the loop only
             // reconnects. A scan wake is held off too; the dashcam probe
-            // stamps a camera that answers (RadarLinkState.dashcamSwitchedOffMac,
-            // `DashcamSwitchOffServiceTest.aCameraLinkThatIsOnlyReconnectingDoesNotStampTheCameraSeen`).
+            // stamps a camera that answers
+            // (`DashcamSwitchOffServiceTest.aCameraLinkThatIsOnlyReconnectingDoesNotStampTheCameraSeen`).
+            // The walk-away alarm reads none of these stamps
+            // (`RadarLinkCoordinatorTest.aSightingWithNoContactIsNotHeard`).
             if (cameraLink.isGattActive()) {
                 BatteryStateBus.markSeen(slug(name), System.currentTimeMillis(), SystemClock.elapsedRealtime())
             }
@@ -1094,15 +1124,15 @@ class BikeRadarService : Service() {
      * the radar connection's overlay coroutine. The collector inside
      * overlayJob only runs while the radar is connected; once the radar
      * disconnects, that coroutine is cancelled and its dashcam refresh
-     * dies with it. The walk-away alarm and the in-app main-page glyph
-     * (which reads BatteryStateBus directly) both need the dashcam
-     * entry to keep advancing across the disconnect, so this lives at
-     * service scope and runs from onCreate to onDestroy.
+     * dies with it. The walk-away alarm (through the answers BatteryReader
+     * records) and the in-app main-page glyph (which reads BatteryStateBus
+     * directly) both need the camera read across the disconnect, so this
+     * lives at service scope and runs from onCreate to onDestroy.
      */
     private fun launchDashcamRefresh() {
         val probe = DashcamProbe(
             prefs = prefs,
-            linkState = radarLinkCoordinator::snapshot,
+            coordinator = radarLinkCoordinator,
             dashcamSlug = ::resolveDashcamSlug,
             batteryReader = batteryReader,
             lastProbeMs = lastDashcamProbeMs,
@@ -1122,10 +1152,10 @@ class BikeRadarService : Service() {
         scope.launch {
             var prevTickMs = SystemClock.elapsedRealtime()
             while (true) {
-                // Sleep for the cadence, but a radar drop (markDisconnected ->
-                // walkAwayKick) short-circuits the wait so the loop re-reads
-                // the cadence immediately and flips to the 2 s one, instead of
-                // finishing out up to 30 s of the idle delay.
+                // Sleep for the cadence, but a kick short-circuits the wait.
+                // After a radar drop (markDisconnected -> walkAwayKick) the
+                // loop re-reads the cadence immediately and flips to the 2 s
+                // one, instead of finishing out up to 30 s of the idle delay.
                 withTimeoutOrNull(walkAwayTickDelayMs()) {
                     walkAwayKick.receive()
                 }
@@ -1397,30 +1427,31 @@ class BikeRadarService : Service() {
 
         const val BATTERY_STALE_MS = 15 * 60 * 1000L
 
-        // Dashcam presence-by-advert timing. Fresh threshold accommodates
-        // SCAN_MODE_LOW_POWER batching; cold-start grace covers the window
-        // between overlay activation and the first received advert.
+        // Dashcam presence timing. The cold-start grace covers the window
+        // between overlay activation and the first reading.
         const val DASHCAM_TICK_MS = 2_000L
-        const val DASHCAM_FRESH_MS = 30_000L
         const val DASHCAM_COLD_START_MS = 10_000L
 
         // Some dashcams (Garmin Vue) don't put the 0xfe1f service UUID
         // in their adverts, so the controller-level scan filter never
         // wakes BatteryScanReceiver and there's no advert-driven
         // markSeen path. Without a periodic probe the entry ages past
-        // DASHCAM_FRESH_MS within seconds of the cold-start kickstart
-        // read, flipping the glyph to Dropped. The dashcam-status
-        // ticker fires a real GATT read every DASHCAM_REFRESH_MS so
-        // the glyph reflects whether the camera is actually responding
-        // - bumping readAtMs via the throttle path's markSeen would
-        // falsely keep it green for up to THROTTLE_MS after a power-off,
-        // defeating the alarm. Set just under DASHCAM_FRESH_MS so a
-        // single failed probe is enough to flip the glyph red.
+        // DASHCAM_FRESH_MS soon after the cold-start kickstart read,
+        // flipping the glyph to Dropped. The dashcam-status ticker fires
+        // a real GATT read once the reading is DASHCAM_REFRESH_MS old so
+        // the glyph reflects whether the camera is actually responding.
         const val DASHCAM_REFRESH_MS = 20_000L
+
+        // The oldest a camera answering every read gets on that cadence: a
+        // read starts at DASHCAM_REFRESH_MS of age on a DASHCAM_TICK_MS tick
+        // and gives up after BatteryReader.READ_TIMEOUT_MS. The glyph shows
+        // it Dropped past this.
+        const val DASHCAM_FRESH_MS = DASHCAM_REFRESH_MS + DASHCAM_TICK_MS + BatteryReader.READ_TIMEOUT_MS
 
         // Connect-storm guard: while the radar's link is open, a dashcam whose
         // liveness probe keeps failing (powered off) is retried with doubling
-        // backoff (base DASHCAM_REFRESH_MS) capped here, so it can't connect-storm
+        // backoff (base DASHCAM_REFRESH_MS, or DashcamProbe.ARMED_REFRESH_MS
+        // while the dashcam alarm can still sound) capped here, so it can't connect-storm
         // the radar link. 60s: a dashcam switched back on mid-ride is re-detected
         // within <=60s (auto-light-off config; the camera-light link detects
         // faster when on). Backoff never applies while no radar link is open.

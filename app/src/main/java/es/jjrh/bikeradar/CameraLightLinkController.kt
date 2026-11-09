@@ -27,12 +27,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** What the front camera link tells the dashcam walk-away alarm. Implemented by
  *  [RadarLinkCoordinator]. */
 internal interface DashcamLinkGateway {
-    /** A handshake completed: the camera is on. */
-    fun markDashcamHeard()
+    /** A handshake completed: the camera is on, and heard until its link ends. */
+    fun markDashcamHeard(mac: String)
 
     /** The camera ended a link whose handshake completed
      *  ([CameraLightLinkController.isSwitchOff]). */
     fun markDashcamSwitchedOff(mac: String)
+
+    /** A connection ended, whatever ended it: reported from its teardown. */
+    fun markDashcamLinkDown()
 
     /** The link loop ended. Until a sighting starts it again, nothing reports the camera. */
     fun markDashcamLinkGone()
@@ -46,7 +49,8 @@ internal interface DashcamLinkGateway {
  * unlike the radar it owns no shared service state. It reads the radar's
  * off-time [radarOffSinceMs], the "bike parked" proxy for the long-offline
  * reconnect-backoff cap (shared with the radar loop), and reports the camera's
- * switch-offs and handshakes, and its loop's end, to [dashcamLink].
+ * handshakes, switch-offs, each connection's end and its loop's end to
+ * [dashcamLink].
  *
  * The service keeps `scope`; this controller launches its connection coroutine
  * on the injected scope, so the service's onDestroy scope.cancel() tears it down.
@@ -353,7 +357,7 @@ internal class CameraLightLinkController(
             journal("camera handshake complete")
             // Heard first: a switch-off landing between the two is then not
             // counted, rather than counted and at once cleared.
-            dashcamLink.markDashcamHeard()
+            dashcamLink.markDashcamHeard(device.address)
             handshakeDone.set(true)
             // As at the radar's handshake: a live area only with an app screen
             // open, else the saved one (LocationCache).
@@ -452,6 +456,7 @@ internal class CameraLightLinkController(
             // Whatever ended it, a callback after this is the app's close
             // (`aLinkEndedByItsScopeIsNoSwitchOff`).
             endedByApp.set(true)
+            dashcamLink.markDashcamLinkDown()
             cameraLightGattActive = false
             if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = clock()
             sunsetJob?.cancel()

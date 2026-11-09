@@ -65,18 +65,28 @@ class CameraLightLinkControllerHarnessTest {
 
     /** Run as the handshake is reported, inside the controller's coroutine. */
     private var onHeard: () -> Unit = {}
+
+    /** Every report including each connection's end, which [reports] leaves out. */
+    private val edges = Collections.synchronizedList(mutableListOf<String>())
     private val gateway = object : DashcamLinkGateway {
-        override fun markDashcamHeard() {
+        override fun markDashcamHeard(mac: String) {
             reports += "heard"
+            edges += "heard $mac"
             onHeard()
         }
 
         override fun markDashcamSwitchedOff(mac: String) {
             reports += "off $mac"
+            edges += "off"
+        }
+
+        override fun markDashcamLinkDown() {
+            edges += "down"
         }
 
         override fun markDashcamLinkGone() {
             reports += "gone"
+            edges += "gone"
         }
     }
 
@@ -618,6 +628,31 @@ class CameraLightLinkControllerHarnessTest {
         disconnect(link, 257)
         runCurrent()
         assertEquals(listOf("heard", "gone"), reports.toList())
+    }
+
+    @Test fun everyEndOfAConnectionIsReportedAfterTheHandshakeNamedTheCamera() = runTest {
+        // What keeps the camera heard while its link is up, and only then.
+        val link = Link()
+        val controller = controller(link)
+        startDriver(link)
+
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        handshake(link, 1)
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 3 })
+        handshake(link, 2)
+        disconnect(link, 257)
+        assertTrue("edges=$edges", pumpUntil { link.openCount >= 4 })
+        controller.stop()
+        assertTrue(pumpUntil { edges.lastOrNull() == "gone" })
+        assertEquals(
+            listOf("down", "heard $mac", "down", "heard $mac", "off", "down", "down", "gone"),
+            edges.toList(),
+        )
     }
 
     @Test fun theLoopEndingReportsTheLinkGoneAndALinkTheAppEndedIsNoSwitchOff() = runTest {

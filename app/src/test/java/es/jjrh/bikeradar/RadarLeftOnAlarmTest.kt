@@ -47,6 +47,9 @@ class RadarLeftOnAlarmTest {
     private var ebikeAtMs: Long? = null
     private var batteryPct: Int? = 60
     private var dashcamSlug: String? = null
+
+    /** When the camera last answered a battery read. */
+    private var answeredMs: Long? = null
     private var onPost: () -> Unit = {}
 
     @Before
@@ -66,6 +69,7 @@ class RadarLeftOnAlarmTest {
             journal = { journal += it },
             setReconnectBanner = {},
             resolveDashcamSlug = { dashcamSlug },
+            dashcamAnsweredAtMs = { answeredMs },
             eBikeSnapshot = { ebike },
             eBikeSnapshotAtMs = { ebikeAtMs ?: now },
             eBikeRidingSinceMs = { ridingSinceMs },
@@ -128,6 +132,10 @@ class RadarLeftOnAlarmTest {
         stream(mac)
         now += 600_000L
         drop(3_500L)
+    }
+
+    private fun heardAt(t: Long) {
+        answeredMs = t
     }
 
     private fun tickAt(msAfterDrop: Long, dropAt: Long) {
@@ -667,12 +675,13 @@ class RadarLeftOnAlarmTest {
 
     @Test
     fun aCameraHeardJustBeforeTheDropIsNamedToo() {
+        // Within one probe cycle: read at 20 s of age on a 2 s tick, answering
+        // by the 15 s timeout.
         switchOffs(3)
         dashcamSlug = "cam"
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 30_000L)
+        heardAt(now - 37_000L)
         drop(3_500L)
         tickAt(20_000L, now)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
@@ -683,10 +692,9 @@ class RadarLeftOnAlarmTest {
     fun aCameraLastHeardEarlierIsNotNamed() {
         switchOffs(3)
         dashcamSlug = "cam"
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 30_001L)
+        heardAt(now - 37_001L)
         drop(3_500L)
         tickAt(20_000L, now)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR), posted)
@@ -697,7 +705,6 @@ class RadarLeftOnAlarmTest {
         prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
         prefs.dashcamMac = CAM
         dashcamSlug = "cam"
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
     }
 
     @Test
@@ -707,7 +714,7 @@ class RadarLeftOnAlarmTest {
         selectCamera()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         coordinator.markDashcamSwitchedOff(CAM)
         drop(3_500L)
         tickAt(20_000L, now)
@@ -721,7 +728,7 @@ class RadarLeftOnAlarmTest {
         selectCamera()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         now = dropAt + 10_000L
@@ -738,7 +745,7 @@ class RadarLeftOnAlarmTest {
         selectCamera()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         tickAt(20_000L, dropAt)
@@ -780,7 +787,7 @@ class RadarLeftOnAlarmTest {
         now += 600_000L
         drop(300L, status = 19)
         val firstDrop = now
-        BatteryStateBus.markSeen("cam", 0L, firstDrop + 14_000L)
+        heardAt(firstDrop + 14_000L)
         now = firstDrop + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(1, dashcamPosts)
@@ -798,7 +805,7 @@ class RadarLeftOnAlarmTest {
         now += 600_000L
         drop(300L, status = 19)
         val dropAt = now
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        heardAt(dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(1, dashcamPosts)
@@ -832,10 +839,9 @@ class RadarLeftOnAlarmTest {
     fun aDismissOfTheAlarmNamingTheCameraHoldsToo() {
         switchOffs(3)
         dashcamSlug = "cam"
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         tickAt(20_000L, now)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
@@ -854,7 +860,7 @@ class RadarLeftOnAlarmTest {
         now += 600_000L
         drop(300L, status = 19)
         val dropAt = now
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        heardAt(dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(1, dashcamPosts)
@@ -872,11 +878,11 @@ class RadarLeftOnAlarmTest {
         dashcamAlarmDue()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         coordinator.markAdapterOff()
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        heardAt(dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         tickAt(20_000L, dropAt)
@@ -978,7 +984,6 @@ class RadarLeftOnAlarmTest {
     private fun dashcamAlarmDue() {
         prefs.walkAwayAlarmThresholdSec = 15
         dashcamSlug = "cam"
-        BatteryStateBus.update(BatteryEntry("cam", "Cam", 80))
     }
 
     @Test
@@ -987,20 +992,20 @@ class RadarLeftOnAlarmTest {
         dashcamAlarmDue()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         tickAt(20_000L, dropAt)
         assertEquals(listOf(WalkAwayAlarmKind.RADAR_AND_DASHCAM), posted)
         // The camera is still heard, which would sound the dashcam alarm.
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 29_000L)
+        heardAt(dropAt + 29_000L)
         now = dropAt + 30_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
         // It owns the episode, so the switch turned off afterwards does not
         // hand the camera to the other alarm.
         prefs.radarLeftOnAlarmEnabled = false
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 59_000L)
+        heardAt(dropAt + 59_000L)
         now = dropAt + 60_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
@@ -1014,10 +1019,10 @@ class RadarLeftOnAlarmTest {
         dashcamAlarmDue()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        heardAt(dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
@@ -1031,7 +1036,7 @@ class RadarLeftOnAlarmTest {
         dashcamAlarmDue()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         now = dropAt + 5_000L
@@ -1039,7 +1044,7 @@ class RadarLeftOnAlarmTest {
         now = dropAt + 8_000L
         coordinator.markDisconnected(null)
         tickAt(20_000L, dropAt)
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 24_000L)
+        heardAt(dropAt + 24_000L)
         now = dropAt + 25_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
@@ -1057,13 +1062,13 @@ class RadarLeftOnAlarmTest {
         dashcamAlarmDue()
         stream()
         now += 600_000L
-        BatteryStateBus.markSeen("cam", 0L, now - 1_000L)
+        heardAt(now - 1_000L)
         drop(3_500L)
         val dropAt = now
         now = dropAt + 5_000L
         coordinator.markLinkOpen(RADAR_A)
         tickAt(20_000L, dropAt)
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 24_000L)
+        heardAt(dropAt + 24_000L)
         now = dropAt + 25_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(0, dashcamPosts)
@@ -1079,7 +1084,7 @@ class RadarLeftOnAlarmTest {
         walkAway()
         val dropAt = now
         prefs.radarLeftOnAlarmEnabled = false
-        BatteryStateBus.markSeen("cam", 0L, dropAt + 14_000L)
+        heardAt(dropAt + 14_000L)
         now = dropAt + 15_000L
         coordinator.evaluateWalkAway(now)
         assertEquals(1, dashcamPosts)

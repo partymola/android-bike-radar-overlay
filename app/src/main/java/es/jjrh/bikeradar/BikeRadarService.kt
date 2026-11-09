@@ -1100,48 +1100,17 @@ class BikeRadarService : Service() {
      * service scope and runs from onCreate to onDestroy.
      */
     private fun launchDashcamRefresh() {
+        val probe = DashcamProbe(
+            prefs = prefs,
+            linkState = radarLinkCoordinator::snapshot,
+            dashcamSlug = ::resolveDashcamSlug,
+            batteryReader = batteryReader,
+            lastProbeMs = lastDashcamProbeMs,
+            probeFailures = dashcamProbeFailures,
+        )
         scope.launch {
             while (true) {
-                val mac = prefs.activeDashcamMac
-                val name = prefs.dashcamDisplayName
-                val link = radarLinkCoordinator.snapshot()
-                val gateOpen = IdleGate.shouldRefreshDashcam(
-                    radarGattActive = link.radarGattActive,
-                    radarOffSinceMs = link.radarOffSinceMs,
-                    nowMs = SystemClock.elapsedRealtime(),
-                )
-                if (gateOpen && mac != null && !name.isNullOrEmpty()) {
-                    val slug = resolveDashcamSlug()
-                    val entry = slug?.let { BatteryStateBus.entries.value[it] }
-                    // Monotonic: age the dashcam against the same elapsedRealtime
-                    // freshness (lastSeenElapsedMs) the walk-away alarm reads, and
-                    // matching the monotonic IdleGate above, so a wall-clock jump
-                    // can't stall the probe that keeps that freshness current.
-                    val nowMono = SystemClock.elapsedRealtime()
-                    val ageMs = entry?.let { nowMono - it.lastSeenElapsedMs } ?: Long.MAX_VALUE
-                    if (ageMs >= DASHCAM_REFRESH_MS) {
-                        // Connect-storm guard: while the radar's link is open, a
-                        // probe that keeps failing (dashcam powered off) backs off
-                        // so it can't connect-storm and contend with the radar
-                        // link. With no link open the walk-away alarm consumes
-                        // this same monotonic liveness freshness, so backoff is
-                        // bypassed there - the probe keeps its full age-gated
-                        // cadence. A failing radar holds the link for its
-                        // handshake, so the backoff applies then too.
-                        val probeOk = BatteryProbeBackoff.shouldProbe(
-                            link.radarGattActive,
-                            nowMono,
-                            lastDashcamProbeMs[mac],
-                            dashcamProbeFailures[mac] ?: 0,
-                            DASHCAM_REFRESH_MS,
-                            DASHCAM_PROBE_BACKOFF_CAP_MS,
-                        )
-                        if (probeOk) {
-                            lastDashcamProbeMs[mac] = nowMono
-                            batteryReader.launch(name, mac)
-                        }
-                    }
-                }
+                probe.tick(SystemClock.elapsedRealtime())
                 delay(DASHCAM_TICK_MS)
             }
         }

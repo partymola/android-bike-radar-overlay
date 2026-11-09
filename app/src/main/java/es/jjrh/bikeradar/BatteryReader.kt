@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.Prefs
@@ -42,6 +43,7 @@ internal const val KEY_LAST_TS = "last_ts"
  * [HaPublisher.publishBatteryToHa] and the private [readBattery], while tests
  * pass fakes so the whole post-read path (known-device upsert, failure counter,
  * display-name sync, publish-gated throttle) is exercisable without a device.
+ * The clocks are injected so a test can run reads in virtual time.
  */
 @SuppressLint("MissingPermission")
 internal class BatteryReader(
@@ -54,6 +56,8 @@ internal class BatteryReader(
     private val slug: (String) -> String,
     private val dashcamProbeFailures: MutableMap<String, Int>,
     private val readBatteryFn: (suspend (String) -> Int?)? = null,
+    private val monoClock: () -> Long = { SystemClock.elapsedRealtime() },
+    private val wallClock: () -> Long = { System.currentTimeMillis() },
 ) {
     // Per-mac in-flight guard: a read launched within ATTEMPT_COOLDOWN_MS is
     // skipped so back-to-back fires from different paths don't stack.
@@ -67,7 +71,7 @@ internal class BatteryReader(
      * would falsely keep the entry fresh without an actual sighting.
      */
     fun launch(name: String, mac: String) {
-        val now = System.currentTimeMillis()
+        val now = wallClock()
         val lastAttempt = attemptInFlight[mac] ?: 0L
         if (now - lastAttempt < ATTEMPT_COOLDOWN_MS) {
             Log.d(TAG, "skip $name (attempt in flight)")
@@ -139,19 +143,19 @@ internal class BatteryReader(
         if (prefs.activeDashcamMac.equals(mac, ignoreCase = true) && prefs.dashcamDisplayName != name) {
             prefs.dashcamDisplayName = name
         }
-        BatteryStateBus.update(BatteryEntry(s, name, pct))
+        BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = monoClock()))
 
         // Only arm the 5-min throttle if publish succeeded (or HA isn't
         // configured at all). On a transient HA failure we want the next
         // advert to retry within ATTEMPT_COOLDOWN_MS rather than waiting
         // 5 minutes with no HA state update.
         if (publishBattery(name, pct)) {
-            sp.edit().putLong("${KEY_LAST_TS}_$s", System.currentTimeMillis()).apply()
+            sp.edit().putLong("${KEY_LAST_TS}_$s", wallClock()).apply()
         }
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun readBattery(mac: String, timeoutMs: Long = 15_000): Int? {
+    private suspend fun readBattery(mac: String, timeoutMs: Long = READ_TIMEOUT_MS): Int? {
         val btMgr = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return null
         val adapter = btMgr.adapter ?: return null
         if (!adapter.isEnabled) return null
@@ -245,5 +249,8 @@ internal class BatteryReader(
         // Minimum gap between battery-read attempts for one device, across all
         // trigger paths (advert sighting, dashcam refresh ticker).
         const val ATTEMPT_COOLDOWN_MS = 30 * 1000L
+
+        /** The longest one GATT battery read waits for an answer. */
+        const val READ_TIMEOUT_MS = 15_000L
     }
 }

@@ -34,6 +34,11 @@ class RideStatsAccumulator(
     // sensible "no data" zero value: a ride with no observed vehicles should
     // surface "unknown" in HA, not a misleading 0 m / 0 km/h.
     private val seenTrackIds = HashSet<Int>()
+
+    /** Ids in range on a frame close-pass counting ran on: what the conversion
+     *  rate divides by, so overtakes from before counting was switched on do
+     *  not dilute it (`theRateDividesByOvertakesSeenWhileCounting`). */
+    private val countedTrackIds = HashSet<Int>()
     private var peakClosingKmh: Int? = null
     private var minLateralM: Float? = null
     private var distanceRiddenM: Double = 0.0
@@ -81,8 +86,10 @@ class RideStatsAccumulator(
      * the per-track readings behind the tightest clearance, and the
      * unique-overtake set. [closingFloorMs] is the
      * rider's close-pass closing floor, the value [ClosePassDetector] reads.
+     * [counting] says close-pass counting runs on this frame, which puts its
+     * in-range cars in the conversion rate's denominator.
      */
-    fun observeFrame(state: RadarState, closingFloorMs: Float) {
+    fun observeFrame(state: RadarState, closingFloorMs: Float, counting: Boolean) {
         val nowMs = monoMsProvider()
         val prev = lastFrameMs
         lastFrameMs = nowMs
@@ -162,6 +169,7 @@ class RideStatsAccumulator(
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
             if (seenTrackIds.add(v.id)) generation++
+            if (counting && countedTrackIds.add(v.id)) generation++
 
             if (v.speedMs < 0 && -v.speedMs <= ClosePassDetector.PEAK_CLOSING_MAX_MS) {
                 val closingKmh = (-v.speedMs * MS_TO_KMH).toInt()
@@ -209,6 +217,10 @@ class RideStatsAccumulator(
         }
         val present = state.vehicles.mapTo(HashSet()) { it.id }
         openTracks.keys.filter { it !in present }.forEach { tid -> openTracks.remove(tid)?.let(::endTrack) }
+        if (counting && !closePassesCounted) {
+            closePassesCounted = true
+            generation++
+        }
     }
 
     /** Forget every open track without counting it. Called as each radar
@@ -263,12 +275,6 @@ class RideStatsAccumulator(
         generation++
     }
 
-    /** Close-pass counting ran at some point in this ride. */
-    fun markClosePassesCounted() {
-        if (!closePassesCounted) generation++
-        closePassesCounted = true
-    }
-
     /**
      * Ingest one sounded alert cue, tagged by [AlertBeeper]'s `onCue`
      * chokepoint. Only the close-pass alarm cues ([AlertBeeper] tags `beep…`
@@ -297,8 +303,9 @@ class RideStatsAccumulator(
      *  propagate. */
     fun snapshot(): RideStatsSnapshot {
         val totalOvertakes = seenTrackIds.size
-        val conversionRatePct = if (totalOvertakes > 0) {
-            closePassCount.toFloat() / totalOvertakes.toFloat() * 100f
+        val countedOvertakes = countedTrackIds.size
+        val conversionRatePct = if (countedOvertakes > 0) {
+            closePassCount.toFloat() / countedOvertakes.toFloat() * 100f
         } else {
             0f
         }
@@ -381,6 +388,8 @@ data class RideStatsSnapshot(
     val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,
     val exposureSeconds: Long,
+    /** Close passes per hundred overtakes seen while close-pass counting ran,
+     *  which can be fewer than [overtakesTotal]. */
     val closePassConversionRatePct: Float,
     val tightestPass: TightestPass?,
     val rideStartedAtMs: Long,

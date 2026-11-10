@@ -351,7 +351,7 @@ class RadarV1SafetyTest {
         for (dist in 30 downTo 4) {
             now += 100L
             mono += 100L
-            d.feed(threat(1 to dist))?.let { stats.observeFrame(it, 6f) }
+            d.feed(threat(1 to dist))?.let { stats.observeFrame(it, 6f, counting = false) }
         }
         return stats.snapshot()
     }
@@ -390,9 +390,9 @@ class RadarV1SafetyTest {
         var mono = 10_000L
         val stats = RideStatsAccumulator(nowMsProvider = { 1_700_000_000_000L }, monoMsProvider = { mono })
         val d = decoderAt { 1_000L }
-        stats.observeFrame(d.feed(threat(1 to 20))!!, 6f)
+        stats.observeFrame(d.feed(threat(1 to 20))!!, 6f, counting = false)
         mono += 2_000L
-        stats.observeFrame(RadarState(vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true)), timestamp = 1_100L, source = DataSource.V1), 6f)
+        stats.observeFrame(RadarState(vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true)), timestamp = 1_100L, source = DataSource.V1), 6f, counting = false)
 
         assertEquals("two seconds of observed traffic", 2L, stats.snapshot().exposureSeconds)
     }

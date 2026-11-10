@@ -180,7 +180,11 @@ internal class OverlayPipeline(
 
                         // Read once: the ride figure and the detector below use the same floor.
                         val closingFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat()
-                        rideStats().observeFrame(state, closingFloorMs)
+                        val countingEnabled = prefs.closePassLoggingEnabled
+                        // Only frames the detector can count from: none on a
+                        // range-only stream (`aRangeOnlyRideIsNotCounted`).
+                        val counting = countingEnabled && state.source.hasLateral && state.bikeSpeedMs != null
+                        rideStats().observeFrame(state, closingFloorMs, counting)
 
                         // A granted app drawing its own map can ask for ours to
                         // get out of the way. Checked every frame rather than
@@ -252,16 +256,11 @@ internal class OverlayPipeline(
                         // known; the in-flight guard suppresses re-issue
                         // while the publish is pending.
                         val cpCfg = ClosePassDetector.Config(
-                            enabled = prefs.closePassLoggingEnabled,
+                            enabled = countingEnabled,
                             riderSpeedFloorMs = prefs.closePassRiderSpeedFloorMs,
                             closingSpeedFloorMs = closingFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
-                        // Only frames the detector can count from: none on a
-                        // range-only stream (`aRangeOnlyRideIsNotCounted`).
-                        if (cpCfg.enabled && state.source.hasLateral && state.bikeSpeedMs != null) {
-                            rideStats().markClosePassesCounted()
-                        }
                         val table = macToSlug()
                         val radarMac = currentRadarMac()
                         val radarSlug = radarMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }

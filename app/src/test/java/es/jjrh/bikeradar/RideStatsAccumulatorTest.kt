@@ -21,8 +21,13 @@ class RideStatsAccumulatorTest {
     private fun acc(clock: FakeClock = FakeClock()) = RideStatsAccumulator(clock.provider, clock.provider)
 
     /** The close-pass closing floor at its 6 m/s default, for every test that
-     *  is not about the floor itself. */
-    private fun RideStatsAccumulator.observeFrame(state: RadarState) = observeFrame(state, 6f)
+     *  is not about the floor itself, with close-pass counting off. */
+    private fun RideStatsAccumulator.observeFrame(state: RadarState) = observeFrame(state, 6f, counting = false)
+
+    private fun RideStatsAccumulator.observeFrame(state: RadarState, closingFloorMs: Float) = observeFrame(state, closingFloorMs, counting = false)
+
+    /** A frame close-pass counting runs on. */
+    private fun RideStatsAccumulator.observeCountedFrame(state: RadarState) = observeFrame(state, 6f, counting = true)
 
     private fun veh(
         id: Int,
@@ -486,9 +491,51 @@ class RideStatsAccumulatorTest {
     @Test
     fun conversionRateIsCloseOverOvertakesAsPct() {
         val a = acc()
-        a.observeFrame(radarState(listOf(veh(1), veh(2), veh(3), veh(4))))
+        a.observeCountedFrame(radarState(listOf(veh(1), veh(2), veh(3), veh(4))))
         a.observeClosePass(closeEvent())
         assertEquals(25f, a.snapshot().closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun theRateDividesByOvertakesSeenWhileCounting() {
+        // Counting switched on partway: four cars passed before it, then one
+        // still behind and one new car are seen with it on, and one of those
+        // two passes close. A sixth car comes after it is switched off again.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(1), veh(2), veh(3), veh(4))))
+        a.observeCountedFrame(radarState(listOf(veh(4), veh(5))))
+        a.observeClosePass(closeEvent())
+        a.observeFrame(radarState(listOf(veh(6))))
+        val s = a.snapshot()
+        assertEquals(6, s.overtakesTotal)
+        assertEquals(50f, s.closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun aCarBeyondTrackingRangeIsNotInTheRatesOvertakes() {
+        val a = acc()
+        a.observeCountedFrame(radarState(listOf(veh(1), veh(2, distanceM = 50))))
+        a.observeClosePass(closeEvent())
+        assertEquals(100f, a.snapshot().closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun aNewlyCountedOvertakeIsAChangeToPublish() {
+        // Stationary alongside and not closing, so neither exposure nor the
+        // closing peak moves the generation on these frames.
+        fun parked(id: Int) = veh(id, speedMs = 0f, isAlongsideStationary = true)
+        val a = acc()
+        a.observeCountedFrame(radarState(listOf(parked(1))))
+        a.markPublished()
+        a.observeCountedFrame(radarState(listOf(parked(1))))
+        assertEquals(false, a.changedSinceLast())
+        // Seen before counting, so only its counted frame marks the change.
+        val b = acc()
+        b.observeCountedFrame(radarState(listOf(parked(1))))
+        b.observeFrame(radarState(listOf(parked(1), parked(2))))
+        b.markPublished()
+        b.observeCountedFrame(radarState(listOf(parked(2))))
+        assertEquals(true, b.changedSinceLast())
     }
 
     // ── p90 closing speed ────────────────────────────────────────────────────

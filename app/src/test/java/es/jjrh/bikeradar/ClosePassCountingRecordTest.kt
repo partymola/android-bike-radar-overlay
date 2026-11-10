@@ -39,10 +39,15 @@ class ClosePassCountingRecordTest {
         closePassesCounted = counted,
     )
 
+    /** A frame with no cars, observed with close-pass counting running or not. */
+    private fun RideStatsAccumulator.frame(counting: Boolean) = observeFrame(RadarState(vehicles = emptyList(), source = DataSource.V2), 6f, counting)
+
     @Test fun aRideStartsUncountedUntilCountingRuns() {
         val stats = RideStatsAccumulator()
         assertFalse(stats.snapshot().closePassesCounted)
-        stats.markClosePassesCounted()
+        stats.frame(counting = false)
+        assertFalse(stats.snapshot().closePassesCounted)
+        stats.frame(counting = true)
         assertTrue(stats.snapshot().closePassesCounted)
     }
 
@@ -65,23 +70,23 @@ class ClosePassCountingRecordTest {
     }
 
     @Test fun aReconnectKeepsTheRideCounted() {
-        val stats = RideStatsAccumulator().also { it.markClosePassesCounted() }
+        val stats = RideStatsAccumulator().also { it.frame(counting = true) }
         stats.dropOpenTracks()
         assertTrue(stats.snapshot().closePassesCounted)
     }
 
-    @Test fun onlyTheFirstMarkAsksForAPublish() {
+    @Test fun onlyTheFirstCountedFrameAsksForAPublish() {
         val stats = RideStatsAccumulator()
         stats.markPublished()
-        stats.markClosePassesCounted()
+        stats.frame(counting = true)
         assertTrue(stats.changedSinceLast())
         stats.markPublished()
-        stats.markClosePassesCounted()
+        stats.frame(counting = true)
         assertFalse(stats.changedSinceLast())
     }
 
     @Test fun theStoredRideCarriesWhetherItWasCounted() {
-        val counted = RideStatsAccumulator().also { it.markClosePassesCounted() }
+        val counted = RideStatsAccumulator().also { it.frame(counting = true) }
         assertEquals(true, RideHistoryRecord.fromSnapshot(counted.snapshot(), endedAtMs = 1L).closePassesCounted)
         assertEquals(false, RideHistoryRecord.fromSnapshot(RideStatsAccumulator().snapshot(), endedAtMs = 1L).closePassesCounted)
         for (c in listOf(true, false)) {

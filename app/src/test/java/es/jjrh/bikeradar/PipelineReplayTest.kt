@@ -64,7 +64,9 @@ class PipelineReplayTest {
             val state = decoder.feed(frame.bytes) ?: continue
             snapshotCount++
 
-            stats.observeFrame(state, cfg.closingSpeedFloorMs)
+            // The pipeline's own counting gate.
+            val counting = cfg.enabled && state.source.hasLateral && state.bikeSpeedMs != null
+            stats.observeFrame(state, cfg.closingSpeedFloorMs, counting)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,
@@ -106,6 +108,10 @@ class PipelineReplayTest {
                 snap.closePassConversionRatePct in 0f..100f,
             )
         }
+        assertTrue(
+            "passes counted while counting ran must give a rate above 0",
+            snap.closePassCount == 0 || snap.closePassConversionRatePct > 0f,
+        )
 
         // Plausibility — ranges that should hold for a 30 s urban capture.
         assertTrue(
@@ -146,7 +152,7 @@ class PipelineReplayTest {
         for (frame in frames) {
             clock = frame.relMs
             val state = decoder.feed(frame.bytes) ?: continue
-            stats.observeFrame(state, 6f)
+            stats.observeFrame(state, 6f, counting = false)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,

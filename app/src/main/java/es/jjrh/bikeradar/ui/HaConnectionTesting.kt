@@ -20,6 +20,7 @@ import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaConnectionTest
 import es.jjrh.bikeradar.HaFailure
 import es.jjrh.bikeradar.HaFailureException
+import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.HaIntent
@@ -48,6 +49,9 @@ internal suspend fun runHaTest(
         creds.save(url, token)
         prefs.haLastValidatedEpochMs = System.currentTimeMillis()
         prefs.haIntent = HaIntent.YES
+        // The MQTT check is a publish that worked, so an older failure no
+        // longer describes these values (`SettingsHaConnectionTest`).
+        if (result.mqtt?.isSuccess == true) HaHealthBus.reset()
     }
     return result
 }

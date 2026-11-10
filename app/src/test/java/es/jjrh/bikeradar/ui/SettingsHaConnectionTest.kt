@@ -14,6 +14,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sun.net.httpserver.HttpServer
+import es.jjrh.bikeradar.HaFailure
+import es.jjrh.bikeradar.HaFamily
+import es.jjrh.bikeradar.HaHealth
+import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
@@ -44,6 +48,9 @@ class SettingsHaConnectionTest {
 
     /** When set, the ping counts down [pingArrived] and waits for this before answering. */
     @Volatile private var pingHeld: CountDownLatch? = null
+
+    /** Status for the MQTT probe; the ping always answers 200. */
+    @Volatile private var probeStatus = 404
     private val pingArrived = CountDownLatch(1)
 
     private val baseUrl get() = "http://127.0.0.1:${server.address.port}"
@@ -51,6 +58,7 @@ class SettingsHaConnectionTest {
     @Before
     fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
+        HaHealthBus.reset()
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange ->
             exchange.requestBody.readBytes()
@@ -58,7 +66,7 @@ class SettingsHaConnectionTest {
                 pingArrived.countDown()
                 pingHeld?.await(5, TimeUnit.SECONDS)
             }
-            val code = if (exchange.requestURI.path == "/api/") 200 else 404
+            val code = if (exchange.requestURI.path == "/api/") 200 else probeStatus
             val body = "{}".toByteArray()
             exchange.sendResponseHeaders(code, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
@@ -69,6 +77,7 @@ class SettingsHaConnectionTest {
     @After
     fun tearDown() {
         server.stop(0)
+        HaHealthBus.reset()
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
     }
 
@@ -90,6 +99,31 @@ class SettingsHaConnectionTest {
         openSettings()
         compose.onNodeWithText("Test and save").performScrollTo().performClick()
         waitForText("MQTT: not configured in HA")
+    }
+
+    private fun retestAfterAFailedRide() {
+        HaCredentials(app).save(baseUrl, "tok")
+        HaHealthBus.reportError(HaFamily.BATTERY, "battery publish failed", HaFailure.HOST_UNREACHABLE)
+        openSettings()
+        compose.onNodeWithText("Last error: HA: unreachable").assertExists()
+        compose.onNodeWithText("Test and save").performScrollTo().performClick()
+    }
+
+    /** The test's MQTT check is a publish that worked, so an older failure no longer describes these values. */
+    @Test
+    fun aPassingRetestOfTheSameValuesClearsTheLastError() {
+        probeStatus = 200
+        retestAfterAFailedRide()
+        waitForText("MQTT: ready")
+        compose.onNodeWithText("Last error", substring = true).assertDoesNotExist()
+        assertEquals(HaHealth.Unknown, HaHealthBus.state.value)
+    }
+
+    @Test
+    fun aRetestWhoseMqttCheckFailsKeepsTheLastError() {
+        retestAfterAFailedRide()
+        waitForText("MQTT: not configured in HA")
+        compose.onNodeWithText("Last error: HA: unreachable").assertExists()
     }
 
     /** The same check setup's Continue runs. */

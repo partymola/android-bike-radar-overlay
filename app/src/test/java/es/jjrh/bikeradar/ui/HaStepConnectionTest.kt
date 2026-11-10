@@ -64,7 +64,7 @@ class HaStepConnectionTest {
                 pingHeld?.await(5, TimeUnit.SECONDS)
             }
             val code = if (exchange.requestURI.path == "/api/") 200 else probeStatus
-            val body = "{}".toByteArray()
+            val body = (if (exchange.requestURI.path == "/api/") """{"message": "API running."}""" else "{}").toByteArray()
             exchange.sendResponseHeaders(code, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
         }

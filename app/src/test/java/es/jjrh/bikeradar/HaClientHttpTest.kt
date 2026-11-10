@@ -55,6 +55,9 @@ class HaClientHttpTest {
      */
     @Volatile private var statusFor: (String?) -> Int = { 200 }
 
+    /** What `/api/` answers with; Home Assistant's documented body by default. */
+    @Volatile private var pingBody = """{"message": "API running."}"""
+
     @Before
     fun setUp() {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -88,7 +91,7 @@ class HaClientHttpTest {
             ),
         )
         val topic = if (body.isNotEmpty()) JSONObject(body).optString("topic").ifEmpty { null } else null
-        val payload = "{}".toByteArray()
+        val payload = (if (exchange.requestURI.path == "/api/") pingBody else "{}").toByteArray()
         exchange.sendResponseHeaders(statusFor(topic), payload.size.toLong())
         exchange.responseBody.use { it.write(payload) }
     }
@@ -335,6 +338,51 @@ class HaClientHttpTest {
         assertEquals(HaFailure.NOT_HOME_ASSISTANT to "404", client().ping().cause())
         respondAll(502)
         assertEquals(HaFailure.SERVER_ERROR to "502", client().ping().cause())
+    }
+
+    // ── what counts as Home Assistant answering ─────────────────────────────
+
+    @Test
+    fun aPingAnsweredWithTheDocumentedBodyIsHomeAssistant() = runTest {
+        pingBody = """{"message": "API running."}"""
+        assertTrue(client().ping().isSuccess)
+    }
+
+    @Test
+    fun aPingAnsweredWithAnotherMessageIsStillHomeAssistant() = runTest {
+        pingBody = """{"message": "API is up"}"""
+        assertTrue(client().ping().isSuccess)
+    }
+
+    @Test
+    fun aPingAnsweredWithAWebPageIsNotHomeAssistant() = runTest {
+        pingBody = "<html><body>Router login</body></html>"
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+    }
+
+    @Test
+    fun aPingAnsweredWithNothingIsNotHomeAssistant() = runTest {
+        pingBody = ""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+    }
+
+    @Test
+    fun aPingAnsweredWithJsonLackingAMessageIsNotHomeAssistant() = runTest {
+        pingBody = """{"status": "ok"}"""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+        pingBody = """{"message": 5}"""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+        pingBody = """["message"]"""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+    }
+
+    @Test
+    fun aTestAnsweredByAWebPageSkipsTheMqttCheck() = runTest {
+        pingBody = "<html></html>"
+        val r = client().testConnection()
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", r.ping.cause())
+        assertNull(r.mqtt)
+        assertEquals(listOf("/api/"), requests.map { it.path })
     }
 
     @Test

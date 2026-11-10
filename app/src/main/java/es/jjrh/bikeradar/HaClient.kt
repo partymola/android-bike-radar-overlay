@@ -106,8 +106,16 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         }
     }
 
-    /** Whether Home Assistant answers at the base URL with this token. A
-     *  failure is a [HaFailureException]. */
+    /**
+     * Whether Home Assistant answers at the base URL with this token. A
+     * failure is a [HaFailureException].
+     *
+     * A 2xx counts only with a JSON object carrying a string `message`, the
+     * shape of Home Assistant's documented `GET /api/` answer
+     * (`{"message": "API running."}`), so a router page that answers 2xx is
+     * not taken for it. The text itself is not checked, so a release that
+     * rewords it is still recognised (`HaClientHttpTest`).
+     */
     suspend fun ping(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
         haUrlRefusal(baseUrl)?.let { return Result.failure(it) }
@@ -121,10 +129,15 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                     readTimeout = HA_TIMEOUT_MS
                 }
                 val code = conn.responseCode
-                drainAndReturn(conn, code)
                 if (code in 200..299) {
-                    Result.success("OK ($code)")
+                    val body = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    if (runCatching { JSONObject(body).opt("message") is String }.getOrDefault(false)) {
+                        Result.success("OK ($code)")
+                    } else {
+                        Result.failure(HaFailureException(HaFailure.NOT_HOME_ASSISTANT, "$code", "HTTP $code, not Home Assistant's API"))
+                    }
                 } else {
+                    drainAndReturn(conn, code)
                     Result.failure(HaFailureException(classifyPingFailure(code = code), "$code", "HTTP $code"))
                 }
             } catch (t: Throwable) {

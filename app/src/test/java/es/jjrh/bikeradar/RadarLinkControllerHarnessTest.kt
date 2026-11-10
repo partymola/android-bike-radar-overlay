@@ -1940,6 +1940,80 @@ class RadarLinkControllerHarnessTest {
         assertFalse("nor does the journal say it went live", journalHas("radar legacy stream live"))
     }
 
+    // ── the radar remembered as distance-only ───────────────────────────────────
+
+    @Test fun aLegacyStreamThatDeliversIsRememberedAsDistanceOnly() = runTest {
+        val link = Link()
+        val p = prefs()
+        val controller = controller(link, prefs = p, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        assertEquals("an acknowledged subscribe is not data", null, p.rangeOnlyRadarMac)
+
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02")
+        assertTrue(pumpUntil { journalHas("radar legacy stream live") })
+        assertEquals("AA:BB:CC:DD:EE:FF", p.rangeOnlyRadarMac)
+        controller.forceReconnect()
+    }
+
+    @Test fun aLegacyStreamThatNeverDeliversIsNotRemembered() = runTest {
+        val link = Link()
+        val p = prefs()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, prefs = p, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        clockMs.set(8_000L)
+        assertTrue(pumpUntil { journalHas("radar legacy stream silent") })
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+        assertEquals(null, p.rangeOnlyRadarMac)
+    }
+
+    @Test fun aV2FrameForgetsTheRadarWasDistanceOnly() = runTest {
+        val link = Link()
+        val p = prefs()
+        p.rangeOnlyRadarMac = "aa:bb:cc:dd:ee:ff"
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        assertEquals("a finished handshake is not a V2 frame", "aa:bb:cc:dd:ee:ff", p.rangeOnlyRadarMac)
+
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        assertEquals(null, p.rangeOnlyRadarMac)
+        controller.forceReconnect()
+    }
+
+    @Test fun aV2FrameFromAnotherRadarForgetsTheRememberedOne() = runTest {
+        // The slot says the radar that streamed last was distance-only, so a
+        // full radar streaming since makes that untrue.
+        val link = Link()
+        val p = prefs()
+        p.rangeOnlyRadarMac = "11:22:33:44:55:66"
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        assertEquals(null, p.rangeOnlyRadarMac)
+        controller.forceReconnect()
+    }
+
     /**
      * When the cache clear FAILS, the fallback is refused outright.
      *

@@ -540,8 +540,9 @@ private fun SystemRowRender(
 
 /** [rideStored] has no default: ride history is kept whether or not counting
  *  is on, so a stored ride alone offers the link (`ClosePassHistoryLinkTest`).
- *  [rangeOnly]: a radar that reports distance only is connected, so nothing
- *  can be counted. The app knows this only while that radar streams. */
+ *  [rangeOnly]: this bike's radar reports distance only, so nothing can be
+ *  counted. Known from its stream, and between streams from the radar the
+ *  home screen remembers (`ClosePassCardStoredRadarTest`). */
 @Composable
 internal fun ClosePassStatsCard(
     loggingEnabled: Boolean,
@@ -573,8 +574,8 @@ internal fun ClosePassStatsCard(
                     )
                 }
             }
-            // No figure while counting is off or a distance-only radar is
-            // connected, unless a pass was already counted this session
+            // No figure while counting is off or the radar is distance-only,
+            // unless a pass was already counted this session
             // (`ClosePassCardFigureTest`).
             if (count > 0 || (loggingEnabled && !rangeOnly)) {
                 Spacer(modifier = Modifier.height(10.dp))

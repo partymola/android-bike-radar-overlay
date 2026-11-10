@@ -151,6 +151,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // the result, and it lets Doze idle the device cleanly.
     val lifecycleOwner = LocalLifecycleOwner.current
     val firstBonded = remember { RadarSelection.bondedDevices(ctx) }
+    var paired by remember { mutableStateOf(firstBonded) }
     var hasBond by remember { mutableStateOf(RadarSelection.hasLinkableRadar(firstBonded, prefs.radarMac)) }
     var radarPickOffered by remember { mutableStateOf(radarHatchDevices(firstBonded, prefs.dashcamMac).isNotEmpty()) }
     var pinnedOffRadarName by remember { mutableStateOf(RadarSelection.pinOffNamedRadars(firstBonded, prefs.radarMac)?.name) }
@@ -162,6 +163,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             // screen the banner sent them to still sees it for five seconds.
             while (true) {
                 val bonded = RadarSelection.bondedDevices(ctx)
+                paired = bonded
                 hasBond = RadarSelection.hasLinkableRadar(bonded, prefs.radarMac)
                 radarPickOffered = radarHatchDevices(bonded, prefs.dashcamMac).isNotEmpty()
                 pinnedOffRadarName = RadarSelection.pinOffNamedRadars(bonded, prefs.radarMac)?.name
@@ -205,6 +207,23 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // A range-only source is delivering, but cannot raise the urgent warning
     // or log a close pass, so the row must not render it as full cover.
     val radarLimited = radarState.source == DataSource.V1
+    // For the close-pass card alone, which must say the same before and after
+    // a ride as during it. With no stream, the radar remembered from its last
+    // one counts while it is still this bike's: the pin when one holds, as for
+    // the battery row, else any radar a link may start to
+    // (`ClosePassCardStoredRadarTest`).
+    val closePassRangeOnly = radarLimited ||
+        (
+            radarState.source == DataSource.NONE &&
+                prefs.rangeOnlyRadarMac?.let { mac ->
+                    val pairedMacs = paired.mapTo(HashSet()) { it.mac }
+                    if (RadarSelection.pinHolds(prefsSnap.radarMac, pairedMacs)) {
+                        mac.equals(prefsSnap.radarMac, ignoreCase = true)
+                    } else {
+                        RadarSelection.mayStartLink(mac, pairedMacs)
+                    }
+                } == true
+            )
     // Routed through the SAME deriver the Settings radar card uses, rather
     // than spelling the predicate out again here. Two surfaces answering one
     // question with two copies of the logic is the defect this fixes: the
@@ -375,6 +394,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = prefsSnap.closePassLoggingEnabled,
+            closePassRangeOnly = closePassRangeOnly,
             rideStored = rideStored,
             eBikeDataEnabled = prefsSnap.eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -422,6 +442,10 @@ internal fun MainScreenContent(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    /** The close-pass card's distance-only state. The screen also sets it
+     *  from a radar remembered while none streams
+     *  (`ClosePassCardStoredRadarTest`). */
+    closePassRangeOnly: Boolean = radarLimited,
     rideStored: Boolean,
     eBikeDataEnabled: Boolean = false,
     ebikeReceiving: Boolean = false,
@@ -457,6 +481,7 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            closePassRangeOnly = closePassRangeOnly,
             rideStored = rideStored,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -491,6 +516,7 @@ internal fun MainScreenContent(
             dashcamBattery = dashcamBattery,
             haStatus = haStatus,
             closePassLoggingEnabled = closePassLoggingEnabled,
+            closePassRangeOnly = closePassRangeOnly,
             rideStored = rideStored,
             eBikeDataEnabled = eBikeDataEnabled,
             ebikeReceiving = ebikeReceiving,
@@ -560,6 +586,7 @@ private fun MainScreenPortrait(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    closePassRangeOnly: Boolean,
     rideStored: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
@@ -617,7 +644,7 @@ private fun MainScreenPortrait(
             ClosePassStatsCard(
                 loggingEnabled = closePassLoggingEnabled,
                 rideStored = rideStored,
-                rangeOnly = radarLimited,
+                rangeOnly = closePassRangeOnly,
                 onClick = onClosePassCardClick,
             )
             if (showDashcamPrompt) {
@@ -660,6 +687,7 @@ private fun MainScreenLandscape(
     dashcamBattery: BatteryEntry?,
     haStatus: HaStatus,
     closePassLoggingEnabled: Boolean,
+    closePassRangeOnly: Boolean,
     rideStored: Boolean,
     eBikeDataEnabled: Boolean,
     ebikeReceiving: Boolean,
@@ -699,7 +727,7 @@ private fun MainScreenLandscape(
                 ClosePassStatsCard(
                     loggingEnabled = closePassLoggingEnabled,
                     rideStored = rideStored,
-                    rangeOnly = radarLimited,
+                    rangeOnly = closePassRangeOnly,
                     onClick = onClosePassCardClick,
                 )
                 if (showBtOffBanner) {

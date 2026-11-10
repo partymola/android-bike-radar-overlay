@@ -895,6 +895,19 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_RADAR_LEGACY_TALLY, v).apply()
         }
 
+    /** Address of the radar that streamed last, when that stream was distance
+     *  only; null once any radar's V2 stream has started since. The link
+     *  writes it (`RadarLinkControllerHarnessTest.aLegacyStreamThatDeliversIsRememberedAsDistanceOnly`,
+     *  `aV2FrameFromAnotherRadarForgetsTheRememberedOne`) and the home
+     *  close-pass card reads it while no radar streams
+     *  (`ClosePassCardStoredRadarTest`). Not in [PrefsSnapshot]: the card
+     *  reads it directly. */
+    var rangeOnlyRadarMac: String?
+        get() = sp.getString(KEY_RANGE_ONLY_RADAR_MAC, null)
+        set(v) {
+            sp.edit().putString(KEY_RANGE_ONLY_RADAR_MAC, v).apply()
+        }
+
     /** Enable the Bosch eBike live-data reader. Off by default. When off, the
      *  read-only status reader is never started and every downstream consumer
      *  (AlertDecider stationary override, walk-away disarm gate) sees a null
@@ -1203,6 +1216,8 @@ class Prefs(context: Context) {
         // Counts only, no identifiers, so it needs no strip - but it goes
         // through the same one anyway rather than relying on that staying true.
         appendLine("radar_legacy_tally=${redactAddresses(radarLegacyTally)}")
+        // Presence only: the value is a radar's address.
+        appendLine("range_only_radar_mac=${redactPresence(rangeOnlyRadarMac)}")
         appendLine("ebike_data_enabled=$eBikeDataEnabled")
         appendLine("ebike_ownership=$eBikeOwnership")
         appendLine("ebike_unknown_object_log_enabled=$eBikeUnknownObjectLogEnabled")
@@ -1309,6 +1324,7 @@ class Prefs(context: Context) {
         const val KEY_RADAR_LINK_PROBE = "radar_link_probe"
         const val KEY_CAMERA_LINK_PROBE = "camera_link_probe"
         const val KEY_RADAR_LEGACY_TALLY = "radar_legacy_tally"
+        const val KEY_RANGE_ONLY_RADAR_MAC = "range_only_radar_mac"
 
         /** Bounds for [radarLateralOffsetCm]. The Settings slider snaps to 0
          *  (centred), then jumps to +/-[RADAR_LATERAL_OFFSET_MIN_CM] and runs in

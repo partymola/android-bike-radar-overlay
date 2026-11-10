@@ -974,6 +974,7 @@ internal class RadarLinkController(
                             // The radar counts as up from here, not from the
                             // handshake line above, so a report needs this edge.
                             if (markStreaming()) journal("radar V2 stream live")
+                            prefs.rangeOnlyRadarMac = null
                         }
                         v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                     }
@@ -1163,6 +1164,9 @@ internal class RadarLinkController(
                     // churn the radio for the whole ride.
                     lastConnectionReachedDecode = true
                     if (markStreaming()) journal("radar legacy stream live")
+                    // On a frame, not the subscribe
+                    // (`aLegacyStreamThatNeverDeliversIsNotRemembered`).
+                    gatt.device?.address?.let { prefs.rangeOnlyRadarMac = it }
                 }
                 // Published on EVERY payload, not only the ones that change the
                 // track set. Heartbeats are the only traffic on an empty road,

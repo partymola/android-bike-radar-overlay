@@ -627,15 +627,28 @@ class BikeRadarService : Service() {
                 radarLinkCoordinator.markAdapterOn()
                 registerEventScan()
                 maybeStartEBikeReader()
+                // Also a pin the cache replay below does not hold
+                // (`bluetoothComingOnStartsAnUncachedPin`).
+                startPinIfIdle()
                 scope.launch { kickstartFromCache() }
             },
         )
         bluetoothStateMonitor.register()
         // Settings, setup and the home card write only the pref, so a pin
         // changed while a link runs is followed here
-        // (`BikeRadarServiceSmokeTest.aPinChangedWhileLinkedMovesTheLink`).
+        // (`BikeRadarServiceSmokeTest.aPinChangedWhileLinkedMovesTheLink`),
+        // and one written while none runs is started
+        // (`aPinSetWhileNoLinkRunsStartsALinkToIt`).
         scope.launch {
-            prefs.flow.map { it.radarMac }.distinctUntilChanged().collect { followRadarPin() }
+            prefs.flow.map { it.radarMac }.distinctUntilChanged().collect {
+                followRadarPin()
+                startPinIfIdle()
+            }
+        }
+        // Resume writes only the pref as well, and so does the pause expiry
+        // (`aPinSetWhilePausedStartsWhenThePauseEnds`, `aPauseRunningOutStartsThePin`).
+        scope.launch {
+            prefs.flow.map { it.pausedUntilEpochMs }.distinctUntilChanged().collect { startPinIfIdle() }
         }
         scope.launch { kickstartFromCache() }
         launchWalkAwayTick()
@@ -992,10 +1005,11 @@ class BikeRadarService : Service() {
         scheduleRead(shownName, mac)
     }
 
-    /** A sighting passes its own name and address; the pin collector passes
-     *  neither, and only it records a pin the bonded read cannot see, since it
-     *  runs once per change. An empty read while a link runs is a failed read,
-     *  not an unpaired pin, so it records nothing. */
+    /** Moves a running link only; with none running, [startPinIfIdle] starts
+     *  the pin. A sighting passes its own name and address; the pin collector
+     *  passes neither, and only it records a pin the bonded read cannot see,
+     *  since it runs once per change. An empty read while a link runs is a
+     *  failed read, not an unpaired pin, so it records nothing. */
     private suspend fun followRadarPin(sightedName: String? = null, sightedMac: String? = null) {
         val pin = prefs.radarMac ?: return
         val bonded = RadarSelection.bondedDevices(this)
@@ -1004,6 +1018,20 @@ class BikeRadarService : Service() {
             linkJournal.log("radar pin not bonded; link kept")
         }
         radarLink.followPin(RadarSelection.pinnedLinkName(pin, sightedMac, sightedName, bonded), pin, bondedMacs)
+    }
+
+    /** Starts the pin while alerts are not paused and a readable paired list
+     *  holds it. The scan reports a radar already on only once, so a pin
+     *  written after that sighting gets no other. An empty list may be
+     *  Bluetooth off and starts nothing
+     *  (`aPinSetWithNothingReadablyPairedStartsNothing`). A running link is
+     *  [RadarLinkController.start]'s to keep or replace. */
+    private fun startPinIfIdle() {
+        val pin = prefs.radarMac ?: return
+        if (prefs.isPaused) return
+        val bonded = RadarSelection.bondedDevices(this)
+        val pinned = bonded.firstOrNull { it.mac.equals(pin, ignoreCase = true) } ?: return
+        radarLink.start(RadarSelection.pinnedLinkName(pin, null, null, bonded), pinned.mac, bonded.mapTo(HashSet()) { it.mac })
     }
 
     // ── capture log ───────────────────────────────────────────────────────────

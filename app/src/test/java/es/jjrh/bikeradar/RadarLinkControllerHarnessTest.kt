@@ -740,7 +740,8 @@ class RadarLinkControllerHarnessTest {
         assertFalse(gateway.events.contains("disconnected"))
         assertFalse(journalHas("moving to the pinned radar"))
 
-        // A link that has ended is not moved: the scan path starts the pinned one.
+        // A link that has ended is not moved: the service starts the pinned one
+        // (`BikeRadarServiceSmokeTest.aPinSetWhileNoLinkRunsStartsALinkToIt`).
         controller.forceReconnect()
         assertTrue(pumpUntil { !controller.isActive() })
         controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))

@@ -850,6 +850,129 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    private fun File.radarStarts() = if (exists()) readLines().count { it.contains("radar link start ") } else 0
+
+    @Test
+    fun aPinSetWhileNoLinkRunsStartsALinkToIt() {
+        // The scan reports a radar already on once, so a pin written after
+        // that sighting gets no second one.
+        val (controller, _, journal) = twoRadarService(listOf(RADAR_A, RADAR_B))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals(0, journal.radarStarts())
+
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        idleMainUntil(timeoutMs = 500L) { false }
+        val text = journal.readText()
+        assertEquals("got:\n$text", 1, journal.starts("RTL515"))
+        assertEquals("got:\n$text", 1, journal.radarStarts())
+        controller.destroy()
+    }
+
+    @Test
+    fun anUnlistedPinPairedEarlierStartsWhenItIsPinned() {
+        // Its pairing is dropped for its name, so nothing cached it. The pin is
+        // in another case than the paired list's address.
+        val (controller, _, journal) = twoRadarService(emptyList())
+        pair(UNLISTED, "Tail unit")
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals(0, journal.radarStarts())
+
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED.lowercase(), "Tail unit"))
+        idleMainUntil { journal.starts("Tail unit") == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("Tail unit"))
+
+        // Opened under the paired address, the link is still running when a
+        // pause ends; under the pin's own case it could not open at all.
+        Prefs(app).pausedUntilEpochMs = Long.MAX_VALUE
+        idleMainUntil(timeoutMs = 300L) { false }
+        Prefs(app).pausedUntilEpochMs = 0L
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinSetWhilePausedStartsWhenThePauseEnds() {
+        val prefs = Prefs(app).apply { pausedUntilEpochMs = Long.MAX_VALUE }
+        val (controller, _, journal) = twoRadarService(listOf(RADAR_A, RADAR_B))
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("a pause holds the start, got:\n${journal.readText()}", 0, journal.radarStarts())
+
+        // Resume on the home card and in Settings writes only the pref.
+        prefs.pausedUntilEpochMs = 0L
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPauseRunningOutStartsThePin() {
+        val prefs = Prefs(app).apply { pausedUntilEpochMs = System.currentTimeMillis() + 3_000L }
+        RadarSelection.pin(prefs, RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        val (controller, _, journal) = twoRadarService(listOf(RADAR_B))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 0, journal.radarStarts())
+
+        idleMainUntil(timeoutMs = 8_000L) { journal.starts("RTL515") == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("RTL515"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinSetWithNothingReadablyPairedStartsNothing() {
+        // Bluetooth off and a refused read both list nothing.
+        val (controller, _, journal) = twoRadarService(emptyList())
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 0, journal.radarStarts())
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinTheReadablePairedListLacksStartsNothing() {
+        val (controller, _, journal) = twoRadarService(listOf(RADAR_A))
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 0, journal.radarStarts())
+        controller.destroy()
+    }
+
+    @Test
+    fun bluetoothComingOnStartsAnUncachedPin() {
+        // Off, Android lists nothing paired; on, the cache has nothing to replay.
+        val adapter = (app.getSystemService(Application.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        shadowOf(adapter).setEnabled(false)
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, _, journal) = serviceWithPairedAndCached(emptyMap(), emptyList())
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 0, journal.radarStarts())
+
+        val pinned = adapter.getRemoteDevice(UNLISTED).also { shadowOf(it).setName("Tail unit") }
+        shadowOf(adapter).setBondedDevices(setOf(pinned))
+        shadowOf(adapter).setEnabled(true)
+        app.sendBroadcast(
+            Intent(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.STATE_ON),
+        )
+        shadowOf(app.mainLooper).idle()
+        idleMainUntil { journal.starts("Tail unit") == 1 }
+        assertEquals("got:\n${journal.readText()}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
+    fun aServiceStartedWithThePinPairedAndCachedStartsOneLink() {
+        // The cache replay and the pin both ask for it.
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        val (controller, _, journal) = serviceWithPairedAndCached(mapOf(RADAR_B to "RTL515"), listOf("RTL515" to RADAR_B))
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        idleMainUntil(timeoutMs = 500L) { false }
+        assertEquals("got:\n${journal.readText()}", 1, journal.radarStarts())
+        controller.destroy()
+    }
+
     /** [bonded] paired, by address and name, and the service started with the
      *  known-device cache holding [cached]; returns it and its journal, cleared. */
     private fun serviceWithPairedAndCached(bonded: Map<String, String>, cached: List<Pair<String, String>>): Triple<org.robolectric.android.controller.ServiceController<BikeRadarService>, BikeRadarService, File> {
@@ -1105,8 +1228,8 @@ class BikeRadarServiceSmokeTest {
         readDevice(service, name, mac, 1)
         assertEquals("got:\n${journal.readText()}", 0, journal.starts(name))
 
+        // The scan has reported it once already, so no sighting follows.
         RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(mac, name))
-        readDevice(service, name, mac, 2)
         idleMainUntil { journal.starts(name) == 1 }
         assertEquals("got:\n${journal.readText()}", 1, journal.starts(name))
         controller.destroy()

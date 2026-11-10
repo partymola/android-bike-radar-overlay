@@ -20,7 +20,8 @@ class DashcamProbeTest {
         lastProbeMs: Long? = null,
         failures: Int = 0,
         alarmSoundedAtMs: Long? = null,
-    ) = DashcamProbe.shouldLaunch(radarGattActive, radarOffSinceMs, nowMs, shownAgeMs, heardAgeMs, armed, lastProbeMs, failures, alarmSoundedAtMs)
+        awaitingSound: Boolean = false,
+    ) = DashcamProbe.shouldLaunch(radarGattActive, radarOffSinceMs, nowMs, shownAgeMs, heardAgeMs, armed, lastProbeMs, failures, alarmSoundedAtMs, awaitingSound)
 
     @Test
     fun aCameraReadTwentySecondsAgoIsReadAgain() {
@@ -73,6 +74,14 @@ class DashcamProbeTest {
         assertFalse(launches(radarGattActive = true, armed = true, heardAgeMs = 2_000L, nowMs = 1_903_999L, lastProbeMs = 1_900_000L, failures = 1, alarmSoundedAtMs = 1_890_000L))
         assertEquals(35_000L, DashcamProbe.REPEAT_AFTER_GATE_MS)
         assertEquals(300_000L, WalkAwayDecider.Config(enabled = true, thresholdMs = 0L).rateLimitMs)
+    }
+
+    @Test
+    fun readsGoOnPastTheIdleGateWhileASoundingIsAwaited() {
+        // The gate closed at 1 900 000.
+        assertTrue(launches(nowMs = 1_990_000L, heardAgeMs = 2_000L, armed = true, awaitingSound = true))
+        assertFalse(launches(nowMs = 1_990_000L, heardAgeMs = 2_000L, armed = true, awaitingSound = false))
+        assertFalse(launches(nowMs = 1_990_000L, heardAgeMs = 1_999L, armed = true, awaitingSound = true))
     }
 
     @Test

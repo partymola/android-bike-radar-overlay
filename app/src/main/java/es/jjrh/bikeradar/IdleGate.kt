@@ -8,7 +8,7 @@ package es.jjrh.bikeradar
  * the ticker from issuing GATT reads when no radar link is open
  * AND we are past the walk-away monitoring window. At that point the
  * dashcam liveness signal has no consumer and the reads are wasted,
- * except for a walk-away alarm sounding or due just then
+ * except for a walk-away alarm sounding, due just then or snoozed
  * ([DashcamProbe.shouldLaunch]).
  */
 internal object IdleGate {
@@ -16,8 +16,8 @@ internal object IdleGate {
      * Window opens when the radar's off-episode starts (`radarOffSinceMs`
      * set by `RadarLinkCoordinator.markDisconnected`, including a session's
      * first failed attempt). A camera only the probe hears goes unheard soon
-     * after it closes, or after a repeat due just past the close has sounded,
-     * which ends the dashcam walk-away alarm for it; one
+     * after it closes, or after a repeat due just past the close or a snoozed
+     * reminder has sounded, which ends the dashcam walk-away alarm for it; one
      * whose light link stays up stays heard, and its alarm repeats past it
      * (`DashcamHeardWindowTest`). Long enough for the longest threshold to
      * sound twice (`IdleGateTest.dashcamWindowLetsTheLongestThresholdSoundTwice`).

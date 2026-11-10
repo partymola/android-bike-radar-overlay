@@ -250,6 +250,121 @@ class DashcamHeardWindowTest {
         assertEquals(0, h.launches.count { it > DROP_MS + 920_000L })
     }
 
+    /** A snooze from [snoozeAtMs] to [snoozeEndsAtMs] after the drop, at a 45 s
+     *  wait, whose own repeats are due too late to hold the reads. */
+    private fun DashcamProbeHarness.snoozeAcrossTheMonitoringWindow(snoozeAtMs: Long, snoozeEndsAtMs: Long) {
+        runUntil(DROP_MS + snoozeAtMs)
+        coordinator.markWalkAwayDismissed(snoozed = true)
+        runUntil(DROP_MS + snoozeEndsAtMs)
+        coordinator.clearWalkAwayDismissalForReArm()
+        runUntil(DROP_MS + 1_300_000L)
+    }
+
+    @Test
+    fun aReminderDueJustAfterTheMonitoringWindowSoundsInFull() = runTest {
+        // Snoozed at 794 s, so the reminder is due at 914 s, 14 s past the window.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L)
+        h.snoozeAcrossTheMonitoringWindow(snoozeAtMs = 794_000L, snoozeEndsAtMs = 914_000L)
+        assertEquals(DROP_MS + 916_000L, h.postTimes.last())
+        assertEquals(1, h.stops)
+        assertTrue("stop=${h.stopTimes.single() - DROP_MS}", h.stopTimes.single() >= DROP_MS + 976_000L)
+    }
+
+    @Test
+    fun aReminderDueWellAfterTheMonitoringWindowStillSounds() = runTest {
+        // Snoozed at 880 s: without the reads the camera would go unheard at
+        // 920 s and the reminder at 1 000 s would never come.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L)
+        h.snoozeAcrossTheMonitoringWindow(snoozeAtMs = 880_000L, snoozeEndsAtMs = 1_000_000L)
+        assertEquals(DROP_MS + 1_002_000L, h.postTimes.last())
+        assertEquals(1, h.stops)
+        assertTrue("stop=${h.stopTimes.single() - DROP_MS}", h.stopTimes.single() >= DROP_MS + 1_062_000L)
+    }
+
+    /** Reads of 0.1 s, 10 s and at the timeout, each probe phase half a second
+     *  apart, and the snooze ending every 0.9 s across the longest read cycle,
+     *  18 s: a 15 s read, then the next on the first tick 2 s after its
+     *  answer. So on and off the tick grid and at every point of a read, the
+     *  reminder sounds and has its whole 60 s. */
+    @Test
+    fun aReminderSoundsInFullWhateverTheReadTimeAndWhenTheSnoozeEnds() {
+        val failures = mutableListOf<String>()
+        for (readMs in listOf(100L, 9_999L, 14_999L)) {
+            for (phase in listOf(0L, 500L, 1_000L, 1_500L)) {
+                for (endOffset in 0L until 18_000L step 900L) {
+                    runTest {
+                        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = readMs, probePhaseMs = phase)
+                        val endsAt = 1_000_000L + endOffset
+                        h.snoozeAcrossTheMonitoringWindow(snoozeAtMs = endsAt - 120_000L, snoozeEndsAtMs = endsAt)
+                        val last = h.postTimes.last()
+                        val ok = last >= DROP_MS + endsAt &&
+                            last < DROP_MS + endsAt + 4_000L &&
+                            h.stops == 1 &&
+                            h.stopTimes.single() - last >= 60_000L
+                        if (!ok) failures += "read=$readMs phase=$phase end=$endOffset posts=${h.postTimes.map { it - DROP_MS }} stops=${h.stopTimes.map { it - DROP_MS }}"
+                    }
+                    clear()
+                }
+            }
+        }
+        assertEquals("reminders missed or cut short:\n" + failures.joinToString("\n"), 0, failures.size)
+    }
+
+    @Test
+    fun aPhoneAsleepThroughTheEndOfASnoozeStillSoundsTheReminder() = runTest {
+        // Asleep from 890 s to 1 019 s, past the window and the snooze's end
+        // at 1 000 s: the snooze's timer runs as the phone wakes, with the
+        // last answer over two minutes old.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L)
+        h.runUntil(DROP_MS + 880_000L)
+        h.coordinator.markWalkAwayDismissed(snoozed = true)
+        h.runUntil(DROP_MS + 890_000L)
+        h.dozeUntil(DROP_MS + 1_019_000L)
+        h.coordinator.clearWalkAwayDismissalForReArm()
+        h.runUntil(DROP_MS + 1_300_000L)
+        assertTrue("posts=${h.postTimes.map { it - DROP_MS }}", h.postTimes.last() in DROP_MS + 1_019_000L until DROP_MS + 1_026_000L)
+        assertEquals(1, h.stops)
+        assertTrue(h.stopTimes.single() - h.postTimes.last() >= 60_000L)
+    }
+
+    @Test
+    fun aDismissDoesNotKeepTheReadsGoingPastTheMonitoringWindow() = runTest {
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L)
+        h.runUntil(DROP_MS + 880_000L)
+        h.coordinator.markWalkAwayDismissed(snoozed = false)
+        h.runUntil(DROP_MS + 1_300_000L)
+        assertEquals(0, h.launches.count { it >= DROP_MS + 900_000L })
+    }
+
+    @Test
+    fun aCameraThatGoesOffDuringASnoozeEndsTheReads() = runTest {
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L, answers = { it < DROP_MS + 905_000L })
+        h.runUntil(DROP_MS + 880_000L)
+        h.coordinator.markWalkAwayDismissed(snoozed = true)
+        h.runUntil(DROP_MS + 1_000_000L)
+        assertFalse(h.coordinator.snapshot().walkAwayArmed)
+        // Held past the window by the snooze, then ended with the camera.
+        assertTrue(h.launches.contains(DROP_MS + 904_000L))
+        assertEquals(0, h.launches.count { it > DROP_MS + 930_000L })
+    }
+
+    @Test
+    fun aRepeatSnoozedAfterTheMonitoringWindowRemindsInFull() = runTest {
+        // At 15 s the fourth sounding comes at 916 s, past the window; the
+        // rider snoozes it at 930 s, so the reminder is due at 1 050 s.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 15, readMs = 100L)
+        h.runUntil(DROP_MS + 930_000L)
+        assertEquals(DROP_MS + 916_000L, h.postTimes.last())
+        h.coordinator.markWalkAwayDismissed(snoozed = true)
+        h.runUntil(DROP_MS + 1_050_000L)
+        assertEquals(DROP_MS + 916_000L, h.postTimes.last())
+        h.coordinator.clearWalkAwayDismissalForReArm()
+        h.runUntil(DROP_MS + 1_300_000L)
+        assertEquals(DROP_MS + 1_052_000L, h.postTimes.last())
+        assertEquals(1, h.stops)
+        assertTrue("stop=${h.stopTimes.single() - DROP_MS}", h.stopTimes.single() in DROP_MS + 1_112_000L until DROP_MS + 1_140_000L)
+    }
+
     @Test
     fun aSnoozeEndsWithTheAlarmForACameraStillOn() = runTest {
         val h = DashcamProbeHarness(this, app, thresholdSec = 15, readMs = 14_999L)

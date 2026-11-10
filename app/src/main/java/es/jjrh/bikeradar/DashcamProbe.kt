@@ -26,16 +26,23 @@ internal class DashcamProbe(
         val link = coordinator.snapshot()
         val entry = dashcamSlug()?.let { BatteryStateBus.entries.value[it] }
         val shownAgeMs = entry?.let { nowMs - it.lastSeenElapsedMs } ?: Long.MAX_VALUE
+        val canSound = coordinator.dashcamAlarmCanSound(link)
         val launch = shouldLaunch(
             radarGattActive = link.radarGattActive,
             radarOffSinceMs = link.radarOffSinceMs,
             nowMs = nowMs,
             shownAgeMs = shownAgeMs,
             heardAgeMs = nowMs - coordinator.dashcamHeardAtMs(nowMs, link),
-            armed = coordinator.dashcamAlarmCanSound(link),
+            armed = canSound,
             lastProbeMs = lastProbeMs[mac],
             failures = probeFailures[mac] ?: 0,
             alarmSoundedAtMs = link.lastWalkAwayFireMs,
+            // Dismissed and still able to sound is a snooze: a dismiss for
+            // good ends [RadarLinkCoordinator.dashcamAlarmCanSound]. No fire
+            // time on record covers every alarm that can sound and has none:
+            // before the first sounding, and after a snooze's end or an
+            // auto-dismiss cleared it.
+            awaitingSound = canSound && (link.walkAwayDismissed || link.lastWalkAwayFireMs == null),
         )
         // Only a read that started counts toward the backoff; one skipped for a
         // read still in flight does not
@@ -79,6 +86,14 @@ internal class DashcamProbe(
          * those reads that repeat is stopped seconds into its tone for a camera
          * still on
          * (`DashcamHeardWindowTest.aRepeatDueJustAfterTheMonitoringWindowSoundsInFull`).
+         * Also past it while [awaitingSound]: the alarm is snoozed, or can sound
+         * with no sounding on record, as when a snooze has ended and its
+         * reminder has not sounded yet. Otherwise the
+         * reminder the rider asked for finds the camera unheard and never
+         * sounds, or sounds and is stopped
+         * (`DashcamHeardWindowTest.aReminderDueWellAfterTheMonitoringWindowStillSounds`,
+         * `DashcamHeardWindowTest.aReminderSoundsInFullWhateverTheReadTimeAndWhenTheSnoozeEnds`,
+         * `DashcamHeardWindowTest.aPhoneAsleepThroughTheEndOfASnoozeStillSoundsTheReminder`).
          * And only once the camera was last heard ([heardAgeMs], an answer or
          * its light link) or last shown ([shownAgeMs], the battery bus)
          * [BikeRadarService.DASHCAM_REFRESH_MS] ago, whichever is older: a
@@ -101,10 +116,12 @@ internal class DashcamProbe(
             lastProbeMs: Long?,
             failures: Int,
             alarmSoundedAtMs: Long?,
+            awaitingSound: Boolean,
         ): Boolean {
             val ageMs = if (armed) heardAgeMs else maxOf(heardAgeMs, shownAgeMs)
             val baseMs = if (armed) ARMED_REFRESH_MS else BikeRadarService.DASHCAM_REFRESH_MS
-            return (IdleGate.shouldRefreshDashcam(radarGattActive, radarOffSinceMs, nowMs) || alarmNeedsReads(radarOffSinceMs, nowMs, alarmSoundedAtMs)) &&
+            val gateOpen = IdleGate.shouldRefreshDashcam(radarGattActive, radarOffSinceMs, nowMs)
+            return (gateOpen || awaitingSound || alarmNeedsReads(radarOffSinceMs, nowMs, alarmSoundedAtMs)) &&
                 ageMs >= baseMs &&
                 BatteryProbeBackoff.shouldProbe(
                     radarGattActive,

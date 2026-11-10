@@ -208,22 +208,8 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     // or log a close pass, so the row must not render it as full cover.
     val radarLimited = radarState.source == DataSource.V1
     // For the close-pass card alone, which must say the same before and after
-    // a ride as during it. With no stream, the radar remembered from its last
-    // one counts while it is still this bike's: the pin when one holds, as for
-    // the battery row, else any radar a link may start to
-    // (`ClosePassCardStoredRadarTest`).
-    val closePassRangeOnly = radarLimited ||
-        (
-            radarState.source == DataSource.NONE &&
-                prefs.rangeOnlyRadarMac?.let { mac ->
-                    val pairedMacs = paired.mapTo(HashSet()) { it.mac }
-                    if (RadarSelection.pinHolds(prefsSnap.radarMac, pairedMacs)) {
-                        mac.equals(prefsSnap.radarMac, ignoreCase = true)
-                    } else {
-                        RadarSelection.mayStartLink(mac, pairedMacs)
-                    }
-                } == true
-            )
+    // a ride as during it (`ClosePassCardStoredRadarTest`).
+    val closePassRangeOnly = RadarSelection.reportsDistanceOnly(radarState.source, prefs.rangeOnlyRadarMac, prefsSnap.radarMac, paired)
     // Routed through the SAME deriver the Settings radar card uses, rather
     // than spelling the predicate out again here. Two surfaces answering one
     // question with two copies of the logic is the defect this fixes: the

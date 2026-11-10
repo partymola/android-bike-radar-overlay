@@ -278,6 +278,95 @@ class SettingsRadarDeviceStatusTest {
         composeRule.onNodeWithText("No effect on this radar: it reports distance only.").assertDoesNotExist()
     }
 
+    private fun assertSaysDistanceOnly() {
+        composeRule.onNodeWithText(limitedSourceNote).assertIsDisplayed()
+        composeRule.onNodeWithText("No effect on this radar: it reports distance only.").assertExists()
+        composeRule.onNodeWithText("Slide toward the side your radar is mounted.").assertDoesNotExist()
+    }
+
+    private fun assertSaysNothingAboutDistanceOnly() {
+        composeRule.onNodeWithText(limitedSourceNote).assertDoesNotExist()
+        composeRule.onNodeWithText("No effect on this radar: it reports distance only.").assertDoesNotExist()
+        composeRule.onNodeWithText("Slide toward the side your radar is mounted.").assertExists()
+    }
+
+    private fun bondTwoRadars() {
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val first = adapter.getRemoteDevice("AA:BB:CC:DD:EE:11")
+        val second = adapter.getRemoteDevice("AA:BB:CC:DD:EE:22")
+        shadowOf(second).setName("RearVue8 spare")
+        shadowOf(adapter).setBondedDevices(setOf(first, second))
+    }
+
+    @Test
+    fun aRememberedDistanceOnlyRadarKeepsItsNoteWithNoRadarStreaming() {
+        prefs.rangeOnlyRadarMac = "aa:bb:cc:dd:ee:11"
+
+        showScreen()
+
+        // The label still describes the link, which is down.
+        composeRule.onNodeWithText("No signal").assertIsDisplayed()
+        composeRule.onNodeWithText("Limited").assertDoesNotExist()
+        assertSaysDistanceOnly()
+    }
+
+    @Test
+    fun withNoRadarRememberedAndNoneStreamingNeitherShows() {
+        showScreen()
+
+        assertSaysNothingAboutDistanceOnly()
+    }
+
+    @Test
+    fun aRememberedRadarIsIgnoredWhileAFullRadarStreams() {
+        prefs.rangeOnlyRadarMac = "AA:BB:CC:DD:EE:11"
+        BikeRadarService.radarLinkStateForUi =
+            MutableStateFlow(RadarLinkState(radarGattActive = true))
+        RadarStateBus.publish(
+            RadarState(
+                vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = -4f)),
+                timestamp = System.currentTimeMillis(),
+                source = DataSource.V2,
+            ),
+        )
+
+        showScreen()
+
+        composeRule.onNodeWithText("Live").assertIsDisplayed()
+        assertSaysNothingAboutDistanceOnly()
+    }
+
+    @Test
+    fun aRememberedRadarNoLongerPairedShowsNeither() {
+        prefs.rangeOnlyRadarMac = "AA:BB:CC:DD:EE:22"
+
+        showScreen()
+
+        assertSaysNothingAboutDistanceOnly()
+    }
+
+    @Test
+    fun aRememberedRadarOtherThanThePinnedOneShowsNeither() {
+        bondTwoRadars()
+        prefs.radarMac = "AA:BB:CC:DD:EE:11"
+        prefs.rangeOnlyRadarMac = "AA:BB:CC:DD:EE:22"
+
+        showScreen()
+
+        assertSaysNothingAboutDistanceOnly()
+    }
+
+    @Test
+    fun aRememberedRadarThatIsThePinnedOneKeepsItsNote() {
+        bondTwoRadars()
+        prefs.radarMac = "AA:BB:CC:DD:EE:22"
+        prefs.rangeOnlyRadarMac = "aa:bb:cc:dd:ee:22"
+
+        showScreen()
+
+        assertSaysDistanceOnly()
+    }
+
     @Test
     fun freshDecodedFramesReadLive() {
         // The positive half: what "Live" means is that the radar is

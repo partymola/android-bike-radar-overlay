@@ -86,6 +86,21 @@ object RadarSelection {
     fun mayStartLink(mac: String, bondedMacs: Set<String>): Boolean = bondedMacs.isEmpty() || bondedMacs.any { it.equals(mac, ignoreCase = true) }
 
     /**
+     * Whether this bike's radar reports distance only: a legacy stream is on
+     * [source], or no stream is and [rememberedMac] (`Prefs.rangeOnlyRadarMac`)
+     * is still this bike's radar, the pin when [pinHolds], else any radar
+     * [mayStartLink] accepts. A full stream ignores the remembered radar. The
+     * home close-pass card and the radar screen both ask this
+     * (`ClosePassCardStoredRadarTest`, `SettingsRadarDeviceStatusTest`).
+     */
+    fun reportsDistanceOnly(source: DataSource, rememberedMac: String?, chosenMac: String?, allBonded: List<BondedRadar>): Boolean {
+        if (source == DataSource.V1) return true
+        if (source != DataSource.NONE || rememberedMac == null) return false
+        val pairedMacs = allBonded.mapTo(HashSet()) { it.mac }
+        return if (pinHolds(chosenMac, pairedMacs)) rememberedMac.equals(chosenMac, ignoreCase = true) else mayStartLink(rememberedMac, pairedMacs)
+    }
+
+    /**
      * Whether a link running to [linkedMac] gives way to [targetMac]: only when
      * [bondedMacs] holds the target and the linked radar could not start now,
      * which makes the list non-empty and the target another address. An empty

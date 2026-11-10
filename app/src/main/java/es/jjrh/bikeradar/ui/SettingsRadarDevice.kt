@@ -173,6 +173,7 @@ private fun SettingsRadarDeviceBody(navController: NavController, prefs: Prefs) 
         chosenMac = chosen,
         activeName = activeName,
         link = link,
+        distanceOnly = RadarSelection.reportsDistanceOnly(radarState.source, prefs.rangeOnlyRadarMac, chosen, allBonded),
         batteryPct = freshBattery?.pct,
         batteryLowThresholdPct = prefsSnap.batteryLowThresholdPct,
         onPairDifferent = {
@@ -204,11 +205,13 @@ internal fun SettingsRadarDeviceContent(
     bonded: List<RadarSelection.BondedRadar>,
     chosenMac: String?,
     activeName: String?,
-    /** Classified by the same [deviceLinkState] the home System row uses.
-     *  [DeviceLinkState.LIMITED] also drives the range-only note below: a
-     *  rider must not mistake a partly-working radar for a fully-working
-     *  one, and nothing else on any screen says so. */
+    /** Classified by the same [deviceLinkState] the home System row uses. */
     link: DeviceLinkState,
+    /** Drives the range-only note and the slider's no-effect helper: a rider
+     *  must not mistake a partly-working radar for a fully-working one. The
+     *  screen sets it from [RadarSelection.reportsDistanceOnly], so it holds
+     *  with the radar off (`SettingsRadarDeviceStatusTest`). */
+    distanceOnly: Boolean = link == DeviceLinkState.LIMITED,
     batteryPct: Int?,
     batteryLowThresholdPct: Int = DEFAULT_BATTERY_LOW_THRESHOLD_PCT,
     others: List<RadarSelection.BondedRadar> = emptyList(),
@@ -377,7 +380,7 @@ internal fun SettingsRadarDeviceContent(
                                 fontSize = 11.sp,
                             )
                         }
-                        if (link == DeviceLinkState.LIMITED) {
+                        if (distanceOnly) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = stringResource(R.string.settings_radardev_limited_source),
@@ -435,7 +438,7 @@ internal fun SettingsRadarDeviceContent(
                 // slider says so rather than promising an effect
                 // (`SettingsRadarDeviceStatusTest`).
                 helper = stringResource(
-                    if (link == DeviceLinkState.LIMITED) {
+                    if (distanceOnly) {
                         R.string.settings_radardev_position_no_effect
                     } else {
                         R.string.settings_radardev_position_helper

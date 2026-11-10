@@ -371,9 +371,10 @@ class AlertDecider(
      *  swing inside [URGENT_PASS_LATERAL_MIN_M] judged, or one never checked
      *  again behind a closer candidate; the urgent lines say which sounded.
      *
-     *  Volume is bounded per TRACK, not per frame, though the hook is reached
-     *  on every frame: each verdict is deduped per track ([logPassGate],
-     *  [passGateOkLogged], [ceilingLogged], [rxVetoLogged],
+     *  Volume does not follow the frame rate, though the hook is reached on
+     *  every frame: a pass-gate verdict is logged when it differs from the
+     *  last one recorded for the track ([logPassGate]), the rest are deduped
+     *  per track ([passGateOkLogged], [ceilingLogged], [rxVetoLogged],
      *  [unconfidentWaits]) and an expiry can
      *  fire once per fit because the fit is removed as it is reported. A
      *  pass or refused pass is logged once per closest car leaving, a
@@ -1483,12 +1484,15 @@ class AlertDecider(
         return when (val fit = predictedPassFit(v.id)) {
             is PassFit.Unconfident -> !(waitEnabled && heldForUnconfidentWait(v, nowMs))
             is PassFit.FreshOverride -> {
-                // The fail-open path: a stale fit wanted to judge this
-                // candidate and the freshest measurement refused to back
-                // it. Logged because it is the branch that lets an urgent
-                // SOUND where the wide fit alone would have silenced it.
-                logPassGate(v.id, "open") {
-                    "# gate urgent-pass-open tid=${v.id} newest_rx=${fit.newestRangeXm} d=${v.distanceM}"
+                // The fail-open path: the freshest measurement is near
+                // centre, so no wider fit is asked. `fallback=fit` marks the
+                // case worth reading later, where a fit over the whole
+                // approach existed and was not allowed to judge;
+                // `fallback=none` is a track with too little history for
+                // any fit (`AlertDeciderPassOpenLogTest`).
+                logPassGate(v.id, if (fit.staleFit) "open" else "open-nofit") {
+                    "# gate urgent-pass-open tid=${v.id} newest_rx=${fit.newestRangeXm} d=${v.distanceM}" +
+                        " fallback=${if (fit.staleFit) "fit" else "none"}"
                 }
                 true
             }
@@ -1563,11 +1567,11 @@ class AlertDecider(
         return false
     }
 
-    /** Emit a pass-gate decision to the capture log once per verdict per
-     *  track. This gate is evaluated inside the urgent-candidate search on
-     *  every frame, so a car lingering as a candidate beside the rider is
-     *  judged many times a second; only a CHANGE in what the gate DECIDED
-     *  is news.
+    /** Emit a pass-gate decision to the capture log when it differs from the
+     *  last one recorded for the track. This gate is evaluated inside the
+     *  urgent-candidate search on every frame, so a car lingering as a
+     *  candidate beside the rider is judged many times a second; only a
+     *  CHANGE in what the gate DECIDED is news.
      *
      *  [verdict] is the dedupe key and must carry no per-frame numbers.
      *  Keying on the formatted line instead would defeat the whole purpose:
@@ -1576,13 +1580,19 @@ class AlertDecider(
      *  The numbers still reach the log - they ride in [message], recorded on
      *  the transition that is worth reading later.
      *
-     *  This memo covers the off-axis, corroboration and veto verdicts only.
-     *  The confident-PASS verdict keeps its own ([passGateOkLogged]) and
-     *  never reaches here; a fifth verdict added to this one would re-arm
-     *  all three of the above, which is the trap that split them.
+     *  This memo holds the off-axis verdict, the veto per fit window, and the
+     *  open verdict under two keys, with and without a fit passed over. The
+     *  two open keys can alternate on one track as its history gains and
+     *  loses span, so a track's lines are bounded by changes of key, not by
+     *  one per verdict. The second open key re-arms nothing: an off-axis or
+     *  veto line is emitted whenever the slot holds anything else, both open
+     *  keys are something else, and so those lines land on the frames they
+     *  would with one key. The confident-PASS verdict keeps its own memo
+     *  ([passGateOkLogged]) and must not be written here: it comes between
+     *  two vetoes at the margin, and would re-arm the second.
      *
-     *  A consequence worth knowing before reading a capture: these lines are
-     *  each verdict's FIRST occurrence for a track, not a chronology. On
+     *  A consequence worth knowing before reading a capture: a confident
+     *  pass does not change the slot, so these lines are not a chronology. On
      *  veto -> pass -> veto the second veto is deduped, so the last gate line
      *  for that track says `ok` while the verdict in force was `veto`. Read
      *  the set of lines, not the last one. */
@@ -1594,9 +1604,11 @@ class AlertDecider(
 
     /** Outcome of the pass prediction for one track: either a trusted
      *  intercept (with the window that produced it, for the capture log),
-     *  no usable fit at all, or a stale fit the freshest measurement
-     *  refused to corroborate. The last two both fail OPEN; they are
-     *  distinct only so the capture log can tell them apart after a ride. */
+     *  no usable fit with a newest sample off to the side or no sample at
+     *  all, or a newest sample near centre with no confident recent fit,
+     *  which is never judged on the whole-history fit. The last two both
+     *  fail OPEN; they are distinct because only the first of them can be
+     *  held by the Experimental wait. */
     private sealed interface PassFit {
         /** [predictedRangeXm] is the fitted offset where the track draws
          *  level with the RADAR; [minClearanceM] is the closest the same
@@ -1609,7 +1621,10 @@ class AlertDecider(
             val source: String,
         ) : PassFit
         data object Unconfident : PassFit
-        data class FreshOverride(val newestRangeXm: Float) : PassFit
+
+        /** [staleFit] says whether the whole history had a fit to offer. It
+         *  is for the capture log only and decides nothing. */
+        data class FreshOverride(val newestRangeXm: Float, val staleFit: Boolean) : PassFit
     }
 
     /** Least-squares extrapolation of the track's lateral offset at
@@ -1653,8 +1668,11 @@ class AlertDecider(
         // tightens the margin, and it is the guard that fires the cue for a
         // car crossing INTO the rider's line (AlertDeciderTest, "stale
         // side-pass history cannot veto a car swinging into the rider").
+        // Returned before the whole-history fit is judged, with or without one
+        // to judge: this order is also what keeps a near-centre candidate out
+        // of the Experimental wait, which checks no lateral itself.
         if (abs(newest.rangeXm) < URGENT_PASS_LATERAL_MIN_M) {
-            return PassFit.FreshOverride(newest.rangeXm)
+            return PassFit.FreshOverride(newest.rangeXm, staleFit = fitLine(all) != null)
         }
         val fallback = fitLine(all) ?: return PassFit.Unconfident
         return confident(fallback, "fallback")

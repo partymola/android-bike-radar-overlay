@@ -51,16 +51,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
 import es.jjrh.bikeradar.HaStatusDeriver
-import es.jjrh.bikeradar.HaUrlPolicy
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -138,17 +135,15 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
                 return@SettingsHaContent
             }
             pinging = true
-            scope.launch(Dispatchers.IO) {
-                val result = HaClient(url, tok).testConnection()
-                pingResult = result.ping
-                mqttResult = result.mqtt
-                if (result.ping.isSuccess) {
-                    creds.save(url, tok)
-                    prefs.haLastValidatedEpochMs = System.currentTimeMillis()
-                    prefs.haIntent = es.jjrh.bikeradar.data.HaIntent.YES
-                    haConfigured = true
+            scope.launch {
+                runHaTest(url, tok, creds, prefs) {
+                    urlField.trim() == url && tokenField.trim() == tok
+                }?.let {
+                    pingResult = it.ping
+                    mqttResult = it.mqtt
+                    resultForCreds = url to tok
+                    if (it.ping.isSuccess) haConfigured = true
                 }
-                resultForCreds = url to tok
                 pinging = false
             }
         },
@@ -372,16 +367,6 @@ internal fun SettingsHaContent(
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
-}
-
-/**
- * Pre-network gate. Returns the user-facing refusal message when the URL is
- * malformed or sends a bearer token in cleartext to a non-LAN host, else null.
- */
-private fun urlRefusalMessage(url: String): String? = when (val r = HaUrlPolicy.validate(url)) {
-    is HaUrlPolicy.Result.CleartextWanRefused -> HaUrlPolicy.refusalMessage(r.host)
-    HaUrlPolicy.Result.Malformed -> HaUrlPolicy.malformedMessage()
-    HaUrlPolicy.Result.Empty, HaUrlPolicy.Result.Ok -> null
 }
 
 @Composable

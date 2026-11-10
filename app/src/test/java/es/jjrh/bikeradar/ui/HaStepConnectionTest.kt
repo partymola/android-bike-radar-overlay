@@ -20,6 +20,7 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -179,6 +180,38 @@ class HaStepConnectionTest {
         val verifiedAt = Prefs(app).haLastValidatedEpochMs
         compose.onNodeWithText("Continue").performClick()
         assertEquals(verifiedAt, Prefs(app).haLastValidatedEpochMs)
+    }
+
+    private fun continueWith(url: String): Boolean {
+        HaCredentials(app).save(baseUrl, "tok")
+        val prefs = Prefs(app).apply { haIntent = HaIntent.YES }
+        var continued = false
+        compose.setContent { UiTheme { HaStep(onContinue = { continued = true }, onSkip = {}, prefs = prefs) } }
+        compose.onNodeWithText(baseUrl).performTextReplacement(url)
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitForIdle()
+        return continued
+    }
+
+    /** Settings refuses to save these, and every publish would refuse them too. */
+    @Test
+    fun aCleartextAddressOutsideTheHomeNetworkIsNotSavedOnContinue() {
+        assertFalse(continueWith("http://example.com:8123"))
+        assertEquals(baseUrl, HaCredentials(app).baseUrl)
+        waitForText("Refused")
+    }
+
+    @Test
+    fun aMalformedAddressIsNotSavedOnContinue() {
+        assertFalse(continueWith("homeassistant.local:8123"))
+        assertEquals(baseUrl, HaCredentials(app).baseUrl)
+        waitForText("Refused")
+    }
+
+    @Test
+    fun anUntestedAddressThePolicyAcceptsIsSavedOnContinue() {
+        assertTrue(continueWith("http://homeassistant.local:8123"))
+        assertEquals("http://homeassistant.local:8123", HaCredentials(app).baseUrl)
     }
 
     /** Coming back to the step and leaving it unedited has tested nothing new, and changed nothing. */

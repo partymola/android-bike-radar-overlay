@@ -56,14 +56,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.HaIntent
 import es.jjrh.bikeradar.data.Prefs
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // ── Step 2 - Home Assistant ──────────────────────────────────────────
 
@@ -91,10 +88,16 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
         prefsSnap.haIntent == HaIntent.YES || creds.isConfigured() -> HaIntent.YES
         else -> HaIntent.UNSET
     }
-    val onContinueSaving: () -> Unit = {
+    val onContinueSaving: () -> Unit = continueSaving@{
         if (canSubmit) {
             val url = urlField.trim()
             val token = tokenField.trim()
+            val refusal = urlRefusalMessage(url)
+            if (refusal != null) {
+                pingResult = Result.failure(Exception(refusal))
+                mqttResult = null
+                return@continueSaving
+            }
             // A verified time belongs to the values it was earned on.
             if (creds.save(url, token)) prefs.haLastValidatedEpochMs = 0L
             prefs.haIntent = HaIntent.YES
@@ -162,28 +165,14 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                         canSubmit = canSubmit,
                         onTest = {
                             pinging = true
-                            // Taken before the test: a rider can edit the
-                            // fields while it runs, and that result belongs
-                            // to what was tested, not to what is typed now
-                            // (`HaStepConnectionTest`).
                             val url = urlField.trim()
                             val tok = tokenField.trim()
-                            scope.launch(Dispatchers.IO) {
-                                val result = HaClient(url, tok).testConnection()
-                                // On Main, where the fields are edited, so no
-                                // edit lands between the check and the chips.
-                                val stillTested = withContext(Dispatchers.Main) {
-                                    (urlField.trim() == url && tokenField.trim() == tok).also {
-                                        if (it) {
-                                            pingResult = result.ping
-                                            mqttResult = result.mqtt
-                                        }
-                                    }
-                                }
-                                if (stillTested && result.ping.isSuccess) {
-                                    creds.save(url, tok)
-                                    prefs.haLastValidatedEpochMs = System.currentTimeMillis()
-                                    prefs.haIntent = HaIntent.YES
+                            scope.launch {
+                                runHaTest(url, tok, creds, prefs) {
+                                    urlField.trim() == url && tokenField.trim() == tok
+                                }?.let {
+                                    pingResult = it.ping
+                                    mqttResult = it.mqtt
                                 }
                                 pinging = false
                             }

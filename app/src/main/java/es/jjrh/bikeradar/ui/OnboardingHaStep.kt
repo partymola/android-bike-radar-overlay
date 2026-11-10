@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -401,7 +403,7 @@ internal fun HaFieldsBlock(
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(br.bgElev2)
-            .clickable(enabled = testEnabled, onClick = onTest),
+            .clickable(enabled = testEnabled, role = Role.Button, onClick = onTest),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -430,7 +432,6 @@ internal fun HaFieldsBlock(
     HaTestResult(
         pingResult = pingResult,
         mqttResult = mqttResult,
-        pingOkText = stringResource(R.string.onboarding_ha_connected),
         fixStyle = TextStyle(color = br.fgDim, fontSize = 11.sp),
     )
     // When fields are incomplete, the dual footer shows a disabled
@@ -523,12 +524,14 @@ private fun Field(
 ) {
     val br = LocalBrColors.current
     Column {
+        // The field carries the label for TalkBack (`HaScreensConsistencyTest`).
         Text(
             text = label,
             color = br.fgMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.2.sp,
+            modifier = Modifier.clearAndSetSemantics {},
         )
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
@@ -552,7 +555,7 @@ private fun Field(
                 fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
                 fontSize = 13.sp,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
         )
         if (hint != null) {
             Spacer(modifier = Modifier.height(5.dp))

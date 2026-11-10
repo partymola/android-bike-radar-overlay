@@ -42,6 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -243,7 +247,7 @@ internal fun SettingsHaContent(
                 ),
             )
             HaField(
-                label = stringResource(R.string.settings_ha_token_label),
+                label = stringResource(R.string.onboarding_ha_token_label),
                 value = tokenField,
                 onChange = onTokenChange,
                 placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
@@ -321,7 +325,6 @@ internal fun SettingsHaContent(
                 HaTestResult(
                     pingResult = pingResult,
                     mqttResult = mqttResult,
-                    pingOkText = stringResource(R.string.settings_ha_chip_ha_saved),
                     fixStyle = TextStyle(color = br.fgMuted, fontSize = 12.sp, lineHeight = 16.sp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
@@ -418,6 +421,7 @@ private fun HaField(
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        // The field carries the label for TalkBack (`HaScreensConsistencyTest`).
         Text(
             text = label.uppercase(),
             color = br.fgDim,
@@ -425,6 +429,7 @@ private fun HaField(
             fontWeight = FontWeight.SemiBold,
             fontSize = 10.sp,
             letterSpacing = 1.0.sp,
+            modifier = Modifier.clearAndSetSemantics {},
         )
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
@@ -448,7 +453,7 @@ private fun HaField(
                 fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
                 fontSize = 13.sp,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
         )
     }
 }
@@ -466,7 +471,7 @@ private fun BrandButton(
             .height(44.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) br.brand else br.bgElev2)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -491,7 +496,7 @@ private fun GhostButton(
             .height(44.dp)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, br.hairline2, RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(

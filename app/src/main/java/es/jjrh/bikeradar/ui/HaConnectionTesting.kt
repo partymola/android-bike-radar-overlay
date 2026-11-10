@@ -96,21 +96,20 @@ private fun haFailureFix(failure: HaFailure): Int = when (failure) {
 
 /**
  * The chips a connection test leaves and, after a failure, one line in
- * [fixStyle] saying what to do. [pingOkText] is the screen's word for a
- * passing ping. One polite live region, so TalkBack reads the outcome
- * wherever its focus is (`HaTestResultCopyTest`).
+ * [fixStyle] saying what to do. One polite live region, so TalkBack reads the
+ * outcome wherever its focus is (`HaTestResultCopyTest`).
  */
 @Composable
 internal fun HaTestResult(
     pingResult: Result<String>?,
     mqttResult: Result<String>?,
-    pingOkText: String,
     fixStyle: TextStyle,
     modifier: Modifier = Modifier,
 ) {
     if (pingResult == null && mqttResult == null) return
     val br = LocalBrColors.current
-    val pingChip = pingResult?.let { r -> r.exceptionOrNull()?.let { stringResource(haFailureChip(it.haFailure)) } ?: pingOkText }
+    val pingOk = stringResource(R.string.settings_ha_chip_ha_saved)
+    val pingChip = pingResult?.let { r -> r.exceptionOrNull()?.let { stringResource(haFailureChip(it.haFailure)) } ?: pingOk }
     val mqttOk = stringResource(R.string.settings_ha_chip_mqtt_ready)
     val mqttChip = mqttResult?.let { r -> r.exceptionOrNull()?.let { stringResource(haFailureChip(it.haFailure)) } ?: mqttOk }
     val fix = (pingResult?.exceptionOrNull() ?: mqttResult?.exceptionOrNull())?.let {

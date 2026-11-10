@@ -145,14 +145,14 @@ class HaTestResultCopyTest {
     @Test
     fun setupSaysWhatFailedAndWhatToDo() {
         showSetup()
-        assertEachCase(english, "HA: connected", "MQTT: ready", "Home Assistant test: ")
+        assertEachCase(english, "HA: saved", "MQTT: ready", "Home Assistant test: ")
     }
 
     @Test
     @Config(qualifiers = "es")
     fun setupSaysItInSpanish() {
         showSetup()
-        assertEachCase(spanish, "HA: conectado", "MQTT: listo", "Prueba de Home Assistant: ")
+        assertEachCase(spanish, "HA: guardado", "MQTT: listo", "Prueba de Home Assistant: ")
     }
 
     @Test
@@ -172,7 +172,7 @@ class HaTestResultCopyTest {
     fun aPassingTestIsReadOutWithNoLineUnderTheChips() {
         compose.setContent {
             UiTheme {
-                HaTestResult(Result.success("OK (200)"), Result.success("MQTT OK"), "HA: saved", androidx.compose.ui.text.TextStyle())
+                HaTestResult(Result.success("OK (200)"), Result.success("MQTT OK"), androidx.compose.ui.text.TextStyle())
             }
         }
         val description = compose.onNode(liveRegion).fetchSemanticsNode().config[SemanticsProperties.ContentDescription]

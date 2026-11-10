@@ -257,7 +257,6 @@
     <string name="onboarding_ha_token_hint">En HA: Perfil → Seguridad → Tokens de acceso de larga duración.</string>
     <string name="onboarding_ha_testing">Probando…</string>
     <string name="onboarding_ha_test_connection">Probar conexión</string>
-    <string name="onboarding_ha_connected">HA: conectado</string>
     <string name="onboarding_ha_enter_to_continue">Introduce la URL y el token para continuar.</string>
     <string name="onboarding_ha_skipped_title">Omitido</string>
     <string name="onboarding_ha_skipped_body">Puedes añadir Home Assistant en cualquier momento en Ajustes → Home Assistant.</string>
@@ -533,7 +532,6 @@
     <!-- Ajustes → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>
     <string name="settings_ha_base_url_label">URL base</string>
-    <string name="settings_ha_token_label">Token de larga duración</string>
     <string name="settings_ha_show_token">Mostrar token</string>
     <string name="settings_ha_hide_token">Ocultar token</string>
     <string name="settings_ha_testing">Probando…</string>

@@ -301,13 +301,13 @@
     <string name="onboarding_ha_change_later">You can change this later from Settings → Home Assistant.</string>
     <string name="onboarding_ha_using_pill">Using Home Assistant · change</string>
     <string name="onboarding_ha_url_label">Base URL</string>
+    <!-- Also the token field's label in Settings → Home Assistant. -->
     <string name="onboarding_ha_token_label">Long-lived access token</string>
     <string name="onboarding_ha_hide_token">Hide token</string>
     <string name="onboarding_ha_show_token">Show token</string>
     <string name="onboarding_ha_token_hint">In HA: Profile → Security → Long-lived access tokens.</string>
     <string name="onboarding_ha_testing">Testing…</string>
     <string name="onboarding_ha_test_connection">Test connection</string>
-    <string name="onboarding_ha_connected">HA: connected</string>
     <string name="onboarding_ha_enter_to_continue">Enter URL and token to continue.</string>
     <string name="onboarding_ha_skipped_title">Skipped</string>
     <string name="onboarding_ha_skipped_body">You can add Home Assistant any time from Settings → Home Assistant.</string>
@@ -604,13 +604,13 @@
     <!-- Settings → Home Assistant (SettingsHa.kt) -->
     <string name="settings_ha_title">Home Assistant</string>
     <string name="settings_ha_base_url_label">Base URL</string>
-    <string name="settings_ha_token_label">Long-lived token</string>
     <string name="settings_ha_show_token">Show token</string>
     <string name="settings_ha_hide_token">Hide token</string>
     <string name="settings_ha_testing">Testing…</string>
     <string name="settings_ha_test_and_save">Test and save</string>
     <string name="settings_ha_save_without_testing">Save without testing</string>
     <string name="settings_ha_clear_config">Clear HA configuration</string>
+    <!-- A passing test, on this screen and on setup's step: both save it. -->
     <string name="settings_ha_chip_ha_saved">HA: saved</string>
     <string name="settings_ha_chip_mqtt_ready">MQTT: ready</string>
     <string name="settings_ha_published_entities">Your entities</string>

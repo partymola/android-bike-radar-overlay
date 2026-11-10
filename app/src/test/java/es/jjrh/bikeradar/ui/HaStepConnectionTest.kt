@@ -95,7 +95,7 @@ class HaStepConnectionTest {
     fun aWorkingMqttIntegrationIsReported() {
         testFromSetup()
         waitForText("MQTT: ready")
-        compose.onNodeWithText("HA: connected", ignoreCase = true).assertExists()
+        compose.onNodeWithText("HA: saved", ignoreCase = true).assertExists()
     }
 
     @Test
@@ -104,7 +104,7 @@ class HaStepConnectionTest {
         testFromSetup()
         waitForText("MQTT: not configured in HA")
         compose.onNodeWithText("Home Assistant answers, but MQTT may not be set up in it.", substring = true).assertExists()
-        compose.onNodeWithText("HA: connected", ignoreCase = true).assertExists()
+        compose.onNodeWithText("HA: saved", ignoreCase = true).assertExists()
     }
 
     @Test
@@ -113,7 +113,7 @@ class HaStepConnectionTest {
         waitForText("MQTT: ready")
         compose.onNodeWithText(baseUrl).performTextReplacement("$baseUrl/")
         compose.onNodeWithText("MQTT: ready", ignoreCase = true).assertDoesNotExist()
-        compose.onNodeWithText("HA: connected", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("HA: saved", ignoreCase = true).assertDoesNotExist()
     }
 
     /** The result belongs to the address that was tested, not the one typed since. */
@@ -125,7 +125,7 @@ class HaStepConnectionTest {
         compose.onNodeWithText(baseUrl).performTextReplacement("http://127.0.0.1:1")
         pingHeld!!.countDown()
         waitForText("Test connection")
-        compose.onNodeWithText("HA: connected", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("HA: saved", ignoreCase = true).assertDoesNotExist()
         compose.onNodeWithText("MQTT: ready", ignoreCase = true).assertDoesNotExist()
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
         assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
@@ -141,7 +141,7 @@ class HaStepConnectionTest {
         compose.onNodeWithText("tok").performTextReplacement("other")
         pingHeld!!.countDown()
         waitForText("Test connection")
-        compose.onNodeWithText("HA: connected", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("HA: saved", ignoreCase = true).assertDoesNotExist()
         assertEquals("tok", HaCredentials(app).token)
         assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }

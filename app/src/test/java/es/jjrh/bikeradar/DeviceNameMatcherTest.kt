@@ -51,10 +51,12 @@ class DeviceNameMatcherTest {
             "Varia RTL515" to true,
             "Varia RTL 515" to true,
             "VARIA rtl515" to true,
-            "Rear Radar" to true,
-            "Rear light 3" to true,
             "Varia Rear Vue" to true,
             "Rear Vue 2" to true,
+            "Garmin Rear Radar" to true,
+            "Rear Radar" to false,
+            "Rear light 3" to false,
+            "Forearm band" to false,
             "Varia RVR315" to false,
             "Varia Radar" to false,
             "VARIA RADAR" to false,
@@ -74,6 +76,23 @@ class DeviceNameMatcherTest {
             assertEquals("isRadarName($name)", isRadar, DeviceNameMatcher.isRadarName(name))
             assertEquals("isRearAdvert($name)", isRadar, DeviceNameMatcher.isRearAdvert(name))
         }
+    }
+
+    @Test fun everyRadarNameIsAKnownAccessory() {
+        // Every unpinned route to the link asks isKnownAccessory first, so a
+        // radar name it refuses would read as paired and never link.
+        val names = listOf(
+            "RearVue8", "RTL515 1234", "eRTL615", "Varia RTL 515", "Varia Rear Vue", "Rear Vue 2",
+            "Garmin Rear Radar", "Rear Radar", "Rear light 3", "Rear unit 5", "Forearm band", "Varia RVR315",
+            "Vue-123", "Pixel Watch",
+        )
+        for (name in names) {
+            if (DeviceNameMatcher.isRearAdvert(name)) assertTrue(name, DeviceNameMatcher.isKnownAccessory(name))
+        }
+        // "rear" alone is the name that would break it.
+        assertFalse(DeviceNameMatcher.isKnownAccessory("Rear light 3"))
+        assertFalse(DeviceNameMatcher.isRearAdvert("Rear light 3"))
+        assertTrue(DeviceNameMatcher.isRearAdvert("Garmin Rear Radar"))
     }
 
     @Test fun unambiguousRadarKeepsFrontCamerasOfferable() {

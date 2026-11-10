@@ -122,8 +122,7 @@ object RadarSelection {
      *
      * This is the ONE definition of "the rider has a radar", and every surface
      * that reports link state must use it, because on a readable paired list it
-     * follows [shouldLinkRadar]: a bonded pin wins, else a radar name, with the
-     * one exception [DeviceNameMatcher] states for a bare "rear". Two ways a
+     * follows [shouldLinkRadar]: a bonded pin wins, else a radar name. Two ways a
      * narrower test gets it wrong, and both report "Not paired" about a radar
      * that is delivering targets:
      *
@@ -191,9 +190,9 @@ object RadarSelection {
     fun bondedForBattery(ctx: Context, chosenMac: String?): List<BondedRadar> = if (chosenMac == null) emptyList() else bondedDevices(ctx)
 
     /** The radars a rider chooses between: every name [isRadarName] accepts, so
-     *  a front camera never (`a front camera is never offered as the radar`)
-     *  and a name known only by "rear" does
-     *  (`two radars named only by rear are offered the chooser`). */
+     *  a front camera never (`a front camera is never offered as the radar`),
+     *  nor a device named only by "rear"
+     *  (`a device named only by rear is not a radar, and can be picked`). */
     fun choosableRadars(allBonded: List<BondedRadar>): List<BondedRadar> = allBonded.filter { isRadarName(it.name) }
 
     /**
@@ -239,7 +238,8 @@ object RadarSelection {
      * only be a rear unit ([DeviceNameMatcher.isUnambiguousRadar]). So it stays
      * while none is settled, while the pin sits on another device, so a wrong
      * pick can be changed on the screen it was made on, and while the radar is
-     * known only by a wider name such as "rear" (`OnboardingPairingRadarPickTest`).
+     * known only by a wider name such as "Rear Vue" spaced
+     * (`setup keeps the pick for a radar whose name could be something else`).
      */
     fun setupOffersPick(allBonded: List<BondedRadar>, chosenMac: String?): Boolean {
         val active = activeRadar(allBonded, chosenMac) ?: return true

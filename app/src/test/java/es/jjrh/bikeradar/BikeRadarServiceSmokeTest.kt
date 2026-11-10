@@ -813,10 +813,11 @@ class BikeRadarServiceSmokeTest {
 
     @Test
     fun aDevicePairedThatIsNotARadarIsLeftAlone() {
-        // "Rear" is enough for the link's own name match but not for the gate a
-        // scan wake applies, so only that gate keeps this from linking.
-        val (controller, _, journal) = twoRadarService(emptyList())
+        // "Rear" alone is neither a radar name nor a name a scan wake accepts.
+        val (controller, service, journal) = twoRadarService(emptyList())
         pair("AA:BB:CC:DD:EE:44", "Rear light")
+        readDevice(service, "Rear light", "AA:BB:CC:DD:EE:44", 1)
+        idleMainUntil(timeoutMs = 500L) { false }
         assertEquals(0, journal.starts("Rear light"))
         controller.destroy()
     }
@@ -1075,6 +1076,17 @@ class BikeRadarServiceSmokeTest {
         // until it is picked; do not re-arm the warning on this name without
         // also linking it.
         assertEquals(30_000L, tickDelayOnARideWithNoRadar("Varia RVR315"))
+    }
+
+    @Test
+    fun aRideWithAnUnpickedDeviceNamedOnlyByRearStaysOnTheIdleTick() {
+        // No unpinned route links it, so there is no radar to warn about.
+        assertEquals(30_000L, tickDelayOnARideWithNoRadar("Rear light"))
+    }
+
+    @Test
+    fun aRideWithAPickedDeviceNamedOnlyByRearTicksFast() {
+        assertEquals(2_000L, tickDelayOnARideWithNoRadar("Rear light", picked = true))
     }
 
     @Test

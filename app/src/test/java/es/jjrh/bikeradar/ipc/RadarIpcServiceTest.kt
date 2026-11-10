@@ -270,14 +270,14 @@ class RadarIpcServiceTest {
     fun withNoPinTheAnswerIsStillARadarRatherThanAnyDevice() {
         // No pin is the ordinary case, and the fallback has to be name-matched:
         // the same map carries the dashcam, whose battery is not what a
-        // consumer asked for. "TestRearRadar" rather than "TestRadar" because
+        // consumer asked for. "RearVue8" rather than "TestRadar" because
         // the matcher looks for what these units actually advertise, and a
         // fixture the matcher rejects would test the empty answer instead.
         val service = controller.create().get()
         grantSelf()
         Prefs(context).radarMac = null
         BatteryStateBus.update(BatteryEntry("dashcam", "TestDashcam", 22))
-        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+        BatteryStateBus.update(BatteryEntry("radar", "RearVue8", 66))
 
         assertEquals(66, service.binder.batteryPercent)
     }
@@ -289,7 +289,7 @@ class RadarIpcServiceTest {
         grantSelf()
         bond("AA:BB:CC:DD:EE:FF")
         Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
-        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+        BatteryStateBus.update(BatteryEntry("radar", "RearVue8", 66))
 
         assertEquals(-1, service.binder.batteryPercent)
     }
@@ -305,7 +305,7 @@ class RadarIpcServiceTest {
         Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
         BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
         BatteryStateBus.update(BatteryEntry("pinned", "OtherRadar", 88))
-        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+        BatteryStateBus.update(BatteryEntry("radar", "RearVue8", 66))
 
         assertEquals(66, service.binder.batteryPercent)
     }
@@ -320,7 +320,7 @@ class RadarIpcServiceTest {
         shadowOf(adapter).setBondedDevices(emptySet())
         Prefs(context).radarMac = "AA:BB:CC:DD:EE:FF"
         BikeRadarService.macToSlug["AA:BB:CC:DD:EE:FF"] = "pinned"
-        BatteryStateBus.update(BatteryEntry("radar", "TestRearRadar", 66))
+        BatteryStateBus.update(BatteryEntry("radar", "RearVue8", 66))
         BatteryStateBus.update(BatteryEntry("pinned", "TestRadar", 88))
 
         assertEquals(88, service.binder.batteryPercent)

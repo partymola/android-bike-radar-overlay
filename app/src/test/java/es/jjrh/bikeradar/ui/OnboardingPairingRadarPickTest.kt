@@ -175,15 +175,32 @@ class OnboardingPairingRadarPickTest {
 
     @Test
     fun `only the rider's own pick is marked`() {
-        // "Rear light 3" reads as the radar by name, unpinned, and still gets
+        // "Rear Vue 2" reads as the radar by name, unpinned, and still gets
         // the list since it is not a rear unit for sure; the app chose it, the
         // rider did not.
-        bond("AA:BB:CC:DD:EE:07" to "Rear light 3", watchMac to "Watch 7")
+        bond("AA:BB:CC:DD:EE:07" to "Rear Vue 2", watchMac to "Watch 7")
         show()
         composeRule.onNodeWithText(chooseTitle).performScrollTo().performClick()
 
-        composeRule.onAllNodesWithText("Rear light 3").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Rear Vue 2").assertCountEquals(2)
         composeRule.onAllNodesWithText("Selected").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a device named only by rear is not paired until it is picked`() {
+        // No unpinned route links such a name, so the card must not call it
+        // paired; it may also be a tail light.
+        bond("AA:BB:CC:DD:EE:07" to "Rear light 3", watchMac to "Watch 7")
+        show()
+        composeRule.onAllNodesWithText("PAIRED").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Open Bluetooth settings").assertCountEquals(1)
+
+        composeRule.onNodeWithText(pickTitle).performScrollTo().performClick()
+        composeRule.onNodeWithText("Rear light 3").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals("AA:BB:CC:DD:EE:07", prefs.radarMac)
+        composeRule.onAllNodesWithText("PAIRED").assertCountEquals(1)
     }
 
     @Test

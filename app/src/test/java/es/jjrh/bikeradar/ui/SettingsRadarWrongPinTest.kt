@@ -124,16 +124,32 @@ class SettingsRadarWrongPinTest {
     }
 
     @Test
-    fun `two radars named only by rear can be chosen between`() {
-        bond("AA:BB:CC:DD:EE:55" to "Rear light 3", "AA:BB:CC:DD:EE:66" to "Rear unit 5")
+    fun `two radars whose names the link accepts can be chosen between`() {
+        bond("AA:BB:CC:DD:EE:55" to "Varia Rear Vue", "AA:BB:CC:DD:EE:66" to "Rear Vue 2")
         val prefs = Prefs(app)
         show(prefs)
         composeRule.onAllNodesWithText(chooserLabel).assertCountEquals(1)
 
-        composeRule.onNodeWithText("Rear unit 5").performScrollTo().performClick()
+        composeRule.onNodeWithText("Rear Vue 2").performScrollTo().performClick()
         composeRule.waitForIdle()
 
         assertEquals("AA:BB:CC:DD:EE:66", prefs.radarMac)
+    }
+
+    @Test
+    fun `a device named only by rear reads not paired and can be picked`() {
+        bond("AA:BB:CC:DD:EE:55" to "Rear light 3")
+        val prefs = Prefs(app)
+        show(prefs)
+        composeRule.onAllNodesWithText("Pair your radar").assertCountEquals(1)
+        composeRule.onAllNodesWithText(chooserLabel).assertCountEquals(0)
+
+        composeRule.onNodeWithText("Already paired your radar?").performScrollTo().performClick()
+        composeRule.onNodeWithText("Rear light 3").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals("AA:BB:CC:DD:EE:55", prefs.radarMac)
+        composeRule.onAllNodesWithText("Pair your radar").assertCountEquals(0)
     }
 
     @Test

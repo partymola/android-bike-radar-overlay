@@ -198,12 +198,27 @@ class RadarSelectionTest {
     private val rearLight = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:07", "Rear light 3")
     private val rearUnit = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:08", "Rear unit 5")
 
-    @Test fun `two radars named only by rear are offered the chooser`() {
+    private val rearVue = RadarSelection.BondedRadar("AA:BB:CC:DD:EE:0B", "Rear Vue 2")
+
+    @Test fun `a device named only by rear is not a radar, and can be picked`() {
+        // No unpinned route links such a name, so it must not read as paired.
+        assertFalse(RadarSelection.shouldOfferChooser(listOf(rearLight, rearUnit), chosenMac = null))
+        assertFalse(RadarSelection.hasLinkableRadar(listOf(rearLight, rearUnit), chosenMac = null))
+        assertEquals(listOf(rearLight, rearUnit), RadarSelection.unlistedDevices(listOf(rearLight, rearUnit), emptyList()))
+        // Beside a real radar it changes nothing about which one is the radar.
+        assertFalse(RadarSelection.shouldOfferChooser(listOf(radarA, rearLight), chosenMac = null))
+        assertEquals(listOf(radarA), RadarSelection.choosableRadars(listOf(radarA, rearLight, watch)))
+        assertEquals(radarA, RadarSelection.activeRadar(listOf(radarA, rearLight), null))
+        // The pick is what makes it the radar.
+        assertTrue(RadarSelection.hasLinkableRadar(listOf(rearLight), rearLight.mac))
+        assertEquals(rearLight, RadarSelection.activeRadar(listOf(rearLight, watch), rearLight.mac))
+    }
+
+    @Test fun `two radars with rear in a name the link accepts are offered the chooser`() {
         // Pinned, either can be the one streaming.
-        assertTrue(RadarSelection.shouldOfferChooser(listOf(rearLight, rearUnit), chosenMac = null))
-        assertTrue(RadarSelection.shouldOfferChooser(listOf(radarA, rearLight), chosenMac = null))
-        assertEquals(listOf(radarA, rearLight), RadarSelection.choosableRadars(listOf(radarA, rearLight, watch)))
-        assertNull(RadarSelection.activeRadar(listOf(radarA, rearLight), null))
+        assertTrue(RadarSelection.shouldOfferChooser(listOf(radarA, rearVue), chosenMac = null))
+        assertEquals(listOf(radarA, rearVue), RadarSelection.choosableRadars(listOf(radarA, rearVue, watch)))
+        assertNull(RadarSelection.activeRadar(listOf(radarA, rearVue), null))
     }
 
     @Test fun `a front camera alone is not named as the radar`() {
@@ -214,7 +229,8 @@ class RadarSelectionTest {
     @Test fun `a pin or a radar name counts as paired, never a front camera`() {
         assertFalse(RadarSelection.hasLinkableRadar(listOf(frontCamera, watch), chosenMac = null))
         assertFalse(RadarSelection.hasLinkableRadar(listOf(watch), chosenMac = "DD:DD:DD:DD:DD:DD"))
-        assertTrue(RadarSelection.hasLinkableRadar(listOf(frontCamera, rearLight), chosenMac = null))
+        assertFalse(RadarSelection.hasLinkableRadar(listOf(frontCamera, rearLight), chosenMac = null))
+        assertTrue(RadarSelection.hasLinkableRadar(listOf(frontCamera, rearVue), chosenMac = null))
         assertTrue(RadarSelection.hasLinkableRadar(listOf(watch), chosenMac = watch.mac.lowercase()))
     }
 
@@ -235,10 +251,12 @@ class RadarSelectionTest {
         )
     }
 
-    @Test fun `setup keeps the pick for a radar known only by rear`() {
-        assertEquals(rearLight, RadarSelection.activeRadar(listOf(rearLight, watch), null))
-        assertTrue(RadarSelection.setupOffersPick(listOf(rearLight, watch), chosenMac = null))
-        assertTrue(RadarSelection.setupOffersPick(listOf(rearLight, watch), chosenMac = rearLight.mac))
+    @Test fun `setup keeps the pick for a radar whose name could be something else`() {
+        // "Rear Vue 2" links by name, but only "rearvue" unspaced can be
+        // nothing but a rear unit.
+        assertEquals(rearVue, RadarSelection.activeRadar(listOf(rearVue, watch), null))
+        assertTrue(RadarSelection.setupOffersPick(listOf(rearVue, watch), chosenMac = null))
+        assertTrue(RadarSelection.setupOffersPick(listOf(rearVue, watch), chosenMac = rearVue.mac))
     }
 
     @Test fun `the dashcam, the eBike and front cameras are never offered as the radar`() {

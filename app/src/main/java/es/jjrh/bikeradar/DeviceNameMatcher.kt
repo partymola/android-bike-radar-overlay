@@ -22,9 +22,10 @@ package es.jjrh.bikeradar
  *    chooser, every UI "is a radar paired?" and the radar's battery rows. It
  *    must not be wider: the no-radar warning reads it, so a wider name arms a
  *    warning and shows "paired" over a radar that never links
- *    (`aRadarNameEqualsWhatIsRearAdvertAccepts`). One name already does: a bare
- *    "rear" passes here, while [isKnownAccessory], which gates every unpinned
- *    route to the link, turns it away (`aDevicePairedThatIsNotARadarIsLeftAlone`).
+ *    (`aRadarNameEqualsWhatIsRearAdvertAccepts`). Nor wider than
+ *    [isKnownAccessory], which gates every unpinned route to the link: "rear"
+ *    counts only in a name that gate accepts, so a bare "Rear light" is not a
+ *    radar (`everyRadarNameIsAKnownAccessory`).
  *    A bonded name it misses is offered behind "my radar isn't listed", unless
  *    it is a front camera, the saved dashcam or the eBike.
  *  - [isUnambiguousRadar] excludes rear units from the DASHCAM picker
@@ -56,7 +57,7 @@ object DeviceNameMatcher {
     /** Live-advert link gate for the rear radar (see class KDoc). */
     fun isRearAdvert(name: String): Boolean {
         val n = name.lowercase()
-        return n.contains("rear") || n.contains(RTL_MODEL)
+        return n.contains(RTL_MODEL) || (n.contains("rear") && isKnownAccessory(name))
     }
 
     /** Whether [name] is a radar's, meaning what [isRearAdvert] accepts (see

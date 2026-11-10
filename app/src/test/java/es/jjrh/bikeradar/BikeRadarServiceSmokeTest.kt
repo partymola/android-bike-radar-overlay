@@ -1235,6 +1235,71 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    // ── no one-shot battery read beside the radar link ──────────────────────
+
+    /** [name] pinned and paired at [UNLISTED], with its link started. */
+    private fun pinnedAndLinked(name: String): Triple<org.robolectric.android.controller.ServiceController<BikeRadarService>, BikeRadarService, File> {
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, name))
+        val started = serviceWithPairedAndCached(mapOf(UNLISTED to name), emptyList())
+        idleMainUntil { started.third.starts(name) == 1 }
+        assertEquals(1, started.third.starts(name))
+        return started
+    }
+
+    /** A one-shot read caches the device before it connects, so an entry
+     *  means a second GATT client was opened on it. */
+    private fun assertNoReadOf(mac: String, journal: File) {
+        idleMainUntil(timeoutMs = 500L) { knownDevices().any { it.second == mac } }
+        assertEquals("got:\n${journal.readText()}", emptyList<Pair<String, String>>(), knownDevices())
+    }
+
+    private fun noReadBesideThePinnedLink(name: String) {
+        val (controller, service, journal) = pinnedAndLinked(name)
+        readDevice(service, name, UNLISTED, 1)
+        assertNoReadOf(UNLISTED, journal)
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinnedRadarNamedOnlyByRearIsNotReadBesideItsLink() = noReadBesideThePinnedLink("Rear light")
+
+    @Test
+    fun aPinnedRadarWithANameNoMatchKnowsIsNotReadBesideItsLink() = noReadBesideThePinnedLink("Tail unit")
+
+    @Test
+    fun aLinkKeptWhenThePickMovesToAnUnpairedRadarIsNotReadBesideIt() {
+        val name = "Varia RVR315"
+        val (controller, service, journal) = pinnedAndLinked(name)
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
+        idleMainUntil { journal.readText().contains("radar pin not bonded; link kept") }
+        assertTrue("got:\n${journal.readText()}", journal.readText().contains("radar pin not bonded; link kept"))
+        readDevice(service, name, UNLISTED, 1)
+        assertNoReadOf(UNLISTED, journal)
+        controller.destroy()
+    }
+
+    @Test
+    fun aPinTheLinkDoesNotHoldIsNotReadBesideIt() {
+        // The readable list lacks the pin, so name-match links the paired radar.
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, service, journal) = serviceWithPairedAndCached(mapOf(RADAR_B to "RTL515"), emptyList())
+        readDevice(service, "RTL515", RADAR_B, 1)
+        idleMainUntil { journal.starts("RTL515") == 1 }
+        readDevice(service, "Tail unit", UNLISTED, 2)
+        assertNoReadOf(UNLISTED, journal)
+        controller.destroy()
+    }
+
+    @Test
+    fun aSecondRadarIsNotReadWhileTheFirstStreams() {
+        val (controller, service, journal) = twoRadarService(listOf(RADAR_A, RADAR_B))
+        readDevice(service, "RearVue8", RADAR_A, 1)
+        idleMainUntil { journal.starts("RearVue8") == 1 }
+        readDevice(service, "RTL515", RADAR_B, 2)
+        assertNoReadOf(RADAR_B, journal)
+        controller.destroy()
+    }
+
     @Test
     fun theEBikeSnapshotIsStampedOnTheClockTheRadarLinkReadsItBy() {
         // The alert path ages the snapshot on the coordinator's own clock, but

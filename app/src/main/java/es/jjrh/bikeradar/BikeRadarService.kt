@@ -947,7 +947,13 @@ class BikeRadarService : Service() {
         // (`aPinPairedWhileAnotherRadarIsLinkedMovesTheLinkOnItsSighting`).
         if (shouldLinkRadar && pinnedRadar != null && radarLink.isActive()) scope.launch { followRadarPin(name, mac) }
 
-        if (isRearDevice(name) && (radarGattActive || radarLink.isActive())) {
+        // The pin and the linked address count whatever their name
+        // (`aPinTheLinkDoesNotHoldIsNotReadBesideIt`,
+        // `aLinkKeptWhenThePickMovesToAnUnpairedRadarIsNotReadBesideIt`).
+        val radarSighting = isRearDevice(name) ||
+            mac.equals(pinnedRadar, ignoreCase = true) ||
+            mac.equals(radarLink.currentRadarMac, ignoreCase = true)
+        if (radarSighting && (radarGattActive || radarLink.isActive())) {
             Log.d(TAG, "skip $name (radar gatt active, piggyback will read instead)")
             return
         }

@@ -4,6 +4,8 @@ package es.jjrh.bikeradar.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.HaFailure
+import es.jjrh.bikeradar.HaFailureException
 import es.jjrh.bikeradar.HaHealth
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode
  *  - savedNotYetPublished: saved, nothing published yet (en + es)
  *  - savedHealthOk: fields populated + healthy MQTT discovery
  *  - savedHealthError: fields populated + recent HA error
+ *  - mqttMissingEs: a passing ping and a failed MQTT check, in Spanish
  *
  * Renders via Robolectric Native Graphics (runs in cold-cache CI). Verify
  * with `:app:verifyRoborazziDebug`; regenerate with `:app:recordRoborazziDebug`.
@@ -175,10 +178,40 @@ class SettingsHaSnapshotTest {
                     onTokenChange = {},
                     tokenVisible = false,
                     onToggleTokenVisible = {},
-                    pingResult = Result.failure(Exception("connection refused")),
+                    pingResult = Result.failure(
+                        HaFailureException(HaFailure.HOST_UNREACHABLE, "ConnectException", "connection refused"),
+                    ),
                     mqttResult = null,
                     pinging = false,
-                    haHealth = HaHealth.Error("connection refused", atMs = 0L),
+                    haHealth = HaHealth.Error("connection refused", atMs = 0L, cause = HaFailure.HOST_UNREACHABLE),
+                    haConfigured = true,
+                    onBack = {},
+                    onTestAndSave = {},
+                    onSaveWithoutTesting = {},
+                    onClear = {},
+                )
+            }
+        }
+    }
+
+    /** The widest pair of chips with the line under them, in Spanish, where
+     *  both run longest. */
+    @Test
+    @Config(qualifiers = "+es")
+    fun mqttMissingEs() {
+        captureRoboImage {
+            UiTheme {
+                SettingsHaContent(
+                    urlField = "https://homeassistant.local:8123",
+                    onUrlChange = {},
+                    tokenField = "eyJ0eXAiOiJKV1QiLCJh.fake.token",
+                    onTokenChange = {},
+                    tokenVisible = false,
+                    onToggleTokenVisible = {},
+                    pingResult = Result.success("OK (200)"),
+                    mqttResult = Result.failure(HaFailureException(HaFailure.MQTT_MISSING, "404", "not enabled")),
+                    pinging = false,
+                    haHealth = HaHealth.Unknown,
                     haConfigured = true,
                     onBack = {},
                     onTestAndSave = {},

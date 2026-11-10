@@ -102,7 +102,8 @@ class HaStepConnectionTest {
     fun aMissingMqttIntegrationIsReported() {
         probeStatus = 404
         testFromSetup()
-        waitForText("MQTT integration is not enabled")
+        waitForText("MQTT: not configured in HA")
+        compose.onNodeWithText("Home Assistant answers, but MQTT may not be set up in it.", substring = true).assertExists()
         compose.onNodeWithText("HA: connected", ignoreCase = true).assertExists()
     }
 
@@ -198,14 +199,14 @@ class HaStepConnectionTest {
     fun aCleartextAddressOutsideTheHomeNetworkIsNotSavedOnContinue() {
         assertFalse(continueWith("http://example.com:8123"))
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
-        waitForText("Refused")
+        waitForText("URL: HTTPS needed")
     }
 
     @Test
     fun aMalformedAddressIsNotSavedOnContinue() {
         assertFalse(continueWith("homeassistant.local:8123"))
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
-        waitForText("Refused")
+        waitForText("URL: not valid")
     }
 
     @Test

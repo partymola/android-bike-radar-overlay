@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Why a publish failed, in the terms the rider's next action depends on.
+ * Why a publish or a connection test failed, in the terms the rider's next
+ * action depends on.
  *
  * Every failure used to arrive as "publish failed", which is true of a
  * mistyped token, a host that does not resolve, a URL the app refuses to send
@@ -21,21 +22,50 @@ enum class HaFailure {
     /** 401/403. The token is wrong, expired, or revoked. */
     AUTH,
 
-    /** 404. The URL reaches something, but not this endpoint. */
-    NOT_FOUND,
+    /** 404, or for the test's ping any other answer short of a server error:
+     *  something answered, but not Home Assistant's API. */
+    NOT_HOME_ASSISTANT,
 
     /** The app refused to send the token over cleartext to a non-local host. */
     INSECURE_REFUSED,
 
+    /** Not a URL the app can send anything to. Nothing left the app. */
+    URL_INVALID,
+
     /** No connection at all: DNS, route, or timeout. */
     HOST_UNREACHABLE,
+
+    /** The TLS handshake failed: an untrusted certificate, or not HTTPS. */
+    TLS,
 
     /** 5xx. Home Assistant answered and something is wrong at its end. */
     SERVER_ERROR,
 
+    /** The MQTT probe's 400/404: Home Assistant may have no MQTT integration. */
+    MQTT_MISSING,
+
+    /** The MQTT probe's 401/403, after the same token passed the ping. */
+    MQTT_AUTH,
+
+    /** The MQTT probe failed any other way. */
+    MQTT_FAILED,
+
     /** Recognised as a failure, not as one of the above. */
     UNKNOWN,
 }
+
+/**
+ * A failed step of the connection test, carrying its [failure], which is what
+ * the screens show. [detail] is the HTTP status or the exception's simple class
+ * name, shown only where the screens name no cause. The message stays English
+ * for logs and tests and is never shown: it can carry the rider's host.
+ */
+class HaFailureException(
+    val failure: HaFailure,
+    val detail: String?,
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
 
 /**
  * Classify a publish failure from what the transport observed.
@@ -46,18 +76,16 @@ enum class HaFailure {
  *
  * @param code the HTTP status, when the request completed.
  * @param error the simple class name of a thrown exception, when it did not.
- * @param insecureRefusal the publish never left the app because the URL was
- *   cleartext to a non-local host.
  */
 fun classifyHaFailure(
     code: Int? = null,
     error: String? = null,
-    insecureRefusal: Boolean = false,
 ): HaFailure = when {
-    insecureRefusal -> HaFailure.INSECURE_REFUSED
     code == 401 || code == 403 -> HaFailure.AUTH
-    code == 404 -> HaFailure.NOT_FOUND
+    code == 404 -> HaFailure.NOT_HOME_ASSISTANT
     code != null && code in 500..599 -> HaFailure.SERVER_ERROR
+    error != null && error.startsWith("SSL") -> HaFailure.TLS
+    error != null && error.contains("MalformedURL") -> HaFailure.URL_INVALID
     // Name-matched rather than typed: the client catches Throwable and this
     // stays out of the network layer's types. Substring, because the JDK
     // spells these differently across hosts (SocketTimeoutException,
@@ -71,6 +99,21 @@ fun classifyHaFailure(
                 error.contains("SocketException", ignoreCase = true)
             ) -> HaFailure.HOST_UNREACHABLE
     else -> HaFailure.UNKNOWN
+}
+
+/** [classifyHaFailure] for the test's ping of `/api/`, where any answer short
+ *  of a server error, other than a refused token, is not Home Assistant's. */
+fun classifyPingFailure(code: Int? = null, error: String? = null): HaFailure = when {
+    code != null && code in 300..499 && code != 401 && code != 403 -> HaFailure.NOT_HOME_ASSISTANT
+    else -> classifyHaFailure(code, error)
+}
+
+/** The test's MQTT probe, which runs only after a good ping. [code] is null
+ *  when the probe threw. */
+fun classifyMqttProbeFailure(code: Int?): HaFailure = when (code) {
+    400, 404 -> HaFailure.MQTT_MISSING
+    401, 403 -> HaFailure.MQTT_AUTH
+    else -> HaFailure.MQTT_FAILED
 }
 
 /** Which stream of publishes an outcome belongs to. */

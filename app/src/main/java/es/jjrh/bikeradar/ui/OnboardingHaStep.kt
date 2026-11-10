@@ -60,6 +60,7 @@ import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.HaIntent
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.haUrlRefusal
 import kotlinx.coroutines.launch
 
 // ── Step 2 - Home Assistant ──────────────────────────────────────────
@@ -92,9 +93,9 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
         if (canSubmit) {
             val url = urlField.trim()
             val token = tokenField.trim()
-            val refusal = urlRefusalMessage(url)
+            val refusal = haUrlRefusal(url)
             if (refusal != null) {
-                pingResult = Result.failure(Exception(refusal))
+                pingResult = Result.failure(refusal)
                 mqttResult = null
                 return@continueSaving
             }
@@ -426,35 +427,12 @@ internal fun HaFieldsBlock(
             )
         }
     }
-    pingResult?.let { r ->
-        BrChip(
-            text =
-            if (r.isSuccess) {
-                stringResource(R.string.onboarding_ha_connected)
-            } else {
-                stringResource(
-                    R.string.onboarding_ha_error,
-                    r.exceptionOrNull()?.message ?: stringResource(R.string.onboarding_ha_error_generic),
-                )
-            },
-            color = if (r.isSuccess) br.safe else br.danger,
-        )
-    }
-    // The same chip Settings shows: Home Assistant answering is not enough,
-    // every publish goes through its MQTT integration.
-    mqttResult?.let { r ->
-        BrChip(
-            text = if (r.isSuccess) {
-                stringResource(R.string.settings_ha_chip_mqtt_ready)
-            } else {
-                stringResource(
-                    R.string.settings_ha_chip_mqtt_error,
-                    r.exceptionOrNull()?.message ?: stringResource(R.string.onboarding_ha_error_generic),
-                )
-            },
-            color = if (r.isSuccess) br.safe else br.caution,
-        )
-    }
+    HaTestResult(
+        pingResult = pingResult,
+        mqttResult = mqttResult,
+        pingOkText = stringResource(R.string.onboarding_ha_connected),
+        fixStyle = TextStyle(color = br.fgDim, fontSize = 11.sp),
+    )
     // When fields are incomplete, the dual footer shows a disabled
     // Continue with no inline reason. A muted hint here makes the
     // gating explicit without crowding the populated state.

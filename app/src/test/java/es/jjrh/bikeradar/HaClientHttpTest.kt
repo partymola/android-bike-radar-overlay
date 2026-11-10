@@ -323,6 +323,54 @@ class HaClientHttpTest {
         assertTrue(requests.isEmpty())
     }
 
+    // ── the cause each test step carries to the screens ─────────────────────
+
+    private fun Result<String>.cause(): Pair<HaFailure, String?> = (exceptionOrNull() as HaFailureException).let { it.failure to it.detail }
+
+    @Test
+    fun aPingCarriesItsCauseAndCode() = runTest {
+        respondAll(401)
+        assertEquals(HaFailure.AUTH to "401", client().ping().cause())
+        respondAll(404)
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "404", client().ping().cause())
+        respondAll(502)
+        assertEquals(HaFailure.SERVER_ERROR to "502", client().ping().cause())
+    }
+
+    @Test
+    fun aPingThatCannotConnectCarriesTheExceptionsName() = runTest {
+        assertEquals(HaFailure.HOST_UNREACHABLE to "ConnectException", HaClient(deadPortUrl(), "tok").ping().cause())
+    }
+
+    @Test
+    fun aProbeCarriesItsCauseAndCode() = runTest {
+        respondAll(404)
+        assertEquals(HaFailure.MQTT_MISSING to "404", client().probeMqttService().cause())
+        respondAll(403)
+        assertEquals(HaFailure.MQTT_AUTH to "403", client().probeMqttService().cause())
+        respondAll(503)
+        assertEquals(HaFailure.MQTT_FAILED to "503", client().probeMqttService().cause())
+    }
+
+    @Test
+    fun aProbeThatCannotConnectIsAFailedCheck() = runTest {
+        assertEquals(HaFailure.MQTT_FAILED to "ConnectException", HaClient(deadPortUrl(), "tok").probeMqttService().cause())
+    }
+
+    @Test
+    fun aRefusedUrlCarriesItsCauseOnEveryPath() = runTest {
+        val wan = HaClient(baseUrl = "http://8.8.8.8", token = "tok")
+        assertEquals(HaFailure.INSECURE_REFUSED to null, wan.ping().cause())
+        assertEquals(HaFailure.INSECURE_REFUSED to null, wan.probeMqttService().cause())
+        assertFalse(wan.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.INSECURE_REFUSED, wan.lastFailure)
+        val malformed = HaClient(baseUrl = "homeassistant.local:8123", token = "tok")
+        assertEquals(HaFailure.URL_INVALID to null, malformed.ping().cause())
+        assertFalse(malformed.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.URL_INVALID, malformed.lastFailure)
+        assertTrue(requests.isEmpty())
+    }
+
     @Test
     fun publishClosePassEventDoesTwoWritesAndTagsEventType() = runTest {
         respondAll(200)

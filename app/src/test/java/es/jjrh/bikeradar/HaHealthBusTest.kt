@@ -46,19 +46,65 @@ class HaHealthBusTest {
     }
 
     @Test
-    fun `a refused cleartext URL is its own cause`() {
+    fun `a refused URL is its own cause`() {
         // Nothing left the app. Reporting this as unreachable would send the
         // rider to check a server that was never contacted.
-        assertEquals(HaFailure.INSECURE_REFUSED, classifyHaFailure(insecureRefusal = true))
-        // It outranks a code, because the refusal happens before the request.
-        assertEquals(HaFailure.INSECURE_REFUSED, classifyHaFailure(code = 500, insecureRefusal = true))
+        assertEquals(HaFailure.INSECURE_REFUSED, haUrlRefusal("http://example.com:8123")?.failure)
+        assertEquals(HaFailure.URL_INVALID, haUrlRefusal("homeassistant.local:8123")?.failure)
+        assertEquals(HaFailure.URL_INVALID, haUrlRefusal("ftp://homeassistant.local")?.failure)
+        assertEquals(null, haUrlRefusal("http://homeassistant.local:8123"))
+        assertEquals(null, haUrlRefusal("https://example.com"))
     }
 
     @Test
     fun `server and not-found are distinct from both`() {
         assertEquals(HaFailure.SERVER_ERROR, classifyHaFailure(code = 500))
         assertEquals(HaFailure.SERVER_ERROR, classifyHaFailure(code = 503))
-        assertEquals(HaFailure.NOT_FOUND, classifyHaFailure(code = 404))
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyHaFailure(code = 404))
+    }
+
+    @Test
+    fun `a failed TLS handshake is told apart from an unreachable host`() {
+        assertEquals(HaFailure.TLS, classifyHaFailure(error = "SSLHandshakeException"))
+        assertEquals(HaFailure.TLS, classifyHaFailure(error = "SSLPeerUnverifiedException"))
+        assertEquals(HaFailure.TLS, classifyHaFailure(error = "SSLException"))
+    }
+
+    @Test
+    fun `a URL the platform cannot parse is not valid`() {
+        assertEquals(HaFailure.URL_INVALID, classifyHaFailure(error = "MalformedURLException"))
+    }
+
+    @Test
+    fun `a ping answered by something other than Home Assistant says so`() {
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 301))
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 400))
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 404))
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 418))
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 499))
+    }
+
+    @Test
+    fun `a ping keeps the causes it shares with a publish`() {
+        assertEquals(HaFailure.AUTH, classifyPingFailure(code = 401))
+        assertEquals(HaFailure.AUTH, classifyPingFailure(code = 403))
+        assertEquals(HaFailure.SERVER_ERROR, classifyPingFailure(code = 500))
+        assertEquals(HaFailure.HOST_UNREACHABLE, classifyPingFailure(error = "ConnectException"))
+        assertEquals(HaFailure.TLS, classifyPingFailure(error = "SSLHandshakeException"))
+        assertEquals(HaFailure.UNKNOWN, classifyPingFailure(code = 299))
+        assertEquals(HaFailure.UNKNOWN, classifyPingFailure(code = 600))
+        assertEquals(HaFailure.UNKNOWN, classifyPingFailure(error = "IllegalStateException"))
+    }
+
+    @Test
+    fun `the MQTT probe names its own causes`() {
+        assertEquals(HaFailure.MQTT_MISSING, classifyMqttProbeFailure(400))
+        assertEquals(HaFailure.MQTT_MISSING, classifyMqttProbeFailure(404))
+        assertEquals(HaFailure.MQTT_AUTH, classifyMqttProbeFailure(401))
+        assertEquals(HaFailure.MQTT_AUTH, classifyMqttProbeFailure(403))
+        assertEquals(HaFailure.MQTT_FAILED, classifyMqttProbeFailure(500))
+        assertEquals(HaFailure.MQTT_FAILED, classifyMqttProbeFailure(405))
+        assertEquals(HaFailure.MQTT_FAILED, classifyMqttProbeFailure(null))
     }
 
     @Test
@@ -98,7 +144,7 @@ class HaHealthBusTest {
     @Test
     fun `the newest failure is the one reported`() {
         // Only the newest has a current observation behind it.
-        val old = HaHealth.Error("old", atMs = 1_000L, cause = HaFailure.NOT_FOUND)
+        val old = HaHealth.Error("old", atMs = 1_000L, cause = HaFailure.NOT_HOME_ASSISTANT)
         val new = HaHealth.Error("new", atMs = 2_000L, cause = HaFailure.AUTH)
         val agg = aggregateHaHealth(mapOf(HaFamily.BATTERY to old, HaFamily.RIDE_EDGE to new))
         assertEquals(HaFailure.AUTH, (agg as HaHealth.Error).cause)

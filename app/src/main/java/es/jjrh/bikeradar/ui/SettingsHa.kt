@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import es.jjrh.bikeradar.HaFailure
 import es.jjrh.bikeradar.HaHealth
 import es.jjrh.bikeradar.HaHealthBus
 import es.jjrh.bikeradar.HaStatus
@@ -58,6 +60,7 @@ import es.jjrh.bikeradar.HaStatusDeriver
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
+import es.jjrh.bikeradar.haUrlRefusal
 import kotlinx.coroutines.launch
 
 @Composable
@@ -125,11 +128,11 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         onTestAndSave = {
             val url = urlField.trim()
             val tok = tokenField.trim()
-            val refusal = urlRefusalMessage(url)
+            val refusal = haUrlRefusal(url)
             if (refusal != null) {
                 // Preserve any previously saved working creds.
                 // Pill keeps reflecting actual storage state.
-                pingResult = Result.failure(Exception(refusal))
+                pingResult = Result.failure(refusal)
                 mqttResult = null
                 resultForCreds = url to tok
                 return@SettingsHaContent
@@ -150,9 +153,9 @@ private fun SettingsHaBody(navController: NavController, prefs: Prefs) {
         onSaveWithoutTesting = {
             val url = urlField.trim()
             val tok = tokenField.trim()
-            val refusal = urlRefusalMessage(url)
+            val refusal = haUrlRefusal(url)
             if (refusal != null) {
-                pingResult = Result.failure(Exception(refusal))
+                pingResult = Result.failure(refusal)
                 mqttResult = null
                 resultForCreds = url to tok
                 return@SettingsHaContent
@@ -313,35 +316,15 @@ internal fun SettingsHaContent(
                 )
             }
 
-            // Result chips, side-by-side, when present
             if (pingResult != null || mqttResult != null) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Row(
+                HaTestResult(
+                    pingResult = pingResult,
+                    mqttResult = mqttResult,
+                    pingOkText = stringResource(R.string.settings_ha_chip_ha_saved),
+                    fixStyle = TextStyle(color = br.fgMuted, fontSize = 12.sp, lineHeight = 16.sp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val errorFallback = stringResource(R.string.settings_ha_error)
-                    pingResult?.let { r ->
-                        BrChip(
-                            text = if (r.isSuccess) {
-                                stringResource(R.string.settings_ha_chip_ha_saved)
-                            } else {
-                                stringResource(R.string.settings_ha_chip_ha_error, r.exceptionOrNull()?.message ?: errorFallback)
-                            },
-                            color = if (r.isSuccess) br.safe else br.danger,
-                        )
-                    }
-                    mqttResult?.let { r ->
-                        BrChip(
-                            text = if (r.isSuccess) {
-                                stringResource(R.string.settings_ha_chip_mqtt_ready)
-                            } else {
-                                stringResource(R.string.settings_ha_chip_mqtt_error, r.exceptionOrNull()?.message ?: errorFallback)
-                            },
-                            color = if (r.isSuccess) br.safe else br.caution,
-                        )
-                    }
-                }
+                )
             }
 
             // Points at Home Assistant rather than listing ids, because the app
@@ -404,7 +387,7 @@ private fun ConnectionStateCard(status: HaStatus, health: HaHealth) {
                 HaStatus.NOT_CONFIGURED -> stringResource(R.string.settings_ha_add_url_token)
                 HaStatus.UNREACHABLE -> stringResource(
                     R.string.settings_ha_last_error,
-                    (health as? HaHealth.Error)?.message.orEmpty(),
+                    stringResource(haFailureChip((health as? HaHealth.Error)?.cause ?: HaFailure.UNKNOWN)),
                 )
                 // Publishing happens at ride edges, so a correct setup sits
                 // here for most of a session. It must not claim discovery is

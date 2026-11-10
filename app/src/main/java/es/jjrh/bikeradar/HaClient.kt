@@ -66,23 +66,11 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     var lastFailure: HaFailure? = null
         private set
 
-    /**
-     * Returns a Throwable describing why the configured URL is unsafe to send
-     * the bearer token over, or null if the URL is acceptable. HTTPS is always
-     * acceptable; HTTP is acceptable only for LAN hosts. See [HaUrlPolicy].
-     */
-    private fun cleartextRefusal(): Throwable? = when (val r = HaUrlPolicy.validate(baseUrl)) {
-        is HaUrlPolicy.Result.CleartextWanRefused ->
-            SecurityException(HaUrlPolicy.refusalMessage(r.host))
-        HaUrlPolicy.Result.Malformed -> IllegalArgumentException("HA URL malformed")
-        HaUrlPolicy.Result.Empty, HaUrlPolicy.Result.Ok -> null
-    }
-
     suspend fun publishMqtt(topic: String, payload: String, retain: Boolean): Boolean {
         if (!isConfigured()) return false
-        cleartextRefusal()?.let {
+        haUrlRefusal(baseUrl)?.let {
             Log.w(TAG, "HA mqtt/publish $topic refused: ${it.message}")
-            lastFailure = classifyHaFailure(insecureRefusal = true)
+            lastFailure = it.failure
             return false
         }
         return withContext(Dispatchers.IO) {
@@ -118,9 +106,11 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         }
     }
 
+    /** Whether Home Assistant answers at the base URL with this token. A
+     *  failure is a [HaFailureException]. */
     suspend fun ping(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
-        cleartextRefusal()?.let { return Result.failure(it) }
+        haUrlRefusal(baseUrl)?.let { return Result.failure(it) }
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/")
@@ -135,10 +125,11 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 if (code in 200..299) {
                     Result.success("OK ($code)")
                 } else {
-                    Result.failure(Exception("HTTP $code"))
+                    Result.failure(HaFailureException(classifyPingFailure(code = code), "$code", "HTTP $code"))
                 }
             } catch (t: Throwable) {
-                Result.failure(t)
+                val name = t.javaClass.simpleName
+                Result.failure(HaFailureException(classifyPingFailure(error = name), name, t.message ?: name, t))
             }
         }
     }
@@ -150,11 +141,12 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * temporarily offline, HA accepts the call and queues). A 400 or
      * 404 typically means the MQTT integration hasn't been set up.
      * ping() verifies HA reachability; this verifies the downstream
-     * feature path the app actually depends on.
+     * feature path the app actually depends on. A failure is a
+     * [HaFailureException].
      */
     suspend fun probeMqttService(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
-        cleartextRefusal()?.let { return Result.failure(it) }
+        haUrlRefusal(baseUrl)?.let { return Result.failure(it) }
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/services/mqtt/publish")
@@ -175,18 +167,20 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 conn.outputStream.use { it.write(body.toByteArray()) }
                 val code = conn.responseCode
                 drainAndReturn(conn, code)
-                when {
-                    code in 200..299 -> Result.success("MQTT OK")
-                    code == 400 || code == 404 -> Result.failure(
-                        Exception("HA's MQTT integration is not enabled"),
-                    )
-                    code == 401 || code == 403 -> Result.failure(
-                        Exception("Token rejected for mqtt.publish"),
-                    )
-                    else -> Result.failure(Exception("MQTT probe HTTP $code"))
+                if (code in 200..299) {
+                    Result.success("MQTT OK")
+                } else {
+                    val failure = classifyMqttProbeFailure(code)
+                    val message = when (failure) {
+                        HaFailure.MQTT_MISSING -> "HA's MQTT integration is not enabled"
+                        HaFailure.MQTT_AUTH -> "Token rejected for mqtt.publish"
+                        else -> "MQTT probe HTTP $code"
+                    }
+                    Result.failure(HaFailureException(failure, "$code", message))
                 }
             } catch (t: Throwable) {
-                Result.failure(t)
+                val name = t.javaClass.simpleName
+                Result.failure(HaFailureException(classifyMqttProbeFailure(null), name, t.message ?: name, t))
             }
         }
     }
@@ -574,6 +568,18 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 /** The outcome of [HaClient.testConnection]; [mqtt] is null when the ping
  *  failed and the probe was not run. */
 data class HaConnectionTest(val ping: Result<String>, val mqtt: Result<String>?)
+
+/**
+ * Why the token may not be sent to [url], or null when it may: HTTPS always,
+ * HTTP only to a home-network host (see [HaUrlPolicy]). The one check before
+ * every request and every save, on both Home Assistant screens.
+ */
+fun haUrlRefusal(url: String): HaFailureException? = when (val r = HaUrlPolicy.validate(url)) {
+    is HaUrlPolicy.Result.CleartextWanRefused ->
+        HaFailureException(HaFailure.INSECURE_REFUSED, null, HaUrlPolicy.refusalMessage(r.host))
+    HaUrlPolicy.Result.Malformed -> HaFailureException(HaFailure.URL_INVALID, null, HaUrlPolicy.malformedMessage())
+    HaUrlPolicy.Result.Empty, HaUrlPolicy.Result.Ok -> null
+}
 
 /**
  * Single source of truth for every category of data Bike Radar sends

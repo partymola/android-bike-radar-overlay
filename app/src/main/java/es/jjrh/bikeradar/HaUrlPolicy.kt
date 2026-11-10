@@ -52,11 +52,9 @@ object HaUrlPolicy {
     }
 
     /**
-     * Short user-facing message for the [Result.CleartextWanRefused] case.
-     * Leads with "Refused" so the chip slot (which also surfaces server-side
-     * errors like `HTTP 401`) cannot be misread as an HA response. The host
-     * is sanitised: non-printables stripped, length-capped so long subdomains
-     * don't blow the chip width.
+     * English message for the [Result.CleartextWanRefused] case, for logs and
+     * tests; the screens show their own text for the refusal. The host is
+     * sanitised: non-printables stripped, length-capped.
      */
     fun refusalMessage(host: String): String {
         val safe = host.filter { it.code in 0x20..0x7E && it != '"' }
@@ -68,7 +66,7 @@ object HaUrlPolicy {
         return "Refused: HTTPS required for non-LAN host ($display)"
     }
 
-    /** Short user-facing message for the [Result.Malformed] case. */
+    /** English message for the [Result.Malformed] case, as above. */
     fun malformedMessage(): String = "Refused: URL must start with https:// or http://"
 
     private fun isLanHost(host: String): Boolean {

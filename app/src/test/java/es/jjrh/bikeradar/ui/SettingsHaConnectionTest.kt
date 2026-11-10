@@ -89,7 +89,7 @@ class SettingsHaConnectionTest {
     fun aMissingMqttIntegrationIsReported() {
         openSettings()
         compose.onNodeWithText("Test and save").performScrollTo().performClick()
-        waitForText("MQTT integration is not enabled")
+        waitForText("MQTT: not configured in HA")
     }
 
     /** The same check setup's Continue runs. */
@@ -98,7 +98,7 @@ class SettingsHaConnectionTest {
         openSettings()
         compose.onNodeWithText(baseUrl).performTextReplacement("http://example.com:8123")
         compose.onNodeWithText("Save without testing").performScrollTo().performClick()
-        waitForText("Refused")
+        waitForText("URL: HTTPS needed")
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
     }
 
@@ -113,7 +113,7 @@ class SettingsHaConnectionTest {
         pingHeld!!.countDown()
         waitForText("Test and save")
         compose.onNodeWithText("HA: saved", ignoreCase = true).assertDoesNotExist()
-        compose.onNodeWithText("MQTT integration is not enabled", substring = true, ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("MQTT: not configured in HA", ignoreCase = true).assertDoesNotExist()
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
         assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }

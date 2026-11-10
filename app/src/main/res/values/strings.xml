@@ -308,8 +308,6 @@
     <string name="onboarding_ha_testing">Testing…</string>
     <string name="onboarding_ha_test_connection">Test connection</string>
     <string name="onboarding_ha_connected">HA: connected</string>
-    <string name="onboarding_ha_error">HA: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
-    <string name="onboarding_ha_error_generic">error</string>
     <string name="onboarding_ha_enter_to_continue">Enter URL and token to continue.</string>
     <string name="onboarding_ha_skipped_title">Skipped</string>
     <string name="onboarding_ha_skipped_body">You can add Home Assistant any time from Settings → Home Assistant.</string>
@@ -613,11 +611,8 @@
     <string name="settings_ha_test_and_save">Test and save</string>
     <string name="settings_ha_save_without_testing">Save without testing</string>
     <string name="settings_ha_clear_config">Clear HA configuration</string>
-    <string name="settings_ha_error">error</string>
     <string name="settings_ha_chip_ha_saved">HA: saved</string>
-    <string name="settings_ha_chip_ha_error">HA: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_chip_mqtt_ready">MQTT: ready</string>
-    <string name="settings_ha_chip_mqtt_error">MQTT: <xliff:g id="reason" example="timeout">%1$s</xliff:g></string>
     <string name="settings_ha_published_entities">Your entities</string>
     <string name="settings_ha_entities_look_up_in_ha">Your entity ids are in HA: Settings → Devices &amp; services → Entities.</string>
     <string name="settings_ha_entities_after_publishing">They appear in HA once the app has published: Settings → Devices &amp; services → Entities.</string>
@@ -627,6 +622,35 @@
     <string name="settings_ha_mqtt_discovery_active">Publishing to Home Assistant via MQTT</string>
     <string name="settings_ha_saved_without_testing_toast">Saved without testing</string>
     <string name="settings_ha_config_cleared_toast">HA configuration cleared</string>
+    <!-- A failed test on setup's Home Assistant step and on this screen: the
+         chip says what failed (30 characters at most, prefix included, as
+         chips sit side by side), the line under it what to do. The Last
+         error line on this screen reuses the chips. -->
+    <string name="settings_ha_chip_url_invalid">URL: not valid</string>
+    <string name="settings_ha_fix_url_invalid">Not saved. The URL must start with https:// or http:// and have no spaces, like https://homeassistant.local:8123.</string>
+    <string name="settings_ha_chip_url_https">URL: HTTPS needed</string>
+    <string name="settings_ha_fix_url_https">Nothing was sent. Outside your home network the URL must start with https://, so your token never travels unprotected.</string>
+    <string name="settings_ha_chip_ha_unreachable">HA: unreachable</string>
+    <string name="settings_ha_fix_unreachable">Nothing answered at that URL. Check the address and port, and that Home Assistant is on and this phone can reach it from this network.</string>
+    <string name="settings_ha_chip_ha_tls">HA: secure connection failed</string>
+    <string name="settings_ha_fix_tls">Android does not trust that server\'s certificate, or that port is not HTTPS. On your home network you can use http:// instead.</string>
+    <string name="settings_ha_chip_ha_token">HA: token rejected</string>
+    <string name="settings_ha_fix_token">Home Assistant rejected the token. Create a new long-lived access token and paste it here.</string>
+    <string name="settings_ha_chip_ha_not_found">HA: not at this URL</string>
+    <string name="settings_ha_fix_not_found">Something answered, but not Home Assistant (code <xliff:g id="code" example="404">%1$s</xliff:g>). Check the address and port, usually 8123.</string>
+    <string name="settings_ha_chip_ha_server_error">HA: server error</string>
+    <string name="settings_ha_fix_server_error">Home Assistant answered with an error (code <xliff:g id="code" example="503">%1$s</xliff:g>). Try again in a moment.</string>
+    <string name="settings_ha_chip_ha_failed">HA: couldn\'t connect</string>
+    <string name="settings_ha_fix_failed">The test failed for a reason the app doesn\'t recognise (<xliff:g id="code" example="IOException">%1$s</xliff:g>). Check the URL and token and try again.</string>
+    <string name="settings_ha_chip_mqtt_missing">MQTT: not configured in HA</string>
+    <string name="settings_ha_fix_mqtt_missing">Home Assistant answers, but MQTT may not be set up in it. Check that the MQTT integration is added in HA: Settings → Devices &amp; services.</string>
+    <string name="settings_ha_chip_mqtt_token">MQTT: token not allowed</string>
+    <string name="settings_ha_fix_mqtt_token">Home Assistant answers, but won\'t let this token publish.</string>
+    <string name="settings_ha_chip_mqtt_failed">MQTT: check failed</string>
+    <string name="settings_ha_fix_mqtt_failed">Home Assistant answers, but the MQTT check failed (<xliff:g id="code" example="503">%1$s</xliff:g>). Try again.</string>
+    <!-- What TalkBack reads for the test result, which it announces as it
+         changes: the chips, then the line under them. -->
+    <string name="settings_ha_result_cd">Home Assistant test: <xliff:g id="result" example="HA: token rejected. Home Assistant rejected the token.">%1$s</xliff:g></string>
 
     <!-- Settings → eBike (SettingsEBike.kt) -->
     <string name="settings_ebike_title">eBike</string>

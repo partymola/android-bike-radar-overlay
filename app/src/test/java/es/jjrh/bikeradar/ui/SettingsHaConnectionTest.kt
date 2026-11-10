@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sun.net.httpserver.HttpServer
+import es.jjrh.bikeradar.HaClient
 import es.jjrh.bikeradar.HaFailure
 import es.jjrh.bikeradar.HaFamily
 import es.jjrh.bikeradar.HaHealth
@@ -22,8 +23,10 @@ import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -99,7 +102,20 @@ class SettingsHaConnectionTest {
     fun aMissingMqttIntegrationIsReported() {
         openSettings()
         compose.onNodeWithText("Test and save").performScrollTo().performClick()
-        waitForText("MQTT: not configured in HA")
+        waitForText("MQTT: not found in HA")
+    }
+
+    /** A publish calls the endpoint the test's MQTT check calls, so a 404 there reads the same. */
+    @Test
+    fun aPublishThatFindsNoMqttShowsTheMqttCauseOnTheCard() {
+        // Saved first: a change of credentials forgets every outcome.
+        HaCredentials(app).save(baseUrl, "tok")
+        val client = HaClient(baseUrl, "tok")
+        assertFalse(runBlocking { client.publishMqtt("bikeradar/x/battery", "88", retain = true) })
+        HaHealthBus.reportError(HaFamily.BATTERY, "battery publish failed", client.lastFailure ?: HaFailure.UNKNOWN)
+        openSettings()
+        compose.onNodeWithText("Last error: MQTT: not found in HA").assertExists()
+        compose.onNodeWithText("Last error: HA: not at that URL").assertDoesNotExist()
     }
 
     private fun retestAfterAFailedRide() {
@@ -123,7 +139,7 @@ class SettingsHaConnectionTest {
     @Test
     fun aRetestWhoseMqttCheckFailsKeepsTheLastError() {
         retestAfterAFailedRide()
-        waitForText("MQTT: not configured in HA")
+        waitForText("MQTT: not found in HA")
         compose.onNodeWithText("Last error: HA: unreachable").assertExists()
     }
 
@@ -160,7 +176,7 @@ class SettingsHaConnectionTest {
         pingHeld!!.countDown()
         waitForText("Test and save")
         compose.onNodeWithText("HA: saved", ignoreCase = true).assertDoesNotExist()
-        compose.onNodeWithText("MQTT: not configured in HA", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("MQTT: not found in HA", ignoreCase = true).assertDoesNotExist()
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
         assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }

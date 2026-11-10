@@ -8,8 +8,8 @@ package es.jjrh.bikeradar
  * the ticker from issuing GATT reads when no radar link is open
  * AND we are past the walk-away monitoring window. At that point the
  * dashcam liveness signal has no consumer and the reads are wasted,
- * except for a walk-away alarm sounding, due just then or snoozed
- * ([DashcamProbe.shouldLaunch]).
+ * except for a walk-away alarm sounding, due just then, snoozed, or able
+ * to sound with no sounding on record ([DashcamProbe.shouldLaunch]).
  */
 internal object IdleGate {
     /**

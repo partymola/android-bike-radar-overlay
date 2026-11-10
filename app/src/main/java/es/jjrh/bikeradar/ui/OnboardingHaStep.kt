@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +61,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import es.jjrh.bikeradar.HaFailure
+import es.jjrh.bikeradar.HaFailureException
 import es.jjrh.bikeradar.R
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.HaIntent
@@ -210,11 +215,16 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
         // YES with empty/partial fields: dual CTA so the user can still
         // bail via Skip-for-now. YES with both fields filled: only
         // Continue - the user has clearly opted into HA, and Skip-for-now
-        // would silently discard typed creds. The "change" pill remains
-        // the bail path. NO: single Continue.
+        // would silently discard typed creds. A refused address gets the
+        // dual CTA too, since Continue cannot get past it
+        // (`HaStepConnectionTest.aRefusedAddressOffersSkipForNowUntilItIsEdited`).
+        // The "change" pill remains the bail path. NO: single Continue.
+        val refused = (pingResult?.exceptionOrNull() as? HaFailureException)?.failure.let {
+            it == HaFailure.INSECURE_REFUSED || it == HaFailure.URL_INVALID
+        }
         when (effectiveIntent) {
             HaIntent.UNSET -> Unit
-            HaIntent.YES -> if (canSubmit) {
+            HaIntent.YES -> if (canSubmit && !refused) {
                 FooterCta(
                     label = stringResource(R.string.common_continue),
                     enabled = true,
@@ -224,7 +234,7 @@ internal fun HaStep(onContinue: () -> Unit, onSkip: () -> Unit, prefs: Prefs) {
                 FooterCtaDual(
                     primary = stringResource(R.string.common_continue),
                     secondary = stringResource(R.string.onboarding_skip_for_now),
-                    primaryEnabled = false,
+                    primaryEnabled = canSubmit,
                     onPrimary = onContinueSaving,
                     onSecondary = onSkip,
                 )
@@ -429,10 +439,16 @@ internal fun HaFieldsBlock(
             )
         }
     }
+    // A refusal comes from the footer's Continue, so the result may be off screen.
+    val resultInView = remember { BringIntoViewRequester() }
+    LaunchedEffect(pingResult) {
+        if (pingResult?.isFailure == true) resultInView.bringIntoView()
+    }
     HaTestResult(
         pingResult = pingResult,
         mqttResult = mqttResult,
         fixStyle = TextStyle(color = br.fgDim, fontSize = 11.sp),
+        modifier = Modifier.bringIntoViewRequester(resultInView),
     )
     // When fields are incomplete, the dual footer shows a disabled
     // Continue with no inline reason. A muted hint here makes the

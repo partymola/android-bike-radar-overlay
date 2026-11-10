@@ -898,10 +898,13 @@ class Prefs(context: Context) {
     /** Address of the radar that streamed last, when that stream was distance
      *  only; null once any radar's V2 stream has started since. The link
      *  writes it (`RadarLinkControllerHarnessTest.aLegacyStreamThatDeliversIsRememberedAsDistanceOnly`,
-     *  `aV2FrameFromAnotherRadarForgetsTheRememberedOne`) and the home
-     *  close-pass card reads it while no radar streams
-     *  (`ClosePassCardStoredRadarTest`). Not in [PrefsSnapshot]: the card
-     *  reads it directly. */
+     *  `aV2FrameFromAnotherRadarForgetsTheRememberedOne`), once per
+     *  connection (`aSecondV2FrameLeavesTheRememberedRadarAlone`,
+     *  `aSecondLegacyFrameLeavesTheRememberedRadarAlone`). The home
+     *  close-pass card and the Settings radar screen
+     *  read it while no radar streams (`ClosePassCardStoredRadarTest`,
+     *  `SettingsRadarDeviceStatusTest`). Not in [PrefsSnapshot]: both read it
+     *  directly. */
     var rangeOnlyRadarMac: String?
         get() = sp.getString(KEY_RANGE_ONLY_RADAR_MAC, null)
         set(v) {

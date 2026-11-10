@@ -541,8 +541,8 @@ private fun SystemRowRender(
 /** [rideStored] has no default: ride history is kept whether or not counting
  *  is on, so a stored ride alone offers the link (`ClosePassHistoryLinkTest`).
  *  [rangeOnly]: this bike's radar reports distance only, so nothing can be
- *  counted. Known from its stream, and between streams from the radar the
- *  home screen remembers (`ClosePassCardStoredRadarTest`). */
+ *  counted. Known from its stream, and between streams from the remembered
+ *  radar (`ClosePassCardStoredRadarTest`). */
 @Composable
 internal fun ClosePassStatsCard(
     loggingEnabled: Boolean,

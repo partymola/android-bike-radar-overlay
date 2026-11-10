@@ -57,10 +57,15 @@ class HaHealthBusTest {
     }
 
     @Test
-    fun `server and not-found are distinct from both`() {
+    fun `a server error is distinct from both`() {
         assertEquals(HaFailure.SERVER_ERROR, classifyHaFailure(code = 500))
         assertEquals(HaFailure.SERVER_ERROR, classifyHaFailure(code = 503))
-        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyHaFailure(code = 404))
+    }
+
+    @Test
+    fun `a publish answered 400 or 404 has no MQTT, as the test's check says`() {
+        assertEquals(HaFailure.MQTT_MISSING, classifyHaFailure(code = 400))
+        assertEquals(HaFailure.MQTT_MISSING, classifyHaFailure(code = 404))
     }
 
     @Test
@@ -77,6 +82,7 @@ class HaHealthBusTest {
 
     @Test
     fun `a ping answered by something other than Home Assistant says so`() {
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 300))
         assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 301))
         assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 400))
         assertEquals(HaFailure.NOT_HOME_ASSISTANT, classifyPingFailure(code = 404))

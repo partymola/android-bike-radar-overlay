@@ -120,7 +120,7 @@ internal class BatteryReader(
      *  The radar test is [DeviceNameMatcher.isUnambiguousRadar] and no wider,
      *  because that is the test the dashcam picker excludes on, so no name
      *  both passes here and is offered there. The wider `isRearAdvert` would
-     *  read a switched-off camera called "RearView". Pinned by
+     *  read a switched-off camera called "Garmin RearView Dash Cam". Pinned by
      *  aSwitchedOffCameraWithARadarLikeNameIsNotRead here and by
      *  noNameIsBothOfferedAsTheCameraAndReadAsARadar across the two files. */
     private fun mayRead(name: String, mac: String): Boolean = DeviceNameMatcher.isUnambiguousRadar(name) ||

@@ -58,6 +58,9 @@ class HaClientHttpTest {
     /** What `/api/` answers with; Home Assistant's documented body by default. */
     @Volatile private var pingBody = """{"message": "API running."}"""
 
+    /** When set, `/api/` sends a 200 and the start of a body, then goes quiet. */
+    @Volatile private var pingStalls = false
+
     @Before
     fun setUp() {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -90,6 +93,13 @@ class HaClientHttpTest {
                 body = body,
             ),
         )
+        if (pingStalls && exchange.requestURI.path == "/api/") {
+            exchange.sendResponseHeaders(200, 0)
+            exchange.responseBody.write("""{"mess""".toByteArray())
+            exchange.responseBody.flush()
+            Thread.sleep(10_000)
+            return
+        }
         val topic = if (body.isNotEmpty()) JSONObject(body).optString("topic").ifEmpty { null } else null
         val payload = (if (exchange.requestURI.path == "/api/") pingBody else "{}").toByteArray()
         exchange.sendResponseHeaders(statusFor(topic), payload.size.toLong())
@@ -220,6 +230,23 @@ class HaClientHttpTest {
         val c = client()
         assertFalse(c.publishMqtt("t", "p", retain = false))
         assertEquals(HaFailure.SERVER_ERROR, c.lastFailure)
+    }
+
+    /** The endpoint the test's MQTT check calls, so the same answer means the same thing. */
+    @Test
+    fun aPublishAnswered404LeavesAMissingMqttCause() = runTest {
+        respondAll(404)
+        val c = client()
+        assertFalse(c.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.MQTT_MISSING, c.lastFailure)
+    }
+
+    @Test
+    fun aPublishAnswered400LeavesAMissingMqttCause() = runTest {
+        respondAll(400)
+        val c = client()
+        assertFalse(c.publishMqtt("t", "p", retain = false))
+        assertEquals(HaFailure.MQTT_MISSING, c.lastFailure)
     }
 
     @Test
@@ -373,6 +400,22 @@ class HaClientHttpTest {
         pingBody = """{"message": 5}"""
         assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
         pingBody = """["message"]"""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+    }
+
+    /** The body is read up to 4 KB, far more than Home Assistant's answer. */
+    @Test
+    fun aPingBodyPastTheCapIsNotHomeAssistant() = runTest {
+        pingBody = """{"message": "API running.", "pad": "${"x".repeat(4_000)}"}"""
+        assertTrue("an answer under the cap is read whole", client().ping().isSuccess)
+        pingBody = """{"message": "API running.", "pad": "${"x".repeat(5_000)}"}"""
+        assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
+    }
+
+    /** Something answered 2xx, so a body that stops arriving is not an unreachable host. */
+    @Test
+    fun aPingWhoseBodyStopsArrivingIsNotHomeAssistant() = runTest {
+        pingStalls = true
         assertEquals(HaFailure.NOT_HOME_ASSISTANT to "200", client().ping().cause())
     }
 

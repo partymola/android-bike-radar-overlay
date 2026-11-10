@@ -108,13 +108,17 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 
     /**
      * Whether Home Assistant answers at the base URL with this token. A
-     * failure is a [HaFailureException].
+     * failure is a [HaFailureException] unless the URL or token is blank.
      *
      * A 2xx counts only with a JSON object carrying a string `message`, the
      * shape of Home Assistant's documented `GET /api/` answer
      * (`{"message": "API running."}`), so a router page that answers 2xx is
      * not taken for it. The text itself is not checked, so a release that
-     * rewords it is still recognised (`HaClientHttpTest`).
+     * rewords it is still recognised (`HaClientHttpTest`). At most
+     * [PING_BODY_MAX_BYTES] of it are read, so a stream served at `/api/`
+     * cannot fill memory, and a body that fails to arrive after the 2xx is
+     * not Home Assistant's either (`aPingBodyPastTheCapIsNotHomeAssistant`,
+     * `aPingWhoseBodyStopsArrivingIsNotHomeAssistant`).
      */
     suspend fun ping(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
@@ -130,7 +134,20 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 }
                 val code = conn.responseCode
                 if (code in 200..299) {
-                    val body = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    val body = try {
+                        conn.inputStream.use { stream ->
+                            val buf = ByteArray(PING_BODY_MAX_BYTES)
+                            var n = 0
+                            while (n < buf.size) {
+                                val read = stream.read(buf, n, buf.size - n)
+                                if (read < 0) break
+                                n += read
+                            }
+                            String(buf, 0, n, Charsets.UTF_8)
+                        }
+                    } catch (t: Throwable) {
+                        return@withContext Result.failure(HaFailureException(HaFailure.NOT_HOME_ASSISTANT, "$code", "HTTP $code, body unreadable: ${t.javaClass.simpleName}", t))
+                    }
                     if (runCatching { JSONObject(body).opt("message") is String }.getOrDefault(false)) {
                         Result.success("OK ($code)")
                     } else {
@@ -155,7 +172,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      * 404 typically means the MQTT integration hasn't been set up.
      * ping() verifies HA reachability; this verifies the downstream
      * feature path the app actually depends on. A failure is a
-     * [HaFailureException].
+     * [HaFailureException] unless the URL or token is blank.
      */
     suspend fun probeMqttService(): Result<String> {
         if (!isConfigured()) return Result.failure(Exception("Not configured"))
@@ -570,6 +587,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         // write) and /api/ ping - neither does HA-side processing that
         // would justify a longer timeout.
         private const val HA_TIMEOUT_MS = 3000
+
+        // Home Assistant's `/api/` answer is a few dozen bytes.
+        private const val PING_BODY_MAX_BYTES = 4096
 
         // 10 minutes. Past this, the ride-summary sensors flip to
         // `unavailable` so HA dashboards don't show stale numbers from the

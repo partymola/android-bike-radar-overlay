@@ -3,6 +3,7 @@
 package es.jjrh.bikeradar.ui
 
 import android.app.Application
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -26,6 +27,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -102,7 +105,7 @@ class HaStepConnectionTest {
     fun aMissingMqttIntegrationIsReported() {
         probeStatus = 404
         testFromSetup()
-        waitForText("MQTT: not configured in HA")
+        waitForText("MQTT: not found in HA")
         compose.onNodeWithText("Home Assistant answers, but MQTT may not be set up in it.", substring = true).assertExists()
         compose.onNodeWithText("HA: saved", ignoreCase = true).assertExists()
     }
@@ -183,11 +186,12 @@ class HaStepConnectionTest {
         assertEquals(verifiedAt, Prefs(app).haLastValidatedEpochMs)
     }
 
-    private fun continueWith(url: String): Boolean {
+    private fun continueWith(url: String, onSkip: () -> Unit = {}): Boolean {
         HaCredentials(app).save(baseUrl, "tok")
         val prefs = Prefs(app).apply { haIntent = HaIntent.YES }
         var continued = false
-        compose.setContent { UiTheme { HaStep(onContinue = { continued = true }, onSkip = {}, prefs = prefs) } }
+        compose.setContent { UiTheme { HaStep(onContinue = { continued = true }, onSkip = onSkip, prefs = prefs) } }
+        compose.onNodeWithText("Skip for now").assertDoesNotExist()
         compose.onNodeWithText(baseUrl).performTextReplacement(url)
         compose.onNodeWithText("Continue").performClick()
         compose.waitForIdle()
@@ -207,6 +211,35 @@ class HaStepConnectionTest {
         assertFalse(continueWith("homeassistant.local:8123"))
         assertEquals(baseUrl, HaCredentials(app).baseUrl)
         waitForText("URL: not valid")
+    }
+
+    /** Continue cannot get past a refused address, so setup offers the way on it offers empty fields. */
+    @Test
+    fun aRefusedAddressOffersSkipForNowUntilItIsEdited() {
+        continueWith("http://example.com:8123")
+        compose.onNodeWithText("Skip for now").assertExists()
+        compose.onNodeWithText("http://example.com:8123").performTextReplacement("https://example.com:8123")
+        compose.onNodeWithText("Skip for now").assertDoesNotExist()
+    }
+
+    /** Continue sits in the footer, so on a short screen the refusal it raises is scrolled to. */
+    @Test
+    @Config(qualifiers = "w360dp-h480dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aRefusalOnAShortScreenIsBroughtIntoView() {
+        continueWith("http://example.com:8123")
+        compose.onNodeWithText("URL: HTTPS needed", ignoreCase = true).assertIsDisplayed()
+        compose.onNodeWithText("Not saved, and nothing was sent.", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun skippingAfterARefusalMovesOnAndSavesNothing() {
+        var skipped = false
+        continueWith("homeassistant.local:8123") { skipped = true }
+        compose.onNodeWithText("Skip for now").performClick()
+        assertTrue(skipped)
+        assertEquals(baseUrl, HaCredentials(app).baseUrl)
+        assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }
 
     @Test

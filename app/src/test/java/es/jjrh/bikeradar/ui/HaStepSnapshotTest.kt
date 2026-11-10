@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import es.jjrh.bikeradar.HaFailure
+import es.jjrh.bikeradar.HaFailureException
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -18,7 +20,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Roborazzi goldens for the three HA-step branches: the UNSET chooser,
- * the YES fields block (empty + populated), and the NO skipped card.
+ * the YES fields block (empty, populated, and after a failed test), and
+ * the NO skipped card.
  * Locks the visual contract so a future refactor that breaks the
  * chooser, pill, or skipped-card layout fails the golden comparison.
  *
@@ -106,6 +109,31 @@ class HaStepSnapshotTest {
                     )
                     // Mirrors the real YES branch, which shows the egress
                     // disclosure below the fields (see HaStep).
+                    HaStepPrivacyNote()
+                }
+            }
+        }
+    }
+
+    /** A failed test's chip and the line under it, here the longest line. */
+    @Test
+    fun yesRefusedUrl() {
+        captureRoboImage {
+            UiTheme {
+                StepShell {
+                    HaFieldsBlock(
+                        urlField = "http://example.com:8123",
+                        onUrlChange = {},
+                        tokenField = "eyJ0eXAiOiJKV1QiLCJh.fake.token",
+                        onTokenChange = {},
+                        tokenVisible = false,
+                        onToggleTokenVisible = {},
+                        pingResult = Result.failure(HaFailureException(HaFailure.INSECURE_REFUSED, null, "refused")),
+                        pinging = false,
+                        canSubmit = true,
+                        onTest = {},
+                        onChangeIntent = {},
+                    )
                     HaStepPrivacyNote()
                 }
             }

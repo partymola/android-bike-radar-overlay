@@ -963,6 +963,15 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun aServiceStartedWithAPairedPinTheCacheNeverHeldStartsIt() {
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+        val (controller, _, journal) = serviceWithPairedAndCached(mapOf(UNLISTED to "Tail unit"), emptyList())
+        idleMainUntil { journal.exists() && journal.starts("Tail unit") == 1 }
+        assertEquals("got:\n${if (journal.exists()) journal.readText() else ""}", 1, journal.starts("Tail unit"))
+        controller.destroy()
+    }
+
+    @Test
     fun aServiceStartedWithThePinPairedAndCachedStartsOneLink() {
         // The cache replay and the pin both ask for it.
         RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(RADAR_B, "RTL515"))
@@ -1278,10 +1287,24 @@ class BikeRadarServiceSmokeTest {
         controller.destroy()
     }
 
+    /** The control for [assertNoReadOf]: with no link, a sighting is read, and
+     *  the cache shows it within the same wait. */
     @Test
-    fun aPinTheLinkDoesNotHoldIsNotReadBesideIt() {
-        // The readable list lacks the pin, so name-match links the paired radar.
-        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(UNLISTED, "Tail unit"))
+    fun aSightingWithNoLinkRunningIsReadAndTheCacheShowsIt() {
+        Prefs(app).apply {
+            dashcamMac = CAMERA
+            dashcamOwnership = DashcamOwnership.YES
+        }
+        val (controller, service, _) = serviceWithPairedAndCached(mapOf(CAMERA to "Varia Vue 84509"), emptyList())
+        readDevice(service, "Varia Vue 84509", CAMERA, 1)
+        idleMainUntil(timeoutMs = 500L) { knownDevices().any { it.second == CAMERA } }
+        assertEquals(listOf("Varia Vue 84509" to CAMERA), knownDevices())
+        controller.destroy()
+    }
+
+    /** The readable list lacks [pin], so name-match links the paired radar. */
+    private fun noReadOfAPinTheLinkDoesNotHold(pin: String) {
+        RadarSelection.pin(Prefs(app), RadarSelection.BondedRadar(pin, "Tail unit"))
         val (controller, service, journal) = serviceWithPairedAndCached(mapOf(RADAR_B to "RTL515"), emptyList())
         readDevice(service, "RTL515", RADAR_B, 1)
         idleMainUntil { journal.starts("RTL515") == 1 }
@@ -1289,6 +1312,12 @@ class BikeRadarServiceSmokeTest {
         assertNoReadOf(UNLISTED, journal)
         controller.destroy()
     }
+
+    @Test
+    fun aPinTheLinkDoesNotHoldIsNotReadBesideIt() = noReadOfAPinTheLinkDoesNotHold(UNLISTED)
+
+    @Test
+    fun aPinStoredInAnotherCaseIsNotReadBesideTheLinkEither() = noReadOfAPinTheLinkDoesNotHold(UNLISTED.lowercase())
 
     @Test
     fun aSecondRadarIsNotReadWhileTheFirstStreams() {

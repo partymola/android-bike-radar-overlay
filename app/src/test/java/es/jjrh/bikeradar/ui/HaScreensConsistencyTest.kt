@@ -115,16 +115,17 @@ class HaScreensConsistencyTest {
         }
     }
 
-    /** Both screens save on a passing test, and say so in the same words. */
+    /** Setup saves on a passing test and says so in Settings' words, which
+     *  `HaTestResultCopyTest` reads on Settings. */
     @Test
-    fun aPassingTestReadsTheSameOnBothScreens() {
+    fun setupSaysAPassingTestSaved() {
         showSetup(Result.success("OK (200)"))
         compose.onNode(hasText("HA: saved", ignoreCase = true)).assertExists()
     }
 
     @Test
     @Config(qualifiers = "es")
-    fun aPassingTestReadsTheSameOnBothScreensInSpanish() {
+    fun setupSaysAPassingTestSavedInSpanish() {
         showSetup(Result.success("OK (200)"))
         compose.onNode(hasText("HA: guardado", ignoreCase = true)).assertExists()
     }

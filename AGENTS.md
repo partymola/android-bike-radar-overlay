@@ -177,9 +177,11 @@ to its file. The notes below are the working summary.
   `BikeRadarServiceSmokeTest.aPin*`,
   `RadarLinkControllerHarnessTest.aPinMovedWhileStreamingEndsTheOldLinkBeforeThePinnedOneOpens`).
   A pin written with no link running starts one when the pin is paired and
-  alerts are not paused. Bluetooth coming on and a pause ending start it the
-  same way (`BikeRadarService.startPinIfIdle`,
-  `BikeRadarServiceSmokeTest.aPinSetWhileNoLinkRunsStartsALinkToIt`).
+  alerts are not paused. The service starting, Bluetooth coming on and a
+  pause ending start it the same way, including a pin the known-device cache
+  never held (`BikeRadarService.startPinIfIdle`,
+  `BikeRadarServiceSmokeTest.aPinSetWhileNoLinkRunsStartsALinkToIt`,
+  `aServiceStartedWithAPairedPinTheCacheNeverHeldStartsIt`).
   A failed bonded read never moves a running link
   (`RadarSelectionTest."an empty bonded read never moves a running link"`), so
   on one the other radar keeps streaming until the pinned one is next sighted.

@@ -44,32 +44,32 @@ class HaTestResultCopyTest {
     private fun failure(f: HaFailure, detail: String? = null) = HaFailureException(f, detail, "secret.example.com said no")
 
     private val english = listOf(
-        Case(failure(HaFailure.URL_INVALID), false, "URL: not valid", "Not saved. The URL must start with https:// or http:// and have no spaces, like https://homeassistant.local:8123."),
-        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: HTTPS needed", "Nothing was sent. Outside your home network the URL must start with https://, so your token never travels unprotected."),
-        Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: unreachable", "Nothing answered at that URL. Check the address and port, and that Home Assistant is on and this phone can reach it from this network."),
-        Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: secure connection failed", "Android does not trust that server's certificate, or that port is not HTTPS. On your home network you can use http:// instead."),
-        Case(failure(HaFailure.AUTH, "401"), false, "HA: token rejected", "Home Assistant rejected the token. Create a new long-lived access token and paste it here."),
-        Case(failure(HaFailure.NOT_HOME_ASSISTANT, "404"), false, "HA: not at this URL", "Something answered, but not Home Assistant (code 404). Check the address and port, usually 8123."),
-        Case(failure(HaFailure.SERVER_ERROR, "503"), false, "HA: server error", "Home Assistant answered with an error (code 503). Try again in a moment."),
-        Case(failure(HaFailure.UNKNOWN, "418"), false, "HA: couldn't connect", "The test failed for a reason the app doesn't recognise (418). Check the URL and token and try again."),
-        Case(IOException("secret.example.com said no"), false, "HA: couldn't connect", "The test failed for a reason the app doesn't recognise (IOException). Check the URL and token and try again."),
-        Case(failure(HaFailure.MQTT_MISSING, "404"), true, "MQTT: not configured in HA", "Home Assistant answers, but MQTT may not be set up in it. Check that the MQTT integration is added in HA: Settings → Devices & services."),
-        Case(failure(HaFailure.MQTT_AUTH, "403"), true, "MQTT: token not allowed", "Home Assistant answers, but won't let this token publish."),
+        Case(failure(HaFailure.URL_INVALID), false, "URL: not valid", "Not saved. The URL must start with https:// or http:// and be a valid address, like https://homeassistant.local:8123."),
+        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: HTTPS needed", "Not saved, and nothing was sent. http:// works only with a home-network address, like 192.168.1.10 or homeassistant.local. For any other address the app needs https:// and will not send your token in plain text."),
+        Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: unreachable", "Nothing answered at that URL. Check the address and port, and that Home Assistant is on and reachable from this network."),
+        Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: secure connection failed", "Android does not trust that server's certificate, or that port is not HTTPS. On your home network you can use http:// with a local address, like http://192.168.1.10:8123."),
+        Case(failure(HaFailure.AUTH, "401"), false, "HA: token rejected", "Home Assistant rejected the token. Check it, or create a new long-lived access token and paste it here."),
+        Case(failure(HaFailure.NOT_HOME_ASSISTANT, "404"), false, "HA: not at that URL", "Something answered, but it isn't Home Assistant (code 404). Check the address and port, usually 8123."),
+        Case(failure(HaFailure.SERVER_ERROR, "503"), false, "HA: server error", "The server answered with an error (code 503). Check that Home Assistant is running, then try again."),
+        Case(failure(HaFailure.UNKNOWN, "418"), false, "HA: unexpected error", "The test failed for a reason the app doesn't recognise (418). Check the URL and token and try again."),
+        Case(IOException("secret.example.com said no"), false, "HA: unexpected error", "The test failed for a reason the app doesn't recognise (IOException). Check the URL and token and try again."),
+        Case(failure(HaFailure.MQTT_MISSING, "404"), true, "MQTT: not found in HA", "Home Assistant answers, but MQTT may not be set up in it. Check that the MQTT integration is added in HA: Settings → Devices & services."),
+        Case(failure(HaFailure.MQTT_AUTH, "403"), true, "MQTT: token not allowed", "Home Assistant answers, but won't let this token publish. Create a new long-lived access token and paste it here."),
         Case(failure(HaFailure.MQTT_FAILED, "503"), true, "MQTT: check failed", "Home Assistant answers, but the MQTT check failed (503). Try again."),
     )
 
     private val spanish = listOf(
-        Case(failure(HaFailure.URL_INVALID), false, "URL: no válida", "No se ha guardado. La URL debe empezar por https:// o http:// y no llevar espacios, como https://homeassistant.local:8123."),
-        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: hace falta HTTPS", "No se ha enviado nada. Fuera de tu red doméstica la URL debe empezar por https://, para que tu token nunca viaje sin cifrar."),
-        Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: sin conexión", "Nada responde en esa URL. Revisa la dirección y el puerto, y que Home Assistant esté encendido y accesible desde esta red."),
-        Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: fallo de conexión segura", "Android no confía en el certificado de ese servidor, o ese puerto no es HTTPS. En tu red doméstica puedes usar http://."),
-        Case(failure(HaFailure.AUTH, "401"), false, "HA: token rechazado", "Home Assistant ha rechazado el token. Crea un token de acceso de larga duración nuevo y pégalo aquí."),
+        Case(failure(HaFailure.URL_INVALID), false, "URL: no válida", "No se ha guardado. La URL debe empezar por https:// o http:// y ser una dirección válida, como https://homeassistant.local:8123."),
+        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: hace falta HTTPS", "No se ha guardado ni enviado nada. http:// solo vale con una dirección de tu red doméstica, como 192.168.1.10 o homeassistant.local. Para cualquier otra, la app exige https:// y no envía tu token en texto plano."),
+        Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: no responde", "Nada responde en esa URL. Revisa la dirección y el puerto, y que Home Assistant esté encendido y accesible desde esta red."),
+        Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: fallo de conexión segura", "Android no confía en el certificado de ese servidor, o ese puerto no es HTTPS. En tu red doméstica puedes usar http:// con una dirección local, como http://192.168.1.10:8123."),
+        Case(failure(HaFailure.AUTH, "401"), false, "HA: token rechazado", "Home Assistant ha rechazado el token. Revísalo, o crea un nuevo token de acceso de larga duración y pégalo aquí."),
         Case(failure(HaFailure.NOT_HOME_ASSISTANT, "404"), false, "HA: no está en esa URL", "Algo ha respondido, pero no es Home Assistant (código 404). Revisa la dirección y el puerto, normalmente 8123."),
-        Case(failure(HaFailure.SERVER_ERROR, "503"), false, "HA: error del servidor", "Home Assistant ha respondido con un error (código 503). Inténtalo de nuevo en un momento."),
-        Case(failure(HaFailure.UNKNOWN, "418"), false, "HA: conexión fallida", "La prueba ha fallado por un motivo que la app no reconoce (418). Revisa la URL y el token e inténtalo de nuevo."),
-        Case(IOException("secret.example.com said no"), false, "HA: conexión fallida", "La prueba ha fallado por un motivo que la app no reconoce (IOException). Revisa la URL y el token e inténtalo de nuevo."),
-        Case(failure(HaFailure.MQTT_MISSING, "404"), true, "MQTT: sin configurar en HA", "Home Assistant responde, pero puede que no tenga MQTT configurado. Comprueba que la integración MQTT esté añadida en HA: Ajustes → Dispositivos y servicios."),
-        Case(failure(HaFailure.MQTT_AUTH, "403"), true, "MQTT: token sin permiso", "Home Assistant responde, pero no deja publicar con este token."),
+        Case(failure(HaFailure.SERVER_ERROR, "503"), false, "HA: error del servidor", "El servidor ha respondido con un error (código 503). Comprueba que Home Assistant esté en marcha e inténtalo de nuevo."),
+        Case(failure(HaFailure.UNKNOWN, "418"), false, "HA: error inesperado", "La prueba ha fallado por un motivo que la app no reconoce (418). Revisa la URL y el token e inténtalo de nuevo."),
+        Case(IOException("secret.example.com said no"), false, "HA: error inesperado", "La prueba ha fallado por un motivo que la app no reconoce (IOException). Revisa la URL y el token e inténtalo de nuevo."),
+        Case(failure(HaFailure.MQTT_MISSING, "404"), true, "MQTT: no encontrado en HA", "Home Assistant responde, pero puede que no tenga MQTT configurado. Comprueba que la integración MQTT esté añadida en HA: Ajustes → Dispositivos y servicios."),
+        Case(failure(HaFailure.MQTT_AUTH, "403"), true, "MQTT: token sin permiso", "Home Assistant responde, pero no deja publicar con este token. Crea un nuevo token de acceso de larga duración y pégalo aquí."),
         Case(failure(HaFailure.MQTT_FAILED, "503"), true, "MQTT: prueba fallida", "Home Assistant responde, pero la prueba de MQTT ha fallado (503). Inténtalo de nuevo."),
     )
 
@@ -212,13 +212,13 @@ class HaTestResultCopyTest {
         for (
         (cause, text) in listOf(
             HaFailure.AUTH to "Last error: HA: token rejected",
-            HaFailure.NOT_HOME_ASSISTANT to "Last error: HA: not at this URL",
+            HaFailure.MQTT_MISSING to "Last error: MQTT: not found in HA",
             HaFailure.INSECURE_REFUSED to "Last error: URL: HTTPS needed",
             HaFailure.URL_INVALID to "Last error: URL: not valid",
             HaFailure.HOST_UNREACHABLE to "Last error: HA: unreachable",
             HaFailure.TLS to "Last error: HA: secure connection failed",
             HaFailure.SERVER_ERROR to "Last error: HA: server error",
-            HaFailure.UNKNOWN to "Last error: HA: couldn't connect",
+            HaFailure.UNKNOWN to "Last error: HA: unexpected error",
         )
         ) {
             lastErrorShown.value = cause

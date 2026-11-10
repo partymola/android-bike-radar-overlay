@@ -2015,6 +2015,52 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    // Once per connection, not per frame. The value set by hand between the
+    // frames is what a second write would overwrite.
+
+    @Test fun aSecondV2FrameLeavesTheRememberedRadarAlone() = runTest {
+        val link = Link()
+        val p = prefs()
+        p.rangeOnlyRadarMac = "11:22:33:44:55:66"
+        val controller = controller(link, prefs = p)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { p.rangeOnlyRadarMac == null })
+
+        p.rangeOnlyRadarMac = "11:22:33:44:55:66"
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        // First in, first out: the battery reading is the witness that the
+        // loop has read the second frame.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        assertEquals("11:22:33:44:55:66", p.rangeOnlyRadarMac)
+        controller.forceReconnect()
+    }
+
+    @Test fun aSecondLegacyFrameLeavesTheRememberedRadarAlone() = runTest {
+        val link = Link()
+        val p = prefs()
+        val controller = controller(link, prefs = p, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02")
+        assertTrue(pumpUntil { p.rangeOnlyRadarMac == mac })
+
+        p.rangeOnlyRadarMac = null
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
+        assertEquals(null, p.rangeOnlyRadarMac)
+        controller.forceReconnect()
+    }
+
     /**
      * When the cache clear FAILS, the fallback is refused outright.
      *

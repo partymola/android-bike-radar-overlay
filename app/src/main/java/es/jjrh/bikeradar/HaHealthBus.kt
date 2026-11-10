@@ -22,8 +22,8 @@ enum class HaFailure {
     /** 401/403. The token is wrong, expired, or revoked. */
     AUTH,
 
-    /** 404, or for the test's ping any other answer short of a server error:
-     *  something answered, but not Home Assistant's API. */
+    /** The test's ping met an answer short of a server error, other than a
+     *  refused token: something answered, but not Home Assistant's API. */
     NOT_HOME_ASSISTANT,
 
     /** The app refused to send the token over cleartext to a non-local host. */
@@ -41,7 +41,8 @@ enum class HaFailure {
     /** 5xx. Home Assistant answered and something is wrong at its end. */
     SERVER_ERROR,
 
-    /** The MQTT probe's 400/404: Home Assistant may have no MQTT integration. */
+    /** A 400/404 from `mqtt.publish`, to the test's probe or to a publish:
+     *  Home Assistant may have no MQTT integration. */
     MQTT_MISSING,
 
     /** The MQTT probe's 401/403, after the same token passed the ping. */
@@ -82,7 +83,10 @@ fun classifyHaFailure(
     error: String? = null,
 ): HaFailure = when {
     code == 401 || code == 403 -> HaFailure.AUTH
-    code == 404 -> HaFailure.NOT_HOME_ASSISTANT
+    // Every publish calls `mqtt.publish`, so these mean what they mean to the
+    // test's probe ([classifyMqttProbeFailure]). That assumes the URL is Home
+    // Assistant's, as a tested save is.
+    code == 400 || code == 404 -> HaFailure.MQTT_MISSING
     code != null && code in 500..599 -> HaFailure.SERVER_ERROR
     error != null && error.startsWith("SSL") -> HaFailure.TLS
     error != null && error.contains("MalformedURL") -> HaFailure.URL_INVALID
@@ -101,8 +105,8 @@ fun classifyHaFailure(
     else -> HaFailure.UNKNOWN
 }
 
-/** [classifyHaFailure] for the test's ping of `/api/`, where any answer short
- *  of a server error, other than a refused token, is not Home Assistant's. */
+/** [classifyHaFailure] for the test's ping of `/api/`, where any 3xx or 4xx
+ *  other than a refused token is not Home Assistant's. */
 fun classifyPingFailure(code: Int? = null, error: String? = null): HaFailure = when {
     code != null && code in 300..499 && code != 401 && code != 403 -> HaFailure.NOT_HOME_ASSISTANT
     else -> classifyHaFailure(code, error)

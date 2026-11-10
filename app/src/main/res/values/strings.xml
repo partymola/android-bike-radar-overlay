@@ -688,7 +688,9 @@
     <string name="settings_dashcam_walkaway_label">Walk-away alarm</string>
     <string name="settings_dashcam_walkaway_alert">Alert if the dashcam is still on</string>
     <!-- The 15 min is IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS, after which
-         only the Dashcam light's link still hears the camera; the 30 s is
+         only the Dashcam light's link still hears the camera, bar a repeat due
+         within 35 s and its minute of sound (DashcamProbe.shouldLaunch), so
+         "about"; the 30 s is
          RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS, the radar-left-on
          alarm's rule, which a lock read after the riding lifts. -->
     <string name="settings_dashcam_walkaway_alert_subtitle">Sounds when the radar has been off for a time you set (30 s by default) and your phone still picks up the dashcam.\n• Plays your phone\'s alarm sound at full volume and vibrates\n• Repeats every 5 min until you dismiss it. Stops if the radar comes back or your phone stops picking up the dashcam\n• Without the dashcam light\'s auto-switch (Settings → Light auto-mode), it stops about 15 min after the radar goes off\n• Stays quiet if the radar goes off while you ride or in the 30 s after you stop. With a radar that reports distance only, it can sound while you ride\n• With eBike data on and Bosch Flow running, it still sounds if you lock the bike and walk straight off, and stays quiet if the bike was unlocked when the radar went off\n• If the radar\'s own walk-away alarm sounds (Settings → Alerts), this one stays quiet, and the radar\'s alarm names the dashcam if your phone was picking it up</string>

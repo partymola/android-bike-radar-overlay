@@ -182,6 +182,75 @@ class DashcamHeardWindowTest {
     }
 
     @Test
+    fun aRepeatDueJustAfterTheMonitoringWindowSoundsInFull() = runTest {
+        // At 15 s the fourth sounding is due 916 s after the drop, 16 s past
+        // the window. Its tone runs 60 s, so no stop comes before 976 s.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 15, readMs = 100L)
+        h.runUntil(DROP_MS + 1_200_000L)
+        assertEquals(listOf(16_000L, 316_000L, 616_000L, 916_000L), h.postTimes.map { it - DROP_MS })
+        assertEquals(1, h.stops)
+        assertTrue("stop=${h.stopTimes.single() - DROP_MS}", h.stopTimes.single() in DROP_MS + 976_000L until DROP_MS + 1_000_000L)
+    }
+
+    @Test
+    fun aRepeatDueWellAfterTheMonitoringWindowDoesNotSound() = runTest {
+        val h = DashcamProbeHarness(this, app, thresholdSec = 45, readMs = 100L)
+        h.runUntil(DROP_MS + 1_200_000L)
+        assertEquals(listOf(46_000L, 346_000L, 646_000L), h.postTimes.map { it - DROP_MS })
+        assertEquals(0, h.launches.count { it >= DROP_MS + 900_000L })
+    }
+
+    /** Every threshold on the slider, reads fast and at the timeout: the last
+     *  repeat has its whole 60 s before the alarm stops. */
+    @Test
+    fun noRepeatIsStoppedMidToneForACameraStillOn() {
+        val failures = mutableListOf<String>()
+        for (thresholdSec in 15..120 step 15) {
+            for (readMs in listOf(100L, 9_999L, 14_999L)) {
+                runTest {
+                    val h = DashcamProbeHarness(this, app, thresholdSec, readMs)
+                    h.runUntil(DROP_MS + 1_200_000L)
+                    val ok = h.stops == 1 && h.stopTimes.single() - h.postTimes.last() >= 60_000L
+                    if (!ok) failures += "threshold=$thresholdSec read=$readMs posts=${h.postTimes.map { it - DROP_MS }} stops=${h.stopTimes.map { it - DROP_MS }}"
+                }
+                clear()
+            }
+        }
+        assertEquals("soundings cut short:\n" + failures.joinToString("\n"), 0, failures.size)
+    }
+
+    @Test
+    fun aRepeatHeardOnAReadThatEndsAfterTheMonitoringWindowSoundsInFull() = runTest {
+        // At 30 s the fourth sounding is due at 930 s. The read begun at 896 s
+        // answers at 911 s, so the camera is still fresh then.
+        val h = DashcamProbeHarness(
+            this,
+            app,
+            thresholdSec = 30,
+            readMs = 100L,
+            readMsAt = { if (it == DROP_MS + 896_000L) 14_999L else null },
+        )
+        h.runUntil(DROP_MS + 1_200_000L)
+        assertTrue(h.launches.contains(DROP_MS + 896_000L))
+        assertEquals(DROP_MS + 930_000L, h.postTimes.last())
+        assertEquals(1, h.stops)
+        assertTrue("stop=${h.stopTimes.single() - DROP_MS}", h.stopTimes.single() >= DROP_MS + 990_000L)
+    }
+
+    @Test
+    fun anAlarmSwitchedOffBeforeARepeatDoesNotKeepTheReadsGoing() = runTest {
+        // Switched off, the alarm neither sounds the repeat due at 916 s nor
+        // clears the third sounding's time; the reads still end with it.
+        val h = DashcamProbeHarness(this, app, thresholdSec = 15, readMs = 100L)
+        h.runUntil(DROP_MS + 700_000L)
+        h.prefs.walkAwayAlarmEnabled = false
+        h.runUntil(DROP_MS + 1_200_000L)
+        assertEquals(DROP_MS + 616_000L, h.postTimes.last())
+        assertEquals(DROP_MS + 616_000L, h.coordinator.snapshot().lastWalkAwayFireMs)
+        assertEquals(0, h.launches.count { it > DROP_MS + 920_000L })
+    }
+
+    @Test
     fun aSnoozeEndsWithTheAlarmForACameraStillOn() = runTest {
         val h = DashcamProbeHarness(this, app, thresholdSec = 15, readMs = 14_999L)
         h.runUntil(DROP_MS + 20_000L)

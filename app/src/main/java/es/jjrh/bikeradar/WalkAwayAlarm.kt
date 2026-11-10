@@ -301,7 +301,7 @@ internal class WalkAwayAlarm(
 
         /** Hard cap on a single alarm-tone episode; see the class KDoc for
          *  what sounds it again. */
-        private const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
+        const val WALKAWAY_RINGTONE_CAP_MS = 60_000L
 
         /**
          * Restore an alarm-stream override a process death left behind. The

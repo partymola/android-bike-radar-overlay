@@ -21,7 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
  * the probe ticks every [PROBE_TICK_MS] on its own phase ([probePhaseMs] after
  * the drop's grid), the walk-away loop every [WALK_AWAY_TICK_MS] from the drop,
  * and each read the probe launches ends [readMs] later ([readMsFor] for the
- * read with that index, when given), answering when [answers] says so for its
+ * read with that index or [readMsAt] for one launched at that instant, when
+ * given), answering when [answers] says so for its
  * launch instant. [dozeUntil] stops both loops, as a phone asleep would.
  * Nothing here reads a real clock.
  */
@@ -35,6 +36,7 @@ internal class DashcamProbeHarness(
     private val publishMs: Long = 0L,
     private val readMsFor: ((index: Int) -> Long)? = null,
     private val answers: (launchedAtMs: Long) -> Boolean = { true },
+    private val readMsAt: ((launchedAtMs: Long) -> Long?)? = null,
 ) {
     val prefs: Prefs = Prefs(app).apply {
         walkAwayAlarmEnabled = true
@@ -169,7 +171,7 @@ internal class DashcamProbeHarness(
         if (answerAtOnce) return PCT
         val at = now()
         launches += at
-        delay(readMsFor?.invoke(launches.size - 1) ?: readMs)
+        delay(readMsAt?.invoke(at) ?: readMsFor?.invoke(launches.size - 1) ?: readMs)
         return if (answers(at)) PCT else null
     }
 

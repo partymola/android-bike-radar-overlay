@@ -79,11 +79,11 @@ object WalkAwayDecider {
         /** No new fire within this window after a previous fire. Past it, a
          *  dashcam still heard sounds again, until the rider dismisses it
          *  (`DashcamHeardWindowTest`). */
-        val rateLimitMs: Long = 300_000L,
+        val rateLimitMs: Long = RATE_LIMIT_MS,
         /** How long after the dashcam was last heard it still counts as on.
          *  The probe re-reads an armed episode's camera inside it
          *  ([DashcamProbe.ARMED_REFRESH_MS]). */
-        val dashcamFreshMs: Long = 20_000L,
+        val dashcamFreshMs: Long = DASHCAM_FRESH_MS,
     )
 
     data class Input(
@@ -217,4 +217,12 @@ object WalkAwayDecider {
     /** [Config.coldStartRadarMs]'s default, which the coordinator also reads
      *  to tell whether the alarm can still sound. */
     const val COLD_START_RADAR_MS = 60_000L
+
+    /** [Config.rateLimitMs]'s default, which the probe also reads to tell
+     *  when the next repeat is due. */
+    const val RATE_LIMIT_MS = 300_000L
+
+    /** [Config.dashcamFreshMs]'s default, which the probe also reads
+     *  ([DashcamProbe.REPEAT_AFTER_GATE_MS]). */
+    const val DASHCAM_FRESH_MS = 20_000L
 }

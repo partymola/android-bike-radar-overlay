@@ -35,6 +35,7 @@ internal class DashcamProbe(
             armed = coordinator.dashcamAlarmCanSound(link),
             lastProbeMs = lastProbeMs[mac],
             failures = probeFailures[mac] ?: 0,
+            alarmSoundedAtMs = link.lastWalkAwayFireMs,
         )
         // Only a read that started counts toward the backoff; one skipped for a
         // read still in flight does not
@@ -63,8 +64,22 @@ internal class DashcamProbe(
         const val ARMED_REFRESH_MS = 2_000L
 
         /**
-         * Whether this tick launches a read. Only while [IdleGate] is open.
-         * Otherwise once the camera was last heard ([heardAgeMs], an answer or
+         * A repeat due this soon after [IdleGate] closes can still sound: a
+         * read that began before the close can answer this late, and its
+         * answer stays fresh for [WalkAwayDecider.Config.dashcamFreshMs].
+         */
+        const val REPEAT_AFTER_GATE_MS = BatteryReader.READ_TIMEOUT_MS + WalkAwayDecider.DASHCAM_FRESH_MS
+
+        /**
+         * Whether this tick launches a read. Only while [IdleGate] is open, or
+         * past it for a dashcam alarm that last sounded at [alarmSoundedAtMs]:
+         * until a repeat due within
+         * [REPEAT_AFTER_GATE_MS] of the close is due, and for
+         * [WalkAwayAlarm.WALKAWAY_RINGTONE_CAP_MS] after any sounding. Without
+         * those reads that repeat is stopped seconds into its tone for a camera
+         * still on
+         * (`DashcamHeardWindowTest.aRepeatDueJustAfterTheMonitoringWindowSoundsInFull`).
+         * And only once the camera was last heard ([heardAgeMs], an answer or
          * its light link) or last shown ([shownAgeMs], the battery bus)
          * [BikeRadarService.DASHCAM_REFRESH_MS] ago, whichever is older: a
          * sighting refreshes what is shown but never holds off the read the
@@ -85,10 +100,11 @@ internal class DashcamProbe(
             armed: Boolean,
             lastProbeMs: Long?,
             failures: Int,
+            alarmSoundedAtMs: Long?,
         ): Boolean {
             val ageMs = if (armed) heardAgeMs else maxOf(heardAgeMs, shownAgeMs)
             val baseMs = if (armed) ARMED_REFRESH_MS else BikeRadarService.DASHCAM_REFRESH_MS
-            return IdleGate.shouldRefreshDashcam(radarGattActive, radarOffSinceMs, nowMs) &&
+            return (IdleGate.shouldRefreshDashcam(radarGattActive, radarOffSinceMs, nowMs) || alarmNeedsReads(radarOffSinceMs, nowMs, alarmSoundedAtMs)) &&
                 ageMs >= baseMs &&
                 BatteryProbeBackoff.shouldProbe(
                     radarGattActive,
@@ -98,6 +114,19 @@ internal class DashcamProbe(
                     baseMs,
                     BikeRadarService.DASHCAM_PROBE_BACKOFF_CAP_MS,
                 )
+        }
+
+        private fun alarmNeedsReads(radarOffSinceMs: Long?, nowMs: Long, alarmSoundedAtMs: Long?): Boolean {
+            if (alarmSoundedAtMs == null || radarOffSinceMs == null) return false
+            val toneRunning = nowMs - alarmSoundedAtMs < WalkAwayAlarm.WALKAWAY_RINGTONE_CAP_MS
+            val gateClosesMs = radarOffSinceMs + IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS
+            val repeatDueMs = alarmSoundedAtMs + WalkAwayDecider.RATE_LIMIT_MS
+            // Up to a late tick past due, so a repeat that never sounds (the
+            // alarm switched off, a long sleep) does not hold the reads
+            // (`DashcamHeardWindowTest.anAlarmSwitchedOffBeforeARepeatDoesNotKeepTheReadsGoing`).
+            val repeatPending = repeatDueMs - gateClosesMs in 1..REPEAT_AFTER_GATE_MS &&
+                nowMs <= repeatDueMs + RadarLinkCoordinator.LATE_TICK_MS
+            return toneRunning || repeatPending
         }
     }
 }

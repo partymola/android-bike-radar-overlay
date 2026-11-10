@@ -19,7 +19,8 @@ class DashcamProbeTest {
         armed: Boolean = false,
         lastProbeMs: Long? = null,
         failures: Int = 0,
-    ) = DashcamProbe.shouldLaunch(radarGattActive, radarOffSinceMs, nowMs, shownAgeMs, heardAgeMs, armed, lastProbeMs, failures)
+        alarmSoundedAtMs: Long? = null,
+    ) = DashcamProbe.shouldLaunch(radarGattActive, radarOffSinceMs, nowMs, shownAgeMs, heardAgeMs, armed, lastProbeMs, failures, alarmSoundedAtMs)
 
     @Test
     fun aCameraReadTwentySecondsAgoIsReadAgain() {
@@ -40,11 +41,38 @@ class DashcamProbeTest {
     }
 
     @Test
-    fun nothingIsReadWithTheIdleGateClosed() {
+    fun nothingIsReadWithTheIdleGateClosedAndNoAlarmSounded() {
         assertFalse(launches(radarOffSinceMs = null))
         assertFalse(launches(radarOffSinceMs = 1_000_000L, nowMs = 1_900_000L))
         assertTrue(launches(radarOffSinceMs = 1_000_000L, nowMs = 1_899_999L))
         assertFalse(launches(radarOffSinceMs = 1_000_000L, nowMs = 1_900_000L, heardAgeMs = 60_000L, armed = true))
+    }
+
+    @Test
+    fun readsGoOnPastTheIdleGateWhileTheAlarmsToneCanStillBeSounding() {
+        // The gate closed at 1 900 000; the tone runs 60 s from the sounding.
+        assertTrue(launches(nowMs = 1_949_999L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_890_000L))
+        assertFalse(launches(nowMs = 1_950_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_890_000L))
+        assertFalse(launches(nowMs = 1_949_999L, heardAgeMs = 1_999L, armed = true, alarmSoundedAtMs = 1_890_000L))
+    }
+
+    @Test
+    fun readsGoOnPastTheIdleGateForARepeatDueWithinThirtyFiveSecondsOfIt() {
+        // The gate closed at 1 900 000 and a repeat is due 300 s after the
+        // last sounding: 35 s past the close is the latest it can still sound.
+        assertTrue(launches(nowMs = 1_900_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_635_000L))
+        assertFalse(launches(nowMs = 1_900_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_635_001L))
+        assertTrue(launches(nowMs = 1_900_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_600_001L))
+        // Due as the gate closes: it sounds on the window's own reads.
+        assertFalse(launches(nowMs = 1_900_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_600_000L))
+        // Only until it is due, at 1 935 000, and two ticks more: a repeat that
+        // never sounds does not hold the reads.
+        assertTrue(launches(nowMs = 1_939_000L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_635_000L))
+        assertFalse(launches(nowMs = 1_939_001L, heardAgeMs = 2_000L, armed = true, alarmSoundedAtMs = 1_635_000L))
+        // A failing camera still backs off while the radar's link is open.
+        assertFalse(launches(radarGattActive = true, armed = true, heardAgeMs = 2_000L, nowMs = 1_903_999L, lastProbeMs = 1_900_000L, failures = 1, alarmSoundedAtMs = 1_890_000L))
+        assertEquals(35_000L, DashcamProbe.REPEAT_AFTER_GATE_MS)
+        assertEquals(300_000L, WalkAwayDecider.Config(enabled = true, thresholdMs = 0L).rateLimitMs)
     }
 
     @Test

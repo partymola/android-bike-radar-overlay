@@ -49,7 +49,8 @@ class SettingsHaConnectionTest {
     /** When set, the ping counts down [pingArrived] and waits for this before answering. */
     @Volatile private var pingHeld: CountDownLatch? = null
 
-    /** Status for the MQTT probe; the ping always answers 200. */
+    @Volatile private var pingStatus = 200
+
     @Volatile private var probeStatus = 404
     private val pingArrived = CountDownLatch(1)
 
@@ -66,7 +67,7 @@ class SettingsHaConnectionTest {
                 pingArrived.countDown()
                 pingHeld?.await(5, TimeUnit.SECONDS)
             }
-            val code = if (exchange.requestURI.path == "/api/") 200 else probeStatus
+            val code = if (exchange.requestURI.path == "/api/") pingStatus else probeStatus
             val body = (if (exchange.requestURI.path == "/api/") """{"message": "API running."}""" else "{}").toByteArray()
             exchange.sendResponseHeaders(code, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
@@ -124,6 +125,18 @@ class SettingsHaConnectionTest {
         retestAfterAFailedRide()
         waitForText("MQTT: not configured in HA")
         compose.onNodeWithText("Last error: HA: unreachable").assertExists()
+    }
+
+    @Test
+    fun aFailedTestSavesNothing() {
+        pingStatus = 401
+        openSettings()
+        compose.onNodeWithContentDescription("Show token").performClick()
+        compose.onNodeWithText("tok").performTextReplacement("other")
+        compose.onNodeWithText("Test and save").performScrollTo().performClick()
+        waitForText("HA: token rejected")
+        assertEquals("tok", HaCredentials(app).token)
+        assertEquals(0L, Prefs(app).haLastValidatedEpochMs)
     }
 
     /** The same check setup's Continue runs. */

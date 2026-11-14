@@ -95,13 +95,15 @@ object EnablingSequence {
          *  so the caller can persist and log the revision without a
          *  second GATT round trip. */
         onFirmwareRevision: (String) -> Unit = {},
-        /** Invoked with the battery percentage from the pre-handshake battery
+        /** Invoked with the battery byte from the pre-handshake battery
          *  step, which runs for its side effect on the radar's stream
          *  selection and previously discarded its own answer. Surfacing it
          *  costs no extra round trip and is the only battery a radar whose
          *  handshake aborts LATER will ever report, since the one-shot reader
          *  stands down while a link is live. Fires before the handshake
-         *  returns, so an aborting radar still gets a reading. */
+         *  returns, so an aborting radar still gets a reading. Unchecked:
+         *  the caller hands it to [BatteryStateBus.update], which refuses
+         *  one that is not a percentage. */
         onBatteryPct: (Int) -> Unit = {},
         clog: (String) -> Unit,
     ): String? {
@@ -133,7 +135,6 @@ object EnablingSequence {
             ?.firstOrNull()
             ?.toInt()
             ?.and(0xFF)
-            ?.takeIf { it in 0..100 }
             ?.let(onBatteryPct)
         delay(250)
         subscribeCccd(gatt, queue, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, clog)

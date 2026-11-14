@@ -104,11 +104,12 @@
              keep working. A network-security-config is deliberately NOT
              used: NSC matches cleartext exemptions by hostname/domain,
              but the policy we need is "cleartext only to RFC1918 /
-             loopback / ULA / link-local addresses" and the HA host is an
-             arbitrary user-configured LAN IP that no domain-config can
+             loopback / ULA / link-local addresses and .local, .lan or
+             dotless names" and the HA host is an arbitrary
+             user-configured LAN IP or name that no domain-config can
              enumerate. Enforcement is therefore app-level: HaUrlPolicy
-             requires HTTPS for any non-LAN host, so the bearer token
-             never leaves over HTTP to the WAN. -->
+             requires HTTPS for any other host. A name is judged by its
+             form, not by what it resolves to (see .github/SECURITY.md). -->
 
 
         <!-- Started by a consumer app with startActivityForResult, so that

@@ -11,7 +11,21 @@ import java.net.URI
  * is judged safe to send in cleartext. "On the LAN" means: loopback
  * (127.0.0.1, ::1), an IPv4 in any RFC1918 range (10/8, 172.16/12,
  * 192.168/16), an IPv6 unique-local-address (fc00::/7), an IPv6
- * link-local (fe80::/10), or a `.local` / `.lan` hostname.
+ * link-local (fe80::/10), a `.local` / `.lan` hostname, or a hostname with
+ * no dot of three or more characters (`nas`, `homeassistant`).
+ *
+ * A name with no dot is normally answered by the network the phone is on, the
+ * trust a `.lan` name already gets. The resolver also tries it in public DNS
+ * after the search domains, where a country-code domain can carry an address,
+ * so a two-letter or `xn--` name is refused
+ * (`HaUrlPolicyTest.aOneWordNameThatCouldBeACountryDomainIsRefused`). A host
+ * that is one number is refused because inet_aton-style parsers read it as an
+ * IPv4 address, whatever the phone's own resolver does
+ * (`HaUrlPolicyTest.aHostThatIsOneNumberIsNeverTakenForAHomeName`). A name is
+ * judged by its form, not by what it resolves to.
+ *
+ * The Privacy screen's `settings_privacy_networking_https` lists these classes
+ * in both locales; change it in the same commit.
  *
  * Public WAN hosts must use HTTPS. A long-lived bearer token captured on
  * café or train Wi-Fi is full HA compromise; LAN is treated as trusted
@@ -30,6 +44,7 @@ object HaUrlPolicy {
     }
 
     private val DOTTED_QUAD_SHAPED = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
+    private val ONE_NUMBER = Regex("""^(\d+|0x[0-9a-f]*)$""")
 
     fun validate(rawUrl: String): Result {
         val url = rawUrl.trim()
@@ -70,7 +85,10 @@ object HaUrlPolicy {
     fun malformedMessage(): String = "Refused: URL must start with https:// or http://"
 
     private fun isLanHost(host: String): Boolean {
-        if (host == "localhost") return true
+        // A global IPv6 literal has no dot either, hence the colon check.
+        if ('.' !in host && ':' !in host) {
+            return host.length > 2 && !host.startsWith("xn--") && !ONE_NUMBER.matches(host)
+        }
         if (host.endsWith(".local") || host.endsWith(".lan")) return true
 
         val ipv4 = host.split('.').takeIf { it.size == 4 }?.let { parts ->

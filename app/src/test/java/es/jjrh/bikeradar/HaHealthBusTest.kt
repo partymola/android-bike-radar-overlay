@@ -54,6 +54,8 @@ class HaHealthBusTest {
         assertEquals(HaFailure.URL_INVALID, haUrlRefusal("ftp://homeassistant.local")?.failure)
         assertEquals(null, haUrlRefusal("http://homeassistant.local:8123"))
         assertEquals(null, haUrlRefusal("https://example.com"))
+        assertEquals(null, haUrlRefusal("http://nas:8123"))
+        assertEquals(HaFailure.INSECURE_REFUSED, haUrlRefusal("http://ws:8123")?.failure)
     }
 
     @Test

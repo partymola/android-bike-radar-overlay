@@ -41,6 +41,46 @@ class HaUrlPolicyTest {
         assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://my-server.lan"))
     }
 
+    @Test fun httpToAHostNameWithNoDotOk() {
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://nas:8123"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://raspberrypi:8123"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://HomeAssistant"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://home-assistant:8123/lovelace"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://cafe:8123"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://nas2:8123"))
+    }
+
+    @Test fun aOneWordNameThatCouldBeACountryDomainIsRefused() {
+        // The resolver also tries a name with no dot in public DNS, after the
+        // search domains, and a country-code top-level domain (two letters, or
+        // an xn-- name) can answer there with a public address.
+        for (host in listOf("uz", "tk", "ws", "cm", "bd", "UZ", "ha", "pi", "xn--ngbrx", "xn--p1ai")) {
+            val r = HaUrlPolicy.validate("http://$host:8123")
+            assertTrue("$host must be refused, got $r", r is HaUrlPolicy.Result.CleartextWanRefused)
+        }
+    }
+
+    @Test fun httpToAOneLabelNameWithATrailingDotRefused() {
+        // "nas." is the fully qualified name of a top-level domain, looked up in
+        // public DNS rather than only on the home network.
+        val r = HaUrlPolicy.validate("http://nas.:8123")
+        assertTrue(r is HaUrlPolicy.Result.CleartextWanRefused)
+        assertEquals("nas.", (r as HaUrlPolicy.Result.CleartextWanRefused).host)
+    }
+
+    @Test fun aHostThatIsOneNumberIsNeverTakenForAHomeName() {
+        // Parsers that use inet_aton read one number as an IPv4 address: each of
+        // these is 8.8.8.8 there, and 0XCB007105 is 203.0.113.5.
+        for (host in listOf("134744072", "01002004010", "0x08080808", "0X8080808", "0XCB007105")) {
+            val r = HaUrlPolicy.validate("http://$host:8123")
+            assertTrue("$host must be refused", r is HaUrlPolicy.Result.CleartextWanRefused)
+        }
+        for (host in listOf("0", "0x")) {
+            val r = HaUrlPolicy.validate("http://$host:8123")
+            assertTrue("$host must be refused, got $r", r is HaUrlPolicy.Result.CleartextWanRefused)
+        }
+    }
+
     @Test fun httpToIpv6UlaOk() {
         assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://[fc00::1]:8123"))
         assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://[fd12:3456::1]:8123"))
@@ -253,20 +293,16 @@ class HaUrlPolicyTest {
     }
 
     @Test fun threePartNumericHostIsMalformed() {
-        // covers HaUrlPolicy.kt:44 - a digit-leading toplabel makes java.net.URI
-        // return a null host. "1.2.3" is not a 4-part IPv4 literal and its final
-        // label "3" starts with a digit, so URI treats the authority as
-        // registry-based and getHost() returns null -> Malformed.
-        // NOTE: HaUrlPolicy.kt:47-49 (the DOTTED_QUAD_SHAPED bad-octet block) is
-        // DEAD CODE - unreachable via validate() because java.net.URI already
-        // nulls any out-of-range-octet dotted-quad host at L44 (verified:
-        // 999.0.0.5, 10.0.0.999, 192.168.300.1 all return host==null). Flagged
-        // for a production cleanup.
+        // "1.2.3" is not a 4-part IPv4 literal and its final label "3" starts
+        // with a digit, so java.net.URI treats the authority as registry-based
+        // and getHost() returns null -> Malformed. The same null host is why
+        // validate()'s DOTTED_QUAD_SHAPED octet check is never reached: URI
+        // already returns null for 999.0.0.5, 10.0.0.999 and 192.168.300.1.
         assertEquals(HaUrlPolicy.Result.Malformed, HaUrlPolicy.validate("http://1.2.3"))
     }
 
     @Test fun fourPartHostWithNonNumericPartRefused() {
-        // covers HaUrlPolicy.kt:77-78 - "10.0.0.x" has a valid URI host (toplabel
+        // isLanHost's IPv4 parse: "10.0.0.x" has a valid URI host (toplabel
         // "x" is a letter), skips the dotted-quad gate, and in isLanHost the
         // non-numeric "x" is dropped by mapNotNull so the list is size 3 != 4;
         // ipv4 is null, no LAN range matches, so the cleartext token is refused.
@@ -276,7 +312,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun edgeOf192_168RangeRefused() {
-        // covers HaUrlPolicy.kt:88 - the `a == 192 && b == 168` boundary.
+        // The `a == 192 && b == 168` boundary.
         // 192.168.1.10 is LAN (RFC1918), but 192.169.1.10 fails the b==168
         // arm and must be refused, pinning the second-octet check so a refactor
         // that loosens it to all of 192/8 is caught.
@@ -286,7 +322,7 @@ class HaUrlPolicyTest {
     }
 
     @Test fun feHostWithNonLinkLocalNibbleRefused() {
-        // covers HaUrlPolicy.kt:103 - the link-local nibble check false arm.
+        // The link-local nibble check's false arm.
         // fe80::1 is link-local (nibble 8 -> Ok, see httpToIpv6LinkLocalOk), but
         // fec0::1 has second nibble 'c' which is NOT in {8,9,a,b}, so it is NOT
         // fe80::/10 link-local and must be refused (fec0::/10 is deprecated

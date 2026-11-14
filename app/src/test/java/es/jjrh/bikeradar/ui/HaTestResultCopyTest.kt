@@ -45,7 +45,7 @@ class HaTestResultCopyTest {
 
     private val english = listOf(
         Case(failure(HaFailure.URL_INVALID), false, "URL: not valid", "Not saved. The URL must start with https:// or http:// and be a valid address, like https://homeassistant.local:8123."),
-        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: HTTPS needed", "Not saved, and nothing was sent. http:// works only with a home-network address, like 192.168.1.10 or homeassistant.local. For any other address the app needs https:// and will not send your token in plain text."),
+        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: HTTPS needed", "Not saved, and nothing was sent. http:// works only with a home-network address, like 192.168.1.10, homeassistant.local or just homeassistant. For any other address the app needs https:// and will not send your token in plain text."),
         Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: unreachable", "Nothing answered at that URL. Check the address and port, and that Home Assistant is on and reachable from this network."),
         Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: secure connection failed", "Android does not trust that server's certificate, or that port is not HTTPS. On your home network you can use http:// with a local address, like http://192.168.1.10:8123."),
         Case(failure(HaFailure.AUTH, "401"), false, "HA: token rejected", "Home Assistant rejected the token. Check it, or create a new long-lived access token and paste it here."),
@@ -60,7 +60,7 @@ class HaTestResultCopyTest {
 
     private val spanish = listOf(
         Case(failure(HaFailure.URL_INVALID), false, "URL: no válida", "No se ha guardado. La URL debe empezar por https:// o http:// y ser una dirección válida, como https://homeassistant.local:8123."),
-        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: hace falta HTTPS", "No se ha guardado ni enviado nada. http:// solo vale con una dirección de tu red doméstica, como 192.168.1.10 o homeassistant.local. Para cualquier otra, la app exige https:// y no envía tu token en texto plano."),
+        Case(failure(HaFailure.INSECURE_REFUSED), false, "URL: hace falta HTTPS", "No se ha guardado ni enviado nada. http:// solo vale con una dirección de tu red doméstica, como 192.168.1.10, homeassistant.local o simplemente homeassistant. Para cualquier otra, la app exige https:// y no envía tu token en texto plano."),
         Case(failure(HaFailure.HOST_UNREACHABLE, "ConnectException"), false, "HA: no responde", "Nada responde en esa URL. Revisa la dirección y el puerto, y que Home Assistant esté encendido y accesible desde esta red."),
         Case(failure(HaFailure.TLS, "SSLHandshakeException"), false, "HA: fallo de conexión segura", "Android no confía en el certificado de ese servidor, o ese puerto no es HTTPS. En tu red doméstica puedes usar http:// con una dirección local, como http://192.168.1.10:8123."),
         Case(failure(HaFailure.AUTH, "401"), false, "HA: token rechazado", "Home Assistant ha rechazado el token. Revísalo, o crea un nuevo token de acceso de larga duración y pégalo aquí."),

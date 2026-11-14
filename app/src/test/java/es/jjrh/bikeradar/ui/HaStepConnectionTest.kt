@@ -248,6 +248,12 @@ class HaStepConnectionTest {
         assertEquals("http://homeassistant.local:8123", HaCredentials(app).baseUrl)
     }
 
+    @Test
+    fun anUntestedAddressWithNoDotIsSavedOnContinue() {
+        assertTrue(continueWith("http://nas:8123"))
+        assertEquals("http://nas:8123", HaCredentials(app).baseUrl)
+    }
+
     /** Coming back to the step and leaving it unedited has tested nothing new, and changed nothing. */
     @Test
     fun continuingUnchangedOnALaterVisitKeepsItsVerifiedTime() {

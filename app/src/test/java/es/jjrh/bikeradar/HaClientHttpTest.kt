@@ -171,6 +171,14 @@ class HaClientHttpTest {
     }
 
     @Test
+    fun aPingToLocalhostReachesTheServer() = runTest {
+        respondAll(200)
+        val r = HaClient("http://localhost:${server.address.port}", "tok").ping()
+        assertTrue(r.isSuccess)
+        assertEquals("/api/", requests.single().path)
+    }
+
+    @Test
     fun pingReturnsFailureOnNon2xx() = runTest {
         respondAll(503)
         val r = client().ping()

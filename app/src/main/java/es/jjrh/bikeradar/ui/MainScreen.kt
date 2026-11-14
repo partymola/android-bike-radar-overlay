@@ -232,7 +232,7 @@ private fun MainScreenBody(navController: NavController, prefs: Prefs) {
     val haConfigured = remember(tickNowMs) { haCreds.isConfigured() }
     // Gated on configured: HaHealthBus is process-global and is never reset when
     // the rider clears their credentials, so an ungated check leaves the hero
-    // saying "Home Assistant unreachable" for five minutes after HA is removed,
+    // reporting a failed send to Home Assistant for five minutes after HA is removed,
     // while the System row correctly reads "Not configured".
     val haErrorRecent = haConfigured &&
         ((haHealth as? HaHealth.Error)?.let { now - it.atMs < 5 * 60_000L } ?: false)

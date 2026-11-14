@@ -120,6 +120,6 @@ class DeviceStatusGenderTest {
         assertEquals("Sin configurar", app.getString(haStatusLabel(HaStatus.NOT_CONFIGURED)))
         assertEquals("Configurado", app.getString(haStatusLabel(HaStatus.CONFIGURED)))
         assertEquals("MQTT listo", app.getString(haStatusLabel(HaStatus.READY)))
-        assertEquals("Sin conexión", app.getString(haStatusLabel(HaStatus.UNREACHABLE)))
+        assertEquals("Error de envío", app.getString(haStatusLabel(HaStatus.UNREACHABLE)))
     }
 }

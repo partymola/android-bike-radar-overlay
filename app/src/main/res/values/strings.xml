@@ -134,7 +134,7 @@
     <string name="main_status_limited_title">Radar live, distance only</string>
     <string name="main_status_limited_sub">No urgent warning from this radar</string>
     <string name="main_status_live_title">Radar live</string>
-    <string name="main_status_live_ha_down_sub">Home Assistant unreachable</string>
+    <string name="main_status_live_ha_down_sub">Couldn\'t send to Home Assistant</string>
     <string name="main_status_live_dashcam_on_sub">Dashcam on</string>
     <string name="main_status_waiting_title">Waiting for radar</string>
     <string name="main_status_waiting_sub">Turn on your radar</string>
@@ -221,7 +221,7 @@
     <string name="device_status_ha_not_configured">Not configured</string>
     <string name="device_status_ha_configured">Configured</string>
     <string name="device_status_ha_ready">MQTT ready</string>
-    <string name="device_status_ha_unreachable">Unreachable</string>
+    <string name="device_status_ha_unreachable">Send failed</string>
     <!-- Settings Connections rows answer two questions at once: is this
          device set up, and is it working right now. The second half is the
          shared status word above. -->

@@ -109,7 +109,7 @@
     <string name="main_status_limited_title">Radar activo, solo distancia</string>
     <string name="main_status_limited_sub">Sin aviso urgente con este radar</string>
     <string name="main_status_live_title">Radar activo</string>
-    <string name="main_status_live_ha_down_sub">Home Assistant inaccesible</string>
+    <string name="main_status_live_ha_down_sub">No se ha podido enviar a Home Assistant</string>
     <string name="main_status_live_dashcam_on_sub">Cámara delantera encendida</string>
     <string name="main_status_waiting_title">Esperando al radar</string>
     <string name="main_status_waiting_sub">Enciende tu radar</string>
@@ -178,7 +178,7 @@
     <string name="device_status_ha_not_configured">Sin configurar</string>
     <string name="device_status_ha_configured">Configurado</string>
     <string name="device_status_ha_ready">MQTT listo</string>
-    <string name="device_status_ha_unreachable">Sin conexión</string>
+    <string name="device_status_ha_unreachable">Error de envío</string>
     <!-- Las filas de Conexiones en Ajustes responden dos cosas a la vez: si el
          dispositivo está configurado, y si funciona ahora. La segunda mitad
          sale del vocabulario de arriba. -->

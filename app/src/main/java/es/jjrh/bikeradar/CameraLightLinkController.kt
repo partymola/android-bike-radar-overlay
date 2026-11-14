@@ -435,7 +435,9 @@ internal class CameraLightLinkController(
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.CHAR_BATTERY -> {
-                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                        // 0xFF and the like are not a percentage, as on the radar
+                        // (`aBatteryByteThatIsNotAPercentageGoesNowhere`).
+                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF)?.takeIf { it in 0..100 } ?: continue
                         BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
                         if (!prefs.isPaused) haPublisher.offerBattery(name, pct)
                     }

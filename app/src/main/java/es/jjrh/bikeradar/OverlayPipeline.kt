@@ -19,7 +19,7 @@ import org.json.JSONObject
 import java.util.Locale
 
 /**
- * Extracted overlay/alert pipeline. Owns the per-frame loop that consumes
+ * Extracted overlay/alert pipeline. Owns the loop that consumes
  * [RadarStateBus] + [BatteryStateBus] + a tick flow and drives:
  *  - the on-screen [RadarOverlayView] (attach / detach / setState / battery-
  *    low badging / dashcam-status badging),
@@ -40,8 +40,16 @@ import java.util.Locale
  * dashcam-seen flag, close-pass discovery flags) is allocated fresh inside
  * each [attach] call and torn down when the returned [Job] cancels.
  *
+ * The loop runs on every emission of the three flows, so a tick or a battery
+ * update re-sends the radar state it already had. The overlay, the dashcam
+ * and battery badges and the HA discovery retry run on every emission; ride
+ * statistics, the alert decider and close-pass detection run only on a new
+ * radar frame, since each treats a call as one
+ * (`aCarInOneFrameIsNotAnnouncedOnTicksAlone`,
+ * `aTickDoesNotArmACloseBesideTheRider`, `aStalledStreamAddsNoRideDistanceOnTicks`).
+ *
  * Inputs that change at runtime (e.g. `cachedOverlayPrefs`, the eBike
- * snapshot) are read per frame so the pipeline always sees the
+ * snapshot) are read on each emission so the pipeline always sees the
  * latest value without bouncing through a re-subscription.
  */
 internal class OverlayPipeline(
@@ -49,7 +57,7 @@ internal class OverlayPipeline(
     /** Provider, not an instance: the service rebuilds its HaClient when
      *  the stored credentials change, and a captured instance would keep
      *  publishing with the stale token until restart. The lambda deref is
-     *  free on the per-frame `isConfigured` check (no decryption - the
+     *  free on the `isConfigured` check each emission makes (no decryption - the
      *  service hands out an already-built client). */
     private val ha: () -> HaClient,
     private val beeper: AlertBeeper,
@@ -124,6 +132,7 @@ internal class OverlayPipeline(
             var seenDashcamThisSession = false
             var lastLoggedDashcamStatus: DashcamStatus? = null
             var lastAttachFailure: String? = null
+            var lastFrame: RadarState? = null
             val ticker = flow {
                 while (true) {
                     emit(Unit)
@@ -178,22 +187,38 @@ internal class OverlayPipeline(
 
                         if (state.source == DataSource.NONE) return@collect
 
+                        // By identity: the bus drops a value equal to the one it
+                        // holds, combine re-sends the same reference on a tick or
+                        // a battery update, and two frames can share a
+                        // millisecond (`twoFramesInOneMillisecondAreTwoFrames`).
+                        // Advanced while paused too, so a frame from the pause is
+                        // not decided on after it
+                        // (`aFramePublishedWhilePausedIsNotCountedAfterTheResume`).
+                        val newFrame = state !== lastFrame
+                        lastFrame = state
+
                         // Read once: the ride figure and the detector below use the same floor.
                         val closingFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat()
                         val countingEnabled = prefs.closePassLoggingEnabled
-                        // Only frames the detector can count from: none on a
-                        // range-only stream (`aRangeOnlyRideIsNotCounted`).
-                        val counting = countingEnabled && state.source.hasLateral && state.bikeSpeedMs != null
-                        rideStats().observeFrame(state, closingFloorMs, counting)
+                        // Ride statistics run paused or not
+                        // (`rideStatisticsStillRunWhilePaused`).
+                        if (newFrame) {
+                            // Only frames the detector can count from: none on a
+                            // range-only stream (`aRangeOnlyRideIsNotCounted`).
+                            val counting = countingEnabled && state.source.hasLateral && state.bikeSpeedMs != null
+                            rideStats().observeFrame(state, closingFloorMs, counting)
+                        }
 
                         // A granted app drawing its own map can ask for ours to
-                        // get out of the way. Checked every frame rather than
-                        // latched, so the hold being dropped - by an unbind, a
-                        // crash, or the rider revoking - puts the overlay back
-                        // without anything having to notice. A call sets the hold
-                        // aside: the beeper is silent then, so the overlay is the
-                        // only warning Bike Radar can still give. The hold applies
-                        // again after.
+                        // get out of the way. Checked on every emission, ticks
+                        // included, rather than latched, so the hold being
+                        // dropped - by an unbind, a crash, or the rider revoking -
+                        // puts the overlay back without anything having to notice
+                        // or a frame arriving
+                        // (`aReleasedHoldPutsTheOverlayBackOnATick`). A call sets
+                        // the hold aside: the beeper is silent then, so the
+                        // overlay is the only warning Bike Radar can still give.
+                        // The hold applies again after.
                         val held = RadarOverlayGate.hidden
                         val hiddenForConsumer = held && !beeper.suppressForCall()
                         if (hiddenForConsumer && overlayAdded) {
@@ -242,13 +267,15 @@ internal class OverlayPipeline(
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            fireAlertCue(state, alerts, overlayPrefs, nowMono, now)
+                            if (newFrame) fireAlertCue(state, alerts, overlayPrefs, nowMono, now)
                         } else {
                             alerts.reset()
                         }
 
-                        // Close-pass detection runs whenever the user enabled
-                        // it - the count card, ride stats, and ride history
+                        // Close-pass detection runs on each new frame whenever
+                        // the user enabled it, paused or not
+                        // (`closePassesAreStillCountedWhilePaused`) - the count
+                        // card, ride stats, and ride history
                         // are local features. HA is an optional egress: the
                         // discovery + event publishes below additionally
                         // require ha().isConfigured(). Discovery is published
@@ -287,12 +314,16 @@ internal class OverlayPipeline(
                         // epoch (HA event ts, ride-summary tightest_pass.ts). Its
                         // 2 s emit-dedup cooldown is the only duration use and a
                         // wall jump there is a negligible single-event edge.
-                        val cpEvents = closePassDetector.decide(
-                            state.vehicles,
-                            state.bikeSpeedMs,
-                            now,
-                            cpCfg,
-                        )
+                        val cpEvents = if (newFrame) {
+                            closePassDetector.decide(
+                                state.vehicles,
+                                state.bikeSpeedMs,
+                                now,
+                                cpCfg,
+                            )
+                        } else {
+                            emptyList()
+                        }
                         if (cpEvents.isNotEmpty()) {
                             ClosePassStateBus.increment(cpEvents.size)
                             for (ev in cpEvents) rideStats().observeClosePass(ev)

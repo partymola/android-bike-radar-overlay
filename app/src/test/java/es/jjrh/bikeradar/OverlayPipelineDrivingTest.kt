@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -643,6 +644,435 @@ class OverlayPipelineDrivingTest {
             runCurrent()
         }
         assertEquals("the car is announced, then the road behind clears", listOf("beep count=3", "clear"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aCarInOneFrameIsNotAnnouncedOnTicksAlone() = runTest {
+        // The decider counts a car only once it is in two frames, and the
+        // pipeline also runs on its own tick with the radar state unchanged.
+        // `runs` counts snapshot reads, which the pipeline makes on every
+        // emission before it looks at the frame, so it shows the ticks ran.
+        val cues = recordingBeeper()
+        var runs = 0
+        val pipeline = buildPipeline(
+            clockMono = { 1_000L + testScheduler.currentTime },
+            overlayPrefsSnapshot = {
+                runs++
+                prefs.snapshot()
+            },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        fun frame() {
+            val t = 1_000L + testScheduler.currentTime
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = listOf(car), bikeSpeedMs = 5f))
+            runCurrent()
+        }
+        frame()
+        val runsAfterFrame = runs
+        advanceTimeBy(4_900L)
+        runCurrent()
+        assertTrue("the ticks ran the pipeline: ${runs - runsAfterFrame}", runs - runsAfterFrame >= 2)
+        assertEquals("one frame and ticks are not two frames", emptyList<String>(), cues)
+        frame()
+        assertEquals("a second frame is", listOf("beep count=3"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aStalledStreamDoesNotChimeTheAllClearOnTicksAlone() = runTest {
+        // The car is announced, the next frame is empty, and the stream stops.
+        // The all-clear needs the road to read empty for 2 s of frames; ticks
+        // re-running the decider on that one empty frame must not stand in.
+        val cues = recordingBeeper()
+        var runs = 0
+        val pipeline = buildPipeline(
+            clockMono = { 1_000L + testScheduler.currentTime },
+            overlayPrefsSnapshot = {
+                runs++
+                prefs.snapshot()
+            },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+        fun frame(vehicles: List<Vehicle>) {
+            val t = 1_000L + testScheduler.currentTime
+            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = vehicles, bikeSpeedMs = 5f))
+            runCurrent()
+        }
+        frame(listOf(car))
+        advanceTimeBy(100L)
+        frame(listOf(car))
+        advanceTimeBy(100L)
+        frame(emptyList())
+        assertEquals("the car is announced", listOf("beep count=3"), cues)
+        val runsAfterFrame = runs
+        advanceTimeBy(4_700L)
+        runCurrent()
+        assertTrue("the ticks ran the pipeline: ${runs - runsAfterFrame}", runs - runsAfterFrame >= 2)
+        assertEquals("no all-clear from ticks on a stalled stream", listOf("beep count=3"), cues)
+        frame(emptyList())
+        assertEquals("the next empty frame chimes it", listOf("beep count=3", "clear"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    // ── frames, not ticks ────────────────────────────────────────────────
+    //
+    // The pipeline also runs on its 2 s tick and on every battery update,
+    // with the radar state unchanged. These tests run it on a clock tied to
+    // virtual time, as on a phone: with a fixed clock a tick lands at the
+    // same instant as the frame before it, and none of them could fail.
+
+    private fun kotlinx.coroutines.test.TestScope.virtualMono(): () -> Long = { 1_000L + testScheduler.currentTime }
+
+    /** Run virtual time to [t], ticks due by then included. */
+    private fun kotlinx.coroutines.test.TestScope.advanceTo(t: Long) {
+        advanceTimeBy(t - testScheduler.currentTime)
+        runCurrent()
+    }
+
+    /** Publish a V2 frame at virtual time [t]. */
+    private fun kotlinx.coroutines.test.TestScope.frameAt(t: Long, vehicles: List<Vehicle>, bikeSpeedMs: Float = 5f) {
+        advanceTo(t)
+        RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = 1_000L + t, vehicles = vehicles, bikeSpeedMs = bikeSpeedMs))
+        runCurrent()
+    }
+
+    /** As [recordingBeeper], each cue led by the virtual time it played at. */
+    private fun kotlinx.coroutines.test.TestScope.timedBeeper(): MutableList<String> {
+        val cues = mutableListOf<String>()
+        beeper.release()
+        beeper = AlertBeeper(
+            audioManager = context.getSystemService(AudioManager::class.java),
+            executor = java.util.concurrent.Executor { it.run() },
+            playTrackOverride = { true },
+            onCue = { cues += "${testScheduler.currentTime} $it" },
+        )
+        return cues
+    }
+
+    private val nearCar = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
+    private val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+    private val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
+
+    @Test
+    fun theAllClearLandsOnAFrameNotOnTheTickBeforeIt() = runTest {
+        // The road reads empty from 200 ms, so the 2 s grace is up at 2.2 s,
+        // and a radio gap holds the next frame until 4.1 s. The tick at 4 s
+        // falls in the gap.
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, listOf(nearCar))
+        frameAt(100L, listOf(nearCar))
+        for (t in 200L..1_900L step 100L) frameAt(t, emptyList())
+        advanceTo(4_000L)
+        frameAt(4_100L, emptyList())
+        assertEquals(listOf("100 beep count=3", "4100 clear"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun twoFramesInOneMillisecondAreTwoFrames() = runTest {
+        // Frames often share a millisecond, so a frame is told from a re-sent
+        // one by identity, not by its timestamp.
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, listOf(nearCar), bikeSpeedMs = 5f)
+        frameAt(0L, listOf(nearCar), bikeSpeedMs = 5.25f)
+        assertEquals(listOf("0 beep count=3"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun theUrgentIsNotRepeatedOnTicksAfterTheStreamStops() = runTest {
+        // Inside one episode the urgent repeats 3 s after it sounded, on the
+        // next frame that still holds the car; a tick is not such a frame.
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, emptyList(), bikeSpeedMs = 0f)
+        frameAt(2_500L, listOf(slowNear, fastFar), bikeSpeedMs = 0f)
+        frameAt(2_600L, listOf(slowNear, fastFar), bikeSpeedMs = 0f)
+        assertEquals(listOf("2600 urgent"), cues)
+        advanceTo(6_400L)
+        assertEquals("ticks at 4 s and 6 s do not repeat it", listOf("2600 urgent"), cues)
+        frameAt(6_500L, listOf(slowNear, fastFar), bikeSpeedMs = 0f)
+        assertEquals("the next frame does", listOf("2600 urgent", "6500 urgent"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun anUrgentNeedsTwoFramesNotAFrameAndATick() = runTest {
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, emptyList(), bikeSpeedMs = 0f)
+        frameAt(2_500L, listOf(slowNear, fastFar), bikeSpeedMs = 0f)
+        advanceTo(4_000L)
+        assertEquals("one frame and a tick", emptyList<String>(), cues)
+        frameAt(4_100L, listOf(slowNear, fastFar), bikeSpeedMs = 0f)
+        assertEquals("two frames", listOf("4100 urgent"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aBatteryUpdateIsNotARadarFrame() = runTest {
+        val cues = timedBeeper()
+        var runs = 0
+        val pipeline = buildPipeline(
+            clockMono = virtualMono(),
+            overlayPrefsSnapshot = {
+                runs++
+                prefs.snapshot()
+            },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, listOf(nearCar))
+        val runsAfterFrame = runs
+        advanceTo(100L)
+        BatteryStateBus.update(BatteryEntry(slug = "dashcam", name = "Dashcam", pct = 80))
+        runCurrent()
+        assertEquals("the update ran the pipeline", runsAfterFrame + 1, runs)
+        assertEquals("one frame and a battery update", emptyList<String>(), cues)
+        frameAt(200L, listOf(nearCar))
+        assertEquals("two frames", listOf("200 beep count=3"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun aFramePublishedWhilePausedIsNotCountedAfterTheResume() = runTest {
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        try {
+            prefs.pausedUntilEpochMs = Long.MAX_VALUE
+            frameAt(0L, listOf(nearCar))
+            prefs.pausedUntilEpochMs = 0L
+            // A tick after the resume, still on the frame from the pause.
+            advanceTo(2_000L)
+            frameAt(2_100L, listOf(nearCar))
+            assertEquals("the paused frame is not one of the two", emptyList<String>(), cues)
+            frameAt(2_200L, listOf(nearCar))
+            assertEquals(listOf("2200 beep count=3"), cues)
+        } finally {
+            prefs.pausedUntilEpochMs = 0L
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun closePassesAreStillCountedWhilePaused() = runTest {
+        // A pause silences the cues; the ride's record keeps being kept.
+        prefs.closePassLoggingEnabled = true
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            driveOneOvertake()
+            runCurrent()
+            assertEquals(1, ClosePassStateBus.sessionCount.value)
+        } finally {
+            prefs.pausedUntilEpochMs = 0L
+            prefs.closePassLoggingEnabled = false
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun rideStatisticsStillRunWhilePaused() = runTest {
+        val stats = RideStatsAccumulator(monoMsProvider = virtualMono())
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        val job = buildPipeline(clockMono = virtualMono(), rideStats = { stats }).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            frameAt(0L, emptyList())
+            frameAt(100L, emptyList())
+            assertEquals("0.1 s at 5 m/s", 0.0005f, stats.snapshot().distanceRiddenKm, 0.000001f)
+        } finally {
+            prefs.pausedUntilEpochMs = 0L
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun aTickDoesNotArmACloseBesideTheRider() = runTest {
+        // The detector arms a track on its third frame.
+        prefs.closePassLoggingEnabled = true
+        fun overtaker(id: Int, d: Int) = Vehicle(id = id, distanceM = d, speedMs = -8f, lateralPos = 0.25f, rangeXmRaw = 0.75f)
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            frameAt(0L, listOf(overtaker(7, 14)))
+            frameAt(100L, listOf(overtaker(7, 2)))
+            advanceTo(2_000L)
+            frameAt(2_100L, emptyList())
+            assertEquals("two frames and a tick", 0, ClosePassStateBus.sessionCount.value)
+            frameAt(2_200L, listOf(overtaker(8, 14)))
+            frameAt(2_300L, listOf(overtaker(8, 3)))
+            frameAt(2_400L, listOf(overtaker(8, 2)))
+            frameAt(2_500L, emptyList())
+            assertEquals("three frames", 1, ClosePassStateBus.sessionCount.value)
+        } finally {
+            prefs.closePassLoggingEnabled = false
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun theRideClearanceIsNotWeightedByTicks() = runTest {
+        // The figure is the upper median of the frames alongside: of 0.6 m and
+        // 1.2 m it is 1.2 m, and two ticks repeating the 0.6 m frame would make
+        // it 0.6 m.
+        val original = prefs.closePassClosingSpeedFloorMs
+        prefs.closePassClosingSpeedFloorMs = 5
+        prefs.closePassLoggingEnabled = false
+        val stats = RideStatsAccumulator(monoMsProvider = virtualMono())
+        val job = buildPipeline(clockMono = virtualMono(), rideStats = { stats }).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            frameAt(0L, listOf(Vehicle(id = 7, distanceM = 20, speedMs = -5.5f, lateralPos = 0.8f, rangeXmRaw = 2.4f, bornAtMs = 1L)))
+            frameAt(100L, listOf(Vehicle(id = 7, distanceM = 2, speedMs = -1f, lateralPos = 0.2f, rangeXmRaw = 0.6f, bornAtMs = 1L)))
+            advanceTo(4_000L)
+            frameAt(4_100L, listOf(Vehicle(id = 7, distanceM = 1, speedMs = -1f, lateralPos = 0.4f, rangeXmRaw = 1.2f, bornAtMs = 1L)))
+            frameAt(4_200L, emptyList())
+            assertEquals("the median of the frames", 1.2f, stats.snapshot().minLateralClearanceM!!, 0.001f)
+        } finally {
+            prefs.closePassClosingSpeedFloorMs = original
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun aStalledStreamAddsNoRideDistanceOnTicks() = runTest {
+        // A gap between frames wider than the link's 5 s stall threshold adds
+        // no distance; ticks every 2 s across it must not bridge it.
+        val stats = RideStatsAccumulator(monoMsProvider = virtualMono())
+        val job = buildPipeline(clockMono = virtualMono(), rideStats = { stats }).attach(this, "TestRadar")
+        try {
+            runCurrent()
+            frameAt(0L, emptyList())
+            advanceTo(12_000L)
+            frameAt(12_100L, emptyList())
+            frameAt(12_200L, emptyList())
+            assertEquals("0.1 s at 5 m/s, after the gap", 0.0005f, stats.snapshot().distanceRiddenKm, 0.000001f)
+        } finally {
+            job.cancel()
+            job.join()
+        }
+    }
+
+    @Test
+    fun aReleasedHoldPutsTheOverlayBackOnATick() = runTest {
+        // The overlay is time-driven: no radar frame is needed to restore it.
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.hide("com.example.trailbuddy")
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, emptyList())
+        assertEquals("held", 0, fakeHost.attachCount)
+        es.jjrh.bikeradar.ipc.RadarOverlayGate.reset()
+        advanceTo(2_000L)
+        assertEquals("back on the tick", 1, fakeHost.attachCount)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun bornCloseEvidenceComesFromFramesOnly() = runTest {
+        // A car first seen 8 m back needs two consecutive frames closing at
+        // 2.5 m/s or more before it is heard. One such frame and a tick
+        // repeating it are not two.
+        val cues = timedBeeper()
+        fun ghost(closingMs: Float) = Vehicle(id = 7, distanceM = 8, speedMs = -closingMs, bornDistanceM = 8, bornInformative = true, bornAtMs = 1_000L)
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
+        runCurrent()
+        frameAt(0L, listOf(ghost(0f)))
+        frameAt(100L, listOf(ghost(3f)))
+        advanceTo(2_000L)
+        frameAt(2_100L, listOf(ghost(0f)))
+        assertEquals("one closing frame and a tick", emptyList<String>(), cues)
+        frameAt(2_200L, listOf(ghost(3f)))
+        frameAt(2_300L, listOf(ghost(3f)))
+        assertEquals("two closing frames", listOf("2300 beep count=2"), cues)
+        job.cancel()
+        job.join()
+    }
+
+    @Test
+    fun theLivePipelineHearsTheCueLedgerFixtureAsTheLedgerDoes() = runTest {
+        // CueLedgerReplayTest calls the decider once per decoded frame. Here the
+        // same frames reach the real pipeline on virtual time with its ticks
+        // running, and must produce the same cues at the same moments.
+        val fixture = javaClass.classLoader!!.getResourceAsStream("replay-fixture.txt")!!.bufferedReader().useLines { lines ->
+            lines.filter { it.isNotBlank() && !it.startsWith("#") }
+                .map { it.split(' ', limit = 2).let { (ms, hex) -> ms.toLong() to hex.hexToBytes() } }
+                .toList()
+        }
+        fun decodeAll(): List<Pair<Long, RadarState>> {
+            var clock = 0L
+            val decoder = RadarV2Decoder(nowMs = { clock })
+            return fixture.mapNotNull { (ms, bytes) ->
+                clock = ms
+                decoder.feed(bytes)?.let { ms to it }
+            }
+        }
+        // The bus drops a snapshot equal to the one it holds, and the ledger
+        // decides on it: so the pipeline sees five fewer than the ledger here,
+        // and none of the five moves a cue.
+        val decoded = decodeAll()
+        assertEquals("repeated snapshots", 5, decoded.zipWithNext().count { (a, b) -> a.second == b.second })
+
+        val ledger = mutableListOf<String>()
+        val pipeline = buildPipeline(
+            clog = { line ->
+                Regex("^# alert ts=\\d+ event=(\\S+)").find(line)?.let { m ->
+                    val ev = when (val name = m.groupValues[1]) {
+                        "UrgentApproach" -> if ("urgent_path=moving" in line) "Urgent(moving)" else "Urgent(stationary)"
+                        else -> name
+                    }
+                    ledger += "${testScheduler.currentTime} $ev"
+                }
+            },
+            clockMono = { testScheduler.currentTime },
+            // The ledger's wiring: 20 m, no turn data, the shipped urgent settings.
+            overlayPrefsSnapshot = {
+                prefs.snapshot().copy(
+                    alertMaxDistanceM = 20,
+                    turnAwareAlertsEnabled = false,
+                    urgentLowSpeedEnabled = true,
+                    urgentUnconfidentWaitEnabled = false,
+                    urgentPassClearanceM = AlertDecider.DEFAULT_PASS_CLEARANCE_M,
+                    closingSpeedCeilingMs = null,
+                )
+            },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        for ((ms, state) in decoded) {
+            advanceTo(ms)
+            RadarStateBus.publish(state)
+            runCurrent()
+        }
+        assertTrue("the replay spans many ticks", testScheduler.currentTime > 10 * BikeRadarService.DASHCAM_TICK_MS)
+        assertEquals(CueLedgerReplayTest.DEFAULT_GOLDEN, ledger)
         job.cancel()
         job.join()
     }

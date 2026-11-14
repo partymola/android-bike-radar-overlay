@@ -238,7 +238,7 @@ class CueLedgerReplayTest {
         // sounds a stationary urgent at 111983. The Clear at 76539 lands on
         // the slow-rider window's first frame, the stopped window's road
         // having emptied before it ended.
-        private val DEFAULT_GOLDEN: List<String> = listOf(
+        internal val DEFAULT_GOLDEN: List<String> = listOf(
             "0 Beep(3)",
             "2064 Beep(1)",
             "3862 Beep(2)",

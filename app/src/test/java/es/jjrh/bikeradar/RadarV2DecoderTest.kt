@@ -44,9 +44,12 @@ class RadarV2DecoderTest {
     @Test fun emptyTargetFrameReturnsSnapshotForLiveness() {
         // Even an empty target frame (zero targets, non-status header) must emit
         // a snapshot so RadarState.timestamp reflects V2 liveness and the
-        // data-source label shows V2 rather than "none".
+        // data-source label shows V2 rather than "none". The alert decider
+        // runs on published frames only, so on an empty road these are what
+        // the all-clear's grace is timed on.
         val state = decoder.feed(emptyPacket())
         assertNotNull("empty target frame must emit a snapshot for liveness", state)
+        assertTrue("and it reads as an empty road", state!!.isClear)
     }
 
     @Test fun shortPayloadReturnsNullWhenNoTracks() {

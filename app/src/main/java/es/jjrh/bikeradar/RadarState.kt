@@ -151,9 +151,9 @@ data class Vehicle(
      */
     val rangeXmRaw: Float = 0f,
     /**
-     * When this track was first seen by the decoder (monotonic ms),
-     * i.e. the decoder's own track birth - survives frame-to-frame
-     * updates, resets when the track is pruned and re-acquired.
+     * When this track was first seen by the decoder, on the decoder's clock
+     * (wall-clock ms in production), i.e. its own track birth - survives
+     * frame-to-frame updates, resets when the track is pruned and re-acquired.
      * 0L for synthetic sources and the legacy stream, which stamp no birth;
      * [AlertDecider] then cannot tell a recycled tid from the same car.
      */

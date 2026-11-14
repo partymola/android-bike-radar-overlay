@@ -86,7 +86,7 @@ internal class OverlayPipeline(
     /** Monotonic clock (elapsedRealtime) for the in-ride cue cadence -
      *  AlertDecider's urgent-repeat gap - so a wall-clock jump can't stall or
      *  early-fire a safety cue.
-     *  Wall time (the per-frame `now`) is kept for the cosmetic battery /
+     *  Wall time (each emission's `now`) is kept for the cosmetic battery /
      *  dashcam freshness gates, the capture-log lines, and the close-pass emit
      *  cooldown (whose `now` is also the emitted unix-epoch event timestamp). */
     private val clockMono: () -> Long = { SystemClock.elapsedRealtime() },
@@ -229,7 +229,7 @@ internal class OverlayPipeline(
 
                         if (!overlayAdded && !hiddenForConsumer) {
                             // Logged when the KIND of failure changes: this branch
-                            // runs every frame while the attach keeps failing, and
+                            // runs on every emission while the attach keeps failing, and
                             // an addView message names a new window each attempt.
                             val failure = if (overlayHost.canDrawOverlays()) {
                                 overlayHost.attach(view)?.let { it.javaClass.name to "# overlay addView failed: $it" }

@@ -135,7 +135,7 @@ object MainStatusDeriver {
      *  6. Radar live, distance only
      *  7. Radar live but dashcam off  (rider-safety beats HA connectivity)
      *  8. Notifications missing, in place of 9, 10 or 14
-     *  9. Radar live but HA unreachable
+     *  9. Radar live but a send to HA failed
      *  10. Radar live, all good
      *  11. Radar stale after a ride: "Finished your ride?"
      *  12. Pin on a device other than the named radars: "Using the right radar?"

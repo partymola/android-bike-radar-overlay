@@ -681,9 +681,9 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
         }
     }
     violationRules {
-        // Project floors on the testable layer, each set 3 points under the
-        // figure jacocoTestReport measured when it was last raised, rounded
-        // down to a whole percent, so legitimately hard-to-test new code
+        // Project floors on the testable layer, each set a few points under the
+        // figure jacocoTestReport measured when it was last raised, as a whole
+        // percent, so legitimately hard-to-test new code
         // doesn't trip them while a mass regression still fails the build. The
         // per-PR diff-coverage gate guards new code; these guard against
         // wholesale drops. Raise as coverage grows.

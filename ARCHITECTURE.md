@@ -59,7 +59,7 @@ injected at `onCreate`:
 - `EBikeStatusReader` + `EBikeSnapshotCoordinator` - a **read-only** GATT client
   that subscribes to the eBike's proprietary status stream (see below) and the
   cache/derivation on top of it (odometer baseline, ride-edge, riding speed).
-- `OverlayPipeline` - the per-frame overlay/alert loop (see below).
+- `OverlayPipeline` - the overlay/alert loop (see below).
 - `HaPublisher`, `ServiceNotifications`, `CaptureLogManager`,
   `TurnSensorController`, `RideCheckpointCoordinator`, `KnownDevices` - HA
   publishing, notification channels, the opt-in capture log, the turn sensor, the
@@ -76,8 +76,10 @@ testable.
 
 ## The overlay/alert pipeline
 
-`OverlayPipeline` owns the per-frame loop that consumes `RadarStateBus` +
-`BatteryStateBus` + a tick flow and drives:
+`OverlayPipeline` owns the loop that consumes `RadarStateBus` +
+`BatteryStateBus` + a tick flow. The overlay and its badges update on every
+emission of the three; the alert cues, close-pass detection and the ride
+statistics run only on a new radar frame. It drives:
 
 - the on-screen `RadarOverlayView` (a plain `Canvas` `View` added to a
   `TYPE_APPLICATION_OVERLAY` window) - attach/detach, per-vehicle state, and
@@ -131,7 +133,8 @@ no-camera / no-eBike paths carry their own tests. A missing eBike status service
 ## Home Assistant is optional
 
 The overlay and audio work standalone. When configured, `HaPublisher` publishes
-battery, ride-edge, and ride-summary data to the rider's own Home Assistant over
+battery, front-light mode, ride-edge, and ride-summary data, and
+`OverlayPipeline` close-pass events, to the rider's own Home Assistant over
 MQTT, and nowhere else. See `SettingsPrivacy` for the full disclosure of what is
 sent.
 
@@ -169,7 +172,7 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/BluetoothStateMonitor.kt` | Adapter on/off watch: tears the links down when Bluetooth dies mid-ride, re-registers the scan + kickstarts them when it returns |
 | `app/src/main/java/es/jjrh/bikeradar/RideCheckpoint.kt` | Crash-safe single-slot ride checkpoint (pure write-gate decider + store); flushed into ride history at the next start after a process death |
 | `app/src/main/java/es/jjrh/bikeradar/TurnSensorController.kt` | Gyroscope yaw-rate feed for `TurnStateDecider` (gravity-projected, mount-orientation independent); drives the turn-aware alert hold and writes the `# turn yaw` capture trace |
-| `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, ride-edge, ride-summary); rebuilds HaClient per call |
+| `app/src/main/java/es/jjrh/bikeradar/HaPublisher.kt` | HA MQTT publishing (battery, front-light mode, ride-edge, ride-summary); rebuilds HaClient per call, except for the front-light mode |
 | `app/src/main/java/es/jjrh/bikeradar/ServiceNotifications.kt` | Notification channels + the persistent foreground notification |
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |

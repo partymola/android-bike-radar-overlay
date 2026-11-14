@@ -20,9 +20,11 @@ package es.jjrh.bikeradar
  * The caller stamps [lastFrameMs] when its decode loop starts, so a radar that
  * completes the handshake and never streams is still torn down
  * (`RadarLinkControllerHarnessTest.watchdogTearsDownSilentV2Stream`). A 0 stamp
- * reads as fresh: production never passes one, since elapsedRealtime is past
- * zero by then, and a harness clock fixed at 0 relies on it to keep the
- * watchdog off. The boundary is strictly-greater.
+ * reads as fresh. The guard is defensive and unreachable in production: the
+ * stamp is written before the watchdog starts, when elapsedRealtime is past
+ * zero. Nor is it what keeps a clock fixed at 0 quiet, since 0 - 0 is never
+ * past the stall (`aZeroStampIsNeverStale` pins the guard). The boundary is
+ * strictly-greater.
  */
 object V2WatchdogDecider {
     fun isStale(nowMs: Long, lastFrameMs: Long, stallMs: Long): Boolean = lastFrameMs != 0L && nowMs - lastFrameMs > stallMs

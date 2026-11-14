@@ -145,8 +145,11 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    (`on the legacy stream a later car under the same track id is taken
  *    for the one heard`).
  *  - **Sustain debounce.** A track must be present in close for
- *    `sustainFrames` consecutive frames before it counts. Single-
- *    frame radar blips never fire.
+ *    `sustainFrames` consecutive frames before it counts. Those are
+ *    published frames, not radar reports: on a live V2 stream heartbeats
+ *    and device-status frames republish a held track until the decoder
+ *    prunes it ([RadarV2Decoder.STALE_MOVING_MS] for a moving one), so a
+ *    target the radar reported once can still reach the count.
  *  - **Beep cooldown.** No two beeps within `minBeepGapMs`. Triggers
  *    in the cooldown window collapse into a single beep at the
  *    closest urgency *at the moment the cooldown expires* - except a
@@ -323,7 +326,9 @@ class AlertDecider(
      *  new tid, cannot fire a false all-clear while it is still physically
      *  behind. The grace also absorbs a single-frame radar dropout / boundary
      *  flap. A genuine all-clear (the car overtakes -> `isBehind`, or corners /
-     *  turns off and leaves the stream) is delayed by at most this long: a
+     *  turns off and leaves the stream) waits at least this long and until the
+     *  next radar frame after it, since the decider runs on radar frames only,
+     *  so a stream that goes quiet sounds none: a
      *  delayed or absent all-clear is deliberately preferred over a false one,
      *  since a false all-clear tells the rider the road is clear while a car is
      *  still there. 2000 ms is the owner-chosen dwell; in the ride-capture

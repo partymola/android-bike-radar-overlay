@@ -77,7 +77,7 @@ class RadarV2Decoder(
     private data class Track(
         val vehicle: Vehicle,
         val lastSeen: Long,
-        /** Monotonic millis the first time this tid appeared. Used by the
+        /** [nowMs] the first time this tid appeared. Used by the
          *  alongside-stationary dwell-time gate and carried onto
          *  [Vehicle.bornAtMs]; never updated. */
         val firstSeen: Long,
@@ -104,7 +104,7 @@ class RadarV2Decoder(
      *  gap), not an informative birth - see [Vehicle.bornInformative]. */
     private val recentDeaths = ArrayDeque<Pair<Long, Int>>()
 
-    /** First feed() after construction or [reset], monotonic ms. Births in
+    /** [nowMs] at the first feed() after construction or [reset]. Births in
      *  the first [BIRTH_WARMUP_MS] after this are uninformative: the world
      *  was already populated before the decoder started watching. */
     private var firstFeedAtMs = Long.MIN_VALUE
@@ -117,8 +117,10 @@ class RadarV2Decoder(
     private var lastBikeSpeedMs: Float? = null
 
     /**
-     * Feed one notification payload. Returns the new [RadarState] if the
-     * packet changed anything visible, else null (pure-status frame).
+     * Feed one notification payload. Target frames, including heartbeats with
+     * no target, and device-status frames always return a snapshot, which the
+     * all-clear is timed on (`emptyTargetFrameReturnsSnapshotForLiveness`). A
+     * pure-status frame or a runt returns null unless it pruned a track.
      */
     fun feed(payload: ByteArray): RadarState? {
         val now = nowMs()

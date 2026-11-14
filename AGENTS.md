@@ -384,7 +384,8 @@ side.
   intentional change with `-Pbikeradar.cueLedgerRecord=true
   --no-configuration-cache` and paste the printed ledgers into the test's
   `DEFAULT_GOLDEN` and `ALONG_AXIS_GOLDEN`; cite the diff in review.
-  - **It reaches each urgent path once, and that is all it can show.** The
+  - **It reaches each urgent path, the stationary one in two windows, and
+    that is all it can show.** The
     fixture holds one stopped rider with fast closers, one slow rider with a
     fast closer and one stopped rider with a car that closes then slows, on
     radar-only wiring with no eBike data at a 20 m alert distance.
@@ -538,8 +539,8 @@ must not be changed about it. Four that bite in ordinary work:
   goes next, except that a front-mode offer carrying no mode never replaces
   one that does (`HaPublisherTest.aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode`).
   A send awaited on a loop holds the radar frames behind a
-  blocking request: alerts decide on a stale state, and the data-flow
-  watchdog tears down a link that is streaming
+  blocking request: no frame is published, so no alert is decided until the
+  send returns, and the data-flow watchdog tears down a link that is streaming
   (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
   `aLinkEndsWhileABatterySendHangsDeafToCancellation`,
   `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`,

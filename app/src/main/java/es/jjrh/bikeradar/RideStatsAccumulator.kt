@@ -17,7 +17,7 @@ import kotlin.math.min
  *     Updates per-event counters and the tightest-pass record.
  *
  * Threading: not thread-safe. Call from a single coroutine context (the
- * radar collect block in BikeRadarService).
+ * radar collect block in [OverlayPipeline]).
  */
 class RideStatsAccumulator(
     /** Wall clock (currentTimeMillis), for [rideStartedAtMs] which is exported
@@ -30,18 +30,22 @@ class RideStatsAccumulator(
     val rideStartedAtMs: Long = nowMsProvider()
     private val rideStartedAtMono: Long = monoMsProvider()
 
+    /** (tid, bornAtMs) of each car seen in range: the radar reuses ids within
+     *  a ride (`aSecondCarOnAReusedIdIsASecondOvertake`). A car re-born on its
+     *  old id after a prune or a reconnect counts again, deliberately
+     *  (`aCarRebornOnItsOldIdAfterAPruneCountsAgain`); a legacy track carries
+     *  bornAtMs 0 and counts once per id (`aLegacyStreamCountsOneOvertakePerId`). */
+    private val seenTracks = HashSet<Pair<Int, Long>>()
+
+    /** Cars in range on a frame close-pass counting ran on, keyed as
+     *  [seenTracks]: what the conversion rate divides by, so overtakes from
+     *  before counting was switched on do not dilute it
+     *  (`theRateDividesByOvertakesSeenWhileCounting`). */
+    private val countedTracks = HashSet<Pair<Int, Long>>()
+
     // Per-frame state. Nullable for measurement-class fields that have no
     // sensible "no data" zero value: a ride with no observed vehicles should
     // surface "unknown" in HA, not a misleading 0 m / 0 km/h.
-
-    /** (tid, bornAtMs) of each car seen in range: the radar reuses ids within
-     *  a ride (`aSecondCarOnAReusedIdIsASecondOvertake`). */
-    private val seenTracks = HashSet<Pair<Int, Long>>()
-
-    /** Cars in range on a frame close-pass counting ran on: what the conversion
-     *  rate divides by, so overtakes from before counting was switched on do
-     *  not dilute it (`theRateDividesByOvertakesSeenWhileCounting`). */
-    private val countedTracks = HashSet<Pair<Int, Long>>()
     private var peakClosingKmh: Int? = null
     private var minLateralM: Float? = null
     private var distanceRiddenM: Double = 0.0

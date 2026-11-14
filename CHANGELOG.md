@@ -1,5 +1,77 @@
 # Changelog
 
+## v1.12.0 - 2026-11-14
+
+### Fixes
+
+- **The dashcam's walk-away alarm now sounds, and repeats, while the phone still picks up the dashcam.** Before, it could stay silent with "Radar off for" at 30 s or longer. At 15 s it could stop early.
+  - It repeats every 5 min until you dismiss it or the phone stops picking up the dashcam.
+  - Without the dashcam light's auto-switch (Settings -> Light auto-mode), it stops about 15 min after the radar goes off. A repeat that starts just after that is not cut short.
+- **"Remind in 2 min" on the dashcam's walk-away alarm now sounds again after 2 min.** That holds while the phone still picks up the dashcam. Before, the reminder could fail to come.
+- **The dashcam's walk-away alarm stays quiet if the radar goes off while you are moving.** The same goes for the 30 s after you stop. Before, the radar going off mid-ride could set it off.
+  - With eBike data on and Bosch Flow running, it still sounds if you lock the bike and walk off.
+  - With a radar that reports distance only and no eBike data, the alarm can still sound mid-ride.
+- **With the dashcam light's auto-switch on, the app now sees you switch the dashcam off.** Its walk-away alarm then does not start, and stops if it was sounding. Before, it could sound beside you after you switched the radar off, then the dashcam.
+  - The radar's walk-away alarm no longer names a dashcam you had already switched off.
+- **The app no longer crashes again and again after you stop allowing Nearby devices.** Before, Android kept restarting the app and it crashed each time.
+- **Picking a radar while it is already on now connects to it.** Before, the app waited until the radar was switched off and on again.
+  - The same goes when the app starts, Bluetooth comes on or a pause ends.
+- **A radar you unpaired no longer blocks the radar you have paired.** Before, the app could wait for the old one forever and never connect to yours.
+- **With a radar picked, the app no longer starts a connection to another radar when it cannot read your paired devices.** That happens when it starts with Bluetooth off.
+- **A paired device that only has "rear" in its name no longer shows as your radar.** A rear light is one example. Before, the warning for riding without the radar could sound for it.
+  - If it is your radar, pick it under Pair on the home screen.
+- **The app no longer opens a second connection to a radar you picked, just to read its battery.** It did this for a radar it doesn't recognise by name.
+- **A radar that reports distance only keeps its note on the home screen and in Settings while it is off.** The note says it can't count close passes. Before, with close-pass counting on, the Close passes card showed 0 for this ride between rides.
+- **With Bluetooth off, the radar and dashcam screens in Settings now say so.** So does the dashcam picker. Before, they showed a paired device as not paired, or offered to pair it again.
+  - With Nearby devices not allowed, the first Settings screen and the dashcam screen now say that too.
+- **The Home Assistant test says what failed and what to do, in English and Spanish.** Before, it showed raw error text.
+  - The Home Assistant screen's last error uses the same words, and says when MQTT is missing.
+- **Setup no longer saves a Home Assistant address the app cannot use, and offers Skip for now.** One example is http:// outside your home network.
+- **A router's page or other web page at the address no longer passes the Home Assistant test.** Before, it could pass and be saved.
+- **A passing Home Assistant test clears an old "Unreachable" error.**
+- **Settings drops a Home Assistant test result if you edited the address or token meanwhile.** Before, it showed and saved that result.
+
+### Breaking
+
+- **The Home Assistant close-pass conversion rate now counts only the overtakes seen while close passes were counted.** On a ride where you switched close-pass counting on or off partway, it reads higher. If an automation reads it, check it still does what you want.
+  - The sensor is `close_pass_conversion_rate`. On other rides it can read slightly higher.
+
+### Improvements
+
+- **Setup and Settings use the same words for Home Assistant.** A passing test reads "HA: saved" on both, and the token field is "Long-lived access token".
+- **Screen readers now announce the Home Assistant test buttons as buttons.** The dashcam screen's Pick and Change button too.
+
+### Battery
+
+- **With a dashcam set up and its walk-away alarm on, the phone stays awake after the radar goes off.** It stays awake until that alarm sounds or can no longer sound. This lasts at most your "Radar off for" time plus 15 s. This is so the phone's sleep does not delay the alarm.
+  - While the alarm can still sound, the app checks the dashcam every few seconds, not every 20 s. For a dashcam left on, that lasts until you dismiss the alarm or about 15 min pass. These checks do not run while the dashcam light's auto-switch holds its connection to the dashcam.
+  - Home Assistant gets the dashcam's battery level only when it changes, or every 5 min.
+- **The phone can now stay awake for up to 5 min after you switch the radar off on arrival, or after it drops while you ride.** That applies when it goes off while you are moving or within 30 s of stopping, with or without a dashcam. It needs a radar that reports speed. It stops when the radar reconnects or the ride summary is posted, usually about 3 min later. Before, it could stop about 20 s after the radar went off.
+
+### Bug reports
+
+- The connection log now records when the dashcam's walk-away alarm arms, sounds and stops. It also says why the alarm did not arm.
+- The connection log notes when the app does not start because Nearby devices isn't allowed. It also notes a link moved off an unpaired radar.
+- The capture log's `urgent-pass-open` line now ends in `fallback=fit` or `fallback=none`. It says whether a fit over the whole approach was passed over.
+- The report you copy for a bug report now says whether a distance-only radar is remembered. It also names more Home Assistant failure causes.
+- The hardware report form now says to pick an unrecognised radar before recording setup.
+
+### Upgrading
+
+- Still works on Android 12 and later.
+- If your radar shows as not paired after installing this version, pick it under Pair on the home screen.
+- Beeps, the urgent warning and the all-clear are unchanged.
+- After installing this version, the dashcam's walk-away alarm may sound where it stayed silent before. That happens if you carry the dashcam away switched on, or switch it off well after the radar.
+- With a radar that reports speed, the dashcam's walk-away alarm no longer sounds if you switch the radar off within 30 s of stopping. It still does if eBike data shows the bike locked after.
+- With a radar that reports distance only and no eBike data, the dashcam's walk-away alarm may now sound mid-ride.
+- Some phones may miss a repeat of the dashcam's walk-away alarm while the screen is off. This applies without the dashcam light's auto-switch.
+- If Bluetooth is turned off before the dashcam's walk-away alarm has sounded, the alarm stays quiet. It can sound the next time the radar goes off.
+- In Home Assistant, the close-pass conversion rate can read higher. The dashcam's battery level now arrives only when it changes or every 5 min. Nothing else changes in Home Assistant.
+
+### For developers
+
+- Android Gradle plugin 9.5.1, Roborazzi 1.78.0, Gradle 9.9.0, gradle/actions 6.4.1, softprops/action-gh-release 3.0.4, actions/setup-java 6.2.0.
+
 ## v1.11.0 - 2026-11-05
 
 ### Fixes

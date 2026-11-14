@@ -437,7 +437,7 @@ internal class CameraLightLinkController(
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
                         BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
-                        if (!prefs.isPaused) haPublisher.maybePublishBatteryToHa(name, pct)
+                        if (!prefs.isPaused) haPublisher.offerBattery(name, pct)
                     }
                     Uuids.SETTINGS_14 -> {
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue

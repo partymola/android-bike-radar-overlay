@@ -15,9 +15,11 @@ import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarControlBridge
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancelAndJoin
@@ -29,6 +31,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
@@ -495,12 +498,18 @@ class RadarLinkControllerHarnessTest {
         return link to controller
     }
 
+    private suspend fun TestScope.assertBatteryStatesSent(ha: RecordingHaClient, expected: List<String>) {
+        val sent = pumpUntil { ha.batteryStates("testradar") == expected }
+        assertTrue("sends=${ha.sends}", sent)
+    }
+
     @Test fun aBatteryNotifyIsSentToHomeAssistant() = runTest {
         val ha = RecordingHaClient()
         val (link, controller) = streamingLink(ha, prefs(paused = false))
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertBatteryStatesSent(ha, listOf("60"))
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
-        assertTrue("sends=${ha.sends}", pumpUntil { ha.batteryStates("testradar") == listOf("60", "59") })
+        assertBatteryStatesSent(ha, listOf("60", "59"))
         controller.forceReconnect()
     }
 
@@ -512,6 +521,100 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 59 })
         pumpUntil(timeoutMs = 300) { false }
         assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
+        controller.forceReconnect()
+    }
+
+    // ── a Home Assistant send that never answers ────────────────────────────────
+
+    /** Holds [slug]'s battery state send until [release] completes, deaf to
+     *  cancellation when [ignoringCancel]. */
+    private fun hangBatterySend(ha: RecordingHaClient, slug: String, release: CompletableDeferred<Unit>, ignoringCancel: Boolean = false) {
+        ha.answer = { topic, _ ->
+            if (topic == "bikeradar/$slug/battery") {
+                if (ignoringCancel) withContext(NonCancellable) { release.await() } else release.await()
+            }
+            true
+        }
+    }
+
+    /** One V2 target, tid 1, [metres] behind and closing at 8 m/s. */
+    private fun v2FrameAt(metres: Int): String {
+        val packed = (metres * 10) shl 11
+        return "00000117" + "%02x%02x%02x".format(packed and 0xFF, (packed shr 8) and 0xFF, packed shr 16) + "1008f080"
+    }
+
+    /** Feeds one frame every 100 ms for 8 s, at 100 m, 101 m and on, and
+     *  returns the distances not yet on RadarStateBus 100 ms after their frame. */
+    private suspend fun TestScope.framesLateOnTheBus(feed: (metres: Int) -> Unit): List<Int> {
+        val late = mutableListOf<Int>()
+        val start = testScheduler.currentTime
+        for (i in 0 until 80) {
+            val metres = 100 + i
+            val due = start + i * 100L
+            if (due > testScheduler.currentTime) delay(due - testScheduler.currentTime)
+            feed(metres)
+            if (!pumpUntil(timeoutMs = 100) { RadarStateBus.state.value.vehicles.any { it.distanceM == metres } }) late += metres
+        }
+        return late
+    }
+
+    @Test fun aHungBatterySendDoesNotHoldTheRadarFrames() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hangBatterySend(ha, "testradar", release)
+        val (link, controller) = streamingLink(ha, prefs(paused = false), clock = { 1_000L + testScheduler.currentTime })
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertBatteryStatesSent(ha, listOf("60"))
+
+        val late = framesLateOnTheBus { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2FrameAt(it)) }
+        assertEquals("frames still off the bus 100 ms after they arrived", emptyList<Int>(), late)
+        assertFalse("journal=$journal", journalHas("stream silent"))
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2FrameAt(200))
+        assertTrue(pumpUntil(timeoutMs = 100) { RadarStateBus.state.value.vehicles.any { it.distanceM == 200 } })
+        release.complete(Unit)
+        controller.forceReconnect()
+    }
+
+    @Test fun aHungBatterySendDoesNotHoldTheLegacyFrames() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hangBatterySend(ha, "testradar", release)
+        val link = Link()
+        val controller = controller(
+            link,
+            prefs = prefs(paused = false),
+            ha = ha,
+            setUp = ::setUpLegacyOnlyRadarWithBattery,
+            clock = { 1_000L + testScheduler.currentTime },
+        )
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertBatteryStatesSent(ha, listOf("60"))
+
+        val late = framesLateOnTheBus { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "0281%02x00".format(it)) }
+        assertEquals("frames still off the bus 100 ms after they arrived", emptyList<Int>(), late)
+        assertFalse("journal=$journal", journalHas("stream silent"))
+        release.complete(Unit)
+        controller.forceReconnect()
+    }
+
+    @Test fun aLinkEndsWhileABatterySendHangsDeafToCancellation() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hangBatterySend(ha, "testradar", release, ignoringCancel = true)
+        val (link, controller) = streamingLink(ha, prefs(paused = false))
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertBatteryStatesSent(ha, listOf("60"))
+
+        val moved = withTimeoutOrNull(5_000L) { controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac)) }
+        assertTrue("the old loop must end with the send still hung", moved != null)
+        assertTrue(pumpUntil { link.openCount == 2 })
+        release.complete(Unit)
         controller.forceReconnect()
     }
 

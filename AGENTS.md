@@ -515,10 +515,19 @@ must not be changed about it. Four that bite in ordinary work:
   awake that long (`RadarLinkCoordinator.onDashcamAnswered`,
   `aCameraStillAnsweringAcrossRepeatedLongSleepsSoundsItsRepeat`). Failed reads with a radar
   link open back off from 2 s and can pass the bound. It holds only because the
-  read's in-flight guard ends before its Home Assistant publish
-  (`BatteryReaderTest.aSlowPublishDoesNotHoldTheNextRead`); that publish goes
-  out only on a change or the 5 min heartbeat
-  (`HaPublisher.publishBatteryIfChanged`).
+  read's in-flight guard ends before its Home Assistant send
+  (`BatteryReaderTest.aSlowPublishDoesNotHoldTheNextRead`); that send goes
+  out only on a change or the 5 min heartbeat (`HaPublisher.sendBattery`).
+- **No connection loop waits on Home Assistant.** The radar's V2 and legacy
+  loops and the camera loop hand each battery reading to
+  `HaPublisher.offerBattery`, which returns at once. The send runs on the
+  service scope, one per device at a time, and the newest reading goes next.
+  A send awaited on a loop holds the radar frames behind a blocking request:
+  alerts decide on a stale state, and the data-flow watchdog tears down a
+  link that is streaming (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
+  `aLinkEndsWhileABatterySendHangsDeafToCancellation`,
+  `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`).
+  The camera loop still awaits its front-mode state publish.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

@@ -1001,7 +1001,7 @@ internal class RadarLinkController(
                     Uuids.CHAR_BATTERY -> {
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
                         if (publishRadarBattery(rearMac, name, pct) && !prefs.isPaused) {
-                            haPublisher.maybePublishBatteryToHa(name, pct)
+                            haPublisher.offerBattery(name, pct)
                         }
                     }
                 }
@@ -1149,7 +1149,7 @@ internal class RadarLinkController(
                 if (uuid == Uuids.CHAR_BATTERY) {
                     val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
                     if (publishRadarBattery(gatt.device?.address, name, pct) && !prefs.isPaused) {
-                        haPublisher.maybePublishBatteryToHa(name, pct)
+                        haPublisher.offerBattery(name, pct)
                     }
                     continue
                 }
@@ -1273,10 +1273,10 @@ internal class RadarLinkController(
      * chip as 255%. A validation every caller must remember is a validation
      * that gets forgotten, so it lives here.
      *
-     * Home Assistant publishing stays at the call sites: it suspends, and one
-     * caller is a plain lambda inside the handshake. The return value is what
-     * keeps the two in step - an unpublishable reading must not reach HA
-     * either, which is the half the old copies got wrong.
+     * The Home Assistant offer stays at the two notify loops, behind the
+     * pause; the handshake's and the legacy read's readings go to the bus
+     * only. The return value keeps the two in step: an unpublishable reading
+     * must not reach HA either.
      *
      * [mac] is nullable because one caller reads it off a GATT whose device
      * can be absent; a missing MAC costs the slug mapping, not the reading.

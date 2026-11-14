@@ -44,7 +44,7 @@ internal const val KEY_LAST_TS = "last_ts"
  *
  * The HA publish ([publishBattery]) and the GATT read ([readBatteryFn]) are
  * injected as function seams: production wires them to the real
- * [HaPublisher.publishBatteryIfChanged] and the private [readBattery], while tests
+ * [HaPublisher.sendBattery] and the private [readBattery], while tests
  * pass fakes so the whole post-read path (known-device upsert, failure counter,
  * display-name sync, publish-gated throttle) is exercisable without a device.
  * The clocks are injected so a test can run reads in virtual time.
@@ -88,12 +88,10 @@ internal class BatteryReader(
      * would falsely keep the entry fresh without an actual sighting. Returns
      * whether the read started.
      *
-     * The guard ends with the GATT read, not the HA publish after it, so the
-     * dashcam alarm's armed probe can start the next read at once; two
-     * publishes for one device can then overlap
-     * (`aSlowPublishDoesNotHoldTheNextRead`), and an older value can land
-     * after a newer one until the value next changes or the 5 min heartbeat
-     * sends it again.
+     * The guard ends with the GATT read, not the HA send after it, so the
+     * dashcam alarm's armed probe can start the next read at once
+     * (`aSlowPublishDoesNotHoldTheNextRead`). [HaPublisher.sendBattery] runs
+     * one send per device at a time, the newest reading going out next.
      */
     fun launch(name: String, mac: String): Boolean {
         val token = Any()
@@ -174,10 +172,10 @@ internal class BatteryReader(
         }
         BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = answeredAtMs))
 
-        // Only arm the 5-min throttle if publish succeeded, had nothing new to
-        // send, or HA isn't configured at all. On a transient HA failure the
-        // next advert retries rather than waiting 5 minutes with no HA state
-        // update.
+        // Only arm the 5-min throttle if the send this reading went out in
+        // succeeded, had nothing new to send, or HA isn't configured at all. On
+        // a transient HA failure the next advert retries rather than waiting
+        // 5 minutes with no HA state update.
         if (publishBattery(name, pct)) {
             sp.edit().putLong("${KEY_LAST_TS}_$s", wallClock()).apply()
         }

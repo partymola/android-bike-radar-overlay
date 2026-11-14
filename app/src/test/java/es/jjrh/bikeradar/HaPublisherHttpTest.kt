@@ -107,20 +107,16 @@ class HaPublisherHttpTest {
     // ── battery ──────────────────────────────────────────────────────────────
 
     @Test fun batteryPublishPostsDiscoveryThenStateAndReportsSuccess() = runBlocking {
-        assertTrue(publisher().publishBatteryToHa("Radar", 80))
+        assertTrue(publisher().sendBattery("Radar", 80))
         assertEquals(
             "homeassistant/sensor/bikeradar_radar_battery/config",
             topics.first(),
         )
-        // The reading is published synchronously. The retirement is a couple
-        // of dozen round trips and must NOT be awaited: this runs on the
-        // radar's notify loop, and blocking it stops V2 frames being drained
-        // for long enough that the data-flow watchdog tears the link down.
-        //
-        // So the assertion is that the call returned with the retirement still
-        // in flight, not merely that it happened later - awaiting it after the
-        // state write would satisfy an ordering check while reintroducing the
-        // stall.
+        // The send returns with the reading published. The retirement is a
+        // couple of dozen round trips and must NOT be awaited, or it holds
+        // this device's next battery send behind it. So the assertion is that
+        // the send returned with the retirement still in flight, not merely
+        // that it happened later.
         assertEquals(
             "a successful publish must reach the bus, or the row cannot go green",
             HaHealth.Ok,
@@ -134,7 +130,7 @@ class HaPublisherHttpTest {
 
     @Test fun batteryPublishReturnsFalseWhenDiscoveryFails() = runBlocking {
         statusFor = { 500 }
-        assertFalse(publisher().publishBatteryToHa("Radar", 80))
+        assertFalse(publisher().sendBattery("Radar", 80))
         // Reported, with the cause. A discovery failure used to return here
         // having only logged, so the family never reported at all and the
         // diagnostic bundle called a stream failing on every attempt "not
@@ -148,7 +144,7 @@ class HaPublisherHttpTest {
         // Discovery (config) succeeds, the state write fails - exercises the
         // state-publish failure branch, distinct from a discovery failure.
         statusFor = { if (it.endsWith("/config")) 200 else 500 }
-        assertFalse(publisher().publishBatteryToHa("Radar", 80))
+        assertFalse(publisher().sendBattery("Radar", 80))
         assertTrue("discovery still went out", topics.any { it.endsWith("/config") })
         assertTrue("state write was attempted", topics.contains("bikeradar/radar/battery"))
         val health = HaHealthBus.families.value[HaFamily.BATTERY]
@@ -159,9 +155,9 @@ class HaPublisherHttpTest {
     @Test fun discoveryFailureRollsBackSoTheNextCallRetriesDiscovery() = runBlocking {
         val p = publisher()
         statusFor = { 500 }
-        assertFalse(p.publishBatteryToHa("Radar", 80))
+        assertFalse(p.sendBattery("Radar", 80))
         statusFor = { 200 }
-        assertTrue(p.publishBatteryToHa("Radar", 80))
+        assertTrue(p.sendBattery("Radar", 80))
         // Count the NEW namespace's discovery only: the retirement path also
         // writes /config topics, under the old namespace.
         assertEquals(
@@ -175,14 +171,15 @@ class HaPublisherHttpTest {
         // Counts the state topic, never `topics.size`: the first publish leaves
         // the stale-discovery retirement in flight by design, so the total keeps
         // growing on another thread and a size comparison measures that race
-        // rather than the throttle.
+        // rather than the throttle. Each send is awaited, so a count is taken
+        // after the send it is about has run.
         val p = publisher()
         val state = "bikeradar/radar/battery"
-        p.maybePublishBatteryToHa("Radar", 80)
+        assertTrue(p.sendBattery("Radar", 80))
         assertEquals("the first reading publishes", 1, topics.count { it == state })
-        p.maybePublishBatteryToHa("Radar", 80)
+        assertTrue(p.sendBattery("Radar", 80))
         assertEquals("same pct within heartbeat is throttled", 1, topics.count { it == state })
-        p.maybePublishBatteryToHa("Radar", 81)
+        assertTrue(p.sendBattery("Radar", 81))
         assertEquals("a pct change re-publishes", 2, topics.count { it == state })
     }
 
@@ -191,13 +188,13 @@ class HaPublisherHttpTest {
         // reader arms its own throttle on true.
         val p = publisher()
         val state = "bikeradar/cam/battery"
-        assertTrue(p.publishBatteryIfChanged("Cam", 70))
-        assertTrue("nothing new: skipped, and still true", p.publishBatteryIfChanged("Cam", 70))
+        assertTrue(p.sendBattery("Cam", 70))
+        assertTrue("nothing new: skipped, and still true", p.sendBattery("Cam", 70))
         assertEquals(1, topics.count { it == state })
         statusFor = { 500 }
-        assertFalse("a change that fails to send says so", p.publishBatteryIfChanged("Cam", 69))
+        assertFalse("a change that fails to send says so", p.sendBattery("Cam", 69))
         statusFor = { 200 }
-        assertTrue(p.publishBatteryIfChanged("Cam", 69))
+        assertTrue(p.sendBattery("Cam", 69))
         assertEquals("the failed value was not recorded, so it is sent again", 3, topics.count { it == state })
     }
 

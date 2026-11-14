@@ -89,7 +89,7 @@ class DashcamAlarmServiceTest {
         // The map the reader writes is the one the alarm reads.
         assertSame(service.dashcamAnsweredMs, service.batteryReader.dashcamAnsweredAtMs)
         // And the reader publishes only a change, not every armed read.
-        assertEquals(service.haPublisher::publishBatteryIfChanged, service.batteryReader.publishBattery)
+        assertEquals(service.haPublisher::sendBattery, service.batteryReader.publishBattery)
         // And the camera's answer reaches the walk-away tick.
         assertEquals(service.radarLinkCoordinator::onDashcamAnswered, service.batteryReader.onDashcamAnswered)
         service.dashcamAnsweredMs[CAM] = now - 3_000L

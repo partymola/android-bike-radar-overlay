@@ -14,6 +14,7 @@ import es.jjrh.bikeradar.data.DashcamOwnership
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -349,12 +350,18 @@ class CameraLightLinkControllerHarnessTest {
         return link to controller
     }
 
+    private suspend fun TestScope.assertBatteryStatesSent(ha: RecordingHaClient, expected: List<String>) {
+        val sent = pumpUntil { ha.batteryStates("cam") == expected }
+        assertTrue("sends=${ha.sends}", sent)
+    }
+
     @Test fun aBatteryNotifyIsSentToHomeAssistant() = runTest {
         val ha = RecordingHaClient()
         val (link, controller) = handshookLink(ha, prefs(paused = false))
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertBatteryStatesSent(ha, listOf("60"))
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
-        assertTrue("sends=${ha.sends}", pumpUntil { ha.batteryStates("cam") == listOf("60", "59") })
+        assertBatteryStatesSent(ha, listOf("60", "59"))
         controller.stop()
     }
 
@@ -366,6 +373,25 @@ class CameraLightLinkControllerHarnessTest {
         assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 59 })
         pumpUntil(timeoutMs = 300) { false }
         assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
+        controller.stop()
+    }
+
+    @Test fun aHungBatterySendDoesNotHoldTheNextBatteryReading() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        ha.answer = { topic, _ ->
+            if (topic == "bikeradar/cam/battery") release.await()
+            true
+        }
+        val (link, controller) = handshookLink(ha, prefs(paused = false))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertBatteryStatesSent(ha, listOf("80"))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(
+            "the next reading must reach the bus while the send hangs",
+            pumpUntil(timeoutMs = 100) { BatteryStateBus.entries.value["cam"]?.pct == 60 },
+        )
+        release.complete(Unit)
         controller.stop()
     }
 

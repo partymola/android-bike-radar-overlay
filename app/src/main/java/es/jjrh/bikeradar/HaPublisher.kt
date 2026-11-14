@@ -4,6 +4,8 @@ package es.jjrh.bikeradar
 
 import android.util.Log
 import es.jjrh.bikeradar.data.HaCredentials
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -25,9 +27,9 @@ import java.util.concurrent.ConcurrentHashMap
  * providers; the service rebuilds that client when the stored credentials
  * change, so every consumer follows a mid-session save.
  *
- * Threading: [publishRideEdgeIfHa] and the ride-summary loop launch into the
- * injected [scope]; the summary path runs on IO and reads + marks the
- * [rideStats] accumulator there. The accumulator stays single-writer-on-Main
+ * Threading: [publishRideEdgeIfHa], the battery sends and the ride-summary
+ * loop launch into the injected [scope]; the summary path runs on IO and
+ * reads + marks the [rideStats] accumulator there. The accumulator stays single-writer-on-Main
  * for its tally side (see BikeRadarService.onCue); this IO reader only consumes
  * a consistent snapshot and never mutates the running totals. The accumulator
  * REFERENCE is swapped from the walk-away tick (IO) when a long radar-off gap
@@ -56,32 +58,94 @@ internal class HaPublisher(
 
     private fun client() = newClient(creds.baseUrl, creds.token)
 
+    private class PendingBattery(val name: String, val pct: Int, val waiters: List<CompletableDeferred<Boolean>>)
+
+    private class BatterySlot {
+        var draining = false
+        var pending: PendingBattery? = null
+    }
+
+    // Per slug; guarded by itself.
+    private val batterySlots = HashMap<String, BatterySlot>()
+
     /**
-     * Publishes [pct] when it differs from the last value published for this
-     * device, or [BATTERY_HA_HEARTBEAT_MS] after it, so HA's last-update stays
-     * recent; records it on success. The notify streams and the battery reads
-     * (the dashcam probe reads every few seconds while its alarm waits) all
-     * come through here. True when nothing needed sending or the send
-     * succeeded, so a caller's throttle arms; false on a failed send.
+     * Queues a battery reading for Home Assistant and returns at once: the
+     * send runs on this publisher's scope, never on the caller's, so a
+     * connection loop never waits on Home Assistant
+     * (`RadarLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheRadarFrames`).
+     * One send per device runs at a time, and a reading offered while one runs
+     * replaces any still waiting (`offersDuringAHungSendCollapseToTheNewest`).
      */
-    suspend fun publishBatteryIfChanged(name: String, pct: Int): Boolean {
+    fun offerBattery(name: String, pct: Int) = enqueueBattery(name, pct, null)
+
+    /**
+     * [offerBattery], then waits for the send this reading went out in: its
+     * own, or the newer one that replaced it. True when nothing needed
+     * sending or the send succeeded, so a caller's throttle arms; false on a
+     * failed send.
+     */
+    suspend fun sendBattery(name: String, pct: Int): Boolean {
+        val result = CompletableDeferred<Boolean>()
+        enqueueBattery(name, pct, result)
+        return result.await()
+    }
+
+    private fun enqueueBattery(name: String, pct: Int, waiter: CompletableDeferred<Boolean>?) {
         val s = slug(name)
+        val startDrain = synchronized(batterySlots) {
+            val slot = batterySlots.getOrPut(s) { BatterySlot() }
+            slot.pending = PendingBattery(name, pct, slot.pending?.waiters.orEmpty() + listOfNotNull(waiter))
+            val idle = !slot.draining
+            slot.draining = true
+            idle
+        }
+        if (startDrain) scope.launch { drainBattery(s) }
+    }
+
+    private suspend fun drainBattery(s: String) {
+        while (true) {
+            val next = synchronized(batterySlots) {
+                val slot = batterySlots.getValue(s)
+                val p = slot.pending
+                slot.pending = null
+                if (p == null) slot.draining = false
+                p
+            } ?: return
+            val ok = try {
+                sendBatteryIfDue(s, next.name, next.pct)
+            } catch (e: CancellationException) {
+                val queued = synchronized(batterySlots) {
+                    val slot = batterySlots.getValue(s)
+                    slot.draining = false
+                    slot.pending.also { slot.pending = null }
+                }
+                (next.waiters + queued?.waiters.orEmpty()).forEach { it.cancel(e) }
+                throw e
+            } catch (t: Throwable) {
+                Log.w(TAG, "HA battery send for $s threw: ${t.javaClass.simpleName}")
+                false
+            }
+            next.waiters.forEach { it.complete(ok) }
+        }
+    }
+
+    /**
+     * Sends [pct] when it differs from the last value sent for this device,
+     * or [BATTERY_HA_HEARTBEAT_MS] after it, so HA's last-update stays recent;
+     * records it on success. Decided when the send runs, not when the reading
+     * was offered, so a repeat of the reading in flight is not sent twice.
+     */
+    private suspend fun sendBatteryIfDue(s: String, name: String, pct: Int): Boolean {
         val now = wallClock()
-        val lastPct = lastPublishedPct[s]
         val lastMs = lastHaPublishMs[s] ?: 0L
-        val shouldPublish = pct != lastPct || (now - lastMs) >= BATTERY_HA_HEARTBEAT_MS
-        if (!shouldPublish) return true
+        val due = pct != lastPublishedPct[s] || (now - lastMs) >= BATTERY_HA_HEARTBEAT_MS
+        if (!due) return true
         val ok = publishBatteryToHa(name, pct)
         if (ok) {
             lastHaPublishMs[s] = now
             lastPublishedPct[s] = pct
         }
         return ok
-    }
-
-    /** [publishBatteryIfChanged] for the notify streams, which keep no throttle. */
-    suspend fun maybePublishBatteryToHa(name: String, pct: Int) {
-        publishBatteryIfChanged(name, pct)
     }
 
     /**
@@ -115,7 +179,7 @@ internal class HaPublisher(
      * retrying every advert. A transient HA failure returns false so the next
      * advert retries rather than waiting for the 5-min heartbeat.
      */
-    suspend fun publishBatteryToHa(name: String, pct: Int): Boolean {
+    private suspend fun publishBatteryToHa(name: String, pct: Int): Boolean {
         val ha = client()
         if (!ha.isConfigured()) return true
 
@@ -145,12 +209,8 @@ internal class HaPublisher(
         if (newlyDiscovered) {
             // Retire this device's entities from the naming generations the
             // app has shipped, so the old ones do not sit beside the new.
-            //
-            // Launched, never awaited: this caller is the radar's notify loop,
-            // and a couple of dozen sequential round trips would stop it
-            // draining radar frames long enough for the data-flow watchdog to
-            // tear the link down. Home Assistant housekeeping must not cost
-            // the rider their radar.
+            // Launched, never awaited: a couple of dozen sequential round
+            // trips would hold this device's next battery send behind them.
             scope.launch {
                 val retired = ha.cleanupStaleDiscoveryTopics(listOf(s))
                 Log.i(TAG, "HA stale-entity cleanup for $s: ok=$retired")

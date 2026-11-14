@@ -681,27 +681,27 @@ tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
         }
     }
     violationRules {
-        // Project floors on the testable layer, each ratcheted a few points
-        // below the current figure (LINE ~88%, INSTRUCTION ~87%, BRANCH ~78%)
-        // so legitimately hard-to-test new code doesn't trip them while a mass
-        // regression still fails the build. The per-PR diff-coverage gate
-        // guards new code; these guard against wholesale drops. Raise as
-        // coverage grows.
+        // Project floors on the testable layer, each set 3 points under the
+        // figure jacocoTestReport measured when it was last raised, rounded
+        // down to a whole percent, so legitimately hard-to-test new code
+        // doesn't trip them while a mass regression still fails the build. The
+        // per-PR diff-coverage gate guards new code; these guard against
+        // wholesale drops. Raise as coverage grows.
         rule {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.80".toBigDecimal()
+                minimum = "0.90".toBigDecimal()
             }
             limit {
                 counter = "INSTRUCTION"
                 value = "COVEREDRATIO"
-                minimum = "0.78".toBigDecimal()
+                minimum = "0.89".toBigDecimal()
             }
             limit {
                 counter = "BRANCH"
                 value = "COVEREDRATIO"
-                minimum = "0.68".toBigDecimal()
+                minimum = "0.83".toBigDecimal()
             }
         }
         // Branch coverage on the safety-critical decision classes. Wildcards

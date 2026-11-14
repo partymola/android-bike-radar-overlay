@@ -20,7 +20,7 @@ the coverage, lint or R8 configuration in `app/build.gradle.kts` or
   - `:app:jacocoTestReport` writes a logic-scoped report (excludes Compose UI
     and framework services) at `app/build/reports/jacoco/jacocoTestReport/`.
   - `:app:jacocoCoverageVerification` (runs in CI) is the ratchet:
-    project floors LINE >= 0.80, INSTRUCTION >= 0.78, BRANCH >= 0.68 on the
+    project floors LINE >= 0.90, INSTRUCTION >= 0.89, BRANCH >= 0.83 on the
     whole testable layer, plus a tighter BRANCH >= 0.93 on every `*Decider` /
     `*Deriver` (matched by wildcard) plus `RadarV2Decoder`. Raise the floors in
     `app/build.gradle.kts` as coverage grows.

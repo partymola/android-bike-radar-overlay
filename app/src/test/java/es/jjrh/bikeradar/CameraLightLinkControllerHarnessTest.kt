@@ -16,12 +16,14 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -146,13 +148,13 @@ class CameraLightLinkControllerHarnessTest {
         prefs: Prefs = prefs(),
         scope: kotlinx.coroutines.CoroutineScope = backgroundScope,
         ha: RecordingHaClient = RecordingHaClient(),
+        // Unconfigured unless a test is about the front-light mode send.
+        frontModeHa: HaClient = HaClient("", ""),
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
         scope = scope,
         prefs = prefs,
-        // The front-mode publishes stay unconfigured: only the battery send
-        // goes through the publisher.
-        ha = { HaClient("", "") },
+        ha = { frontModeHa },
         haPublisher = haPublisher(backgroundScope, ha),
         notifications = ServiceNotifications(app) { Prefs(app) },
         macToSlug = ConcurrentHashMap(),
@@ -338,9 +340,13 @@ class CameraLightLinkControllerHarnessTest {
     }
 
     /** A camera link through its handshake, with [ha] behind the publisher. */
-    private suspend fun TestScope.handshookLink(ha: RecordingHaClient, prefs: Prefs): Pair<Link, CameraLightLinkController> {
+    private suspend fun TestScope.handshookLink(
+        ha: RecordingHaClient,
+        prefs: Prefs,
+        frontModeHa: HaClient = HaClient("", ""),
+    ): Pair<Link, CameraLightLinkController> {
         val link = Link()
-        val controller = controller(link, prefs = prefs, ha = ha)
+        val controller = controller(link, prefs = prefs, ha = ha, frontModeHa = frontModeHa)
         startDriver(link)
         controller.start("Cam", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -404,6 +410,141 @@ class CameraLightLinkControllerHarnessTest {
             pumpUntil(timeoutMs = 100) { BatteryStateBus.entries.value["cam"]?.pct == 60 },
         )
         release.complete(Unit)
+        controller.stop()
+    }
+
+    // ── the front-light mode send ──────────────────────────────────────────────
+
+    /** Both auto-mode phases set the same mode, so the first send's value does
+     *  not depend on the time of day. */
+    private fun frontModePrefs() = prefs(paused = false).apply {
+        cameraLightDayMode = CameraLightMode.LOW
+        cameraLightNightMode = CameraLightMode.LOW
+    }
+
+    /** Holds every send to [topic] until [release] completes, deaf to
+     *  cancellation when [ignoringCancel]. */
+    private fun hang(ha: RecordingHaClient, topic: String, release: CompletableDeferred<Unit>, ignoringCancel: Boolean = false) {
+        ha.answer = { t, _ ->
+            if (t == topic) {
+                if (ignoringCancel) withContext(NonCancellable) { release.await() } else release.await()
+            }
+            true
+        }
+    }
+
+    private fun inFlight(ha: RecordingHaClient, topic: String) = ha.sends.toList().any { it.first == topic }
+
+    @Test fun aHungFrontModeSendDoesNotHoldTheCameraLoop() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hang(ha, "bikeradar/cam/front_mode", release)
+        val (link, controller) = handshookLink(ha, frontModePrefs(), frontModeHa = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { inFlight(ha, "bikeradar/cam/front_mode") })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010000")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(
+            "the loop must read on past the light-state frames while the send hangs",
+            pumpUntil(timeoutMs = 100) { BatteryStateBus.entries.value["cam"]?.pct == 80 },
+        )
+        assertBatteryStatesSent(ha, listOf("80"))
+        release.complete(Unit)
+        controller.stop()
+    }
+
+    @Test fun aHungFrontModeDiscoveryDoesNotHoldTheCameraLoop() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hang(ha, ha.frontModeDiscoveryTopic("cam"), release)
+        val (link, controller) = handshookLink(ha, frontModePrefs(), frontModeHa = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { inFlight(ha, ha.frontModeDiscoveryTopic("cam")) })
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(
+            "the loop must run while the discovery hangs",
+            pumpUntil(timeoutMs = 100) { BatteryStateBus.entries.value["cam"]?.pct == 80 },
+        )
+        // Discovery goes first, so the mode waits behind it rather than racing it.
+        assertEquals(emptyList<String>(), ha.frontModeStates("cam"))
+        release.complete(Unit)
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW") })
+        controller.stop()
+    }
+
+    @Test fun theNewestFrontModeGoesNextWhenSeveralWaitBehindAHungSend() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hang(ha, "bikeradar/cam/front_mode", release)
+        val (link, controller) = handshookLink(ha, frontModePrefs(), frontModeHa = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { inFlight(ha, "bikeradar/cam/front_mode") })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010000")
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010100")
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        pumpUntil(timeoutMs = 300) { false }
+        release.complete(Unit)
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(listOf("LOW", "OFF"), ha.frontModeStates("cam"))
+        controller.stop()
+    }
+
+    @Test fun aLinkEndsWhileAFrontModeSendHangsDeafToCancellation() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hang(ha, "bikeradar/cam/front_mode", release, ignoringCancel = true)
+        val (_, controller) = handshookLink(ha, frontModePrefs(), frontModeHa = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { inFlight(ha, "bikeradar/cam/front_mode") })
+        controller.stop()
+        assertTrue("the loop must end with the send still hung; reports=$reports", pumpUntil(timeoutMs = 1_000) { reports.lastOrNull() == "gone" })
+        release.complete(Unit)
+    }
+
+    @Test fun theFrontModeReachesHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = handshookLink(ha, frontModePrefs(), frontModeHa = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW") })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW", "OFF") })
+        // Discovery once per device, not per connection. The OFF read as a
+        // press, so the next connection sets no mode of its own.
+        disconnect(link, 147)
+        handshake(link, 2)
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010200")
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW", "OFF", "LOW") })
+        assertEquals(1, ha.frontModeDiscoveries("cam"))
+        controller.stop()
+    }
+
+    /** The full front-camera table, with a mode-set characteristic that refuses writes. */
+    private fun setUpCameraRefusingLightWrites(gatt: BluetoothGatt) {
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.CHAR_2820, propWriteNoResp or propWrite),
+            char(Uuids.CHAR_2810, propNotify, cccd = true),
+        )
+        addService(
+            gatt,
+            Uuids.SVC_CONTROL,
+            char(Uuids.SETTINGS_ACK, propIndicate, cccd = true),
+            char(Uuids.SETTINGS_14, propNotify, cccd = true),
+        )
+        addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propRead or propNotify, cccd = true))
+        gatt.discoverServices()
+    }
+
+    @Test fun aCameraWhoseLightIsNeverSetStillGetsItsEntity() = runTest {
+        val ha = RecordingHaClient()
+        val link = Link()
+        val controller = controller(link, prefs = frontModePrefs(), ha = ha, frontModeHa = ha, setUp = ::setUpCameraRefusingLightWrites)
+        startDriver(link)
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("camera handshake complete") })
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeDiscoveries("cam") == 1 })
+        pumpUntil(timeoutMs = 5_000) { false }
+        assertEquals(emptyList<String>(), ha.frontModeStates("cam"))
         controller.stop()
     }
 

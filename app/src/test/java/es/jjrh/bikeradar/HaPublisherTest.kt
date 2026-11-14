@@ -26,8 +26,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The optional-HA contract (with HA unconfigured every publish path is a clean
- * no-op), and the battery send's throttle and health reporting against a
- * [RecordingHaClient]. Robolectric for HaCredentials' SharedPreferences + the
+ * no-op), the battery send's throttle and health reporting, and the
+ * front-light mode send, against a [RecordingHaClient]. Robolectric for HaCredentials' SharedPreferences + the
  * in-memory cryptor. The wire format is HaClient's own tests'.
  *
  * The configured publisher runs on `backgroundScope`, whose work
@@ -220,6 +220,49 @@ class HaPublisherTest {
         assertFalse(p.sendBattery("Radar", 80))
         assertTrue(p.sendBattery("Radar", 79))
         assertEquals(listOf("80", "79"), ha.batteryStates("radar"))
+    }
+
+    // ── the front-light mode send ────────────────────────────────────────────
+
+    @Test fun aFailedFrontModeDiscoveryIsSentAgainWithTheNextMode() = runTest {
+        val ha = RecordingHaClient()
+        var refuse = true
+        ha.answer = { topic, _ -> !(refuse && topic == ha.frontModeDiscoveryTopic("cam")) }
+        val p = configured(ha, backgroundScope)
+        p.offerFrontMode({ ha }, "cam", "Cam", null)
+        runCurrent()
+        refuse = false
+        p.offerFrontMode({ ha }, "cam", "Cam", "LOW")
+        runCurrent()
+        p.offerFrontMode({ ha }, "cam", "Cam", "OFF")
+        runCurrent()
+        assertEquals("sent again after the refusal, then never", 2, ha.frontModeDiscoveries("cam"))
+        assertEquals(listOf("LOW", "OFF"), ha.frontModeStates("cam"))
+    }
+
+    @Test fun aHungBatterySendDoesNotHoldTheSameDevicesFrontMode() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        ha.answer = { topic, _ ->
+            if (topic == "bikeradar/cam/battery") release.await()
+            true
+        }
+        val p = configured(ha, backgroundScope)
+        p.offerBattery("Cam", 80)
+        runCurrent()
+        p.offerFrontMode({ ha }, "cam", "Cam", "LOW")
+        runCurrent()
+        assertEquals(listOf("LOW"), ha.frontModeStates("cam"))
+        release.complete(Unit)
+        runCurrent()
+    }
+
+    @Test fun anUnconfiguredClientIsSentNoFrontMode() = runTest {
+        val ha = RecordingHaClient(baseUrl = "")
+        val p = configured(RecordingHaClient(), backgroundScope)
+        p.offerFrontMode({ ha }, "cam", "Cam", "LOW")
+        runCurrent()
+        assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
     }
 
     @Test fun aFailedOfferReportsItsCause() = runTest {

@@ -21,7 +21,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** What the front camera link tells the dashcam walk-away alarm. Implemented by
@@ -147,8 +146,6 @@ internal class CameraLightLinkController(
     // the cancel reaches the connection's own teardown
     // (`theLoopEndingReportsTheLinkGoneAndALinkTheAppEndedIsNoSwitchOff`).
     @Volatile private var connectionEndedByApp: AtomicBoolean? = null
-
-    private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     @Synchronized
     fun start(name: String, mac: String) {
@@ -368,11 +365,7 @@ internal class CameraLightLinkController(
             val lightSlugEarly = slug(name)
             val lightMacEarly = gatt.device?.address
             if (lightMacEarly != null) macToSlug[lightMacEarly] = lightSlugEarly
-            if (ha().isConfigured() && frontModeDiscoveredSlugs.add(lightSlugEarly)) {
-                if (!ha().publishFrontModeDiscovery(lightSlugEarly, name)) {
-                    frontModeDiscoveredSlugs.remove(lightSlugEarly)
-                }
-            }
+            haPublisher.offerFrontMode(ha, lightSlugEarly, name, null)
 
             val controller = CameraLightController(gatt, queue)
             val nowMs = System.currentTimeMillis()
@@ -407,7 +400,7 @@ internal class CameraLightLinkController(
                 Log.i(TAG, "$label mode=$mode applied=$ok")
                 if (ok) {
                     cameraLightLastWrittenMode = mode
-                    if (ha().isConfigured()) ha().publishFrontModeState(lightSlugEarly, mode.name)
+                    haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
                 } else {
                     postLightModeFailNotification(mode)
                 }
@@ -449,7 +442,7 @@ internal class CameraLightLinkController(
                             cameraLightUserOverride = true
                             Log.i(TAG, "override detected: expected=$expected device=$mode")
                         }
-                        if (ha().isConfigured()) ha().publishFrontModeState(lightSlugEarly, mode.name)
+                        haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
                     }
                 }
             }

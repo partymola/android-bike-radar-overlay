@@ -532,14 +532,18 @@ must not be changed about it. Four that bite in ordinary work:
   out only on a change or the 5 min heartbeat (`HaPublisher.sendBattery`).
 - **No connection loop waits on Home Assistant.** The radar's V2 and legacy
   loops and the camera loop hand each battery reading to
-  `HaPublisher.offerBattery`, which returns at once. The send runs on the
-  service scope, one per device at a time, and the newest reading goes next.
-  A send awaited on a loop holds the radar frames behind a blocking request:
-  alerts decide on a stale state, and the data-flow watchdog tears down a
-  link that is streaming (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
+  `HaPublisher.offerBattery`, and the camera hands its light mode to
+  `HaPublisher.offerFrontMode`; both return at once. The send runs on the
+  service scope, one per device and entity at a time, and the newest value
+  goes next. A send awaited on a loop holds the radar frames behind a
+  blocking request: alerts decide on a stale state, and the data-flow
+  watchdog tears down a link that is streaming
+  (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
   `aLinkEndsWhileABatterySendHangsDeafToCancellation`,
-  `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`).
-  The camera loop still awaits its front-mode state publish.
+  `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`,
+  `aHungFrontModeSendDoesNotHoldTheCameraLoop`,
+  `aHungFrontModeDiscoveryDoesNotHoldTheCameraLoop`,
+  `aLinkEndsWhileAFrontModeSendHangsDeafToCancellation`).
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the

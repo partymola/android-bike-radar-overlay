@@ -5,11 +5,12 @@ package es.jjrh.bikeradar
 import java.util.Collections
 
 /**
- * An [HaClient] configured with an https URL that records every MQTT publish
- * instead of sending it, and answers with [answer]. A false answer sets
- * [failure] as the cause, as a real refused publish would.
+ * An [HaClient] configured with an https URL, or with [baseUrl] when a test
+ * needs it unconfigured, that records every MQTT publish instead of sending it,
+ * and answers with [answer]. A false answer sets [failure] as the cause, as a
+ * real refused publish would.
  */
-internal class RecordingHaClient : HaClient("https://ha.example.test", "tok") {
+internal class RecordingHaClient(baseUrl: String = "https://ha.example.test") : HaClient(baseUrl, "tok") {
     /** Every publish attempted, as (topic, payload), recorded before it answers. */
     val sends: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
@@ -29,4 +30,12 @@ internal class RecordingHaClient : HaClient("https://ha.example.test", "tok") {
 
     /** How many battery discoveries were sent for [slug]. */
     fun batteryDiscoveries(slug: String): Int = sends.toList().count { it.first == "homeassistant/sensor/bikeradar_${slug}_battery/config" }
+
+    /** The front-light modes sent for [slug], in order. */
+    fun frontModeStates(slug: String): List<String> = sends.toList().filter { it.first == "bikeradar/$slug/front_mode" }.map { it.second }
+
+    /** How many front-light mode discoveries were sent for [slug]. */
+    fun frontModeDiscoveries(slug: String): Int = sends.toList().count { it.first == frontModeDiscoveryTopic(slug) }
+
+    fun frontModeDiscoveryTopic(slug: String) = "homeassistant/sensor/bikeradar_${slug}_front_mode/config"
 }

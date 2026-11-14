@@ -23,12 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
  * `token` getters re-read storage live), so a credential change takes effect on
  * the next publish here without restarting the service. The client this does NOT
  * own is the service-held one, used by the overlay pipeline's close-pass
- * publish and the camera-light front-mode publish through `() -> HaClient`
- * providers; the service rebuilds that client when the stored credentials
- * change, so every consumer follows a mid-session save.
+ * publish and, through [offerFrontMode], the camera-light front-mode publish,
+ * by way of `() -> HaClient` providers; the service rebuilds that client when
+ * the stored credentials change, so every consumer follows a mid-session save.
  *
- * Threading: [publishRideEdgeIfHa], the battery sends and the ride-summary
- * loop launch into the injected [scope]; the summary path runs on IO and
+ * Threading: [publishRideEdgeIfHa], the battery and front-mode sends and the
+ * ride-summary loop launch into the injected [scope]; the summary path runs on IO and
  * reads + marks the [rideStats] accumulator there. The accumulator stays single-writer-on-Main
  * for its tally side (see BikeRadarService.onCue); this IO reader only consumes
  * a consistent snapshot and never mutates the running totals. The accumulator
@@ -55,18 +55,19 @@ internal class HaPublisher(
     private val lastHaPublishMs = ConcurrentHashMap<String, Long>()
     private val lastPublishedPct = ConcurrentHashMap<String, Int>()
     private val rideSummaryDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
+    private val frontModeDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
     private fun client() = newClient(creds.baseUrl, creds.token)
 
-    private class PendingBattery(val name: String, val pct: Int, val waiters: List<CompletableDeferred<Boolean>>)
+    private class PendingSend(val send: suspend () -> Boolean, val waiters: List<CompletableDeferred<Boolean>>)
 
-    private class BatterySlot {
+    private class SendSlot {
         var draining = false
-        var pending: PendingBattery? = null
+        var pending: PendingSend? = null
     }
 
-    // Per slug; guarded by itself.
-    private val batterySlots = HashMap<String, BatterySlot>()
+    // Per device and entity; guarded by itself.
+    private val sendSlots = HashMap<String, SendSlot>()
 
     /**
      * Queues a battery reading for Home Assistant and returns at once: the
@@ -92,37 +93,58 @@ internal class HaPublisher(
 
     private fun enqueueBattery(name: String, pct: Int, waiter: CompletableDeferred<Boolean>?) {
         val s = slug(name)
-        val startDrain = synchronized(batterySlots) {
-            val slot = batterySlots.getOrPut(s) { BatterySlot() }
-            slot.pending = PendingBattery(name, pct, slot.pending?.waiters.orEmpty() + listOfNotNull(waiter))
+        enqueue("$s/battery", waiter) { sendBatteryIfDue(s, name, pct) }
+    }
+
+    /**
+     * Queues the front camera's light [mode] for Home Assistant, or only its
+     * discovery when [mode] is null, and returns at once, as [offerBattery]
+     * does and on a queue of its own
+     * (`CameraLightLinkControllerHarnessTest.aHungFrontModeSendDoesNotHoldTheCameraLoop`,
+     * `theNewestFrontModeGoesNextWhenSeveralWaitBehindAHungSend`). Each send
+     * publishes the discovery first until one succeeds. [ha] is read when the
+     * send runs.
+     */
+    fun offerFrontMode(ha: () -> HaClient, slug: String, name: String, mode: String?) = enqueue("$slug/front_mode", null) { sendFrontMode(ha(), slug, name, mode) }
+
+    private suspend fun sendFrontMode(ha: HaClient, s: String, name: String, mode: String?): Boolean {
+        if (!ha.isConfigured()) return true
+        if (frontModeDiscoveredSlugs.add(s) && !ha.publishFrontModeDiscovery(s, name)) frontModeDiscoveredSlugs.remove(s)
+        return mode == null || ha.publishFrontModeState(s, mode)
+    }
+
+    private fun enqueue(key: String, waiter: CompletableDeferred<Boolean>?, send: suspend () -> Boolean) {
+        val startDrain = synchronized(sendSlots) {
+            val slot = sendSlots.getOrPut(key) { SendSlot() }
+            slot.pending = PendingSend(send, slot.pending?.waiters.orEmpty() + listOfNotNull(waiter))
             val idle = !slot.draining
             slot.draining = true
             idle
         }
-        if (startDrain) scope.launch { drainBattery(s) }
+        if (startDrain) scope.launch { drain(key) }
     }
 
-    private suspend fun drainBattery(s: String) {
+    private suspend fun drain(key: String) {
         while (true) {
-            val next = synchronized(batterySlots) {
-                val slot = batterySlots.getValue(s)
+            val next = synchronized(sendSlots) {
+                val slot = sendSlots.getValue(key)
                 val p = slot.pending
                 slot.pending = null
                 if (p == null) slot.draining = false
                 p
             } ?: return
             val ok = try {
-                sendBatteryIfDue(s, next.name, next.pct)
+                next.send()
             } catch (e: CancellationException) {
-                val queued = synchronized(batterySlots) {
-                    val slot = batterySlots.getValue(s)
+                val queued = synchronized(sendSlots) {
+                    val slot = sendSlots.getValue(key)
                     slot.draining = false
                     slot.pending.also { slot.pending = null }
                 }
                 (next.waiters + queued?.waiters.orEmpty()).forEach { it.cancel(e) }
                 throw e
             } catch (t: Throwable) {
-                Log.w(TAG, "HA battery send for $s threw: ${t.javaClass.simpleName}")
+                Log.w(TAG, "HA send for $key threw: ${t.javaClass.simpleName}")
                 false
             }
             next.waiters.forEach { it.complete(ok) }

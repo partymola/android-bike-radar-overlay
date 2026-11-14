@@ -76,6 +76,9 @@ class RadarLinkControllerHarnessTest {
     private val app = ApplicationProvider.getApplicationContext<android.app.Application>()
     private val mac = "AA:BB:CC:DD:EE:FF"
     private val journal = Collections.synchronizedList(mutableListOf<String>())
+
+    /** Each journal line with the virtual time it was written at. */
+    private val journalAt = Collections.synchronizedList(mutableListOf<Pair<String, Long>>())
     private lateinit var beeper: AlertBeeper
 
     @Before fun setUp() {
@@ -212,7 +215,10 @@ class RadarLinkControllerHarnessTest {
         linkState = gateway,
         macToSlug = macToSlug,
         slug = { it.lowercase() },
-        journal = { journal += it },
+        journal = {
+            journal += it
+            journalAt += it to testScheduler.currentTime
+        },
         clock = clock,
         wallClock = wallClock,
         refreshGatt = refreshGatt,
@@ -1162,8 +1168,153 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
-    @Test fun aLoopReadsAsSetupUntilItsFirstReceive() {
-        assertEquals("setup", LoopStep().word)
+    // ── the watchdog counts from the start of the decode loop ───────────────────
+
+    /** Forwards every callback the controller handles, except the first
+     *  [swallow] write answers on the tail-light characteristic, so each of
+     *  those writes runs to the queue's op timeout. */
+    private class SwallowingLightWrites(private val inner: BluetoothGattCallback, private var swallow: Int) : BluetoothGattCallback() {
+        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = inner.onConnectionStateChange(g, status, newState)
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = inner.onServicesDiscovered(g, status)
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = inner.onDescriptorWrite(g, d, status)
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) = inner.onCharacteristicRead(g, ch, status)
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = inner.onCharacteristicRead(g, ch, value, status)
+        override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+            if (ch.uuid == Uuids.SETTINGS_ACK && swallow > 0) {
+                swallow--
+                return
+            }
+            inner.onCharacteristicWrite(g, ch, status)
+        }
+        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) = inner.onMtuChanged(g, mtu, status)
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) = inner.onCharacteristicChanged(g, ch)
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) = inner.onCharacteristicChanged(g, ch, value)
+    }
+
+    /** The full radar table on every connection, each of which leaves its
+     *  first [swallowedWrites] tail-light writes unanswered. */
+    private fun slowLightRadar(swallowedWrites: Int): (BluetoothGatt) -> Unit = { g ->
+        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites))
+        setUpRadarServices(g)
+    }
+
+    /** A V2 target frame every 100 ms until cancelled. */
+    private fun TestScope.feedV2(link: Link) = backgroundScope.launch {
+        while (isActive) {
+            notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+            delay(100)
+        }
+    }
+
+    private fun silentLines() = journalAt.toList().filter { " stream silent " in it.first }
+
+    private fun writtenAt(line: (String) -> Boolean): Long = journalAt.toList().first { line(it.first) }.second
+
+    /** A streaming radar whose auto-mode light set takes two op timeouts. */
+    private suspend fun TestScope.slowLightLink(): Pair<Link, RadarLinkController> {
+        val link = Link()
+        val controller = controller(
+            link,
+            prefs = autoLightPrefs(),
+            setUp = slowLightRadar(swallowedWrites = 2),
+            clock = { 1_000L + testScheduler.currentTime },
+        )
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        return link to controller
+    }
+
+    @Test fun aSlowTailLightSetDoesNotEndAStreamingRadar() = runTest {
+        val (link, controller) = slowLightLink()
+        var feeder = feedV2(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        assertTrue("journal=$journal", autoLightLine(applied = true).matches(autoLightLines().single()))
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
+        pumpUntil(timeoutMs = 8_000) { false }
+        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
+
+        // A second connection starts with the first one's last frame as its
+        // stamp, which a watchdog started before the setup would read.
+        feeder.cancel()
+        pumpUntil(timeoutMs = 3_000) { false }
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount == 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journal.count { it == "radar handshake complete" } == 2 })
+        feeder = feedV2(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 2 })
+        pumpUntil(timeoutMs = 8_000) { false }
+        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
+        feeder.cancel()
+        controller.forceReconnect()
+    }
+
+    @Test fun aStreamThatStopsAfterASlowSetupIsStillTornDown() = runTest {
+        val (link, controller) = slowLightLink()
+        val feeder = feedV2(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
+        pumpUntil(timeoutMs = 1_000) { false }
+        feeder.cancel()
+        val stoppedAt = testScheduler.currentTime
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 8_000) { silentLines().isNotEmpty() })
+        val (line, at) = silentLines().single()
+        val age = Regex("""radar V2 stream silent (\d+)ms, last received \d+ms ago, loop=waiting; tearing down""")
+            .matchEntire(line)?.groupValues?.get(1)?.toLong()
+        assertTrue("line=$line", age != null && age in 5_001L..7_000L)
+        assertTrue("torn down ${at - stoppedAt} ms after the stream stopped", at - stoppedAt in 4_900L..7_100L)
+        controller.forceReconnect()
+    }
+
+    @Test fun aRadarWhoseFirstFrameFollowsASlowSetupGetsTheStallWindow() = runTest {
+        val (link, controller) = slowLightLink()
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        val feeder = feedV2(link)
+        pumpUntil(timeoutMs = 8_000) { false }
+        assertTrue(journalHas("radar V2 stream live"))
+        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
+        feeder.cancel()
+        controller.forceReconnect()
+    }
+
+    @Test fun aTailLightThatNeverAnswersHoldsTheWatchdogOnlyUntilTheLoopStarts() = runTest {
+        val link = Link()
+        val controller = controller(
+            link,
+            prefs = autoLightPrefs(),
+            setUp = slowLightRadar(swallowedWrites = Int.MAX_VALUE),
+            clock = { 1_000L + testScheduler.currentTime },
+        )
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
+        assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
+        // Three op timeouts and the two jittered retry gaps.
+        val setupMs = writtenAt { autoLightLine(applied = false).matches(it) } - writtenAt { it == "radar handshake complete" }
+        assertTrue("setup took $setupMs ms", setupMs in 16_600L..17_400L)
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 8_000) { silentLines().isNotEmpty() })
+        // The fail tone runs before the loop starts; the stall counts from there.
+        val afterLight = silentLines().single().second - writtenAt { autoLightLine(applied = false).matches(it) }
+        assertTrue("torn down $afterLight ms after the light line", afterLight in 6_000L..7_600L)
+        assertWatchdogLine("radar V2 stream silent 6000ms, last received never, loop=waiting; tearing down")
+        controller.forceReconnect()
     }
 
     // ── a radar that opens the link and never streams is never "up" ─────────────

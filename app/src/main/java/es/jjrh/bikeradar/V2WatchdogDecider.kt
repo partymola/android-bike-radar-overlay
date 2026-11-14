@@ -17,9 +17,12 @@ package es.jjrh.bikeradar
  * `now - lastFrame` and let a silently-dead radar look alive. elapsedRealtime
  * advances across deep sleep and never jumps backward.
  *
- * [lastFrameMs] == 0 means "no frame yet this connection": the watchdog gives
- * the first frame a fair chance to arrive and never tears down before one lands.
- * The boundary is strictly-greater, matching the prior inline `ageMs > stall`.
+ * The caller stamps [lastFrameMs] when its decode loop starts, so a radar that
+ * completes the handshake and never streams is still torn down
+ * (`RadarLinkControllerHarnessTest.watchdogTearsDownSilentV2Stream`). A 0 stamp
+ * reads as fresh: production never passes one, since elapsedRealtime is past
+ * zero by then, and a harness clock fixed at 0 relies on it to keep the
+ * watchdog off. The boundary is strictly-greater.
  */
 object V2WatchdogDecider {
     fun isStale(nowMs: Long, lastFrameMs: Long, stallMs: Long): Boolean = lastFrameMs != 0L && nowMs - lastFrameMs > stallMs

@@ -179,7 +179,7 @@ internal class RadarLinkController(
     // is precisely the absent-radar case the journal is read for.
     @Volatile private var reconnectJournalled = false
 
-    // Last time the V2 stream produced a frame (watchdog clock); 0 = none yet.
+    // Watchdog clock at the decode loop's start and at each frame it consumes.
     @Volatile private var lastV2FrameMs: Long = 0L
 
     // Owns the change-debounce and the per-answer since= stamps; see
@@ -818,10 +818,8 @@ internal class RadarLinkController(
             var v2FrameCount = 0
 
             // Mark this connection as healthy so the reconnect loop resets
-            // its backoff. Initialise the watchdog clock to "now" so we give
-            // the first frame a fair chance to arrive.
+            // its backoff.
             lastConnectionReachedDecode = true
-            lastV2FrameMs = clock()
 
             // Drop the connection interval from BALANCED to LOW_POWER once
             // the V2 stream is up: the radar pushes notifications at its own
@@ -831,35 +829,6 @@ internal class RadarLinkController(
                 if (!ok) Log.w(TAG, "requestConnectionPriority(LOW_POWER) returned false")
             } catch (t: Throwable) {
                 Log.w(TAG, "requestConnectionPriority threw: $t")
-            }
-
-            // Data-flow watchdog: if no V2 frame arrives for V2_FRAME_STALL_MS,
-            // tear down the GATT so the outer loop can reconnect. Catches the
-            // case where the stack thinks we are still connected but the radar
-            // has gone silent.
-            val capturedGatt = gatt
-            val step = LoopStep()
-            watchdogJob = scope.launch {
-                while (true) {
-                    delay(V2_WATCHDOG_TICK_MS)
-                    val now = clock()
-                    val last = lastV2FrameMs
-                    if (V2WatchdogDecider.isStale(now, last, V2_FRAME_STALL_MS)) {
-                        val ageMs = now - last
-                        Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
-                        // Both clocks: the watchdog's is when a frame was
-                        // consumed, so a receipt more recent than it means the
-                        // decode loop was held up, not the radar silent; the
-                        // step says where.
-                        val received = receipts.receivedAgo(now)
-                        journal("radar V2 stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
-                        receipts.endingByApp()
-                        try {
-                            capturedGatt.disconnect()
-                        } catch (_: Throwable) {}
-                        return@launch
-                    }
-                }
             }
 
             // Subscribe the radar control-service mode-state notify (6a4e2f14)
@@ -963,7 +932,39 @@ internal class RadarLinkController(
                 }
             }
 
-            step.word = LoopStep.WAITING
+            // Data-flow watchdog: if no V2 frame is consumed for
+            // V2_FRAME_STALL_MS, tear down the GATT so the outer loop can
+            // reconnect. Catches the case where the stack thinks we are still
+            // connected but the radar has gone silent. Stamped and started
+            // here, after the connect-time writes above, which can run several
+            // op timeouts and must not count as silence
+            // (`aSlowTailLightSetDoesNotEndAStreamingRadar`).
+            val capturedGatt = gatt
+            val step = LoopStep()
+            lastV2FrameMs = clock()
+            watchdogJob = scope.launch {
+                while (true) {
+                    delay(V2_WATCHDOG_TICK_MS)
+                    val now = clock()
+                    val last = lastV2FrameMs
+                    if (V2WatchdogDecider.isStale(now, last, V2_FRAME_STALL_MS)) {
+                        val ageMs = now - last
+                        Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
+                        // Both clocks: the watchdog's is when a frame was
+                        // consumed, so a receipt more recent than it means the
+                        // decode loop was held up, not the radar silent; the
+                        // step says where.
+                        val received = receipts.receivedAgo(now)
+                        journal("radar V2 stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
+                        receipts.endingByApp()
+                        try {
+                            capturedGatt.disconnect()
+                        } catch (_: Throwable) {}
+                        return@launch
+                    }
+                }
+            }
+
             for ((uuid, bytes) in notifyChannel) {
                 // Reset in a finally, which the `continue` below runs too
                 // (`aWatchdogTeardownNamesTheLoopWaiting`).
@@ -1161,7 +1162,6 @@ internal class RadarLinkController(
         }
 
         try {
-            step.word = LoopStep.WAITING
             for ((uuid, bytes) in notifyChannel) {
                 // Reset in a finally, which the `continue`s run too.
                 try {
@@ -1535,11 +1535,9 @@ internal class StreamReceipts(private val clock: () -> Long) {
  * journal's masking leaves them alone (`aWatchdogTeardownNamesTheLoopWaiting`).
  */
 internal class LoopStep {
-    @Volatile var word: String = SETUP
+    @Volatile var word: String = WAITING
 
     companion object {
-        /** Before the loop's first receive: the connect-time writes. */
-        const val SETUP = "setup"
         const val WAITING = "waiting"
         const val DECODING = "decoding"
         const val LIGHT_STATE = "lightstate"

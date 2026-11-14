@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * Pins the rear-radar V2 data-flow watchdog staleness decision: the
- * strictly-greater teardown boundary, the "no frame yet" guard, and - the
+ * strictly-greater teardown boundary, the zero-stamp guard, and - the
  * safety point - that once the monotonic age exceeds the stall it stays stale
  * as time advances, so a silently-dead radar is always torn down. Plain JVM:
  * the decider takes nowMs as an argument, so there is no clock to mock (the
@@ -18,7 +18,7 @@ class V2WatchdogDeciderTest {
 
     private val stall = 5_000L
 
-    @Test fun noFrameYetIsNeverStale() {
+    @Test fun aZeroStampIsNeverStale() {
         assertFalse(V2WatchdogDecider.isStale(nowMs = 1_000_000L, lastFrameMs = 0L, stallMs = stall))
     }
 

@@ -494,6 +494,18 @@ must not be changed about it. Four that bite in ordinary work:
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.
+- **The V2 data-flow watchdog counts from the start of the decode loop, not
+  from the handshake.** The connect-time writes before the loop (the 2f14
+  subscribe and the tail-light set, whose retries can run to three op
+  timeouts) must not count as silence. Started before them, the watchdog
+  would tear down a streaming radar on every connect while the cause lasted.
+  `lastV2FrameMs` is stamped as the watchdog starts, not only on a frame, so a
+  radar that never streams is still torn down
+  (`RadarLinkControllerHarnessTest.aSlowTailLightSetDoesNotEndAStreamingRadar`,
+  `aRadarWhoseFirstFrameFollowsASlowSetupGetsTheStallWindow`,
+  `aTailLightThatNeverAnswersHoldsTheWatchdogOnlyUntilTheLoopStarts`,
+  `watchdogTearsDownSilentV2Stream`). Frames that arrive during those writes
+  wait in the channel, so no alert is decided until the loop starts.
 - **The dashcam walk-away alarm hears the camera only through a battery read
   it answered or its established light link, never through
   `BatteryStateBus`**, which sightings with no contact also stamp

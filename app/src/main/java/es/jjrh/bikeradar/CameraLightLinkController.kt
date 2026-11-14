@@ -431,7 +431,11 @@ internal class CameraLightLinkController(
                         // The bus refuses 0xFF and the like, and then nothing is sent
                         // (`aBatteryByteThatIsNotAPercentageGoesNowhere`).
                         val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        if (BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct)) && !prefs.isPaused) {
+                        if (!BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))) {
+                            // Still seen; a camera with no earlier valid reading
+                            // still reads as not seen (`aRefusedBatteryByteStillMarksTheCameraSeen`).
+                            BatteryStateBus.markSeen(lightSlugEarly)
+                        } else if (!prefs.isPaused) {
                             haPublisher.offerBattery(name, pct)
                         }
                     }

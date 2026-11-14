@@ -60,7 +60,9 @@ object BatteryStateBus {
      *  entry without changing pct. Used when we
      *  see the device in an advert but the throttle is skipping the actual
      *  GATT read: the advert proves liveness to the screen, and is no contact
-     *  as far as the walk-away alarm is concerned. No-op if the slug has no
+     *  as far as the walk-away alarm is concerned. Also when a device answers
+     *  with a byte [update] refuses (`aRefusedReadingAfterAValidOneKeepsTheDeviceSeen`).
+     *  No-op if the slug has no
      *  prior entry (first sighting still goes through a full read + [update]). */
     fun markSeen(
         slug: String,

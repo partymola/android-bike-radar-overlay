@@ -394,6 +394,20 @@ class CameraLightLinkControllerHarnessTest {
         controller.stop()
     }
 
+    @Test fun aRefusedBatteryByteStillMarksTheCameraSeen() = runTest {
+        val (link, controller) = handshookLink(RecordingHaClient(), prefs(paused = false))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 60 })
+        BatteryStateBus.update(BatteryEntry("cam", "Cam", 60, readAtMs = 1L, lastSeenElapsedMs = 1L))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "ff")
+        assertTrue(
+            "entry=${BatteryStateBus.entries.value["cam"]}",
+            pumpUntil(timeoutMs = 1_000) { (BatteryStateBus.entries.value["cam"]?.readAtMs ?: 0L) > 1L },
+        )
+        assertEquals(60, BatteryStateBus.entries.value["cam"]?.pct)
+        controller.stop()
+    }
+
     @Test fun theEndsOfTheRangeArePercentagesAndOnePastIsNot() = runTest {
         val ha = RecordingHaClient()
         val (link, controller) = handshookLink(ha, prefs(paused = false))

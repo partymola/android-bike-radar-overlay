@@ -80,6 +80,10 @@ internal class BatteryReader(
     // never clears a later read's guard (`aLaunchInTheSameMillisecondIsGuardedToo`).
     private val attemptInFlight = ConcurrentHashMap<String, Any>()
 
+    // The last refused byte per mac, so a device answering 0xFF on every read
+    // logs once (`aRefusalIsLoggedOnceUntilTheValueOrDeviceChanges`).
+    private val lastRefused = ConcurrentHashMap<String, Int>()
+
     /**
      * Real GATT battery read, bypassing the SharedPrefs throttle but skipped
      * while a read of the same device is in flight, so fires from different
@@ -173,9 +177,13 @@ internal class BatteryReader(
         // A byte that is not a percentage (0xFF is "unknown") goes nowhere,
         // though the device did answer (`aReadByteThatIsNotAPercentageGoesNowhere`).
         if (!BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = answeredAtMs))) {
-            Log.w(TAG, "battery $name: $pct is not a percentage")
+            if (lastRefused.put(mac, pct) != pct) Log.w(TAG, "battery $name: $pct is not a percentage")
+            // Still seen; a device with no earlier valid reading still reads as not seen.
+            BatteryStateBus.markSeen(s, wallClock(), answeredAtMs)
+            sp.edit().putLong("${KEY_LAST_TS}_$s", wallClock()).apply()
             return
         }
+        lastRefused.remove(mac)
 
         // Only arm the 5-min throttle if the send this reading went out in
         // succeeded, had nothing new to send, or HA isn't configured at all. On

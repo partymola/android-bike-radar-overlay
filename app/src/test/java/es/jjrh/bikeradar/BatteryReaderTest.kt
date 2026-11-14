@@ -172,8 +172,69 @@ class BatteryReaderTest {
 
         assertNull(BatteryStateBus.entries.value["cam"])
         assertEquals(emptyList<Int>(), sent)
-        assertFalse(throttleArmed("cam"))
+        assertTrue("the device answered, so a refusal is no failed send to retry", throttleArmed("cam"))
         assertEquals("the camera still answered the read", mapOf(camAddr to 5_000L), answered)
+    }
+
+    @Test
+    fun aRefusedReadingAfterAValidOneKeepsTheDeviceSeen() = runTest {
+        var wall = 1_000_000L
+        var mono = 5_000L
+        val bytes = ArrayDeque(listOf(80, 255))
+        val r = reader(readBatteryFn = { bytes.removeFirst() }, monoClock = { mono }, wallClock = { wall })
+        r.doReadBattery("Cam", camAddr)
+        wall = 1_040_000L
+        mono = 45_000L
+        r.doReadBattery("Cam", camAddr)
+
+        val entry = requireNotNull(BatteryStateBus.entries.value["cam"])
+        assertEquals("the last percentage stays", 80, entry.pct)
+        assertEquals(1_040_000L, entry.readAtMs)
+        assertEquals(45_000L, entry.lastSeenElapsedMs)
+    }
+
+    @Test
+    fun aCameraThatKeepsAnswering255StaysOkPastTheFreshWindow() = runTest {
+        var wall = 1_000_000L
+        val bytes = ArrayDeque(listOf(80, 255, 255))
+        val r = reader(readBatteryFn = { bytes.removeFirst() }, wallClock = { wall })
+        for (at in listOf(1_000_000L, 1_020_000L, 1_040_000L)) {
+            wall = at
+            r.doReadBattery("Cam", camAddr)
+        }
+
+        fun statusAt(nowMs: Long, entries: Map<String, BatteryEntry>, seen: Boolean) = DashcamStatusDeriver.derive(
+            config = DashcamStatusDeriver.Config(warnWhenOff = true, selectedSlug = "cam"),
+            entries = entries,
+            nowMs = nowMs,
+            sessionStartMs = 0L,
+            seenThisSession = seen,
+            freshMs = BikeRadarService.DASHCAM_FRESH_MS,
+            coldStartMs = BikeRadarService.DASHCAM_COLD_START_MS,
+        )
+        assertEquals(DashcamStatus.Ok, statusAt(1_045_000L, BatteryStateBus.entries.value, seen = true))
+
+        // A camera with no earlier valid reading has no entry to keep fresh.
+        BatteryStateBus.clearForTest()
+        reader(readBatteryFn = { 255 }, wallClock = { 1_045_000L }).doReadBattery("Cam", camAddr)
+        assertEquals(DashcamStatus.Missing, statusAt(1_045_000L, BatteryStateBus.entries.value, seen = false))
+    }
+
+    @Test
+    fun aRefusalIsLoggedOnceUntilTheValueOrDeviceChanges() = runTest {
+        org.robolectric.shadows.ShadowLog.clear()
+        val bytes = ArrayDeque(listOf(255, 255, 255, 254, 254))
+        val r = reader(readBatteryFn = { bytes.removeFirst() })
+        repeat(4) { r.doReadBattery("Cam", camAddr) }
+        r.doReadBattery("RearVue8", radarAddr)
+
+        val warnings = org.robolectric.shadows.ShadowLog.getLogsForTag("BikeRadar")
+            .map { it.msg }
+            .filter { it.contains("is not a percentage") }
+        assertEquals(
+            listOf("battery Cam: 255 is not a percentage", "battery Cam: 254 is not a percentage", "battery RearVue8: 254 is not a percentage"),
+            warnings,
+        )
     }
 
     @Test

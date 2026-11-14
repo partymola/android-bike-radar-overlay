@@ -226,7 +226,7 @@ class RideStatsAccumulatorTest {
     // ── overtakes_total ──────────────────────────────────────────────────────
 
     @Test
-    fun overtakesTotalDedupsByTrackId() {
+    fun overtakesTotalDedupsByTrackIdAndBirth() {
         val a = acc()
         a.observeFrame(radarState(listOf(veh(1), veh(2))))
         a.observeFrame(radarState(listOf(veh(1), veh(2), veh(3))))
@@ -285,6 +285,19 @@ class RideStatsAccumulatorTest {
         val s = a.snapshot()
         assertEquals(2, s.overtakesTotal)
         assertEquals(50f, s.closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun aCarRebornOnItsOldIdAfterAPruneCountsAgain() {
+        // Deliberate: a birth stamp cannot tell a car the radar lost and found
+        // again from a new car on a recycled id, and nor can a reconnect.
+        val a = acc()
+        a.observeFrame(radarState(listOf(veh(3, bornAtMs = 100L))))
+        a.observeFrame(radarState())
+        a.observeFrame(radarState(listOf(veh(3, bornAtMs = 1_000L))))
+        a.dropOpenTracks()
+        a.observeFrame(radarState(listOf(veh(3, bornAtMs = 5_000L))))
+        assertEquals(3, a.snapshot().overtakesTotal)
     }
 
     @Test

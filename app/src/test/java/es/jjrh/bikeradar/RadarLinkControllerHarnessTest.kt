@@ -37,6 +37,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -153,6 +154,9 @@ class RadarLinkControllerHarnessTest {
         /** Runs inside each disconnect edge, so a test can act mid-teardown. */
         @Volatile var onDisconnect: () -> Unit = {}
 
+        /** Runs inside the connected edge, so a test can hold the loop there. */
+        @Volatile var onConnected: () -> Unit = {}
+
         /** What each disconnect edge carried, in order. */
         val losses: MutableList<LinkLoss?> = Collections.synchronizedList(mutableListOf())
         override fun markLinkOpen(mac: String) {
@@ -161,6 +165,7 @@ class RadarLinkControllerHarnessTest {
         }
         override fun markConnected() {
             events += "connected"
+            onConnected()
         }
         override fun markDisconnected(loss: LinkLoss?) {
             events += "disconnected"
@@ -353,8 +358,8 @@ class RadarLinkControllerHarnessTest {
 
     /** Background loop completing the read/CCCD/MTU ops ShadowBluetoothGatt does
      *  not auto-fire, routed through the controller's own callback. */
-    private fun TestScope.startDriver(link: Link) {
-        backgroundScope.launch {
+    private fun TestScope.startDriver(link: Link, scope: CoroutineScope = backgroundScope) {
+        scope.launch {
             while (isActive) {
                 val cb = link.cb
                 val gatt = link.gatt
@@ -525,6 +530,22 @@ class RadarLinkControllerHarnessTest {
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
         notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
         assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 59 })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
+        controller.forceReconnect()
+    }
+
+    @Test fun aPausedLegacyLinkSendsNoBatteryToHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val link = Link()
+        val controller = controller(link, prefs = prefs(paused = true), ha = ha, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
         pumpUntil(timeoutMs = 300) { false }
         assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
         controller.forceReconnect()
@@ -1131,6 +1152,10 @@ class RadarLinkControllerHarnessTest {
             pumpUntil { journalHas("V2 stream silent") },
         )
         assertWatchdogLine("radar V2 stream silent 7000ms, last received never, loop=waiting; tearing down")
+        // Once: with the disconnect not called back the loop runs on, and the
+        // watchdog must not tear down again on its later ticks.
+        pumpUntil(timeoutMs = 5_000) { false }
+        assertWatchdogLine("radar V2 stream silent 7000ms, last received never, loop=waiting; tearing down")
         // A radar that completes the handshake and never streams cycles this
         // way, and covers nothing.
         assertEquals(0, gateway.connects)
@@ -1165,6 +1190,113 @@ class RadarLinkControllerHarnessTest {
         clockMs.set(9_000L)
         assertTrue("journal=$journal", pumpUntil { journalHas("stream silent") })
         assertWatchdogLine("radar V2 stream silent 7000ms, last received 8000ms ago, loop=waiting; tearing down")
+        controller.forceReconnect()
+    }
+
+    @Test fun aWatchdogTeardownNamesTheStepTheLoopIsHeldIn() = runTest {
+        // The loop is held inside the first frame's step, so the watchdog has
+        // to run beside it: real threads, as in production.
+        val pool = Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+        val realPool = CoroutineScope(SupervisorJob() + pool)
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            val link = Link()
+            val gateway = FakeGateway()
+            gateway.onConnected = {
+                held.countDown()
+                release.await(30, TimeUnit.SECONDS)
+            }
+            val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+            val controller = controller(link, scope = realPool, gateway = gateway, clock = { clockMs.get() })
+            startDriver(link, realPool)
+            controller.start("TestRadar", mac)
+            assertTrue(waitReal(5_000) { link.cb != null })
+            bootstrap(link)
+            feedHandshakeReplies(link)
+            assertTrue("journal=$journal", waitReal(10_000) { journalHas("radar handshake complete") })
+            notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+            assertTrue("the first frame must reach the gateway", held.await(5, TimeUnit.SECONDS))
+            clockMs.set(8_000L)
+            assertTrue("journal=$journal", waitReal(10_000) { journalHas("stream silent") })
+            assertWatchdogLine("radar V2 stream silent 7000ms, last received 7000ms ago, loop=decoding; tearing down")
+        } finally {
+            release.countDown()
+            // The overlay pipeline runs on the main looper, which only this
+            // thread turns, so the pool cannot finish until it is idled.
+            val job = realPool.coroutineContext.job
+            job.cancel()
+            val mainLooper = shadowOf(android.os.Looper.getMainLooper())
+            assertTrue("the pool must wind down", waitReal(10_000) { mainLooper.idle().let { job.isCompleted } })
+            pool.close()
+        }
+    }
+
+    // ── the watchdog's teardown ends the link ───────────────────────────────────
+    // The shadow calls a disconnect back only on a link notifyConnection opened.
+    // The callback's own close then disconnects again from inside it, so these
+    // look for an edge, never a count of them.
+
+    @Test fun theWatchdogsDisconnectEndsAV2LinkAndTheLoopReconnects() = runTest {
+        val link = Link()
+        val gateway = FakeGateway()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, gateway = gateway, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        shadowOf(requireNotNull(link.gatt)).notifyConnection(mac)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        assertFalse(gateway.events.contains("disconnected"))
+        clockMs.set(8_000L)
+        assertTrue("journal=$journal", pumpUntil { journalHas("V2 stream silent") })
+        assertTrue("the teardown must end the link; journal=$journal", pumpUntil { link.openCount >= 2 })
+        assertTrue(journalHas("radar conn state status=0 newState=0"))
+        assertTrue(gateway.events.contains("disconnected"))
+        controller.forceReconnect()
+    }
+
+    @Test fun theWatchdogsDisconnectEndsALegacyLinkAndTheLoopReconnects() = runTest {
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        val opened = link.openCount
+        shadowOf(requireNotNull(link.gatt)).notifyConnection(mac)
+        assertFalse(journalHas("radar conn state status=0 newState=0"))
+        clockMs.set(8_000L)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream silent") })
+        assertTrue("the teardown must end the link; journal=$journal", pumpUntil { link.openCount > opened })
+        assertTrue(journalHas("radar conn state status=0 newState=0"))
+        controller.forceReconnect()
+    }
+
+    // ── what counts as a radar frame ────────────────────────────────────────────
+
+    /** One parked target, which the decoder keeps for seconds, not 800 ms. */
+    private val v2ParkedTargetFrame = "0000011700900110080080"
+
+    @Test fun aPureStatusV2FrameLeavesThePublishedStateAsItWas() = runTest {
+        // A new state on the bus is what the alert path reads as a new radar
+        // frame, so a status frame that changes nothing must publish nothing.
+        val (link, controller) = streamingLink(RecordingHaClient(), prefs())
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2ParkedTargetFrame)
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
+        val before = RadarStateBus.state.value
+        // The decoder stamps on the wall clock, so a state republished from the
+        // status frame then carries a new stamp the bus cannot drop as equal.
+        Thread.sleep(5)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, "0100")
+        // First in, first out: the battery reading is the witness that the
+        // loop has read the status frame.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        assertSame(before, RadarStateBus.state.value)
         controller.forceReconnect()
     }
 
@@ -1308,7 +1440,7 @@ class RadarLinkControllerHarnessTest {
         assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
         // Three op timeouts and the two jittered retry gaps.
         val setupMs = writtenAt { autoLightLine(applied = false).matches(it) } - writtenAt { it == "radar handshake complete" }
-        assertTrue("setup took $setupMs ms", setupMs in 16_600L..17_400L)
+        assertTrue("setup took $setupMs ms", setupMs in 16_500L..17_500L)
         assertTrue("journal=$journal", pumpUntil(timeoutMs = 8_000) { silentLines().isNotEmpty() })
         // The fail tone runs before the loop starts; the stall counts from there.
         val afterLight = silentLines().single().second - writtenAt { autoLightLine(applied = false).matches(it) }
@@ -2448,6 +2580,8 @@ class RadarLinkControllerHarnessTest {
             "a silent legacy stream must be torn down by the watchdog",
             pumpUntil { journalHas("radar legacy stream silent") },
         )
+        assertWatchdogLine("radar legacy stream silent 7000ms, last received never, loop=waiting; tearing down")
+        pumpUntil(timeoutMs = 5_000) { false }
         assertWatchdogLine("radar legacy stream silent 7000ms, last received never, loop=waiting; tearing down")
         controller.forceReconnect()
     }

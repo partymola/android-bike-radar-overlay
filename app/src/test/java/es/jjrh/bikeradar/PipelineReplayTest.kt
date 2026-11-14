@@ -114,6 +114,13 @@ class PipelineReplayTest {
             snap.closePassCount == 0 || snap.closePassConversionRatePct > 0f,
         )
 
+        // The fixture's own counts, every car in range seen while counting ran.
+        // One id is reused by a second car, so keying cars on the id alone
+        // gives 19 and a rate of 31.6%.
+        assertEquals(20, snap.overtakesTotal)
+        assertEquals(6, snap.closePassCount)
+        assertEquals(30f, snap.closePassConversionRatePct, 0.001f)
+
         // Plausibility: ranges that should hold for under two minutes of urban capture.
         assertTrue(
             "ride start must be the early clock value, got ${snap.rideStartedAtMs}",

@@ -80,7 +80,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 .put("retain", retain)
                 .put("qos", 0)
                 .toString()
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            val conn = openConnection(url).apply {
                 requestMethod = "POST"
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "application/json")
@@ -125,11 +125,11 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("${baseUrl.trimEnd('/')}/api/")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openConnection(url).apply {
                     requestMethod = "GET"
                     setRequestProperty("Authorization", "Bearer $token")
-                    connectTimeout = HA_TIMEOUT_MS
-                    readTimeout = HA_TIMEOUT_MS
+                    connectTimeout = HA_TEST_TIMEOUT_MS
+                    readTimeout = HA_TEST_TIMEOUT_MS
                 }
                 val code = conn.responseCode
                 if (code in 200..299) {
@@ -185,12 +185,12 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                     .put("retain", true)
                     .put("qos", 0)
                     .toString()
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openConnection(url).apply {
                     requestMethod = "POST"
                     setRequestProperty("Authorization", "Bearer $token")
                     setRequestProperty("Content-Type", "application/json")
-                    connectTimeout = HA_TIMEOUT_MS
-                    readTimeout = HA_TIMEOUT_MS
+                    connectTimeout = HA_TEST_TIMEOUT_MS
+                    readTimeout = HA_TEST_TIMEOUT_MS
                     doOutput = true
                 }
                 conn.outputStream.use { it.write(body.toByteArray()) }
@@ -226,6 +226,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
         val ping = ping()
         return HaConnectionTest(ping, if (ping.isSuccess) probeMqttService() else null)
     }
+
+    /** Open so a test can read the timeouts each request sets (`HaClientHttpTest`). */
+    internal open fun openConnection(url: URL): HttpURLConnection = url.openConnection() as HttpURLConnection
 
     /**
      * Read the response stream to completion so the underlying TCP socket
@@ -582,10 +585,12 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 
         // 3 s connect+read keeps the radio awake at most ~6 s on a failed
         // publish during a flaky cell handover; the next heartbeat will
-        // retry. HA endpoints used here are mqtt.publish (broker queue
-        // write) and /api/ ping - neither does HA-side processing that
-        // would justify a longer timeout.
+        // retry. mqtt.publish is a broker queue write, with no HA-side
+        // processing that would justify a longer timeout.
         private const val HA_TIMEOUT_MS = 3000
+
+        // The Test button's two requests: a rider watching a spinner, not a background radio cost.
+        private const val HA_TEST_TIMEOUT_MS = 10_000
 
         // Home Assistant's `/api/` answer is a few dozen bytes.
         private const val PING_BODY_MAX_BYTES = 4096

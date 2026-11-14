@@ -15,8 +15,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -97,7 +99,8 @@ class HaClientHttpTest {
             exchange.sendResponseHeaders(200, 0)
             exchange.responseBody.write("""{"mess""".toByteArray())
             exchange.responseBody.flush()
-            Thread.sleep(10_000)
+            // Past the test's 10 s read timeout, so the timeout is what ends the read.
+            Thread.sleep(20_000)
             return
         }
         val topic = if (body.isNotEmpty()) JSONObject(body).optString("topic").ifEmpty { null } else null
@@ -326,6 +329,37 @@ class HaClientHttpTest {
         assertTrue(r.ping.isFailure)
         assertNull(r.mqtt)
         assertEquals(1, requests.size)
+    }
+
+    // ── timeouts ─────────────────────────────────────────────────────────────
+
+    /** Keeps every connection it opens, so a test can read its timeouts. */
+    private class TimeoutReadingClient(baseUrl: String) : HaClient(baseUrl, "tok") {
+        val opened = CopyOnWriteArrayList<HttpURLConnection>()
+
+        override fun openConnection(url: URL): HttpURLConnection = super.openConnection(url).also { opened.add(it) }
+    }
+
+    @Test
+    fun theConnectionTestWaitsTenSecondsForEachRequest() = runTest {
+        respondAll(200)
+        val c = TimeoutReadingClient(baseUrl())
+        assertTrue(c.testConnection().mqtt!!.isSuccess)
+        assertEquals(2, c.opened.size)
+        for (conn in c.opened) {
+            assertEquals(10_000, conn.connectTimeout)
+            assertEquals(10_000, conn.readTimeout)
+        }
+    }
+
+    @Test
+    fun aPublishStillGivesUpAfterThreeSeconds() = runTest {
+        respondAll(200)
+        val c = TimeoutReadingClient(baseUrl())
+        assertTrue(c.publishMqtt("t", "p", retain = false))
+        val conn = c.opened.single()
+        assertEquals(3_000, conn.connectTimeout)
+        assertEquals(3_000, conn.readTimeout)
     }
 
     @Test

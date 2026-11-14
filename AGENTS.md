@@ -535,7 +535,9 @@ must not be changed about it. Four that bite in ordinary work:
   `HaPublisher.offerBattery`, and the camera hands its light mode to
   `HaPublisher.offerFrontMode`; both return at once. The send runs on the
   service scope, one per device and entity at a time, and the newest value
-  goes next. A send awaited on a loop holds the radar frames behind a
+  goes next, except that a front-mode offer carrying no mode never replaces
+  one that does (`HaPublisherTest.aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode`).
+  A send awaited on a loop holds the radar frames behind a
   blocking request: alerts decide on a stale state, and the data-flow
   watchdog tears down a link that is streaming
   (`RadarLinkControllerHarnessTest.aHungBatterySend*`,

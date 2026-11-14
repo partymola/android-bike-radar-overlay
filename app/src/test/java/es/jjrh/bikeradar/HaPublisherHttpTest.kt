@@ -31,11 +31,10 @@ import java.util.concurrent.Executors
  * Configured-path coverage for [HaPublisher]: battery discovery+state and its
  * throttle/rollback, ride-edge, and the full ride-summary branch matrix
  * (no-mac, unknown-slug, uppercase-MAC fallback, discovery/state failure).
- * Drives a real loopback JDK [HttpServer] (the HaClientHttpTest pattern) rather
- * than a mock - HaClient talks straight to HttpURLConnection with no interface
- * seam, so a local server is the cleanest way to exercise the orchestration
- * without faking the wire. The HA-unconfigured no-op contract lives in
- * HaPublisherTest.
+ * Drives a real loopback JDK [HttpServer] (the HaClientHttpTest pattern), so
+ * these tests cover the real wire under the orchestration; HaPublisherTest
+ * drives the same orchestration through a [RecordingHaClient] and holds the
+ * HA-unconfigured no-op contract.
  */
 @RunWith(RobolectricTestRunner::class)
 class HaPublisherHttpTest {

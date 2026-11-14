@@ -14,18 +14,18 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * All outbound Home Assistant MQTT publishing: device-battery state, the
- * ride-edge markers, and the periodic ride-summary snapshot. Optional - every
- * method is a clean no-op when HA is not configured, so a radar-only rider who
- * never set up HA pays nothing.
+ * Outbound Home Assistant MQTT publishing for device-battery state, the front
+ * camera's light mode, the ride-edge markers and the periodic ride-summary
+ * snapshot. The close-pass event does not go through here: the overlay
+ * pipeline publishes it itself. Optional - every method is a clean no-op when
+ * HA is not configured, so a radar-only rider who never set up HA pays nothing.
  *
  * A fresh [HaClient] is built per publish call from [creds] (whose `baseUrl` /
  * `token` getters re-read storage live), so a credential change takes effect on
- * the next publish here without restarting the service. The client this does NOT
- * own is the service-held one, used by the overlay pipeline's close-pass
- * publish and, through [offerFrontMode], the camera-light front-mode publish,
- * by way of `() -> HaClient` providers; the service rebuilds that client when
- * the stored credentials change, so every consumer follows a mid-session save.
+ * the next publish here without restarting the service. The front-mode send is
+ * the exception: it uses the service-held client, through the `() -> HaClient`
+ * provider [offerFrontMode] takes, which the service rebuilds when the stored
+ * credentials change, so it follows a mid-session save too.
  *
  * Threading: [publishRideEdgeIfHa], the battery and front-mode sends and the
  * ride-summary loop launch into the injected [scope]; the summary path runs on IO and
@@ -102,10 +102,14 @@ internal class HaPublisher(
      * does and on a queue of its own
      * (`CameraLightLinkControllerHarnessTest.aHungFrontModeSendDoesNotHoldTheCameraLoop`,
      * `theNewestFrontModeGoesNextWhenSeveralWaitBehindAHungSend`). Each send
-     * publishes the discovery first until one succeeds. [ha] is read when the
-     * send runs.
+     * publishes the discovery first until one succeeds, so a discovery-only
+     * offer never replaces a mode still waiting
+     * (`aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode`). [ha] is read when the
+     * send runs (`theFrontModeGoesToTheClientCurrentWhenItsSendRuns`).
      */
-    fun offerFrontMode(ha: () -> HaClient, slug: String, name: String, mode: String?) = enqueue("$slug/front_mode", null) { sendFrontMode(ha(), slug, name, mode) }
+    fun offerFrontMode(ha: () -> HaClient, deviceSlug: String, name: String, mode: String?) = enqueue("$deviceSlug/front_mode", null, yieldsToWaiting = mode == null) {
+        sendFrontMode(ha(), deviceSlug, name, mode)
+    }
 
     private suspend fun sendFrontMode(ha: HaClient, s: String, name: String, mode: String?): Boolean {
         if (!ha.isConfigured()) return true
@@ -113,10 +117,18 @@ internal class HaPublisher(
         return mode == null || ha.publishFrontModeState(s, mode)
     }
 
-    private fun enqueue(key: String, waiter: CompletableDeferred<Boolean>?, send: suspend () -> Boolean) {
+    /** An offer replaces the one waiting for [key], unless it [yieldsToWaiting]. */
+    private fun enqueue(
+        key: String,
+        waiter: CompletableDeferred<Boolean>?,
+        yieldsToWaiting: Boolean = false,
+        send: suspend () -> Boolean,
+    ) {
         val startDrain = synchronized(sendSlots) {
             val slot = sendSlots.getOrPut(key) { SendSlot() }
-            slot.pending = PendingSend(send, slot.pending?.waiters.orEmpty() + listOfNotNull(waiter))
+            val waiting = slot.pending
+            val kept = if (yieldsToWaiting && waiting != null) waiting.send else send
+            slot.pending = PendingSend(kept, waiting?.waiters.orEmpty() + listOfNotNull(waiter))
             val idle = !slot.draining
             slot.draining = true
             idle
@@ -144,6 +156,8 @@ internal class HaPublisher(
                 (next.waiters + queued?.waiters.orEmpty()).forEach { it.cancel(e) }
                 throw e
             } catch (t: Throwable) {
+                // Swallowed on purpose: the drain rides a scope with no exception
+                // handler, so a throw escaping here would take the process down.
                 Log.w(TAG, "HA send for $key threw: ${t.javaClass.simpleName}")
                 false
             }

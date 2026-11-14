@@ -6,10 +6,12 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
@@ -206,6 +208,38 @@ class HaPublisherTest {
         assertEquals(listOf("80"), ha.batteryStates("radar"))
     }
 
+    @Test fun aHungSendForOneDeviceDoesNotHoldAnothers() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hangState(ha, "80", release)
+        val p = configured(ha, backgroundScope)
+        p.offerBattery("Radar", 80)
+        runCurrent()
+        p.offerBattery("Cam", 70)
+        runCurrent()
+        assertEquals(listOf("70"), ha.batteryStates("cam"))
+        release.complete(Unit)
+    }
+
+    @Test fun aCancelledSendCancelsItsWaitersAndALaterOfferStartsAgain() = runTest {
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        hangState(ha, "80", release)
+        val scope = CoroutineScope(backgroundScope.coroutineContext + Job(backgroundScope.coroutineContext[Job]))
+        val p = configured(ha, scope)
+        val inFlight = async { runCatching { p.sendBattery("Radar", 80) } }
+        runCurrent()
+        val waiting = async { runCatching { p.sendBattery("Radar", 79) } }
+        runCurrent()
+        requireNotNull(scope.coroutineContext[Job]).children.forEach { it.cancel() }
+        runCurrent()
+        assertTrue(inFlight.await().exceptionOrNull() is CancellationException)
+        assertTrue(waiting.await().exceptionOrNull() is CancellationException)
+        p.offerBattery("Radar", 78)
+        runCurrent()
+        assertEquals(listOf("80", "78"), ha.batteryStates("radar"))
+    }
+
     @Test fun aSendThatThrowsDoesNotStopTheNext() = runTest {
         val ha = RecordingHaClient()
         var thrown = false
@@ -238,6 +272,44 @@ class HaPublisherTest {
         runCurrent()
         assertEquals("sent again after the refusal, then never", 2, ha.frontModeDiscoveries("cam"))
         assertEquals(listOf("LOW", "OFF"), ha.frontModeStates("cam"))
+    }
+
+    @Test fun aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode() = runTest {
+        // A camera reconnecting while a send hangs offers its discovery alone.
+        val ha = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        ha.answer = { topic, _ ->
+            if (topic == "bikeradar/cam/front_mode") release.await()
+            true
+        }
+        val p = configured(ha, backgroundScope)
+        p.offerFrontMode({ ha }, "cam", "Cam", "LOW")
+        runCurrent()
+        p.offerFrontMode({ ha }, "cam", "Cam", "OFF")
+        p.offerFrontMode({ ha }, "cam", "Cam", null)
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("LOW", "OFF"), ha.frontModeStates("cam"))
+    }
+
+    @Test fun theFrontModeGoesToTheClientCurrentWhenItsSendRuns() = runTest {
+        val before = RecordingHaClient()
+        val after = RecordingHaClient()
+        val release = CompletableDeferred<Unit>()
+        before.answer = { topic, _ ->
+            if (topic == "bikeradar/cam/front_mode") release.await()
+            true
+        }
+        var current: HaClient = before
+        val p = configured(RecordingHaClient(), backgroundScope)
+        p.offerFrontMode({ current }, "cam", "Cam", "LOW")
+        runCurrent()
+        p.offerFrontMode({ current }, "cam", "Cam", "OFF")
+        current = after
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("LOW"), before.frontModeStates("cam"))
+        assertEquals(listOf("OFF"), after.frontModeStates("cam"))
     }
 
     @Test fun aHungBatterySendDoesNotHoldTheSameDevicesFrontMode() = runTest {

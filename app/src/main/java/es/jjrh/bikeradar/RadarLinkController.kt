@@ -1053,8 +1053,11 @@ internal class RadarLinkController(
         try {
             val ch = gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY) ?: return
             val pct = queue.read(gatt, ch)?.firstOrNull()?.toInt()?.and(0xFF) ?: return
-            if (!publishRadarBattery(gatt.device?.address, name, pct)) return
-            captureLog.clog("# legacy battery $pct%")
+            if (publishRadarBattery(gatt.device?.address, name, pct)) captureLog.clog("# legacy battery $pct%")
+            // Any answer, accepted or not, so one unreadable reading does not
+            // cost the notifies (`aLegacyRadarWhoseFirstBatteryReadingIsRefusedStillGetsBatteryNotifies`).
+            // A read with no answer skips it, as one more op would hold the
+            // stream's start (`aLegacyBatteryReadWithNoAnswerSubscribesNothing`).
             queue.writeCccd(gatt, ch)
         } catch (e: CancellationException) {
             // Cooperative cancellation (link teardown) - structured concurrency

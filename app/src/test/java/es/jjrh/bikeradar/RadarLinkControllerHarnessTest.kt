@@ -357,8 +357,9 @@ class RadarLinkControllerHarnessTest {
     }
 
     /** Background loop completing the read/CCCD/MTU ops ShadowBluetoothGatt does
-     *  not auto-fire, routed through the controller's own callback. */
-    private fun TestScope.startDriver(link: Link, scope: CoroutineScope = backgroundScope) {
+     *  not auto-fire, routed through the controller's own callback. A null
+     *  [batteryByte] leaves the battery read unanswered. */
+    private fun TestScope.startDriver(link: Link, scope: CoroutineScope = backgroundScope, batteryByte: Byte? = 0x64) {
         scope.launch {
             while (isActive) {
                 val cb = link.cb
@@ -370,7 +371,7 @@ class RadarLinkControllerHarnessTest {
                     completeCccd(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_14)
                     completeCccd(cb, gatt, Uuids.SVC_RADAR, Uuids.RADAR_V2)
                     gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY)?.let {
-                        cb.onCharacteristicRead(gatt, it, byteArrayOf(0x64), BluetoothGatt.GATT_SUCCESS)
+                        if (batteryByte != null) cb.onCharacteristicRead(gatt, it, byteArrayOf(batteryByte), BluetoothGatt.GATT_SUCCESS)
                         cb.onDescriptorWrite(gatt, it.getDescriptor(Uuids.CCCD), BluetoothGatt.GATT_SUCCESS)
                     }
                     gatt.getService(Uuids.SVC_DIS)?.let { dis ->
@@ -2326,6 +2327,48 @@ class RadarLinkControllerHarnessTest {
             pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 42 },
         )
         assertEquals("a battery read or notify is not the legacy stream", 0, gateway.connects)
+        controller.forceReconnect()
+    }
+
+    @Test fun aLegacyRadarWhoseFirstBatteryReadingIsRefusedStillGetsBatteryNotifies() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        startDriver(link, batteryByte = 0xFF.toByte())
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        val cccd = requireNotNull(link.gatt).getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY).getDescriptor(Uuids.CCCD)
+
+        // The shadow keeps a written CCCD's bytes on the descriptor, readable
+        // only through the deprecated getter.
+        @Suppress("DEPRECATION")
+        fun subscribed() = cccd.value?.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == true
+        assertTrue(
+            "the battery notifications must be enabled whatever the first reading was",
+            pumpUntil(timeoutMs = 1_000) { subscribed() },
+        )
+        assertEquals("the refused reading itself goes nowhere", null, BatteryStateBus.entries.value["testradar"])
+        controller.forceReconnect()
+    }
+
+    @Test fun aLegacyBatteryReadWithNoAnswerSubscribesNothing() = runTest {
+        // One more op after a timed-out read would hold the stream's start.
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        startDriver(link, batteryByte = null)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        // A frame reaching the bus means the read timed out and the loop began.
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
+        val cccd = requireNotNull(link.gatt).getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY).getDescriptor(Uuids.CCCD)
+
+        @Suppress("DEPRECATION")
+        val written = cccd.value
+        assertEquals("no battery subscribe after a read with no answer", null, written)
         controller.forceReconnect()
     }
 

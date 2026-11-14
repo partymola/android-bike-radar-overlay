@@ -642,6 +642,9 @@ object DataDisclosure {
     data class Flow(val topicFamily: String, val category: String, val disclosureKeyword: String)
 
     val outbound: List<Flow> = listOf(
+        // No topic of its own: the device block of every discovery config
+        // carries the names (`theDeviceBlockCarriesOnlyTheFieldsItDiscloses`).
+        Flow("device", "Radar and dashcam Bluetooth names, which name their Home Assistant devices", "Bluetooth names"),
         Flow("battery", "Radar and dashcam battery level", "battery"),
         Flow("front_mode", "Front-light mode", "front-light mode"),
         // The bare word close-pass also matches the ride-summary bullet. No

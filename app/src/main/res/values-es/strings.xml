@@ -264,7 +264,7 @@
     <string name="onboarding_ha_privacy_heading">Qué se envía</string>
     <string name="onboarding_ha_bullet_sends">Envía a tu HA el nombre de tu radar y de tu cámara delantera, la batería, el modo de luz, las horas de ruta y las estadísticas de la ruta (incluidos los adelantamientos ajustados)</string>
     <string name="onboarding_ha_bullet_only_ha">Va solo a tu Home Assistant - nunca al desarrollador</string>
-    <string name="onboarding_ha_bullet_private">La dirección de tu HA y el token se quedan en el almacenamiento privado de la app y en tu copia de seguridad cifrada de Android</string>
+    <string name="onboarding_ha_bullet_private">La dirección de tu HA y el token se quedan en el almacenamiento privado de la app, y viajan en tu copia de seguridad cifrada de Android y en la transferencia entre teléfonos</string>
 
     <!-- Paso 3: emparejamiento -->
     <string name="onboarding_pair_title">Empareja tus dispositivos</string>
@@ -293,8 +293,8 @@
     <string name="onboarding_pair_comeback">Puedes volver a esto más tarde en <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
     <string name="onboarding_pair_privacy_heading">A qué puede acceder</string>
     <string name="onboarding_pair_bullet_devices">Lee tu lista de dispositivos emparejados para encontrar el radar y la cámara delantera</string>
-    <string name="onboarding_pair_bullet_saves">Recuerda tu radar y tu cámara delantera, que van con tus ajustes en tu copia de seguridad de Android y en la transferencia entre teléfonos</string>
-    <string name="onboarding_pair_bullet_nothing_sent">La app nunca envía nada de esto al desarrollador. Si configuras Home Assistant, recibe el nombre de tu radar y de tu cámara delantera</string>
+    <string name="onboarding_pair_bullet_saves">Recuerda qué radar y qué cámara delantera son los tuyos. Eso va con tus ajustes en tu copia de seguridad de Android y en la transferencia entre teléfonos</string>
+    <string name="onboarding_pair_bullet_nothing_sent">La app nunca envía nada de esto al desarrollador. Si configuras Home Assistant, Home Assistant recibe el nombre de tu radar y de tu cámara delantera</string>
     <string name="onboarding_pair_more_features">Más funciones en Ajustes → Experimental cuando termines la configuración.</string>
     <string name="onboarding_pair_radar_later">Puedes emparejar el radar más tarde desde los ajustes de Bluetooth.</string>
     <string name="onboarding_device_paired_with">Emparejado con <xliff:g id="device" example="RearVue8">%1$s</xliff:g></string>

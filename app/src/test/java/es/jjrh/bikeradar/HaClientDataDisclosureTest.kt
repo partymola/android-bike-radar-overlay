@@ -6,6 +6,8 @@ import es.jjrh.bikeradar.testutil.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * Guards the [DataDisclosure] anchor against drift. The anchor is the single
@@ -17,8 +19,10 @@ import org.junit.Test
  * new `publishMqtt("$NS/$slug/foo", ...)` cannot ship until `foo` is added
  * to [DataDisclosure.outbound], which in turn forces a Privacy-screen update
  * (enforced by `scripts/privacy-disclosure-check.sh`). This test runs in
- * `testDebugUnitTest`, so CI catches the drift.
+ * `testDebugUnitTest`, so CI catches the drift. Robolectric for the JSON the
+ * device-block test reads.
  */
+@RunWith(RobolectricTestRunner::class)
 class HaClientDataDisclosureTest {
 
     @Test
@@ -49,6 +53,21 @@ class HaClientDataDisclosureTest {
                 "$undisclosed. Register each in the anchor AND disclose it in SettingsPrivacy.kt.",
             undisclosed.isEmpty(),
         )
+    }
+
+    @Test
+    fun theDeviceBlockCarriesOnlyTheFieldsItDiscloses() {
+        // Every discovery config carries this block, so a field added to it
+        // reaches Home Assistant with no topic of its own for the scan above.
+        val client = HaClient(baseUrl = "https://h.example", token = "tok")
+        val payloads = listOf(client.buildClosePassDiscoveryPayload("rearvue8", "RearVue8")) +
+            client.buildRideSummaryDiscoveryPayloads("rearvue8", "RearVue8").map { it.second }
+        for (payload in payloads) {
+            assertEquals(
+                setOf("identifiers", "name", "manufacturer", "model", "via_device"),
+                payload.getJSONObject("device").keys().asSequence().toSet(),
+            )
+        }
     }
 
     @Test

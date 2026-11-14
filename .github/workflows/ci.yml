@@ -275,10 +275,19 @@ jobs:
   # the SYSTEM_ALERT_WINDOW overlay (permission not granted automatically),
   # any logic tested by the Robolectric suite, or anything past the first
   # screen. A release that boots here can still fail on a ride.
+  #
+  # Two API levels: 34, and 36, which is targetSdk, so the platform's
+  # target-gated behaviour changes for 35 and 36 apply there and on no API 34
+  # device. fail-fast is off so a failure on one level does not cancel the
+  # other's run.
   boot-smoke:
-    name: APK boot smoke (API 34 emulator)
+    name: APK boot smoke (API ${{ matrix.api-level }} emulator)
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [34, 36]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -313,7 +322,7 @@ jobs:
       - name: Install APK and verify boot on Android emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d  # v2.38.0
         with:
-          api-level: 34
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
           # AOSP (default) target boots faster than google_apis and has no
           # Play Services dependency - sufficient for a boot-alive check.

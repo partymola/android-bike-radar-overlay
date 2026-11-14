@@ -71,7 +71,8 @@ the coverage, lint or R8 configuration in `app/build.gradle.kts` or
   - **Do not add `testReleaseUnitTest` and call the release covered**: it
     runs against release-variant classes before R8.
   - **`boot-smoke`** is the other check: on every push to `main` it installs
-    the shrunk release APK on an API 34 emulator and fails unless the process
+    the shrunk release APK on an API 34 and an API 36 (targetSdk) emulator,
+    one job per level, and each fails unless the process
     is alive at launch and ten seconds later, with no fatal exception in
     logcat. The emulator has no BLE and no overlay permission, so the link,
     overlay and alert paths run on no release build in CI, and the

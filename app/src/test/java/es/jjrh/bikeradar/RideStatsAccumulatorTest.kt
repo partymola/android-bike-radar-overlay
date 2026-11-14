@@ -273,6 +273,41 @@ class RideStatsAccumulatorTest {
         assertEquals(1, a.snapshot().overtakesTotal)
     }
 
+    @Test
+    fun aSecondCarOnAReusedIdIsASecondOvertake() {
+        // The radar recycles its one-byte ids within a ride; the birth stamp
+        // tells the cars apart, as it does for the clearance.
+        val a = acc()
+        a.observeCountedFrame(radarState(listOf(veh(7, bornAtMs = 100L))))
+        a.observeCountedFrame(radarState())
+        a.observeCountedFrame(radarState(listOf(veh(7, bornAtMs = 900L))))
+        a.observeClosePass(closeEvent())
+        val s = a.snapshot()
+        assertEquals(2, s.overtakesTotal)
+        assertEquals(50f, s.closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun oneCarAcrossManyFramesIsOneOvertake() {
+        val a = acc()
+        repeat(5) { i ->
+            a.observeCountedFrame(radarState(listOf(veh(7, distanceM = 30 - i * 5, bornAtMs = 100L))))
+        }
+        a.observeClosePass(closeEvent())
+        val s = a.snapshot()
+        assertEquals(1, s.overtakesTotal)
+        assertEquals(100f, s.closePassConversionRatePct, 0.001f)
+    }
+
+    @Test
+    fun aLegacyStreamCountsOneOvertakePerId() {
+        // The legacy decoder stamps no birth, so every track carries 0.
+        val a = acc()
+        repeat(3) { a.observeFrame(legacyState(listOf(veh(4, lateralUnknown = true)))) }
+        a.observeFrame(legacyState(listOf(veh(4, lateralUnknown = true), veh(5, lateralUnknown = true))))
+        assertEquals(2, a.snapshot().overtakesTotal)
+    }
+
     // ── peak closing speed ───────────────────────────────────────────────────
 
     @Test

@@ -33,12 +33,15 @@ class RideStatsAccumulator(
     // Per-frame state. Nullable for measurement-class fields that have no
     // sensible "no data" zero value: a ride with no observed vehicles should
     // surface "unknown" in HA, not a misleading 0 m / 0 km/h.
-    private val seenTrackIds = HashSet<Int>()
 
-    /** Ids in range on a frame close-pass counting ran on: what the conversion
+    /** (tid, bornAtMs) of each car seen in range: the radar reuses ids within
+     *  a ride (`aSecondCarOnAReusedIdIsASecondOvertake`). */
+    private val seenTracks = HashSet<Pair<Int, Long>>()
+
+    /** Cars in range on a frame close-pass counting ran on: what the conversion
      *  rate divides by, so overtakes from before counting was switched on do
      *  not dilute it (`theRateDividesByOvertakesSeenWhileCounting`). */
-    private val countedTrackIds = HashSet<Int>()
+    private val countedTracks = HashSet<Pair<Int, Long>>()
     private var peakClosingKmh: Int? = null
     private var minLateralM: Float? = null
     private var distanceRiddenM: Double = 0.0
@@ -146,7 +149,7 @@ class RideStatsAccumulator(
         if (state.bikeSpeedMs != null) lastBikeSpeedMs = state.bikeSpeedMs
         val riderMoving = (lastBikeSpeedMs ?: 0f) >= RIDER_MOVING_MS
 
-        // Per-frame extrema and overtake-id dedup.
+        // Per-frame extrema and overtake dedup.
         for (v in state.vehicles) {
             if (v.isBehind) {
                 openTracks.remove(v.id)?.let(::endTrack)
@@ -168,8 +171,9 @@ class RideStatsAccumulator(
             }
             if (v.distanceM !in 0..MAX_TRACK_DISTANCE_M) continue
 
-            if (seenTrackIds.add(v.id)) generation++
-            if (counting && countedTrackIds.add(v.id)) generation++
+            val car = v.id to v.bornAtMs
+            if (seenTracks.add(car)) generation++
+            if (counting && countedTracks.add(car)) generation++
 
             if (v.speedMs < 0 && -v.speedMs <= ClosePassDetector.PEAK_CLOSING_MAX_MS) {
                 val closingKmh = (-v.speedMs * MS_TO_KMH).toInt()
@@ -302,8 +306,8 @@ class RideStatsAccumulator(
      *  those callers treat a torn read as best-effort and must not let it
      *  propagate. */
     fun snapshot(): RideStatsSnapshot {
-        val totalOvertakes = seenTrackIds.size
-        val countedOvertakes = countedTrackIds.size
+        val totalOvertakes = seenTracks.size
+        val countedOvertakes = countedTracks.size
         val conversionRatePct = if (countedOvertakes > 0) {
             closePassCount.toFloat() / countedOvertakes.toFloat() * 100f
         } else {

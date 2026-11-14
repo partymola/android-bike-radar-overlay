@@ -315,7 +315,7 @@
     <string name="onboarding_ha_privacy_heading">What\'s sent</string>
     <string name="onboarding_ha_bullet_sends">Sends your radar\'s and dashcam\'s names, battery, light mode, ride times and ride stats (incl. close passes) to your HA</string>
     <string name="onboarding_ha_bullet_only_ha">Goes only to your Home Assistant - never to the developer</string>
-    <string name="onboarding_ha_bullet_private">Your HA address and token stay in the app\'s private storage, and travel in your encrypted Android backup and phone-to-phone transfer</string>
+    <string name="onboarding_ha_bullet_private">Your HA address and token are kept in the app\'s private storage. They go with your settings into the phone-to-phone transfer and your encrypted Android backup</string>
 
     <!-- Step 3: pairing -->
     <string name="onboarding_pair_title">Pair your devices</string>
@@ -350,7 +350,7 @@
     <string name="onboarding_pair_privacy_heading">What this can access</string>
     <string name="onboarding_pair_bullet_devices">Reads your paired-device list to find the radar and dashcam</string>
     <string name="onboarding_pair_bullet_saves">Remembers which radar and dashcam are yours. That choice goes with your settings into your Android backup and phone-to-phone transfer</string>
-    <string name="onboarding_pair_bullet_nothing_sent">The app never sends any of this to the developer. If you set up Home Assistant, Home Assistant gets your radar\'s and dashcam\'s names</string>
+    <string name="onboarding_pair_bullet_nothing_sent">The app never sends any of this to the developer. If you set up Home Assistant, your Home Assistant gets your radar\'s and dashcam\'s names</string>
     <string name="onboarding_pair_more_features">More features in Settings -> Experimental once you\'re set up.</string>
     <string name="onboarding_pair_radar_later">You can pair the radar later from Bluetooth settings.</string>
     <string name="onboarding_device_paired_with">Paired with <xliff:g id="device" example="RearVue8">%1$s</xliff:g></string>

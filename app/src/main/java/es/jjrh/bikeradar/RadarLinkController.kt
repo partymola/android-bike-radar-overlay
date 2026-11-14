@@ -838,6 +838,7 @@ internal class RadarLinkController(
             // case where the stack thinks we are still connected but the radar
             // has gone silent.
             val capturedGatt = gatt
+            val step = LoopStep()
             watchdogJob = scope.launch {
                 while (true) {
                     delay(V2_WATCHDOG_TICK_MS)
@@ -848,9 +849,10 @@ internal class RadarLinkController(
                         Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
                         // Both clocks: the watchdog's is when a frame was
                         // consumed, so a receipt more recent than it means the
-                        // decode loop was held up, not the radar silent.
+                        // decode loop was held up, not the radar silent; the
+                        // step says where.
                         val received = receipts.receivedAgo(now)
-                        journal("radar V2 stream silent ${ageMs}ms, last received $received; tearing down")
+                        journal("radar V2 stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
                         receipts.endingByApp()
                         try {
                             capturedGatt.disconnect()
@@ -961,49 +963,62 @@ internal class RadarLinkController(
                 }
             }
 
+            step.word = LoopStep.WAITING
             for ((uuid, bytes) in notifyChannel) {
-                when (uuid) {
-                    Uuids.RADAR_V2 -> {
-                        lastV2FrameMs = clock()
-                        if (v2FrameCount++ == 0) {
-                            // The frame itself is a movement payload, so it
-                            // goes the way the handshake replies do. The line
-                            // stays on release builds because it is the signal
-                            // a live test waits for.
-                            Log.i(TAG, if (BuildConfig.DEBUG) "first V2 frame: ${bytes.toHex()}" else "first V2 frame")
-                            // The radar counts as up from here, not from the
-                            // handshake line above, so a report needs this edge.
-                            if (markStreaming()) journal("radar V2 stream live")
-                            prefs.rangeOnlyRadarMac = null
+                // Reset in a finally, which the `continue` below runs too
+                // (`aWatchdogTeardownNamesTheLoopWaiting`).
+                try {
+                    when (uuid) {
+                        Uuids.RADAR_V2 -> {
+                            step.word = LoopStep.DECODING
+                            lastV2FrameMs = clock()
+                            if (v2FrameCount++ == 0) {
+                                // The frame itself is a movement payload, so it
+                                // goes the way the handshake replies do. The line
+                                // stays on release builds because it is the signal
+                                // a live test waits for.
+                                Log.i(TAG, if (BuildConfig.DEBUG) "first V2 frame: ${bytes.toHex()}" else "first V2 frame")
+                                // The radar counts as up from here, not from the
+                                // handshake line above, so a report needs this edge.
+                                if (markStreaming()) journal("radar V2 stream live")
+                                prefs.rangeOnlyRadarMac = null
+                            }
+                            v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                         }
-                        v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
-                    }
-                    Uuids.SETTINGS_14 -> {
-                        if (prefs.radarSettingsProbeEnabled) captureLog.clog("# radar_2f14 ${bytes.toHex()}")
-                        if (prefs.radarLightAutoModeEnabled) {
-                            RadarLightController.parseModeState(bytes)?.let { ms ->
-                                val key = RadarLightOverrideDecider.key(ms.slot, ms.type)
-                                if (radarLightBaselineKey == null) {
-                                    radarLightBaselineKey = key
-                                } else if (!radarLightUserOverride &&
-                                    RadarLightOverrideDecider.isOverride(radarLightBaselineKey, key)
-                                ) {
-                                    radarLightUserOverride = true
-                                    radarSunsetJob?.cancel()
-                                    radarSunriseJob?.cancel()
-                                    captureLog.clog("# radar_light_override (2f14 slot change)")
-                                    journal("radar light slot changed on the radar: auto-mode holds off")
+                        Uuids.SETTINGS_14 -> {
+                            step.word = LoopStep.LIGHT_STATE
+                            if (prefs.radarSettingsProbeEnabled) captureLog.clog("# radar_2f14 ${bytes.toHex()}")
+                            if (prefs.radarLightAutoModeEnabled) {
+                                RadarLightController.parseModeState(bytes)?.let { ms ->
+                                    val key = RadarLightOverrideDecider.key(ms.slot, ms.type)
+                                    if (radarLightBaselineKey == null) {
+                                        radarLightBaselineKey = key
+                                    } else if (!radarLightUserOverride &&
+                                        RadarLightOverrideDecider.isOverride(radarLightBaselineKey, key)
+                                    ) {
+                                        radarLightUserOverride = true
+                                        radarSunsetJob?.cancel()
+                                        radarSunriseJob?.cancel()
+                                        captureLog.clog("# radar_light_override (2f14 slot change)")
+                                        journal("radar light slot changed on the radar: auto-mode holds off")
+                                    }
                                 }
                             }
                         }
-                    }
-                    Uuids.SETTINGS_12 -> if (prefs.radarSettingsProbeEnabled) captureLog.clog("# radar_2f12 ${bytes.toHex()}")
-                    Uuids.CHAR_BATTERY -> {
-                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                        if (publishRadarBattery(rearMac, name, pct) && !prefs.isPaused) {
-                            haPublisher.offerBattery(name, pct)
+                        Uuids.SETTINGS_12 -> {
+                            step.word = LoopStep.SETTINGS
+                            if (prefs.radarSettingsProbeEnabled) captureLog.clog("# radar_2f12 ${bytes.toHex()}")
+                        }
+                        Uuids.CHAR_BATTERY -> {
+                            step.word = LoopStep.BATTERY
+                            val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                            if (publishRadarBattery(rearMac, name, pct) && !prefs.isPaused) {
+                                haPublisher.offerBattery(name, pct)
+                            }
                         }
                     }
+                } finally {
+                    step.word = LoopStep.WAITING
                 }
             }
             false
@@ -1126,6 +1141,7 @@ internal class RadarLinkController(
         // including heartbeats, because a legacy radar with no traffic behind
         // it emits nothing but heartbeats and is perfectly healthy.
         val capturedGatt = gatt
+        val step = LoopStep()
         val watchdog = scope.launch {
             while (true) {
                 delay(V2_WATCHDOG_TICK_MS)
@@ -1134,7 +1150,7 @@ internal class RadarLinkController(
                     val ageMs = now - lastV2FrameMs
                     Log.w(TAG, "legacy stream silent for ${ageMs}ms; tearing down")
                     val received = receipts.receivedAgo(now)
-                    journal("radar legacy stream silent ${ageMs}ms, last received $received; tearing down")
+                    journal("radar legacy stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
                     receipts.endingByApp()
                     try {
                         capturedGatt.disconnect()
@@ -1145,35 +1161,43 @@ internal class RadarLinkController(
         }
 
         try {
+            step.word = LoopStep.WAITING
             for ((uuid, bytes) in notifyChannel) {
-                if (uuid == Uuids.CHAR_BATTERY) {
-                    val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
-                    if (publishRadarBattery(gatt.device?.address, name, pct) && !prefs.isPaused) {
-                        haPublisher.offerBattery(name, pct)
+                // Reset in a finally, which the `continue`s run too.
+                try {
+                    if (uuid == Uuids.CHAR_BATTERY) {
+                        step.word = LoopStep.BATTERY
+                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                        if (publishRadarBattery(gatt.device?.address, name, pct) && !prefs.isPaused) {
+                            haPublisher.offerBattery(name, pct)
+                        }
+                        continue
                     }
-                    continue
+                    if (uuid != Uuids.RADAR_V1) continue
+                    step.word = LoopStep.DECODING
+                    lastV2FrameMs = clock()
+                    if (frames++ == 0) {
+                        Log.i(TAG, "first legacy frame")
+                        // Only now is this a session worth resetting the backoff
+                        // for. A radar that ACKs the subscribe and then streams
+                        // nothing is not delivering, and treating the ACK as
+                        // success would pin the retry delay at its floor and
+                        // churn the radio for the whole ride.
+                        lastConnectionReachedDecode = true
+                        if (markStreaming()) journal("radar legacy stream live")
+                        // On a frame, not the subscribe
+                        // (`aLegacyStreamThatNeverDeliversIsNotRemembered`).
+                        gatt.device?.address?.let { prefs.rangeOnlyRadarMac = it }
+                    }
+                    // Published on EVERY payload, not only the ones that change the
+                    // track set. Heartbeats are the only traffic on an empty road,
+                    // and a consumer scoring liveness off the published timestamp
+                    // would otherwise call a healthy radar stale within seconds of
+                    // the road clearing.
+                    RadarStateBus.publish(dec.feed(bytes) ?: dec.currentState())
+                } finally {
+                    step.word = LoopStep.WAITING
                 }
-                if (uuid != Uuids.RADAR_V1) continue
-                lastV2FrameMs = clock()
-                if (frames++ == 0) {
-                    Log.i(TAG, "first legacy frame")
-                    // Only now is this a session worth resetting the backoff
-                    // for. A radar that ACKs the subscribe and then streams
-                    // nothing is not delivering, and treating the ACK as
-                    // success would pin the retry delay at its floor and
-                    // churn the radio for the whole ride.
-                    lastConnectionReachedDecode = true
-                    if (markStreaming()) journal("radar legacy stream live")
-                    // On a frame, not the subscribe
-                    // (`aLegacyStreamThatNeverDeliversIsNotRemembered`).
-                    gatt.device?.address?.let { prefs.rangeOnlyRadarMac = it }
-                }
-                // Published on EVERY payload, not only the ones that change the
-                // track set. Heartbeats are the only traffic on an empty road,
-                // and a consumer scoring liveness off the published timestamp
-                // would otherwise call a healthy radar stale within seconds of
-                // the road clearing.
-                RadarStateBus.publish(dec.feed(bytes) ?: dec.currentState())
             }
         } finally {
             watchdog.cancel()
@@ -1501,6 +1525,27 @@ internal class StreamReceipts(private val clock: () -> Long) {
     fun gapMs(now: Long): Long = maxOf(0L, now - lastMs.get())
 
     fun receivedAgo(now: Long): String = lastMs.get().let { if (it == 0L) "never" else "${now - it}ms ago" }
+}
+
+/**
+ * What one connection's decode loop is doing, named in its watchdog's line so
+ * a teardown says whether the loop was waiting for a frame or held in a step.
+ * Written only by the loop, and a volatile field so marking a step adds no
+ * suspension or lock to it. The words are lowercase and digit-free, so the
+ * journal's masking leaves them alone (`aWatchdogTeardownNamesTheLoopWaiting`).
+ */
+internal class LoopStep {
+    @Volatile var word: String = SETUP
+
+    companion object {
+        /** Before the loop's first receive: the connect-time writes. */
+        const val SETUP = "setup"
+        const val WAITING = "waiting"
+        const val DECODING = "decoding"
+        const val LIGHT_STATE = "lightstate"
+        const val SETTINGS = "settings"
+        const val BATTERY = "battery"
+    }
 }
 
 /**

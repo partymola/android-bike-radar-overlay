@@ -1124,11 +1124,46 @@ class RadarLinkControllerHarnessTest {
             "a silent V2 stream must be torn down by the watchdog",
             pumpUntil { journalHas("V2 stream silent") },
         )
-        assertTrue("journal=$journal", journalHas("last received never; tearing down"))
+        assertWatchdogLine("radar V2 stream silent 7000ms, last received never, loop=waiting; tearing down")
         // A radar that completes the handshake and never streams cycles this
         // way, and covers nothing.
         assertEquals(0, gateway.connects)
         controller.forceReconnect()
+    }
+
+    /** The watchdog's one line is [expected], which the journal's masking
+     *  leaves as it is. */
+    private fun assertWatchdogLine(expected: String) {
+        assertEquals("journal=$journal", listOf(expected), journal.toList().filter { " stream silent " in it })
+        assertEquals(expected, LogRedaction.shareable(expected))
+    }
+
+    @Test fun aWatchdogTeardownNamesTheLoopWaiting() = runTest {
+        // A light-state frame, then a battery notify the loop skips with a
+        // `continue`: the loop is back at its receive after each.
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        clockMs.set(2_000L)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff01")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "")
+        pumpUntil(timeoutMs = 300) { false }
+        clockMs.set(9_000L)
+        assertTrue("journal=$journal", pumpUntil { journalHas("stream silent") })
+        assertWatchdogLine("radar V2 stream silent 7000ms, last received 8000ms ago, loop=waiting; tearing down")
+        controller.forceReconnect()
+    }
+
+    @Test fun aLoopReadsAsSetupUntilItsFirstReceive() {
+        assertEquals("setup", LoopStep().word)
     }
 
     // ── a radar that opens the link and never streams is never "up" ─────────────
@@ -1288,10 +1323,8 @@ class RadarLinkControllerHarnessTest {
         clockMs.set(2_000L)
         assertTrue(pumpUntil { journalHas("radar V2 stream live") })
         clockMs.set(9_000L)
-        assertTrue(
-            "journal=$journal",
-            pumpUntil { journalHas("radar V2 stream silent 7000ms, last received 8000ms ago; tearing down") },
-        )
+        assertTrue("journal=$journal", pumpUntil { journalHas("stream silent") })
+        assertWatchdogLine("radar V2 stream silent 7000ms, last received 8000ms ago, loop=waiting; tearing down")
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         assertFalse("journal=$journal", journalHas("radar link lost"))
@@ -2264,7 +2297,7 @@ class RadarLinkControllerHarnessTest {
             "a silent legacy stream must be torn down by the watchdog",
             pumpUntil { journalHas("radar legacy stream silent") },
         )
-        assertTrue("journal=$journal", journalHas("radar legacy stream silent 7000ms, last received never; tearing down"))
+        assertWatchdogLine("radar legacy stream silent 7000ms, last received never, loop=waiting; tearing down")
         controller.forceReconnect()
     }
 
@@ -2296,10 +2329,8 @@ class RadarLinkControllerHarnessTest {
         val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
         val (link, controller) = legacyLinkWithOneHeartbeat(clockMs)
         clockMs.set(9_000L)
-        assertTrue(
-            "journal=$journal",
-            pumpUntil { journalHas("radar legacy stream silent 7000ms, last received 8000ms ago; tearing down") },
-        )
+        assertTrue("journal=$journal", pumpUntil { journalHas("stream silent") })
+        assertWatchdogLine("radar legacy stream silent 7000ms, last received 8000ms ago, loop=waiting; tearing down")
         // The watchdog chose this ending, so it records no gap.
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })

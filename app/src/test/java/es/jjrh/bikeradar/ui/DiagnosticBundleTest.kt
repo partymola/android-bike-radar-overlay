@@ -136,7 +136,7 @@ class DiagnosticBundleTest {
         val lines = listOf(
             "1999-01-01 12:34:56 radar legacy stream ended frames=12345 hb=4000 threat=1234 unparsed=0",
             "1999-01-01 12:34:56 radar reconnect in 8000ms (backoff=8000ms)",
-            "1999-01-01 12:34:56 radar V2 stream silent 12000ms, last received 13000ms ago; tearing down",
+            "1999-01-01 12:34:56 radar V2 stream silent 12000ms, last received 13000ms ago, loop=waiting; tearing down",
             "1999-01-01 12:34:56 radar link lost status=147 3990ms after its last frame",
             "1999-01-01 12:34:56 radar conn state status=133 newState=0",
             "1999-01-01 12:34:56 no-radar alert sounded (cue 1, 4000 s into the ride, grace 3600 s)",

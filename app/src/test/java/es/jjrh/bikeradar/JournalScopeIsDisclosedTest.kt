@@ -141,10 +141,10 @@ class JournalScopeIsDisclosedTest {
         "radar handshake aborted at \$handshakeAbort (quick reconnect)",
         "radar handshake complete",
         "radar V2 stream live",
-        "radar V2 stream silent \${ageMs}ms, last received \$received; tearing down",
+        "radar V2 stream silent \${ageMs}ms, last received \$received, loop=\${step.word}; tearing down",
         "radar link lost status=\$status \${gapMs}ms after its last frame",
         "radar legacy stream subscribe ok=\$subscribed",
-        "radar legacy stream silent \${ageMs}ms, last received \$received; tearing down",
+        "radar legacy stream silent \${ageMs}ms, last received \$received, loop=\${step.word}; tearing down",
         "radar legacy stream live",
         "radar legacy stream ended \$tally",
         // Machinery, like the camera's exit below: the rider's pick is the

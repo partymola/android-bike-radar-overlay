@@ -21,7 +21,9 @@ import java.net.URI
  * (`HaUrlPolicyTest.aOneWordNameThatCouldBeACountryDomainIsRefused`). A host
  * that is one number is refused because inet_aton-style parsers read it as an
  * IPv4 address, whatever the phone's own resolver does
- * (`HaUrlPolicyTest.aHostThatIsOneNumberIsNeverTakenForAHomeName`). A name is
+ * (`HaUrlPolicyTest.aHostThatIsOneNumberIsNeverTakenForAHomeName`). A dotted
+ * address with a leading-zero octet is refused for the same reason
+ * (`HaUrlPolicyTest.aDottedAddressWithALeadingZeroIsRefused`). A name is
  * judged by its form, not by what it resolves to.
  *
  * The Privacy screen's `settings_privacy_networking_https` lists these classes
@@ -91,10 +93,13 @@ object HaUrlPolicy {
         }
         if (host.endsWith(".local") || host.endsWith(".lan")) return true
 
-        val ipv4 = host.split('.').takeIf { it.size == 4 }?.let { parts ->
-            parts.mapNotNull { it.toIntOrNull()?.takeIf { v -> v in 0..255 } }
-                .takeIf { it.size == 4 }
-        }
+        // inet_aton-style parsers read a leading zero as octal (aDottedAddressWithALeadingZeroIsRefused).
+        val ipv4 = host.split('.').takeIf { it.size == 4 }
+            ?.takeIf { parts -> parts.none { it.length > 1 && it[0] == '0' } }
+            ?.let { parts ->
+                parts.mapNotNull { it.toIntOrNull()?.takeIf { v -> v in 0..255 } }
+                    .takeIf { it.size == 4 }
+            }
         if (ipv4 != null) {
             val a = ipv4[0]
             val b = ipv4[1]

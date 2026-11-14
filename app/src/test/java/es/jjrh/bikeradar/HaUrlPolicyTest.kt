@@ -81,6 +81,16 @@ class HaUrlPolicyTest {
         }
     }
 
+    @Test fun aDottedAddressWithALeadingZeroIsRefused() {
+        // Parsers that use inet_aton read a leading zero as octal: 010.1.1.1 is 8.1.1.1 there.
+        for (host in listOf("010.1.1.1", "192.168.01.1", "0172.16.0.1", "127.0.0.01")) {
+            val r = HaUrlPolicy.validate("http://$host:8123")
+            assertTrue("$host must be refused", r is HaUrlPolicy.Result.CleartextWanRefused)
+        }
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://10.0.0.1:8123"))
+        assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://192.168.0.10:8123"))
+    }
+
     @Test fun httpToIpv6UlaOk() {
         assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://[fc00::1]:8123"))
         assertEquals(HaUrlPolicy.Result.Ok, HaUrlPolicy.validate("http://[fd12:3456::1]:8123"))

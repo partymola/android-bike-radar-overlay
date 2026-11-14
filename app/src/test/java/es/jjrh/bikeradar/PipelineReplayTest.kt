@@ -117,9 +117,22 @@ class PipelineReplayTest {
         // The fixture's own counts, every car in range seen while counting ran.
         // One id is reused by a second car, so keying cars on the id alone
         // gives 19 and a rate of 31.6%.
-        assertEquals(20, snap.overtakesTotal)
-        assertEquals(6, snap.closePassCount)
-        assertEquals(30f, snap.closePassConversionRatePct, 0.001f)
+        assertEquals(
+            "overtakes move with the (id, birth) car key or the in-range gate; cite the diff for a change",
+            20,
+            snap.overtakesTotal,
+        )
+        assertEquals(
+            "close passes move with ClosePassDetector or the permissive config above; cite the diff for a change",
+            6,
+            snap.closePassCount,
+        )
+        assertEquals(
+            "the rate is close passes over overtakes counted while counting ran; cite the diff for a change",
+            30f,
+            snap.closePassConversionRatePct,
+            0.001f,
+        )
 
         // Plausibility: ranges that should hold for under two minutes of urban capture.
         assertTrue(

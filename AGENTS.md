@@ -379,22 +379,23 @@ side.
 - **Cue-ledger gate** (`CueLedgerReplayTest`): the in-repo, CI-run companion
   to the corpus gate. Replays the committed `replay-fixture.txt` through the
   real decoder -> decider -> cue and asserts the *ordered* cue ledger against
-  a baked golden, so a change to the BEEP and CLEAR paths surfaces as a
-  reviewable diff with no private corpus. Regenerate after an intentional
-  change with `-Pbikeradar.cueLedgerRecord=true` and paste the printed ledger
-  into the test's `DEFAULT_GOLDEN`; cite the diff in review.
-  - **It reaches no urgent cue, so the whole imminent-impact and
-    pass-prediction path is invisible to CI.** The fixture is 30 s of moving
-    traffic with no stopped-rider-plus-fast-closer encounter, and the test
-    pins that absence deliberately in
-    `urgentLowSpeedToggleIsNoOpForThisFixture`,
-    `passClearanceIsNoOpForThisFixture` and
-    `unconfidentWaitIsNoOpForThisFixture`. Each asserts the ledger is
-    unchanged with the feature toggled, which is a statement about the
-    fixture, not about the feature. Only the private `CorpusReplayGate`
-    corpus can see a change there. Extending `replay-fixture.txt` with a
-    real stationary off-axis window is what would close it; until then,
-    never read a green CI as cover for an urgent-path change.
+  a baked golden, so a change to the beep, all-clear and urgent paths
+  surfaces as a reviewable diff with no private corpus. Regenerate after an
+  intentional change with `-Pbikeradar.cueLedgerRecord=true
+  --no-configuration-cache` and paste the printed ledgers into the test's
+  `DEFAULT_GOLDEN` and `ALONG_AXIS_GOLDEN`; cite the diff in review.
+  - **It reaches each urgent path once, and that is all it can show.** The
+    fixture holds one stopped rider with fast closers, one slow rider with a
+    fast closer and one stopped rider with a car that closes then slows, on
+    radar-only wiring with no eBike data at a 20 m alert distance.
+    `lowSpeedUrgentOffSilencesOnlyTheSlowRidersUrgent`,
+    `unconfidentWaitOnWithholdsOnlyTheSlowingCarsUrgent`,
+    `theNarrowestPassClearanceMovesOnlyTheUrgents` and
+    `theWidestPassClearanceMovesOnlyTheUrgents` pin what each setting does
+    to those windows, so a change that stops a setting reaching its urgents
+    fails CI. A green run is still no cover for a change to an urgent
+    threshold, the unconfident wait, or the moving path at other rider
+    speeds: only the private `CorpusReplayGate` corpus can judge those.
 - No Android instrumentation tests (`connectedDebugAndroidTest`) in this repo.
 - Decoder tests build a 9-byte target struct via the `target()` helper;
   `templateLocked = true` by default so new tests appear in snapshots.

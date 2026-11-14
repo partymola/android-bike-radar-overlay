@@ -8,14 +8,15 @@ import org.junit.Test
 
 /**
  * End-to-end pipeline replay: drives [RadarV2Decoder] -> [ClosePassDetector]
- * -> [RideStatsAccumulator] from the captured 30s window, then asserts the
+ * -> [RideStatsAccumulator] from the captured fixture, then asserts the
  * accumulator's final snapshot is internally consistent and inside plausible
  * ranges. Catches integration regressions across the post-decode pipeline
  * that per-component tests miss — e.g. a refactor that changes the
  * RadarState schema in a way the detector keeps accepting but the
  * accumulator silently drops.
  *
- * Fixture is the same 30s real capture used by [RadarV2DecoderReplayTest].
+ * The fixture is the set of real capture windows, under two minutes in all,
+ * that [RadarV2DecoderReplayTest] also replays.
  */
 class PipelineReplayTest {
 
@@ -45,7 +46,7 @@ class PipelineReplayTest {
         val detector = ClosePassDetector()
         val stats = RideStatsAccumulator(nowMsProvider = { clock }, monoMsProvider = { clock })
 
-        // Permissive config: the fixture window is 30 s of real traffic;
+        // Permissive config: the fixture is under two minutes of real traffic;
         // the default emitMinRangeX of 1.0 m can be too strict on a short
         // sample. Loosen so the detector is exercised as well as gated.
         val cfg = ClosePassDetector.Config(
@@ -113,7 +114,7 @@ class PipelineReplayTest {
             snap.closePassCount == 0 || snap.closePassConversionRatePct > 0f,
         )
 
-        // Plausibility — ranges that should hold for a 30 s urban capture.
+        // Plausibility: ranges that should hold for under two minutes of urban capture.
         assertTrue(
             "ride start must be the early clock value, got ${snap.rideStartedAtMs}",
             snap.rideStartedAtMs in 0L..1000L,
@@ -121,7 +122,7 @@ class PipelineReplayTest {
         assertTrue("exposure cannot be negative", snap.exposureSeconds >= 0)
         assertTrue("distance ridden cannot be negative", snap.distanceRiddenKm >= 0f)
         assertTrue(
-            "distance ridden must be plausible for a 30 s clip, got ${snap.distanceRiddenKm} km",
+            "distance ridden must be plausible for the fixture, got ${snap.distanceRiddenKm} km",
             snap.distanceRiddenKm < 0.6f,
         )
         if (snap.peakClosingKmh != null) {

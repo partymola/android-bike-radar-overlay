@@ -14,7 +14,8 @@ import org.junit.Test
  * lateralUnknown carry-over cascades, sequence numbering edge cases).
  *
  * Fixture: `app/src/test/resources/replay-fixture.txt`
- *   - 30s window of paired-vehicle traffic, timestamps relative to t=0
+ *   - real captured windows of traffic, under two minutes in all,
+ *     timestamps relative to t=0
  *   - format: `relative_ms hex_bytes_no_spaces` per line, # comments
  */
 class RadarV2DecoderReplayTest {

@@ -8,19 +8,19 @@ import org.junit.Test
 
 /**
  * End-to-end **cue-ledger** golden replay: drives the real
- * [RadarV2Decoder] -> [AlertDecider] -> [AlertCue] pipeline over a 30 s
- * capture and pins the *ordered sequence of audible cues* against a
+ * [RadarV2Decoder] -> [AlertDecider] -> [AlertCue] pipeline over a few real
+ * captured windows and pins the *ordered sequence of audible cues* against a
  * committed golden. Where [CorpusReplayGate] checks per-capture alert
  * *tallies* against a private corpus, this test pins the exact ledger
  * (which cue, what beep count / urgent path, at which relative ms) for a
  * single fixture that ships in the repo - so it runs in CI with no corpus
  * and turns any change to alert parsimony into a reviewable diff.
  *
- * This is the regression pin the batched cue release builds on: every
- * cue-vocabulary or threshold change shifts this ledger, and the
- * before/after diff is the evidence for review. A silent change to
- * cooldown, sustain, the stationary gate, or the imminent-impact override
- * therefore cannot land unnoticed.
+ * The fixture reaches the stationary and moving urgent paths, the pass
+ * clearance and the unconfident wait, and the setting tests below pin what
+ * each setting does to it. It holds one example of each, on radar-only wiring
+ * with no eBike data at a 20 m alert distance, so it is a regression pin and
+ * no substitute for the corpus replay when judging a threshold or a default.
  *
  * Determinism: the loop is driven entirely by each frame's relative
  * timestamp (`frame.relMs`) - the decoder and decider both read that
@@ -35,9 +35,10 @@ import org.junit.Test
  * Regenerating the golden (after an intentional cue change): run
  *   scripts/dev gradle :app:testDebugUnitTest \
  *     --tests es.jjrh.bikeradar.CueLedgerReplayTest \
- *     -Pbikeradar.cueLedgerRecord=true
- * and paste the printed ledger (between the BEGIN/END markers) into
- * [DEFAULT_GOLDEN]. Cite the diff in review.
+ *     -Pbikeradar.cueLedgerRecord=true --no-configuration-cache
+ * and paste the printed ledgers (between the BEGIN/END markers) into
+ * [DEFAULT_GOLDEN] and [ALONG_AXIS_GOLDEN]; the setting tests carry their own
+ * literals. Cite the diff in review.
  *
  * Fixture: the same `app/src/test/resources/replay-fixture.txt` used by
  * [RadarV2DecoderReplayTest] / [PipelineReplayTest].
@@ -137,48 +138,59 @@ class CueLedgerReplayTest {
         recordOrAssert(DEFAULT_GOLDEN, actual, "default(alertMax=20,urgentLowSpeed=on)")
     }
 
+    private fun urgents(ledger: List<String>) = ledger.filter { "Urgent(" in it }
+
+    private fun nonUrgents(ledger: List<String>) = ledger.filterNot { "Urgent(" in it }
+
+    /** The default golden less [cue], which it must hold, so a regenerated
+     *  golden that lost the cue cannot turn the comparison into a no-op. */
+    private fun defaultWithout(cue: String): List<String> {
+        assertTrue("$cue must be in the default ledger", cue in DEFAULT_GOLDEN)
+        return DEFAULT_GOLDEN.filter { it != cue }
+    }
+
     @Test
-    fun urgentLowSpeedToggleIsNoOpForThisFixture() {
-        // This 30 s window is moving traffic with no stopped/slow-rider +
-        // fast-closer encounter, so it never reaches the imminent-impact
-        // override that `urgentLowSpeedEnabled` gates - on and off produce the
-        // same ledger. Pinning the equality documents that the single in-repo
-        // fixture does not cover the v0.11 low-speed urgent extension (the
-        // private CorpusReplayGate corpus does), and flags it if a future
-        // decoder change ever makes the toggle bite here - at which point the
-        // golden above needs an Urgent entry and a fixture note.
+    fun lowSpeedUrgentOffSilencesOnlyTheSlowRidersUrgent() {
+        val off = replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = false)
+        assertEquals(defaultWithout("86080 Urgent(moving)"), off)
+    }
+
+    @Test
+    fun unconfidentWaitOnWithholdsOnlyTheSlowingCarsUrgent() {
+        val on = replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, urgentUnconfidentWaitEnabled = true)
+        assertEquals(defaultWithout("111983 Urgent(stationary)"), on)
+    }
+
+    @Test
+    fun theNarrowestPassClearanceMovesOnlyTheUrgents() {
+        val ledger = replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 0.5f)
+        assertEquals(nonUrgents(DEFAULT_GOLDEN), nonUrgents(ledger))
         assertEquals(
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = false),
+            listOf(
+                "58117 Urgent(stationary)",
+                "62617 Urgent(stationary)",
+                "68764 Urgent(stationary)",
+                "86080 Urgent(moving)",
+                "111983 Urgent(stationary)",
+            ),
+            urgents(ledger),
         )
     }
 
     @Test
-    fun passClearanceIsNoOpForThisFixture() {
-        // Same shape, and the same warning, as the low-speed toggle above:
-        // the fixture never reaches the imminent-impact override, so the
-        // pass margin decides nothing here and the extremes of the Settings
-        // range produce an identical ledger. AGENTS.md sells this test as
-        // the in-repo companion to the corpus gate for alert-parsimony
-        // changes; pinning the equality records that it does NOT cover this
-        // one, so nobody reads a green run as evidence about the margin.
-        // Only the private corpus can see that change - and if a future
-        // fixture ever makes the margin bite here, this fails and the
-        // golden above needs an Urgent entry.
+    fun theWidestPassClearanceMovesOnlyTheUrgents() {
+        val ledger = replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 3.0f)
+        assertEquals(nonUrgents(DEFAULT_GOLDEN), nonUrgents(ledger))
         assertEquals(
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 0.5f),
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, passClearanceM = 3.0f),
-        )
-    }
-
-    @Test
-    fun unconfidentWaitIsNoOpForThisFixture() {
-        // The same warning again: the fixture reaches no urgent cue, so the
-        // Experimental wait has nothing to hold here and a green run says
-        // nothing about it. Only the private corpus can.
-        assertEquals(
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true),
-            replayLedger(alertMaxM = 20, urgentLowSpeedEnabled = true, urgentUnconfidentWaitEnabled = true),
+            listOf(
+                "57513 Urgent(stationary)",
+                "60446 Urgent(stationary)",
+                "63528 Urgent(stationary)",
+                "67635 Urgent(stationary)",
+                "85903 Urgent(moving)",
+                "111983 Urgent(stationary)",
+            ),
+            urgents(ledger),
         )
     }
 
@@ -218,23 +230,46 @@ class CueLedgerReplayTest {
         // third, is heard there and again at the middle tier as it closes.
         // Two later cars first appear in the far third after a car heard at
         // the middle tier left without passing, so each waits for the middle
-        // tier (17906, and 38567 in the appended off-axis window, where the
-        // vehicle stops at the middle tier because its true range never
-        // closes).
+        // tier (17906, and 38567 in the off-axis window, where the vehicle
+        // stops at the middle tier because its true range never closes).
+        // In the urgent windows the stopped rider's fast closers sound three
+        // stationary urgents (57660 to 68390), the slow rider's car climbs the
+        // tiers into the moving-path urgent at 86080, and the slowing car
+        // sounds a stationary urgent at 111983. The Clear at 76539 lands on
+        // the slow-rider window's first frame, the stopped window's road
+        // having emptied before it ended.
         private val DEFAULT_GOLDEN: List<String> = listOf(
             "0 Beep(3)",
             "2064 Beep(1)",
             "3862 Beep(2)",
             "17906 Beep(2)",
             "38567 Beep(2)",
+            "53386 Beep(2)",
+            "57660 Urgent(stationary)",
+            "62317 Urgent(stationary)",
+            "67072 Clear",
+            "68390 Urgent(stationary)",
+            "76539 Clear",
+            "84099 Beep(1)",
+            "84912 Beep(2)",
+            "85540 Beep(3)",
+            "86080 Urgent(moving)",
+            "86531 Beep(3)",
+            "89053 Clear",
+            "96404 Beep(2)",
+            "96661 Beep(3)",
+            "100664 Clear",
+            "111983 Urgent(stationary)",
         )
 
         // The same fixture scored on along-axis distance, i.e. the shipped
         // behaviour before true-range tiers. Kept so the difference the change
         // makes is visible in the repo rather than only in a private corpus.
-        // The extra cue at 40823 is the whole point: the vehicle has swung out
-        // to the rider's side and its true range is no longer closing, but its
-        // along-axis distance keeps falling into the top band.
+        // The extra cue at 40823 is the point: the vehicle has swung out to
+        // the rider's side and its true range is no longer closing, but its
+        // along-axis distance keeps falling into the top band. At 96404 the
+        // along-axis score also puts a car straight into the top tier that true
+        // range starts at the middle one and raises at 96661.
         private val ALONG_AXIS_GOLDEN: List<String> = listOf(
             "0 Beep(3)",
             "2064 Beep(1)",
@@ -242,6 +277,21 @@ class CueLedgerReplayTest {
             "17906 Beep(2)",
             "38567 Beep(2)",
             "40823 Beep(3)",
+            "53386 Beep(2)",
+            "57660 Urgent(stationary)",
+            "62317 Urgent(stationary)",
+            "67072 Clear",
+            "68390 Urgent(stationary)",
+            "76539 Clear",
+            "84099 Beep(1)",
+            "84912 Beep(2)",
+            "85540 Beep(3)",
+            "86080 Urgent(moving)",
+            "86531 Beep(3)",
+            "89053 Clear",
+            "96404 Beep(3)",
+            "100664 Clear",
+            "111983 Urgent(stationary)",
         )
     }
 }

@@ -2054,10 +2054,12 @@ class AlertDecider(
          *  the rider's setting); judging another value means changing the
          *  replay to pass it. The corpus is private ride data, so it is not in
          *  this tree and CI never replays it (the gate assume-skips without
-         *  one); the in-repo cue-ledger fixture reaches no urgent cue and
-         *  cannot stand in ([CueLedgerReplayTest.passClearanceIsNoOpForThisFixture]
-         *  pins that). A rider may of course set it lower; the setting is
-         *  theirs, and the helper text says which way it trades. */
+         *  one). The in-repo cue-ledger fixture shows the setting moving its
+         *  urgents ([CueLedgerReplayTest.theNarrowestPassClearanceMovesOnlyTheUrgents]
+         *  and [CueLedgerReplayTest.theWidestPassClearanceMovesOnlyTheUrgents]),
+         *  but its few urgent windows cannot judge a new default. A rider may
+         *  of course set it lower; the setting is theirs, and the helper text
+         *  says which way it trades. */
         const val DEFAULT_PASS_CLEARANCE_M = 1.5f
 
         /** Bounds for the rider-set clearance, kept beside the default so the

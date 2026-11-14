@@ -1287,15 +1287,10 @@ internal class RadarLinkController(
     private fun refreshGattCache(gatt: BluetoothGatt): Boolean = refreshGatt(gatt)
 
     /**
-     * Validate one radar battery reading and put it on the battery bus.
-     * Returns false for a reading that is not a percentage, in which case
-     * nothing was published and the caller must not forward it either.
-     *
-     * One helper rather than the same four lines at four call sites, because
-     * they had already drifted: only the legacy read range-checked the byte,
-     * so a 0xFF "unknown" reply from either notify path reached the rider's
-     * chip as 255%. A validation every caller must remember is a validation
-     * that gets forgotten, so it lives here.
+     * Put one radar battery reading on the battery bus, which refuses a
+     * reading that is not a percentage ([BatteryStateBus.update]). Returns
+     * the bus's answer; on false nothing was published and the caller must
+     * not forward it either.
      *
      * The Home Assistant offer stays at the two notify loops, behind the
      * pause; the handshake's and the legacy read's readings go to the bus
@@ -1306,10 +1301,9 @@ internal class RadarLinkController(
      * can be absent; a missing MAC costs the slug mapping, not the reading.
      */
     private fun publishRadarBattery(mac: String?, name: String, pct: Int): Boolean {
-        if (pct !in 0..100) return false
         val s = slug(name)
+        if (!BatteryStateBus.update(BatteryEntry(s, name, pct))) return false
         if (mac != null) macToSlug[mac] = s
-        BatteryStateBus.update(BatteryEntry(s, name, pct))
         return true
     }
 

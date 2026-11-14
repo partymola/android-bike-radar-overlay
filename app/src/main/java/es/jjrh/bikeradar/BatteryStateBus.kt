@@ -44,9 +44,15 @@ object BatteryStateBus {
     private val _entries = MutableStateFlow<Map<String, BatteryEntry>>(emptyMap())
     val entries: StateFlow<Map<String, BatteryEntry>> = _entries
 
-    // Atomic update - concurrent callers cannot drop each other's writes.
-    fun update(entry: BatteryEntry) {
+    /** Store [entry] if its reading is a percentage, and say whether it was.
+     *  Every reading passes through here, so this is the one range check: a
+     *  caller sends a reading on only when this returns true
+     *  (`onlyAPercentageIsTakenAndARefusalKeepsTheLastReading`). Atomic, so
+     *  concurrent callers cannot drop each other's writes. */
+    fun update(entry: BatteryEntry): Boolean {
+        if (entry.pct !in 0..100) return false
         _entries.update { it + (entry.slug to entry) }
+        return true
     }
 
     /** Refresh readAtMs (wall, what the glyph and screens show) and

@@ -4,7 +4,9 @@ package es.jjrh.bikeradar
 
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -18,6 +20,17 @@ class BatteryStateBusTest {
         // BatteryStateBus is a process-wide singleton; empty it so entries
         // don't leak into the next test.
         BatteryStateBus.clearForTest()
+    }
+
+    @Test fun onlyAPercentageIsTakenAndARefusalKeepsTheLastReading() {
+        assertTrue(BatteryStateBus.update(BatteryEntry("radar", "R", 0)))
+        assertTrue(BatteryStateBus.update(BatteryEntry("radar", "R", 100)))
+        assertFalse(BatteryStateBus.update(BatteryEntry("radar", "R", 101)))
+        assertFalse(BatteryStateBus.update(BatteryEntry("radar", "R", 255)))
+        assertFalse(BatteryStateBus.update(BatteryEntry("radar", "R", -1)))
+        assertEquals(100, BatteryStateBus.entries.value["radar"]?.pct)
+        assertFalse(BatteryStateBus.update(BatteryEntry("cam", "C", 101)))
+        assertNull(BatteryStateBus.entries.value["cam"])
     }
 
     @Test fun markSeenBumpsReadAtMsOnExistingEntry() {

@@ -394,6 +394,20 @@ class CameraLightLinkControllerHarnessTest {
         controller.stop()
     }
 
+    @Test fun theEndsOfTheRangeArePercentagesAndOnePastIsNot() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = handshookLink(ha, prefs(paused = false))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "00")
+        assertBatteryStatesSent(ha, listOf("0"))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "64")
+        assertBatteryStatesSent(ha, listOf("0", "100"))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "65")
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(100, BatteryStateBus.entries.value["cam"]?.pct)
+        assertEquals(listOf("0", "100"), ha.batteryStates("cam"))
+        controller.stop()
+    }
+
     @Test fun aHungBatterySendDoesNotHoldTheNextBatteryReading() = runTest {
         val ha = RecordingHaClient()
         val release = CompletableDeferred<Unit>()

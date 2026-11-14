@@ -428,11 +428,12 @@ internal class CameraLightLinkController(
             for ((uuid, bytes) in notifyChannel) {
                 when (uuid) {
                     Uuids.CHAR_BATTERY -> {
-                        // 0xFF and the like are not a percentage, as on the radar
+                        // The bus refuses 0xFF and the like, and then nothing is sent
                         // (`aBatteryByteThatIsNotAPercentageGoesNowhere`).
-                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF)?.takeIf { it in 0..100 } ?: continue
-                        BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct))
-                        if (!prefs.isPaused) haPublisher.offerBattery(name, pct)
+                        val pct = bytes.firstOrNull()?.toInt()?.and(0xFF) ?: continue
+                        if (BatteryStateBus.update(BatteryEntry(lightSlugEarly, name, pct)) && !prefs.isPaused) {
+                            haPublisher.offerBattery(name, pct)
+                        }
                     }
                     Uuids.SETTINGS_14 -> {
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue

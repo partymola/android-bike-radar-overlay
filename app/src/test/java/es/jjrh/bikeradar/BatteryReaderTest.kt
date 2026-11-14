@@ -154,6 +154,46 @@ class BatteryReaderTest {
         assertFalse("a failed HA publish must leave the throttle unarmed for retry", throttleArmed("rearvue8"))
     }
 
+    // ── a reading that is not a percentage ───────────────────────────────────
+
+    @Test
+    fun aReadByteThatIsNotAPercentageGoesNowhere() = runTest {
+        val sent = mutableListOf<Int>()
+        val answered = mutableMapOf<String, Long>()
+        reader(
+            dashcamAnsweredAtMs = answered,
+            publishBattery = { _, pct ->
+                sent += pct
+                true
+            },
+            readBatteryFn = { 255 },
+            monoClock = { 5_000L },
+        ).doReadBattery("Cam", camAddr)
+
+        assertNull(BatteryStateBus.entries.value["cam"])
+        assertEquals(emptyList<Int>(), sent)
+        assertFalse(throttleArmed("cam"))
+        assertEquals("the camera still answered the read", mapOf(camAddr to 5_000L), answered)
+    }
+
+    @Test
+    fun theEndsOfTheRangeAreReadingsAndOnePastIsNot() = runTest {
+        for ((pct, kept) in listOf(0 to true, 100 to true, 101 to false)) {
+            BatteryStateBus.clearForTest()
+            val sent = mutableListOf<Int>()
+            reader(
+                publishBattery = { _, p ->
+                    sent += p
+                    true
+                },
+                readBatteryFn = { pct },
+            ).doReadBattery("RearVue8", radarAddr)
+
+            assertEquals("bus for $pct", if (kept) pct else null, BatteryStateBus.entries.value["rearvue8"]?.pct)
+            assertEquals("sent for $pct", if (kept) listOf(pct) else emptyList(), sent)
+        }
+    }
+
     // ── read-failure path ────────────────────────────────────────────────────
 
     @Test

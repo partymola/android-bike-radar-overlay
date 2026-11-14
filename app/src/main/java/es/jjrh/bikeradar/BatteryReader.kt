@@ -170,7 +170,12 @@ internal class BatteryReader(
             onDashcamAnswered()
             if (prefs.dashcamDisplayName != name) prefs.dashcamDisplayName = name
         }
-        BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = answeredAtMs))
+        // A byte that is not a percentage (0xFF is "unknown") goes nowhere,
+        // though the device did answer (`aReadByteThatIsNotAPercentageGoesNowhere`).
+        if (!BatteryStateBus.update(BatteryEntry(s, name, pct, readAtMs = wallClock(), lastSeenElapsedMs = answeredAtMs))) {
+            Log.w(TAG, "battery $name: $pct is not a percentage")
+            return
+        }
 
         // Only arm the 5-min throttle if the send this reading went out in
         // succeeded, had nothing new to send, or HA isn't configured at all. On

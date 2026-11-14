@@ -202,6 +202,9 @@ class BatteryReaderTest {
             wall = at
             r.doReadBattery("Cam", camAddr)
         }
+        // The reads above straddle this window: 5 s fresh after the last
+        // refusal, 45 s stale after the valid reading.
+        assertEquals(37_000L, BikeRadarService.DASHCAM_FRESH_MS)
 
         fun statusAt(nowMs: Long, entries: Map<String, BatteryEntry>, seen: Boolean) = DashcamStatusDeriver.derive(
             config = DashcamStatusDeriver.Config(warnWhenOff = true, selectedSlug = "cam"),
@@ -223,16 +226,24 @@ class BatteryReaderTest {
     @Test
     fun aRefusalIsLoggedOnceUntilTheValueOrDeviceChanges() = runTest {
         org.robolectric.shadows.ShadowLog.clear()
-        val bytes = ArrayDeque(listOf(255, 255, 255, 254, 254))
+        // 255, 80, 255 at the end: the valid reading resets it, so the second
+        // 255 logs again.
+        val bytes = ArrayDeque(listOf(255, 255, 255, 254, 255, 80, 255, 254))
         val r = reader(readBatteryFn = { bytes.removeFirst() })
-        repeat(4) { r.doReadBattery("Cam", camAddr) }
+        repeat(7) { r.doReadBattery("Cam", camAddr) }
         r.doReadBattery("RearVue8", radarAddr)
 
         val warnings = org.robolectric.shadows.ShadowLog.getLogsForTag("BikeRadar")
             .map { it.msg }
             .filter { it.contains("is not a percentage") }
         assertEquals(
-            listOf("battery Cam: 255 is not a percentage", "battery Cam: 254 is not a percentage", "battery RearVue8: 254 is not a percentage"),
+            listOf(
+                "battery Cam: 255 is not a percentage",
+                "battery Cam: 254 is not a percentage",
+                "battery Cam: 255 is not a percentage",
+                "battery Cam: 255 is not a percentage",
+                "battery RearVue8: 254 is not a percentage",
+            ),
             warnings,
         )
     }

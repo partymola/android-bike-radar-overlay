@@ -404,7 +404,9 @@ class CameraLightLinkControllerHarnessTest {
             "entry=${BatteryStateBus.entries.value["cam"]}",
             pumpUntil(timeoutMs = 1_000) { (BatteryStateBus.entries.value["cam"]?.readAtMs ?: 0L) > 1L },
         )
-        assertEquals(60, BatteryStateBus.entries.value["cam"]?.pct)
+        val entry = requireNotNull(BatteryStateBus.entries.value["cam"])
+        assertTrue("the probe's monotonic stamp moves too; entry=$entry", entry.lastSeenElapsedMs > 1L)
+        assertEquals(60, entry.pct)
         controller.stop()
     }
 

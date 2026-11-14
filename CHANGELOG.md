@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.12.1 - 2026-11-15
+
+### Fixes
+
+- **The all-clear now waits for the radar's next update before it sounds.** Before, a few seconds without any update from the radar could chime the all-clear with a car still behind you.
+  - The same pause could also repeat an urgent warning, or count a car toward a beep, from the last car data the radar sent.
+- **With Home Assistant set up, the radar picture no longer freezes for several seconds when Home Assistant does not answer.** Before, a battery update sent while Home Assistant was out of reach could hold the radar's data for up to about 6 s, long enough for the app to drop the radar.
+- **With the radar tail light's auto-switch on, a radar whose tail light is slow to answer is no longer dropped as it connects.** Before, the app could disconnect it and try again, over and over, with a notification each time that it couldn't switch the tail light.
+- **With Home Assistant set up and the dashcam light's auto-switch on, the dashcam no longer waits on Home Assistant for its battery and light-mode sends.** Before, while Home Assistant did not answer, the dashcam's battery readings and side-button presses could reach the app seconds late.
+- **A radar or dashcam battery reading that is not a percentage is now ignored.** Before, it could show as 255% and go to Home Assistant.
+- **A radar that reports distance only now keeps updating its battery after a battery reading that is not a percentage.** Before, its battery could stay blank or stuck at an old value for the rest of the connection.
+- **The ride's overtake count now includes a car the radar tracked under a number it had used before in the same ride.** Before, that car was not counted. Radars that report distance only count as before.
+- **The Home Assistant test now allows each step 10 s to connect and 10 s to answer.** Before, a slow remote connection could fail it after 3 s.
+- **A Home Assistant address with no dot in its name, like http://homeassistant:8123, is now accepted with http://.** Before, setup and Settings refused it and asked for https://.
+  - A name of one or two letters is still refused, as it could be a country's web domain.
+  - The Privacy screen now lists such names among the home-network addresses.
+
+### Security
+
+- **A Home Assistant address written with a leading zero, like http://010.1.1.1, is no longer accepted with http://.** Before, the app took it for a home-network address and sent your token to it in plain text. Some software reads such an address as a different one, which can be public.
+
+### Improvements
+
+- **A failed send to Home Assistant now reads "Send failed", and the home screen says "Couldn't send to Home Assistant".** Before, both said Home Assistant was unreachable, also when it had answered.
+- **The Privacy screen now says your Android backup carries the Bluetooth address and name of each radar and dashcam the app found or you picked.** Setup now says your choice of radar and dashcam goes into the backup too.
+- **The Privacy screen and setup now list your radar's and dashcam's Bluetooth names among what goes to your Home Assistant.** Home Assistant uses them to name their devices.
+
+### Bug reports
+
+- When the connection log records the app dropping a silent radar, it now says what the app was doing at the time.
+
+### Upgrading
+
+- Still works on Android 12 and later.
+- If your Home Assistant address has a leading zero, like http://010.1.1.1, remove the zero, as in http://10.1.1.1, or switch to https://. Until you do, Home Assistant gets no updates.
+- While the radar is sending car data, a beep or urgent warning can come up to one radar update (a fraction of a second) later than before, or, rarely, not at all.
+- The overtakes count, in the app and in Home Assistant, can read higher on the same ride, and the close-pass rate lower.
+- Other ride figures (distance, time with traffic, tightest clearance, close passes, alert rates) can differ slightly, as they now count radar updates only.
+
+### For developers
+
+- The cue-ledger replay now covers a stopped rider's and a slow rider's urgent warnings.
+- The coverage floors are raised close to measured coverage.
+- The release APK boot test also runs on Android 16.
+- The stream watchdog now starts with the decode loop, after the connect-time writes.
+
 ## v1.12.0 - 2026-11-14
 
 ### Fixes

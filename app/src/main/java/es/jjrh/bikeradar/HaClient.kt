@@ -624,17 +624,20 @@ fun haUrlRefusal(url: String): HaFailureException? = when (val r = HaUrlPolicy.v
  *
  * Why it exists: keeps the privacy disclosures honest as the app grows.
  * [HaClientDataDisclosureTest] fails if [HaClient] publishes a namespaced
- * data topic whose family is not registered here, and
- * `scripts/privacy-disclosure-check.sh` fails if a registered flow's
- * [Flow.disclosureKeyword] is missing from the Settings → Privacy screen.
- * Adding a new outbound flow therefore forces both an entry here and a
- * matching disclosure update.
+ * data topic whose family is not registered here, or if the discovery
+ * device block gains a field, and `scripts/privacy-disclosure-check.sh`
+ * fails if a registered flow's [Flow.disclosureKeyword] is missing from the
+ * Settings → Privacy screen. A new topic family therefore forces both an
+ * entry here and a matching disclosure update. A new key inside an existing
+ * payload is caught by neither and must be disclosed by hand.
  */
 object DataDisclosure {
     /**
      * @param topicFamily the distinctive MQTT topic token after the [NS]
      *   prefix, slug- and `/last`-stripped (e.g. `battery`, or the fixed
-     *   `ride_edge` from `<NS>/ride/edge`).
+     *   `ride_edge` from `<NS>/ride/edge`). The `device` entry has no topic
+     *   of its own: it names the device block every discovery config
+     *   carries.
      * @param category human description of what is sent.
      * @param disclosureKeyword a substring that MUST appear in the Privacy
      *   screen's "What goes to your Home Assistant" copy.

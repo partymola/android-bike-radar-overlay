@@ -700,9 +700,13 @@ a behaviour spec to keep in sync.
   - **A NEW FIELD ON `RadarStateParcel` IS A DISCLOSURE CHANGE.** Whatever
     crosses that wire reaches any app the rider has granted, and
     `settings_privacy_to_apps_body` is where they read what that is, in BOTH
-    locales. `HaClientDataDisclosureTest` forces this for the MQTT side; there
-    is no equivalent for the cross-app side, so a field added here ships
-    undisclosed with every gate green. Update the disclosure in the same commit.
+    locales. On the MQTT side `HaClientDataDisclosureTest` forces it for a new
+    topic family and for a new field in the shared discovery device block
+    (`theDeviceBlockCarriesOnlyTheFieldsItDiscloses`); a new key inside an
+    existing payload is not caught there either and is disclosed by hand.
+    There is no check at all for the cross-app side, so a field added here
+    ships undisclosed with every gate green. Update the disclosure in the same
+    commit.
 - **A comment keeps the fact a maintainer could undo, and the test that pins
   it. Everything else goes.** Cut the argument for the fact, the second example,
   the consequence restated, and any sentence whose job is to show that the

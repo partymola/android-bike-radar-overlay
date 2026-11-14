@@ -6,9 +6,14 @@ import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -18,13 +23,12 @@ import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Pins the optional-HA contract: with HA unconfigured (the radar-only rider
- * who never set it up), every publish path is a clean no-op. Robolectric for
- * HaCredentials' SharedPreferences + the in-memory cryptor.
- *
- * The configured path publishes over real MQTT/HTTP and is not unit-testable
- * here; HaClient owns that and its own tests cover the wire format.
+ * The optional-HA contract (with HA unconfigured every publish path is a clean
+ * no-op), and the battery send's throttle and health reporting against a
+ * [RecordingHaClient]. Robolectric for HaCredentials' SharedPreferences + the
+ * in-memory cryptor. The wire format is HaClient's own tests'.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class HaPublisherTest {
 
@@ -32,10 +36,12 @@ class HaPublisherTest {
 
     @Before fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
+        HaHealthBus.reset()
     }
 
     @After fun tearDown() {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
+        HaHealthBus.reset()
     }
 
     private fun publisher(
@@ -49,6 +55,18 @@ class HaPublisherTest {
         macToSlug = { ConcurrentHashMap<String, String>().apply { put("AA:BB:CC:DD:EE:FF", "radar") } },
         loadKnownDevices = { listOf("radar" to "AA:BB:CC:DD:EE:FF") },
         slug = { it.lowercase(java.util.Locale.ROOT) },
+    )
+
+    private fun configured(ha: RecordingHaClient, scope: CoroutineScope, wallClock: () -> Long = { 1_000_000L }) = HaPublisher(
+        scope = scope,
+        creds = HaCredentials(app),
+        rideStats = { RideStatsAccumulator() },
+        currentRadarMac = { null },
+        macToSlug = { ConcurrentHashMap() },
+        loadKnownDevices = { emptyList() },
+        slug = { it.lowercase(java.util.Locale.ROOT) },
+        newClient = { _, _ -> ha },
+        wallClock = wallClock,
     )
 
     @Test fun publishBatteryReturnsTrueWhenHaNotConfigured() {
@@ -71,5 +89,55 @@ class HaPublisherTest {
             ).publishRideSummaryIfChanged()
         }
         assertFalse("ride-stats must not be consulted when HA is unconfigured", statsRead)
+    }
+
+    // ── the battery send ─────────────────────────────────────────────────────
+
+    @Test fun aChangedBatteryLevelIsSent() = runTest {
+        val ha = RecordingHaClient()
+        val p = configured(ha, backgroundScope)
+        assertTrue(p.publishBatteryIfChanged("Radar", 80))
+        assertTrue(p.publishBatteryIfChanged("Radar", 79))
+        assertEquals(listOf("80", "79"), ha.batteryStates("radar"))
+        assertEquals(1, ha.batteryDiscoveries("radar"))
+    }
+
+    @Test fun anUnchangedLevelIsSentAgainOnlyAtTheFiveMinuteHeartbeat() = runTest {
+        val ha = RecordingHaClient()
+        var now = 1_000_000L
+        val p = configured(ha, backgroundScope) { now }
+        assertTrue(p.publishBatteryIfChanged("Radar", 80))
+        now = 1_299_999L
+        assertTrue("nothing new is still a success", p.publishBatteryIfChanged("Radar", 80))
+        assertEquals(listOf("80"), ha.batteryStates("radar"))
+        now = 1_300_000L
+        assertTrue(p.publishBatteryIfChanged("Radar", 80))
+        assertEquals(listOf("80", "80"), ha.batteryStates("radar"))
+    }
+
+    @Test fun aFailedSendIsRetriedByTheNextReadingAndNotBeforeIt() = runTest {
+        val ha = RecordingHaClient()
+        ha.answer = { topic, _ -> !topic.endsWith("/battery") }
+        val p = configured(ha, backgroundScope)
+        assertFalse(p.publishBatteryIfChanged("Radar", 80))
+        advanceUntilIdle()
+        assertEquals("no send without a new reading", listOf("80"), ha.batteryStates("radar"))
+        ha.answer = { _, _ -> true }
+        assertTrue(p.publishBatteryIfChanged("Radar", 80))
+        assertEquals("the failure was not recorded as sent", listOf("80", "80"), ha.batteryStates("radar"))
+    }
+
+    @Test fun aFailedSendReportsItsCauseAndASuccessReportsOk() = runTest {
+        val ha = RecordingHaClient()
+        ha.failure = HaFailure.AUTH
+        ha.answer = { topic, _ -> !topic.endsWith("/battery") }
+        val p = configured(ha, backgroundScope)
+        assertFalse(p.publishBatteryIfChanged("Radar", 80))
+        val health = HaHealthBus.families.value[HaFamily.BATTERY]
+        assertTrue("a failed send must reach the bus, got $health", health is HaHealth.Error)
+        assertEquals(HaFailure.AUTH, (health as HaHealth.Error).cause)
+        ha.answer = { _, _ -> true }
+        assertTrue(p.publishBatteryIfChanged("Radar", 80))
+        assertEquals(HaHealth.Ok, HaHealthBus.families.value[HaFamily.BATTERY])
     }
 }

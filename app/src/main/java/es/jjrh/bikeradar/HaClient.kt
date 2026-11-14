@@ -35,10 +35,9 @@ import java.net.URL
  * unavailable. Automations referencing the old ids still have to be
  * repointed by hand; the CHANGELOG says so.
  */
-// `open` (and the two close-pass publishers below) so a test double can record
-// publish attempts without a live broker - the close-pass un-gating split
-// "detect locally" from "publish to HA", and the publish-when-configured half
-// is otherwise only reachable through real MQTT. See OverlayPipelineDrivingTest.
+// `open` (with [publishMqtt] and the two close-pass publishers below) so a test
+// double can record publish attempts without a live broker. See
+// OverlayPipelineDrivingTest and RecordingHaClient.
 open class HaClient(private val baseUrl: String, private val token: String) {
     fun isConfigured(): Boolean = baseUrl.isNotBlank() && token.isNotBlank()
 
@@ -64,9 +63,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
      */
     @Volatile
     var lastFailure: HaFailure? = null
-        private set
+        protected set
 
-    suspend fun publishMqtt(topic: String, payload: String, retain: Boolean): Boolean {
+    open suspend fun publishMqtt(topic: String, payload: String, retain: Boolean): Boolean {
         if (!isConfigured()) return false
         haUrlRefusal(baseUrl)?.let {
             Log.w(TAG, "HA mqtt/publish $topic refused: ${it.message}")

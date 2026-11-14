@@ -97,11 +97,11 @@ class RadarLinkControllerHarnessTest {
 
     // ── construction ───────────────────────────────────────────────────────────
 
-    private fun prefs(radarLightAutoMode: Boolean = false) = Prefs(app).apply {
+    /** Paused by default, which skips the notify loop's Home Assistant battery
+     *  send, so a test sees only the BatteryStateBus update. */
+    private fun prefs(radarLightAutoMode: Boolean = false, paused: Boolean = true) = Prefs(app).apply {
         radarLightAutoModeEnabled = radarLightAutoMode
-        // Paused: skips the HA battery-publish branch in the notify loop so the
-        // assertion is the local BatteryStateBus update only.
-        pausedUntilEpochMs = Long.MAX_VALUE
+        pausedUntilEpochMs = if (paused) Long.MAX_VALUE else 0L
     }
 
     private fun overlayPipeline(prefs: Prefs): OverlayPipeline = OverlayPipeline(
@@ -124,7 +124,7 @@ class RadarLinkControllerHarnessTest {
         clog = {},
     )
 
-    private fun haPublisher(scope: kotlinx.coroutines.CoroutineScope) = HaPublisher(
+    private fun haPublisher(scope: kotlinx.coroutines.CoroutineScope, ha: RecordingHaClient) = HaPublisher(
         scope = scope,
         creds = HaCredentials(app),
         rideStats = { RideStatsAccumulator() },
@@ -132,6 +132,7 @@ class RadarLinkControllerHarnessTest {
         macToSlug = { ConcurrentHashMap() },
         loadKnownDevices = { emptyList() },
         slug = { it.lowercase() },
+        newClient = { _, _ -> ha },
     )
 
     /** A [RadarLinkStateGateway] double recording the link edges in order. */
@@ -196,13 +197,14 @@ class RadarLinkControllerHarnessTest {
         // while appearing to test the fallback itself.
         refreshGatt: (BluetoothGatt) -> Boolean = { true },
         macToSlug: MutableMap<String, String> = ConcurrentHashMap(),
+        ha: RecordingHaClient = RecordingHaClient(),
     ): RadarLinkController = RadarLinkController(
         context = app,
         scope = scope,
         prefs = prefs,
         captureLog = captureLog,
         overlayPipeline = overlayPipeline(prefs),
-        haPublisher = haPublisher(backgroundScope),
+        haPublisher = haPublisher(backgroundScope, ha),
         notifications = ServiceNotifications(app) { Prefs(app) },
         linkState = gateway,
         macToSlug = macToSlug,
@@ -473,6 +475,43 @@ class RadarLinkControllerHarnessTest {
         // life of the app, with the suite green.
         assertTrue("a connected radar must be reachable by a granted app", RadarControlBridge.available)
 
+        controller.forceReconnect()
+    }
+
+    /** A streaming V2 link with [ha] behind the publisher. */
+    private suspend fun TestScope.streamingLink(
+        ha: RecordingHaClient,
+        prefs: Prefs,
+        clock: () -> Long = { 0L },
+    ): Pair<Link, RadarLinkController> {
+        val link = Link()
+        val controller = controller(link, prefs = prefs, ha = ha, clock = clock)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        return link to controller
+    }
+
+    @Test fun aBatteryNotifyIsSentToHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = streamingLink(ha, prefs(paused = false))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.batteryStates("testradar") == listOf("60", "59") })
+        controller.forceReconnect()
+    }
+
+    @Test fun aPausedRiderSendsNoBatteryToHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = streamingLink(ha, prefs(paused = true))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 59 })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
         controller.forceReconnect()
     }
 

@@ -105,7 +105,9 @@ class CameraLightLinkControllerHarnessTest {
 
     // ── construction ───────────────────────────────────────────────────────────
 
-    private fun prefs() = Prefs(app).apply {
+    /** Paused by default, which skips the notify loop's Home Assistant battery
+     *  send, so a test sees only the BatteryStateBus update. */
+    private fun prefs(paused: Boolean = true) = Prefs(app).apply {
         autoLightModeEnabled = true
         // The camera under test has to BE the rider's. The loop reads
         // activeDashcamMac on every attempt, so a fixture that leaves the
@@ -114,12 +116,10 @@ class CameraLightLinkControllerHarnessTest {
         // that exited immediately.
         dashcamOwnership = DashcamOwnership.YES
         dashcamMac = this@CameraLightLinkControllerHarnessTest.mac
-        // Paused: skips the HA battery-publish branch in the notify loop so the
-        // assertion is the local BatteryStateBus update only.
-        pausedUntilEpochMs = Long.MAX_VALUE
+        pausedUntilEpochMs = if (paused) Long.MAX_VALUE else 0L
     }
 
-    private fun haPublisher(scope: kotlinx.coroutines.CoroutineScope) = HaPublisher(
+    private fun haPublisher(scope: kotlinx.coroutines.CoroutineScope, ha: RecordingHaClient) = HaPublisher(
         scope = scope,
         creds = HaCredentials(app),
         rideStats = { RideStatsAccumulator() },
@@ -127,6 +127,7 @@ class CameraLightLinkControllerHarnessTest {
         macToSlug = { ConcurrentHashMap() },
         loadKnownDevices = { emptyList() },
         slug = { it.lowercase() },
+        newClient = { _, _ -> ha },
     )
 
     /** Captured handle on the connection the controller opened. */
@@ -143,12 +144,15 @@ class CameraLightLinkControllerHarnessTest {
         setUp: (BluetoothGatt) -> Unit = ::setUpFrontCameraServices,
         prefs: Prefs = prefs(),
         scope: kotlinx.coroutines.CoroutineScope = backgroundScope,
+        ha: RecordingHaClient = RecordingHaClient(),
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
         scope = scope,
         prefs = prefs,
+        // The front-mode publishes stay unconfigured: only the battery send
+        // goes through the publisher.
         ha = { HaClient("", "") },
-        haPublisher = haPublisher(backgroundScope),
+        haPublisher = haPublisher(backgroundScope, ha),
         notifications = ServiceNotifications(app) { Prefs(app) },
         macToSlug = ConcurrentHashMap(),
         slug = { it.lowercase() },
@@ -329,6 +333,39 @@ class CameraLightLinkControllerHarnessTest {
         )
         assertEquals(80, BatteryStateBus.entries.value["cam"]?.pct)
 
+        controller.stop()
+    }
+
+    /** A camera link through its handshake, with [ha] behind the publisher. */
+    private suspend fun TestScope.handshookLink(ha: RecordingHaClient, prefs: Prefs): Pair<Link, CameraLightLinkController> {
+        val link = Link()
+        val controller = controller(link, prefs = prefs, ha = ha)
+        startDriver(link)
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("camera handshake complete") })
+        return link to controller
+    }
+
+    @Test fun aBatteryNotifyIsSentToHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = handshookLink(ha, prefs(paused = false))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.batteryStates("cam") == listOf("60", "59") })
+        controller.stop()
+    }
+
+    @Test fun aPausedRiderSendsNoBatteryToHomeAssistant() = runTest {
+        val ha = RecordingHaClient()
+        val (link, controller) = handshookLink(ha, prefs(paused = true))
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 59 })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals(emptyList<Pair<String, String>>(), ha.sends.toList())
         controller.stop()
     }
 

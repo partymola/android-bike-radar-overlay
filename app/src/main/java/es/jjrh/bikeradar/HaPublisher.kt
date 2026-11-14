@@ -42,6 +42,9 @@ internal class HaPublisher(
     private val macToSlug: () -> ConcurrentHashMap<String, String>,
     private val loadKnownDevices: () -> List<Pair<String, String>>,
     private val slug: (String) -> String,
+    private val newClient: (baseUrl: String, token: String) -> HaClient = ::HaClient,
+    /** Stamps the battery heartbeat. */
+    private val wallClock: () -> Long = { System.currentTimeMillis() },
 ) {
 
     // Per-slug HA discovery + throttle state. One HaPublisher is built per
@@ -51,7 +54,7 @@ internal class HaPublisher(
     private val lastPublishedPct = ConcurrentHashMap<String, Int>()
     private val rideSummaryDiscoveredSlugs = ConcurrentHashMap.newKeySet<String>()
 
-    private fun client() = HaClient(creds.baseUrl, creds.token)
+    private fun client() = newClient(creds.baseUrl, creds.token)
 
     /**
      * Publishes [pct] when it differs from the last value published for this
@@ -63,7 +66,7 @@ internal class HaPublisher(
      */
     suspend fun publishBatteryIfChanged(name: String, pct: Int): Boolean {
         val s = slug(name)
-        val now = System.currentTimeMillis()
+        val now = wallClock()
         val lastPct = lastPublishedPct[s]
         val lastMs = lastHaPublishMs[s] ?: 0L
         val shouldPublish = pct != lastPct || (now - lastMs) >= BATTERY_HA_HEARTBEAT_MS

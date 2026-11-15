@@ -60,6 +60,10 @@ interface IRadarService {
     /**
      * Set the radar's tail-light mode. Needs the control grant, which read
      * never implies. Returns false when refused or when no radar is linked.
+     * It can also return false for up to a few seconds after the radar starts
+     * delivering, while the link is still being set up, so retry a false
+     * answer that comes then. The rider's own day/night setting can change
+     * the mode again when the radar next connects and at dusk or dawn.
      *
      * The int is one of RadarContract's LIGHT_MODE_ values, which are fixed
      * for a contract version; read getContractVersion first. Anything else is

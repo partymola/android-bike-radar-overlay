@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -105,6 +106,10 @@ internal class OverlayPipeline(
     // Cross-connection state. Sampling cadences must NOT reset on every
     // reconnect or a flaky link would replay the cues each time.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
+
+    /** Whether one of the ride's cues is sounding, which the tail-light
+     *  failure tone waits out (`theFailToneWaitsForACueToEnd`). */
+    val cueSounding: StateFlow<Boolean> get() = beeper.cueSounding
 
     /**
      * Start the pipeline. Returns the [Job] driving the collect loop; the

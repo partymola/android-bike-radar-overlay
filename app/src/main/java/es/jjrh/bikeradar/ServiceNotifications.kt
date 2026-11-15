@@ -16,11 +16,7 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.ipc.RadarOverlayGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -246,7 +242,7 @@ internal class ServiceNotifications(
      */
     fun launchReposts(scope: CoroutineScope) {
         scope.launch(Dispatchers.Main) {
-            combine(RadarOverlayGate.hiddenBy, callInProgress()) { _, _ -> }.collect {
+            combine(RadarOverlayGate.hiddenBy, AlertBeeper.callInProgress(audio, context.mainExecutor)) { _, _ -> }.collect {
                 try {
                     postForeground()
                 } catch (t: Throwable) {
@@ -255,16 +251,6 @@ internal class ServiceNotifications(
             }
         }
     }
-
-    /** Registers before reading the current mode, so no edge falls between;
-     *  read the other way round, a call starting in the gap has its end
-     *  swallowed by the de-duplication. No test here interleaves there. */
-    private fun callInProgress(): Flow<Boolean> = callbackFlow {
-        val listener = AudioManager.OnModeChangedListener { trySend(AlertBeeper.isCallMode(it)) }
-        audio.addOnModeChangedListener(context.mainExecutor, listener)
-        trySend(AlertBeeper.isCallMode(audio.mode))
-        awaitClose { audio.removeOnModeChangedListener(listener) }
-    }.distinctUntilChanged()
 
     /** Bond-lost alert: the radar's bond was removed in system settings, so the
      *  reconnect loop was stopped. Deep-links to Bluetooth settings so the rider

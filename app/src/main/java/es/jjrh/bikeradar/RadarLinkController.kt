@@ -31,6 +31,9 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -919,6 +922,7 @@ internal class RadarLinkController(
                 }
                 journal("radar light $phase mode=$mode applied=false")
                 postRadarLightModeFailNotification(mode)
+                awaitQuietForFailTone()
                 playRadarLightFailTone()
             }
 
@@ -1414,10 +1418,10 @@ internal class RadarLinkController(
         return true
     }
 
-    /** The tail-light failure notification, posted beside the tone of
-     *  [playRadarLightFailTone] for a set whose last try went unanswered or
-     *  was refused, no press stopped, and the radar streamed after on a link
-     *  still up (`reportFailedSet`). The radar cannot be read back, so a write
+    /** The tail-light failure notification, posted at once for a set whose
+     *  last try went unanswered or was refused, that nothing stopped, on a link
+     *  still up that the radar streamed on after (`reportFailedSet`); the tone
+     *  of [playRadarLightFailTone] follows once [awaitQuietForFailTone] lets it. The radar cannot be read back, so a write
      *  it ACKs and the light then ignores goes unseen. Its own notification
      *  id, so it and the dashcam's never replace each other. */
     private fun postRadarLightModeFailNotification(mode: RadarLightMode) {
@@ -1432,6 +1436,28 @@ internal class RadarLinkController(
         )
 
         notifications.postRadarLightFail(modeName)
+    }
+
+    /** Holds the tail-light failure tone until no cue of the ride is sounding,
+     *  no pause holds and no call is on, so it never sounds over a cue or
+     *  through a pause or a call. A pause ends at its own deadline or on a
+     *  resume (`theFailToneWaitsForACueToEnd`, `theFailToneWaitsForAResume`,
+     *  `theFailToneWaitsForAPauseToRunOut`, `theFailToneWaitsForACallToEnd`). */
+    private suspend fun awaitQuietForFailTone() {
+        val paused = channelFlow {
+            prefs.flow.collectLatest { s ->
+                val left = s.pausedUntilEpochMs - wallClock()
+                send(left > 0)
+                if (left > 0) {
+                    delay(left)
+                    send(false)
+                }
+            }
+        }
+        val audio = context.getSystemService(android.media.AudioManager::class.java)
+        combine(overlayPipeline.cueSounding, paused, AlertBeeper.callInProgress(audio, context.mainExecutor)) { cue, pause, call ->
+            !cue && !pause && !call
+        }.first { it }
     }
 
     private suspend fun playRadarLightFailTone() {

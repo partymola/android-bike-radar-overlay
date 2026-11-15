@@ -215,6 +215,33 @@ class AlertBeeperFocusTest {
     }
 
     @Test
+    fun aCueReadsSoundingUntilItsBurstEnds() {
+        val beeper = newBeeper()
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        assertFalse(beeper.cueSounding.value)
+        beeper.play(1)
+        assertTrue(beeper.cueSounding.value)
+        // One 80 ms beep, then the 50 ms tail before the abandon timer.
+        main.idleFor(java.time.Duration.ofMillis(129))
+        assertTrue(beeper.cueSounding.value)
+        main.idleFor(java.time.Duration.ofMillis(1))
+        assertFalse(beeper.cueSounding.value)
+        beeper.play(3)
+        assertTrue(beeper.cueSounding.value)
+        beeper.release()
+        assertFalse("a released beeper sounds nothing", beeper.cueSounding.value)
+    }
+
+    @Test
+    fun aCueSkippedForACallNeverReadsSounding() {
+        audioManager.setMode(AudioManager.MODE_IN_CALL)
+        val beeper = newBeeper()
+        beeper.play(2)
+        assertFalse(beeper.cueSounding.value)
+        beeper.release()
+    }
+
+    @Test
     fun release_doesNotThrowAfterPlay() {
         // After play() acquires focus, release() must complete without
         // throwing - even though Robolectric in this version exposes no

@@ -93,8 +93,12 @@ class RadarLinkControllerHarnessTest {
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
         ShadowToneGenerator.reset()
+        // Inline, and every play reported as sounding, so a test can hold a cue
+        // until it idles the main looper past the cue's end.
         beeper = AlertBeeper(
             audioManager = app.getSystemService(AudioManager::class.java),
+            executor = { it.run() },
+            playTrackOverride = { true },
             onCue = {},
         )
     }
@@ -980,8 +984,9 @@ class RadarLinkControllerHarnessTest {
     // ── the connection log says what the tail light was told ────────────────────
 
     /** Each auto-mode set away from its default and from the other: the phase
-     *  depends on the real clock, so a line must name the mode of its phase. */
-    private fun autoLightPrefs() = prefs(radarLightAutoMode = true).apply {
+     *  depends on the real clock, so a line must name the mode of its phase.
+     *  Not paused, since a pause holds the failure tone back. */
+    private fun autoLightPrefs() = prefs(radarLightAutoMode = true, paused = false).apply {
         radarLightDayMode = RadarLightMode.SOLID
         radarLightNightMode = RadarLightMode.PELOTON
     }
@@ -1084,6 +1089,101 @@ class RadarLinkControllerHarnessTest {
         assertEquals("journal=$journal", 1, endedLines().size)
         assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
         assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    // ── the failure tone waits for the audio to be free ─────────────────────────
+
+    /** A link whose light refused all three tries, waiting for the frame that
+     *  shows the radar still streaming. */
+    private suspend fun TestScope.aRefusedSet(prefs: Prefs = autoLightPrefs(), wallClock: () -> Long = { System.currentTimeMillis() }): Pair<Link, RadarLinkController> {
+        ShadowLog.clear()
+        val link = Link()
+        val controller = controller(link, prefs = prefs, setUp = ::setUpRadarRefusingLightWrites, wallClock = wallClock)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { lightSetLogged(applied = false) })
+        return link to controller
+    }
+
+    /** A status frame: the radar streaming, with no car for a cue to sound for. */
+    private fun streams(link: Link) = notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, "0100")
+
+    private val main get() = shadowOf(android.os.Looper.getMainLooper())
+
+    @Test fun theFailToneWaitsForACueToEnd() = runTest {
+        val (link, controller) = aRefusedSet()
+        beeper.play(1)
+        streams(link)
+        assertTrue("posted at once", pumpUntil { radarLightFailNotified() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while the cue sounds", 0, nackTones())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue(pumpUntil { nackTones() == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("once", 1, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test fun theFailToneWaitsForAResume() = runTest {
+        val p = autoLightPrefs().apply { pausedUntilEpochMs = Long.MAX_VALUE }
+        val (link, controller) = aRefusedSet(prefs = p)
+        streams(link)
+        assertTrue("posted at once", pumpUntil { radarLightFailNotified() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while paused", 0, nackTones())
+        p.pausedUntilEpochMs = 0L
+        main.idle()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        controller.forceReconnect()
+    }
+
+    @Test fun theFailToneWaitsForAPauseToRunOut() = runTest {
+        val base = 1_790_000_000_000L
+        val wall = { base + testScheduler.currentTime }
+        val p = autoLightPrefs()
+        val (link, controller) = aRefusedSet(prefs = p, wallClock = wall)
+        p.pausedUntilEpochMs = wall() + 4_000L
+        streams(link)
+        assertTrue("posted at once", pumpUntil { radarLightFailNotified() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while the pause lasts", 0, nackTones())
+        assertTrue(pumpUntil(timeoutMs = 2_000) { nackTones() == 1 })
+        controller.forceReconnect()
+    }
+
+    @Test fun theFailToneWaitsForACallToEnd() = runTest {
+        val audio = app.getSystemService(AudioManager::class.java)
+        try {
+            val (link, controller) = aRefusedSet()
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            main.idle()
+            streams(link)
+            assertTrue("posted at once", pumpUntil { radarLightFailNotified() })
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals("held during the call", 0, nackTones())
+            audio.mode = AudioManager.MODE_NORMAL
+            main.idle()
+            assertTrue(pumpUntil { nackTones() == 1 })
+            controller.forceReconnect()
+        } finally {
+            audio.mode = AudioManager.MODE_NORMAL
+        }
+    }
+
+    @Test fun aHeldFailToneNeverSoundsOnceTheLinkEnds() = runTest {
+        val (link, controller) = aRefusedSet()
+        beeper.play(1)
+        streams(link)
+        assertTrue(pumpUntil { radarLightFailNotified() })
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
         assertEquals(0, nackTones())
         controller.forceReconnect()
     }

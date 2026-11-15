@@ -10,6 +10,13 @@ import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.math.PI
@@ -275,6 +282,13 @@ class AlertBeeper(
 
     @Volatile private var hasFocus: Boolean = false
 
+    private val cueSoundingState = MutableStateFlow(false)
+
+    /** True from a cue's play until its burst's abandon timer fires: the
+     *  cue's own length plus the tail [playWithFocus] arms
+     *  (`AlertBeeperFocusTest.aCueReadsSoundingUntilItsBurstEnds`). */
+    val cueSounding: StateFlow<Boolean> = cueSoundingState.asStateFlow()
+
     /** The rider's own STREAM_ALARM index, captured once when [applyAlarmFloor]
      *  first lifts the alarm stream for a cue burst; null when no lift is in
      *  effect. Restored when the abandon timer fires (end of the burst) and in
@@ -292,6 +306,7 @@ class AlertBeeper(
             hasFocus = false
         }
         restoreAlarmFloor()
+        cueSoundingState.value = false
     }
 
     init {
@@ -498,6 +513,7 @@ class AlertBeeper(
         // just cancelled; do it here so service destroy never leaves the
         // rider's alarm slider raised.
         restoreAlarmFloor()
+        cueSoundingState.value = false
         // Teardown rides the playback executor, keeping the track fields
         // executor-confined: a cue task already queued ahead of this one
         // finds `released` set and skips, so the failure-triggered rebuild
@@ -556,6 +572,7 @@ class AlertBeeper(
         // window so media stays ducked across the burst rather than
         // restoring + re-ducking between cues.
         abandonHandler.removeCallbacks(abandonRunnable)
+        cueSoundingState.value = true
         abandonHandler.postDelayed(abandonRunnable, (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong())
         return played
     }
@@ -853,6 +870,18 @@ class AlertBeeper(
          *  one. MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP
          *  (WhatsApp, Meet, Telegram, SIP): the same rider situation. */
         internal fun isCallMode(mode: Int): Boolean = mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
+
+        /** Whether a call is on ([isCallMode]), now and at each mode change.
+         *  Registers before reading the current mode, so no edge falls
+         *  between; read the other way round, a call starting in the gap has
+         *  its end swallowed by the de-duplication. No test here interleaves
+         *  there. */
+        internal fun callInProgress(audio: AudioManager, executor: Executor): Flow<Boolean> = callbackFlow {
+            val listener = AudioManager.OnModeChangedListener { trySend(isCallMode(it)) }
+            audio.addOnModeChangedListener(executor, listener)
+            trySend(isCallMode(audio.mode))
+            awaitClose { audio.removeOnModeChangedListener(listener) }
+        }.distinctUntilChanged()
 
         /** Carrier for the whole status timbre-class (radar-drop, reconnect).
          *  Chosen in the ~800-1000 Hz window: the earlier

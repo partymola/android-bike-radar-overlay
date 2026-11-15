@@ -237,6 +237,18 @@ Four states quiet or reshape the audio, by design:
   a call routes the output, and preserving call audio integrity outranks a beep
   the rider would struggle to act on mid-call anyway.
 
+**The tail-light failure tone waits for all of the above.** When the radar
+refuses a tail-light mode, or leaves all three tries unanswered, on a link that
+is still streaming, the app posts a notification at once. It also plays a
+short tone on the notification stream. That tone is not one of `AlertBeeper`'s
+cues, so the states above do not apply to it on their own. It waits until no
+cue is sounding, no pause holds and no call is on, then sounds once. If the
+link ends first, it never sounds. The wait has no length of its own: it ends
+when the cue's burst, the pause or the call ends
+(`RadarLinkControllerHarnessTest.theFailToneWaitsForACueToEnd`,
+`theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
+`theFailToneWaitsForACallToEnd`, `aHeldFailToneNeverSoundsOnceTheLinkEnds`).
+
 Audio is the primary channel, so while the service runs `AlertBeeper` must never
 fail silently. (A cue that arrives after the beeper is released at service stop
 is dropped; there is nothing left to play it on.) A cue that could not sound is

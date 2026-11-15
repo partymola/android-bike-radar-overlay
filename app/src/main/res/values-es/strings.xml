@@ -819,6 +819,7 @@
     <string name="svc_main_dashcam_light_title">Luz de la cámara</string>
     <string name="svc_main_radar_light_title">Luz del radar</string>
     <string name="svc_main_light_fail_text">No se ha podido cambiar a <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - comprueba la conexión.</string>
+    <string name="svc_main_radar_light_fail_text">No se ha podido cambiar la luz trasera a «<xliff:g id="mode" example="Destello diurno">%1$s</xliff:g>». Échale un vistazo con la bici parada.</string>
     <string name="svc_main_light_fail_channel_name">Luz de la cámara</string>
     <string name="svc_main_light_fail_channel_desc">Avisa si no se puede aplicar el modo de la cámara o luz delantera.</string>
     <string name="svc_main_forgot_lock_channel_name">Olvido de bloqueo</string>

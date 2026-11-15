@@ -334,32 +334,33 @@ internal class ServiceNotifications(
     /** Front camera/dashcam light-mode-switch-failed alert: the BLE write to set
      *  the mode was not ACKed. [modeName] is the localized failed-mode label.
      *  The NACK beep is played separately by the service. */
-    fun postLightFail(modeName: String) = postLightFail(
-        R.string.svc_main_dashcam_light_title,
-        modeName,
+    fun postLightFail(modeName: String) = nm.notify(
         NOTIF_LIGHT_FAIL_ID,
+        lightFail(R.string.svc_main_dashcam_light_title, context.getString(R.string.svc_main_light_fail_text, modeName)).build(),
     )
 
     /** Rear radar tail-light variant, with a distinct id so it and the dashcam
-     *  light-fail notification never clobber each other. */
-    fun postRadarLightFail(modeName: String) = postLightFail(
-        R.string.svc_main_radar_light_title,
-        modeName,
-        NOTIF_RADAR_LIGHT_FAIL_ID,
-    )
+     *  light-fail notification never clobber each other. Its own text, since it
+     *  posts only on a link still up, and shown in full, since the text is two
+     *  sentences (`theRadarLightFailureSaysToCheckTheLightAndShowsInFull`). */
+    fun postRadarLightFail(modeName: String) {
+        val text = context.getString(R.string.svc_main_radar_light_fail_text, modeName)
+        nm.notify(
+            NOTIF_RADAR_LIGHT_FAIL_ID,
+            lightFail(R.string.svc_main_radar_light_title, text).setStyle(NotificationCompat.BigTextStyle().bigText(text)).build(),
+        )
+    }
 
-    private fun postLightFail(titleRes: Int, modeName: String, notifId: Int) {
+    private fun lightFail(titleRes: Int, text: String): NotificationCompat.Builder {
         ensureChannels()
-        val notif = NotificationCompat.Builder(context, LIGHT_FAIL_CHANNEL_ID)
+        return NotificationCompat.Builder(context, LIGHT_FAIL_CHANNEL_ID)
             .setContentTitle(context.getString(titleRes))
-            .setContentText(context.getString(R.string.svc_main_light_fail_text, modeName))
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
             .setAutoCancel(true)
             .setVibrate(LIGHT_FAIL_VIBRATE_PATTERN)
-            .build()
-        nm.notify(notifId, notif)
     }
 
     /** Wrist-haptic reminder that the rider walked off with the eBike unlocked -

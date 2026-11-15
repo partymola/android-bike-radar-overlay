@@ -525,7 +525,10 @@ must not be changed about it. Four that bite in ordinary work:
     (`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`,
     `threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
     `aFrameAfterTheAppEndedTheLinkReportsNoFailure`). The notification posts
-    then; the tone waits until no cue sounds, no pause holds and no call is
+    then, with its own text about the light rather than the connection,
+    shown in full
+    (`ServiceNotificationsTest.theRadarLightFailureSaysToCheckTheLightAndShowsInFull`);
+    the tone waits until no cue sounds, no pause holds and no call is
     on (`AUDIO_DESIGN.md`, "When the audio steps back";
     `AlertBeeper.cueSounding`). A set that a drop, a
     watchdog teardown, a pin move or a forced reconnect interrupts journals

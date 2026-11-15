@@ -18,6 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 
 /**
  * Channel lifecycle + the foreground notification's paused/active branch.
@@ -188,6 +189,35 @@ class ServiceNotificationsTest {
             ),
             nm.activeNotifications.map { title(it) }.toSet(),
         )
+    }
+
+    private fun lightFail(title: String) = nm.activeNotifications.single { title(it) == title }.notification.extras
+
+    @Test fun theRadarLightFailureSaysToCheckTheLightAndShowsInFull() {
+        // It posts only on a link that is still up, so "check connection"
+        // would be wrong for it; the text is two sentences, so the collapsed
+        // line alone cuts it.
+        val n = notifications()
+        n.postRadarLightFail("Solid")
+        n.postLightFail("Day Flash")
+        val radar = lightFail("Radar light")
+        val expected = "Couldn't switch the tail light to Solid. Check it while you're stopped."
+        assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        assertEquals(expected, radar.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
+        assertEquals(
+            "Couldn't switch to Day Flash - check connection.",
+            lightFail("Dashcam light").getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun theRadarLightFailureSaysToCheckTheLightInSpanishToo() {
+        notifications().postRadarLightFail("Fija")
+        val radar = lightFail("Luz del radar")
+        val expected = "No se ha podido cambiar la luz trasera a «Fija». Échale un vistazo con la bici parada."
+        assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        assertEquals(expected, radar.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
     }
 
     private fun blankSnapshot() = RideStatsSnapshot(

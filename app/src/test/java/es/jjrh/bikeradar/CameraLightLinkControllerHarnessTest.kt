@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
+import android.media.ToneGenerator
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.DashcamOwnership
@@ -34,6 +35,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToneGenerator
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -98,6 +100,7 @@ class CameraLightLinkControllerHarnessTest {
     @Before fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         BatteryStateBus.clearForTest()
+        ShadowToneGenerator.reset()
         shadowOf(adapter).setState(android.bluetooth.BluetoothAdapter.STATE_ON)
     }
 
@@ -150,6 +153,8 @@ class CameraLightLinkControllerHarnessTest {
         ha: RecordingHaClient = RecordingHaClient(),
         // Unconfigured unless a test is about the front-light mode send.
         frontModeHa: HaClient = HaClient("", ""),
+        clock: () -> Long = { 0L },
+        wallClock: () -> Long = { System.currentTimeMillis() },
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
         scope = scope,
@@ -162,7 +167,8 @@ class CameraLightLinkControllerHarnessTest {
         radarOffSinceMs = { null },
         journal = { journal += it },
         dashcamLink = gateway,
-        clock = { 0L },
+        clock = clock,
+        wallClock = wallClock,
         openGatt = { ctx, dev, _, cb ->
             link.openCount++
             link.cb = cb
@@ -914,5 +920,186 @@ class CameraLightLinkControllerHarnessTest {
         disconnect(link, 257)
         assertTrue("reports=$reports", pumpUntil { reports.lastOrNull() == "gone" })
         assertEquals(listOf("heard", "gone"), reports.toList())
+    }
+
+    // ── the light set runs beside the notify loop ──────────────────────────────
+
+    /** Forwards every callback the controller handles, except that the first
+     *  [swallow] answers to a mode-set write are dropped, so each of those
+     *  writes runs to the queue's op timeout. [ops] lists the mode-set writes
+     *  in the order they went out. */
+    private class SwallowingLightWrites(
+        private val inner: BluetoothGattCallback,
+        private var swallow: Int,
+        private val ops: MutableList<String>,
+    ) : BluetoothGattCallback() {
+        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = inner.onConnectionStateChange(g, status, newState)
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = inner.onServicesDiscovered(g, status)
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = inner.onDescriptorWrite(g, d, status)
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) = inner.onCharacteristicRead(g, ch, status)
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = inner.onCharacteristicRead(g, ch, value, status)
+        override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+            if (ch.uuid == Uuids.SETTINGS_ACK) {
+                @Suppress("DEPRECATION")
+                ops += "light " + ch.value.joinToString("") { "%02x".format(it) }
+                if (swallow > 0) {
+                    swallow--
+                    return
+                }
+            }
+            inner.onCharacteristicWrite(g, ch, status)
+        }
+        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) = inner.onMtuChanged(g, mtu, status)
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) = inner.onCharacteristicChanged(g, ch)
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) = inner.onCharacteristicChanged(g, ch, value)
+    }
+
+    /** Every connection's mode-set writes, in order. */
+    private val gattOps: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    private fun lightWrites() = gattOps.toList().filter { it.startsWith("light ") }
+
+    private var lightConnections = 0
+
+    /** The full front-camera table on every connection, each of which leaves
+     *  its first [swallowedWrites] (given the connection's number, from 1)
+     *  mode-set writes unanswered. */
+    private fun slowLightCamera(swallowedWrites: (connection: Int) -> Int): (BluetoothGatt) -> Unit = { g ->
+        lightConnections++
+        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites(lightConnections), gattOps))
+        setUpFrontCameraServices(g)
+    }
+
+    /** A camera link through its handshake, whose mode-set writes are
+     *  [setUp]'s. */
+    private suspend fun TestScope.lightLink(
+        setUp: (BluetoothGatt) -> Unit,
+        prefs: Prefs = frontModePrefs(),
+        ha: RecordingHaClient = RecordingHaClient(),
+        clock: () -> Long = { 0L },
+        wallClock: () -> Long = { System.currentTimeMillis() },
+    ): Pair<Link, CameraLightLinkController> {
+        val link = Link()
+        val controller = controller(link, setUp = setUp, prefs = prefs, ha = ha, frontModeHa = ha, clock = clock, wallClock = wallClock)
+        startDriver(link)
+        controller.start("Cam", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("camera handshake complete") })
+        return link to controller
+    }
+
+    private fun lightFailNotified(): Boolean {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        return shadowOf(nm).allNotifications.any {
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Dashcam light"
+        }
+    }
+
+    private fun nackTones() = ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }
+
+    @Test fun anUnansweredLightSetDoesNotHoldTheCamerasNotifications() = runTest {
+        // Three unanswered tries take about 17 s; neither a battery reading nor
+        // a mode-state notify waits for them.
+        val ha = RecordingHaClient()
+        val (link, controller) = lightLink(slowLightCamera { 3 }, ha = ha)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(
+            "the battery reading must reach the bus while the set is unanswered",
+            pumpUntil(timeoutMs = 100) { BatteryStateBus.entries.value["cam"]?.pct == 80 },
+        )
+        assertTrue("sends=${ha.sends}", pumpUntil(timeoutMs = 100) { ha.frontModeStates("cam") == listOf("OFF") })
+        assertEquals("ops=$gattOps", 1, lightWrites().size)
+        controller.stop()
+    }
+
+    /** Runs [block] in London on midsummer's day, with manual coordinates and
+     *  a wall clock reading 9 s before sunset, so the sunset switch falls due
+     *  9 s into the link. Day mode is High and night mode Low. */
+    private suspend fun TestScope.nineSecondsBeforeSunset(block: suspend (prefs: Prefs, wallClock: () -> Long) -> Unit) {
+        val zone = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        try {
+            val p = frontModePrefs().apply {
+                cameraLightDayMode = CameraLightMode.HIGH
+                cameraLightNightMode = CameraLightMode.LOW
+                setManualLocation(51.5074, -0.1278)
+            }
+            val sunset = requireNotNull(SunsetCalculator.sunsetEpochMs(java.time.LocalDate.of(2026, 6, 21), 51.5074, -0.1278))
+            block(p) { sunset - 9_000L + testScheduler.currentTime }
+        } finally {
+            java.util.TimeZone.setDefault(zone)
+        }
+    }
+
+    @Test fun aFlipDueDuringTheInitialSetComesAfterIt() = runTest {
+        // Three unanswered tries take about 17 s, past the switch's 9 s.
+        nineSecondsBeforeSunset { p, wall ->
+            val (_, controller) = lightLink(slowLightCamera { 3 }, prefs = p, wallClock = wall)
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 30_000) { lightWrites().size == 4 })
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals(listOf("light 070001", "light 070001", "light 070001", "light 070003"), lightWrites())
+            controller.stop()
+        }
+    }
+
+    @Test fun aLinkLostDuringTheLightSetSoundsNoLightFailure() = runTest {
+        // The last try is failed by the disconnect, not by the light.
+        val (link, controller) = lightLink(slowLightCamera { Int.MAX_VALUE })
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 3 })
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertFalse(lightFailNotified())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test fun aSetTheAppEndsReportsNothing() = runTest {
+        val (_, controller) = lightLink(slowLightCamera { Int.MAX_VALUE })
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 2 })
+        controller.stop()
+        pumpUntil(timeoutMs = 20_000) { false }
+        assertEquals("ops=$gattOps", 2, lightWrites().size)
+        assertFalse(lightFailNotified())
+        assertEquals(0, nackTones())
+    }
+
+    @Test fun aRefusedSetOnALiveLinkIsReported() = runTest {
+        val (_, controller) = lightLink(::setUpCameraRefusingLightWrites)
+        assertTrue(pumpUntil { lightFailNotified() })
+        assertTrue(pumpUntil { nackTones() == 1 })
+        controller.stop()
+    }
+
+    @Test fun anEchoOfTheSetBeforeItsAnswerIsNotAPress() = runTest {
+        // Connection 1 lands LOW. Connection 2 sets HIGH, and the camera's
+        // mode-state echo of it arrives while the write is still unanswered.
+        // Read as a press it would hold auto-mode off, and connection 3 would
+        // set nothing.
+        val ha = RecordingHaClient()
+        val p = frontModePrefs()
+        val (link, controller) = lightLink(slowLightCamera { if (it == 2) 1 else 0 }, prefs = p, ha = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW") })
+        p.cameraLightDayMode = CameraLightMode.HIGH
+        p.cameraLightNightMode = CameraLightMode.HIGH
+        disconnect(link, 147)
+        handshake(link, 2)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 2 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010000")
+        assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 20_000) { lightWrites().size == 3 })
+        disconnect(link, 147)
+        handshake(link, 3)
+        assertTrue("connection 3 must set the light again; ops=$gattOps", pumpUntil { lightWrites().size == 4 })
+        controller.stop()
     }
 }

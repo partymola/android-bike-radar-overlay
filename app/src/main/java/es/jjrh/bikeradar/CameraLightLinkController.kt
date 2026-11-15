@@ -18,10 +18,13 @@ import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** What the front camera link tells the dashcam walk-away alarm. Implemented by
  *  [RadarLinkCoordinator]. */
@@ -79,6 +82,9 @@ internal class CameraLightLinkController(
     /** Monotonic clock for the camera-light override deadband; elapsedRealtime
      *  so a wall-clock jump can't mis-clear the rider's manual override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
+    /** Wall clock the light plan is set against sunrise and sunset by, which
+     *  elapsedRealtime is not. Injected so a test can pin it. */
+    private val wallClock: () -> Long = { System.currentTimeMillis() },
     /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
      *  Injected only by the Robolectric harness so a test can capture the
      *  connection's [BluetoothGattCallback] and drive the callbacks by hand;
@@ -139,6 +145,15 @@ internal class CameraLightLinkController(
     @Volatile private var cameraLightUserOverride = false
 
     @Volatile private var cameraLightLastWrittenMode: CameraLightMode? = null
+
+    // The mode a set is writing, so the camera's echo of it, which can reach
+    // the notify loop before the write's answer reaches the set, is not read as
+    // a press (`anEchoOfTheSetBeforeItsAnswerIsNotAPress`). A set clears only
+    // the value it set, so a cancelled set of an old connection cannot clear a
+    // newer one's.
+    private class Setting(val mode: CameraLightMode)
+
+    private val cameraLightSetting = AtomicReference<Setting?>(null)
 
     @Volatile private var cameraLightOffSinceMs: Long? = null
 
@@ -229,6 +244,9 @@ internal class CameraLightLinkController(
         // Read on the binder thread that delivers the disconnect.
         val handshakeDone = AtomicBoolean(false)
         val endedByApp = AtomicBoolean(false).also { connectionEndedByApp = it }
+        // Set by the disconnect callback before it fails the pending write, so
+        // a set that failed because of it reads the link as gone.
+        val linkDown = AtomicBoolean(false)
         var gatt: BluetoothGatt? = null
         var gattClosed = false
         fun closeOnce() {
@@ -249,6 +267,7 @@ internal class CameraLightLinkController(
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        linkDown.set(true)
                         // Before notifyChannel.close(), which lets the connection's
                         // finally run and set endedByApp.
                         val adapterOn = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
@@ -312,8 +331,9 @@ internal class CameraLightLinkController(
 
         val queueJob = scope.launch { queue.run() }
 
-        var sunsetJob: Job? = null
-        var sunriseJob: Job? = null
+        // The initial set and the dusk or dawn switch, which a link's end
+        // cancels without waiting on them.
+        val jobs = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
         return try {
             val ok = servicesReady.await()
             if (!ok) {
@@ -368,8 +388,8 @@ internal class CameraLightLinkController(
             haPublisher.offerFrontMode(ha, lightSlugEarly, name, null)
 
             val controller = CameraLightController(gatt, queue)
-            val nowMs = System.currentTimeMillis()
-            val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+            val nowMs = wallClock()
+            val today = java.time.Instant.ofEpochMilli(nowMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             // Manual coordinates (if set) -> the approximate area -> London. The
             // resolver re-validates every input, so a corrupt pref can't reach
             // the solar calc.
@@ -390,39 +410,53 @@ internal class CameraLightLinkController(
             val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, isNight, cameraLightUserOverride)
             // Provenance only, never the coordinates: this goes to release logcat.
             Log.i(TAG, "auto-mode: night=$isNight override=$cameraLightUserOverride location=${resolved.source}")
-            suspend fun applyPhase(phase: LightAutoModeDecider.Phase, label: String) {
+
+            // The mode that failed, when the failure was the light's: null when
+            // the set landed or the link's end failed it
+            // (`aLinkLostDuringTheLightSetSoundsNoLightFailure`).
+            suspend fun setLight(phase: LightAutoModeDecider.Phase, label: String): CameraLightMode? {
                 val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
                     prefs.cameraLightNightMode
                 } else {
                     prefs.cameraLightDayMode
                 }
-                val ok = applyWithRetry { controller.setMode(mode) }
-                Log.i(TAG, "$label mode=$mode applied=$ok")
-                if (ok) {
-                    cameraLightLastWrittenMode = mode
-                    haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
-                } else {
-                    postLightModeFailNotification(mode)
+                val setting = Setting(mode)
+                cameraLightSetting.set(setting)
+                val ok = try {
+                    applyWithRetry { controller.setMode(mode) }.also { if (it) cameraLightLastWrittenMode = mode }
+                } finally {
+                    cameraLightSetting.compareAndSet(setting, null)
                 }
+                Log.i(TAG, "$label mode=$mode applied=$ok")
+                if (ok) haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
+                return mode.takeUnless { ok || linkDown.get() || endedByApp.get() }
             }
-            if (plan.initial != null) {
-                applyPhase(plan.initial, "initial")
-            } else {
-                Log.i(TAG, "initial mode skipped (manual override active)")
+
+            // Beside the notify loop below, so a write left unanswered cannot
+            // hold the camera's notifications
+            // (`anUnansweredLightSetDoesNotHoldTheCamerasNotifications`).
+            val setup = jobs.launch {
+                if (plan.initial != null) {
+                    setLight(plan.initial, "initial")?.let { postLightModeFailNotification(it) }
+                } else {
+                    Log.i(TAG, "initial mode skipped (manual override active)")
+                }
             }
             val flipAt = plan.flipAtMs
             val flipTo = plan.flipTo
             if (flipAt != null && flipTo != null) {
-                val job = scope.launch {
+                jobs.launch {
                     kotlinx.coroutines.delay(flipAt - nowMs)
+                    // After the initial set, which may still be retrying
+                    // (`aFlipDueDuringTheInitialSetComesAfterIt`).
+                    setup.join()
                     if (cameraLightGattActive && !cameraLightUserOverride) {
-                        applyPhase(
+                        setLight(
                             flipTo,
                             if (flipTo == LightAutoModeDecider.Phase.NIGHT) "sunset" else "sunrise",
-                        )
+                        )?.let { postLightModeFailNotification(it) }
                     }
                 }
-                if (flipTo == LightAutoModeDecider.Phase.NIGHT) sunsetJob = job else sunriseJob = job
             }
 
             for ((uuid, bytes) in notifyChannel) {
@@ -442,8 +476,17 @@ internal class CameraLightLinkController(
                     Uuids.SETTINGS_14 -> {
                         val mode = CameraLightController.parseModeStateNotify(bytes) ?: continue
                         if (BuildConfig.DEBUG) Log.d(TAG, "mode-state notify: $mode")
+                        // The setting first: a set stores the landed mode and then
+                        // clears the setting, so read in the other order a frame
+                        // between the two reads sees the old landed mode and no
+                        // setting, and takes the echo for a press. No test can
+                        // reach it on a single-threaded dispatcher.
+                        val setting = cameraLightSetting.get()?.mode
                         val expected = cameraLightLastWrittenMode
-                        if (!cameraLightUserOverride && CameraLightOverrideDecider.isOverride(expected, mode)) {
+                        if (!cameraLightUserOverride &&
+                            mode != setting &&
+                            CameraLightOverrideDecider.isOverride(expected, mode)
+                        ) {
                             cameraLightUserOverride = true
                             Log.i(TAG, "override detected: expected=$expected device=$mode")
                         }
@@ -459,8 +502,7 @@ internal class CameraLightLinkController(
             dashcamLink.markDashcamLinkDown()
             cameraLightGattActive = false
             if (cameraLightOffSinceMs == null) cameraLightOffSinceMs = clock()
-            sunsetJob?.cancel()
-            sunriseJob?.cancel()
+            jobs.cancel()
             queueJob.cancel()
             queue.cancel()
             closeOnce()

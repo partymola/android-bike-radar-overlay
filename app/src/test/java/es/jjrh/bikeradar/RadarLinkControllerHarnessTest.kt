@@ -1498,7 +1498,8 @@ class RadarLinkControllerHarnessTest {
             val controller = controller(link, scope = realPool, gateway = gateway, clock = { clockMs.get() })
             startDriver(link, realPool)
             controller.start("TestRadar", mac)
-            assertTrue(waitReal(5_000) { link.cb != null })
+            // The GATT, which openGatt sets after the callback.
+            assertTrue(waitReal(5_000) { link.gatt != null })
             bootstrap(link)
             feedHandshakeReplies(link)
             assertTrue("journal=$journal", waitReal(10_000) { journalHas("radar handshake complete") })

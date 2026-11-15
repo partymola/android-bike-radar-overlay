@@ -962,7 +962,10 @@ internal class RadarLinkController(
             // Its choice stands: the connect-time set makes no further try
             // after it (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`).
             val appSetLight = java.util.concurrent.atomic.AtomicBoolean(false)
-            val setup = jobs.launch {
+            // Undispatched, as is the watchdog, so with nothing to write the
+            // watchdog counts from before the loop takes its first frame
+            // (`aWatchdogTeardownNamesTheStepTheLoopIsHeldIn`).
+            val setup = jobs.launch(start = CoroutineStart.UNDISPATCHED) {
                 if ((probeOn || autoMode) && ch2f14 != null) queue.writeCccd(gatt, ch2f14)
                 if (probe12 != null) queue.writeCccd(gatt, probe12)
                 // Only now can a granted app or the debug probe write, so
@@ -1034,7 +1037,7 @@ internal class RadarLinkController(
             // for it (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`).
             val capturedGatt = gatt
             val step = LoopStep()
-            jobs.launch {
+            jobs.launch(start = CoroutineStart.UNDISPATCHED) {
                 setup.join()
                 lastV2FrameMs = clock()
                 while (true) {

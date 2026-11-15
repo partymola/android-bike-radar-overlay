@@ -263,15 +263,20 @@ that lands removes the entry, and the next failure alerts again
 (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
 `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
 `aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`).
+A failure that such a write has overtaken while its alert was held never
+sounds (`aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`,
+`aGrantedAppsWriteThatLandsDuringTheHoldStandsTheSwitchsReportDown`).
 The test pins that one form
 carries the support library's silent marking and the other does not
 (`ServiceNotificationsTest.theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts`);
 no test here can check what a given phone then plays for either. If the link
 ends first, the app ends it, the rider presses the light's button, or a granted
-app asks for a light mode (for the connect-time set only, never a dusk or
-dawn switch: `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
+app asks for a light mode the radar refuses (for the connect-time set only;
+a dusk or dawn switch's report outlasts an app's request the radar refuses:
+`aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
 `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`), the
-silent post stays and nothing sounds. When the ride service stops nothing
+silent post stays and nothing sounds. A request that lands takes the entry
+out of the shade, as any landed write does. When the ride service stops nothing
 sounds either, since a released beeper never reads as quiet, and a stop
 takes an entry already posted out of the shade
 (`BikeRadarServiceSmokeTest.theTailLightFailureDoesNotOutliveTheService`).

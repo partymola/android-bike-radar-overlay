@@ -560,8 +560,11 @@ must not be changed about it. Four that bite in ordinary work:
     wait, until a tail-light write lands; two reports held together alert
     once (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
     `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
-    `twoReportsHeldTogetherAlertOnceAndSoundOnce`). A report that ends with
-    no alert leaves the next failure to alert
+    `twoReportsHeldTogetherAlertOnceAndSoundOnce`). Only a report that
+    alerts writes a line of its own, `radar light <phase> mode=<mode> alerted`
+    (`aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`; a repeat writes
+    none, `aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`). A report
+    that ends with no alert leaves the next failure to alert
     (`aHoldThatEndsWithTheLinkLeavesTheNextFailureToAlert`). A write that
     lands, the auto-mode's or a granted app's, takes the notification out of
     the shade and lets the next failure alert; a refused one and a press on
@@ -569,7 +572,15 @@ must not be changed about it. Four that bite in ordinary work:
     `aFailureAfterALandedSetAlertsAgain`,
     `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`,
     `aGrantedAppsRefusedWriteLeavesTheFailureInTheShade`,
-    `aPressNeitherTakesTheFailureOffTheShadeNorRearmsItsAlert`).
+    `aPressNeitherTakesTheFailureOffTheShadeNorRearmsItsAlert`). A write
+    that lands after a failure, before the frame that would report it,
+    leaves that report nothing to send: no `applied=false` line, post or tone
+    (`aSwitchThatLandsBeforeTheFrameLeavesTheFailureUnreported`). One that
+    lands during the report's hold comes after its `applied=false` line and
+    its silent post; the landing takes the entry out of the shade, and no
+    alerting post or tone follows
+    (`aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`,
+    `aGrantedAppsWriteThatLandsDuringTheHoldStandsTheSwitchsReportDown`).
   - **Two journal lines mark a set that the link's end stopped.**
     `ended with the link` marks one the end cut short mid-try or whose last
     try it failed, for example through a drop or a pin move
@@ -604,16 +615,22 @@ must not be changed about it. Four that bite in ordinary work:
     `aPressAfterAFailedDuskSwitchReportsNothing`,
     `aGrantedAppsRequestAfterAFailedSetReportsNothing`). The same holds
     while a report's alert waits for a cue, a pause or a call: the press,
-    or for the connect-time set the app's request, leaves the silent post
-    with no alert and no tone (`aPressDuringTheHoldLeavesTheSilentPostOnly`,
+    or for the connect-time set an app's request the radar refuses, leaves
+    the silent post with no alert and no tone
+    (`aPressDuringTheHoldLeavesTheSilentPostOnly`,
     `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
-    `aGrantedAppsRequestDuringTheHoldLeavesTheSilentPostOnly`). An app's
-    request, whether made before a switch, after its failed try or while its
-    alert waits, never stops that switch's failure report
+    `aGrantedAppsRequestDuringTheHoldLeavesTheSilentPostOnly`); a request
+    that lands takes the entry out of the shade, as the writes above do.
+    An app's request the radar refuses, whether made before a switch, after
+    its failed try or while its alert waits, never stops that switch's
+    failure report
     (`aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
     `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`,
-    `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`). A dusk/dawn
-    switch waits for the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`).
+    `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`); one
+    that lands ends it as any landed write does
+    (`aGrantedAppsWriteThatLandsDuringTheHoldStandsTheSwitchsReportDown`). A
+    dusk/dawn switch waits for the setup job
+    (`aFlipDueDuringTheInitialSetComesAfterIt`).
     The light baseline and the override deadband are reset before the job
     and the loop start
     (`aLightStateWaitingAtTheLoopsStartIsTheNewLinksBaseline`).

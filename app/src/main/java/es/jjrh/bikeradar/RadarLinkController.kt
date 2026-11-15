@@ -235,8 +235,17 @@ internal class RadarLinkController(
 
     // Set when a tail-light failure alert goes out, cleared by a light write
     // that lands. Here, not per connection, so a flapping link alerts once
-    // (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`).
-    private val radarLightFailAlerted = java.util.concurrent.atomic.AtomicBoolean(false)
+    // (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`). Written only
+    // under [radarLightFailLock]; the one unlocked read decides only whether a
+    // report waits on the hold.
+    @Volatile private var radarLightFailAlerted = false
+
+    // Light writes landed, counted so a report can tell one landed since its
+    // failure. A landing and a report's post take the lock, since a granted
+    // app's write lands on a binder thread.
+    @Volatile private var radarLightWritesLanded = 0
+
+    private val radarLightFailLock = Any()
 
     // Live radar GATT + queue, set once the control-service subscribes have
     // gone out and cleared in the connection finally. Used ONLY by the
@@ -893,21 +902,23 @@ internal class RadarLinkController(
             fun failedBeforeTheLinkEnded(phase: LightAutoModeDecider.Phase, mode: RadarLightMode) = journal("radar light $phase mode=$mode failed before the link ended")
 
             // Null when the set landed, [stop] ended it or the link's end failed
-            // its last try, else the frame count at its failure. A press stops
-            // the retries (`aPressDuringTheSecondTryEndsTheRetries`,
+            // its last try, else the frame count and the landed-write count at
+            // its failure. A press stops the retries
+            // (`aPressDuringTheSecondTryEndsTheRetries`,
             // `aPressDuringTheLastTryReportsNoFailure`).
             suspend fun setLight(
                 controller: RadarLightController,
                 phase: LightAutoModeDecider.Phase,
                 mode: RadarLightMode,
                 stop: () -> Boolean,
-            ): Int? {
+            ): Pair<Int, Int>? {
                 val ok = try {
                     applyWithRetry(stop) { controller.setMode(mode) }
                 } catch (e: CancellationException) {
                     endedWithTheLink(phase, mode)
                     throw e
                 }
+                val landedAtFailure = radarLightWritesLanded
                 val stopped = !ok && stop()
                 Log.i(TAG, "radar light $phase mode=$mode " + if (stopped) "stopped" else "applied=$ok")
                 if (ok) {
@@ -919,7 +930,7 @@ internal class RadarLinkController(
                     endedWithTheLink(phase, mode)
                     return null
                 }
-                return v2Frames.value
+                return v2Frames.value to landedAtFailure
             }
 
             fun linkGone() = synchronized(linkLock) { linkDown } || receipts.endedByApp
@@ -935,16 +946,24 @@ internal class RadarLinkController(
             // `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`). After an
             // alert, until a write lands, it is posted silent only, at once
             // (`aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
-            // `twoReportsHeldTogetherAlertOnceAndSoundOnce`). linkDown is
-            // set before the teardown cancels this job, and isActive covers a
-            // cancel landing just as the wait returns, which no test does; nor
-            // does any test reach the window while the unheld path reads quiet.
+            // `twoReportsHeldTogetherAlertOnceAndSoundOnce`). A light write
+            // landed since the failure ends the report with nothing more
+            // (`aSwitchThatLandsBeforeTheFrameLeavesTheFailureUnreported`,
+            // `aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`,
+            // `aGrantedAppsWriteThatLandsDuringTheHoldStandsTheSwitchsReportDown`).
+            // An alert is journalled (`aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`).
+            // linkDown is set before the teardown cancels this job, and isActive
+            // covers a cancel landing just as the wait returns, which no test
+            // does; nor does any test reach the window while the unheld path
+            // reads quiet, or a landing just before a silent post.
             suspend fun reportFailedSet(
                 phase: LightAutoModeDecider.Phase,
                 mode: RadarLightMode,
                 framesAtFailure: Int,
+                landedAtFailure: Int,
                 stop: () -> Boolean,
             ) {
+                fun landedSince() = radarLightWritesLanded != landedAtFailure
                 try {
                     v2Frames.first { it > framesAtFailure }
                 } catch (e: CancellationException) {
@@ -955,22 +974,30 @@ internal class RadarLinkController(
                     failedBeforeTheLinkEnded(phase, mode)
                     return
                 }
-                if (stop()) return
+                if (stop() || landedSince()) return
                 journal("radar light $phase mode=$mode applied=false")
-                if (!radarLightFailAlerted.get()) {
+                if (!radarLightFailAlerted) {
                     val quiet = failToneQuiet()
                     if (!quiet.first()) {
-                        postRadarLightModeFailNotification(mode, silent = true)
+                        synchronized(radarLightFailLock) {
+                            if (landedSince()) return
+                            postRadarLightModeFailNotification(mode, silent = true)
+                        }
                         quiet.first { it }
                     }
                     if (!currentCoroutineContext().isActive || linkGone() || stop()) return
-                    if (radarLightFailAlerted.compareAndSet(false, true)) {
-                        postRadarLightModeFailNotification(mode, silent = false)
-                        playRadarLightFailTone()
-                        return
-                    }
                 }
-                postRadarLightModeFailNotification(mode, silent = true)
+                val alert = synchronized(radarLightFailLock) {
+                    if (landedSince()) return
+                    val first = !radarLightFailAlerted
+                    radarLightFailAlerted = true
+                    postRadarLightModeFailNotification(mode, silent = !first)
+                    first
+                }
+                if (alert) {
+                    journal("radar light $phase mode=$mode alerted")
+                    playRadarLightFailTone()
+                }
             }
 
             val autoLight = if (autoMode) light else null
@@ -1056,12 +1083,11 @@ internal class RadarLinkController(
                 if (autoLight != null && initial != null) {
                     val mode = modeFor(initial)
                     val stop = { radarLightUserOverride || appSetLight.get() }
-                    val failedAt = setLight(autoLight, initial, mode, stop)
                     // In a job of its own, so the setup ends with its writes.
                     // Undispatched, so a teardown already under way still
                     // reaches the wait and journals the end.
-                    if (failedAt != null) {
-                        jobs.launch(start = CoroutineStart.UNDISPATCHED) { reportFailedSet(initial, mode, failedAt, stop) }
+                    setLight(autoLight, initial, mode, stop)?.let { (frames, landed) ->
+                        jobs.launch(start = CoroutineStart.UNDISPATCHED) { reportFailedSet(initial, mode, frames, landed, stop) }
                     }
                 }
             }
@@ -1077,18 +1103,20 @@ internal class RadarLinkController(
                     setup.join()
                     if (linkState.snapshot().radarGattActive && !radarLightUserOverride) {
                         val mode = modeFor(flipTo)
-                        // Only a press stops the switch and its report. An
-                        // app's request stops neither: the switch still
-                        // overwrites the app's choice, so its failure is still
-                        // the rider's to hear
+                        // Only a press stops the switch. An app's request does
+                        // not: the switch still overwrites the app's choice, so
+                        // its failure is still the rider's to hear, though an
+                        // app's write that lands ends its report as any landed
+                        // write does
                         // (`aDuskSwitchStillWritesAfterAGrantedAppSetTheLight`,
                         // `aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
                         // `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`,
                         // `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`,
-                        // `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`).
+                        // `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
+                        // `aGrantedAppsWriteThatLandsDuringTheHoldStandsTheSwitchsReportDown`).
                         val stop = { radarLightUserOverride }
-                        val failedAt = setLight(autoLight, flipTo, mode, stop) ?: return@launch
-                        reportFailedSet(flipTo, mode, failedAt, stop)
+                        val (frames, landed) = setLight(autoLight, flipTo, mode, stop) ?: return@launch
+                        reportFailedSet(flipTo, mode, frames, landed, stop)
                     }
                 }
             }
@@ -1501,12 +1529,13 @@ internal class RadarLinkController(
         notifications.postRadarLightFail(modeName, silent)
     }
 
-    /** An ACKed tail-light write, ours or a granted app's, ends the fault: the
-     *  entry leaves the shade and the next failure alerts in full
-     *  (`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`,
+    /** An ACKed tail-light write, ours or a granted app's, is taken as the end
+     *  of the fault: the entry leaves the shade and the next failure alerts in
+     *  full (`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`,
      *  `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`). */
-    private fun radarLightWriteLanded() {
-        radarLightFailAlerted.set(false)
+    private fun radarLightWriteLanded() = synchronized(radarLightFailLock) {
+        radarLightWritesLanded++
+        radarLightFailAlerted = false
         notifications.cancelRadarLightFail()
     }
 

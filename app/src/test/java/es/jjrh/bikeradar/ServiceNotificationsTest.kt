@@ -210,6 +210,24 @@ class ServiceNotificationsTest {
         )
     }
 
+    @Test fun theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot() {
+        // The radar's failure tone is held for cues, a pause and a call, so the
+        // notification itself must not sound or buzz when it posts. The
+        // support library's silent marking is a child of its own group that
+        // alerts only through a summary; the channel's sound and buzz are not
+        // on the posted object at all, so only the marking can be pinned here.
+        val n = notifications()
+        n.postRadarLightFail("Solid")
+        n.postLightFail("Day Flash")
+        fun posted(title: String) = nm.activeNotifications.single { title(it) == title }.notification
+        val radar = posted("Radar light")
+        assertEquals("silent", radar.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, radar.groupAlertBehavior)
+        val dashcam = posted("Dashcam light")
+        assertNull(dashcam.group)
+        assertEquals(Notification.GROUP_ALERT_ALL, dashcam.groupAlertBehavior)
+    }
+
     @Test
     @Config(qualifiers = "+es")
     fun theRadarLightFailureSaysToCheckTheLightInSpanishToo() {

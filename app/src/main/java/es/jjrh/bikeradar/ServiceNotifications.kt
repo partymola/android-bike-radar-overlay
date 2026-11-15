@@ -341,13 +341,19 @@ internal class ServiceNotifications(
 
     /** Rear radar tail-light variant, with a distinct id so it and the dashcam
      *  light-fail notification never clobber each other. Its own text, since it
-     *  posts only on a link still up, and shown in full, since the text is two
-     *  sentences (`theRadarLightFailureSaysToCheckTheLightAndShowsInFull`). */
+     *  posts only on a link still up, expanding to both sentences
+     *  (`theRadarLightFailureSaysToCheckTheLightAndShowsInFull`). Silent, as
+     *  the shared channel cannot be: its sound is the tone the radar link holds
+     *  for cues, a pause and a call
+     *  (`theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot`). */
     fun postRadarLightFail(modeName: String) {
         val text = context.getString(R.string.svc_main_radar_light_fail_text, modeName)
         nm.notify(
             NOTIF_RADAR_LIGHT_FAIL_ID,
-            lightFail(R.string.svc_main_radar_light_title, text).setStyle(NotificationCompat.BigTextStyle().bigText(text)).build(),
+            lightFail(R.string.svc_main_radar_light_title, text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setSilent(true)
+                .build(),
         )
     }
 

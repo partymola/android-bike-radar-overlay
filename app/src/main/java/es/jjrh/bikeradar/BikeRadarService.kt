@@ -865,12 +865,14 @@ class BikeRadarService : Service() {
         // behind. Prune clears those, but the last one written survives until
         // the next open.
         closeCaptureLog()
-        // Walk-away and bond-lost notifications survive stopForeground, so
-        // clear them here. A walk-away tick already past its decision can
-        // still post after this; that alert's buttons then only clear it
-        // (`InternalControlReceiverTest`).
+        // Walk-away, bond-lost and tail-light failure notifications survive
+        // stopForeground, so clear them here
+        // (`theTailLightFailureDoesNotOutliveTheService`). A walk-away tick
+        // already past its decision can still post after this; that alert's
+        // buttons then only clear it (`InternalControlReceiverTest`).
         notifications.cancelWalkAway()
         notifications.cancelBondLost()
+        notifications.cancelRadarLightFail()
         // Companion-object cache survives across service instances within the
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
         macToSlug.clear()

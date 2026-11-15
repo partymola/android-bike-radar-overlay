@@ -256,16 +256,26 @@ on, the notification is posted without a silent marking, so it alerts as its
 channel is set to, and a short tone plays once on the notification stream.
 Otherwise the notification is posted marked silent at once, and once nothing
 holds it is posted again without the marking and the tone plays; a cue
-starting during the tone is not waited for. The test pins that one form
+starting during the tone is not waited for. It alerts once per fault. After
+the alert, a repeat failure on the same link or after a reconnect only
+updates the entry in the shade, at once and with no tone. A tail-light write
+that lands removes the entry, and the next failure alerts again
+(`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
+`aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
+`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`).
+The test pins that one form
 carries the support library's silent marking and the other does not
 (`ServiceNotificationsTest.theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts`);
 no test here can check what a given phone then plays for either. If the link
-ends first, the app ends it, the rider presses the light's button, a granted
+ends first, the app ends it, the rider presses the light's button, or a granted
 app asks for a light mode (for the connect-time set only, never a dusk or
 dawn switch: `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
-`aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`), or the
-ride service stops (a released beeper never reads as quiet), the silent post
-stays and nothing sounds. The wait has no length of its own: it ends when the
+`aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`), the
+silent post stays and nothing sounds. When the ride service stops nothing
+sounds either, since a released beeper never reads as quiet, and a stop
+takes an entry already posted out of the shade
+(`BikeRadarServiceSmokeTest.theTailLightFailureDoesNotOutliveTheService`).
+The wait has no length of its own: it ends when the
 cue's burst, the pause or the call ends
 (`RadarLinkControllerHarnessTest.aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
 `theFailToneWaitsForACueToEnd`,

@@ -234,6 +234,14 @@ class ServiceNotificationsTest {
         assertEquals(0, dashcam.flags and Notification.FLAG_ONLY_ALERT_ONCE)
     }
 
+    @Test fun theRadarLightFailureIsCancelledAloneLeavingTheDashcams() {
+        val n = notifications()
+        n.postRadarLightFail("Solid", silent = false)
+        n.postLightFail("Day Flash")
+        n.cancelRadarLightFail()
+        assertEquals(listOf("Dashcam light"), nm.activeNotifications.map { title(it) })
+    }
+
     @Test
     @Config(qualifiers = "+es")
     fun theRadarLightFailureSaysToCheckTheLightInSpanishToo() {

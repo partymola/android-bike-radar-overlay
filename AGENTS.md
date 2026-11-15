@@ -543,16 +543,33 @@ must not be changed about it. Four that bite in ordinary work:
     and the tone plays. Otherwise it is posted marked silent at once, then
     again in the same slot without the marking, with the tone, once nothing
     holds. No test checks what a phone then plays (`AUDIO_DESIGN.md`). A link
-    that ends or that the app ends during the wait, or a service that stops,
-    leaves the silent post only
+    that ends or that the app ends during the wait leaves the silent post
+    only, and a service that stops sounds nothing
     (`ServiceNotificationsTest.theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts`,
     `RadarLinkControllerHarnessTest.aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
     `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
     `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`,
     `aHoldEndingAfterTheAppEndedTheLinkPostsNothingMore`,
-    `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`).
+    `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`). A service that stops
+    takes an entry already posted out of the shade
+    (`BikeRadarServiceSmokeTest.theTailLightFailureDoesNotOutliveTheService`).
     A failed dusk/dawn switch is reported like the connect-time set
     (`aFlipTheRadarRefusesIsReportedToo`).
+    The alert goes out once per fault. After it, any failure on this
+    connection or a later one is posted silent at once, with no tone and no
+    wait, until a tail-light write lands; two reports held together alert
+    once (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
+    `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
+    `twoReportsHeldTogetherAlertOnceAndSoundOnce`). A report that ends with
+    no alert leaves the next failure to alert
+    (`aHoldThatEndsWithTheLinkLeavesTheNextFailureToAlert`). A write that
+    lands, the auto-mode's or a granted app's, takes the notification out of
+    the shade and lets the next failure alert; a refused one and a press on
+    the light's button do neither (`aLandedSetTakesTheFailureOffTheShade`,
+    `aFailureAfterALandedSetAlertsAgain`,
+    `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`,
+    `aGrantedAppsRefusedWriteLeavesTheFailureInTheShade`,
+    `aPressNeitherTakesTheFailureOffTheShadeNorRearmsItsAlert`).
   - **Two journal lines mark a set that the link's end stopped.**
     `ended with the link` marks one the end cut short mid-try or whose last
     try it failed, for example through a drop or a pin move

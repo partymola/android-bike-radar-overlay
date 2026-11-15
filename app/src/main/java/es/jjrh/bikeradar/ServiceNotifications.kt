@@ -358,6 +358,10 @@ internal class ServiceNotifications(
         )
     }
 
+    /** Clear the tail-light failure notification only
+     *  (`theRadarLightFailureIsCancelledAloneLeavingTheDashcams`). */
+    fun cancelRadarLightFail() = nm.cancel(NOTIF_RADAR_LIGHT_FAIL_ID)
+
     private fun lightFail(titleRes: Int, text: String): NotificationCompat.Builder {
         ensureChannels()
         return NotificationCompat.Builder(context, LIGHT_FAIL_CHANNEL_ID)

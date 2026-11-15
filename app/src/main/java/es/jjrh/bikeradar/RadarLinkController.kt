@@ -233,6 +233,11 @@ internal class RadarLinkController(
 
     @Volatile private var radarLightOffSinceMs: Long? = null
 
+    // Set when a tail-light failure alert goes out, cleared by a light write
+    // that lands. Here, not per connection, so a flapping link alerts once
+    // (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`).
+    private val radarLightFailAlerted = java.util.concurrent.atomic.AtomicBoolean(false)
+
     // Live radar GATT + queue, set once the control-service subscribes have
     // gone out and cleared in the connection finally. Used ONLY by the
     // debug-only write-probe.
@@ -905,7 +910,10 @@ internal class RadarLinkController(
                 }
                 val stopped = !ok && stop()
                 Log.i(TAG, "radar light $phase mode=$mode " + if (stopped) "stopped" else "applied=$ok")
-                if (ok) journal("radar light $phase mode=$mode applied=true")
+                if (ok) {
+                    journal("radar light $phase mode=$mode applied=true")
+                    radarLightWriteLanded()
+                }
                 if (ok || stopped) return null
                 if (synchronized(linkLock) { linkDown }) {
                     endedWithTheLink(phase, mode)
@@ -924,7 +932,10 @@ internal class RadarLinkController(
             // (`aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
             // `aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
             // `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
-            // `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`). linkDown is
+            // `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`). After an
+            // alert, until a write lands, it is posted silent only, at once
+            // (`aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
+            // `twoReportsHeldTogetherAlertOnceAndSoundOnce`). linkDown is
             // set before the teardown cancels this job, and isActive covers a
             // cancel landing just as the wait returns, which no test does; nor
             // does any test reach the window while the unheld path reads quiet.
@@ -946,14 +957,20 @@ internal class RadarLinkController(
                 }
                 if (stop()) return
                 journal("radar light $phase mode=$mode applied=false")
-                val quiet = failToneQuiet()
-                if (!quiet.first()) {
-                    postRadarLightModeFailNotification(mode, silent = true)
-                    quiet.first { it }
+                if (!radarLightFailAlerted.get()) {
+                    val quiet = failToneQuiet()
+                    if (!quiet.first()) {
+                        postRadarLightModeFailNotification(mode, silent = true)
+                        quiet.first { it }
+                    }
+                    if (!currentCoroutineContext().isActive || linkGone() || stop()) return
+                    if (radarLightFailAlerted.compareAndSet(false, true)) {
+                        postRadarLightModeFailNotification(mode, silent = false)
+                        playRadarLightFailTone()
+                        return
+                    }
                 }
-                if (!currentCoroutineContext().isActive || linkGone() || stop()) return
-                postRadarLightModeFailNotification(mode, silent = false)
-                playRadarLightFailTone()
+                postRadarLightModeFailNotification(mode, silent = true)
             }
 
             val autoLight = if (autoMode) light else null
@@ -1023,6 +1040,7 @@ internal class RadarLinkController(
                             RadarControlBridge.install { mode ->
                                 appSetLight.set(true)
                                 val ok = writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
+                                if (ok) radarLightWriteLanded()
                                 if (lastGrantedWrite.getAndSet(mode to ok) != (mode to ok)) {
                                     journal("radar light set for another app mode=$mode applied=$ok")
                                 }
@@ -1481,6 +1499,15 @@ internal class RadarLinkController(
         )
 
         notifications.postRadarLightFail(modeName, silent)
+    }
+
+    /** An ACKed tail-light write, ours or a granted app's, ends the fault: the
+     *  entry leaves the shade and the next failure alerts in full
+     *  (`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`,
+     *  `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`). */
+    private fun radarLightWriteLanded() {
+        radarLightFailAlerted.set(false)
+        notifications.cancelRadarLightFail()
     }
 
     /** True while no cue of the ride is sounding, no pause holds and no call

@@ -1491,6 +1491,21 @@ class BikeRadarServiceSmokeTest {
     }
 
     @Test
+    fun theTailLightFailureDoesNotOutliveTheService() {
+        // Left in the shade after a stop, it would speak for a light nothing
+        // watches any more.
+        val nm = app.getSystemService(NotificationManager::class.java)
+        nm.cancelAll()
+        fun lightFailurePosted() = shadowOf(nm).allNotifications.any { it.channelId == "bike_radar_light_fail" }
+        val controller = Robolectric.buildService(BikeRadarService::class.java)
+        controller.create()
+        ServiceNotifications(app) { Prefs(app) }.postRadarLightFail("Solid", silent = true)
+        assertTrue(lightFailurePosted())
+        controller.destroy()
+        assertFalse("a stopped service must take the entry out of the shade", lightFailurePosted())
+    }
+
+    @Test
     fun onStartCommandHandlesUpdateNotifAction() {
         val intent = Intent().apply { action = BikeRadarService.ACTION_UPDATE_NOTIF }
         val controller = Robolectric.buildService(BikeRadarService::class.java, intent)

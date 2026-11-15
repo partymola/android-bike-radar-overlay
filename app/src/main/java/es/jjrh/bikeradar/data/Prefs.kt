@@ -196,10 +196,17 @@ class Prefs(context: Context) {
                 .apply()
         }
 
+    /** Clamped to the Settings slider's range on read and on write
+     *  (`PrefsTest` pins the clamp). The urgent cue's near-third coverage is
+     *  pinned across that range only (`AlertDeciderTest`, "a near-third car at
+     *  the floor closing speed fires the urgent at every slider distance"),
+     *  which sweeps these bounds, so widening the slider widens the sweep and
+     *  turns it red past 56 m. */
     var alertMaxDistanceM: Int
         get() = sp.getInt(KEY_ALERT_MAX_DISTANCE_M, DEFAULT_ALERT_MAX_DISTANCE_M)
+            .coerceIn(MIN_ALERT_MAX_DISTANCE_M, MAX_ALERT_MAX_DISTANCE_M)
         set(v) {
-            sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v).apply()
+            sp.edit().putInt(KEY_ALERT_MAX_DISTANCE_M, v.coerceIn(MIN_ALERT_MAX_DISTANCE_M, MAX_ALERT_MAX_DISTANCE_M)).apply()
         }
 
     var visualMaxDistanceM: Int
@@ -1238,6 +1245,10 @@ class Prefs(context: Context) {
         /** The alert distance an untouched install runs at. The single source:
          *  the getter below and the sound demo's scene both read it. */
         const val DEFAULT_ALERT_MAX_DISTANCE_M = 20
+
+        /** The alert distance slider's range, and the clamp on [alertMaxDistanceM]. */
+        const val MIN_ALERT_MAX_DISTANCE_M = 10
+        const val MAX_ALERT_MAX_DISTANCE_M = 40
 
         private const val FILE = "bike_radar_prefs"
         const val KEY_FIRST_RUN_COMPLETE = "first_run_complete"

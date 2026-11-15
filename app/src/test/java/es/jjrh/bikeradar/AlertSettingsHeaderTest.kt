@@ -40,7 +40,7 @@ class AlertSettingsHeaderTest {
     @Test
     fun `each switch reads its own value the other way too`() {
         val s = base.copy(
-            alertMaxDistanceM = 45,
+            alertMaxDistanceM = 35,
             turnAwareAlertsEnabled = false,
             urgentLowSpeedEnabled = true,
             urgentUnconfidentWaitEnabled = false,
@@ -48,7 +48,7 @@ class AlertSettingsHeaderTest {
             closingSpeedCeilingMs = 20,
         )
         assertEquals(
-            "# settings alert_max_m=45 turn_aware=false urgent_low_speed=true" +
+            "# settings alert_max_m=35 turn_aware=false urgent_low_speed=true" +
                 " unconf_wait=false pass_clearance_m=2.5 ceiling_mps=20",
             OverlayPipeline.alertSettingsLine(s),
         )

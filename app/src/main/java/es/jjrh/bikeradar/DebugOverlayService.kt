@@ -43,7 +43,7 @@ class DebugOverlayService : Service() {
     private val alerts = AlertDecider()
 
     private var volumePct = AlertBeeper.DEFAULT_VOLUME_PCT
-    private var maxDistanceM = DEFAULT_MAX_DISTANCE_M
+    private var maxDistanceM = Prefs.DEFAULT_ALERT_MAX_DISTANCE_M
     private var passClearanceM = AlertDecider.DEFAULT_PASS_CLEARANCE_M
     private var closingCeilingMs: Float? = null
     private var visualMaxM = RadarOverlayView.DEFAULT_VISUAL_MAX_M
@@ -73,7 +73,7 @@ class DebugOverlayService : Service() {
 
         val prefs = Prefs(this)
         volumePct = prefs.alertVolume
-        maxDistanceM = prefs.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
+        maxDistanceM = prefs.alertMaxDistanceM
         passClearanceM = prefs.urgentPassClearanceM
         closingCeilingMs = prefs.closingSpeedCeilingMs?.toFloat()
         visualMaxM = prefs.visualMaxDistanceM
@@ -99,7 +99,7 @@ class DebugOverlayService : Service() {
         scope.launch {
             prefs.flow.collect { snap ->
                 beeper?.setVolumePct(snap.alertVolume)
-                maxDistanceM = snap.alertMaxDistanceM.coerceIn(MIN_DIST_M, MAX_DIST_M)
+                maxDistanceM = snap.alertMaxDistanceM
                 passClearanceM = snap.urgentPassClearanceM
                 closingCeilingMs = snap.closingSpeedCeilingMs?.toFloat()
                 visualMaxM = snap.visualMaxDistanceM
@@ -190,8 +190,5 @@ class DebugOverlayService : Service() {
         private const val TAG = "BikeRadar"
         const val CHANNEL_ID = "bike_radar_debug_overlay"
         const val NOTIF_ID = 3
-        const val MIN_DIST_M = 10
-        const val MAX_DIST_M = 40
-        const val DEFAULT_MAX_DISTANCE_M = 20
     }
 }

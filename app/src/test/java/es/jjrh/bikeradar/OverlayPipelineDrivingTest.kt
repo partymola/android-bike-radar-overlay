@@ -445,6 +445,7 @@ class OverlayPipelineDrivingTest {
      *  pass gate fails open whatever margin is configured. */
     private suspend fun kotlinx.coroutines.test.TestScope.driveStationaryUrgent(
         overlayPrefsSnapshot: () -> PrefsSnapshot = { prefs.snapshot() },
+        slowNearDistanceM: Int = 8,
     ): String {
         var mono = 1_000L
         val clogLines = mutableListOf<String>()
@@ -460,7 +461,7 @@ class OverlayPipelineDrivingTest {
         )
         runCurrent()
         mono = 3_500L
-        val slowNear = Vehicle(id = 3, distanceM = 8, speedMs = -1f, rangeXm = 1f)
+        val slowNear = Vehicle(id = 3, distanceM = slowNearDistanceM, speedMs = -1f, rangeXm = 1f)
         val fastFar = Vehicle(id = 9, distanceM = 15, speedMs = -8f, rangeXm = -1f)
         RadarStateBus.publish(
             RadarState(source = DataSource.V2, timestamp = 3_500L, vehicles = listOf(slowNear, fastFar), bikeSpeedMs = 0f),
@@ -499,14 +500,14 @@ class OverlayPipelineDrivingTest {
         // frame_closest_* is filtered by the alert envelope, and it must be
         // the envelope decide() gated on. Reading it fresh from prefs would
         // name a different car on the same line under a mid-ride change.
-        // prefs says 5 m here, the snapshot says 20: a fresh read filters
-        // the near car out entirely and reports no closest at all.
-        prefs.alertMaxDistanceM = 5
+        // prefs says 10 m here, the snapshot says 20: a fresh read filters
+        // both cars out and reports no closest at all.
+        prefs.alertMaxDistanceM = 10
         val doctored = { prefs.snapshot().copy(alertMaxDistanceM = 20) }
-        val urgentLine = driveStationaryUrgent(overlayPrefsSnapshot = doctored)
+        val urgentLine = driveStationaryUrgent(overlayPrefsSnapshot = doctored, slowNearDistanceM = 12)
         assertTrue(
             "alert line must name the near car the decider saw, got $urgentLine",
-            urgentLine.contains("frame_closest_tid=3") && urgentLine.contains("frame_closest_d=8"),
+            urgentLine.contains("frame_closest_tid=3") && urgentLine.contains("frame_closest_d=12"),
         )
     }
 

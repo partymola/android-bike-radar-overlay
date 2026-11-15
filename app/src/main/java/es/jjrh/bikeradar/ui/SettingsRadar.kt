@@ -374,7 +374,7 @@ internal fun SettingsRadarContent(
                 valueDisplay = stringResource(R.string.settings_radar_meters_value, alertDist),
                 helper = stringResource(R.string.settings_radar_alert_distance_helper),
                 value = alertDist.toFloat(),
-                valueRange = 10f..40f,
+                valueRange = Prefs.MIN_ALERT_MAX_DISTANCE_M.toFloat()..Prefs.MAX_ALERT_MAX_DISTANCE_M.toFloat(),
                 onValueChange = { onAlertDistChange(it.toInt()) },
                 onValueChangeFinished = onAlertDistFinished,
             )

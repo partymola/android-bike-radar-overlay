@@ -585,15 +585,18 @@ must not be changed about it. Four that bite in ordinary work:
   If Bluedroid stays stuck, `svc bluetooth disable && svc bluetooth enable`
   resets it. Wait for `BikeRadar.Radar: handshake complete` + `first V2
   frame` in logcat before declaring the app ready to test.
-- AlertDecider's imminent-impact override has TWO disjunct gates: the
-  proximity gate (`distance <= alertMaxM/3 AND closing >= 6 m/s`) and a
-  TTC gate (`TTC <= 3s AND closing >= 6 m/s AND distance <= alertMaxM`).
-  It arms when the rider is stationary, and - via the low-speed extension
+- AlertDecider's imminent-impact override has ONE kinematic gate, TTC
+  (`TTC <= 3 s AND closing >= 6 m/s AND distance <= alertMaxM`). It arms
+  when the rider is stationary, and - via the low-speed extension
   (`urgentLowSpeedEnabled`, default on) - while moving at <= 15 km/h with
-  both gates' closing floor raised to 10 m/s on that moving path.
-  Boundary tests in `AlertDeciderTest.kt` pin the semantics. Don't reduce
-  the override to a single gate or loosen the moving floor without
-  re-running the capture replay.
+  the closing floor raised to 10 m/s on that moving path. That one gate
+  covers the whole near third at the floor speed on both paths at every
+  alert distance the slider offers, and `Prefs.alertMaxDistanceM` clamps
+  to that 10-40 m range (`AlertDeciderTest`, "a near-third car at the
+  floor closing speed fires the urgent at every slider distance";
+  `PrefsTest`). Boundary tests in `AlertDeciderTest.kt` pin the rest.
+  Don't shorten the TTC window, move either closing floor or widen the
+  slider without re-running the capture replay.
 - `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
   released in `onDestroy`). The first beep after every BLE reconnect lands
   on the same warm AudioTrack pool; do not allocate per-overlayJob.

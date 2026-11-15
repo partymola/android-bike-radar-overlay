@@ -26,10 +26,11 @@ class AlertDeciderUrgentCooldownTest {
     private fun closer(id: Int, distanceM: Int, speedMs: Float = -11f) = Vehicle(id, distanceM, speedMs)
 
     /**
-     * Drives a stationary rider up to an imminent threat: a car sustains into
-     * the close set at a mid-tier distance (earning a beep), then jumps inside
-     * the proximity gate a fraction of the beep cooldown later. Returns the
-     * cues in order.
+     * Drives a rider rolling at 4 m/s, inside the moving urgent path, up to
+     * an imminent threat: a car sustains into
+     * the close set at a mid-tier distance (earning a beep), then jumps to 5 m
+     * closing hard, inside the TTC gate, a fraction of the beep cooldown later.
+     * Returns the cues in order.
      */
     private fun beepThenImminent(mode: UrgentCooldown): List<Event> {
         val d = AlertDecider(urgentCooldown = mode)
@@ -40,7 +41,7 @@ class AlertDeciderUrgentCooldownTest {
         out += d.decide(listOf(closer(1, 12, speedMs = -2f)), alertMax, 0L, bikeSpeedMs = 4f)
         out += d.decide(listOf(closer(1, 12, speedMs = -2f)), alertMax, 100L, bikeSpeedMs = 4f)
         // 300 ms later - well inside the 700 ms beep cooldown - the same car
-        // is inside alertMax/3 and closing hard: the imminent-impact gate.
+        // is 5 m back closing at 11 m/s: TTC 0.45 s, the imminent-impact gate.
         out += d.decide(listOf(closer(1, 5)), alertMax, 400L, bikeSpeedMs = 4f)
         return out.filter { it != Event.None }
     }

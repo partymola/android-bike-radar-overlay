@@ -354,6 +354,30 @@ class PrefsTest {
     }
 
     @Test
+    fun theAlertDistanceIsWrittenInsideTheSliderRange() {
+        // Read back from the file, so the setter's half is seen alone. The
+        // urgent cue's near-third coverage is pinned across the slider's range
+        // only (`a near-third car at the floor closing speed fires the urgent
+        // at every slider distance`, which sweeps it).
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        for ((written, stored) in listOf(57 to 40, 41 to 40, 40 to 40, 25 to 25, 10 to 10, 9 to 10, 5 to 10)) {
+            prefs.alertMaxDistanceM = written
+            assertEquals("wrote $written", stored, raw.getInt(Prefs.KEY_ALERT_MAX_DISTANCE_M, -1))
+        }
+    }
+
+    @Test
+    fun anAlertDistanceStoredOutsideTheSliderRangeReadsInsideIt() {
+        // A hand-edited or restored file arrives past the setter.
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        for ((stored, read) in listOf(57 to 40, 41 to 40, 40 to 40, 25 to 25, 10 to 10, 9 to 10, 5 to 10)) {
+            raw.edit().putInt(Prefs.KEY_ALERT_MAX_DISTANCE_M, stored).commit()
+            assertEquals("stored $stored", read, Prefs(context).alertMaxDistanceM)
+            assertEquals("stored $stored, snapshot", read, Prefs(context).snapshot().alertMaxDistanceM)
+        }
+    }
+
+    @Test
     fun corruptEnumValuesFallBackToDefaults() {
         // Write a value the enum can't parse straight into the backing file,
         // bypassing the typed setters, to drive the runCatching fallback that

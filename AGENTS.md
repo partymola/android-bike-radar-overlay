@@ -533,13 +533,24 @@ must not be changed about it. Four that bite in ordinary work:
     `threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
     `framesBeforeTheFailureDoNotReportIt`,
     `aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
-    `aFrameConsumedDuringTheDropReportsNoFailure`). The notification then
-    posts marked silent, with its own text about the light rather than the
-    connection, expanding to both sentences
-    (`ServiceNotificationsTest.theRadarLightFailureSaysToCheckTheLightAndShowsInFull`,
-    `theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot`); the tone
-    waits until no cue sounds, no pause holds and no call is on
-    (`AUDIO_DESIGN.md`, "When the audio steps back"; `AlertBeeper.cueSounding`).
+    `aFrameConsumedDuringTheDropReportsNoFailure`). The notification has its
+    own text about the light rather than the connection, expanding to both
+    sentences
+    (`ServiceNotificationsTest.theRadarLightFailureSaysToCheckTheLightAndShowsInFull`).
+    With no cue sounding, no pause holding and no call on (`AUDIO_DESIGN.md`,
+    "When the audio steps back"; `AlertBeeper.cueSounding`), it is posted
+    once without a silent marking, so it alerts as its channel is set to,
+    and the tone plays. Otherwise it is posted marked silent at once, then
+    again in the same slot without the marking, with the tone, once nothing
+    holds. No test checks what a phone then plays (`AUDIO_DESIGN.md`). A link
+    that ends or that the app ends during the wait, or a service that stops,
+    leaves the silent post only
+    (`ServiceNotificationsTest.theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts`,
+    `RadarLinkControllerHarnessTest.aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
+    `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
+    `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`,
+    `aHoldEndingAfterTheAppEndedTheLinkPostsNothingMore`,
+    `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`).
     A failed dusk/dawn switch is reported like the connect-time set
     (`aFlipTheRadarRefusesIsReportedToo`).
   - **Two journal lines mark a set that the link's end stopped.**
@@ -574,11 +585,17 @@ must not be changed about it. Four that bite in ordinary work:
     request after a failed connect-time set, before the frame that would
     report it, leaves no report (`aPressAfterAFailedSetReportsNothing`,
     `aPressAfterAFailedDuskSwitchReportsNothing`,
-    `aGrantedAppsRequestAfterAFailedSetReportsNothing`). An app's request,
-    whether made before a switch or after its failed try, never stops that
-    switch's failure report
+    `aGrantedAppsRequestAfterAFailedSetReportsNothing`). The same holds
+    while a report's alert waits for a cue, a pause or a call: the press,
+    or for the connect-time set the app's request, leaves the silent post
+    with no alert and no tone (`aPressDuringTheHoldLeavesTheSilentPostOnly`,
+    `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`,
+    `aGrantedAppsRequestDuringTheHoldLeavesTheSilentPostOnly`). An app's
+    request, whether made before a switch, after its failed try or while its
+    alert waits, never stops that switch's failure report
     (`aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
-    `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`). A dusk/dawn
+    `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`,
+    `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`). A dusk/dawn
     switch waits for the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`).
     The light baseline and the override deadband are reset before the job
     and the loop start

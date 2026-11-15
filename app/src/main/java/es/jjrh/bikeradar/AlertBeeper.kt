@@ -238,6 +238,11 @@ class AlertBeeper(
      *  Executor-confined. */
     private var released = false
 
+    /** Set by [release] on the caller's thread, before its teardown task is
+     *  queued, so a cue queued ahead of that task cannot end [cueSounding]
+     *  after it. */
+    @Volatile private var releaseStarted = false
+
     /** Bumped on every successful failure-triggered rebuild; lets tests pin
      *  that a rebuild actually replaced the track set. */
     internal var trackGeneration: Int = 0
@@ -293,7 +298,11 @@ class AlertBeeper(
 
     /** True from a cue's play until its burst's abandon timer fires: the
      *  cue's own length plus the tail [playWithFocus] arms
-     *  (`AlertBeeperFocusTest.aCueReadsSoundingUntilItsBurstEnds`). */
+     *  (`AlertBeeperFocusTest.aCueReadsSoundingUntilItsBurstEnds`). True for
+     *  good once [release] runs, so nothing waiting for quiet goes ahead as
+     *  the service stops, a cue queued ahead of the release included
+     *  (`aReleasedBeeperNeverReadsQuiet`, `aCueQueuedAheadOfTheReleaseLeavesItReadingSounding`,
+     *  `RadarLinkControllerHarnessTest.aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`). */
     val cueSounding: StateFlow<Boolean> = cueSoundingState.asStateFlow()
 
     /** The rider's own STREAM_ALARM index, captured once when [applyAlarmFloor]
@@ -314,7 +323,9 @@ class AlertBeeper(
         }
         restoreAlarmFloor()
         synchronized(cueLock) {
-            if (android.os.SystemClock.uptimeMillis() >= cueEndsAtMs) cueSoundingState.value = false
+            if (!releaseStarted && android.os.SystemClock.uptimeMillis() >= cueEndsAtMs) {
+                cueSoundingState.value = false
+            }
         }
     }
 
@@ -511,6 +522,7 @@ class AlertBeeper(
     }
 
     fun release() {
+        releaseStarted = true
         abandonHandler.removeCallbacks(abandonRunnable)
         if (hasFocus) {
             try {
@@ -522,12 +534,14 @@ class AlertBeeper(
         // just cancelled; do it here so service destroy never leaves the
         // rider's alarm slider raised.
         restoreAlarmFloor()
-        cueSoundingState.value = false
+        cueSoundingState.value = true
         // Teardown rides the playback executor, keeping the track fields
-        // executor-confined: a cue task already queued ahead of this one
-        // finds `released` set and skips, so the failure-triggered rebuild
-        // can never run after release and leak fresh tracks. shutdown()
-        // still runs everything queued before it.
+        // executor-confined: a cue task queued behind this one finds
+        // `released` set and skips, so the failure-triggered rebuild can never
+        // run after release and leak fresh tracks. One queued ahead of it still
+        // plays, and its abandon timer still restores focus and the floor but
+        // leaves [cueSounding] set (`aCueQueuedAheadOfTheReleaseLeavesItReadingSounding`).
+        // shutdown() still runs everything queued before it.
         try {
             executor.execute {
                 released = true

@@ -50,6 +50,7 @@ import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowBluetoothGatt
 import org.robolectric.shadows.ShadowLog
+import org.robolectric.shadows.ShadowNotificationManager
 import org.robolectric.shadows.ShadowToneGenerator
 import java.io.File
 import java.nio.file.Files
@@ -93,6 +94,7 @@ class RadarLinkControllerHarnessTest {
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
         ShadowToneGenerator.reset()
+        RecordingNotifications.posts.clear()
         // Inline, and every play reported as sounding, so a test can hold a cue
         // until it idles the main looper past the cue's end.
         beeper = AlertBeeper(
@@ -1108,10 +1110,11 @@ class RadarLinkControllerHarnessTest {
         prefs: Prefs = autoLightPrefs(),
         wallClock: () -> Long = { System.currentTimeMillis() },
         gateway: FakeGateway = FakeGateway(),
+        clock: () -> Long = { 0L },
     ): Pair<Link, RadarLinkController> {
         ShadowLog.clear()
         val link = Link()
-        val controller = controller(link, prefs = prefs, gateway = gateway, setUp = ::setUpRadarRefusingLightWrites, wallClock = wallClock)
+        val controller = controller(link, prefs = prefs, gateway = gateway, setUp = ::setUpRadarRefusingLightWrites, wallClock = wallClock, clock = clock)
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -1186,15 +1189,246 @@ class RadarLinkControllerHarnessTest {
         }
     }
 
-    @Test fun aHeldFailToneNeverSoundsOnceTheLinkEnds() = runTest {
+    /** Records each post of the tail-light failure notification, as silent or
+     *  alerting, with how many failure tones had played before it. The shadow
+     *  keeps only the latest post per id, so this is what shows how many posts
+     *  a report made and whether its alerting post came before its tone. */
+    @Implements(android.app.NotificationManager::class)
+    class RecordingNotifications : ShadowNotificationManager() {
+        @Implementation
+        override fun notify(tag: String?, id: Int, notification: android.app.Notification) {
+            if (notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light") {
+                val kind = if (notification.group == "silent") "silent" else "alerting"
+                val tones = ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }
+                posts += "$kind after $tones tones"
+            }
+            super.notify(tag, id, notification)
+        }
+
+        companion object {
+            val posts: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        }
+    }
+
+    private fun posts() = RecordingNotifications.posts.toList()
+
+    private val silentOnly = listOf("silent after 0 tones")
+
+    private val silentThenAlerting = listOf("silent after 0 tones", "alerting after 0 tones")
+
+    /** The tail-light failure notification as last posted. */
+    private fun radarLightFail(): android.app.Notification {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        return shadowOf(nm).allNotifications.single {
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light"
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aHeldFailureIsPostedSilentlyThenAgainWithItsTone() = runTest {
         val (link, controller) = aRefusedSet()
         beeper.play(1)
         streams(link)
-        assertTrue(pumpUntil { radarLightFailNotified() })
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while the cue sounds", silentOnly, posts())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue(pumpUntil { nackTones() == 1 })
+        assertEquals(silentThenAlerting, posts())
+        val alerting = radarLightFail()
+        assertEquals(null, alerting.group)
+        assertEquals(android.app.Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
+        assertEquals(0, alerting.flags and android.app.Notification.FLAG_ONLY_ALERT_ONCE)
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce() = runTest {
+        val (link, controller) = aRefusedSet()
+        streams(link)
+        assertTrue(pumpUntil { nackTones() == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.forceReconnect()
+    }
+
+    /** A refused set reported while a cue holds its alert: posted silent. */
+    private suspend fun TestScope.aHeldReport(): Pair<Link, RadarLinkController> {
+        val (link, controller) = aRefusedSet()
+        beeper.play(1)
+        streams(link)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        return link to controller
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aPressDuringTheHoldLeavesTheSilentPostOnly() = runTest {
+        val (link, controller) = aHeldReport()
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aGrantedAppsRequestDuringTheHoldLeavesTheSilentPostOnly() = runTest {
+        val (_, controller) = aHeldReport()
+        aGrantedAppSetsTheLight()
+        assertEquals("still held", silentOnly, posts())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    /** Every write refused, so the connect-time set and the sunset switch 9 s
+     *  in both fail with no frame between; then a cue holds both reports and
+     *  [duringTheHold] runs before the cue ends. */
+    private suspend fun TestScope.bothReportsHeld(duringTheHold: suspend (Link) -> Unit) {
+        nineSecondsBeforeSunset { p, wall ->
+            val (link, controller) = aRefusedSet(
+                prefs = p,
+                wallClock = wall,
+                gateway = FakeGateway().apply { state = RadarLinkState(radarGattActive = true) },
+            )
+            val switchFailed = { ShadowLog.getLogsForTag("BikeRadar.Radar").any { it.msg == "radar light NIGHT mode=PELOTON applied=false" } }
+            assertTrue(pumpUntil { switchFailed() })
+            beeper.play(1)
+            streams(link)
+            assertTrue(pumpUntil { posts().size == 2 })
+            duringTheHold(link)
+            main.idleFor(java.time.Duration.ofSeconds(1))
+            pumpUntil(timeoutMs = 3_000) { false }
+            controller.forceReconnect()
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly() = runTest {
+        bothReportsHeld { link ->
+            notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+            notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+            assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        }
+        assertEquals(listOf("silent after 0 tones", "silent after 0 tones"), posts())
+        assertEquals(0, nackTones())
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported() = runTest {
+        bothReportsHeld { aGrantedAppSetsTheLight() }
+        assertEquals(listOf("silent after 0 tones", "silent after 0 tones", "alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+        assertEquals(
+            "the switch's report is the one that alerted",
+            "Couldn't switch the tail light to Peloton. Check it while you're stopped.",
+            radarLightFail().extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString(),
+        )
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aHeldFailToneNeverSoundsOnceTheLinkEnds() = runTest {
+        val (link, controller) = aRefusedSet()
+        beeper.play(1)
+        streams(link)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         main.idleFor(java.time.Duration.ofSeconds(1))
         pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aHoldEndingAsTheRadarDisconnectsPostsNothingMore() = runTest {
+        // The cue ends inside the disconnect callback: the link already reads
+        // down, and the teardown has not yet cancelled the wait.
+        val gateway = FakeGateway()
+        val (link, controller) = aRefusedSet(gateway = gateway)
+        beeper.play(1)
+        streams(link)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        gateway.onDisconnect = {
+            gateway.onDisconnect = {}
+            main.idleFor(java.time.Duration.ofSeconds(1))
+            testScheduler.runCurrent()
+        }
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aHoldEndingAfterTheAppEndedTheLinkPostsNothingMore() = runTest {
+        // The watchdog ends the link during a call and the stack never calls
+        // the disconnect back, so the wait is still running when the call ends.
+        val audio = app.getSystemService(AudioManager::class.java)
+        try {
+            val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+            val (link, controller) = aRefusedSet(clock = { clockMs.get() })
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            main.idle()
+            streams(link)
+            assertTrue(pumpUntil { posts().isNotEmpty() })
+            clockMs.set(8_000L)
+            assertTrue("journal=$journal", pumpUntil { journalHas("V2 stream silent") })
+            audio.mode = AudioManager.MODE_NORMAL
+            main.idle()
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals(silentOnly, posts())
+            assertEquals(0, nackTones())
+            controller.forceReconnect()
+        } finally {
+            audio.mode = AudioManager.MODE_NORMAL
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aHeldFailToneNeverSoundsOnceTheBeeperIsReleased() = runTest {
+        // The service releases the beeper before it cancels the scope the
+        // report waits in.
+        val (link, controller) = aRefusedSet()
+        beeper.play(1)
+        streams(link)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        beeper.release()
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aFailureReportedAfterTheBeeperIsReleasedSoundsNothing() = runTest {
+        val (link, controller) = aRefusedSet()
+        beeper.release()
+        streams(link)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
         assertEquals(0, nackTones())
         controller.forceReconnect()
     }
@@ -2140,7 +2374,9 @@ class RadarLinkControllerHarnessTest {
         )
     }
 
-    @Test fun aFlipTheRadarRefusesIsReportedToo() = runTest {
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aFlipTheRadarRefusesIsReportedToo() = runTest {
         // Every light write is refused, so the connect-time set and the sunset
         // flip 9 s in both fail, on a link that streams throughout.
         val zone = java.util.TimeZone.getDefault()
@@ -2161,6 +2397,7 @@ class RadarLinkControllerHarnessTest {
                 autoLightLines(),
             )
             assertTrue(pumpUntil { nackTones() == 2 })
+            assertEquals(listOf("alerting after 0 tones", "alerting after 1 tones"), posts())
             feeder.cancel()
             controller.forceReconnect()
         } finally {

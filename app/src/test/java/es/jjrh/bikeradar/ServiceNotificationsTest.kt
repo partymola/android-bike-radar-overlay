@@ -180,7 +180,7 @@ class ServiceNotificationsTest {
         // radar-light failure must coexist, not clobber each other.
         val n = notifications()
         n.postLightFail("Day Flash")
-        n.postRadarLightFail("Solid")
+        n.postRadarLightFail("Solid", silent = false)
         assertEquals(2, nm.activeNotifications.size)
         assertEquals(
             setOf(
@@ -198,7 +198,7 @@ class ServiceNotificationsTest {
         // would be wrong for it; the text is two sentences, so the collapsed
         // line alone cuts it.
         val n = notifications()
-        n.postRadarLightFail("Solid")
+        n.postRadarLightFail("Solid", silent = false)
         n.postLightFail("Day Flash")
         val radar = lightFail("Radar light")
         val expected = "Couldn't switch the tail light to Solid. Check it while you're stopped."
@@ -210,28 +210,34 @@ class ServiceNotificationsTest {
         )
     }
 
-    @Test fun theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot() {
-        // The radar's failure tone is held for cues, a pause and a call, so the
-        // notification itself must not sound or buzz when it posts. The
-        // support library's silent marking is a child of its own group that
+    @Test fun theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts() {
+        // The radar's failure is posted silent while its tone is held for cues,
+        // a pause and a call, then again in the same slot without the marking.
+        // The support library's silent marking is a child of its own group that
         // alerts only through a summary; the channel's sound and buzz are not
         // on the posted object at all, so only the marking can be pinned here.
         val n = notifications()
-        n.postRadarLightFail("Solid")
-        n.postLightFail("Day Flash")
         fun posted(title: String) = nm.activeNotifications.single { title(it) == title }.notification
-        val radar = posted("Radar light")
-        assertEquals("silent", radar.group)
-        assertEquals(Notification.GROUP_ALERT_SUMMARY, radar.groupAlertBehavior)
+        n.postRadarLightFail("Solid", silent = true)
+        val silent = posted("Radar light")
+        assertEquals("silent", silent.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.groupAlertBehavior)
+        n.postRadarLightFail("Solid", silent = false)
+        val alerting = posted("Radar light")
+        assertNull(alerting.group)
+        assertEquals(Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
+        assertEquals(0, alerting.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+        n.postLightFail("Day Flash")
         val dashcam = posted("Dashcam light")
         assertNull(dashcam.group)
         assertEquals(Notification.GROUP_ALERT_ALL, dashcam.groupAlertBehavior)
+        assertEquals(0, dashcam.flags and Notification.FLAG_ONLY_ALERT_ONCE)
     }
 
     @Test
     @Config(qualifiers = "+es")
     fun theRadarLightFailureSaysToCheckTheLightInSpanishToo() {
-        notifications().postRadarLightFail("Fija")
+        notifications().postRadarLightFail("Fija", silent = false)
         val radar = lightFail("Luz del radar")
         val expected = "No se ha podido cambiar la luz trasera a «Fija». Échale un vistazo con la bici parada."
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())

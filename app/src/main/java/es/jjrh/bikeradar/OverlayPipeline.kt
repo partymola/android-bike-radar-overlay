@@ -107,8 +107,9 @@ internal class OverlayPipeline(
     // reconnect or a flaky link would replay the cues each time.
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
 
-    /** Whether one of the ride's cues is sounding, which the tail-light
-     *  failure tone waits out (`theFailToneWaitsForACueToEnd`). */
+    /** Whether one of the ride's cues is sounding, and true for good once the
+     *  beeper is released ([AlertBeeper.cueSounding]). The tail-light failure
+     *  alert waits it out (`theFailToneWaitsForACueToEnd`). */
     val cueSounding: StateFlow<Boolean> get() = beeper.cueSounding
 
     /**

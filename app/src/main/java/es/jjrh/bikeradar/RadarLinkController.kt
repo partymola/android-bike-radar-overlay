@@ -29,12 +29,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -911,14 +914,20 @@ internal class RadarLinkController(
                 return v2Frames.value
             }
 
-            // A failed set is reported only once the radar has streamed since
-            // the failure, on a link that is still up and that the app has not
-            // ended, so a write the link's end failed is not blamed on the light
-            // (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
-            // `aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
-            // `anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`), and only
-            // if [stop] has not come true since (`aPressAfterAFailedSetReportsNothing`,
-            // `aGrantedAppsRequestAfterAFailedSetReportsNothing`).
+            fun linkGone() = synchronized(linkLock) { linkDown } || receipts.endedByApp
+
+            // Reported only once the radar has streamed since the failure, on a
+            // link still up that the app has not ended, and only while [stop] is
+            // false. With nothing holding the tone it is posted alerting at once;
+            // otherwise silent, then alerting with the tone once the audio is
+            // free and the same checks still pass
+            // (`aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
+            // `aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
+            // `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
+            // `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`). linkDown is
+            // set before the teardown cancels this job, and isActive covers a
+            // cancel landing just as the wait returns, which no test does; nor
+            // does any test reach the window while the unheld path reads quiet.
             suspend fun reportFailedSet(
                 phase: LightAutoModeDecider.Phase,
                 mode: RadarLightMode,
@@ -931,14 +940,19 @@ internal class RadarLinkController(
                     failedBeforeTheLinkEnded(phase, mode)
                     throw e
                 }
-                if (synchronized(linkLock) { linkDown } || receipts.endedByApp) {
+                if (linkGone()) {
                     failedBeforeTheLinkEnded(phase, mode)
                     return
                 }
                 if (stop()) return
                 journal("radar light $phase mode=$mode applied=false")
-                postRadarLightModeFailNotification(mode)
-                awaitQuietForFailTone()
+                val quiet = failToneQuiet()
+                if (!quiet.first()) {
+                    postRadarLightModeFailNotification(mode, silent = true)
+                    quiet.first { it }
+                }
+                if (!currentCoroutineContext().isActive || linkGone() || stop()) return
+                postRadarLightModeFailNotification(mode, silent = false)
                 playRadarLightFailTone()
             }
 
@@ -1051,7 +1065,9 @@ internal class RadarLinkController(
                         // the rider's to hear
                         // (`aDuskSwitchStillWritesAfterAGrantedAppSetTheLight`,
                         // `aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
-                        // `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`).
+                        // `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`,
+                        // `aGrantedAppsRequestDuringTheHoldStillLeavesADuskSwitchReported`,
+                        // `aPressDuringTheHoldLeavesADuskSwitchsSilentPostOnly`).
                         val stop = { radarLightUserOverride }
                         val failedAt = setLight(autoLight, flipTo, mode, stop) ?: return@launch
                         reportFailedSet(flipTo, mode, failedAt, stop)
@@ -1450,12 +1466,10 @@ internal class RadarLinkController(
         return true
     }
 
-    /** The tail-light failure notification, posted silently as soon as
-     *  `reportFailedSet` decides to report; its sound is the tone of
-     *  [playRadarLightFailTone], which [awaitQuietForFailTone] may hold. The
-     *  radar cannot be read back, so a write it ACKs and the light then
-     *  ignores goes unseen. */
-    private fun postRadarLightModeFailNotification(mode: RadarLightMode) {
+    /** Posts the tail-light failure notification, [silent] or alerting;
+     *  `reportFailedSet` decides which and when. The radar cannot be read
+     *  back, so a write it ACKs and the light then ignores goes unseen. */
+    private fun postRadarLightModeFailNotification(mode: RadarLightMode, silent: Boolean) {
         val modeName = context.getString(
             when (mode) {
                 RadarLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
@@ -1466,16 +1480,18 @@ internal class RadarLinkController(
             },
         )
 
-        notifications.postRadarLightFail(modeName)
+        notifications.postRadarLightFail(modeName, silent)
     }
 
-    /** Returns once no cue of the ride is sounding, no pause holds and no call
-     *  is on, so the tail-light failure tone never starts while one does; a
-     *  cue starting during the tone is not waited for. A pause ends at its own
-     *  deadline or on a resume (`theFailToneWaitsForACueToEnd`,
+    /** True while no cue of the ride is sounding, no pause holds and no call
+     *  is on, so the tail-light failure's alerting post and tone never start
+     *  while one does; a cue starting during the tone is not waited for. A
+     *  pause ends at its own deadline or on a resume, and a released beeper
+     *  never reads as quiet (`theFailToneWaitsForACueToEnd`,
      *  `theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
-     *  `theFailToneWaitsForACallToEnd`). */
-    private suspend fun awaitQuietForFailTone() {
+     *  `theFailToneWaitsForACallToEnd`,
+     *  `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`). */
+    private fun failToneQuiet(): Flow<Boolean> {
         val paused = channelFlow {
             prefs.flow.collectLatest { s ->
                 val left = s.pausedUntilEpochMs - wallClock()
@@ -1487,9 +1503,9 @@ internal class RadarLinkController(
             }
         }
         val audio = context.getSystemService(android.media.AudioManager::class.java)
-        combine(overlayPipeline.cueSounding, paused, AlertBeeper.callInProgress(audio, context.mainExecutor)) { cue, pause, call ->
+        return combine(overlayPipeline.cueSounding, paused, AlertBeeper.callInProgress(audio, context.mainExecutor)) { cue, pause, call ->
             !cue && !pause && !call
-        }.first { it }
+        }
     }
 
     private suspend fun playRadarLightFailTone() {

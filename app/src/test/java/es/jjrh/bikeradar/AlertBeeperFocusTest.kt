@@ -229,7 +229,47 @@ class AlertBeeperFocusTest {
         beeper.play(3)
         assertTrue(beeper.cueSounding.value)
         beeper.release()
-        assertFalse("a released beeper sounds nothing", beeper.cueSounding.value)
+    }
+
+    @Test
+    fun aReleasedBeeperNeverReadsQuiet() {
+        // Something waiting for quiet must not take the service stopping for it.
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        val idle = newBeeper()
+        idle.release()
+        assertTrue("released with no cue", idle.cueSounding.value)
+        val mid = newBeeper()
+        mid.play(1)
+        mid.release()
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue("released mid-cue, past the cue's end", mid.cueSounding.value)
+    }
+
+    @Test
+    fun aCueQueuedAheadOfTheReleaseLeavesItReadingSounding() {
+        // The queued cue runs after release() returns and before its teardown,
+        // with loud media and a quiet alarm level, so it lifts the floor.
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, 1, 0)
+        val held = ArrayDeque<Runnable>()
+        val cues = mutableListOf<String>()
+        val beeper = AlertBeeper(
+            audioManager = audioManager,
+            executor = { held.addLast(it) },
+            onCue = { cues.add(it) },
+            playTrackOverride = { true },
+        )
+        beeper.play(1)
+        beeper.release()
+        while (held.isNotEmpty()) held.removeFirst().run()
+        assertEquals("the queued cue plays", listOf("beep count=1"), cues)
+        assertTrue("its burst lifts the alarm stream", audioManager.getStreamVolume(AudioManager.STREAM_ALARM) > 1)
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue(beeper.cueSounding.value)
+        // Its timer still gives the focus back and restores the rider's level.
+        assertTrue(shadowAm.lastAbandonedAudioFocusRequest != null)
+        assertEquals(1, audioManager.getStreamVolume(AudioManager.STREAM_ALARM))
     }
 
     @Test

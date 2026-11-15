@@ -45,6 +45,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowBluetoothGatt
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowToneGenerator
 import java.io.File
@@ -175,7 +179,10 @@ class RadarLinkControllerHarnessTest {
             losses += loss
             onDisconnect()
         }
-        override fun snapshot(): RadarLinkState = RadarLinkState()
+
+        /** What [snapshot] answers. */
+        @Volatile var state = RadarLinkState()
+        override fun snapshot(): RadarLinkState = state
     }
 
     /** Captured handle on the connection the controller opened. */
@@ -278,20 +285,23 @@ class RadarLinkControllerHarnessTest {
     }
 
     /** Full rear-radar service map (config/control/battery/radar/DIS), plus the
-     *  2f14 state-notify the radar-light auto-mode subscribes. */
-    private fun setUpRadarServices(gatt: BluetoothGatt) {
+     *  2f14 state-notify the radar-light auto-mode subscribes, and with
+     *  [with2f12] the settings notify only the debug probe subscribes. */
+    private fun setUpRadarServices(gatt: BluetoothGatt) = setUpRadarServices(gatt, with2f12 = false)
+
+    private fun setUpRadarServices(gatt: BluetoothGatt, with2f12: Boolean) {
         addService(
             gatt,
             Uuids.SVC_CONFIG,
             char(Uuids.HANDSHAKE_TX, propWriteNoResp or propWrite),
             char(Uuids.HANDSHAKE_RX, propNotify, cccd = true),
         )
-        addService(
-            gatt,
-            Uuids.SVC_CONTROL,
+        val control = listOfNotNull(
             char(Uuids.SETTINGS_ACK, propIndicate or propWrite, cccd = true),
             char(Uuids.SETTINGS_14, propNotify, cccd = true),
+            if (with2f12) char(Uuids.SETTINGS_12, propNotify, cccd = true) else null,
         )
+        addService(gatt, Uuids.SVC_CONTROL, *control.toTypedArray())
         addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propRead or propNotify, cccd = true))
         addService(gatt, Uuids.SVC_RADAR, char(Uuids.RADAR_V2, propNotify, cccd = true))
         addService(
@@ -361,21 +371,32 @@ class RadarLinkControllerHarnessTest {
 
     /** Background loop completing the read/CCCD/MTU ops ShadowBluetoothGatt does
      *  not auto-fire, routed through the controller's own callback. A null
-     *  [batteryByte] leaves the battery read unanswered. */
-    private fun TestScope.startDriver(link: Link, scope: CoroutineScope = backgroundScope, batteryByte: Byte? = 0x64) {
+     *  [batteryByte] leaves the battery read unanswered. With [answer2f14]
+     *  false it answers no descriptor write once the handshake is complete,
+     *  since the queue takes any descriptor answer for the pending one and
+     *  only the control-service subscribes follow the handshake. */
+    private fun TestScope.startDriver(
+        link: Link,
+        scope: CoroutineScope = backgroundScope,
+        batteryByte: Byte? = 0x64,
+        answer2f14: Boolean = true,
+    ) {
         scope.launch {
             while (isActive) {
                 val cb = link.cb
                 val gatt = link.gatt
                 if (cb != null && gatt != null) {
+                    val cccds = answer2f14 || !journalHas("radar handshake complete")
                     cb.onMtuChanged(gatt, 247, BluetoothGatt.GATT_SUCCESS)
-                    completeCccd(cb, gatt, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_RX)
-                    completeCccd(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK)
-                    completeCccd(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_14)
-                    completeCccd(cb, gatt, Uuids.SVC_RADAR, Uuids.RADAR_V2)
+                    if (cccds) {
+                        completeCccd(cb, gatt, Uuids.SVC_CONFIG, Uuids.HANDSHAKE_RX)
+                        completeCccd(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK)
+                        completeCccd(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_14)
+                        completeCccd(cb, gatt, Uuids.SVC_RADAR, Uuids.RADAR_V2)
+                    }
                     gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY)?.let {
                         if (batteryByte != null) cb.onCharacteristicRead(gatt, it, byteArrayOf(batteryByte), BluetoothGatt.GATT_SUCCESS)
-                        cb.onDescriptorWrite(gatt, it.getDescriptor(Uuids.CCCD), BluetoothGatt.GATT_SUCCESS)
+                        if (cccds) cb.onDescriptorWrite(gatt, it.getDescriptor(Uuids.CCCD), BluetoothGatt.GATT_SUCCESS)
                     }
                     gatt.getService(Uuids.SVC_DIS)?.let { dis ->
                         listOf(Uuids.DIS_MODEL_NUMBER, Uuids.DIS_FIRMWARE_REV, Uuids.DIS_SERIAL_NUMBER).forEach { u ->
@@ -1012,6 +1033,7 @@ class RadarLinkControllerHarnessTest {
     }
 
     @Test fun anAutoModeWriteTheRadarRefusesIsJournalledAsRefused() = runTest {
+        ShadowLog.clear()
         val link = Link()
         val controller = controller(link, prefs = autoLightPrefs(), setUp = ::setUpRadarRefusingLightWrites)
         startDriver(link)
@@ -1019,11 +1041,50 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
         feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { lightSetLogged(applied = false) })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals("nothing before the radar streams again; journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
         assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
         assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
         // The rider hears and sees it, on a link that is still up.
         assertTrue(pumpUntil { radarLightFailNotified() })
         assertTrue(pumpUntil { nackTones() == 1 })
+        controller.forceReconnect()
+    }
+
+    /** The controller's logcat line for a finished auto-mode set, written
+     *  whatever the journal then says about it. */
+    private fun lightSetLogged(applied: Boolean) = ShadowLog.getLogsForTag("BikeRadar.Radar").any {
+        it.msg.startsWith("radar light ") && it.msg.endsWith(" applied=$applied")
+    }
+
+    private fun endedLines() = journal.toList().filter { it.startsWith("radar light ") && it.endsWith(" ended with the link") }
+
+    @Test fun aFrameAfterTheAppEndedTheLinkReportsNoFailure() = runTest {
+        // The watchdog ends the link and the stack never calls the disconnect
+        // back, so the loop runs on and still reads a late frame.
+        ShadowLog.clear()
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(link, prefs = autoLightPrefs(), setUp = ::setUpRadarRefusingLightWrites, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { lightSetLogged(applied = false) })
+        runCurrent()
+        clockMs.set(8_000L)
+        assertTrue("journal=$journal", pumpUntil { journalHas("V2 stream silent") })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue("journal=$journal", pumpUntil { endedLines().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("journal=$journal", 1, endedLines().size)
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
         controller.forceReconnect()
     }
 
@@ -1037,7 +1098,10 @@ class RadarLinkControllerHarnessTest {
     private fun nackTones() = ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }
 
     @Test fun aLinkLostDuringTheLightSetSoundsNoLightFailure() = runTest {
-        // Its last write is failed by the disconnect, not by the light.
+        // Its last write is failed by the disconnect, not by the light. The
+        // teardown cancels the set's jobs before a frame could follow, so the
+        // one line either ends the writes or the wait for that frame, in
+        // whichever order the harness runs them.
         val link = Link()
         val controller = controller(
             link,
@@ -1058,10 +1122,13 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { link.openCount >= 2 })
         pumpUntil(timeoutMs = 3_000) { false }
         assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertTrue("journal=$journal", endedLine.matches(endedLines().single()))
         assertFalse(radarLightFailNotified())
         assertEquals(0, nackTones())
         controller.forceReconnect()
     }
+
+    private val endedLine = Regex("""radar light (DAY mode=SOLID|NIGHT mode=PELOTON) ended with the link""")
 
     @Test fun autoModeOffJournalsNoLightLine() = runTest {
         val link = Link()
@@ -1133,6 +1200,34 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aLightStateWaitingAtTheLoopsStartIsTheNewLinksBaseline() = runTest {
+        // The slot moved while the link was down. The loop reads that state
+        // before the setup job runs, so the old link's baseline must be gone.
+        val link = Link()
+        val controller = controller(link, prefs = autoLightPrefs())
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue(pumpUntil { autoLightLines().size == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline: slot 0
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount == 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        // Behind the handshake's last reply, so it is the loop's first frame.
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // slot 1
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3b")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 59 })
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 2 })
+        assertFalse("journal=$journal", journalHas("radar light slot changed"))
+        controller.forceReconnect()
+    }
+
     @Test fun aGrantedAppsWriteIsJournalledAsTheirs() = runTest {
         val link = Link()
         val controller = controller(link)
@@ -1185,8 +1280,10 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
         feedHandshakeReplies(link)
-        // The decode entry stamps lastV2FrameMs = clock() (1 s); feed no V2 frame.
+        // The watchdog stamps lastV2FrameMs = clock() (1 s) once the setup job,
+        // which has nothing to write here, has ended; feed no V2 frame.
         assertTrue(pumpUntil { journalHas("radar handshake complete") })
+        runCurrent()
 
         // Jump the clock past the stall window so the next watchdog tick fires.
         clockMs.set(1_000L + RadarLinkController.V2_FRAME_STALL_MS + 2_000L)
@@ -1291,6 +1388,8 @@ class RadarLinkControllerHarnessTest {
         shadowOf(requireNotNull(link.gatt)).notifyConnection(mac)
         feedHandshakeReplies(link)
         assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        // So the watchdog's stamp, taken as the setup job ends, reads 1 s.
+        runCurrent()
         assertFalse(gateway.events.contains("disconnected"))
         clockMs.set(8_000L)
         assertTrue("journal=$journal", pumpUntil { journalHas("V2 stream silent") })
@@ -1343,22 +1442,28 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
-    // ── the watchdog counts from the start of the decode loop ───────────────────
+    // ── the watchdog counts from the end of the setup job ───────────────────────
 
     /** Forwards every callback the controller handles, except the first
      *  [swallow] write answers on the tail-light characteristic, so each of
-     *  those writes runs to the queue's op timeout. The shadow answers a write
-     *  inside the call that submits it, so [ops] lists the descriptor and
-     *  tail-light writes in the order they went out. */
+     *  those writes runs to the queue's op timeout, and with [swallow2f14] the
+     *  light-state subscribe's answer. The shadow answers a write inside the
+     *  call that submits it, so [ops] lists the descriptor and tail-light
+     *  writes in the order they went out, and [lightAt] when each tail-light
+     *  write did by [now]. */
     private class SwallowingLightWrites(
         private val inner: BluetoothGattCallback,
         private var swallow: Int,
         private val ops: MutableList<String>,
+        private val swallow2f14: Boolean,
+        private val lightAt: MutableList<Long>,
+        private val now: () -> Long,
     ) : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = inner.onConnectionStateChange(g, status, newState)
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = inner.onServicesDiscovered(g, status)
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
             ops += "cccd " + d.characteristic.uuid.toString().substring(4, 8)
+            if (swallow2f14 && d.characteristic.uuid == Uuids.SETTINGS_14) return
             inner.onDescriptorWrite(g, d, status)
         }
 
@@ -1368,7 +1473,10 @@ class RadarLinkControllerHarnessTest {
         override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = inner.onCharacteristicRead(g, ch, value, status)
         override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
             @Suppress("DEPRECATION")
-            if (ch.uuid == Uuids.SETTINGS_ACK) ops += "light " + ch.value.toHex()
+            if (ch.uuid == Uuids.SETTINGS_ACK) {
+                ops += "light " + ch.value.toHex()
+                lightAt += now()
+            }
             if (ch.uuid == Uuids.SETTINGS_ACK && swallow > 0) {
                 swallow--
                 return
@@ -1384,16 +1492,28 @@ class RadarLinkControllerHarnessTest {
     }
 
     /** The full radar table on every connection, each of which leaves its
-     *  first [swallowedWrites] tail-light writes unanswered. */
-    private fun slowLightRadar(swallowedWrites: Int): (BluetoothGatt) -> Unit = { g ->
-        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites, gattOps))
-        setUpRadarServices(g)
+     *  first [swallowedWrites] tail-light writes unanswered, and with
+     *  [swallow2f14] its light-state subscribe too. */
+    private fun TestScope.slowLightRadar(
+        swallowedWrites: Int,
+        swallow2f14: Boolean = false,
+        with2f12: Boolean = false,
+    ): (BluetoothGatt) -> Unit = { g ->
+        shadowOf(g).setGattCallback(
+            SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites, gattOps, swallow2f14, lightWriteAt) { testScheduler.currentTime },
+        )
+        setUpRadarServices(g, with2f12)
     }
 
     /** What every [slowLightRadar] connection wrote, in order. */
     private val gattOps: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+    /** The virtual time of each tail-light write, in order. */
+    private val lightWriteAt: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+
     private fun lightWrites() = gattOps.toList().filter { it.startsWith("light ") }
+
+    private fun subscribes() = gattOps.toList().filter { it == "cccd 2f14" || it == "cccd 2f12" }
 
     /** A V2 target frame every 100 ms until cancelled. */
     private fun TestScope.feedV2(link: Link) = backgroundScope.launch {
@@ -1407,16 +1527,27 @@ class RadarLinkControllerHarnessTest {
 
     private fun writtenAt(line: (String) -> Boolean): Long = journalAt.toList().first { line(it.first) }.second
 
-    /** A streaming radar whose auto-mode light set takes two op timeouts. */
-    private suspend fun TestScope.slowLightLink(): Pair<Link, RadarLinkController> {
+    /** A radar past its handshake whose auto-mode light set, by default,
+     *  takes two op timeouts, and whose light-state subscribe, with
+     *  [answer2f14] false, one. */
+    private suspend fun TestScope.slowLightLink(
+        swallowedWrites: Int = 2,
+        gateway: FakeGateway = FakeGateway(),
+        prefs: Prefs = autoLightPrefs(),
+        wallClock: () -> Long = { System.currentTimeMillis() },
+        answer2f14: Boolean = true,
+        with2f12: Boolean = false,
+    ): Pair<Link, RadarLinkController> {
         val link = Link()
         val controller = controller(
             link,
-            prefs = autoLightPrefs(),
-            setUp = slowLightRadar(swallowedWrites = 2),
+            prefs = prefs,
+            gateway = gateway,
+            setUp = slowLightRadar(swallowedWrites, swallow2f14 = !answer2f14, with2f12 = with2f12),
             clock = { 1_000L + testScheduler.currentTime },
+            wallClock = wallClock,
         )
-        startDriver(link)
+        startDriver(link, answer2f14 = answer2f14)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
@@ -1427,24 +1558,10 @@ class RadarLinkControllerHarnessTest {
 
     @Test fun aSlowTailLightSetDoesNotEndAStreamingRadar() = runTest {
         val (link, controller) = slowLightLink()
-        var feeder = feedV2(link)
+        val feeder = feedV2(link)
         assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
         assertTrue("journal=$journal", autoLightLine(applied = true).matches(autoLightLines().single()))
         assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.isNotEmpty() })
-        pumpUntil(timeoutMs = 8_000) { false }
-        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
-
-        // A second connection starts with the first one's last frame as its
-        // stamp, which a watchdog started before the setup would read.
-        feeder.cancel()
-        pumpUntil(timeoutMs = 3_000) { false }
-        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
-        assertTrue(pumpUntil { link.openCount == 2 })
-        bootstrap(link)
-        feedHandshakeReplies(link)
-        assertTrue("journal=$journal", pumpUntil { journal.count { it == "radar handshake complete" } == 2 })
-        feeder = feedV2(link)
-        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 2 })
         pumpUntil(timeoutMs = 8_000) { false }
         assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
         feeder.cancel()
@@ -1468,20 +1585,35 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
-    @Test fun aRadarWhoseFirstFrameFollowsASlowSetupGetsTheStallWindow() = runTest {
+    // ── the connect-time setup runs beside the decode loop ──────────────────────
+
+    @Test fun aSlowTailLightSetDoesNotHoldTheRadarFrames() = runTest {
         val (link, controller) = slowLightLink()
-        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
-        pumpUntil(timeoutMs = 3_000) { false }
+        val late = framesLateOnTheBus { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2FrameAt(it)) }
+        assertEquals("frames still off the bus 100 ms after they arrived", emptyList<Int>(), late)
+        assertEquals("the set must still be running; journal=$journal", emptyList<String>(), autoLightLines())
+        controller.forceReconnect()
+    }
+
+    @Test fun theFirstFrameMarksTheRadarUpDuringASlowLightSet() = runTest {
+        val gateway = FakeGateway()
+        val (link, controller) = slowLightLink(gateway = gateway)
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue("events=${gateway.events}", pumpUntil(timeoutMs = 1_000) { gateway.connects == 1 })
         val feeder = feedV2(link)
-        pumpUntil(timeoutMs = 8_000) { false }
-        assertTrue(journalHas("radar V2 stream live"))
-        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        val live = writtenAt { it == "radar V2 stream live" }
+        val light = writtenAt { autoLightLine(applied = true).matches(it) }
+        assertTrue("stream live at $live, light line at $light", live < light)
         feeder.cancel()
         controller.forceReconnect()
     }
 
-    @Test fun aTailLightThatNeverAnswersHoldsTheWatchdogOnlyUntilTheLoopStarts() = runTest {
+    @Test fun aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds() = runTest {
+        // The set's three tries each run to the queue's 5 s op timeout, with
+        // 400 to 600 ms then 1200 to 1800 ms between them, so the setup job
+        // ends 16.6 to 17.4 s after the handshake. The watchdog counts from
+        // there and tears down on its first 2 s tick past the 5 s stall: 6 s.
         val link = Link()
         val controller = controller(
             link,
@@ -1492,19 +1624,201 @@ class RadarLinkControllerHarnessTest {
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
-        bootstrap(link)
+        // So the watchdog's disconnect is called back.
+        shadowOf(requireNotNull(link.gatt)).notifyConnection(mac)
         feedHandshakeReplies(link)
         assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
-        assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
-        assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
-        // Three op timeouts and the two jittered retry gaps.
-        val setupMs = writtenAt { autoLightLine(applied = false).matches(it) } - writtenAt { it == "radar handshake complete" }
-        assertTrue("setup took $setupMs ms", setupMs in 16_500L..17_500L)
-        assertTrue("journal=$journal", pumpUntil(timeoutMs = 8_000) { silentLines().isNotEmpty() })
-        // The fail tone runs before the loop starts; the stall counts from there.
-        val afterLight = silentLines().single().second - writtenAt { autoLightLine(applied = false).matches(it) }
-        assertTrue("torn down $afterLight ms after the light line", afterLight in 6_000L..7_600L)
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 30_000) { silentLines().isNotEmpty() })
+        val afterHandshake = silentLines().single().second - writtenAt { it == "radar handshake complete" }
+        assertTrue("torn down $afterHandshake ms after the handshake", afterHandshake in 22_600L..23_400L)
         assertWatchdogLine("radar V2 stream silent 6000ms, last received never, loop=waiting; tearing down")
+        assertEquals("ops=$gattOps", 3, lightWrites().size)
+        // No frame came after the last try failed, so the light is not blamed.
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertTrue("journal=$journal", endedLine.matches(endedLines().single()))
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test fun threeUnansweredTriesOnAStreamingLinkReportTheFailure() = runTest {
+        // Each try runs to the queue's 5 s op timeout, then waits 400 to
+        // 600 ms, then 1200 to 1800 ms.
+        val (link, controller) = slowLightLink(swallowedWrites = 3)
+        val feeder = feedV2(link)
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 20_000) { autoLightLines().isNotEmpty() })
+        assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
+        val at = lightWriteAt.toList()
+        assertEquals(3, at.size)
+        assertTrue("write times $at", at[1] - at[0] in 5_400L..5_600L && at[2] - at[1] in 6_200L..6_800L)
+        assertTrue(pumpUntil { radarLightFailNotified() })
+        assertTrue(pumpUntil { nackTones() == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(1, nackTones())
+        assertEquals("ops=$gattOps", 3, lightWrites().size)
+        feeder.cancel()
+        controller.forceReconnect()
+    }
+
+    @Test fun anUnansweredLightStateSubscribeDoesNotHoldTheRadarFrames() = runTest {
+        val gateway = FakeGateway()
+        val (link, controller) = slowLightLink(swallowedWrites = 0, gateway = gateway, answer2f14 = false)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue("events=${gateway.events}", pumpUntil(timeoutMs = 1_000) { gateway.connects == 1 })
+        assertEquals("the subscribe must still be outstanding; ops=$gattOps", emptyList<String>(), lightWrites())
+        val late = framesLateOnTheBus { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2FrameAt(it)) }
+        assertEquals("frames still off the bus 100 ms after they arrived", emptyList<Int>(), late)
+        controller.forceReconnect()
+    }
+
+    @Test fun nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut() = runTest {
+        // Neither a granted app nor the debug probe: the light-state subscribe
+        // goes unanswered for the queue's 5 s op timeout, the probe's after it.
+        val p = autoLightPrefs().apply { radarSettingsProbeEnabled = true }
+        val (_, controller) = slowLightLink(swallowedWrites = 0, prefs = p, answer2f14 = false, with2f12 = true)
+        pumpUntil(timeoutMs = 1_000) { false }
+        assertFalse("a granted app can reach the radar before its subscribes", RadarControlBridge.available)
+        controller.probeWriteRadarRaw("070001")
+        assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 8_000) { RadarControlBridge.available })
+        controller.probeWriteRadarRaw("070001")
+        assertTrue("ops=$gattOps", pumpUntil { "light 070001" in lightWrites() })
+        pumpUntil(timeoutMs = 300) { false }
+        val ops = gattOps.toList()
+        assertEquals("ops=$ops", 1, ops.count { it == "light 070001" })
+        assertTrue("ops=$ops", ops.indexOf("cccd 2f12") in 0 until ops.indexOf("light 070001"))
+        controller.forceReconnect()
+    }
+
+    @Test fun theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet() = runTest {
+        val p = autoLightPrefs().apply { radarSettingsProbeEnabled = true }
+        val (_, controller) = slowLightLink(swallowedWrites = 0, prefs = p, with2f12 = true)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        val ops = gattOps.toList().filter { it == "cccd 2f14" || it == "cccd 2f12" || it.startsWith("light ") }
+        assertEquals(listOf("cccd 2f14", "cccd 2f12"), ops.take(2))
+        assertTrue("ops=$ops", ops[2].startsWith("light "))
+        controller.forceReconnect()
+    }
+
+    @Test fun withNeitherTheAutoModeNorTheProbeNothingIsSubscribed() = runTest {
+        val (link, controller) = slowLightLink(swallowedWrites = 0, prefs = prefs(), with2f12 = true)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals("ops=$gattOps", emptyList<String>(), subscribes())
+        controller.forceReconnect()
+    }
+
+    @Test fun theLightStateSubscribeGoesOutBeforeTheFirstLightWrite() = runTest {
+        // The override baseline is the first light state after the subscribe.
+        val (_, controller) = slowLightLink(swallowedWrites = 0)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        val ops = gattOps.toList()
+        assertTrue("ops=$ops", ops.indexOf("cccd 2f14") in 0 until ops.indexOfFirst { it.startsWith("light ") })
+        controller.forceReconnect()
+    }
+
+    @Test fun aPressDuringTheLightRetriesEndsThem() = runTest {
+        val (link, controller) = slowLightLink(swallowedWrites = Int.MAX_VALUE)
+        val feeder = feedV2(link)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        pumpUntil(timeoutMs = 20_000) { false }
+        assertEquals("ops=$gattOps", 1, lightWrites().size)
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
+        feeder.cancel()
+        controller.forceReconnect()
+    }
+
+    /** Presses the radar's light button once [writes] tail-light writes have
+     *  gone out unanswered, with the radar streaming throughout. */
+    private suspend fun TestScope.pressAfterLightWrites(writes: Int): RadarLinkController {
+        val (link, controller) = slowLightLink(swallowedWrites = Int.MAX_VALUE)
+        feedV2(link)
+        assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 20_000) { lightWrites().size == writes })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        pumpUntil(timeoutMs = 20_000) { false }
+        return controller
+    }
+
+    @Test fun aPressDuringTheSecondTryEndsTheRetries() = runTest {
+        val controller = pressAfterLightWrites(2)
+        assertEquals("ops=$gattOps", 2, lightWrites().size)
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test fun aPressDuringTheLastTryReportsNoFailure() = runTest {
+        val controller = pressAfterLightWrites(3)
+        assertEquals("ops=$gattOps", 3, lightWrites().size)
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
+        controller.forceReconnect()
+    }
+
+    /** The tail-light writes of a link whose sunset flip falls due 9 s in, a
+     *  few seconds into an initial set that takes about 12 s, with the radio
+     *  link read as [radarGattActive]. */
+    private suspend fun TestScope.writesWithAFlipDueDuringTheSet(radarGattActive: Boolean): List<String> {
+        val zone = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        try {
+            val p = autoLightPrefs().apply { setManualLocation(51.5074, -0.1278) }
+            val sunset = requireNotNull(SunsetCalculator.sunsetEpochMs(java.time.LocalDate.of(2026, 6, 21), 51.5074, -0.1278))
+            val gateway = FakeGateway().apply { state = RadarLinkState(radarGattActive = radarGattActive) }
+            val (link, controller) = slowLightLink(
+                prefs = p,
+                gateway = gateway,
+                wallClock = { sunset - 9_000L + testScheduler.currentTime },
+            )
+            val feeder = feedV2(link)
+            val set = pumpUntil { autoLightLines().isNotEmpty() }
+            assertTrue("ops=$gattOps journal=$journalAt", set)
+            pumpUntil(timeoutMs = 3_000) { false }
+            feeder.cancel()
+            controller.forceReconnect()
+            return lightWrites()
+        } finally {
+            java.util.TimeZone.setDefault(zone)
+        }
+    }
+
+    @Test fun aFlipDueDuringTheInitialSetComesAfterIt() = runTest {
+        assertEquals(
+            listOf("light 06090111", "light 06090111", "light 06090111", "light 06090112"),
+            writesWithAFlipDueDuringTheSet(radarGattActive = true),
+        )
+    }
+
+    @Test fun aFlipDueWhileTheLinkReadsClosedWritesNothing() = runTest {
+        assertEquals(
+            listOf("light 06090111", "light 06090111", "light 06090111"),
+            writesWithAFlipDueDuringTheSet(radarGattActive = false),
+        )
+    }
+
+    @Test fun aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet() = runTest {
+        val (link, controller) = slowLightLink(swallowedWrites = Int.MAX_VALUE)
+        val feeder = feedV2(link)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 1 })
+        feeder.cancel()
+        controller.followPin("Pinned", pinnedMac, setOf(mac, pinnedMac))
+        assertTrue(pumpUntil { journalHas("radar link start Pinned") })
+        pumpUntil(timeoutMs = 20_000) { false }
+        val lines = journal.toList()
+        assertTrue("journal=$lines", endedLine.matches(lines.single { it.startsWith("radar light ") }))
+        assertTrue("journal=$lines", lines.indexOfFirst { it.startsWith("radar light ") } < lines.indexOf("radar link start Pinned"))
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
         controller.forceReconnect()
     }
 
@@ -2411,7 +2725,6 @@ class RadarLinkControllerHarnessTest {
     }
 
     @Test fun aLegacyBatteryReadWithNoAnswerSubscribesNothing() = runTest {
-        // One more op after a timed-out read would hold the stream's start.
         val link = Link()
         val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
         startDriver(link, batteryByte = null)
@@ -2419,14 +2732,122 @@ class RadarLinkControllerHarnessTest {
         assertTrue(pumpUntil { link.cb != null })
         bootstrap(link)
         assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
-        // A frame reaching the bus means the read timed out and the loop began.
         notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
         assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
+        // Past the read's 5 s op timeout (`BleOpQueue.DEFAULT_TIMEOUT_MS`), when
+        // a subscribe after it would go out.
+        pumpUntil(timeoutMs = 6_000) { false }
         val cccd = requireNotNull(link.gatt).getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY).getDescriptor(Uuids.CCCD)
 
         @Suppress("DEPRECATION")
         val written = cccd.value
         assertEquals("no battery subscribe after a read with no answer", null, written)
+        controller.forceReconnect()
+    }
+
+    @Test fun aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadarWithBattery)
+        startDriver(link, batteryByte = null)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        val late = framesLateOnTheBus { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "0281%02x00".format(it)) }
+        assertEquals("frames still off the bus 100 ms after they arrived", emptyList<Int>(), late)
+        assertEquals("the read was never answered", null, BatteryStateBus.entries.value["testradar"])
+        controller.forceReconnect()
+    }
+
+    /** Forwards every callback the controller handles, recording each
+     *  descriptor write and characteristic read the shadow answers, with
+     *  whether the low-power connection priority had been asked for by then.
+     *  The shadow answers both inside the call that submits them. */
+    private class RecordingOps(
+        private val inner: BluetoothGattCallback,
+        private val ops: MutableList<String>,
+    ) : BluetoothGattCallback() {
+        private fun lowPower(g: BluetoothGatt) = shadowOf(g).connectionPriority == BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
+        private fun tail(ch: BluetoothGattCharacteristic) = ch.uuid.toString().substring(4, 8)
+
+        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = inner.onConnectionStateChange(g, status, newState)
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = inner.onServicesDiscovered(g, status)
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+            ops += "cccd ${tail(d.characteristic)} low_power=${lowPower(g)}"
+            inner.onDescriptorWrite(g, d, status)
+        }
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+            ops += "read ${tail(ch)} low_power=${lowPower(g)}"
+            inner.onCharacteristicRead(g, ch, status)
+        }
+        override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            ops += "read ${tail(ch)} low_power=${lowPower(g)}"
+            inner.onCharacteristicRead(g, ch, value, status)
+        }
+        override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) = inner.onCharacteristicWrite(g, ch, status)
+        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) = inner.onMtuChanged(g, mtu, status)
+
+        @Deprecated("API < 33 compat")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) = inner.onCharacteristicChanged(g, ch)
+        override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) = inner.onCharacteristicChanged(g, ch, value)
+    }
+
+    /** What every [setUpRecordedLegacyRadarWithBattery] connection did, in order. */
+    private val recordedOps: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    /** The legacy radar with a battery service, whose battery read the shadow
+     *  answers with 80 %, recorded by [RecordingOps]. */
+    private fun setUpRecordedLegacyRadarWithBattery(g: BluetoothGatt) {
+        shadowOf(g).setGattCallback(RecordingOps(shadowOf(g).gattCallback, recordedOps))
+        setUpLegacyOnlyRadarWithBattery(g)
+        @Suppress("DEPRECATION")
+        g.getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY).setValue(byteArrayOf(0x50))
+    }
+
+    @Test fun theLegacyBatteryOpsGoOutBeforeTheConnectionPriorityRequest() = runTest {
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpRecordedLegacyRadarWithBattery)
+        startDriver(link, batteryByte = null)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        assertTrue(pumpUntil { shadowOf(requireNotNull(link.gatt)).connectionPriority == BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER })
+        assertEquals(
+            listOf("cccd 3203 low_power=false", "read 2a19 low_power=false", "cccd 2a19 low_power=false"),
+            recordedOps.toList().dropWhile { !it.startsWith("cccd 3203") },
+        )
+        controller.forceReconnect()
+    }
+
+    /** A GATT whose connection-priority request throws, as Android's does
+     *  once Bluetooth connect is revoked. */
+    @Implements(BluetoothGatt::class)
+    class PriorityRequestRefused : ShadowBluetoothGatt() {
+        @Implementation
+        override fun requestConnectionPriority(connectionPriority: Int): Boolean = throw SecurityException("needs BLUETOOTH_CONNECT")
+    }
+
+    @Test
+    @Config(shadows = [PriorityRequestRefused::class])
+    fun aRefusedPriorityRequestLeavesTheLegacyStreamRunning() = runTest {
+        // The request runs in a job of its own on a scope with no exception
+        // handler, so the throw must not escape that job.
+        ShadowLog.clear()
+        val link = Link()
+        val controller = controller(link, setUp = ::setUpLegacyOnlyRadar)
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        assertTrue(pumpUntil { ShadowLog.getLogsForTag("BikeRadar.Radar").any { it.msg.startsWith("requestConnectionPriority threw") } })
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
+        assertTrue(pumpUntil { RadarStateBus.state.value.vehicles.any { it.distanceM == 24 } })
         controller.forceReconnect()
     }
 

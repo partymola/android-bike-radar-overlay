@@ -22,13 +22,16 @@ import es.jjrh.bikeradar.ipc.RadarControlBridge
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -100,8 +103,9 @@ internal class RadarLinkController(
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
     /** Wall clock, separate from [clock] because the connection probe's stamp
      *  has to survive a reboot and be comparable with the other timestamps in
-     *  a diagnostic bundle; elapsedRealtime is neither. Injected so a test can
-     *  pin the stamp rather than race it. */
+     *  a diagnostic bundle, and the tail-light plan is set against sunrise and
+     *  sunset; elapsedRealtime is neither. Injected so a test can pin both
+     *  rather than race them. */
     private val wallClock: () -> Long = { System.currentTimeMillis() },
     /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
      *  Injected only by the Robolectric harness so a test can capture the
@@ -181,7 +185,8 @@ internal class RadarLinkController(
     // is precisely the absent-radar case the journal is read for.
     @Volatile private var reconnectJournalled = false
 
-    // Watchdog clock at the decode loop's start and at each frame it consumes.
+    // Watchdog clock when its counting starts and at each frame the loop
+    // consumes. On a V2 link counting starts when the setup job ends.
     @Volatile private var lastV2FrameMs: Long = 0L
 
     // Owns the change-debounce and the per-answer since= stamps; see
@@ -222,8 +227,9 @@ internal class RadarLinkController(
 
     @Volatile private var radarLightOffSinceMs: Long? = null
 
-    // Live radar GATT + queue, set after the V2 handshake and cleared in the
-    // connection finally. Used ONLY by the debug-only write-probe.
+    // Live radar GATT + queue, set once the control-service subscribes have
+    // gone out and cleared in the connection finally. Used ONLY by the
+    // debug-only write-probe.
     @Volatile private var liveRadarGatt: BluetoothGatt? = null
 
     @Volatile private var liveRadarQueue: BleOpQueue? = null
@@ -545,7 +551,8 @@ internal class RadarLinkController(
         val servicesReady = kotlinx.coroutines.CompletableDeferred<Boolean>()
         var gatt: BluetoothGatt? = null
         var overlayJob: Job? = null
-        var watchdogJob: Job? = null
+        // The setup, light and watchdog jobs of a link past its handshake.
+        var linkJobs: CoroutineScope? = null
         var cacheRefreshed = false
         // Set from the binder callback thread and from this loop's finally.
         val gattClosed = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -701,8 +708,8 @@ internal class RadarLinkController(
 
         val queueJob = scope.launch { queue.run() }
 
-        // Radar tail-light dusk/dawn flip jobs - declared here so the finally can
-        // cancel them (scheduling happens post-handshake when auto-mode is on).
+        // Radar tail-light dusk/dawn flip jobs, which a press on the radar's
+        // light button cancels (scheduled post-handshake when auto-mode is on).
         var radarSunsetJob: Job? = null
         var radarSunriseJob: Job? = null
 
@@ -817,7 +824,8 @@ internal class RadarLinkController(
             )
             captureLog.clog(OverlayPipeline.alertSettingsLine(prefs.snapshot()))
             val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm)
-            var v2FrameCount = 0
+            // V2 frames the loop has consumed; a failed light set waits on it.
+            val v2Frames = MutableStateFlow(0)
 
             // Mark this connection as healthy so the reconnect loop resets
             // its backoff.
@@ -833,33 +841,27 @@ internal class RadarLinkController(
                 Log.w(TAG, "requestConnectionPriority threw: $t")
             }
 
-            // Subscribe the radar control-service mode-state notify (6a4e2f14)
-            // when EITHER the production light auto-mode OR the debug probe needs
-            // it. Done here, AFTER the V2 handshake, so it cannot interfere
-            // with the enabling sequence (verified safe on-bench). 6a4e2f12 and
-            // the live write-probe handles stay strictly debug-gated, never
-            // exposed in a normal ride. Never touch 6a4e3203 (V1 char) here.
+            // The control-service subscribes the setup job below sends, after
+            // the enabling sequence so they cannot interfere with it: the
+            // mode-state notify (6a4e2f14) when the light auto-mode or the debug
+            // probe needs it, 6a4e2f12 for the probe only. Never touch 6a4e3203
+            // (V1 char) here.
             val controlSvc = gatt.getService(Uuids.SVC_CONTROL)
             val ch2f14 = controlSvc?.getCharacteristic(Uuids.SETTINGS_14)
-            if ((prefs.radarSettingsProbeEnabled || prefs.radarLightAutoModeEnabled) && ch2f14 != null) {
-                queue.writeCccd(gatt, ch2f14)
-            }
-            if (prefs.radarSettingsProbeEnabled) {
-                val probe12 = controlSvc?.getCharacteristic(Uuids.SETTINGS_12)
+            val probeOn = prefs.radarSettingsProbeEnabled
+            val autoMode = prefs.radarLightAutoModeEnabled
+            val probe12 = if (probeOn) controlSvc?.getCharacteristic(Uuids.SETTINGS_12) else null
+            if (probeOn) {
                 captureLog.clog("# radar_settings_probe svc=${controlSvc != null} 2f14=${ch2f14 != null} 2f12=${probe12 != null}")
-                if (probe12 != null) queue.writeCccd(gatt, probe12)
-                liveRadarGatt = gatt
-                liveRadarQueue = queue
             }
 
             // Radar tail-light auto day/night. The radar light shares THIS
-            // connection (no separate device), so set the mode now and schedule
-            // the dusk/dawn flip as locals cancelled in finally. Override (rider
-            // button press) is detected from 2f14 slot changes in the loop below,
-            // against a baseline captured fresh this connect. A manual override
+            // connection (no separate device), so the setup job below sets the
+            // mode and the dusk/dawn flip is scheduled beside it. Override
+            // (rider button press) is detected from 2f14 slot changes in the
+            // loop below, against a baseline captured fresh this connect, so
+            // these resets come before the loop can read one. A manual override
             // sticks across brief reconnects and clears only past a deadband.
-            // Supplementary rear light (built-in rear is primary), so failures
-            // are non-critical; rider chose dashcam-parity fail feedback.
             radarLightBaselineKey = null
             if (RadarLightOverrideDecider.shouldClearOverride(
                     radarLightOffSinceMs,
@@ -871,31 +873,60 @@ internal class RadarLinkController(
             }
             radarLightOffSinceMs = null
 
-            // Let a granted consumer set the tail light, independently of the
-            // rider's own auto-mode preference: the two are different askers,
-            // and a rider who runs the light manually has not thereby refused
-            // an app they went on to grant control to. Reset in closeOnce, so
-            // the handler never outlives this GATT. Writes go through the same
-            // queue as ours, so a consumer's request cannot interleave with a
-            // mode set already in flight.
             val light = if (controlSvc != null) RadarLightController(gatt, queue) else null
-            if (light != null) {
-                // Only a changed answer is logged: a consumer may set the light on
-                // every vehicle, which would push the rest out of the journal.
-                val lastGrantedWrite = java.util.concurrent.atomic.AtomicReference<Pair<RadarLightMode, Boolean>?>()
-                RadarControlBridge.install { mode ->
-                    val ok = writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
-                    if (lastGrantedWrite.getAndSet(mode to ok) != (mode to ok)) {
-                        journal("radar light set for another app mode=$mode applied=$ok")
-                    }
-                    ok
+
+            fun modeFor(phase: LightAutoModeDecider.Phase) = if (phase == LightAutoModeDecider.Phase.NIGHT) prefs.radarLightNightMode else prefs.radarLightDayMode
+
+            fun endedWithTheLink(phase: LightAutoModeDecider.Phase, mode: RadarLightMode) = journal("radar light $phase mode=$mode ended with the link")
+
+            // Null when the set landed or [stop] ended it, else the frame count
+            // at its failure. A press stops the retries
+            // (`aPressDuringTheSecondTryEndsTheRetries`,
+            // `aPressDuringTheLastTryReportsNoFailure`).
+            suspend fun setLight(
+                controller: RadarLightController,
+                phase: LightAutoModeDecider.Phase,
+                mode: RadarLightMode,
+                stop: () -> Boolean,
+            ): Int? {
+                val ok = try {
+                    applyWithRetry(stop) { controller.setMode(mode) }
+                } catch (e: CancellationException) {
+                    endedWithTheLink(phase, mode)
+                    throw e
                 }
+                Log.i(TAG, "radar light $phase mode=$mode applied=$ok")
+                if (ok) journal("radar light $phase mode=$mode applied=true")
+                return if (ok || stop()) null else v2Frames.value
             }
 
-            if (prefs.radarLightAutoModeEnabled && light != null) {
-                val controller = light
-                val nowMs = System.currentTimeMillis()
-                val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+            // A failed set is reported only once the radar has streamed since
+            // the failure, on a link that is still up and that the app has not
+            // ended, so a write the link's end failed is not blamed on the light
+            // (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
+            // `aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
+            // `anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`).
+            suspend fun reportFailedSet(phase: LightAutoModeDecider.Phase, mode: RadarLightMode, framesAtFailure: Int) {
+                try {
+                    v2Frames.first { it > framesAtFailure }
+                } catch (e: CancellationException) {
+                    endedWithTheLink(phase, mode)
+                    throw e
+                }
+                if (synchronized(linkLock) { linkDown } || receipts.endedByApp) {
+                    endedWithTheLink(phase, mode)
+                    return
+                }
+                journal("radar light $phase mode=$mode applied=false")
+                postRadarLightModeFailNotification(mode)
+                playRadarLightFailTone()
+            }
+
+            val autoLight = if (autoMode) light else null
+            var plan: LightAutoModeDecider.Plan? = null
+            val planAtMs = wallClock()
+            if (autoLight != null) {
+                val today = java.time.Instant.ofEpochMilli(planAtMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
                 // Manual coordinates (if set) -> the approximate area -> London. Log the
                 // source only, never the coordinates (a manual location is the
                 // rider's home).
@@ -907,50 +938,96 @@ internal class RadarLinkController(
                 val sunriseMs = SunsetCalculator.sunriseEpochMs(today, resolved.lat, resolved.lon)
                 val sunsetMs = SunsetCalculator.sunsetEpochMs(today, resolved.lat, resolved.lon)
                 Log.i(TAG, "radar light location source=${resolved.source}")
-                val night = SunsetCalculator.isNight(nowMs, sunriseMs, sunsetMs)
-                val plan = LightAutoModeDecider.plan(nowMs, sunriseMs, sunsetMs, night, radarLightUserOverride)
-                suspend fun applyPhase(phase: LightAutoModeDecider.Phase) {
-                    val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
-                        prefs.radarLightNightMode
-                    } else {
-                        prefs.radarLightDayMode
-                    }
-                    val okSet = applyWithRetry { controller.setMode(mode) }
-                    Log.i(TAG, "radar light $phase mode=$mode applied=$okSet")
-                    // A link that ended during the writes failed them, not the
-                    // light (`aLinkLostDuringTheLightSetSoundsNoLightFailure`).
-                    val failFeedback = !okSet && currentCoroutineContext().isActive && synchronized(linkLock) { !linkDown }
-                    if (okSet || failFeedback) journal("radar light $phase mode=$mode applied=$okSet")
-                    if (failFeedback) {
-                        postRadarLightModeFailNotification(mode)
-                        playRadarLightFailTone()
-                    }
-                }
-                if (plan.initial != null) applyPhase(plan.initial) else journal("radar light left alone: a slot change holds it")
-                val flipAt = plan.flipAtMs
-                val flipTo = plan.flipTo
-                if (flipAt != null && flipTo != null) {
-                    val job = scope.launch {
-                        kotlinx.coroutines.delay(flipAt - nowMs)
-                        if (linkState.snapshot().radarGattActive && !radarLightUserOverride) {
-                            applyPhase(flipTo)
+                val night = SunsetCalculator.isNight(planAtMs, sunriseMs, sunsetMs)
+                plan = LightAutoModeDecider.plan(planAtMs, sunriseMs, sunsetMs, night, radarLightUserOverride)
+                if (plan.initial == null) journal("radar light left alone: a slot change holds it")
+            }
+
+            val jobs = linkJobsScope()
+            linkJobs = jobs
+
+            // The connect-time writes, in one job beside the decode loop, so
+            // one left unanswered cannot hold the frames
+            // (`aSlowTailLightSetDoesNotHoldTheRadarFrames`,
+            // `anUnansweredLightStateSubscribeDoesNotHoldTheRadarFrames`).
+            // Sequential, so the subscribes go out before the light set
+            // (`theLightStateSubscribeGoesOutBeforeTheFirstLightWrite`,
+            // `theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet`).
+            val initial = plan?.initial
+            val setup = jobs.launch {
+                if ((probeOn || autoMode) && ch2f14 != null) queue.writeCccd(gatt, ch2f14)
+                if (probe12 != null) queue.writeCccd(gatt, probe12)
+                // Only now can a granted app or the debug probe write, so
+                // neither goes out before the subscribes
+                // (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`). Under
+                // the lock and only while the link is up, so closeOnce's reset
+                // and the finally's clear come after.
+                synchronized(linkLock) {
+                    if (!linkDown) {
+                        // A granted consumer sets the tail light independently of
+                        // the rider's own auto-mode preference: the two are
+                        // different askers. Reset in closeOnce, so the handler
+                        // never outlives this GATT. Writes go through the same
+                        // queue as ours, so a consumer's request cannot
+                        // interleave with a mode set already in flight.
+                        if (light != null) {
+                            // Only a changed answer is logged: a consumer may set
+                            // the light on every vehicle.
+                            val lastGrantedWrite = java.util.concurrent.atomic.AtomicReference<Pair<RadarLightMode, Boolean>?>()
+                            RadarControlBridge.install { mode ->
+                                val ok = writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
+                                if (lastGrantedWrite.getAndSet(mode to ok) != (mode to ok)) {
+                                    journal("radar light set for another app mode=$mode applied=$ok")
+                                }
+                                ok
+                            }
+                        }
+                        if (probeOn) {
+                            liveRadarGatt = gatt
+                            liveRadarQueue = queue
                         }
                     }
-                    if (flipTo == LightAutoModeDecider.Phase.NIGHT) radarSunsetJob = job else radarSunriseJob = job
                 }
+                if (autoLight != null && initial != null) {
+                    val mode = modeFor(initial)
+                    val failedAt = setLight(autoLight, initial, mode) { radarLightUserOverride }
+                    // In a job of its own, so the setup ends with its writes.
+                    // Undispatched, so a teardown already under way still
+                    // reaches the wait and journals the end.
+                    if (failedAt != null) {
+                        jobs.launch(start = CoroutineStart.UNDISPATCHED) { reportFailedSet(initial, mode, failedAt) }
+                    }
+                }
+            }
+            val flipAt = plan?.flipAtMs
+            val flipTo = plan?.flipTo
+            if (autoLight != null && flipAt != null && flipTo != null) {
+                val job = jobs.launch {
+                    kotlinx.coroutines.delay(flipAt - planAtMs)
+                    // After the initial set, which may still be retrying
+                    // (`aFlipDueDuringTheInitialSetComesAfterIt`).
+                    setup.join()
+                    if (linkState.snapshot().radarGattActive && !radarLightUserOverride) {
+                        val mode = modeFor(flipTo)
+                        val failedAt = setLight(autoLight, flipTo, mode) { radarLightUserOverride } ?: return@launch
+                        reportFailedSet(flipTo, mode, failedAt)
+                    }
+                }
+                if (flipTo == LightAutoModeDecider.Phase.NIGHT) radarSunsetJob = job else radarSunriseJob = job
             }
 
             // Data-flow watchdog: if no V2 frame is consumed for
             // V2_FRAME_STALL_MS, tear down the GATT so the outer loop can
             // reconnect. Catches the case where the stack thinks we are still
-            // connected but the radar has gone silent. Stamped and started
-            // here, after the connect-time writes above, which can run several
-            // op timeouts and must not count as silence
-            // (`aSlowTailLightSetDoesNotEndAStreamingRadar`).
+            // connected but the radar has gone silent. Silence counts only once
+            // the setup job has finished, from when it finished, so a radar that
+            // holds its stream while a write goes unanswered is not torn down
+            // for it (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`).
             val capturedGatt = gatt
             val step = LoopStep()
-            lastV2FrameMs = clock()
-            watchdogJob = scope.launch {
+            jobs.launch {
+                setup.join()
+                lastV2FrameMs = clock()
                 while (true) {
                     delay(V2_WATCHDOG_TICK_MS)
                     val now = clock()
@@ -981,7 +1058,7 @@ internal class RadarLinkController(
                         Uuids.RADAR_V2 -> {
                             step.word = LoopStep.DECODING
                             lastV2FrameMs = clock()
-                            if (v2FrameCount++ == 0) {
+                            if (v2Frames.value++ == 0) {
                                 // The frame itself is a movement payload, so it
                                 // goes the way the handshake replies do. The line
                                 // stays on release builds because it is the signal
@@ -1032,12 +1109,16 @@ internal class RadarLinkController(
             }
             false
         } finally {
-            radarSunsetJob?.cancel()
-            radarSunriseJob?.cancel()
+            // First, so the setup job installs nothing the resets below would
+            // miss.
+            synchronized(linkLock) { linkDown = true }
+            // Not children of this coroutine, so a teardown never waits on
+            // them; cancelled, none acts on the next link
+            // (`aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`).
+            linkJobs?.cancel()
             radarLightOffSinceMs = clock()
             liveRadarGatt = null
             liveRadarQueue = null
-            watchdogJob?.cancel()
             overlayJob?.cancel()
             queue.cancel()
             queueJob.cancel()
@@ -1050,6 +1131,11 @@ internal class RadarLinkController(
             if (!setupTranscript) captureLog.close()
         }
     }
+
+    /** The jobs of one link past its handshake: not children of the connection
+     *  coroutine, so its teardown cancels them without waiting on them, and
+     *  cancelled with [scope] too. */
+    private fun linkJobsScope() = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
 
     /** One-shot battery read for the legacy path, best-effort. The standard
      *  service needs no bonding and no enabling sequence on this family, and
@@ -1064,8 +1150,9 @@ internal class RadarLinkController(
             if (publishRadarBattery(gatt.device?.address, name, pct)) captureLog.clog("# legacy battery $pct%")
             // Any answer, accepted or not, so one unreadable reading does not
             // cost the notifies (`aLegacyRadarWhoseFirstBatteryReadingIsRefusedStillGetsBatteryNotifies`).
-            // A read with no answer skips it, as one more op would hold the
-            // stream's start (`aLegacyBatteryReadWithNoAnswerSubscribesNothing`).
+            // A read with no answer skips it: a radar that left the read
+            // unanswered is sent no second op
+            // (`aLegacyBatteryReadWithNoAnswerSubscribesNothing`).
             queue.writeCccd(gatt, ch)
         } catch (e: CancellationException) {
             // Cooperative cancellation (link teardown) - structured concurrency
@@ -1131,48 +1218,52 @@ internal class RadarLinkController(
             return false
         }
 
-        // The legacy stream has no device-status frame, so the standard
-        // battery service is the only reading available. One read here, on an
-        // idle queue, rather than none at all: this hardware aborts before the
-        // sequence's own battery step, so nothing else ever fetches one.
-        readLegacyBattery(gatt, queue, name)
-
-        // Same radio treatment as the V2 path: the radar pushes at its own
-        // cadence, so a tighter connection interval only costs power.
-        try {
-            gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
-        } catch (t: Throwable) {
-            Log.w(TAG, "requestConnectionPriority threw: $t")
-        }
-
         val dec = RadarV1Decoder()
         var frames = 0
-        lastV2FrameMs = clock()
-
-        // Same watchdog as the V2 path. EVERY payload counts as liveness,
-        // including heartbeats, because a legacy radar with no traffic behind
-        // it emits nothing but heartbeats and is perfectly healthy.
-        val capturedGatt = gatt
         val step = LoopStep()
-        val watchdog = scope.launch {
-            while (true) {
-                delay(V2_WATCHDOG_TICK_MS)
-                val now = clock()
-                if (V2WatchdogDecider.isStale(now, lastV2FrameMs, V2_FRAME_STALL_MS)) {
-                    val ageMs = now - lastV2FrameMs
-                    Log.w(TAG, "legacy stream silent for ${ageMs}ms; tearing down")
-                    val received = receipts.receivedAgo(now)
-                    journal("radar legacy stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
-                    receipts.endingByApp()
-                    try {
-                        capturedGatt.disconnect()
-                    } catch (_: Throwable) {}
-                    return@launch
+        val jobs = linkJobsScope()
+        try {
+            // The legacy stream has no device-status frame, so the standard
+            // battery service is the only reading available: this hardware
+            // aborts before the sequence's own battery step, so nothing else
+            // ever fetches one. Beside the decode loop, so a read left
+            // unanswered cannot hold the frames
+            // (`aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames`). The
+            // connection-priority request follows the read and its subscribe
+            // (`theLegacyBatteryOpsGoOutBeforeTheConnectionPriorityRequest`).
+            jobs.launch {
+                readLegacyBattery(gatt, queue, name)
+                // Same radio treatment as the V2 path: the radar pushes at its
+                // own cadence, so a tighter connection interval only costs power.
+                try {
+                    gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "requestConnectionPriority threw: $t")
                 }
             }
-        }
 
-        try {
+            // Same watchdog as the V2 path. EVERY payload counts as liveness,
+            // including heartbeats, because a legacy radar with no traffic
+            // behind it emits nothing but heartbeats and is perfectly healthy.
+            lastV2FrameMs = clock()
+            jobs.launch {
+                while (true) {
+                    delay(V2_WATCHDOG_TICK_MS)
+                    val now = clock()
+                    if (V2WatchdogDecider.isStale(now, lastV2FrameMs, V2_FRAME_STALL_MS)) {
+                        val ageMs = now - lastV2FrameMs
+                        Log.w(TAG, "legacy stream silent for ${ageMs}ms; tearing down")
+                        val received = receipts.receivedAgo(now)
+                        journal("radar legacy stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
+                        receipts.endingByApp()
+                        try {
+                            gatt.disconnect()
+                        } catch (_: Throwable) {}
+                        return@launch
+                    }
+                }
+            }
+
             for ((uuid, bytes) in notifyChannel) {
                 // Reset in a finally, which the `continue`s run too.
                 try {
@@ -1211,7 +1302,7 @@ internal class RadarLinkController(
                 }
             }
         } finally {
-            watchdog.cancel()
+            jobs.cancel()
             // The one line that separates the ways this stream can fail on
             // hardware nobody here owns. Silent, heartbeat-only, unparsable,
             // and parsed-to-nothing all present identically from outside:
@@ -1318,12 +1409,12 @@ internal class RadarLinkController(
         return true
     }
 
-    /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
-     *  a HIGH-priority notification, posted beside the NACK beep of
-     *  [playRadarLightFailTone]. Distinct notification ID from the dashcam so
-     *  neither clobbers the other. Fires only when the GATT write was not
-     *  ACKed after the retries - it can't catch the rarer "ACKed but the
-     *  light element didn't change" case (no read-back). */
+    /** The tail-light failure notification, posted beside the tone of
+     *  [playRadarLightFailTone] for a set whose last try went unanswered or
+     *  was refused, no press stopped, and the radar streamed after on a link
+     *  still up (`reportFailedSet`). The radar cannot be read back, so a write
+     *  it ACKs and the light then ignores goes unseen. Its own notification
+     *  id, so it and the dashcam's never replace each other. */
     private fun postRadarLightModeFailNotification(mode: RadarLightMode) {
         val modeName = context.getString(
             when (mode) {

@@ -8,12 +8,15 @@ import kotlinx.coroutines.delay
  * Three jittered attempts at a light-mode GATT write, shared by the camera and
  * radar light paths. [write] returns true once the device ACKs the write; note
  * for the radar that confirms receipt, not that the light element actually
- * changed (the radar can't be read back).
+ * changed (the radar can't be read back). [stop] is asked before each retry,
+ * and true gives up with false.
  */
-internal suspend fun applyWithRetry(write: suspend () -> Boolean): Boolean {
+internal suspend fun applyWithRetry(stop: () -> Boolean = { false }, write: suspend () -> Boolean): Boolean {
     if (write()) return true
     delay(500 + (100 * (Math.random() * 2 - 1)).toLong())
+    if (stop()) return false
     if (write()) return true
     delay(1500 + (300 * (Math.random() * 2 - 1)).toLong())
+    if (stop()) return false
     return write()
 }

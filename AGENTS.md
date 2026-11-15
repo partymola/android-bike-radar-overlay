@@ -495,18 +495,48 @@ must not be changed about it. Four that bite in ordinary work:
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.
-- **The V2 data-flow watchdog counts from the start of the decode loop, not
-  from the handshake.** The connect-time writes before the loop (the 2f14
-  subscribe and the tail-light set, whose retries can run to three op
-  timeouts) must not count as silence. Started before them, the watchdog
-  would tear down a streaming radar on every connect while the cause lasted.
-  `lastV2FrameMs` is stamped as the watchdog starts, not only on a frame, so a
-  radar that never streams is still torn down
-  (`RadarLinkControllerHarnessTest.aSlowTailLightSetDoesNotEndAStreamingRadar`,
-  `aRadarWhoseFirstFrameFollowsASlowSetupGetsTheStallWindow`,
-  `aTailLightThatNeverAnswersHoldsTheWatchdogOnlyUntilTheLoopStarts`,
-  `watchdogTearsDownSilentV2Stream`). Frames that arrive during those writes
-  wait in the channel, so no alert is decided until the loop starts.
+- **The decode loop starts straight after the handshake, and the
+  connect-time writes run beside it in one setup job per connection.** The
+  job sends the 2f14 subscribe, then the debug 2f12 one, then the tail-light
+  set. Each try of the set can run to the 5 s op timeout. An unanswered write
+  holds back no frame, so no alert waits for it
+  (`RadarLinkControllerHarnessTest.aSlowTailLightSetDoesNotHoldTheRadarFrames`,
+  `anUnansweredLightStateSubscribeDoesNotHoldTheRadarFrames`,
+  `theFirstFrameMarksTheRadarUpDuringASlowLightSet`,
+  `theLightStateSubscribeGoesOutBeforeTheFirstLightWrite`,
+  `theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet`). The
+  legacy stream's battery read runs beside its loop the same way
+  (`aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames`).
+  - **Nothing else is written to the radar before the subscribes.** The
+    granted-app handler and the debug probe's handles are installed after
+    them (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`).
+  - **The data-flow watchdog counts silence only once the setup job has
+    ended**, from when it ended. Some radar may hold its stream while a write
+    goes unanswered, and that must not cost it the link. A radar that never
+    streams is torn down at the first tick past the stall window after the
+    setup ends (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
+    `aStreamThatStopsAfterASlowSetupIsStillTornDown`). The setup job
+    adds no duration of its own: the wait is its writes' op timeouts and
+    retry gaps.
+  - **A failed set is reported only after the radar streams again.** After a
+    last try that went unanswered or was refused, the journal line
+    `applied=false`, the notification and the tone wait for a V2 frame. They
+    are dropped if the link ends first or the app ended it
+    (`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`,
+    `threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
+    `aFrameAfterTheAppEndedTheLinkReportsNoFailure`). A set that a drop, a
+    watchdog teardown, a pin move or a forced reconnect interrupts journals
+    `ended with the link` instead
+    (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
+    `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`).
+  - A press on the radar's light button stops the set's retries and leaves
+    no light line (`aPressDuringTheLightRetriesEndsThem`,
+    `aPressDuringTheSecondTryEndsTheRetries`,
+    `aPressDuringTheLastTryReportsNoFailure`). A dusk/dawn flip waits for
+    the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`). The light
+    baseline and the override deadband are reset before the job and the
+    loop start (`aLightStateWaitingAtTheLoopsStartIsTheNewLinksBaseline`).
+    In the journal the light line can follow "radar V2 stream live".
 - **The dashcam walk-away alarm hears the camera only through a battery read
   it answered or its established light link, never through
   `BatteryStateBus`**, which sightings with no contact also stamp

@@ -149,6 +149,84 @@ out of scope by design; the in-app screens (settings, onboarding) follow
 platform conventions, keep icon-only controls labelled, and aim for WCAG AA
 text contrast.
 
+## The riding-aid notice
+
+- **The riding-aid notice is in front of EVERY other destination, and that
+  ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
+  answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,
+  before it looks at `firstRunComplete` at all. That is what lets ONE flag,
+  defaulting false, serve a fresh install and an install upgrading from a
+  version that never wrote the key, without either seeing the screen twice.
+  Making it an onboarding step instead would skip every existing rider
+  silently, since they are already past onboarding, and no manual test on a
+  set-up phone would show it. `SafetyNoticeGateTest` pins all four
+  combinations plus the fact that `MainActivity` routes through the gate
+  rather than re-deriving the branch; `SafetyNoticeAcknowledgeTest` drives the
+  real button in the real activity as an upgrading rider.
+  It gates ACTIVITIES, never the service: the overlay and the foreground
+  notification still reach an unacknowledged rider, which is what
+  `BootReceiver` produces on `MY_PACKAGE_REPLACED` and what
+  `MainActivitySmokeTest.theServiceStillStartsWhileTheNoticeIsUp` pins.
+  `RadarConsentActivity` is the second reader of the flag and the one that
+  matters most, being exported: it shows the notice in front of its question,
+  and only after the decider's refusals, so a ride in progress or an unknown
+  caller is still answered with no screen at all.
+  In `NoScreenBeforeTheNoticeTest` the tests with a caller the decider accepts
+  are the ones where that gate does work; the two refusal tests use a caller or
+  a moment the decider rejects on its own, so they cannot see it.
+
+## Capture log files
+
+By default a file opens per radar connection after the handshake, so a
+mid-ride radar drop splits one ride across files with the gap between them
+unrecorded, and an ordinary capture carries neither the DIS serial nor the
+device-ID frame. A radar that never completes the handshake produces no
+capture, unless it takes the legacy-stream fallback, which opens one after
+the abort. **Record connection setup** (`Prefs.setupTranscriptEnabled`)
+opens the file before the GATT connect and keeps one file across the whole
+reconnect loop, successful rides included. It is the tool for
+unsupported-hardware reports, and carries the serial and device-ID frame
+when the handshake gets that far; its subtitle and the issue template tell
+reporters to turn it off when done. The open file is listed on the Debug
+screen marked as recording: its row withholds delete, and Delete all and
+prune skip it (`deletableCaptureLogs`, `CaptureLogManager.prune`), because
+unlinking it under the live writer loses the session silently. Turning the
+transcript toggle off closes the file at the end of the next attempt that
+gets a GATT connection (a whole ride, if that attempt is one), or when the
+service stops or Bluetooth drops. Turning the capture-log master switch off
+closes it at the next attempt (`CaptureLogManager.open`).
+Separately, each link stores its discovered-service table and abort token
+(`Prefs.radarLinkProbe`, `Prefs.cameraLinkProbe`; one slot per link,
+deliberately), printed in the diagnostic bundle. The exits before service
+discovery record an outcome with no table, so a bundle never reports the
+previous attempt's stopping point as this one's. Within a process each
+distinct answer keeps its first-seen `since=` stamp (`LinkProbeRecorder`);
+the slot holds one line, so after a restart only the stored answer keeps
+its age and any other answer restamps.
+Every file's header carries a build stamp, with `commit=` on non-release
+builds only, and a `# clock unix_ms=.. mono_ms=..` anchor that lets packet
+stamps be converted to the elapsedRealtime sensor series by subtraction
+(the NTP caveat is in the `CaptureLogManager` KDoc). **A release-variant
+capture is NOT attributable to a tree**: two release APKs built from
+different code stamp identically. Why, and the `commit=unknown` fallback:
+`BuildStamp` KDoc.
+
+## Location for light auto-mode
+
+**Android grants the while-in-use `ACCESS_COARSE_LOCATION` only while a
+screen of the app is visible, never to the `connectedDevice` service**
+(observed on a Pixel, Android 16: appop `Reject [fgsvc]`), and a refused
+read returns null like "no fix", so the handshake reads alone would leave
+most rides on London. `MainActivity`'s resume hook and the settings
+listener in `BikeRadarApp` read it too, and
+`LocationCache` keeps one area rounded to tenths of a degree under
+`getNoBackupFilesDir()`, deleted whenever it stops being used: grant gone
+(seen at the next process start), neither auto-mode in use (the front one
+counts only with a front camera selected), or manual coordinates set.
+Robolectric cannot model the refusal; `LocationCacheRefreshTest` and
+`MainActivitySmokeTest.aScreenResumedAfterAFixArrivesSavesTheArea` pin the
+rest.
+
 ## Where to look
 
 The table below maps each responsibility above to its file. The BLE wire
@@ -177,7 +255,7 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/KnownDevices.kt` | name<->MAC SharedPreferences cache, shared by the HA + battery paths |
 | `app/src/main/java/es/jjrh/bikeradar/HaStatusDeriver.kt` | Pure four-state Home Assistant status; every HA surface reads it rather than re-deriving one |
 | `app/src/main/java/es/jjrh/bikeradar/RadarLinkStatus.kt` | Pure "is the app working the radar link right now", fed by the service-published link state; one input to `deviceLinkState` rather than a status of its own |
-| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see AGENTS.md's Architecture note on why that ordering is the feature |
+| `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNoticeGate.kt` | Pure `startDestination` - where a rider belongs on launch. The notice outranks both other destinations; see "The riding-aid notice" above on why that ordering is the feature |
 | `app/src/main/java/es/jjrh/bikeradar/ui/SafetyNotice.kt` | The riding-aid notice. ONE composable with three routes: the launch gate, the consent screen another app opens, and Settings -> About, where the same button closes the screen instead of storing the flag. Do not add a variant for any of them |
 | `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
 | `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |

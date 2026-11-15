@@ -134,29 +134,10 @@ to its file. The notes below are the working summary.
   camera link runs, which needs the Dashcam light's auto-switch on
   (`CameraLightLinkControllerHarnessTest`, `DashcamSwitchOffServiceTest`,
   `DashcamLinkHeardTest`).
-- **The riding-aid notice is in front of EVERY other destination, and that
-  ordering is the feature.** `startDestination` (`ui/SafetyNoticeGate.kt`)
-  answers "safety-notice" whenever `Prefs.safetyNoticeAcknowledged` is false,
-  before it looks at `firstRunComplete` at all. That is what lets ONE flag,
-  defaulting false, serve a fresh install and an install upgrading from a
-  version that never wrote the key, without either seeing the screen twice.
-  Making it an onboarding step instead would skip every existing rider
-  silently, since they are already past onboarding, and no manual test on a
-  set-up phone would show it. `SafetyNoticeGateTest` pins all four
-  combinations plus the fact that `MainActivity` routes through the gate
-  rather than re-deriving the branch; `SafetyNoticeAcknowledgeTest` drives the
-  real button in the real activity as an upgrading rider.
-  It gates ACTIVITIES, never the service: the overlay and the foreground
-  notification still reach an unacknowledged rider, which is what
-  `BootReceiver` produces on `MY_PACKAGE_REPLACED` and what
-  `MainActivitySmokeTest.theServiceStillStartsWhileTheNoticeIsUp` pins.
-  `RadarConsentActivity` is the second reader of the flag and the one that
-  matters most, being exported: it shows the notice in front of its question,
-  and only after the decider's refusals, so a ride in progress or an unknown
-  caller is still answered with no screen at all.
-  In `NoScreenBeforeTheNoticeTest` the tests with a caller the decider accepts
-  are the ones where that gate does work; the two refusal tests use a caller or
-  a moment the decider rejects on its own, so they cannot see it.
+- **The riding-aid notice is in front of every other destination, and it
+  gates activities, never the service.** Before changing `startDestination`,
+  `MainActivity`'s routing or `RadarConsentActivity`, read "The riding-aid
+  notice" in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV UUID pair (see Gotchas).
 - HA integration is optional; the overlay works standalone.
@@ -167,19 +148,8 @@ to its file. The notes below are the working summary.
   dawn/dusk flip is scheduled for the rest of the session. Skipped when
   `cameraLightUserOverride` is set (manual side-button press during the
   session). See `CameraLightLinkController.kt` connect path.
-  **Android grants the while-in-use `ACCESS_COARSE_LOCATION` only while a
-  screen of the app is visible, never to the `connectedDevice` service**
-  (observed on a Pixel, Android 16: appop `Reject [fgsvc]`), and a refused
-  read returns null like "no fix", so the handshake reads alone would leave
-  most rides on London. `MainActivity`'s resume hook and the settings
-  listener in `BikeRadarApp` read it too, and
-  `LocationCache` keeps one area rounded to tenths of a degree under
-  `getNoBackupFilesDir()`, deleted whenever it stops being used: grant gone
-  (seen at the next process start), neither auto-mode in use (the front one
-  counts only with a front camera selected), or manual coordinates set.
-  Robolectric cannot model the refusal; `LocationCacheRefreshTest` and
-  `MainActivitySmokeTest.aScreenResumedAfterAFixArrivesSavesTheArea` pin the
-  rest.
+  Where the location comes from, and why the service cannot read it itself:
+  "Location for light auto-mode" in `ARCHITECTURE.md`.
 - Capture log is opt-in (off by default; `Prefs.captureLoggingEnabled`, toggled
   on the Debug screen). When enabled it is written to
   `/sdcard/Android/data/es.jjrh.bikeradar/files/captures/bike-radar-capture-<stamp>.log`
@@ -196,39 +166,8 @@ to its file. The notes below are the working summary.
   guarded and pinned anyway because they sit beside one. Device names and
   connection state still reach release logcat, deliberately: reading it takes
   a developer tool, and no report template asks for it.
-  By default a file opens per radar connection after the handshake, so a
-  mid-ride radar drop splits one ride across files with the gap between them
-  unrecorded, and an ordinary capture carries neither the DIS serial nor the
-  device-ID frame. A radar that never completes the handshake produces no
-  capture, unless it takes the legacy-stream fallback, which opens one after
-  the abort. **Record connection setup** (`Prefs.setupTranscriptEnabled`)
-  opens the file before the GATT connect and keeps one file across the whole
-  reconnect loop, successful rides included. It is the tool for
-  unsupported-hardware reports, and carries the serial and device-ID frame
-  when the handshake gets that far; its subtitle and the issue template tell
-  reporters to turn it off when done. The open file is listed on the Debug
-  screen marked as recording: its row withholds delete, and Delete all and
-  prune skip it (`deletableCaptureLogs`, `CaptureLogManager.prune`), because
-  unlinking it under the live writer loses the session silently. Turning the
-  transcript toggle off closes the file at the end of the next attempt that
-  gets a GATT connection (a whole ride, if that attempt is one), or when the
-  service stops or Bluetooth drops. Turning the capture-log master switch off
-  closes it at the next attempt (`CaptureLogManager.open`).
-  Separately, each link stores its discovered-service table and abort token
-  (`Prefs.radarLinkProbe`, `Prefs.cameraLinkProbe`; one slot per link,
-  deliberately), printed in the diagnostic bundle. The exits before service
-  discovery record an outcome with no table, so a bundle never reports the
-  previous attempt's stopping point as this one's. Within a process each
-  distinct answer keeps its first-seen `since=` stamp (`LinkProbeRecorder`);
-  the slot holds one line, so after a restart only the stored answer keeps
-  its age and any other answer restamps.
-  Every file's header carries a build stamp, with `commit=` on non-release
-  builds only, and a `# clock unix_ms=.. mono_ms=..` anchor that lets packet
-  stamps be converted to the elapsedRealtime sensor series by subtraction
-  (the NTP caveat is in the `CaptureLogManager` KDoc). **A release-variant
-  capture is NOT attributable to a tree**: two release APKs built from
-  different code stamp identically. Why, and the `commit=unknown` fallback:
-  `BuildStamp` KDoc.
+  How files open and close, "Record connection setup", the stored link probe
+  and the build stamp: "Capture log files" in `ARCHITECTURE.md`.
 - **In the journal and crash reports, words with four or more digits are
   masked.** That is where some devices put a serial in their name.
   `LogRedaction.shareable` applies the rule and removes addresses.

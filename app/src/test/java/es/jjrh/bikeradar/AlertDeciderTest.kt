@@ -2062,10 +2062,9 @@ class AlertDeciderTest {
 
     @Test fun `the truck pass with no speed reading adds one beep once the band lapses`() {
         // The same scene with no movement signal. Tid 51 vanishing at 10 m
-        // is no pass, but the scene sends no frames in the 4.8 s before t+11,
-        // so the floor has lapsed by then and tid 111 is heard at its band
-        // before it reaches the near one. The gap is the fixture's: this
-        // shows the lapse adds one beep, not when it comes
+        // is no pass, but tid 111 is reported for 2 s without it, so the
+        // floor lapses and 111 is heard at its band before it reaches the
+        // near one. This shows the lapse adds one beep, not when it comes
         // (AlertDeciderPassHandoverTest times it).
         assertEquals(
             listOf(
@@ -2107,12 +2106,13 @@ class AlertDeciderTest {
         // Escalation on 51: Beep(3).
         gap(5500)
         scene(listOf(car(51, 10), car(111, 27)))
-        // t+11 - tid 51 leaves close, 111 at 13 m (u=2 mid). The close
-        // set never empties (111 stays in), so latches are preserved. With
-        // movement known the floor holds 111's 2 back; with none it has
-        // lapsed across the gap and 111 is heard at 2.
-        gap(4800)
-        scene(listOf(car(111, 13)))
+        // t+9 to t+11 - tid 51 leaves close, 111 at 13 m (u=2 mid) for 2 s
+        // of frames. The close set never empties (111 stays in), so latches
+        // are preserved. With movement known the floor holds 111's 2 back;
+        // with none it lapses on the last of these frames and 111 is heard
+        // at 2.
+        gap(2800)
+        repeat(11) { feed(listOf(car(111, 13))) }
         // t+12 - tid 51 re-appears at 0 m, tid 111 at 9 m (u=3 near).
         // 111 escalates to the near tier: Beep(3). 51 is not yet stable
         // on that frame, and its latch of 3 keeps it silent on the next.

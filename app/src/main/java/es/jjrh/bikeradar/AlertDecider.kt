@@ -136,7 +136,10 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    reports a car level. So once no car heard at or above the floor, nor
  *    the trigger car of the last urgent, has been in the track list for
  *    [FLOOR_LAPSE_MS], the floor drops and the closest car beeps at its
- *    own tier unless already heard at it (`# gate floor-lapse`). Never
+ *    own tier unless already heard at it (`# gate floor-lapse`). The time
+ *    counts over frames: a gap between frames longer than
+ *    [FRAME_GAP_MAX_MS] starts it again on the frame that ends it
+ *    (`AlertDeciderFrameGapTest`). Never
  *    while such a car is still tracked, and never while the rider's
  *    movement is known, stopped included (`with the rider's movement
  *    known the band never lapses`, `with the rider known to be stopped
@@ -168,7 +171,7 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    also absorbs a single-frame dropout or boundary flap. A car genuinely
  *    leaving (overtake -> `isBehind`, or cornering / turning off) clears after
  *    the grace. The grace is counted over frames: a gap between frames
- *    longer than [CLEAR_GRACE_MAX_GAP_MS] reported nothing, so the grace
+ *    longer than [FRAME_GAP_MAX_MS] reported nothing, so the grace
  *    starts again on the frame that ends it.
  *  - **Closing-speed ceiling.** Off unless the rider sets one (see
  *    [MIN_CLOSING_CEILING_MS] for the range and why there is no default).
@@ -187,7 +190,12 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    `stationaryMsThreshold` for at least `stationaryDwellMs` of
  *    elapsed (monotonic) time, Beep events are mapped to None. Clear still
  *    fires. Lets the rider sit at a traffic light without beep/clear
- *    loops from the queue of stopped cars behind them.
+ *    loops from the queue of stopped cars behind them. Unlike the floor
+ *    lapse, the dwell counts across a gap in the frames, deliberately: the
+ *    frames either side both read the rider stopped, and starting it again
+ *    would beep at a stop the speed still reports
+ *    (`theStationaryDwellCountsAcrossAGapByDesign`). So does
+ *    [URGENT_OVERRIDE_DWELL_MS] (`theUrgentMiniDwellCountsAcrossAGapByDesign`).
  *  - **Imminent-impact safety override.** While stationary-suppressed
  *    (and, via the low-speed extension below, while moving slowly), an
  *    [Event.UrgentApproach] (distinct audio) fires anyway when any
@@ -326,7 +334,7 @@ class AlertDecider(
      *  radar frames: the decider runs on frames only, so a stream that goes
      *  quiet sounds none
      *  (`OverlayPipelineDrivingTest.theAllClearLandsOnAFrameNotOnTheTickBeforeIt`),
-     *  and a gap between frames longer than [CLEAR_GRACE_MAX_GAP_MS] starts
+     *  and a gap between frames longer than [FRAME_GAP_MAX_MS] starts
      *  the wait again
      *  (`OverlayPipelineDrivingTest.aStallRestartsTheAllClearGraceOnTheFirstFrameAfterIt`). A
      *  delayed or absent all-clear is deliberately preferred over a false one,
@@ -457,7 +465,7 @@ class AlertDecider(
     /** Clear-grace state: whether a Clear is deferred pending the
      *  [clearGraceMs] dwell with no vehicle physically present behind, and
      *  when the dwell began: when "behind is empty" started, or the frame
-     *  that ended a gap longer than [CLEAR_GRACE_MAX_GAP_MS]. */
+     *  that ended a gap longer than [FRAME_GAP_MAX_MS]. */
     private var clearPending: Boolean = false
     private var clearPendingSinceMs: Long = 0L
 
@@ -568,8 +576,9 @@ class AlertDecider(
     private var urgentFloorCar: Pair<Int, Long>? = null
 
     /** When a car heard at or above [stepFloor], or [urgentFloorCar], was
-     *  last in the track list, or a beep or an urgent last sounded:
-     *  what [FLOOR_LAPSE_MS] is timed from. */
+     *  last in the track list, a beep or an urgent last sounded, or a gap
+     *  longer than [FRAME_GAP_MAX_MS] ended: what [FLOOR_LAPSE_MS] is timed
+     *  from. */
     private var floorSeenAtMs: Long = 0L
 
     /** Distance (m) of the closest vehicle physically behind on the most
@@ -939,12 +948,16 @@ class AlertDecider(
 
         // With no movement signal no fade can be taken as a pass, so the
         // floor lapses once no car heard at or above it, nor the urgent's
-        // trigger car, has been in the track list for FLOOR_LAPSE_MS, and
-        // the closest car is heard at its own tier unless already heard at it.
+        // trigger car, has been in the track list for FLOOR_LAPSE_MS of
+        // frames, and the closest car is heard at its own tier unless already
+        // heard at it. A gap in the frames reported nothing, so the frame
+        // that ends it starts the count again.
+        val gapEnded = nowMs - lastDecideAtMs > FRAME_GAP_MAX_MS
         val urgentCar = urgentFloorCar
-        if (vehicles.any { firedTierOf(it) >= stepFloor || (it.id == urgentCar?.first && it.bornAtMs == urgentCar.second) }) {
-            floorSeenAtMs = nowMs
+        val floorCarTracked = vehicles.any {
+            firedTierOf(it) >= stepFloor || (it.id == urgentCar?.first && it.bornAtMs == urgentCar.second)
         }
+        if (gapEnded || floorCarTracked) floorSeenAtMs = nowMs
         if (stepFloor > 0 && riderMoving == null && nowMs - floorSeenAtMs >= FLOOR_LAPSE_MS) {
             val armed = closestVehicle != null && closestUrgency > firedTierOf(closestVehicle)
             onGateEvent("# gate floor-lapse floor=$stepFloor after_ms=${nowMs - floorSeenAtMs} armed=$armed")
@@ -1214,7 +1227,7 @@ class AlertDecider(
             clearPending = true
             clearPendingSinceMs = nowMs
         }
-        if (clearPending && clearPendingSinceMs != nowMs && nowMs - lastDecideAtMs > CLEAR_GRACE_MAX_GAP_MS) {
+        if (clearPending && clearPendingSinceMs != nowMs && gapEnded) {
             onGateEvent("# gate clear-restart gap_ms=${nowMs - lastDecideAtMs}")
             clearPendingSinceMs = nowMs
         }
@@ -1840,9 +1853,10 @@ class AlertDecider(
          *  floor, nor the urgent's trigger car, before the floor lapses,
          *  where the rider's movement is unknown. On the legacy stream a
          *  track stays in the list for [RadarV1Decoder.STALE_MS] after its
-         *  last report, so the count drops that much later again. A design
-         *  choice that favours announcing a car, not a measurement of how
-         *  long a radar loses a car. */
+         *  last report, so the count drops that much later again. Counted
+         *  over frames: see [FRAME_GAP_MAX_MS]. A design choice that favours
+         *  announcing a car, not a measurement of how long a radar loses a
+         *  car. */
         const val FLOOR_LAPSE_MS = 2_000L
 
         /** Sentinel for [lastNotStationaryAtMs] meaning "no `decide()`
@@ -1864,12 +1878,14 @@ class AlertDecider(
          *  still absorbs single-frame flaps in that degenerate range. */
         private const val CLOSE_EXIT_HYSTERESIS_DIVISOR: Int = 10
 
-        /** Longest gap between two [decide] calls that the clear grace
-         *  counts across. A longer one restarts the grace on the frame that
-         *  ends it, so the all-clear needs [clearGraceMs] of frames after the
-         *  gap; a gap of exactly this length does not (`a gap of exactly the
-         *  bound does not restart the grace`, `a gap one millisecond over the
-         *  bound restarts the grace`). Sized from the decoder's own limit for
+        /** Longest gap between two [decide] calls that the clear grace and
+         *  the floor's [FLOOR_LAPSE_MS] count across. A longer one restarts
+         *  both on the frame that ends it, so each needs its full time of
+         *  frames after the gap; a gap of exactly this length does not (`a gap
+         *  of exactly the bound does not restart the grace`, `a gap one
+         *  millisecond over the bound restarts the grace`,
+         *  `AlertDeciderFrameGapTest.aGapOfExactlyTheBoundDoesNotRestartTheLapse`,
+         *  `aGapOneMillisecondOverTheBoundRestartsTheLapse`). Sized from the decoder's own limit for
          *  how long a moving car may go unreported before it is dropped
          *  ([RadarV2Decoder.STALE_MOVING_MS]): a longer gap is a stretch the
          *  app cannot vouch for. Its own value so that tuning the decoder
@@ -1883,7 +1899,7 @@ class AlertDecider(
          *  At the heartbeat rate the protocol notes observe, about 7 Hz, it
          *  sounds 2 s after the track ages out
          *  (`RadarV1SafetyTest.theAllClearSoundsOnTheHeartbeatTwoSecondsAfterTheTrackAgesOut`). */
-        private const val CLEAR_GRACE_MAX_GAP_MS = 800L
+        private const val FRAME_GAP_MAX_MS = 800L
 
         /** Consecutive frames a track must be ABSENT from the close set before
          *  its sustain counter is reset. 2 = a single missed frame (one dropped
@@ -1900,7 +1916,8 @@ class AlertDecider(
          *  junction with a closing vehicle gets the urgent tone
          *  well within the time-to-collision window for the gate
          *  (closing ≥ 6 m/s AND TTC ≤ [TTC_GATE_SECONDS] AND distance
-         *  ≤ alertMaxM). */
+         *  ≤ alertMaxM). Counts across a gap in the frames, deliberately
+         *  (`theUrgentMiniDwellCountsAcrossAGapByDesign`). */
         const val URGENT_OVERRIDE_DWELL_MS = 500L
 
         /** Time-to-collision threshold (seconds) for the TTC gate, the

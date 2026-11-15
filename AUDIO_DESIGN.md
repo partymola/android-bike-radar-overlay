@@ -165,8 +165,11 @@ radar frame:
   nor the car that last set off the urgent warning has been on the radar's
   track list for 2 s, the next car is announced at its own tier, unless it has
   already been heard at it. This favours announcing a car over keeping the
-  count from dropping. While such a car is still tracked, or whenever the
-  rider's movement is known, moving or stopped, a lower count stays held back.
+  count from dropping. The 2 s are counted over radar updates, like the
+  all-clear grace below: after more than 800 ms with none, they start again on
+  the next one (`AlertDeciderFrameGapTest`). While such a car is still
+  tracked, or whenever the rider's movement is known, moving or stopped, a
+  lower count stays held back.
 - A short cooldown collapses a burst of triggers into one beep at the closest
   urgency, so a multi-vehicle scene does not machine-gun the rider. The one
   exception is a genuine tier *raise* (the closest car got closer), which is real

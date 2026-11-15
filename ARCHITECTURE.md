@@ -230,6 +230,9 @@ different code stamp identically. Why, and the `commit=unknown` fallback:
 
 ## Location for light auto-mode
 
+Both light auto-modes read the rider's location at each connect to time
+sunrise and sunset, falling back to London when there is none.
+
 **Android grants the while-in-use `ACCESS_COARSE_LOCATION` only while a
 screen of the app is visible, never to the `connectedDevice` service**
 (observed on a Pixel, Android 16: appop `Reject [fgsvc]`), and a refused

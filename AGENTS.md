@@ -355,16 +355,19 @@ must not be changed about it. Four that bite in ordinary work:
   (~1.5 s). If the reconnect doesn't happen, see live-testing recovery
   below.
 - **Before changing the radar link (`RadarLinkController`,
-  `RadarLinkCoordinator`, `RadarSelection`), read
-  [`RADAR_LINK.md`](RADAR_LINK.md).** It holds what the link must not do and
-  the test that pins each: how a pinned radar is chosen, when the radar
-  counts as up, the connect-time writes beside the decode loop and the
-  tail-light failure report. One rule from it applies everywhere: never
-  subscribe the CCCD of `6a4e3203` on a radar that has `6a4e3204`.
-- **Before changing the front camera's link or the dashcam walk-away alarm's
-  probe, read [`CAMERA_LINK.md`](CAMERA_LINK.md).** The alarm hears the
-  camera only through a battery read it answered or its established light
-  link, never through `BatteryStateBus`.
+  `RadarLinkCoordinator`, `RadarSelection`, `BikeRadarService`'s scan
+  dispatch, cache replay and pin start, or the tail-light failure
+  notification), read [`RADAR_LINK.md`](RADAR_LINK.md).** It holds what the
+  link must not do and the test that pins each: how a pinned radar is
+  chosen, when the radar counts as up, the connect-time writes beside the
+  decode loop and the tail-light failure report. One rule from it applies
+  everywhere: never subscribe the CCCD of `6a4e3203` on a radar that has
+  `6a4e3204`.
+- **Before changing the front camera's link, `DashcamProbe`,
+  `BatteryReader` or the dashcam walk-away alarm's probe, read
+  [`CAMERA_LINK.md`](CAMERA_LINK.md).** The alarm hears the camera only
+  through a battery read it answered or its established light link, never
+  through `BatteryStateBus`.
 - **No connection loop waits on Home Assistant.** Battery readings and the
   front-light mode are handed to `HaPublisher` and sent off the loop; an
   awaited send holds the radar frames. The tests that pin it: "Home
@@ -481,7 +484,8 @@ a behaviour spec to keep in sync.
   contract file, a licence header or the README's licence section.
   **A new field on `RadarStateParcel` is a disclosure change**: update
   `settings_privacy_to_apps_body` in both locales in the same commit; no
-  check forces it.
+  check forces it. On the MQTT side a new key inside an existing payload is
+  not caught by any test either, and is disclosed by hand.
 - **A comment keeps the fact a maintainer could undo, and the test that pins
   it. Everything else goes.** Cut the argument for the fact, the second example,
   the consequence restated, and any sentence whose job is to show that the

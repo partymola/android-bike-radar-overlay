@@ -51,19 +51,20 @@ before changing `RadarLinkController`, `RadarLinkCoordinator` or
   `6a4e3204`. Writing that CCCD before the enabling sequence (fw 6.70) drops
   the radar into V1: the handshake succeeds, V1 heartbeats arrive on
   `6a4e3203`, and `6a4e3204` never emits. Later connections that never touch
-  the CCCD get no V2 either, until the radar is power-cycled. See
-  `Uuids.RADAR_V1`.
+  the CCCD get no V2 either, until the radar is power-cycled (the V1 lock).
+  See `Uuids.RADAR_V1`.
   - **The one sanctioned subscribe is the legacy-stream fallback**, and its
     gate is that whole exception. `RadarLinkController.legacyStreamChar`
     returns the characteristic ONLY when the radar service carries no
     `6a4e3204`, read off the discovered GATT table rather than the stored
-    probe. A radar with V2 therefore cannot reach the subscribe, so the pin
-    cannot be applied to a radar it would cost anything. `RadarLinkControllerHarnessTest`
-    pins both directions: falls back when the characteristic is absent, never
-    falls back when it is present however the handshake ends.
+    probe. A radar with V2 therefore cannot reach the subscribe, so the V1
+    lock cannot be applied to a radar it would cost anything.
+    `RadarLinkControllerHarnessTest` pins both directions: falls back when
+    the characteristic is absent, never falls back when it is present
+    however the handshake ends.
   - **Do not relax that gate to a retry count.** A count fires on a healthy
-    radar after a transient handshake failure, which is precisely when the pin
-    is expensive - it would cost the rider V2 until they power-cycle. The
+    radar after a transient handshake failure, which is precisely when the V1
+    lock is expensive - it would cost the rider V2 until they power-cycle. The
     absence of `6a4e3204` is a fact about the hardware; a retry count is a
     guess about the moment.
   - The stream itself carries range only. `RadarV1Decoder` writes a zero

@@ -173,34 +173,41 @@ internal class WalkAwayAlarm(
         // stop() and strand the slider high (the beeper's own restore skips
         // the stream while this override is active, handing ownership here).
         // [beeperAlarmBaseline] supplies the true pre-lift level instead, and
-        // the shared slot covers a lift by the sound demo's own beeper.
-        val alreadyOverridden = savedAlarmVolume != null
-        val saved = if (alreadyOverridden) {
-            null
-        } else {
-            beeperAlarmBaseline() ?: prefs.alertBeeperSavedAlarmVolume ?: try {
-                am.getStreamVolume(AudioManager.STREAM_ALARM)
-            } catch (_: Throwable) {
+        // the shared slot covers a lift by the sound demo's own beeper. The
+        // capture, the force and [overrideActive] happen under the beepers'
+        // lock, so no cue lift or restore lands between them
+        // (`WalkAwayAlarmBeeperInterlockTest`); the tone plays outside it.
+        val saved = synchronized(AlertBeeper.alarmStreamLock) {
+            val alreadyOverridden = savedAlarmVolume != null
+            val level = if (alreadyOverridden) {
                 null
+            } else {
+                beeperAlarmBaseline() ?: prefs.alertBeeperSavedAlarmVolume ?: try {
+                    am.getStreamVolume(AudioManager.STREAM_ALARM)
+                } catch (_: Throwable) {
+                    null
+                }
             }
-        }
-        if (saved != null) {
-            // Persist BEFORE forcing: if the process dies between the two
-            // writes, the repair-on-construction path restores a level equal
-            // to the current one - harmless - whereas persisting after the
-            // force would leave a death window with no record to repair from.
-            prefs.walkAwaySavedAlarmVolume = saved
-        }
-        if (saved != null || alreadyOverridden) {
-            try {
-                am.setStreamVolume(
-                    AudioManager.STREAM_ALARM,
-                    am.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-                    0,
-                )
-            } catch (t: Throwable) {
-                Log.w(TAG, "alarm-stream max-out failed: $t")
+            if (level != null) {
+                // Persist BEFORE forcing: if the process dies between the two
+                // writes, the repair-on-construction path restores a level equal
+                // to the current one - harmless - whereas persisting after the
+                // force would leave a death window with no record to repair from.
+                prefs.walkAwaySavedAlarmVolume = level
             }
+            if (level != null || alreadyOverridden) {
+                try {
+                    am.setStreamVolume(
+                        AudioManager.STREAM_ALARM,
+                        am.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                        0,
+                    )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "alarm-stream max-out failed: $t")
+                }
+            }
+            savedAlarmVolume = level ?: savedAlarmVolume
+            level
         }
 
         try {
@@ -211,21 +218,31 @@ internal class WalkAwayAlarm(
                 am.abandonAudioFocusRequest(focusReq)
             } catch (_: Throwable) {}
             // Roll back the alarm-stream override so a play() failure
-            // doesn't leave the rider's morning alarm stuck at max.
+            // doesn't leave the rider's morning alarm stuck at max. Under the
+            // beepers' lock, so no cue finds the override still set after the
+            // rider's level is back
+            // (`aCueAsAFailedWalkAwayRollsBackIsLiftedOnceItsOverrideEnds`).
             if (saved != null) {
-                try {
-                    am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
-                } catch (_: Throwable) {}
-                prefs.walkAwaySavedAlarmVolume = null
+                synchronized(AlertBeeper.alarmStreamLock) {
+                    try {
+                        am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+                    } catch (_: Throwable) {}
+                    prefs.walkAwaySavedAlarmVolume = null
+                    savedAlarmVolume = null
+                }
             }
             return
         }
 
-        // Commit the new state only after play() succeeds, so a partial
-        // setup never leaks a focus token or a half-initialised tone. A
-        // stale episode's focus token is abandoned before the new one
-        // replaces it, and its saved volume is kept - it still holds the
-        // rider's true pre-alert level.
+        // Only the focus token and the tone wait for play() to succeed, so a
+        // partial setup never leaks either. The saved volume, and with it
+        // [overrideActive], was committed with the force under the lock, and
+        // the rollback above takes it back if play() throws; moved below
+        // play(), a cue lifting while the tone starts would pull the alarm
+        // off max (`aCueWhileTheWalkAwaysToneStartsLeavesItAtMax`). A stale
+        // episode's focus token is abandoned before the new one replaces it,
+        // and its saved volume is kept - it still holds the rider's true
+        // pre-alert level.
         audioFocusRequest?.let { stale ->
             try {
                 am.abandonAudioFocusRequest(stale)
@@ -233,7 +250,6 @@ internal class WalkAwayAlarm(
         }
         audioFocusRequest = focusReq
         tone = newTone
-        savedAlarmVolume = saved ?: savedAlarmVolume
         ringtoneCapJob?.cancel()
         ringtoneCapJob = scope.launch {
             delay(WALKAWAY_RINGTONE_CAP_MS)
@@ -263,15 +279,19 @@ internal class WalkAwayAlarm(
             } catch (_: Throwable) {}
         }
         audioFocusRequest = null
-        savedAlarmVolume?.let { saved ->
-            try {
-                am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
-            } catch (t: Throwable) {
-                Log.w(TAG, "alarm-stream restore failed: $t")
+        // Under the beepers' lock, so no cue finds the override still set after
+        // the rider's level is back (`aCueAsTheWalkAwayStopsIsLiftedOnceItsOverrideEnds`).
+        synchronized(AlertBeeper.alarmStreamLock) {
+            savedAlarmVolume?.let { saved ->
+                try {
+                    am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "alarm-stream restore failed: $t")
+                }
+                prefs.walkAwaySavedAlarmVolume = null
             }
-            prefs.walkAwaySavedAlarmVolume = null
+            savedAlarmVolume = null
         }
-        savedAlarmVolume = null
     }
 
     /**

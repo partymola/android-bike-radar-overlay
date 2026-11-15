@@ -287,14 +287,13 @@ class AlertBeeper(
 
     private val cueSoundingState = MutableStateFlow(false)
 
-    // Guards the focus, the floor lift and the burst's end. [cueEndsAtMs] is
-    // when the burst's abandon timer is due, on the Handler's clock: the end of
+    // Guarded by [alarmStreamLock], with the floor lift and its restore.
+    // [cueEndsAtMs] is the burst's end on the Handler's clock: the end of
     // whichever of its cues ends last, since cues on separate tracks overlap.
-    // The timer does nothing before that time or while [cueStarting], so one
-    // from an earlier burst that runs during a later cue leaves its focus,
-    // lift and [cueSounding] alone, and a cue that starts while it runs waits
-    // for it (`AlertBeeperEarlierTimerTest`).
-    private val cueLock = Any()
+    // The abandon timer runs at the burst's end. A run before that time or
+    // while [cueStarting] does nothing, so a timer from an earlier burst that
+    // runs during a later cue leaves its focus, lift and [cueSounding] alone,
+    // and a cue that starts while it runs waits for it (`AlertBeeperEarlierTimerTest`).
     private var cueEndsAtMs = 0L
     private var cueStarting = false
     private var hasFocus: Boolean = false
@@ -311,13 +310,13 @@ class AlertBeeper(
     /** The rider's own STREAM_ALARM index, captured once when [applyAlarmFloor]
      *  first lifts the alarm stream for a cue burst; null when no lift is in
      *  effect. Restored at the burst's end (see [cueEndsAtMs]) and in
-     *  [release]. Written only under [cueLock]; @Volatile for
+     *  [release]. Written only under [alarmStreamLock]; @Volatile for
      *  [alarmFloorBaseline], which may be called without the lock. */
     @Volatile private var savedAlarmFloor: Int? = null
 
     private val abandonHandler = Handler(Looper.getMainLooper())
     private val abandonRunnable = Runnable {
-        synchronized(cueLock) {
+        synchronized(alarmStreamLock) {
             if (cueStarting || android.os.SystemClock.uptimeMillis() < cueEndsAtMs) return@Runnable
             if (hasFocus) {
                 try {
@@ -524,7 +523,7 @@ class AlertBeeper(
 
     fun release() {
         releaseStarted = true
-        synchronized(cueLock) {
+        synchronized(alarmStreamLock) {
             abandonHandler.removeCallbacks(abandonRunnable)
             if (hasFocus) {
                 try {
@@ -582,13 +581,13 @@ class AlertBeeper(
      */
     internal fun suppressForCall(): Boolean = isCallMode(audioManager.mode)
 
-    /** The lock is held for the focus request and the floor lift, never
-     *  across the play. The timer is re-armed in `finally`, so a cue whose
-     *  start or play throws still ends its burst
+    /** [alarmStreamLock] is held for the focus request and the floor lift,
+     *  never across the play. The timer is re-armed in `finally`, so a cue
+     *  whose start or play throws still ends its burst
      *  (`aCueWhoseStartThrowsStillEndsItsBurst`, `aCueWhosePlayThrowsStillEndsItsBurst`). */
     private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
         try {
-            synchronized(cueLock) {
+            synchronized(alarmStreamLock) {
                 abandonHandler.removeCallbacks(abandonRunnable)
                 cueStarting = true
                 cueSoundingState.value = true
@@ -608,7 +607,7 @@ class AlertBeeper(
             // across the burst rather than restoring + re-ducking between cues,
             // and a shorter cue inside a longer one never shortens it
             // (`aShortCueDuringALongerOneHoldsTheDuckAndLiftUntilTheLongerEnds`).
-            synchronized(cueLock) {
+            synchronized(alarmStreamLock) {
                 cueStarting = false
                 val endsAtMs = android.os.SystemClock.uptimeMillis() + durationMs + ABANDON_SAFETY_MARGIN_MS
                 cueEndsAtMs = maxOf(cueEndsAtMs, endsAtMs)
@@ -635,7 +634,7 @@ class AlertBeeper(
      * per pulse. The saved level is persisted via [saveAlarmFloor] so a process
      * death inside the sub-second lift window is repaired at the next start
      * ([repairLeakedAlarmFloor]) - the walk-away alarm's pattern, on a separate
-     * slot. Called from [playWithFocus] with [cueLock] held.
+     * slot. Called from [playWithFocus] with [alarmStreamLock] held.
      *
      * Interlock: while the walk-away alarm holds its own override
      * ([walkAwayOverrideActive]) the floor does nothing - the stream is
@@ -667,11 +666,11 @@ class AlertBeeper(
     }
 
     /** Restore the alarm stream to the rider's pre-lift level. No-op when no
-     *  lift is in effect. Called with [cueLock] held, by the abandon timer
+     *  lift is in effect. Called with [alarmStreamLock] held, by the abandon timer
      *  and by [release]; the null-guard makes the second call inert.
      *
      *  Interlock: if the walk-away alarm took the stream over mid-lift
-     *  (ordering: floor lifts -> walk-away forces max -> this timer fires),
+     *  (ordering: floor lifts -> walk-away forces max -> the burst ends),
      *  the stream write is SKIPPED and only the slot is cleared - the
      *  walk-away captured the rider's true baseline through
      *  [alarmFloorBaseline] at its start() and now owns the restore. Writing
@@ -901,6 +900,16 @@ class AlertBeeper(
         const val DEFAULT_VOLUME_PCT = 50
 
         private const val TAG = "BikeRadar"
+
+        /** One lock for every beeper's floor lift and restore and for
+         *  [WalkAwayAlarm]'s force to max and its restore, so a cue's lift or
+         *  restore never lands between one of the walk-away's stream writes and
+         *  its override flag (`WalkAwayAlarmBeeperInterlockTest`).
+         *  Lock order: a [WalkAwayAlarm] takes its own monitor before this lock.
+         *  Nothing run under this lock may take that monitor or wait on the main
+         *  thread, so [WalkAwayAlarm.overrideActive] stays a plain volatile
+         *  read; no test checks the order itself. */
+        internal val alarmStreamLock = Any()
 
         /** The one definition of "a call" for everything that changes during
          *  one. MODE_IN_CALL is telephony; MODE_IN_COMMUNICATION is VoIP

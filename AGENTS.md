@@ -748,7 +748,17 @@ must not be changed about it. Four that bite in ordinary work:
   collapse that seam into `loadAlarmFloor`, which would make the demo
   repair from a screen. The debug overlay's preview beeper
   (`DebugOverlayService`) has none of this wiring; any beeper a rider
-  reaches outside the debug tools needs all of it.
+  reaches outside the debug tools needs all of it. The walk-away alarm
+  captures the rider's level, forces max and sets `overrideActive` under
+  `AlertBeeper.alarmStreamLock`, the lock every beeper's lift and restore
+  hold, and plays its tone outside it; its restore in `stop()` and after a
+  failed tone start clears `overrideActive` under the same lock. Otherwise a
+  cue's lift or restore landing in between leaves the walk-away sounding
+  below max, or the cue at the rider's bare level
+  (`aWalkAwayStartingDuringACuesLiftStaysAtMax`,
+  `aWalkAwayStartingDuringACuesRestoreStaysAtMax`,
+  `aCueAsTheWalkAwayStopsIsLiftedOnceItsOverrideEnds`). The lock order is in
+  the `alarmStreamLock` KDoc.
 - `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
   a re-arming abandon timer. The walk-away alarm path uses the stronger
   `_EXCLUSIVE` flavour and is separate from the close-pass path. The timer

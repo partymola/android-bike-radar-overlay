@@ -138,6 +138,23 @@ battery, front-light mode, ride-edge, and ride-summary data, and
 MQTT, and nowhere else. See `SettingsPrivacy` for the full disclosure of what is
 sent.
 
+- **No connection loop waits on Home Assistant.** The radar's V2 and legacy
+  loops and the camera loop hand each battery reading to
+  `HaPublisher.offerBattery`, and the camera hands its light mode to
+  `HaPublisher.offerFrontMode`; both return at once. The send runs on the
+  service scope, one per device and entity at a time, and the newest value
+  goes next, except that a front-mode offer carrying no mode never replaces
+  one that does (`HaPublisherTest.aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode`).
+  A send awaited on a loop holds the radar frames behind a
+  blocking request: no frame is published, so no alert is decided until the
+  send returns, and the data-flow watchdog tears down a link that is streaming
+  (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
+  `aLinkEndsWhileABatterySendHangsDeafToCancellation`,
+  `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`,
+  `aHungFrontModeSendDoesNotHoldTheCameraLoop`,
+  `aHungFrontModeDiscoveryDoesNotHoldTheCameraLoop`,
+  `aLinkEndsWhileAFrontModeSendHangsDeafToCancellation`).
+
 ## Accessibility scope
 
 Bike Radar is a riding aid built around sight and sound: audio cues are the

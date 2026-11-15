@@ -256,7 +256,7 @@ def scope_findings(tracked: set[str], examined: set[str]) -> list[tuple[str, str
     # has no anchor and the scope comparison agrees with itself in silence.
     # This loop is keyed to the six paths themselves, so it is the only thing
     # that speaks when PERMISSIVE_FILES grows past the kinds the table names -
-    # which is the scenario AGENTS.md tells maintainers to expect, and where
+    # which is the scenario LICENSING_NOTES.md tells maintainers to expect, and where
     # the failure is a file this check claims to protect never being read.
     for permissive in sorted(PERMISSIVE_FILES & tracked):
         if permissive not in examined:

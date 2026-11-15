@@ -361,46 +361,14 @@ must not be changed about it. Four that bite in ordinary work:
   counts as up, the connect-time writes beside the decode loop and the
   tail-light failure report. One rule from it applies everywhere: never
   subscribe the CCCD of `6a4e3203` on a radar that has `6a4e3204`.
-- **The dashcam walk-away alarm hears the camera only through a battery read
-  it answered or its established light link, never through
-  `BatteryStateBus`**, which sightings with no contact also stamp
-  (`RadarLinkCoordinatorTest.aSightingWithNoContactIsNotHeard`). While the
-  alarm can still sound (`RadarLinkCoordinator.dashcamAlarmCanSound`) the
-  probe starts the next read on the first 2 s tick at least 2 s after the
-  camera was last heard, so a camera answering within the 15 s read timeout is
-  never older than the alarm's 20 s while both loops run on time
-  (`DashcamProbeTest.anArmedProbeKeepsACameraThatAnswersInsideTheAlarmsWindow`,
-  `DashcamHeardWindowTest`, whose harness runs both loops in virtual time).
-  The walk-away wakelock keeps them on time until the alarm first sounds;
-  after that a walk-away tick more than two ticks after the one before counts
-  as a wake, and the camera's unheard time counts from the first wake after
-  each hearing, giving its read 20 s to land
-  (`aLateWakeAfterTheAlarmSoundedDoesNotEndIt`,
-  `repeatedShortWakesDoNotHoldOffTheStopOfACameraThatWentOff`). Its answer runs
-  the walk-away tick at once while the alarm can sound, so the repeat can sound
-  on a phone that sleeps between reads, provided the answer's callback keeps it
-  awake that long (`RadarLinkCoordinator.onDashcamAnswered`,
-  `aCameraStillAnsweringAcrossRepeatedLongSleepsSoundsItsRepeat`). Failed reads with a radar
-  link open back off from 2 s and can pass the bound. It holds only because the
-  read's in-flight guard ends before its Home Assistant send
-  (`BatteryReaderTest.aSlowPublishDoesNotHoldTheNextRead`); that send goes
-  out only on a change or the 5 min heartbeat (`HaPublisher.sendBattery`).
-- **No connection loop waits on Home Assistant.** The radar's V2 and legacy
-  loops and the camera loop hand each battery reading to
-  `HaPublisher.offerBattery`, and the camera hands its light mode to
-  `HaPublisher.offerFrontMode`; both return at once. The send runs on the
-  service scope, one per device and entity at a time, and the newest value
-  goes next, except that a front-mode offer carrying no mode never replaces
-  one that does (`HaPublisherTest.aDiscoveryOnlyOfferDoesNotReplaceAWaitingMode`).
-  A send awaited on a loop holds the radar frames behind a
-  blocking request: no frame is published, so no alert is decided until the
-  send returns, and the data-flow watchdog tears down a link that is streaming
-  (`RadarLinkControllerHarnessTest.aHungBatterySend*`,
-  `aLinkEndsWhileABatterySendHangsDeafToCancellation`,
-  `CameraLightLinkControllerHarnessTest.aHungBatterySendDoesNotHoldTheNextBatteryReading`,
-  `aHungFrontModeSendDoesNotHoldTheCameraLoop`,
-  `aHungFrontModeDiscoveryDoesNotHoldTheCameraLoop`,
-  `aLinkEndsWhileAFrontModeSendHangsDeafToCancellation`).
+- **Before changing the front camera's link or the dashcam walk-away alarm's
+  probe, read [`CAMERA_LINK.md`](CAMERA_LINK.md).** The alarm hears the
+  camera only through a battery read it answered or its established light
+  link, never through `BatteryStateBus`.
+- **No connection loop waits on Home Assistant.** Battery readings and the
+  front-light mode are handed to `HaPublisher` and sent off the loop; an
+  awaited send holds the radar frames. The tests that pin it: "Home
+  Assistant is optional" in `ARCHITECTURE.md`.
 - AMV UUID pairs differ by device class: the rear radar uses RX=`6a4e2811`/
   TX=`6a4e2821`; the front camera/light uses RX=`6a4e2810`/TX=`6a4e2820`.
   Mixing the pairs causes silent handshake failure — the device accepts the
@@ -452,40 +420,10 @@ must not be changed about it. Four that bite in ordinary work:
   Don't shorten the TTC window, move either closing floor or widen the
   slider without re-running the capture replay.
 - `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
-  released in `onDestroy`). The first beep after every BLE reconnect lands
-  on the same warm AudioTrack pool; do not allocate per-overlayJob.
-  The sound demo, the volume step and the Alert sounds page build a second,
-  screen-scoped beeper (`newDemoBeeper`) on the same alarm stream. It joins both halves of
-  the walk-away interlock through the shared Prefs slots and never runs the
-  crash repair, since the ride's beeper may hold a lift from that slot
-  (`WalkAwayAlarmBeeperInterlockTest.aSoundDemoLiftIsInterlockedWithTheWalkAwayAlarmToo`,
-  `DemoCuePlayerTest`). Each beeper takes the rider's level for a new lift
-  from that slot (`sharedFloorBaseline`) before the stream, so a lift that
-  starts while the other beeper's saved level is in the slot saves that
-  level, not the raised stream (`TwoBeepersShareOneFloorTest`); do not
-  collapse that seam into `loadAlarmFloor`, which would make the demo
-  repair from a screen. The debug overlay's preview beeper
-  (`DebugOverlayService`) has none of this wiring; any beeper a rider
-  reaches outside the debug tools needs all of it. The walk-away alarm
-  captures the rider's level, forces max and sets `overrideActive` under
-  `AlertBeeper.alarmStreamLock`, the lock every beeper's lift and restore
-  hold, and plays its tone outside it; its restore in `stop()` and after a
-  failed tone start clears `overrideActive` under the same lock. Otherwise a
-  cue's lift or restore landing in between leaves the walk-away sounding
-  below max, or the cue at the rider's bare level
-  (`aWalkAwayStartingDuringACuesLiftStaysAtMax`,
-  `aWalkAwayStartingDuringACuesRestoreStaysAtMax`,
-  `aCueAsTheWalkAwayStopsIsLiftedOnceItsOverrideEnds`). The lock order is in
-  the `alarmStreamLock` KDoc.
-- `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
-  a re-arming abandon timer. The walk-away alarm path uses the stronger
-  `_EXCLUSIVE` flavour and is separate from the close-pass path. The timer
-  runs on the main thread and the cue on the playback thread, so a cue's
-  focus request and floor lift, the timer's body and `release` hold one lock,
-  and the timer does nothing while a cue starts or before the burst's
-  last-ending cue ends. Otherwise an earlier burst's timer that comes due as a
-  cue starts takes that cue's duck and lift, and a short cue played over a
-  longer one ends the longer one's (`AlertBeeperEarlierTimerTest`).
+  released in `onDestroy`); do not allocate one per connection. Before
+  changing it, `WalkAwayAlarm` or any second beeper, read "Implementation
+  notes" in [`AUDIO_DESIGN.md`](AUDIO_DESIGN.md): the shared alarm-volume
+  slot, the walk-away interlock and its lock, and the focus timer.
 - While a call is active (`audioManager.mode` is `MODE_IN_CALL` for telephony
   or `MODE_IN_COMMUNICATION` for VoIP) the close-pass beeper skips the audio
   path entirely (visual overlay still fires). Non-negotiable, no Settings
@@ -537,49 +475,13 @@ a behaviour spec to keep in sync.
 - GPL-3.0-or-later. Don't copy non-GPL-compatible code.
 - **Two files carry the cross-app licensing, and they cover different halves.**
   Change either only on purpose.
-  - **Six files are Apache-2.0**: the three `.aidl`, plus `RadarContract.kt`,
-    `RadarStateParcel.kt` and `RadarVehicleParcel.kt`. Together they are a
-    complete client contract; the `.aidl` alone are not, since
-    `RadarStateParcel.aidl` is a forward declaration and the constants are not
-    in them. Licence text is `LICENSES/Apache-2.0.txt`. Everything implementing
-    them stays GPL-3.0-or-later, and Apache-2.0 combines into a GPL-3.0 whole,
-    so the app's own licence is untouched. Do NOT normalise those headers, and
-    keep those files free of any reference to the app behind them, or the
-    permission means nothing. `InterfaceIsPermissiveImplementationIsNotTest`
-    pins the list and `ContractIsSelfContainedTest` pins the self-containment.
-    A new `.aidl` fails until someone puts it on a side; a new `.kt` lands in
-    the copyleft bucket and passes quietly, so decide deliberately.
-    **The list exists in three places and all three must move together**: that
-    test, `PERMISSIVE_FILES` in `scripts/check-licence-headers.py`, and the
-    README section the same check pins. Updating only the test reds CI worded as
-    an SPDX mismatch, which is loud but names the wrong cause.
-  - **`additional-permission.txt` covers writing a consumer** rather than
-    copying our files: a section 7 grant that an app communicating solely
-    through the interface is not, by virtue of that communication, a work based
-    on this one. That qualifier is load-bearing and must survive any rewrite;
-    without it the grant reaches an app that also embeds our GPL code. Do not
-    argue in public docs that two apps over Binder are separate programs. The
-    grant settles the question rather than taking a position on it.
-  - **A permissive file's imports stay platform-only** (`android.`, `java.`,
-    `kotlin.`). Nothing enforces that, deliberately: every other check on this
-    surface exists because its failure is SILENT, and this one's is not. A
-    third-party import fails at build time on the copier's side, naming what
-    they lack; an `androidx` one usually just resolves, because virtually every
-    Android project already carries androidx. Neither is a licence problem
-    while every artifact on the release runtime classpath is Apache-2.0, which
-    `scripts/check-transitive-licences.py` reports on rather than gates. An
-    import here necessarily lands on that classpath. Do not read the absence of
-    a test as the absence of the rule.
-  - **A NEW FIELD ON `RadarStateParcel` IS A DISCLOSURE CHANGE.** Whatever
-    crosses that wire reaches any app the rider has granted, and
-    `settings_privacy_to_apps_body` is where they read what that is, in BOTH
-    locales. On the MQTT side `HaClientDataDisclosureTest` forces it for a new
-    topic family and for a new field in the shared discovery device block
-    (`theDeviceBlockCarriesOnlyTheFieldsItDiscloses`); a new key inside an
-    existing payload is not caught there either and is disclosed by hand.
-    There is no check at all for the cross-app side, so a field added here
-    ships undisclosed with every gate green. Update the disclosure in the same
-    commit.
+  Which six files are Apache-2.0, what `additional-permission.txt` grants,
+  the import rule and the three places the file list lives:
+  [`LICENSING_NOTES.md`](LICENSING_NOTES.md). Read it before touching a
+  contract file, a licence header or the README's licence section.
+  **A new field on `RadarStateParcel` is a disclosure change**: update
+  `settings_privacy_to_apps_body` in both locales in the same commit; no
+  check forces it.
 - **A comment keeps the fact a maintainer could undo, and the test that pins
   it. Everything else goes.** Cut the argument for the fact, the second example,
   the consequence restated, and any sentence whose job is to show that the

@@ -362,3 +362,41 @@ compliance claim.
 Before changing alert behaviour, read the relevant KDoc, run the decider tests,
 and replay the cue-ledger gate (`CueLedgerReplayTest`) so any change in cue
 parsimony surfaces as a reviewable diff.
+
+## Implementation notes
+
+- `AlertBeeper` is service-scoped (allocated in `BikeRadarService.onCreate`,
+  released in `onDestroy`). The first beep after every BLE reconnect lands
+  on the same warm AudioTrack pool; do not allocate per-overlayJob.
+  The sound demo, the volume step and the Alert sounds page build a second,
+  screen-scoped beeper (`newDemoBeeper`) on the same alarm stream. It joins both halves of
+  the walk-away interlock through the shared Prefs slots and never runs the
+  crash repair, since the ride's beeper may hold a lift from that slot
+  (`WalkAwayAlarmBeeperInterlockTest.aSoundDemoLiftIsInterlockedWithTheWalkAwayAlarmToo`,
+  `DemoCuePlayerTest`). Each beeper takes the rider's level for a new lift
+  from that slot (`sharedFloorBaseline`) before the stream, so a lift that
+  starts while the other beeper's saved level is in the slot saves that
+  level, not the raised stream (`TwoBeepersShareOneFloorTest`); do not
+  collapse that seam into `loadAlarmFloor`, which would make the demo
+  repair from a screen. The debug overlay's preview beeper
+  (`DebugOverlayService`) has none of this wiring; any beeper a rider
+  reaches outside the debug tools needs all of it. The walk-away alarm
+  captures the rider's level, forces max and sets `overrideActive` under
+  `AlertBeeper.alarmStreamLock`, the lock every beeper's lift and restore
+  hold, and plays its tone outside it; its restore in `stop()` and after a
+  failed tone start clears `overrideActive` under the same lock. Otherwise a
+  cue's lift or restore landing in between leaves the walk-away sounding
+  below max, or the cue at the rider's bare level
+  (`aWalkAwayStartingDuringACuesLiftStaysAtMax`,
+  `aWalkAwayStartingDuringACuesRestoreStaysAtMax`,
+  `aCueAsTheWalkAwayStopsIsLiftedOnceItsOverrideEnds`). The lock order is in
+  the `alarmStreamLock` KDoc.
+- `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
+  a re-arming abandon timer. The walk-away alarm path uses the stronger
+  `_EXCLUSIVE` flavour and is separate from the close-pass path. The timer
+  runs on the main thread and the cue on the playback thread, so a cue's
+  focus request and floor lift, the timer's body and `release` hold one lock,
+  and the timer does nothing while a cue starts or before the burst's
+  last-ending cue ends. Otherwise an earlier burst's timer that comes due as a
+  cue starts takes that cue's duck and lift, and a short cue played over a
+  longer one ends the longer one's (`AlertBeeperEarlierTimerTest`).

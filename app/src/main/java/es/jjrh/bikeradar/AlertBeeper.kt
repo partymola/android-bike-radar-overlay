@@ -288,17 +288,19 @@ class AlertBeeper(
     private val cueSoundingState = MutableStateFlow(false)
 
     // Guards the focus, the floor lift and the burst's end. [cueEndsAtMs] is
-    // when the latest burst's abandon timer is due, on the Handler's clock,
-    // and Long.MAX_VALUE from a cue's start until its play returns. The timer
-    // does nothing before that time, so one from an earlier burst that runs
-    // during a later cue leaves its focus, lift and [cueSounding] alone, and
-    // a cue that starts while it runs waits for it (`AlertBeeperEarlierTimerTest`).
+    // when the burst's abandon timer is due, on the Handler's clock: the end of
+    // whichever of its cues ends last, since cues on separate tracks overlap.
+    // The timer does nothing before that time or while [cueStarting], so one
+    // from an earlier burst that runs during a later cue leaves its focus,
+    // lift and [cueSounding] alone, and a cue that starts while it runs waits
+    // for it (`AlertBeeperEarlierTimerTest`).
     private val cueLock = Any()
     private var cueEndsAtMs = 0L
+    private var cueStarting = false
     private var hasFocus: Boolean = false
 
-    /** True from a cue's play until its burst's abandon timer fires: the
-     *  cue's own length plus the tail [playWithFocus] arms
+    /** True from a cue's start until the burst's end (see [cueEndsAtMs]): the
+     *  end of its last-ending cue plus the tail [playWithFocus] arms
      *  (`AlertBeeperFocusTest.aCueReadsSoundingUntilItsBurstEnds`). True for
      *  good once [release] runs, so nothing waiting for quiet goes ahead as
      *  the service stops, a cue queued ahead of the release included
@@ -316,7 +318,7 @@ class AlertBeeper(
     private val abandonHandler = Handler(Looper.getMainLooper())
     private val abandonRunnable = Runnable {
         synchronized(cueLock) {
-            if (android.os.SystemClock.uptimeMillis() < cueEndsAtMs) return@Runnable
+            if (cueStarting || android.os.SystemClock.uptimeMillis() < cueEndsAtMs) return@Runnable
             if (hasFocus) {
                 try {
                     audioManager.abandonAudioFocusRequest(focusRequest)
@@ -581,30 +583,35 @@ class AlertBeeper(
     internal fun suppressForCall(): Boolean = isCallMode(audioManager.mode)
 
     /** The lock is held for the focus request and the floor lift, never
-     *  across the play. The timer is re-armed in `finally`, so a play that
-     *  throws still ends its burst (`aCueWhosePlayThrowsStillEndsItsBurst`). */
+     *  across the play. The timer is re-armed in `finally`, so a cue whose
+     *  start or play throws still ends its burst
+     *  (`aCueWhoseStartThrowsStillEndsItsBurst`, `aCueWhosePlayThrowsStillEndsItsBurst`). */
     private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
-        synchronized(cueLock) {
-            abandonHandler.removeCallbacks(abandonRunnable)
-            cueEndsAtMs = Long.MAX_VALUE
-            cueSoundingState.value = true
-            if (!hasFocus) {
-                hasFocus = try {
-                    audioManager.requestAudioFocus(focusRequest) ==
-                        AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-                } catch (_: Throwable) {
-                    false
-                }
-            }
-            applyAlarmFloor()
-        }
         try {
+            synchronized(cueLock) {
+                abandonHandler.removeCallbacks(abandonRunnable)
+                cueStarting = true
+                cueSoundingState.value = true
+                if (!hasFocus) {
+                    hasFocus = try {
+                        audioManager.requestAudioFocus(focusRequest) ==
+                            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                    } catch (_: Throwable) {
+                        false
+                    }
+                }
+                applyAlarmFloor()
+            }
             return (playTrackOverride ?: ::playOnce)(track)
         } finally {
             // Back-to-back plays extend the window so media stays ducked
-            // across the burst rather than restoring + re-ducking between cues.
+            // across the burst rather than restoring + re-ducking between cues,
+            // and a shorter cue inside a longer one never shortens it
+            // (`aShortCueDuringALongerOneHoldsTheDuckAndLiftUntilTheLongerEnds`).
             synchronized(cueLock) {
-                cueEndsAtMs = android.os.SystemClock.uptimeMillis() + durationMs + ABANDON_SAFETY_MARGIN_MS
+                cueStarting = false
+                val endsAtMs = android.os.SystemClock.uptimeMillis() + durationMs + ABANDON_SAFETY_MARGIN_MS
+                cueEndsAtMs = maxOf(cueEndsAtMs, endsAtMs)
                 abandonHandler.postAtTime(abandonRunnable, cueEndsAtMs)
             }
         }

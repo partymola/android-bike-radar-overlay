@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * cue's audio focus, alarm-floor lift and [AlertBeeper.cueSounding] alone,
  * whether it is still queued, already dequeued or part-way through its body;
  * a later cue that starts while it runs waits for it and then takes focus and
- * the lift afresh.
+ * the lift afresh. A burst ends when its last-ending cue does.
  *
  * The playback executor and the main looper are separate threads on a phone.
  * Tests where the cue must wait for the timer run the beeper on a real
@@ -266,6 +266,56 @@ class AlertBeeperEarlierTimerTest {
     }
 
     @Test
+    fun aShortCueDuringALongerOneHoldsTheDuckAndLiftUntilTheLongerEnds() {
+        val slot = mutableListOf<Int?>()
+        val beeper = AlertBeeper(
+            audioManager = audio,
+            executor = { it.run() },
+            playTrackOverride = { true },
+            saveAlarmFloor = { slot += it },
+        )
+        // The urgent's timer is due at 430 + 50 ms; a one-beep cue at 100 ms
+        // would end at 230 ms on its own.
+        beeper.playUrgent()
+        main.idleFor(Duration.ofMillis(100))
+        beeper.play(1)
+        main.idleFor(Duration.ofMillis(379))
+        assertEquals(listOf("request"), focus.focusEvents)
+        assertEquals(7, alarm)
+        assertTrue(beeper.cueSounding.value)
+        main.idleFor(Duration.ofMillis(1))
+        assertEquals(listOf("request", "abandon"), focus.focusEvents)
+        assertEquals(1, alarm)
+        assertFalse(beeper.cueSounding.value)
+        main.idleFor(Duration.ofSeconds(1))
+        assertEquals(listOf("request", "abandon"), focus.focusEvents)
+        assertEquals(listOf<Int?>(1, null), slot)
+        beeper.release()
+    }
+
+    @Test
+    fun aLongerCueAfterAShorterOneStillExtendsTheBurst() {
+        // A control against over-correcting
+        // `aShortCueDuringALongerOneHoldsTheDuckAndLiftUntilTheLongerEnds`: it
+        // passes with the burst's end taken from the latest cue alone, as well
+        // as from the max.
+        val beeper = AlertBeeper(audioManager = audio, executor = { it.run() }, playTrackOverride = { true })
+        // A one-beep cue ends at 130 ms; the urgent at 50 ms ends at 530 ms.
+        beeper.play(1)
+        main.idleFor(Duration.ofMillis(50))
+        beeper.playUrgent()
+        main.idleFor(Duration.ofMillis(479))
+        assertEquals(listOf("request"), focus.focusEvents)
+        assertEquals(7, alarm)
+        assertTrue(beeper.cueSounding.value)
+        main.idleFor(Duration.ofMillis(1))
+        assertEquals(listOf("request", "abandon"), focus.focusEvents)
+        assertEquals(1, alarm)
+        assertFalse(beeper.cueSounding.value)
+        beeper.release()
+    }
+
+    @Test
     fun aCueWhosePlayThrowsStillEndsItsBurst() {
         val beeper = AlertBeeper(
             audioManager = audio,
@@ -274,6 +324,24 @@ class AlertBeeperEarlierTimerTest {
         )
         beeper.play(1)
         assertEquals(7, alarm)
+        main.idleFor(Duration.ofSeconds(1))
+        assertEquals(listOf("request", "abandon"), focus.focusEvents)
+        assertEquals(1, alarm)
+        assertFalse(beeper.cueSounding.value)
+        beeper.release()
+    }
+
+    @Test
+    fun aCueWhoseStartThrowsStillEndsItsBurst() {
+        // The walk-away check is the first thing the floor lift does, outside
+        // its own catch, so a throw there leaves the cue's start part-way done.
+        val beeper = AlertBeeper(
+            audioManager = audio,
+            executor = { it.run() },
+            playTrackOverride = { true },
+            walkAwayOverrideActive = { throw IllegalStateException("override unreadable") },
+        )
+        beeper.play(1)
         main.idleFor(Duration.ofSeconds(1))
         assertEquals(listOf("request", "abandon"), focus.focusEvents)
         assertEquals(1, alarm)

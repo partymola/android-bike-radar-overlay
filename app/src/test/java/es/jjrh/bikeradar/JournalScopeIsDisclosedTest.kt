@@ -115,6 +115,7 @@ class JournalScopeIsDisclosedTest {
         Event("radar light \$phase mode=\$mode applied=true", "radar tail light being set", "se ajusta la luz trasera del radar"),
         Event("radar light \$phase mode=\$mode applied=false", "radar tail light being set", "se ajusta la luz trasera del radar"),
         Event("radar light \$phase mode=\$mode ended with the link", "radar tail light being set", "se ajusta la luz trasera del radar"),
+        Event("radar light \$phase mode=\$mode failed before the link ended", "radar tail light being set", "se ajusta la luz trasera del radar"),
         Event("radar light left alone: a slot change holds it", "radar tail light being set", "se ajusta la luz trasera del radar"),
         Event("radar light slot changed on the radar: auto-mode holds off", "radar tail light being set", "se ajusta la luz trasera del radar"),
         Event("radar light set for another app mode=\$mode applied=\$ok", "radar tail light being set", "se ajusta la luz trasera del radar"),

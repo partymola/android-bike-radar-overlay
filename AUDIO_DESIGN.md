@@ -90,12 +90,18 @@ confused with each other or with the awareness beeps:
 ### 3. End of trip
 
 Anything that can wait. The in-ride audio channel is reserved for live threats,
-so non-safety equipment state is never spoken while riding; it surfaces on an
-attention surface after the ride instead. The canonical example is the radar's
-battery being dangerously low **when the radar did not actually die during the
-ride**: the rider can charge it tonight, so a mid-ride beep would only add noise
-to the awareness channel and train the rider to tune the channel out. (If the
-radar actually dies, that is a bucket-2 event and the drop cue covers it.)
+so non-safety equipment state is not spoken while riding; it surfaces on an
+attention surface after the ride instead. The deliberate exceptions are the two
+light-failure tones, which sound mid-ride so the rider can check the light at
+the next stop. The tail light's waits for a cue, a pause or a call to end
+(`threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
+`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`, and below); the front
+camera's plays as soon as its switch fails and waits for nothing. The canonical
+example is the radar's battery being dangerously low **when the radar did not
+actually die during the ride**: the rider can charge it tonight, so a mid-ride
+beep would only add noise to the awareness channel and train the rider to tune
+the channel out. (If the radar actually dies, that is a bucket-2 event and the
+drop cue covers it.)
 
 ## Encoding rules
 
@@ -237,14 +243,20 @@ Four states quiet or reshape the audio, by design:
   a call routes the output, and preserving call audio integrity outranks a beep
   the rider would struggle to act on mid-call anyway.
 
-**The tail-light failure tone waits for all of the above.** When the radar
-refuses a tail-light mode, or leaves all three tries unanswered, on a link that
-is still streaming, the app posts a notification at once. It also plays a
-short tone on the notification stream. That tone is not one of `AlertBeeper`'s
-cues, so the states above do not apply to it on their own. It waits until no
-cue is sounding, no pause holds and no call is on, then sounds once. If the
-link ends first, it never sounds. The wait has no length of its own: it ends
-when the cue's burst, the pause or the call ends
+**The tail-light failure tone waits for cues, a pause and a call.** When the
+radar refuses a tail-light mode, or leaves all three tries unanswered, the app
+waits for the radar's next frame on a link that is still up. Then it posts a
+notification and plays a short tone on the notification stream. The
+notification is posted marked silent, so the tone is meant to be its only
+sound. The test pins that the posted notification carries the support
+library's silent marking
+(`ServiceNotificationsTest.theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot`);
+no test here can check that a given phone then keeps it quiet. The tone is not
+one of `AlertBeeper`'s cues, so the states above do not apply to it on their
+own. It waits until no cue is sounding, no pause holds and no call is on, then
+starts once; a cue starting during the tone is not waited for. If the link
+ends first, it never sounds. The wait has no length of its own: it ends when
+the cue's burst, the pause or the call ends
 (`RadarLinkControllerHarnessTest.theFailToneWaitsForACueToEnd`,
 `theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
 `theFailToneWaitsForACallToEnd`, `aHeldFailToneNeverSoundsOnceTheLinkEnds`).

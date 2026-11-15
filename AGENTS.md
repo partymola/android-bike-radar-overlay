@@ -498,59 +498,91 @@ must not be changed about it. Four that bite in ordinary work:
 - **The decode loop starts straight after the handshake, and the
   connect-time writes run beside it in one setup job per connection.** The
   job sends the 2f14 subscribe, then the debug 2f12 one, then the tail-light
-  set. Each try of the set can run to the 5 s op timeout. An unanswered write
-  holds back no frame, so no alert waits for it
+  set. Each try of the set can run to the 5 s op timeout. No frame waits for
+  an unanswered write, so no alert does
   (`RadarLinkControllerHarnessTest.aSlowTailLightSetDoesNotHoldTheRadarFrames`,
   `anUnansweredLightStateSubscribeDoesNotHoldTheRadarFrames`,
   `theFirstFrameMarksTheRadarUpDuringASlowLightSet`,
   `theLightStateSubscribeGoesOutBeforeTheFirstLightWrite`,
-  `theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet`). The
-  legacy stream's battery read runs beside its loop the same way
-  (`aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames`).
-  - **Nothing else is written to the radar before the subscribes.** The
-    granted-app handler and the debug probe's handles are installed after
-    them, and not at all once the link has ended
-    (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`,
-    `aLinkLostDuringTheSubscribesLeavesNoHandlerForAGrantedApp`).
+  `theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet`,
+  `theDebugProbeAloneSubscribesBothSettingsCharacteristics`). The legacy
+  stream's battery read runs beside its loop the same way
+  (`aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames`), and a legacy
+  link's jobs end with it (`aLegacyLinkThatEndedLeavesNoWatchdogBehind`).
+  - **Neither a granted app nor the debug probe can write to the radar
+    before the subscribes.** Their handles are installed after them
+    (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`). The granted-app
+    handler is not installed at all once the link has ended
+    (`aLinkLostDuringTheSubscribesLeavesNoHandlerForAGrantedApp`); no test
+    covers the debug probe's handles in that case.
   - **The data-flow watchdog counts silence only once the setup job has
-    ended**, from when it ended. Some radar may hold its stream while a write
+    ended**, from when it ended. A radar may hold its stream while a write
     goes unanswered, and that must not cost it the link. A radar that never
-    streams is torn down at the first tick past the stall window after the
-    setup ends (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
-    `aStreamThatStopsAfterASlowSetupIsStillTornDown`). The setup job
-    adds no duration of its own: the wait is its writes' op timeouts and
-    retry gaps.
+    streams, or stops during the setup, is torn down at the first tick past
+    the stall window after the setup ends
+    (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
+    `aStreamThatStopsDuringASlowSetupIsTornDownAStallWindowAfterIt`,
+    `aStreamThatStopsAfterASlowSetupIsStillTornDown`). The setup job adds no
+    duration of its own: the wait is its writes' op timeouts and retry gaps.
   - **A failed set is reported only after the radar streams again.** After a
     last try that went unanswered or was refused, the journal line
-    `applied=false`, the notification and the tone wait for a V2 frame. They
-    are dropped if the link ends first or the app ended it
+    `applied=false`, the notification and the tone wait for a V2 frame;
+    frames from before the failure do not count. Nothing is reported if the
+    link ends first or the app ends it
     (`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`,
     `threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
-    `aFrameAfterTheAppEndedTheLinkReportsNoFailure`). The notification posts
-    then, with its own text about the light rather than the connection,
-    shown in full
-    (`ServiceNotificationsTest.theRadarLightFailureSaysToCheckTheLightAndShowsInFull`);
-    the tone waits until no cue sounds, no pause holds and no call is
-    on (`AUDIO_DESIGN.md`, "When the audio steps back";
-    `AlertBeeper.cueSounding`). A set that a drop, a
-    watchdog teardown, a pin move or a forced reconnect interrupts journals
-    `ended with the link` instead
-    (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
-    `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`). A failed
-    dusk/dawn switch is reported like the connect-time set
+    `framesBeforeTheFailureDoNotReportIt`,
+    `aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
+    `aFrameConsumedDuringTheDropReportsNoFailure`). The notification then
+    posts marked silent, with its own text about the light rather than the
+    connection, expanding to both sentences
+    (`ServiceNotificationsTest.theRadarLightFailureSaysToCheckTheLightAndShowsInFull`,
+    `theRadarLightFailurePostsSilentlyAndTheDashcamsDoesNot`); the tone
+    waits until no cue sounds, no pause holds and no call is on
+    (`AUDIO_DESIGN.md`, "When the audio steps back"; `AlertBeeper.cueSounding`).
+    A failed dusk/dawn switch is reported like the connect-time set
     (`aFlipTheRadarRefusesIsReportedToo`).
-  - **A light mode a granted app sets on this connection stands.** The set
-    makes no further try once the app has asked
-    (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`). A dusk/dawn flip
-    still runs at its time.
-  - A press on the radar's light button stops the set before its next try
-    and leaves no light line (`aPressBeforeTheFirstTryStopsTheSet`,
+  - **Two journal lines mark a set that the link's end stopped.**
+    `ended with the link` marks one the end cut short mid-try or whose last
+    try it failed, for example through a drop or a pin move
+    (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
+    `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`,
+    `aLastTryTheDropFailsEndsWithTheLink`). `failed before the link ended`
+    marks one whose tries had all failed and whose link then ended before
+    the next frame, for example through a drop or a watchdog teardown
+    (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
+    `aFrameConsumedDuringTheDropReportsNoFailure`). A watchdog teardown
+    cannot cut short the connect-time set, since the watchdog counts only
+    after it (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`); it can
+    end a report's wait or a dusk/dawn switch.
+  - **The connect-time set does not overwrite a granted app's choice.** It
+    makes no further try once the app has asked, even if the app's own write
+    then fails, and nothing is reported then
+    (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`,
+    `aGrantedAppsUnansweredWriteStillStopsTheConnectTimeSet`). A dusk/dawn
+    switch still overwrites it, deliberately, once the setup job has ended
+    (`aDuskSwitchStillWritesAfterAGrantedAppSetTheLight`).
+  - A press on the radar's light button stops the set or a dusk/dawn switch
+    before its next try. When the try in flight then fails, the press leaves
+    no light line (`aPressBeforeTheFirstTryStopsTheSet`,
     `aPressDuringTheLightRetriesEndsThem`,
     `aPressDuringTheSecondTryEndsTheRetries`,
-    `aPressDuringTheLastTryReportsNoFailure`). A dusk/dawn flip waits for
-    the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`). The light
-    baseline and the override deadband are reset before the job and the
-    loop start (`aLightStateWaitingAtTheLoopsStartIsTheNewLinksBaseline`).
+    `aPressDuringTheLastTryReportsNoFailure`,
+    `aPressDuringADuskSwitchLeavesNoLightLine`); a try sent before the press
+    that the radar then ACKs still journals `applied=true`, which no test
+    covers. A press after a failed try of the set or of a switch, or an app's
+    request after a failed connect-time set, before the frame that would
+    report it, leaves no report (`aPressAfterAFailedSetReportsNothing`,
+    `aPressAfterAFailedDuskSwitchReportsNothing`,
+    `aGrantedAppsRequestAfterAFailedSetReportsNothing`). An app's request,
+    whether made before a switch or after its failed try, never stops that
+    switch's failure report
+    (`aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
+    `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`). A dusk/dawn
+    switch waits for the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`).
+    The light baseline and the override deadband are reset before the job
+    and the loop start
+    (`aLightStateWaitingAtTheLoopsStartIsTheNewLinksBaseline`).
     In the journal the light line can follow "radar V2 stream live".
 - **The dashcam walk-away alarm hears the camera only through a battery read
   it answered or its established light link, never through

@@ -32,8 +32,9 @@ import java.util.Locale
  * It also builds the feature notifications whose channels it owns: the
  * walk-away alarm ([postWalkAway]), the bond-lost alert ([postBondLost]), and
  * the light-switch-failed alerts ([postLightFail] / [postRadarLightFail]). The
- * service still drives the accompanying alarm tone / NACK beep; this class owns
- * every channel and builds every notification the service posts.
+ * service drives the walk-away alarm tone, and the two link controllers drive
+ * the light-failure tones; this class owns every channel and builds every
+ * notification they post.
  */
 internal class ServiceNotifications(
     private val context: Context,
@@ -333,7 +334,7 @@ internal class ServiceNotifications(
 
     /** Front camera/dashcam light-mode-switch-failed alert: the BLE write to set
      *  the mode was not ACKed. [modeName] is the localized failed-mode label.
-     *  The NACK beep is played separately by the service. */
+     *  The NACK beep is played separately by the camera's link controller. */
     fun postLightFail(modeName: String) = nm.notify(
         NOTIF_LIGHT_FAIL_ID,
         lightFail(R.string.svc_main_dashcam_light_title, context.getString(R.string.svc_main_light_fail_text, modeName)).build(),

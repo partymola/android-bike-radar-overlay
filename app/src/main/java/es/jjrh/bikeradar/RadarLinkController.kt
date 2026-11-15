@@ -711,11 +711,6 @@ internal class RadarLinkController(
 
         val queueJob = scope.launch { queue.run() }
 
-        // Radar tail-light dusk/dawn flip jobs, which a press on the radar's
-        // light button cancels (scheduled post-handshake when auto-mode is on).
-        var radarSunsetJob: Job? = null
-        var radarSunriseJob: Job? = null
-
         return try {
             val ok = servicesReady.await()
             if (!ok) {
@@ -845,10 +840,9 @@ internal class RadarLinkController(
             }
 
             // The control-service subscribes the setup job below sends, after
-            // the enabling sequence so they cannot interfere with it: the
-            // mode-state notify (6a4e2f14) when the light auto-mode or the debug
-            // probe needs it, 6a4e2f12 for the probe only. Never touch 6a4e3203
-            // (V1 char) here.
+            // the enabling sequence has finished: the mode-state notify
+            // (6a4e2f14) when the light auto-mode or the debug probe needs it,
+            // 6a4e2f12 for the probe only. Never touch 6a4e3203 (V1 char) here.
             val controlSvc = gatt.getService(Uuids.SVC_CONTROL)
             val ch2f14 = controlSvc?.getCharacteristic(Uuids.SETTINGS_14)
             val probeOn = prefs.radarSettingsProbeEnabled
@@ -880,11 +874,19 @@ internal class RadarLinkController(
 
             fun modeFor(phase: LightAutoModeDecider.Phase) = if (phase == LightAutoModeDecider.Phase.NIGHT) prefs.radarLightNightMode else prefs.radarLightDayMode
 
+            // Only a link end cancels a light job. The first line is for a set
+            // it cuts short mid-try, or whose last try it fails, which
+            // `setLight` reads after the try; the second for one whose tries had
+            // all failed before it (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
+            // `aLastTryTheDropFailsEndsWithTheLink`,
+            // `aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`).
             fun endedWithTheLink(phase: LightAutoModeDecider.Phase, mode: RadarLightMode) = journal("radar light $phase mode=$mode ended with the link")
 
-            // Null when the set landed or [stop] ended it, else the frame count
-            // at its failure. A press stops the retries
-            // (`aPressDuringTheSecondTryEndsTheRetries`,
+            fun failedBeforeTheLinkEnded(phase: LightAutoModeDecider.Phase, mode: RadarLightMode) = journal("radar light $phase mode=$mode failed before the link ended")
+
+            // Null when the set landed, [stop] ended it or the link's end failed
+            // its last try, else the frame count at its failure. A press stops
+            // the retries (`aPressDuringTheSecondTryEndsTheRetries`,
             // `aPressDuringTheLastTryReportsNoFailure`).
             suspend fun setLight(
                 controller: RadarLightController,
@@ -898,9 +900,15 @@ internal class RadarLinkController(
                     endedWithTheLink(phase, mode)
                     throw e
                 }
-                Log.i(TAG, "radar light $phase mode=$mode applied=$ok")
+                val stopped = !ok && stop()
+                Log.i(TAG, "radar light $phase mode=$mode " + if (stopped) "stopped" else "applied=$ok")
                 if (ok) journal("radar light $phase mode=$mode applied=true")
-                return if (ok || stop()) null else v2Frames.value
+                if (ok || stopped) return null
+                if (synchronized(linkLock) { linkDown }) {
+                    endedWithTheLink(phase, mode)
+                    return null
+                }
+                return v2Frames.value
             }
 
             // A failed set is reported only once the radar has streamed since
@@ -908,18 +916,26 @@ internal class RadarLinkController(
             // ended, so a write the link's end failed is not blamed on the light
             // (`aSilentRadarIsTornDownAStallWindowAfterTheSetupEnds`,
             // `aFrameAfterTheAppEndedTheLinkReportsNoFailure`,
-            // `anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`).
-            suspend fun reportFailedSet(phase: LightAutoModeDecider.Phase, mode: RadarLightMode, framesAtFailure: Int) {
+            // `anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`), and only
+            // if [stop] has not come true since (`aPressAfterAFailedSetReportsNothing`,
+            // `aGrantedAppsRequestAfterAFailedSetReportsNothing`).
+            suspend fun reportFailedSet(
+                phase: LightAutoModeDecider.Phase,
+                mode: RadarLightMode,
+                framesAtFailure: Int,
+                stop: () -> Boolean,
+            ) {
                 try {
                     v2Frames.first { it > framesAtFailure }
                 } catch (e: CancellationException) {
-                    endedWithTheLink(phase, mode)
+                    failedBeforeTheLinkEnded(phase, mode)
                     throw e
                 }
                 if (synchronized(linkLock) { linkDown } || receipts.endedByApp) {
-                    endedWithTheLink(phase, mode)
+                    failedBeforeTheLinkEnded(phase, mode)
                     return
                 }
+                if (stop()) return
                 journal("radar light $phase mode=$mode applied=false")
                 postRadarLightModeFailNotification(mode)
                 awaitQuietForFailTone()
@@ -963,8 +979,10 @@ internal class RadarLinkController(
             // after it (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`).
             val appSetLight = java.util.concurrent.atomic.AtomicBoolean(false)
             // Undispatched, as is the watchdog, so with nothing to write the
-            // watchdog counts from before the loop takes its first frame
-            // (`aWatchdogTeardownNamesTheStepTheLoopIsHeldIn`).
+            // watchdog counts from before the loop takes its first frame. Only
+            // the real-thread `aWatchdogTeardownNamesTheStepTheLoopIsHeldIn`
+            // depends on the order, and it fails without it only when the race
+            // goes the other way.
             val setup = jobs.launch(start = CoroutineStart.UNDISPATCHED) {
                 if ((probeOn || autoMode) && ch2f14 != null) queue.writeCccd(gatt, ch2f14)
                 if (probe12 != null) queue.writeCccd(gatt, probe12)
@@ -977,13 +995,16 @@ internal class RadarLinkController(
                     if (!linkDown) {
                         // A granted consumer sets the tail light independently of
                         // the rider's own auto-mode preference: the two are
-                        // different askers. Reset in closeOnce, so the handler
-                        // never outlives this GATT. Writes go through the same
-                        // queue as ours, so a consumer's request cannot
-                        // interleave with a mode set already in flight.
+                        // different askers, and a rider running the light by
+                        // hand has not thereby refused an app they went on to
+                        // grant. Reset in closeOnce, so the handler never
+                        // outlives this GATT. Writes go through the same queue
+                        // as ours, so a consumer's request cannot interleave
+                        // with a mode set already in flight.
                         if (light != null) {
                             // Only a changed answer is logged: a consumer may set
-                            // the light on every vehicle.
+                            // the light on every vehicle, and the repeats would
+                            // push the rest out of the journal.
                             val lastGrantedWrite = java.util.concurrent.atomic.AtomicReference<Pair<RadarLightMode, Boolean>?>()
                             RadarControlBridge.install { mode ->
                                 appSetLight.set(true)
@@ -1002,30 +1023,40 @@ internal class RadarLinkController(
                 }
                 if (autoLight != null && initial != null) {
                     val mode = modeFor(initial)
-                    val failedAt = setLight(autoLight, initial, mode) { radarLightUserOverride || appSetLight.get() }
+                    val stop = { radarLightUserOverride || appSetLight.get() }
+                    val failedAt = setLight(autoLight, initial, mode, stop)
                     // In a job of its own, so the setup ends with its writes.
                     // Undispatched, so a teardown already under way still
                     // reaches the wait and journals the end.
                     if (failedAt != null) {
-                        jobs.launch(start = CoroutineStart.UNDISPATCHED) { reportFailedSet(initial, mode, failedAt) }
+                        jobs.launch(start = CoroutineStart.UNDISPATCHED) { reportFailedSet(initial, mode, failedAt, stop) }
                     }
                 }
             }
             val flipAt = plan?.flipAtMs
             val flipTo = plan?.flipTo
             if (autoLight != null && flipAt != null && flipTo != null) {
-                val job = jobs.launch {
+                // A press does not cancel it; the override stops it
+                // (`aPressDuringADuskSwitchLeavesNoLightLine`).
+                jobs.launch {
                     kotlinx.coroutines.delay(flipAt - planAtMs)
                     // After the initial set, which may still be retrying
                     // (`aFlipDueDuringTheInitialSetComesAfterIt`).
                     setup.join()
                     if (linkState.snapshot().radarGattActive && !radarLightUserOverride) {
                         val mode = modeFor(flipTo)
-                        val failedAt = setLight(autoLight, flipTo, mode) { radarLightUserOverride } ?: return@launch
-                        reportFailedSet(flipTo, mode, failedAt)
+                        // Only a press stops the switch and its report. An
+                        // app's request stops neither: the switch still
+                        // overwrites the app's choice, so its failure is still
+                        // the rider's to hear
+                        // (`aDuskSwitchStillWritesAfterAGrantedAppSetTheLight`,
+                        // `aGrantedAppsRequestBeforeADuskSwitchLeavesItsFailureReported`,
+                        // `aGrantedAppsRequestAfterAFailedDuskSwitchLeavesItReported`).
+                        val stop = { radarLightUserOverride }
+                        val failedAt = setLight(autoLight, flipTo, mode, stop) ?: return@launch
+                        reportFailedSet(flipTo, mode, failedAt, stop)
                     }
                 }
-                if (flipTo == LightAutoModeDecider.Phase.NIGHT) radarSunsetJob = job else radarSunriseJob = job
             }
 
             // Data-flow watchdog: if no V2 frame is consumed for
@@ -1047,9 +1078,11 @@ internal class RadarLinkController(
                     if (V2WatchdogDecider.isStale(now, last, V2_FRAME_STALL_MS)) {
                         val ageMs = now - last
                         Log.w(TAG, "V2 stream silent for ${ageMs}ms; tearing down GATT")
-                        // Both clocks: the watchdog's is when a frame was
-                        // consumed, so a receipt more recent than it means the
-                        // decode loop was held up, not the radar silent; the
+                        // Both clocks. The watchdog's counts from the later of
+                        // the last frame the loop consumed and the setup job's
+                        // end; the receipt clock from the last frame the radar
+                        // sent. A receipt more recent than the watchdog's means
+                        // the loop was held up, not the radar silent, and the
                         // step says where.
                         val received = receipts.receivedAgo(now)
                         journal("radar V2 stream silent ${ageMs}ms, last received $received, loop=${step.word}; tearing down")
@@ -1095,8 +1128,6 @@ internal class RadarLinkController(
                                         RadarLightOverrideDecider.isOverride(radarLightBaselineKey, key)
                                     ) {
                                         radarLightUserOverride = true
-                                        radarSunsetJob?.cancel()
-                                        radarSunriseJob?.cancel()
                                         captureLog.clog("# radar_light_override (2f14 slot change)")
                                         journal("radar light slot changed on the radar: auto-mode holds off")
                                     }
@@ -1122,10 +1153,9 @@ internal class RadarLinkController(
             false
         } finally {
             // First, so the setup job installs nothing the resets below would
-            // miss.
+            // miss. No test interleaves there.
             synchronized(linkLock) { linkDown = true }
-            // Not children of this coroutine, so a teardown never waits on
-            // them; cancelled, none acts on the next link
+            // None acts on the next link
             // (`aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`).
             linkJobs?.cancel()
             radarLightOffSinceMs = clock()
@@ -1161,9 +1191,8 @@ internal class RadarLinkController(
             val pct = queue.read(gatt, ch)?.firstOrNull()?.toInt()?.and(0xFF) ?: return
             if (publishRadarBattery(gatt.device?.address, name, pct)) captureLog.clog("# legacy battery $pct%")
             // Any answer, accepted or not, so one unreadable reading does not
-            // cost the notifies (`aLegacyRadarWhoseFirstBatteryReadingIsRefusedStillGetsBatteryNotifies`).
-            // A read with no answer skips it: a radar that left the read
-            // unanswered is sent no second op
+            // cost the notifies (`aLegacyRadarWhoseFirstBatteryReadingIsRefusedStillGetsBatteryNotifies`),
+            // and none after a read with no answer
             // (`aLegacyBatteryReadWithNoAnswerSubscribesNothing`).
             queue.writeCccd(gatt, ch)
         } catch (e: CancellationException) {
@@ -1421,12 +1450,11 @@ internal class RadarLinkController(
         return true
     }
 
-    /** The tail-light failure notification, posted at once for a set whose
-     *  last try went unanswered or was refused, that nothing stopped, on a link
-     *  still up that the radar streamed on after (`reportFailedSet`); the tone
-     *  of [playRadarLightFailTone] follows once [awaitQuietForFailTone] lets it. The radar cannot be read back, so a write
-     *  it ACKs and the light then ignores goes unseen. Its own notification
-     *  id, so it and the dashcam's never replace each other. */
+    /** The tail-light failure notification, posted silently as soon as
+     *  `reportFailedSet` decides to report; its sound is the tone of
+     *  [playRadarLightFailTone], which [awaitQuietForFailTone] may hold. The
+     *  radar cannot be read back, so a write it ACKs and the light then
+     *  ignores goes unseen. */
     private fun postRadarLightModeFailNotification(mode: RadarLightMode) {
         val modeName = context.getString(
             when (mode) {
@@ -1441,11 +1469,12 @@ internal class RadarLinkController(
         notifications.postRadarLightFail(modeName)
     }
 
-    /** Holds the tail-light failure tone until no cue of the ride is sounding,
-     *  no pause holds and no call is on, so it never sounds over a cue or
-     *  through a pause or a call. A pause ends at its own deadline or on a
-     *  resume (`theFailToneWaitsForACueToEnd`, `theFailToneWaitsForAResume`,
-     *  `theFailToneWaitsForAPauseToRunOut`, `theFailToneWaitsForACallToEnd`). */
+    /** Returns once no cue of the ride is sounding, no pause holds and no call
+     *  is on, so the tail-light failure tone never starts while one does; a
+     *  cue starting during the tone is not waited for. A pause ends at its own
+     *  deadline or on a resume (`theFailToneWaitsForACueToEnd`,
+     *  `theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
+     *  `theFailToneWaitsForACallToEnd`). */
     private suspend fun awaitQuietForFailTone() {
         val paused = channelFlow {
             prefs.flow.collectLatest { s ->
@@ -1471,7 +1500,8 @@ internal class RadarLinkController(
             kotlinx.coroutines.delay(600)
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "tail-light failure tone could not play: $e")
         } finally {
             tg?.release()
         }

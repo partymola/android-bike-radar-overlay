@@ -200,7 +200,7 @@ class ServiceNotificationsTest {
         val n = notifications()
         n.postRadarLightFail("Solid", silent = false)
         n.postLightFail("Day Flash")
-        val radar = lightFail("Radar light")
+        val radar = lightFail("Tail light")
         val expected = "Couldn't switch the tail light to Solid. Check it while you're stopped."
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
@@ -219,11 +219,11 @@ class ServiceNotificationsTest {
         val n = notifications()
         fun posted(title: String) = nm.activeNotifications.single { title(it) == title }.notification
         n.postRadarLightFail("Solid", silent = true)
-        val silent = posted("Radar light")
+        val silent = posted("Tail light")
         assertEquals("silent", silent.group)
         assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.groupAlertBehavior)
         n.postRadarLightFail("Solid", silent = false)
-        val alerting = posted("Radar light")
+        val alerting = posted("Tail light")
         assertNull(alerting.group)
         assertEquals(Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
         assertEquals(0, alerting.flags and Notification.FLAG_ONLY_ALERT_ONCE)
@@ -246,10 +246,40 @@ class ServiceNotificationsTest {
     @Config(qualifiers = "+es")
     fun theRadarLightFailureSaysToCheckTheLightInSpanishToo() {
         notifications().postRadarLightFail("Fija", silent = false)
-        val radar = lightFail("Luz del radar")
+        val radar = lightFail("Luz trasera")
         val expected = "No se ha podido cambiar la luz trasera a «Fija». Échale un vistazo con la bici parada."
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
+    }
+
+    /** An upgrader's light-failure channel, created under earlier words, after
+     *  the service has started. The id is what keeps the rider's settings for
+     *  the channel, so it is spelled out here rather than read off the code. */
+    private fun lightFailChannelAfterAnUpgrade(): android.app.NotificationChannel {
+        nm.createNotificationChannel(
+            android.app.NotificationChannel("bike_radar_light_fail", "old", NotificationManager.IMPORTANCE_HIGH).apply { description = "old" },
+        )
+        val n = notifications()
+        n.ensureChannels()
+        n.postRadarLightFail("Solid", silent = false)
+        assertEquals("bike_radar_light_fail", nm.activeNotifications.single().notification.channelId)
+        return nm.getNotificationChannel("bike_radar_light_fail")
+    }
+
+    @Test fun theLightFailChannelTakesTheCurrentNameInEachLocale() {
+        val ch = lightFailChannelAfterAnUpgrade()
+        assertEquals("Light auto-mode", ch.name.toString())
+        assertEquals("Tells you when the tail light or dashcam light couldn't be switched to its day or night mode.", ch.description)
+        assertEquals("Tail light", title(nm.activeNotifications.single()))
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun theLightFailChannelTakesTheCurrentNameInSpanishToo() {
+        val ch = lightFailChannelAfterAnUpgrade()
+        assertEquals("Modo automático de luces", ch.name.toString())
+        assertEquals("Avisa si no se ha podido cambiar la luz trasera o la de la cámara a su modo diurno o nocturno.", ch.description)
+        assertEquals("Luz trasera", title(nm.activeNotifications.single()))
     }
 
     private fun blankSnapshot() = RideStatsSnapshot(

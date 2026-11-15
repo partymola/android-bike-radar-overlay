@@ -1200,7 +1200,7 @@ class RadarLinkControllerHarnessTest {
     class RecordingNotifications : ShadowNotificationManager() {
         @Implementation
         override fun notify(tag: String?, id: Int, notification: android.app.Notification) {
-            if (notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light") {
+            if (notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Tail light") {
                 val kind = if (notification.group == "silent") "silent" else "alerting"
                 val tones = ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }
                 posts += "$kind after $tones tones"
@@ -1223,7 +1223,7 @@ class RadarLinkControllerHarnessTest {
     private fun radarLightFail(): android.app.Notification {
         val nm = app.getSystemService(android.app.NotificationManager::class.java)
         return shadowOf(nm).allNotifications.single {
-            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light"
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Tail light"
         }
     }
 
@@ -1669,7 +1669,7 @@ class RadarLinkControllerHarnessTest {
     private fun radarLightFailNotified(): Boolean {
         val nm = app.getSystemService(android.app.NotificationManager::class.java)
         return shadowOf(nm).allNotifications.any {
-            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light"
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Tail light"
         }
     }
 

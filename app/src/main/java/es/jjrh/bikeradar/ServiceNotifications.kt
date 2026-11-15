@@ -61,19 +61,22 @@ internal class ServiceNotifications(
                 nm.deleteNotificationChannel(id)
             }
         }
-        if (nm.getNotificationChannel(LIGHT_FAIL_CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    LIGHT_FAIL_CHANNEL_ID,
-                    context.getString(R.string.svc_main_light_fail_channel_name),
-                    NotificationManager.IMPORTANCE_HIGH,
-                ).apply {
-                    description = context.getString(R.string.svc_main_light_fail_channel_desc)
-                    enableVibration(true)
-                    vibrationPattern = LIGHT_FAIL_VIBRATE_PATTERN
-                },
-            )
-        }
+        // Created on every call, like the walk-away channel below, so an
+        // upgrader sees the current name and description
+        // (`theLightFailChannelTakesTheCurrentNameInEachLocale`); that the
+        // phone keeps the rider's importance and sound for an existing id is
+        // the platform's documented behaviour, which no test here drives.
+        nm.createNotificationChannel(
+            NotificationChannel(
+                LIGHT_FAIL_CHANNEL_ID,
+                context.getString(R.string.svc_main_light_fail_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = context.getString(R.string.svc_main_light_fail_channel_desc)
+                enableVibration(true)
+                vibrationPattern = LIGHT_FAIL_VIBRATE_PATTERN
+            },
+        )
 
         // Forgot-to-lock reminder. v2 migration: only the channel VIBRATION is
         // disabled, so the FIRE path can drive a single DND-piercing USAGE_ALARM

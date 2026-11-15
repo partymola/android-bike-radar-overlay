@@ -285,16 +285,17 @@ class AlertBeeper(
             .setOnAudioFocusChangeListener { }
             .build()
 
-    @Volatile private var hasFocus: Boolean = false
-
     private val cueSoundingState = MutableStateFlow(false)
 
-    // When the latest burst's abandon timer is due, on the Handler's clock.
-    // The timer clears [cueSounding] only once that time has come, so a timer
-    // from an earlier burst already running when a cue starts leaves it set
-    // (`anEarlierBurstsAbandonTimerDoesNotEndALaterCue`).
+    // Guards the focus, the floor lift and the burst's end. [cueEndsAtMs] is
+    // when the latest burst's abandon timer is due, on the Handler's clock,
+    // and Long.MAX_VALUE from a cue's start until its play returns. The timer
+    // does nothing before that time, so one from an earlier burst that runs
+    // during a later cue leaves its focus, lift and [cueSounding] alone, and
+    // a cue that starts while it runs waits for it (`AlertBeeperEarlierTimerTest`).
     private val cueLock = Any()
     private var cueEndsAtMs = 0L
+    private var hasFocus: Boolean = false
 
     /** True from a cue's play until its burst's abandon timer fires: the
      *  cue's own length plus the tail [playWithFocus] arms
@@ -307,25 +308,23 @@ class AlertBeeper(
 
     /** The rider's own STREAM_ALARM index, captured once when [applyAlarmFloor]
      *  first lifts the alarm stream for a cue burst; null when no lift is in
-     *  effect. Restored when the abandon timer fires (end of the burst) and in
-     *  [release]. @Volatile because it is written on the playback executor
-     *  ([applyAlarmFloor]) and read/cleared on the main looper (the abandon
-     *  runnable) - the same cross-thread shape as [hasFocus]. */
+     *  effect. Restored at the burst's end (see [cueEndsAtMs]) and in
+     *  [release]. Written only under [cueLock]; @Volatile for
+     *  [alarmFloorBaseline], which may be called without the lock. */
     @Volatile private var savedAlarmFloor: Int? = null
 
     private val abandonHandler = Handler(Looper.getMainLooper())
     private val abandonRunnable = Runnable {
-        if (hasFocus) {
-            try {
-                audioManager.abandonAudioFocusRequest(focusRequest)
-            } catch (_: Throwable) {}
-            hasFocus = false
-        }
-        restoreAlarmFloor()
         synchronized(cueLock) {
-            if (!releaseStarted && android.os.SystemClock.uptimeMillis() >= cueEndsAtMs) {
-                cueSoundingState.value = false
+            if (android.os.SystemClock.uptimeMillis() < cueEndsAtMs) return@Runnable
+            if (hasFocus) {
+                try {
+                    audioManager.abandonAudioFocusRequest(focusRequest)
+                } catch (_: Throwable) {}
+                hasFocus = false
             }
+            restoreAlarmFloor()
+            if (!releaseStarted) cueSoundingState.value = false
         }
     }
 
@@ -523,18 +522,20 @@ class AlertBeeper(
 
     fun release() {
         releaseStarted = true
-        abandonHandler.removeCallbacks(abandonRunnable)
-        if (hasFocus) {
-            try {
-                audioManager.abandonAudioFocusRequest(focusRequest)
-            } catch (_: Throwable) {}
-            hasFocus = false
+        synchronized(cueLock) {
+            abandonHandler.removeCallbacks(abandonRunnable)
+            if (hasFocus) {
+                try {
+                    audioManager.abandonAudioFocusRequest(focusRequest)
+                } catch (_: Throwable) {}
+                hasFocus = false
+            }
+            // The abandon timer that would normally restore the alarm floor was
+            // just cancelled; do it here so service destroy never leaves the
+            // rider's alarm slider raised.
+            restoreAlarmFloor()
+            cueSoundingState.value = true
         }
-        // The abandon timer that would normally restore the alarm floor was
-        // just cancelled; do it here so service destroy never leaves the
-        // rider's alarm slider raised.
-        restoreAlarmFloor()
-        cueSoundingState.value = true
         // Teardown rides the playback executor, keeping the track fields
         // executor-confined: a cue task queued behind this one finds
         // `released` set and skips, so the failure-triggered rebuild can never
@@ -579,29 +580,34 @@ class AlertBeeper(
      */
     internal fun suppressForCall(): Boolean = isCallMode(audioManager.mode)
 
+    /** The lock is held for the focus request and the floor lift, never
+     *  across the play. The timer is re-armed in `finally`, so a play that
+     *  throws still ends its burst (`aCueWhosePlayThrowsStillEndsItsBurst`). */
     private fun playWithFocus(track: AudioTrack, durationMs: Int): Boolean {
-        if (!hasFocus) {
-            val granted = try {
-                audioManager.requestAudioFocus(focusRequest) ==
-                    AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            } catch (_: Throwable) {
-                false
-            }
-            hasFocus = granted
-        }
-        applyAlarmFloor()
-        val played = (playTrackOverride ?: ::playOnce)(track)
-        // Re-arm the abandon timer. Back-to-back plays extend the
-        // window so media stays ducked across the burst rather than
-        // restoring + re-ducking between cues.
-        abandonHandler.removeCallbacks(abandonRunnable)
-        val tailMs = (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong()
         synchronized(cueLock) {
-            cueEndsAtMs = android.os.SystemClock.uptimeMillis() + tailMs
+            abandonHandler.removeCallbacks(abandonRunnable)
+            cueEndsAtMs = Long.MAX_VALUE
             cueSoundingState.value = true
+            if (!hasFocus) {
+                hasFocus = try {
+                    audioManager.requestAudioFocus(focusRequest) ==
+                        AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                } catch (_: Throwable) {
+                    false
+                }
+            }
+            applyAlarmFloor()
         }
-        abandonHandler.postDelayed(abandonRunnable, tailMs)
-        return played
+        try {
+            return (playTrackOverride ?: ::playOnce)(track)
+        } finally {
+            // Back-to-back plays extend the window so media stays ducked
+            // across the burst rather than restoring + re-ducking between cues.
+            synchronized(cueLock) {
+                cueEndsAtMs = android.os.SystemClock.uptimeMillis() + durationMs + ABANDON_SAFETY_MARGIN_MS
+                abandonHandler.postAtTime(abandonRunnable, cueEndsAtMs)
+            }
+        }
     }
 
     /**
@@ -617,12 +623,12 @@ class AlertBeeper(
      * plays.
      *
      * Burst-scoped: the pre-lift level is saved ONCE (guarded by
-     * [savedAlarmFloor] being null) and restored when the burst's abandon timer
-     * fires, so a rapid multi-beep burst lifts and restores once, not per
-     * pulse. The saved level is persisted via [saveAlarmFloor] so a process
+     * [savedAlarmFloor] being null) and restored at the burst's end (see
+     * [cueEndsAtMs]), so a rapid multi-beep burst lifts and restores once, not
+     * per pulse. The saved level is persisted via [saveAlarmFloor] so a process
      * death inside the sub-second lift window is repaired at the next start
      * ([repairLeakedAlarmFloor]) - the walk-away alarm's pattern, on a separate
-     * slot. Executor-confined (called from [playWithFocus]).
+     * slot. Called from [playWithFocus] with [cueLock] held.
      *
      * Interlock: while the walk-away alarm holds its own override
      * ([walkAwayOverrideActive]) the floor does nothing - the stream is
@@ -654,12 +660,8 @@ class AlertBeeper(
     }
 
     /** Restore the alarm stream to the rider's pre-lift level. No-op when no
-     *  lift is in effect. Runs on the main looper (abandon timer) and on the
-     *  caller thread ([release]); the null-guard makes the second call inert,
-     *  and [savedAlarmFloor] is @Volatile, so the cross-thread overlap with an
-     *  executor-side [applyAlarmFloor] is benign - worst case a lift is
-     *  restored a burst early and re-applied by the next cue, and a leak is
-     *  still caught by the crash-repair slot.
+     *  lift is in effect. Called with [cueLock] held, by the abandon timer
+     *  and by [release]; the null-guard makes the second call inert.
      *
      *  Interlock: if the walk-away alarm took the stream over mid-lift
      *  (ordering: floor lifts -> walk-away forces max -> this timer fires),

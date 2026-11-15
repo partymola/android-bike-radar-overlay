@@ -751,7 +751,12 @@ must not be changed about it. Four that bite in ordinary work:
   reaches outside the debug tools needs all of it.
 - `AlertBeeper` requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` per cue with
   a re-arming abandon timer. The walk-away alarm path uses the stronger
-  `_EXCLUSIVE` flavour and is separate from the close-pass path.
+  `_EXCLUSIVE` flavour and is separate from the close-pass path. The timer
+  runs on the main thread and the cue on the playback thread, so a cue's
+  focus request and floor lift, the timer's body and `release` hold one lock,
+  and the timer does nothing before the latest cue's end. Otherwise an earlier
+  burst's timer that comes due as a cue starts takes that cue's duck and lift
+  (`AlertBeeperEarlierTimerTest`).
 - While a call is active (`audioManager.mode` is `MODE_IN_CALL` for telephony
   or `MODE_IN_COMMUNICATION` for VoIP) the close-pass beeper skips the audio
   path entirely (visual overlay still fires). Non-negotiable, no Settings

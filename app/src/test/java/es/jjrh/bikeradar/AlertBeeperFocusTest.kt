@@ -273,27 +273,6 @@ class AlertBeeperFocusTest {
     }
 
     @Test
-    fun anEarlierBurstsAbandonTimerDoesNotEndALaterCue() {
-        // The timer already running on the main thread when a new cue starts
-        // is the one removeCallbacks cannot take back. Running it by hand at
-        // its own due time, 130 ms after the first play and 1 ms after the
-        // second, is that moment.
-        val beeper = newBeeper()
-        val main = shadowOf(android.os.Looper.getMainLooper())
-        val abandon = AlertBeeper::class.java.getDeclaredField("abandonRunnable")
-            .apply { isAccessible = true }.get(beeper) as Runnable
-        beeper.play(1)
-        main.idleFor(java.time.Duration.ofMillis(129))
-        beeper.play(1)
-        main.idleFor(java.time.Duration.ofMillis(1))
-        abandon.run()
-        assertTrue("the second cue still sounds", beeper.cueSounding.value)
-        main.idleFor(java.time.Duration.ofMillis(129))
-        assertFalse(beeper.cueSounding.value)
-        beeper.release()
-    }
-
-    @Test
     fun aCueSkippedForACallNeverReadsSounding() {
         audioManager.setMode(AudioManager.MODE_IN_CALL)
         val beeper = newBeeper()

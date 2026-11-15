@@ -14,17 +14,21 @@ import kotlin.math.roundToInt
  *
  * Header bits:
  *   0x0001 -> status/ack frame, no target payload.
- *   0x0004 -> device-status frame; the final byte is the rider's own bike
- *             speed. Scaling is empirical (not documented in the canonical
- *             protocol spec): 0.25 m/s per LSB (= 0.9 km/h per LSB).
+ *   0x0004 -> device-status frame. Only the 6-byte full frame carries the
+ *             rider's own bike speed, in payload[5], at 0.25 m/s per LSB
+ *             (= 0.9 km/h per LSB). The 5-byte sparse frame has no speed
+ *             byte, and no other length is documented, so any other
+ *             length leaves the cached speed unchanged
+ *             (`aSparseStatusFrameLeavesTheSpeedAtTheLastFullFramesValue`,
+ *             `aSevenByteStatusFrameLeavesTheSpeedUnchanged`).
  *             Stationary floor is raw 2 (doppler noise floor, not true
  *             zero). Observed ceiling is raw 63 (~56.7 km/h) as a
  *             single-frame peak; bits 6-7 have never been set across
  *             6,499 device-status frames, so the field may be a 6-bit
  *             value with reserved upper bits or a plain uint8 whose
  *             range is never exercised. Accept the full uint8 range to
- *             stay robust either way. See PROTOCOL.md for the full
- *             evidence base.
+ *             stay robust either way. See PROTOCOL.md ("Device-status
+ *             body") for the full evidence base.
  *   Anything else -> body is N consecutive 9-byte target structs.
  *
  * Target struct (9 bytes):
@@ -109,11 +113,12 @@ class RadarV2Decoder(
      *  was already populated before the decoder started watching. */
     private var firstFeedAtMs = Long.MIN_VALUE
 
-    /** Rider's own bike speed in m/s, last reported by a device-status
-     *  frame (byte[len-1] x 0.25 m/s per LSB - native protocol resolution).
-     *  Carried as Float so downstream Float thresholds land on the same
-     *  raw-byte boundaries the prior km/h thresholds did. Null until
-     *  the first such frame. */
+    /** Rider's own bike speed in m/s, last reported by a full 6-byte
+     *  device-status frame (payload[5] x 0.25 m/s per LSB - native protocol
+     *  resolution). Carried as Float so downstream Float thresholds land on
+     *  raw-byte boundaries. Null until the first such frame; a sparse frame
+     *  or any other length never writes it
+     *  (`aSparseStatusFrameBeforeAnyFullFrameLeavesTheSpeedNull`). */
     private var lastBikeSpeedMs: Float? = null
 
     /**
@@ -130,16 +135,11 @@ class RadarV2Decoder(
         val isStatus = header and STATUS_FRAME_BIT != 0
         val isDeviceStatus = header and DEVICE_STATUS_BIT != 0
         if (isDeviceStatus) {
-            // Device-status frame carries the rider's own bike speed in
-            // the final byte, scaled by 0.9 km/h (0.25 m/s per LSB).
-            // Always emit a snapshot so bikeSpeedMs propagates even
-            // when no targets changed.
-            if (payload.size > HEADER_SIZE) {
-                val raw = payload[payload.size - 1].toInt() and 0xFF
-                // 0.25 m/s per LSB (PROTOCOL.md). Keep as Float so the
-                // 0.25-m/s resolution propagates to threshold checks
-                // exactly; UI converts to km/h at presentation time.
-                lastBikeSpeedMs = raw * 0.25f
+            // Every device-status frame emits a snapshot, a sparse one
+            // included: the all-clear is timed on published frames
+            // (`aSparseStatusFrameStillReturnsASnapshotAndPrunes`).
+            if (payload.size == DEVICE_STATUS_FULL_SIZE) {
+                lastBikeSpeedMs = (payload[BIKE_SPEED_INDEX].toInt() and 0xFF) * 0.25f
             }
             pruneStale(now)
             return snapshot(now)
@@ -387,6 +387,13 @@ class RadarV2Decoder(
         const val TARGET_SIZE = 9
         const val STATUS_FRAME_BIT = 0x0001
         const val DEVICE_STATUS_BIT = 0x0004
+
+        /** Length of the full device-status frame, the only one that
+         *  carries the rider speed. */
+        private const val DEVICE_STATUS_FULL_SIZE = 6
+
+        /** Where the rider-speed byte sits in that frame. */
+        private const val BIKE_SPEED_INDEX = 5
 
         // Named for what the return looks like, not for any vehicle. The
         // same names and values are in the sibling docs repo's reference

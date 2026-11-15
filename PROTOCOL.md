@@ -134,7 +134,7 @@ Header bits:
 | Bit | Meaning |
 |-----|---------|
 | `0x0001` | Status/ack frame, no target payload. Skip. |
-| `0x0004` | Device-status frame: no targets. The body's final byte is the rider's own bike speed (`x0.25` m/s), used for adaptive alerts. |
+| `0x0004` | Device-status frame: no targets. Only the 6-byte full frame carries the rider's own bike speed, in `payload[5]` (`x0.25` m/s), used for adaptive alerts. Any other length, the 5-byte sparse frame included, leaves the last speed in place. |
 | anything else | Decode N target structs from body. |
 
 ### 9-byte target struct

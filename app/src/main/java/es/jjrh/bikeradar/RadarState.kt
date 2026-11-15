@@ -206,12 +206,11 @@ data class RadarState(
      *  synthetic). Null when the state is sourced from a live radar link -
      *  the overlay uses null to decide whether to render the t+... label. */
     val scenarioTimeMs: Long? = null,
-    /** Rider's own bike speed in m/s, sourced from the radar's
-     *  device-status frame (byte[len-1] x 0.25 m/s per LSB - native
-     *  protocol resolution). Carried as Float so threshold comparisons
-     *  in AlertDecider / ClosePassDetector / decoder land on the exact
-     *  raw-byte boundaries the prior km/h thresholds did. Null until
-     *  the first device-status frame has been received in the current
+    /** Rider's own bike speed in m/s, from the radar's full 6-byte
+     *  device-status frame (payload[5] x 0.25 m/s per LSB); a frame of any
+     *  other length leaves it unchanged. Carried as Float so threshold
+     *  comparisons in AlertDecider / ClosePassDetector / decoder land on
+     *  exact raw-byte boundaries. Null until the first full frame of the
      *  session. */
     val bikeSpeedMs: Float? = null,
 ) {

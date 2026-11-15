@@ -529,8 +529,13 @@ must not be changed about it. Four that bite in ordinary work:
     `ended with the link` instead
     (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
     `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`).
-  - A press on the radar's light button stops the set's retries and leaves
-    no light line (`aPressDuringTheLightRetriesEndsThem`,
+  - **A light mode a granted app sets on this connection stands.** The set
+    makes no further try once the app has asked
+    (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`). A dusk/dawn flip
+    still runs at its time.
+  - A press on the radar's light button stops the set before its next try
+    and leaves no light line (`aPressBeforeTheFirstTryStopsTheSet`,
+    `aPressDuringTheLightRetriesEndsThem`,
     `aPressDuringTheSecondTryEndsTheRetries`,
     `aPressDuringTheLastTryReportsNoFailure`). A dusk/dawn flip waits for
     the setup job (`aFlipDueDuringTheInitialSetComesAfterIt`). The light

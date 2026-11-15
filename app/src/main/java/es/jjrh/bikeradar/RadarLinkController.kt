@@ -954,6 +954,10 @@ internal class RadarLinkController(
             // (`theLightStateSubscribeGoesOutBeforeTheFirstLightWrite`,
             // `theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet`).
             val initial = plan?.initial
+            // Set once a granted app asks for a light mode on this connection.
+            // Its choice stands: the connect-time set makes no further try
+            // after it (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`).
+            val appSetLight = java.util.concurrent.atomic.AtomicBoolean(false)
             val setup = jobs.launch {
                 if ((probeOn || autoMode) && ch2f14 != null) queue.writeCccd(gatt, ch2f14)
                 if (probe12 != null) queue.writeCccd(gatt, probe12)
@@ -975,6 +979,7 @@ internal class RadarLinkController(
                             // the light on every vehicle.
                             val lastGrantedWrite = java.util.concurrent.atomic.AtomicReference<Pair<RadarLightMode, Boolean>?>()
                             RadarControlBridge.install { mode ->
+                                appSetLight.set(true)
                                 val ok = writeLightForGrantedApp(light::setMode, mode, BRIDGE_WRITE_TIMEOUT_MS)
                                 if (lastGrantedWrite.getAndSet(mode to ok) != (mode to ok)) {
                                     journal("radar light set for another app mode=$mode applied=$ok")
@@ -990,7 +995,7 @@ internal class RadarLinkController(
                 }
                 if (autoLight != null && initial != null) {
                     val mode = modeFor(initial)
-                    val failedAt = setLight(autoLight, initial, mode) { radarLightUserOverride }
+                    val failedAt = setLight(autoLight, initial, mode) { radarLightUserOverride || appSetLight.get() }
                     // In a job of its own, so the setup ends with its writes.
                     // Undispatched, so a teardown already under way still
                     // reaches the wait and journals the end.

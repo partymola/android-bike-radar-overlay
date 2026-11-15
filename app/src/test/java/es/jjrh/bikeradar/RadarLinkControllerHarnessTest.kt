@@ -1267,6 +1267,53 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aGrantedAppsChoiceStandsOverTheConnectTimeSet() = runTest {
+        // The app sets the light while the set's first try goes unanswered. Its
+        // write waits behind that try in the queue; the set must not try again
+        // after it.
+        val (link, controller) = slowLightLink(swallowedWrites = 1)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 1 })
+        val answer = java.util.concurrent.atomic.AtomicReference<Boolean?>()
+        val binder = Thread { answer.set(RadarControlBridge.set(RadarLightMode.DAY_FLASH)) }
+        binder.start()
+        // Virtual time for the queue's 5 s op timeout, real time for the binder
+        // thread's own 6 s wait.
+        val end = System.nanoTime() + 10_000_000_000L
+        while (binder.isAlive && System.nanoTime() < end) {
+            testScheduler.advanceTimeBy(10)
+            runCurrent()
+            Thread.sleep(1)
+        }
+        assertEquals(true, answer.get())
+        pumpUntil(timeoutMs = 20_000) { false }
+        assertEquals("ops=$gattOps", 2, lightWrites().size)
+        assertEquals("the app's mode is the last written", "light 06090113", lightWrites()[1])
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+
+        // On the next connection the set runs again.
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount == 2 })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { autoLightLines().size == 1 })
+        assertTrue("journal=$journal", autoLightLine(applied = true).matches(autoLightLines().single()))
+        controller.forceReconnect()
+    }
+
+    @Test fun aPressBeforeTheFirstTryStopsTheSet() = runTest {
+        // The press lands while the light-state subscribe goes unanswered, so
+        // after the connect-time plan and before the first light write.
+        val (link, controller) = slowLightLink(swallowedWrites = 0, answer2f14 = false)
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff11") // the press
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+        pumpUntil(timeoutMs = 10_000) { false }
+        assertEquals("ops=$gattOps", emptyList<String>(), lightWrites())
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        controller.forceReconnect()
+    }
+
     // ── data-flow watchdog tears down a silent V2 stream ────────────────────────
 
     @Test fun watchdogTearsDownSilentV2Stream() = runTest {

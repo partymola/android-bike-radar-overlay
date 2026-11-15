@@ -1097,10 +1097,14 @@ class RadarLinkControllerHarnessTest {
 
     /** A link whose light refused all three tries, waiting for the frame that
      *  shows the radar still streaming. */
-    private suspend fun TestScope.aRefusedSet(prefs: Prefs = autoLightPrefs(), wallClock: () -> Long = { System.currentTimeMillis() }): Pair<Link, RadarLinkController> {
+    private suspend fun TestScope.aRefusedSet(
+        prefs: Prefs = autoLightPrefs(),
+        wallClock: () -> Long = { System.currentTimeMillis() },
+        gateway: FakeGateway = FakeGateway(),
+    ): Pair<Link, RadarLinkController> {
         ShadowLog.clear()
         val link = Link()
-        val controller = controller(link, prefs = prefs, setUp = ::setUpRadarRefusingLightWrites, wallClock = wallClock)
+        val controller = controller(link, prefs = prefs, gateway = gateway, setUp = ::setUpRadarRefusingLightWrites, wallClock = wallClock)
         startDriver(link)
         controller.start("TestRadar", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -1839,6 +1843,18 @@ class RadarLinkControllerHarnessTest {
         controller.forceReconnect()
     }
 
+    @Test fun aLinkLostDuringTheSubscribesLeavesNoHandlerForAGrantedApp() = runTest {
+        // The drop resets the handler while the setup job still waits on the
+        // light-state subscribe; the job must not install one after it.
+        val (link, controller) = slowLightLink(swallowedWrites = 0, answer2f14 = false)
+        pumpUntil(timeoutMs = 1_000) { false }
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        assertFalse("a granted app can reach a link that has ended", RadarControlBridge.available)
+        assertEquals("ops=$gattOps", emptyList<String>(), lightWrites())
+        controller.forceReconnect()
+    }
+
     @Test fun theDebugProbeSubscribesBothSettingsCharacteristicsBeforeTheLightSet() = runTest {
         val p = autoLightPrefs().apply { radarSettingsProbeEnabled = true }
         val (_, controller) = slowLightLink(swallowedWrites = 0, prefs = p, with2f12 = true)
@@ -1846,6 +1862,17 @@ class RadarLinkControllerHarnessTest {
         val ops = gattOps.toList().filter { it == "cccd 2f14" || it == "cccd 2f12" || it.startsWith("light ") }
         assertEquals(listOf("cccd 2f14", "cccd 2f12"), ops.take(2))
         assertTrue("ops=$ops", ops[2].startsWith("light "))
+        controller.forceReconnect()
+    }
+
+    @Test fun theDebugProbeAloneSubscribesBothSettingsCharacteristics() = runTest {
+        val p = prefs().apply { radarSettingsProbeEnabled = true }
+        val (link, controller) = slowLightLink(swallowedWrites = 0, prefs = p, with2f12 = true)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        assertTrue(pumpUntil { journalHas("radar V2 stream live") })
+        pumpUntil(timeoutMs = 300) { false }
+        assertEquals("ops=$gattOps", listOf("cccd 2f14", "cccd 2f12"), subscribes())
+        assertEquals("ops=$gattOps", emptyList<String>(), lightWrites())
         controller.forceReconnect()
     }
 
@@ -1952,6 +1979,34 @@ class RadarLinkControllerHarnessTest {
             listOf("light 06090111", "light 06090111", "light 06090111"),
             writesWithAFlipDueDuringTheSet(radarGattActive = false),
         )
+    }
+
+    @Test fun aFlipTheRadarRefusesIsReportedToo() = runTest {
+        // Every light write is refused, so the connect-time set and the sunset
+        // flip 9 s in both fail, on a link that streams throughout.
+        val zone = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        try {
+            val p = autoLightPrefs().apply { setManualLocation(51.5074, -0.1278) }
+            val sunset = requireNotNull(SunsetCalculator.sunsetEpochMs(java.time.LocalDate.of(2026, 6, 21), 51.5074, -0.1278))
+            val (link, controller) = aRefusedSet(
+                prefs = p,
+                wallClock = { sunset - 9_000L + testScheduler.currentTime },
+                gateway = FakeGateway().apply { state = RadarLinkState(radarGattActive = true) },
+            )
+            val feeder = feedV2(link)
+            pumpUntil { autoLightLines().size == 2 }
+            assertEquals(
+                "journal=$journal",
+                listOf("radar light DAY mode=SOLID applied=false", "radar light NIGHT mode=PELOTON applied=false"),
+                autoLightLines(),
+            )
+            assertTrue(pumpUntil { nackTones() == 2 })
+            feeder.cancel()
+            controller.forceReconnect()
+        } finally {
+            java.util.TimeZone.setDefault(zone)
+        }
     }
 
     @Test fun aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet() = runTest {
@@ -3290,6 +3345,29 @@ class RadarLinkControllerHarnessTest {
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         assertFalse("journal=$journal", journalHas("radar link lost"))
+        controller.forceReconnect()
+    }
+
+    @Test fun aLegacyLinkThatEndedLeavesNoWatchdogBehind() = runTest {
+        // The first connection finds the legacy candidate, the second streams
+        // it, and the third parks at discovery, so no watchdog of its own runs.
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val controller = controller(
+            link,
+            setUp = { g -> if (link.openCount <= 2) setUpLegacyOnlyRadar(g) else setUpNoDiscover(g) },
+            clock = { clockMs.get() },
+        )
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        assertTrue(pumpUntil { journalHas("radar legacy stream subscribe ok=true") })
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 3 })
+        clockMs.set(30_000L)
+        pumpUntil(timeoutMs = 5_000) { false }
+        assertEquals("journal=$journal", emptyList<Pair<String, Long>>(), silentLines())
         controller.forceReconnect()
     }
 

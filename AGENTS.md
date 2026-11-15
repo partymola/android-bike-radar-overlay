@@ -509,7 +509,9 @@ must not be changed about it. Four that bite in ordinary work:
   (`aLegacyBatteryReadWithNoAnswerDoesNotHoldTheLegacyFrames`).
   - **Nothing else is written to the radar before the subscribes.** The
     granted-app handler and the debug probe's handles are installed after
-    them (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`).
+    them, and not at all once the link has ended
+    (`nothingIsWrittenToTheRadarBeforeItsSubscribesGoOut`,
+    `aLinkLostDuringTheSubscribesLeavesNoHandlerForAGrantedApp`).
   - **The data-flow watchdog counts silence only once the setup job has
     ended**, from when it ended. Some radar may hold its stream while a write
     goes unanswered, and that must not cost it the link. A radar that never
@@ -534,7 +536,9 @@ must not be changed about it. Four that bite in ordinary work:
     watchdog teardown, a pin move or a forced reconnect interrupts journals
     `ended with the link` instead
     (`aLinkLostDuringTheLightSetSoundsNoLightFailure`,
-    `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`).
+    `aPinMovedDuringTheLightSetLeavesNothingOfTheOldLinksSet`). A failed
+    dusk/dawn switch is reported like the connect-time set
+    (`aFlipTheRadarRefusesIsReportedToo`).
   - **A light mode a granted app sets on this connection stands.** The set
     makes no further try once the app has asked
     (`aGrantedAppsChoiceStandsOverTheConnectTimeSet`). A dusk/dawn flip

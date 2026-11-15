@@ -235,9 +235,10 @@ class CueLedgerReplayTest {
         // In the urgent windows the stopped rider's fast closers sound three
         // stationary urgents (57660 to 68390), the slow rider's car climbs the
         // tiers into the moving-path urgent at 86080, and the slowing car
-        // sounds a stationary urgent at 111983. The Clear at 76539 lands on
-        // the slow-rider window's first frame, the stopped window's road
-        // having emptied before it ended.
+        // sounds a stationary urgent at 111983. The stopped window's road
+        // empties before it ends, and the splice to the slow-rider window is
+        // a gap with no frame, so the grace starts again on that window's
+        // first frame (76539) and the Clear lands at 78609.
         internal val DEFAULT_GOLDEN: List<String> = listOf(
             "0 Beep(3)",
             "2064 Beep(1)",
@@ -249,7 +250,7 @@ class CueLedgerReplayTest {
             "62317 Urgent(stationary)",
             "67072 Clear",
             "68390 Urgent(stationary)",
-            "76539 Clear",
+            "78609 Clear",
             "84099 Beep(1)",
             "84912 Beep(2)",
             "85540 Beep(3)",
@@ -282,7 +283,7 @@ class CueLedgerReplayTest {
             "62317 Urgent(stationary)",
             "67072 Clear",
             "68390 Urgent(stationary)",
-            "76539 Clear",
+            "78609 Clear",
             "84099 Beep(1)",
             "84912 Beep(2)",
             "85540 Beep(3)",

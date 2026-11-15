@@ -176,7 +176,11 @@ gated on whether any vehicle is *physically* behind in range (the raw radar read
 including a matched-speed follower or one that briefly dropped and returned under
 a new identity), not on the managed beep-path set, and it must hold for a grace
 period before it chimes. A car that genuinely leaves clears after the grace; a
-follower sitting in the blind spot never produces an all-clear.
+follower sitting in the blind spot never produces an all-clear. The grace is
+counted over radar updates: when no radar update reaches the alert logic for
+longer than 800 ms, the grace starts again on the next one, because nothing was
+reported in between (`a gap in the frames longer than the bound restarts the
+grace`).
 
 The urgent-impact override runs on its own path, independent of the beep
 cooldown, but it has its own parsimony: **episode pacing**. Urgent sightings

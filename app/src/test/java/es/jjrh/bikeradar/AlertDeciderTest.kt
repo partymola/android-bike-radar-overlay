@@ -42,7 +42,18 @@ class AlertDeciderTest {
         fun jump(deltaMs: Long) {
             now += deltaMs
         }
+
+        /** [decide] on every frame of the next [ms] at this clock's cadence,
+         *  as a live stream keeps publishing; the events, in order. */
+        fun frames(ms: Long, decide: (Long) -> AlertDecider.Event): List<AlertDecider.Event> {
+            require(ms % dtMs == 0L) { "$ms is not a whole number of $dtMs ms frames" }
+            return List((ms / dtMs).toInt()) { decide(tick()) }
+        }
     }
+
+    /** 2 s of frames at 100 ms after the grace began: silent, then one Clear
+     *  on the frame the grace runs out. */
+    private val graceThenClear = List(19) { AlertDecider.Event.None } + AlertDecider.Event.Clear
 
     @Test fun `empty road returns None`() {
         val d = AlertDecider()
@@ -260,9 +271,7 @@ class AlertDeciderTest {
             d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick()),
         )
         // After the grace, Clear fires - not gated by the beep cooldown.
-        c.jump(2000)
-        val ev = d.decide(listOf(car(1, 2, isBehind = true)), alertMax, c.tick())
-        assertEquals(AlertDecider.Event.Clear, ev)
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(listOf(car(1, 2, isBehind = true)), alertMax, it) })
     }
 
     @Test fun `close zone emptying triggers Clear once after grace`() {
@@ -273,8 +282,7 @@ class AlertDeciderTest {
         // First empty frame starts the clear-grace; no Clear yet.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         // Road stays empty past the grace window -> Clear fires once.
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
     }
 
@@ -310,8 +318,7 @@ class AlertDeciderTest {
         d.decide(listOf(car(1, 21)), alertMax, c.tick()) // Beep(1)
         // 30 m > alertMax(21) + band(2): drops out, grace starts.
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 30)), alertMax, c.tick()))
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(listOf(car(1, 30)), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(listOf(car(1, 30)), alertMax, it) })
     }
 
     @Test fun `band-retained track that flips isBehind leaves close and clears`() {
@@ -329,11 +336,7 @@ class AlertDeciderTest {
             AlertDecider.Event.None,
             d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()),
         )
-        c.jump(2000)
-        assertEquals(
-            AlertDecider.Event.Clear,
-            d.decide(listOf(car(1, 22, isBehind = true)), alertMax, c.tick()),
-        )
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(listOf(car(1, 22, isBehind = true)), alertMax, it) })
     }
 
     @Test fun `single-frame dropout within grace does not clear or re-beep`() {
@@ -344,7 +347,7 @@ class AlertDeciderTest {
         // Radar drops the target for one frame (absent from vehicles).
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         // Wait past the beep cooldown so a re-beep is not merely cooldown-
-        // gated; still inside the clear-grace (800 ms < 1000 ms).
+        // gated; still inside the clear-grace (800 ms < 2000 ms).
         c.jump(700)
         // Same car returns: no Clear, and no fresh re-beep (latch survived
         // the cancelled grace).
@@ -424,8 +427,7 @@ class AlertDeciderTest {
         // Car leaves the close zone for longer than the clear-grace: a real
         // departure, so the Clear fires and the per-track latch is wiped.
         d.decide(listOf(car(1, 50)), alertMax, c.tick()) // grace starts
-        c.jump(2000)
-        d.decide(listOf(car(1, 50)), alertMax, c.tick()) // grace elapsed → Clear
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(listOf(car(1, 50)), alertMax, it) })
         c.jump(700)
         d.decide(listOf(car(1, 10)), alertMax, c.tick()) // re-entering, frame 1
         val ev = d.decide(listOf(car(1, 10)), alertMax, c.tick())
@@ -521,8 +523,7 @@ class AlertDeciderTest {
         repeat(40) { d.decide(listOf(docked), alertMax, c.tick()) } // long dock, no clear
         // Car leaves entirely (corners / turns off): grace starts now.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
     }
 
     @Test fun `matched-speed follower re-docked under a new tid still blocks the all-clear`() {
@@ -559,10 +560,9 @@ class AlertDeciderTest {
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
-        // Jitter to 22 m (just past alertMax, inside the exit band).
-        d.decide(listOf(car(1, 22)), alertMax, c.tick())
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 22)), alertMax, c.tick()))
+        // Jitter to 22 m (just past alertMax, inside the exit band) and hold
+        // there for 3 s of frames, past the grace.
+        assertEquals(List(30) { AlertDecider.Event.None }, c.frames(3000) { d.decide(listOf(car(1, 22)), alertMax, it) })
     }
 
     // ── stationary-suppress gate ─────────────────────────────────────────
@@ -593,10 +593,8 @@ class AlertDeciderTest {
             AlertDecider.Event.None,
             d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f),
         )
-        c.jump(2000)
         // Clear must still fire after the grace even though rider is stationary.
-        val ev = d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
-        assertEquals(AlertDecider.Event.Clear, ev)
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it, bikeSpeedMs = 0f) })
     }
 
     @Test fun `rider moving beeps normally with speed provided`() {
@@ -2364,10 +2362,9 @@ class AlertDeciderTest {
             AlertDecider.Event.None,
             d.decide(listOf(Vehicle(id = 1, distanceM = -3, speedMs = 5f)), alertMax, c.tick()),
         )
-        c.jump(2000)
         assertEquals(
-            AlertDecider.Event.Clear,
-            d.decide(listOf(Vehicle(id = 1, distanceM = -3, speedMs = 5f)), alertMax, c.tick()),
+            graceThenClear,
+            c.frames(2000) { d.decide(listOf(Vehicle(id = 1, distanceM = -3, speedMs = 5f)), alertMax, it) },
         )
     }
 
@@ -2383,8 +2380,7 @@ class AlertDeciderTest {
         // alertMax 21 + band 2 = 23; 40 m is well past it. id IS in
         // prevCloseRaw so the RHS is evaluated and is false -> excluded.
         assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 40)), alertMax, c.tick()))
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(listOf(car(1, 40)), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(listOf(car(1, 40)), alertMax, it) })
     }
 
     // ── clear-pending re-arm after a cancelled grace ─────────────────────
@@ -2408,8 +2404,7 @@ class AlertDeciderTest {
         // Drops out again: clear-grace re-pends.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         // Road stays empty past the grace -> Clear fires.
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
     }
 
     // ── beepPending surviving the stable set emptying mid-cooldown ───────
@@ -2567,12 +2562,14 @@ class AlertDeciderTest {
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
         // Third empty frame (t=400), still inside the grace -> still None.
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
-        // Jump past t>=2200 (grace measured from the FIRST empty frame at
-        // t=200, +2000 = 2200). The Clear fires now and exactly once - if the
-        // intervening empties had re-armed the timer, this would still be
-        // None.
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        // Frames on to t=2200 (grace measured from the FIRST empty frame at
+        // t=200, +2000 = 2200). The Clear fires on that frame and exactly
+        // once. Had the intervening empties re-armed the timer, it would
+        // never fire.
+        assertEquals(
+            List(17) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(1800) { d.decide(emptyList(), alertMax, it) },
+        )
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
     }
 
@@ -2591,16 +2588,162 @@ class AlertDeciderTest {
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
-        // Drop out: clear-grace pends (clearPending true).
+        // Drop out at t=200: clear-grace pends (clearPending true).
         assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
-        // Same car returns within the grace. behindPresent true -> clearPending
-        // is reset; no Clear, and the surviving latch keeps it silent.
-        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
-        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
-        // Even after the original grace window would have elapsed, no Clear
-        // fires - the pending Clear was cancelled, not merely deferred.
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.None, d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        // Same car returns within the grace and stays for 2 s of frames.
+        // behindPresent true -> clearPending is reset; no Clear, and the
+        // surviving latch keeps it silent.
+        assertEquals(List(20) { AlertDecider.Event.None }, c.frames(2000) { d.decide(listOf(car(1, 10)), alertMax, it) })
+        // It leaves at t=2300 and the grace counts from there, so the Clear
+        // lands at 4300: the pending Clear was cancelled, not merely deferred.
+        // One left pending since t=200 would chime on the first empty frame.
+        assertEquals(
+            List(20) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(2100) { d.decide(emptyList(), alertMax, it) },
+        )
+    }
+
+    // ── a gap in the frames restarts the clear grace ─────────────────────
+    //
+    // The grace stands for 2 s of frames reporting an empty road. A gap
+    // between frames longer than 800 ms is not that, so the frame that ends it
+    // starts the grace again.
+
+    /** A car heard at 10 m leaves: the grace begins on the empty frame at
+     *  t=200, then empty frames run on to t=1000 with no Clear. */
+    private fun deciderWithAPendingClear(c: Clock, onGateEvent: (String) -> Unit = {}): AlertDecider {
+        val d = AlertDecider(onGateEvent = onGateEvent)
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(List(8) { AlertDecider.Event.None }, c.frames(800) { d.decide(emptyList(), alertMax, it) })
+        return d
+    }
+
+    @Test fun `a gap in the frames longer than the bound restarts the grace`() {
+        val c = Clock()
+        val d = deciderWithAPendingClear(c)
+        // Nothing from t=1000 to t=2500: 2.3 s since the grace began, 1.5 s
+        // of it unreported, so no Clear on the frame that ends the gap.
+        c.jump(1400)
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        // It lands after 2 s of frames, at t=4500.
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
+    }
+
+    @Test fun `a gap of exactly the bound does not restart the grace`() {
+        val c = Clock()
+        val d = deciderWithAPendingClear(c)
+        // Frames at 1000 and 1800: the grace from t=200 runs out at 2200.
+        c.jump(700)
+        assertEquals(
+            List(4) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(500) { d.decide(emptyList(), alertMax, it) },
+        )
+    }
+
+    @Test fun `a gap one millisecond over the bound restarts the grace`() {
+        val c = Clock()
+        val d = deciderWithAPendingClear(c)
+        // Frames at 1000 and 1801: the grace starts again at 1801 and runs
+        // out at 3801, not at 2201.
+        c.jump(701)
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
+    }
+
+    @Test fun `gaps each within the bound do not add up to a restart`() {
+        // Frames at 900, 1600 and 2300 after the grace began at 200: 2.1 s of
+        // 700 ms gaps, each inside the bound, so the Clear lands at 2300.
+        val c = Clock()
+        val d = AlertDecider()
+        d.decide(listOf(car(1, 10)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(
+            List(3) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            listOf(200L, 900L, 1_600L, 2_300L).map { d.decide(emptyList(), alertMax, it) },
+        )
+    }
+
+    private fun restartLines(lines: List<String>) = lines.filter { it.startsWith("# gate clear-restart") }
+
+    @Test fun `a restart is logged once with the gap that caused it`() {
+        val lines = mutableListOf<String>()
+        val c = Clock()
+        val d = deciderWithAPendingClear(c) { lines += it }
+        c.jump(1400)
+        d.decide(emptyList(), alertMax, c.tick())
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
+        assertEquals(listOf("# gate clear-restart gap_ms=1500"), restartLines(lines))
+    }
+
+    @Test fun `no restart is logged at exactly the bound, on a steady stream, or for a grace that begins after a gap`() {
+        val atBound = mutableListOf<String>()
+        val c = Clock()
+        val d = deciderWithAPendingClear(c) { atBound += it }
+        c.jump(700)
+        d.decide(emptyList(), alertMax, c.tick())
+        assertEquals(emptyList<String>(), restartLines(atBound))
+
+        val steady = mutableListOf<String>()
+        val c2 = Clock()
+        val d2 = deciderWithAPendingClear(c2) { steady += it }
+        assertEquals(List(11) { AlertDecider.Event.None } + AlertDecider.Event.Clear, c2.frames(1200) { d2.decide(emptyList(), alertMax, it) })
+        assertEquals(emptyList<String>(), restartLines(steady))
+
+        // The car is there until the gap, so the grace starts on the frame
+        // that ends it and nothing is restarted.
+        val afterGap = mutableListOf<String>()
+        val c3 = Clock()
+        val d3 = AlertDecider(onGateEvent = { afterGap += it })
+        d3.decide(listOf(car(1, 10)), alertMax, c3.tick())
+        assertEquals(AlertDecider.Event.Beep(2), d3.decide(listOf(car(1, 10)), alertMax, c3.tick()))
+        c3.jump(1400)
+        d3.decide(emptyList(), alertMax, c3.tick())
+        assertEquals(emptyList<String>(), restartLines(afterGap))
+    }
+
+    @Test fun `a car inside the restarted grace cancels the all-clear`() {
+        val c = Clock()
+        val d = deciderWithAPendingClear(c)
+        c.jump(1400)
+        // After the gap: 1 s of empty frames, a car for three frames, then
+        // empty frames again from t=3800.
+        val events = c.frames(1000) { d.decide(emptyList(), alertMax, it) } +
+            c.frames(300) { d.decide(listOf(car(2, 18)), alertMax, it) } +
+            c.frames(1900) { d.decide(emptyList(), alertMax, it) }
+        assertFalse("no all-clear while the car was there or since: $events", AlertDecider.Event.Clear in events)
+        // The grace counts from the car leaving, so it runs out at 5800.
+        assertEquals(
+            listOf(AlertDecider.Event.None, AlertDecider.Event.Clear),
+            c.frames(200) { d.decide(emptyList(), alertMax, it) },
+        )
+    }
+
+    @Test fun `a gap with a car behind leaves its beeps and its later all-clear as they were`() {
+        // Nothing is pending while the car is there, so the gap moves nothing.
+        val c = Clock()
+        val d = AlertDecider()
+        d.decide(listOf(car(1, 18)), alertMax, c.tick())
+        assertEquals(AlertDecider.Event.Beep(1), d.decide(listOf(car(1, 18)), alertMax, c.tick()))
+        c.jump(1400)
+        assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
+        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
+    }
+
+    @Test fun `an urgent after a gap that restarted the grace sounds on its second frame`() {
+        val c = Clock()
+        val d = stationaryDecider(c)
+        // A slow car in range, so a Clear is pending once it leaves at t=2400.
+        repeat(3) { d.decide(listOf(closingCar(1, 10, -1f)), alertMax, c.tick(), bikeSpeedMs = 0f) }
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        c.jump(1400)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 0f)
+        val fast = closingCar(id = 2, distanceM = 15, speedMs = -8f)
+        val first = d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedMs = 0f)
+        assertEquals(AlertDecider.Event.None, first)
+        assertUrgent(d.decide(listOf(fast), alertMax, c.tick(), bikeSpeedMs = 0f))
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -2682,17 +2825,14 @@ class AlertDeciderTest {
     // 0.93 floor and do NOT add no-op tests; the live-arm pins above are the
     // correct anti-regression coverage for these guards.
     //
-    // NOTE: line numbers above predate the 2026-06 clear-grace rework (raw-
-    // presence gate + closeEpisodeActive latch); re-derive against the current
-    // source. The old L527/L528 anyInRange and L530 prevStableClose branches no
-    // longer exist - their dead arms were removed by that change (12 -> 10).
+    // NOTE: the line numbers above are stale; re-derive against the current
+    // source.
     //
-    // The turn-aware clear deferral added one more unreachable miss (10 -> 11):
-    // `behindPresentVehicles.minOf { it.distanceM }`'s empty-collection throw
-    // arm, guarded dead by the enclosing `if (behindPresent)` (behindPresent ==
-    // behindPresentVehicles.isNotEmpty()). Every decision branch the deferral
-    // itself introduced (TURNING/HOLD gates, anchor-once conjuncts, tail
-    // clamps, null-speed floor) is exercised by the tests below.
+    // One more unreachable arm: `behindPresentVehicles.minOf { it.distanceM }`'s
+    // empty-collection throw, guarded dead by the enclosing `if (behindPresent)`
+    // (behindPresent == behindPresentVehicles.isNotEmpty()). Every decision
+    // branch of the turn deferral (TURNING/HOLD gates, anchor-once conjuncts,
+    // tail clamps, null-speed floor) is exercised by the tests below.
 
     // ── turn-aware clear deferral ────────────────────────────────────
     //
@@ -2711,17 +2851,11 @@ class AlertDeciderTest {
         val c = Clock()
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
-        // Tracks vanish mid-turn. Way past the normal grace, still no Clear.
-        repeat(3) {
-            assertEquals(
-                AlertDecider.Event.None,
-                d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING),
-            )
-            c.jump(2000)
-        }
+        // Tracks vanish mid-turn. 5 s of empty frames, way past the normal
+        // grace, still no Clear.
         assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING),
+            List(50) { AlertDecider.Event.None },
+            c.frames(5000) { d.decide(emptyList(), alertMax, it, turnState = TURNING) },
         )
     }
 
@@ -2754,25 +2888,13 @@ class AlertDeciderTest {
         // Corner blackout, then straightening with the road still empty:
         // 8 m / 6 m/s = 1.3 s, clamped up to TURN_TAIL_MIN_MS (3 s).
         d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = TURNING)
-        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD)
-        // Mid-tail (anchor + 1.7 s): still deferred. Without the clamp the
-        // 1.3 s raw tail would already have expired and armed the grace.
-        c.jump(1600)
+        d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD) // anchor at 300
+        // The tail runs to 3300, where the grace arms, and the Clear lands
+        // 2 s later at 5300. The raw 1.3 s tail would arm it at 1700 and
+        // chime at 3700.
         assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
-        )
-        // First frame past the 3 s clamp arms the grace - had the raw tail
-        // been used, a full grace would have elapsed and Clear fired here.
-        c.jump(2000)
-        assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
-        )
-        c.jump(2000)
-        assertEquals(
-            AlertDecider.Event.Clear,
-            d.decide(emptyList(), alertMax, c.tick(), bikeSpeedMs = 6f, turnState = HOLD),
+            List(49) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(5000) { d.decide(emptyList(), alertMax, it, bikeSpeedMs = 6f, turnState = HOLD) },
         )
     }
 
@@ -2789,30 +2911,13 @@ class AlertDeciderTest {
         // Anchor: 25 m / 2 m/s = 12.5 s, capped at TURN_TAIL_MAX_MS (10 s).
         // Post-anchor frames drop back to IDLE: the anchored tail must run
         // to completion even though the HOLD state ended.
-        d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f, turnState = HOLD)
-        // ~5 s after the anchor plus a full grace: still deferred.
-        c.jump(5000)
+        d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f, turnState = HOLD) // anchor at 300
+        // The 10 s cap ends the tail at 10300, where the grace arms, and the
+        // Clear lands at 12300. An uncapped 12.5 s tail would arm it at
+        // 12800 and chime at 14800.
         assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
-        )
-        c.jump(2000)
-        assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
-        )
-        // Past the 10 s cap the grace arms; the Clear fires once it
-        // elapses. An uncapped 12.5 s tail would still be deferring both
-        // of these frames.
-        c.jump(3000)
-        assertEquals(
-            AlertDecider.Event.None,
-            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
-        )
-        c.jump(2000)
-        assertEquals(
-            AlertDecider.Event.Clear,
-            d.decide(emptyList(), alertMax30, c.tick(), bikeSpeedMs = 2f),
+            List(119) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(12_000) { d.decide(emptyList(), alertMax30, it, bikeSpeedMs = 2f) },
         )
     }
 
@@ -2836,8 +2941,7 @@ class AlertDeciderTest {
         // the normal grace, well before the cancelled 6.7 s tail would
         // have allowed.
         d.decide(emptyList(), alertMax, c.tick())
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        assertEquals(graceThenClear, c.frames(2000) { d.decide(emptyList(), alertMax, it) })
     }
 
     @Test fun `turn states never gate beeps for a fresh episode`() {
@@ -2892,15 +2996,12 @@ class AlertDeciderTest {
         d.decide(listOf(car(1, 10)), alertMax, c.tick())
         assertEquals(AlertDecider.Event.Beep(2), d.decide(listOf(car(1, 10)), alertMax, c.tick()))
         d.decide(emptyList(), alertMax, c.tick(), turnState = TURNING)
-        d.decide(emptyList(), alertMax, c.tick(), turnState = HOLD) // anchor: 6.67 s
-        // 5 s in (plus a full grace): still deferred - a 3 s min-clamped
-        // tail would already have cleared here.
-        c.jump(5000)
-        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
-        // Tail expires at ~6.7 s; the grace then arms and the Clear fires.
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.None, d.decide(emptyList(), alertMax, c.tick()))
-        c.jump(2000)
-        assertEquals(AlertDecider.Event.Clear, d.decide(emptyList(), alertMax, c.tick()))
+        d.decide(emptyList(), alertMax, c.tick(), turnState = HOLD) // anchor at 300: 6.67 s
+        // The tail ends at 6966, so the grace arms on the frame at 7000 and
+        // the Clear lands at 9000. A 3 s min-clamped tail would chime at 5300.
+        assertEquals(
+            List(86) { AlertDecider.Event.None } + AlertDecider.Event.Clear,
+            c.frames(8700) { d.decide(emptyList(), alertMax, it) },
+        )
     }
 }

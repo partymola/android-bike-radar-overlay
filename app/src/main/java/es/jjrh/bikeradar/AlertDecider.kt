@@ -167,7 +167,9 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    physically behind, so it must not produce a "road clear" chime. The grace
  *    also absorbs a single-frame dropout or boundary flap. A car genuinely
  *    leaving (overtake -> `isBehind`, or cornering / turning off) clears after
- *    the grace.
+ *    the grace. The grace is counted over frames: a gap between frames
+ *    longer than [CLEAR_GRACE_MAX_GAP_MS] reported nothing, so the grace
+ *    starts again on the frame that ends it.
  *  - **Closing-speed ceiling.** Off unless the rider sets one (see
  *    [MIN_CLOSING_CEILING_MS] for the range and why there is no default).
  *    A target closing faster than it never enters the close set, so it can
@@ -326,9 +328,13 @@ class AlertDecider(
      *  new tid, cannot fire a false all-clear while it is still physically
      *  behind. The grace also absorbs a single-frame radar dropout / boundary
      *  flap. A genuine all-clear (the car overtakes -> `isBehind`, or corners /
-     *  turns off and leaves the stream) waits at least this long and until the
-     *  next radar frame after it, since the decider runs on radar frames only,
-     *  so a stream that goes quiet sounds none: a
+     *  turns off and leaves the stream) waits at least this long, counted over
+     *  radar frames: the decider runs on frames only, so a stream that goes
+     *  quiet sounds none
+     *  (`OverlayPipelineDrivingTest.theAllClearLandsOnAFrameNotOnTheTickBeforeIt`),
+     *  and a gap between frames longer than [CLEAR_GRACE_MAX_GAP_MS] starts
+     *  the wait again
+     *  (`OverlayPipelineDrivingTest.aStallRestartsTheAllClearGraceOnTheFirstFrameAfterIt`). A
      *  delayed or absent all-clear is deliberately preferred over a false one,
      *  since a false all-clear tells the rider the road is clear while a car is
      *  still there. 2000 ms is the owner-chosen dwell; in the ride-capture
@@ -366,7 +372,9 @@ class AlertDecider(
      *  re-fire, a pass and a pass refused, a beep held below the
      *  floor (`step-down`) or at a stop (`stationary`), the floor
      *  lapsing, the four urgent-pass verdicts, the unconfident wait's start
-     *  and run-out, the fit expiry, and the closing-speed ceiling and rx
+     *  and run-out, the fit expiry, a pending all-clear's grace restarted
+     *  after a gap in the frames (`clear-restart`, with the gap), and the
+     *  closing-speed ceiling and rx
      *  veto; those two mark a track's first excluded frame, not each
      *  silenced cue (see [ceilingLogged]), so the rest of an exclusion is
      *  recovered by replaying the capture's packets. A wait's run-out is
@@ -383,6 +391,8 @@ class AlertDecider(
      *  [unconfidentWaits]) and an expiry can
      *  fire once per fit because the fit is removed as it is reported. A
      *  pass or refused pass is logged once per closest car leaving, a
+     *  grace restart once per gap, on the frame that ends it
+     *  (`a restart is logged once with the gap that caused it`), a
      *  floor lapse once per floor, and a step-down once per held trigger,
      *  so again each time a held car climbs a band short of the floor. A
      *  stationary hold is logged once per car and band at each stop, with
@@ -454,9 +464,13 @@ class AlertDecider(
 
     /** Clear-grace state: whether a Clear is deferred pending the
      *  [clearGraceMs] dwell with no vehicle physically present behind, and
-     *  when that "behind is empty" condition started. */
+     *  when the dwell began: when "behind is empty" started, or the frame
+     *  that ended a gap longer than [CLEAR_GRACE_MAX_GAP_MS]. */
     private var clearPending: Boolean = false
     private var clearPendingSinceMs: Long = 0L
+
+    /** `nowMs` of the previous [decide] call. */
+    private var lastDecideAtMs: Long = 0L
 
     /** True once a stable-close track has been confirmed during the current
      *  approach episode; reset when the Clear finally fires. Needed because a
@@ -1212,6 +1226,11 @@ class AlertDecider(
             clearPending = true
             clearPendingSinceMs = nowMs
         }
+        if (clearPending && clearPendingSinceMs != nowMs && nowMs - lastDecideAtMs > CLEAR_GRACE_MAX_GAP_MS) {
+            onGateEvent("# gate clear-restart gap_ms=${nowMs - lastDecideAtMs}")
+            clearPendingSinceMs = nowMs
+        }
+        lastDecideAtMs = nowMs
         val clearGraceElapsed = clearPending &&
             !behindPresent &&
             (nowMs - clearPendingSinceMs) >= clearGraceMs
@@ -1341,6 +1360,7 @@ class AlertDecider(
         pendingRule = ""
         clearPending = false
         clearPendingSinceMs = 0L
+        lastDecideAtMs = 0L
         closeEpisodeActive = false
         prevCloseRaw = emptySet()
         prevBehindRaw = emptySet()
@@ -1855,6 +1875,27 @@ class AlertDecider(
          *  band is 0 (exit reverts to the hard alertMaxM); the clear-grace
          *  still absorbs single-frame flaps in that degenerate range. */
         private const val CLOSE_EXIT_HYSTERESIS_DIVISOR: Int = 10
+
+        /** Longest gap between two [decide] calls that the clear grace
+         *  counts across. A longer one restarts the grace on the frame that
+         *  ends it, so the all-clear needs [clearGraceMs] of frames after the
+         *  gap; a gap of exactly this length does not (`a gap of exactly the
+         *  bound does not restart the grace`, `a gap one millisecond over the
+         *  bound restarts the grace`). Sized from the decoder's own limit for
+         *  how long a moving car may go unreported before it is dropped
+         *  ([RadarV2Decoder.STALE_MOVING_MS]): a longer gap is a stretch the
+         *  app cannot vouch for. Its own value so that tuning the decoder
+         *  does not move it; re-check it if that limit changes. The legacy
+         *  stream keeps a track for [RadarV1Decoder.STALE_MS], so this is the
+         *  V2 limit, the stricter of the two.
+         *
+         *  A stated limit: a legacy unit sending payloads more than this far
+         *  apart gets no all-clear at all, since every gap restarts the grace
+         *  (`RadarV1SafetyTest.aLegacyUnitUpdatingLessOftenThanTheGraceBoundGetsNoAllClear`).
+         *  At the heartbeat rate the protocol notes observe, about 7 Hz, it
+         *  sounds 2 s after the track ages out
+         *  (`RadarV1SafetyTest.theAllClearSoundsOnTheHeartbeatTwoSecondsAfterTheTrackAgesOut`). */
+        private const val CLEAR_GRACE_MAX_GAP_MS = 800L
 
         /** Consecutive frames a track must be ABSENT from the close set before
          *  its sustain counter is reset. 2 = a single missed frame (one dropped

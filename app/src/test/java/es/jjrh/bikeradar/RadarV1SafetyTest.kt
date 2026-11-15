@@ -258,6 +258,42 @@ class RadarV1SafetyTest {
         )
     }
 
+    /**
+     * A car held 10 m back for four threat packets, then heartbeats only, one
+     * payload every [cadenceMs]. Each payload is decided as the legacy loop
+     * publishes it, the decoder's state when it changed and its current state
+     * when it did not. Returns when each all-clear sounded.
+     */
+    private fun legacyAllClearTimes(cadenceMs: Long, untilMs: Long): List<Long> {
+        val decider = AlertDecider()
+        var now = 0L
+        val d = decoderAt { now }
+        val clears = mutableListOf<Long>()
+        var seq = 0
+        while (now <= untilMs) {
+            val payload = if (now < 4 * cadenceMs) threat(1 to 10) else byteArrayOf(((seq++ and 0x0F) shl 4 or 0x02).toByte())
+            val state = d.feed(payload) ?: d.currentState()
+            if (decider.decide(state.vehicles, alertMaxM = 20, nowMs = now) == AlertDecider.Event.Clear) clears += now
+            now += cadenceMs
+        }
+        return clears
+    }
+
+    @Test
+    fun theAllClearSoundsOnTheHeartbeatTwoSecondsAfterTheTrackAgesOut() {
+        // At the protocol notes' observed heartbeat rate, about 7 Hz. The last
+        // threat packet is at 429, the track ages out on the heartbeat at 2431,
+        // and the grace ends on the one at 4433.
+        assertEquals(listOf(4_433L), legacyAllClearTimes(cadenceMs = 143L, untilMs = 10_000L))
+    }
+
+    @Test
+    fun aLegacyUnitUpdatingLessOftenThanTheGraceBoundGetsNoAllClear() {
+        // A stated limit, not a goal: every 900 ms gap restarts the grace, so
+        // the all-clear never sounds on such a unit.
+        assertEquals(emptyList<Long>(), legacyAllClearTimes(cadenceMs = 900L, untilMs = 20_000L))
+    }
+
     // ── packet-level rejections, so junk cannot become a phantom vehicle ───
 
     @Test

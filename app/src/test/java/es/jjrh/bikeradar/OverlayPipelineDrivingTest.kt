@@ -684,40 +684,23 @@ class OverlayPipelineDrivingTest {
     }
 
     @Test
-    fun aStalledStreamDoesNotChimeTheAllClearOnTicksAlone() = runTest {
-        // The car is announced, the next frame is empty, and the stream stops.
-        // The all-clear needs the road to read empty for 2 s of frames; ticks
-        // re-running the decider on that one empty frame must not stand in.
-        val cues = recordingBeeper()
-        var runs = 0
-        val pipeline = buildPipeline(
-            clockMono = { 1_000L + testScheduler.currentTime },
-            overlayPrefsSnapshot = {
-                runs++
-                prefs.snapshot()
-            },
-        )
-        val job = pipeline.attach(this, "TestRadar")
+    fun aStallRestartsTheAllClearGraceOnTheFirstFrameAfterIt() = runTest {
+        // The car is announced, the next frame is empty, and the stream stops
+        // for 4.7 s. The grace needs 2 s of frames, so it starts again on the
+        // first frame after the stall and the all-clear lands 2 s after that.
+        // That a tick inside a gap chimes nothing is pinned by
+        // theAllClearLandsOnAFrameNotOnTheTickBeforeIt, whose gap the grace
+        // counts across; RadarV1SafetyTest drives the legacy stream.
+        val cues = timedBeeper()
+        val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
         runCurrent()
-        val car = Vehicle(id = 7, distanceM = 6, speedMs = -3f, rangeXm = 1f)
-        fun frame(vehicles: List<Vehicle>) {
-            val t = 1_000L + testScheduler.currentTime
-            RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = t, vehicles = vehicles, bikeSpeedMs = 5f))
-            runCurrent()
-        }
-        frame(listOf(car))
-        advanceTimeBy(100L)
-        frame(listOf(car))
-        advanceTimeBy(100L)
-        frame(emptyList())
-        assertEquals("the car is announced", listOf("beep count=3"), cues)
-        val runsAfterFrame = runs
-        advanceTimeBy(4_700L)
-        runCurrent()
-        assertTrue("the ticks ran the pipeline: ${runs - runsAfterFrame}", runs - runsAfterFrame >= 2)
-        assertEquals("no all-clear from ticks on a stalled stream", listOf("beep count=3"), cues)
-        frame(emptyList())
-        assertEquals("the next empty frame chimes it", listOf("beep count=3", "clear"), cues)
+        frameAt(0L, listOf(nearCar))
+        frameAt(100L, listOf(nearCar))
+        frameAt(200L, emptyList())
+        for (t in 4_900L..6_800L step 100L) frameAt(t, emptyList())
+        assertEquals("1.9 s of frames after the stall is short of the grace", listOf("100 beep count=3"), cues)
+        frameAt(6_900L, emptyList())
+        assertEquals(listOf("100 beep count=3", "6900 clear"), cues)
         job.cancel()
         job.join()
     }
@@ -763,18 +746,19 @@ class OverlayPipelineDrivingTest {
 
     @Test
     fun theAllClearLandsOnAFrameNotOnTheTickBeforeIt() = runTest {
-        // The road reads empty from 200 ms, so the 2 s grace is up at 2.2 s,
-        // and a radio gap holds the next frame until 4.1 s. The tick at 4 s
-        // falls in the gap.
+        // The road reads empty from 1.4 s, so the 2 s grace is up at 3.4 s,
+        // and a radio gap short enough for the grace to count across holds
+        // the next frame from 3.3 s until 4.05 s. The tick at 4 s falls in
+        // the gap.
         val cues = timedBeeper()
         val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
         runCurrent()
-        frameAt(0L, listOf(nearCar))
-        frameAt(100L, listOf(nearCar))
-        for (t in 200L..1_900L step 100L) frameAt(t, emptyList())
+        frameAt(1_200L, listOf(nearCar))
+        frameAt(1_300L, listOf(nearCar))
+        for (t in 1_400L..3_300L step 100L) frameAt(t, emptyList())
         advanceTo(4_000L)
-        frameAt(4_100L, emptyList())
-        assertEquals(listOf("100 beep count=3", "4100 clear"), cues)
+        frameAt(4_050L, emptyList())
+        assertEquals(listOf("1300 beep count=3", "4050 clear"), cues)
         job.cancel()
         job.join()
     }

@@ -527,8 +527,8 @@ must not be changed about it. Four that bite in ordinary work:
   - **A failed set is reported only after the radar streams again.** After a
     last try that went unanswered or was refused, the journal line
     `applied=false`, the notification and the tone wait for a V2 frame;
-    frames from before the failure do not count. Nothing is reported if the
-    link ends first or the app ends it
+    frames the loop counted before the failure do not count. Nothing is
+    reported if the link ends first or the app ends it
     (`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`,
     `threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
     `framesBeforeTheFailureDoNotReportIt`,
@@ -555,12 +555,20 @@ must not be changed about it. Four that bite in ordinary work:
     (`BikeRadarServiceSmokeTest.theTailLightFailureDoesNotOutliveTheService`).
     A failed dusk/dawn switch is reported like the connect-time set
     (`aFlipTheRadarRefusesIsReportedToo`).
-    The alert goes out once per fault. After it, any failure on this
-    connection or a later one is posted silent at once, with no tone and no
-    wait, until a tail-light write lands; two reports held together alert
-    once (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
+    The alert goes out once per fault per ride, a ride being the app's own:
+    a radar that streams again after an off-episode of at least the rider's
+    idle-radar threshold (`Prefs.radarLongOfflineThresholdMinutes`) starts a
+    new one (`RadarLinkState.newRideAtConnect`). After the alert, any failure
+    in the same ride is posted silent at once, with no tone and no wait,
+    until a tail-light write lands or a new ride starts
+    (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
     `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
-    `twoReportsHeldTogetherAlertOnceAndSoundOnce`). Only a report that
+    `aFailureOnANewRideAlertsInFullAgain`,
+    `aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry`,
+    `theNewRideGapIsTheRidersOwn`; the re-arm comes before the new ride's
+    first frame is counted, `aNewRideIsReArmedBeforeItsFirstFrameCanReport`).
+    Two reports held together alert once
+    (`twoReportsHeldTogetherAlertOnceAndSoundOnce`). Only a report that
     alerts writes a line of its own, `radar light <phase> mode=<mode> alerted`
     (`aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`; a repeat writes
     none, `aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`). A report

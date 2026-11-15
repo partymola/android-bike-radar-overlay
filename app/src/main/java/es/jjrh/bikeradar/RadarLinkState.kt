@@ -128,8 +128,8 @@ data class RadarLinkState(
      *  stands until the bike sends another reading
      *  (`aReconnectWithinTheSameRideKeepsTheLock`). */
     val bikeLocked: Boolean = false,
-    /** True on the tick after the radar streams again having been off longer
-     *  than the app's parked boundary, which starts a NEW RIDE.
+    /** True on the tick after the radar streams again having been off
+     *  for at least the app's parked boundary, which starts a NEW RIDE.
      *
      *  Exists so the drop cue's bookkeeping reset runs on the tick loop, which
      *  is that latch's only writer, rather than on the BLE callback thread. A

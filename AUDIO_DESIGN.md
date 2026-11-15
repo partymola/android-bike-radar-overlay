@@ -256,12 +256,19 @@ on, the notification is posted without a silent marking, so it alerts as its
 channel is set to, and a short tone plays once on the notification stream.
 Otherwise the notification is posted marked silent at once, and once nothing
 holds it is posted again without the marking and the tone plays; a cue
-starting during the tone is not waited for. It alerts once per fault. After
-the alert, a repeat failure on the same link or after a reconnect only
-updates the entry in the shade, at once and with no tone. A tail-light write
-that lands removes the entry, and the next failure alerts again
+starting during the tone is not waited for. It alerts once per fault per
+ride. A ride is the app's own: the radar streaming again after it has been
+off for at least the rider's idle-radar threshold (30 minutes unless they
+changed it) starts a new one, and so the next failure alerts in full again,
+whether or not the last ride's entry is still in the shade. After the alert,
+a repeat failure in the same ride, on the same link or after a reconnect,
+only updates the entry in the shade, at once and with no tone. A tail-light
+write that lands removes the entry, and the next failure alerts again
 (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
 `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
+`aFailureOnANewRideAlertsInFullAgain`,
+`aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry`,
+`theNewRideGapIsTheRidersOwn`,
 `aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`).
 A failure that such a write has overtaken while its alert was held never
 sounds (`aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`,

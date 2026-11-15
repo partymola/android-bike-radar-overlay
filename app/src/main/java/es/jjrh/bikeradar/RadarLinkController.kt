@@ -59,8 +59,9 @@ internal interface RadarLinkStateGateway {
 
     /** The radar's first data frame on this connection, called once. A radar
      *  that opens the link and never streams must not reach this, or the
-     *  dead-radar warnings read it as up (`RadarLinkControllerHarnessTest`). */
-    fun markConnected()
+     *  dead-radar warnings read it as up (`RadarLinkControllerHarnessTest`).
+     *  True when it starts a new ride ([RadarLinkState.newRideAtConnect]). */
+    fun markConnected(): Boolean
 
     /** [loss] is what the disconnect callback measured on a V2 link that
      *  streamed and that the app did not end; every other edge has none
@@ -234,7 +235,8 @@ internal class RadarLinkController(
     @Volatile private var radarLightOffSinceMs: Long? = null
 
     // Set when a tail-light failure alert goes out, cleared by a light write
-    // that lands. Here, not per connection, so a flapping link alerts once
+    // that lands or a connect that starts a new ride. Here, not per
+    // connection, so a flapping link alerts once a ride
     // (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`). Written only
     // under [radarLightFailLock]; the one unlocked read decides only whether a
     // report waits on the hold.
@@ -581,16 +583,23 @@ internal class RadarLinkController(
         // ran. Marking the radar up then would start a stream on a dead link
         // (`aFrameDrainedAfterTheDisconnectDoesNotMarkTheRadarUp`). Called on a
         // connection's first frame only, by both streams' frame counters; true
-        // when it marked the radar up.
+        // when it marked the radar up. A connect that starts a new ride re-arms
+        // the tail-light failure alert (`aFailureOnANewRideAlertsInFullAgain`,
+        // `aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry`).
         val linkLock = Any()
         var linkDown = false
         var streamed = false
-        fun markStreaming(): Boolean = synchronized(linkLock) {
-            if (!linkDown) {
-                linkState.markConnected()
-                streamed = true
+        fun markStreaming(): Boolean {
+            var newRide = false
+            val up = synchronized(linkLock) {
+                if (!linkDown) {
+                    newRide = linkState.markConnected()
+                    streamed = true
+                }
+                !linkDown
             }
-            !linkDown
+            if (newRide) synchronized(radarLightFailLock) { radarLightFailAlerted = false }
+            return up
         }
         val receipts = StreamReceipts(clock)
         fun closeOnce() {
@@ -944,7 +953,8 @@ internal class RadarLinkController(
             // `aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
             // `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
             // `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`). After an
-            // alert, until a write lands, it is posted silent only, at once
+            // alert, until a write lands or a new ride starts, it is posted
+            // silent only, at once
             // (`aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
             // `twoReportsHeldTogetherAlertOnceAndSoundOnce`). A light write
             // landed since the failure ends the report with nothing more
@@ -1165,7 +1175,7 @@ internal class RadarLinkController(
                         Uuids.RADAR_V2 -> {
                             step.word = LoopStep.DECODING
                             lastV2FrameMs = clock()
-                            if (v2Frames.value++ == 0) {
+                            if (v2Frames.value == 0) {
                                 // The frame itself is a movement payload, so it
                                 // goes the way the handshake replies do. The line
                                 // stays on release builds because it is the signal
@@ -1176,6 +1186,10 @@ internal class RadarLinkController(
                                 if (markStreaming()) journal("radar V2 stream live")
                                 prefs.rangeOnlyRadarMac = null
                             }
+                            // Counted after that edge, so a failure report waiting
+                            // on the frame reads a new ride's re-armed latch
+                            // (`aNewRideIsReArmedBeforeItsFirstFrameCanReport`).
+                            v2Frames.value++
                             v2Dec.feed(bytes)?.let { RadarStateBus.publish(it) }
                         }
                         Uuids.SETTINGS_14 -> {

@@ -520,7 +520,7 @@ internal class RadarLinkCoordinator(
      *  run more than once on a CAS retry; the ones keyed to the off-episode
      *  fire exactly once per observed transition. The snapshot read of the
      *  prior state is the arbiter for whether to fire them. */
-    override fun markConnected() {
+    override fun markConnected(): Boolean {
         val nowMs = clock()
         val prev = _radarLinkState.value
         // Computed from prev once, so a CAS retry cannot re-evaluate it against
@@ -626,6 +626,7 @@ internal class RadarLinkCoordinator(
         // Radar is back: hide the reconnecting banner now rather than waiting
         // for the next (up to 30s idle) tick of evaluateRadarDrop.
         setReconnectBanner(RadarLinkVisualDecider.LinkVisual.LIVE)
+        return startsNewRide
     }
 
     override fun markDisconnected(loss: LinkLoss?) {

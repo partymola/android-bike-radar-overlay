@@ -176,9 +176,10 @@ class RadarLinkControllerHarnessTest {
             events += "open"
             openMacs += mac
         }
-        override fun markConnected() {
+        override fun markConnected(): Boolean {
             events += "connected"
             onConnected()
+            return false
         }
         override fun markDisconnected(loss: LinkLoss?) {
             events += "disconnected"
@@ -209,7 +210,7 @@ class RadarLinkControllerHarnessTest {
         // which the single-threaded test dispatcher never lets happen.
         scope: CoroutineScope = backgroundScope,
         prefs: Prefs = prefs(),
-        gateway: FakeGateway = FakeGateway(),
+        gateway: RadarLinkStateGateway = FakeGateway(),
         clock: () -> Long = { 0L },
         // Matches production, so a test that does not care about the stamp
         // still exercises the real default rather than a synthetic one.
@@ -1115,7 +1116,7 @@ class RadarLinkControllerHarnessTest {
     private suspend fun TestScope.aRefusedSet(
         prefs: Prefs = autoLightPrefs(),
         wallClock: () -> Long = { System.currentTimeMillis() },
-        gateway: FakeGateway = FakeGateway(),
+        gateway: RadarLinkStateGateway = FakeGateway(),
         clock: () -> Long = { 0L },
         refusesOn: (connection: Int) -> Boolean = { true },
     ): Pair<Link, RadarLinkController> {
@@ -1616,6 +1617,135 @@ class RadarLinkControllerHarnessTest {
             "Couldn't switch the tail light to Peloton. Check it while you're stopped.",
             radarLightFail().extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString(),
         )
+    }
+
+    // ── one alert per fault per ride ────────────────────────────────────────────
+
+    /** The real [RadarLinkCoordinator] as the gateway, on [clockMs], so a
+     *  reconnect starts a new ride by the app's own rule. No eBike and no front
+     *  camera, as in the rest of this harness. [onConnected] runs inside each
+     *  first-frame edge, after the coordinator has handled it. */
+    private class RideGateway(private val inner: RadarLinkCoordinator) : RadarLinkStateGateway by inner {
+        @Volatile var onConnected: () -> Unit = {}
+
+        override fun markConnected(): Boolean = inner.markConnected().also { onConnected() }
+    }
+
+    private fun rideGateway(p: Prefs, clockMs: java.util.concurrent.atomic.AtomicLong) = RideGateway(
+        RadarLinkCoordinator(
+            clock = { clockMs.get() },
+            prefs = p,
+            postWalkAwayNotification = {},
+            cancelWalkAwayNotification = {},
+            startWalkAwayAlarm = {},
+            stopWalkAwayAlarm = {},
+            alertBeeper = { null },
+            clog = {},
+            journal = {},
+            setReconnectBanner = {},
+            resolveDashcamSlug = { null },
+            dashcamAnsweredAtMs = { null },
+            eBikeSnapshot = { null },
+            eBikeSnapshotAtMs = { 0L },
+            eBikeRidingSinceMs = { null },
+            hasLinkableRadar = { true },
+            hasEBikeSignal = { false },
+            everSawTrack = { false },
+            postForgotToLock = {},
+            cancelForgotToLock = {},
+            cancelWalkAwaySnooze = {},
+            clearDashcamBackoff = {},
+            lastRidingActivityMs = { null },
+            lastTrackActivityMs = { null },
+            clearTrackActivity = {},
+            forgetEBikeLock = {},
+            wakeTick = {},
+            acquireRideWakeLock = {},
+            releaseRideWakeLock = {},
+        ),
+    )
+
+    /** A refused set alerted in full on a link to [gateway]; the entry stays
+     *  in the shade. */
+    private suspend fun TestScope.anAlertedFailureOnARide(p: Prefs, gateway: RideGateway): Pair<Link, RadarLinkController> {
+        val (link, controller) = aRefusedSet(prefs = p, gateway = gateway)
+        streams(link)
+        assertTrue(pumpUntil { nackTones() == 1 })
+        assertTrue(radarLightFailNotified())
+        return link to controller
+    }
+
+    /** The radar drops, stays off [offMs] on the coordinator's clock, comes
+     *  back, refuses the connect-time set again and streams. */
+    private suspend fun TestScope.offFor(link: Link, clockMs: java.util.concurrent.atomic.AtomicLong, offMs: Long, failures: Int) {
+        reconnect(link) { clockMs.addAndGet(offMs) }
+        assertTrue(pumpUntil { failedSetsLogged() == failures })
+        streams(link)
+        assertTrue(pumpUntil { posts().size == failures })
+        pumpUntil(timeoutMs = 3_000) { false }
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aFailureOnANewRideAlertsInFullAgain() = runTest {
+        // Off for exactly the default 30 min new-ride gap.
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+        val p = autoLightPrefs()
+        val gateway = rideGateway(p, clockMs)
+        val (link, controller) = anAlertedFailureOnARide(p, gateway)
+        offFor(link, clockMs, offMs = 1_800_000L, failures = 2)
+        assertEquals(listOf("alerting after 0 tones", "alerting after 1 tones"), posts())
+        assertEquals(2, nackTones())
+        assertEquals("journal=$journal", 2, alertedLines().size)
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry() = runTest {
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+        val p = autoLightPrefs()
+        val gateway = rideGateway(p, clockMs)
+        val (link, controller) = anAlertedFailureOnARide(p, gateway)
+        offFor(link, clockMs, offMs = 1_740_000L, failures = 2)
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+        assertEquals(1, nackTones())
+        assertEquals("journal=$journal", 1, alertedLines().size)
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun theNewRideGapIsTheRidersOwn() = runTest {
+        // A 7 min gap set by the rider: off 6 min is the same ride, off 7 min
+        // a new one.
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+        val p = autoLightPrefs().apply { radarLongOfflineThresholdMinutes = 7 }
+        val gateway = rideGateway(p, clockMs)
+        val (link, controller) = anAlertedFailureOnARide(p, gateway)
+        offFor(link, clockMs, offMs = 360_000L, failures = 2)
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+        offFor(link, clockMs, offMs = 420_000L, failures = 3)
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones", "alerting after 1 tones"), posts())
+        assertEquals(2, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aNewRideIsReArmedBeforeItsFirstFrameCanReport() = runTest {
+        // The connect-time set fails before the new ride's first frame, so its
+        // report waits for that frame. Anything waiting is run inside the
+        // first-frame edge, before it returns.
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+        val p = autoLightPrefs()
+        val gateway = rideGateway(p, clockMs)
+        val (link, controller) = anAlertedFailureOnARide(p, gateway)
+        gateway.onConnected = { testScheduler.runCurrent() }
+        offFor(link, clockMs, offMs = 1_800_000L, failures = 2)
+        assertEquals(listOf("alerting after 0 tones", "alerting after 1 tones"), posts())
+        assertEquals(2, nackTones())
+        controller.forceReconnect()
     }
 
     // ── a light write that lands stands an earlier failure's report down ────────

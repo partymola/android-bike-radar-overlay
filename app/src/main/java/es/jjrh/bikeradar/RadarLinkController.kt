@@ -26,7 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -915,8 +917,14 @@ internal class RadarLinkController(
                     }
                     val okSet = applyWithRetry { controller.setMode(mode) }
                     Log.i(TAG, "radar light $phase mode=$mode applied=$okSet")
-                    journal("radar light $phase mode=$mode applied=$okSet")
-                    if (!okSet) postRadarLightModeFailNotification(mode)
+                    // A link that ended during the writes failed them, not the
+                    // light (`aLinkLostDuringTheLightSetSoundsNoLightFailure`).
+                    val failFeedback = !okSet && currentCoroutineContext().isActive && synchronized(linkLock) { !linkDown }
+                    if (okSet || failFeedback) journal("radar light $phase mode=$mode applied=$okSet")
+                    if (failFeedback) {
+                        postRadarLightModeFailNotification(mode)
+                        playRadarLightFailTone()
+                    }
                 }
                 if (plan.initial != null) applyPhase(plan.initial) else journal("radar light left alone: a slot change holds it")
                 val flipAt = plan.flipAtMs
@@ -1311,11 +1319,12 @@ internal class RadarLinkController(
     }
 
     /** Radar tail-light switch-failed feedback, dashcam parity (rider choice):
-     *  a HIGH-priority notification + the NACK beep. Distinct notification ID
-     *  from the dashcam so neither clobbers the other. Fires only when the GATT
-     *  write was not ACKed after the retries - it can't catch the rarer "ACKed
-     *  but the light element didn't change" case (no read-back). */
-    private suspend fun postRadarLightModeFailNotification(mode: RadarLightMode) {
+     *  a HIGH-priority notification, posted beside the NACK beep of
+     *  [playRadarLightFailTone]. Distinct notification ID from the dashcam so
+     *  neither clobbers the other. Fires only when the GATT write was not
+     *  ACKed after the retries - it can't catch the rarer "ACKed but the
+     *  light element didn't change" case (no read-back). */
+    private fun postRadarLightModeFailNotification(mode: RadarLightMode) {
         val modeName = context.getString(
             when (mode) {
                 RadarLightMode.NIGHT_FLASH -> R.string.settings_lightmode_night_flash
@@ -1327,12 +1336,16 @@ internal class RadarLinkController(
         )
 
         notifications.postRadarLightFail(modeName)
+    }
 
+    private suspend fun playRadarLightFailTone() {
         var tg: android.media.ToneGenerator? = null
         try {
             tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
             tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
             kotlinx.coroutines.delay(600)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
         } finally {
             tg?.release()

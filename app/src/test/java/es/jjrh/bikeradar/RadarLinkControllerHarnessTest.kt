@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
 import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
 import es.jjrh.bikeradar.data.HaCredentials
@@ -45,6 +46,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowLog
+import org.robolectric.shadows.ShadowToneGenerator
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -86,6 +88,7 @@ class RadarLinkControllerHarnessTest {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         RadarStateBus.clear()
         BatteryStateBus.clearForTest()
+        ShadowToneGenerator.reset()
         beeper = AlertBeeper(
             audioManager = app.getSystemService(AudioManager::class.java),
             onCue = {},
@@ -1018,6 +1021,45 @@ class RadarLinkControllerHarnessTest {
         feedHandshakeReplies(link)
         assertTrue("journal=$journal", pumpUntil { autoLightLines().isNotEmpty() })
         assertTrue("journal=$journal", autoLightLine(applied = false).matches(autoLightLines().single()))
+        // The rider hears and sees it, on a link that is still up.
+        assertTrue(pumpUntil { radarLightFailNotified() })
+        assertTrue(pumpUntil { nackTones() == 1 })
+        controller.forceReconnect()
+    }
+
+    private fun radarLightFailNotified(): Boolean {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        return shadowOf(nm).allNotifications.any {
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Radar light"
+        }
+    }
+
+    private fun nackTones() = ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }
+
+    @Test fun aLinkLostDuringTheLightSetSoundsNoLightFailure() = runTest {
+        // Its last write is failed by the disconnect, not by the light.
+        val link = Link()
+        val controller = controller(
+            link,
+            prefs = autoLightPrefs(),
+            setUp = slowLightRadar(swallowedWrites = Int.MAX_VALUE),
+            clock = { 1_000L + testScheduler.currentTime },
+        )
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { journalHas("radar handshake complete") })
+        val feeder = feedV2(link)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 3 })
+        feeder.cancel()
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
+        assertFalse(radarLightFailNotified())
+        assertEquals(0, nackTones())
         controller.forceReconnect()
     }
 
@@ -1305,17 +1347,28 @@ class RadarLinkControllerHarnessTest {
 
     /** Forwards every callback the controller handles, except the first
      *  [swallow] write answers on the tail-light characteristic, so each of
-     *  those writes runs to the queue's op timeout. */
-    private class SwallowingLightWrites(private val inner: BluetoothGattCallback, private var swallow: Int) : BluetoothGattCallback() {
+     *  those writes runs to the queue's op timeout. The shadow answers a write
+     *  inside the call that submits it, so [ops] lists the descriptor and
+     *  tail-light writes in the order they went out. */
+    private class SwallowingLightWrites(
+        private val inner: BluetoothGattCallback,
+        private var swallow: Int,
+        private val ops: MutableList<String>,
+    ) : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = inner.onConnectionStateChange(g, status, newState)
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = inner.onServicesDiscovered(g, status)
-        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = inner.onDescriptorWrite(g, d, status)
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+            ops += "cccd " + d.characteristic.uuid.toString().substring(4, 8)
+            inner.onDescriptorWrite(g, d, status)
+        }
 
         @Deprecated("API < 33 compat")
         @Suppress("DEPRECATION")
         override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) = inner.onCharacteristicRead(g, ch, status)
         override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = inner.onCharacteristicRead(g, ch, value, status)
         override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+            @Suppress("DEPRECATION")
+            if (ch.uuid == Uuids.SETTINGS_ACK) ops += "light " + ch.value.toHex()
             if (ch.uuid == Uuids.SETTINGS_ACK && swallow > 0) {
                 swallow--
                 return
@@ -1333,9 +1386,14 @@ class RadarLinkControllerHarnessTest {
     /** The full radar table on every connection, each of which leaves its
      *  first [swallowedWrites] tail-light writes unanswered. */
     private fun slowLightRadar(swallowedWrites: Int): (BluetoothGatt) -> Unit = { g ->
-        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites))
+        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites, gattOps))
         setUpRadarServices(g)
     }
+
+    /** What every [slowLightRadar] connection wrote, in order. */
+    private val gattOps: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    private fun lightWrites() = gattOps.toList().filter { it.startsWith("light ") }
 
     /** A V2 target frame every 100 ms until cancelled. */
     private fun TestScope.feedV2(link: Link) = backgroundScope.launch {

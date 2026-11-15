@@ -284,6 +284,13 @@ class AlertBeeper(
 
     private val cueSoundingState = MutableStateFlow(false)
 
+    // When the latest burst's abandon timer is due, on the Handler's clock.
+    // The timer clears [cueSounding] only once that time has come, so a timer
+    // from an earlier burst already running when a cue starts leaves it set
+    // (`anEarlierBurstsAbandonTimerDoesNotEndALaterCue`).
+    private val cueLock = Any()
+    private var cueEndsAtMs = 0L
+
     /** True from a cue's play until its burst's abandon timer fires: the
      *  cue's own length plus the tail [playWithFocus] arms
      *  (`AlertBeeperFocusTest.aCueReadsSoundingUntilItsBurstEnds`). */
@@ -306,7 +313,9 @@ class AlertBeeper(
             hasFocus = false
         }
         restoreAlarmFloor()
-        cueSoundingState.value = false
+        synchronized(cueLock) {
+            if (android.os.SystemClock.uptimeMillis() >= cueEndsAtMs) cueSoundingState.value = false
+        }
     }
 
     init {
@@ -572,8 +581,12 @@ class AlertBeeper(
         // window so media stays ducked across the burst rather than
         // restoring + re-ducking between cues.
         abandonHandler.removeCallbacks(abandonRunnable)
-        cueSoundingState.value = true
-        abandonHandler.postDelayed(abandonRunnable, (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong())
+        val tailMs = (durationMs + ABANDON_SAFETY_MARGIN_MS).toLong()
+        synchronized(cueLock) {
+            cueEndsAtMs = android.os.SystemClock.uptimeMillis() + tailMs
+            cueSoundingState.value = true
+        }
+        abandonHandler.postDelayed(abandonRunnable, tailMs)
         return played
     }
 

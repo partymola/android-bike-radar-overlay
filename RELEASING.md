@@ -4,24 +4,34 @@ Read this before bumping the version, writing a CHANGELOG section, or
 cutting a `v*` tag.
 
 Releases: bump `versionCode` + `versionName` in `app/build.gradle.kts`,
-add a top-level entry to `CHANGELOG.md` (group changes under the
-headings Breaking, Features, Fixes, Security, Improvements, Battery,
-Bug reports, Upgrading, For developers). Headings are words a rider
-uses, never jargon such as UX, Diagnostics or Internal. Sections released
-before 1.10.0 used older headings and stay as published. `Breaking` says
-what the rider has to change by hand. Order the headings by how many
-riders they reach: `Breaking` leads when it reaches everyone, and
-`Features` leads when the breakage only reaches a subset, as in 1.5.0,
-where it lands on Home Assistant users alone. The section covers
-everything since the last tag, not just what is unpushed - read the range
-as `v<last>..HEAD`.
+add a top-level entry to `CHANGELOG.md`. Open it with two or three plain
+sentences saying what the release is about and what, if anything, a
+rider will notice. Then give each moment where a rider meets a change
+its own `###` heading, in a rider's words, such as "While you ride",
+"When your radar or dashcam connects" or "When you leave the bike".
+Choose the moments from what the release holds and order them by how
+many riders they reach. Under each moment, a bold theme line names what
+got better ("Steadier beeps", "Better sound"), and the changes sit as
+nested bullets under it. Anything a rider has to change by hand goes
+under `What you need to do`, first when it reaches every rider. Three
+headings keep fixed names and come last, in this order:
+`If you report a bug`, `After installing this version` and
+`For developers`; their bullets need no theme line. Headings and themes
+are words a rider uses, never jargon such as UX, Diagnostics or
+Internal. Sections released before 1.12.2 used other headings and stay
+as published. The section covers everything since the last tag, not just
+what is unpushed - read the range as `v<last>..HEAD`.
 
 Each bullet is one short, plain statement, in words a rider uses rather
 than an app engineer's ("in the background", "the service", "a missing
-permission" without naming it). A fix names the bad behaviour it ends, so
-a rider can tell whether it ever touched them. Where a detail is needed,
-give it one or two nested bullets, never a paragraph. Say "after
-installing this version", never "after the update". Write each bullet on
+permission" without naming it). A change that reaches only riders with
+particular kit says so in its first words. A fix for something a rider
+reported, or that a replay of recorded rides showed, says what used to
+happen. A fix for something nobody has met on a ride says only what the
+app does: no account of what could have gone wrong, and no worst-case
+figure. Keep one thing a rider would notice to one bullet, however many
+changes it took. Say "after installing this version", never "after the
+update". Write each bullet on
 a SINGLE line, no hard wrapping: the release workflow copies the section
 verbatim into the GitHub release body, which renders every newline as a
 line break, so a wrapped bullet shows mid-sentence breaks on the Releases

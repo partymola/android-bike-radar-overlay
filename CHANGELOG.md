@@ -1,5 +1,54 @@
 # Changelog
 
+## v1.12.2 - 2026-11-16
+
+This release tidies up traffic beeps, alert sound and the light auto-mode alerts. Most of it smooths out edge cases you are unlikely to have met. The change you are most likely to notice: if light auto-mode can't switch a light, you now hear about it once, not at every reconnect, and its sound waits for beeps and warnings to finish.
+
+### While you ride
+
+- **Steadier beeps**
+  - Beeps hold steady when the radar's own speed reading drops out for a moment. The app no longer mistakes that for you stopping.
+  - The all-clear can wait up to 2 s longer after the radar goes quiet for a moment, so it doesn't chime just before a car shows up.
+  - With a radar that reports distance only and no eBike data, the beeps keep following the closest car after a brief gap in the radar's data.
+- **Better sound**
+  - Your music stays lowered, and each beep or warning stays loud, until the last one ends.
+
+### When your radar or dashcam connects
+
+- **A quicker start**
+  - With the tail light's auto-switch on, the first beeps come as soon as the radar connects, without waiting for the tail light to switch.
+  - With a radar that reports distance only, the first beeps don't wait for its battery reading.
+  - With the dashcam light's auto-switch on, dashcam battery levels and side-button presses come through while the app is switching the light.
+
+### When light auto-mode can't switch a light
+
+- **Fewer alerts**
+  - You hear about a light that won't switch once, not at every reconnect and again at dusk and dawn.
+  - If it switches and later fails again, or on your next ride, you hear about it again. Other repeat failures update the notification without a sound.
+  - Its sound waits until no beep or warning is playing, alerts aren't paused and you're not on a call.
+  - No alert when a light only failed because the radar or dashcam disconnected or went out of reach.
+  - The alert goes away once the light does switch, or when the app stops.
+- **Clearer alerts**
+  - The alert names the light and says to look at it. The tail light's alert is now titled "Tail light".
+  - In Android's notification settings, these alerts now sit under "Light auto-mode", not "Dashcam light". Your settings for them are kept.
+- **Your choice stands**
+  - Pressing the radar's light button while the app is switching the tail light stops the app trying again.
+
+### If you report a bug
+
+- The connection log now records when the tail light's failure alert sounds, and why a tail-light switch did not finish.
+
+### After installing this version
+
+- For the light alert, your next ride starts when the radar or dashcam comes back after your "Idle radar after" time (30 min by default).
+- Nothing changes in Home Assistant.
+
+### For developers
+
+- An app using the radar interface can get `false` from a tail-light request for a few seconds after the radar connects. Retry a `false` answer that comes then.
+- The walk-away alarm and the alert beeps now take turns when setting the alarm volume.
+- The contributor notes in AGENTS.md are split across RADAR_LINK.md, CAMERA_LINK.md, LICENSING_NOTES.md, ARCHITECTURE.md and AUDIO_DESIGN.md.
+
 ## v1.12.1 - 2026-11-15
 
 ### Fixes

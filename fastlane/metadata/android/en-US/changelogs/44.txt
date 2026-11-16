@@ -1,0 +1,1 @@
+Traffic beeps are steadier when the radar's data pauses for a moment. Your music stays lowered until the last beep or warning ends. If light auto-mode can't switch a light, you hear about it once, not at every reconnect, and only when no beep or warning is playing, for the dashcam light too. With the tail light's auto-switch on, the first beeps come as soon as the radar connects.

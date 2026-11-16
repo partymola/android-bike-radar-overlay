@@ -21,6 +21,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -79,11 +83,17 @@ internal class CameraLightLinkController(
      *  camera counted as on. */
     @get:androidx.annotation.VisibleForTesting
     internal val dashcamLink: DashcamLinkGateway,
+    /** Whether one of the ride's cues is sounding ([OverlayPipeline.cueSounding]),
+     *  which the light-failure alert waits out. No default: a link wired to
+     *  nothing would sound its alert over every cue. */
+    @get:androidx.annotation.VisibleForTesting
+    internal val cueSounding: Flow<Boolean>,
     /** Monotonic clock for the camera-light override deadband; elapsedRealtime
      *  so a wall-clock jump can't mis-clear the rider's manual override. */
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
     /** Wall clock the light plan is set against sunrise and sunset by, which
-     *  elapsedRealtime is not. Injected so a test can pin it. */
+     *  elapsedRealtime is not, and the clock a rider's pause deadline is read
+     *  against while a failure alert is held. Injected so a test can pin it. */
     private val wallClock: () -> Long = { System.currentTimeMillis() },
     /** GATT opener seam, defaulting to the shared LE-transport [connectGattLe].
      *  Injected only by the Robolectric harness so a test can capture the
@@ -150,12 +160,25 @@ internal class CameraLightLinkController(
     // the notify loop before the write's answer reaches the set, is not read as
     // a press (`anEchoOfTheSetBeforeItsAnswerIsNotAPress`). A set clears only
     // the value it set, so a cancelled set of an old connection cannot clear a
-    // newer one's.
+    // newer one's. No test reaches that case.
     private class Setting(val mode: CameraLightMode)
 
     private val cameraLightSetting = AtomicReference<Setting?>(null)
 
     @Volatile private var cameraLightOffSinceMs: Long? = null
+
+    // Set when a failure alert goes out, cleared by a light write that lands or
+    // a connect that starts a new ride. Here, not per connection, so a flapping
+    // link alerts once a ride (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`).
+    // Written only under [lightFailLock]; the one unlocked read decides only
+    // whether a report waits on the hold.
+    @Volatile private var lightFailAlerted = false
+
+    // Light writes landed, counted so a report can tell one landed since its
+    // failure.
+    @Volatile private var lightWritesLanded = 0
+
+    private val lightFailLock = Any()
 
     // The current connection's ended-by-app flag, so stop() can mark it before
     // the cancel reaches the connection's own teardown
@@ -349,6 +372,16 @@ internal class CameraLightLinkController(
                 cameraLightUserOverride = false
                 Log.i(TAG, "override cleared after ${(clock() - (offSince ?: 0)) / 1000}s off")
             }
+            // A new ride for the failure alert is the camera back after the rider's
+            // idle-radar gap, the app's own boundary, read on the camera's own off
+            // time so it holds with no radar (`aFailureOnANewRideAlertsInFullAgain`,
+            // `aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry`,
+            // `theNewRideGapIsTheRidersOwn`).
+            if (offSince != null &&
+                RideSummaryNotificationDecider.shouldStartNewRide(clock() - offSince, prefs.radarLongOfflineThresholdMinutes * 60_000L)
+            ) {
+                synchronized(lightFailLock) { lightFailAlerted = false }
+            }
             cameraLightOffSinceMs = null
             Log.i(TAG, "connected, running handshake")
 
@@ -411,10 +444,27 @@ internal class CameraLightLinkController(
             // Provenance only, never the coordinates: this goes to release logcat.
             Log.i(TAG, "auto-mode: night=$isNight override=$cameraLightUserOverride location=${resolved.source}")
 
-            // The mode that failed, when the failure was the light's: null when
-            // the set landed or the link's end failed it
-            // (`aLinkLostDuringTheLightSetSoundsNoLightFailure`).
-            suspend fun setLight(phase: LightAutoModeDecider.Phase, label: String): CameraLightMode? {
+            fun linkGone() = linkDown.get() || endedByApp.get()
+
+            // An answered read of the camera's battery: the link's proof of life.
+            // False after the queue's own op timeout, if the read was not
+            // submitted, if the link ended, or if the camera answered with an
+            // error status. A camera with no battery characteristic never proves
+            // itself, so its failure is never reported, deliberately
+            // (`aCameraWithNoBatteryToReadNeverProvesItAnswers`). On a phone, after
+            // a write the camera never answered, the platform's GATT client stays
+            // busy until its own timeout, so this read is usually refused at submit
+            // and nothing is reported; that leaves
+            // `unansweredWritesAreReportedOnceTheCameraAnswersARead` covering a
+            // late answer.
+            suspend fun linkAnswers(): Boolean {
+                val battery = gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY) ?: return false
+                return queue.read(gatt, battery) != null
+            }
+
+            // The mode that failed and the landed-write count at its failure, or
+            // null when the set landed.
+            suspend fun setLight(phase: LightAutoModeDecider.Phase, label: String): Pair<CameraLightMode, Int>? {
                 val mode = if (phase == LightAutoModeDecider.Phase.NIGHT) {
                     prefs.cameraLightNightMode
                 } else {
@@ -422,22 +472,34 @@ internal class CameraLightLinkController(
                 }
                 val setting = Setting(mode)
                 cameraLightSetting.set(setting)
+                // A press of the light's button does not stop the remaining tries,
+                // deliberately: a mode-state frame from a camera that has just come
+                // up reads as a press, and stopping on it would leave the light in
+                // the mode the camera started in
+                // (`aPressDuringATryDoesNotStopTheRemainingTries`).
                 val ok = try {
                     applyWithRetry { controller.setMode(mode) }.also { if (it) cameraLightLastWrittenMode = mode }
                 } finally {
                     cameraLightSetting.compareAndSet(setting, null)
                 }
+                val landedAtFailure = lightWritesLanded
                 Log.i(TAG, "$label mode=$mode applied=$ok")
-                if (ok) haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
-                return mode.takeUnless { ok || linkDown.get() || endedByApp.get() }
+                if (ok) {
+                    haPublisher.offerFrontMode(ha, lightSlugEarly, name, mode.name)
+                    lightWriteLanded()
+                }
+                return if (ok) null else mode to landedAtFailure
             }
 
             // Beside the notify loop below, so a write left unanswered cannot
             // hold the camera's notifications
-            // (`anUnansweredLightSetDoesNotHoldTheCamerasNotifications`).
+            // (`anUnansweredLightSetDoesNotHoldTheCamerasNotifications`). Its
+            // report is a job of its own, so the setup ends with its writes.
             val setup = jobs.launch {
                 if (plan.initial != null) {
-                    setLight(plan.initial, "initial")?.let { postLightModeFailNotification(it) }
+                    setLight(plan.initial, "initial")?.let { (mode, landed) ->
+                        jobs.launch { reportFailedSet(mode, landed, ::linkGone, ::linkAnswers) }
+                    }
                 } else {
                     Log.i(TAG, "initial mode skipped (manual override active)")
                 }
@@ -451,10 +513,11 @@ internal class CameraLightLinkController(
                     // (`aFlipDueDuringTheInitialSetComesAfterIt`).
                     setup.join()
                     if (cameraLightGattActive && !cameraLightUserOverride) {
-                        setLight(
+                        val (mode, landed) = setLight(
                             flipTo,
                             if (flipTo == LightAutoModeDecider.Phase.NIGHT) "sunset" else "sunrise",
-                        )?.let { postLightModeFailNotification(it) }
+                        ) ?: return@launch
+                        reportFailedSet(mode, landed, ::linkGone, ::linkAnswers)
                     }
                 }
             }
@@ -509,7 +572,77 @@ internal class CameraLightLinkController(
         }
     }
 
-    private suspend fun postLightModeFailNotification(mode: CameraLightMode) {
+    /** An ACKed light write is taken as the end of the fault: the entry leaves
+     *  the shade and the next failure alerts in full
+     *  (`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`). */
+    private fun lightWriteLanded() = synchronized(lightFailLock) {
+        lightWritesLanded++
+        lightFailAlerted = false
+        notifications.cancelLightFail()
+    }
+
+    /**
+     * Reports a failed set once the camera has answered a read of its battery
+     * since the failure ([linkAnswers]). The queue reports a write the camera
+     * refused and one it never answered alike, so every failure waits on that
+     * read, which gives up at the queue's own op timeout: a camera out of
+     * range but not yet flagged disconnected reports nothing
+     * (`unansweredWritesAreReportedOnceTheCameraAnswersARead`,
+     * `unansweredWritesAndAnUnansweredReadReportNothing`,
+     * `aRefusedSetWhoseFollowingReadGoesUnansweredReportsNothing`). A link
+     * flagged down or ended by the app, a press of the light's button, or a
+     * write landed since the failure ends the report
+     * (`aSetTheLinksEndFailedReportsNothingBeforeTheTeardownReachesIt`,
+     * `aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`,
+     * `aPressDuringTheSetLeavesTheAlertedEntryAsItWas`, and for a press that
+     * lands before the read is answered
+     * `aPressWhileTheProofReadIsPendingReportsNothing`). A camera with no
+     * battery characteristic never answers the read, so reports nothing
+     * (`aCameraWithNoBatteryToReadNeverProvesItAnswers`). With nothing
+     * holding the tone it is posted alerting at once; otherwise silent, then
+     * alerting with the tone once the audio is free and the same checks still
+     * pass (`aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce`,
+     * `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
+     * `aHeldFailToneNeverSoundsOnceTheLinkEnds`,
+     * `aHoldEndingAsTheCameraDisconnectsPostsNothingMore`,
+     * `aPressDuringTheHoldLeavesTheSilentPostOnly`). After an alert, until a
+     * write lands or a new ride starts, it is posted silent only, at once
+     * (`aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`). No test
+     * reaches a cancel landing just as the wait returns, which the isActive
+     * check covers.
+     */
+    private suspend fun reportFailedSet(
+        mode: CameraLightMode,
+        landedAtFailure: Int,
+        linkGone: () -> Boolean,
+        linkAnswers: suspend () -> Boolean,
+    ) {
+        // A landed write is read where a post is made, under the lock.
+        fun landedSince() = lightWritesLanded != landedAtFailure
+        fun due() = !linkGone() && !cameraLightUserOverride
+        if (!linkAnswers() || !due()) return
+        if (!lightFailAlerted) {
+            val quiet = lightFailToneQuiet(context, prefs, wallClock, cueSounding)
+            if (!quiet.first()) {
+                synchronized(lightFailLock) {
+                    if (landedSince()) return
+                    postLightModeFailNotification(mode, silent = true)
+                }
+                quiet.first { it }
+            }
+            if (!currentCoroutineContext().isActive || !due()) return
+        }
+        val alert = synchronized(lightFailLock) {
+            if (landedSince()) return
+            val first = !lightFailAlerted
+            lightFailAlerted = true
+            postLightModeFailNotification(mode, silent = !first)
+            first
+        }
+        if (alert) playLightFailTone(TAG, "dashcam light")
+    }
+
+    private fun postLightModeFailNotification(mode: CameraLightMode, silent: Boolean) {
         val modeName = context.getString(
             when (mode) {
                 CameraLightMode.HIGH -> R.string.settings_lightmode_high
@@ -521,18 +654,7 @@ internal class CameraLightLinkController(
             },
         )
 
-        notifications.postLightFail(modeName)
-
-        // Descending two-tone NACK beep; released in finally so cancellation cannot leak the handle.
-        var tg: android.media.ToneGenerator? = null
-        try {
-            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
-            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
-            kotlinx.coroutines.delay(600)
-        } catch (_: Exception) {
-        } finally {
-            tg?.release()
-        }
+        notifications.postLightFail(modeName, silent)
     }
 
     companion object {

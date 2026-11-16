@@ -235,7 +235,8 @@ class Prefs(context: Context) {
      *  ride-stats reset, the radar-drop cue's bookkeeping reset, the traffic
      *  sighting clear, the eBike lock forget and the tail-light failure
      *  alert's re-arm all read on reconnect, and which ends a ride with no
-     *  radar after this long without riding.
+     *  radar after this long without riding. The dashcam light's failure alert
+     *  re-arms on the camera link's own return after this long.
      *  Lowering it therefore also shortens how long a mid-ride return still
      *  earns the reconnect acknowledgement beep; raising it lengthens how long
      *  a lock taken at a stop still counts as this ride's. The Settings copy

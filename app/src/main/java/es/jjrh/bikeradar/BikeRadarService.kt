@@ -585,6 +585,7 @@ class BikeRadarService : Service() {
             radarOffSinceMs = { radarLinkCoordinator.snapshot().radarOffSinceMs },
             journal = linkJournal::log,
             dashcamLink = radarLinkCoordinator,
+            cueSounding = overlayPipeline.cueSounding,
             clock = { SystemClock.elapsedRealtime() },
         )
         batteryReader = BatteryReader(
@@ -865,14 +866,16 @@ class BikeRadarService : Service() {
         // behind. Prune clears those, but the last one written survives until
         // the next open.
         closeCaptureLog()
-        // Walk-away, bond-lost and tail-light failure notifications survive
+        // Walk-away, bond-lost and light failure notifications survive
         // stopForeground, so clear them here
-        // (`theTailLightFailureDoesNotOutliveTheService`). A walk-away tick
+        // (`theTailLightFailureDoesNotOutliveTheService`,
+        // `theDashcamLightFailureDoesNotOutliveTheService`). A walk-away tick
         // already past its decision can still post after this; that alert's
         // buttons then only clear it (`InternalControlReceiverTest`).
         notifications.cancelWalkAway()
         notifications.cancelBondLost()
         notifications.cancelRadarLightFail()
+        notifications.cancelLightFail()
         // Companion-object cache survives across service instances within the
         // same process; clear it so Stop = clean slate for MAC->slug resolution.
         macToSlug.clear()

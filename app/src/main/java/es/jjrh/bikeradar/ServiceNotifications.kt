@@ -337,29 +337,37 @@ internal class ServiceNotifications(
 
     /** Front camera/dashcam light-mode-switch-failed alert: the BLE write to set
      *  the mode was not ACKed. [modeName] is the localized failed-mode label.
+     *  Posted only on a link that has answered since the failure, so the text
+     *  says to look at the light, expanding to both sentences
+     *  (`theDashcamLightFailureSaysToLookAtTheLightAndShowsInFull`). [silent]
+     *  sets the support library's silent marking; unmarked, it alerts as its
+     *  channel is set to
+     *  (`theDashcamLightFailureIsPostedSilentThenAlertingInPlace`).
      *  The NACK beep is played separately by the camera's link controller. */
-    fun postLightFail(modeName: String) = nm.notify(
+    fun postLightFail(modeName: String, silent: Boolean) = nm.notify(
         NOTIF_LIGHT_FAIL_ID,
-        lightFail(R.string.svc_main_dashcam_light_title, context.getString(R.string.svc_main_light_fail_text, modeName)).build(),
+        lightFail(R.string.svc_main_dashcam_light_title, context.getString(R.string.svc_main_light_fail_text, modeName))
+            .setSilent(silent)
+            .build(),
     )
 
+    /** Clear the dashcam light failure notification only
+     *  (`theDashcamLightFailureIsCancelledAloneLeavingTheTailLights`). */
+    fun cancelLightFail() = nm.cancel(NOTIF_LIGHT_FAIL_ID)
+
     /** Rear radar tail-light variant, with a distinct id so it and the dashcam
-     *  light-fail notification never clobber each other. Its own text, since it
-     *  posts only on a link still up, expanding to both sentences
+     *  light-fail notification never clobber each other. Its text says which
+     *  light, and expands to both sentences
      *  (`theRadarLightFailureSaysToCheckTheLightAndShowsInFull`). [silent] sets
      *  the support library's silent marking; unmarked, it alerts as its channel
      *  is set to
      *  (`theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts`). */
-    fun postRadarLightFail(modeName: String, silent: Boolean) {
-        val text = context.getString(R.string.svc_main_radar_light_fail_text, modeName)
-        nm.notify(
-            NOTIF_RADAR_LIGHT_FAIL_ID,
-            lightFail(R.string.svc_main_radar_light_title, text)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-                .setSilent(silent)
-                .build(),
-        )
-    }
+    fun postRadarLightFail(modeName: String, silent: Boolean) = nm.notify(
+        NOTIF_RADAR_LIGHT_FAIL_ID,
+        lightFail(R.string.svc_main_radar_light_title, context.getString(R.string.svc_main_radar_light_fail_text, modeName))
+            .setSilent(silent)
+            .build(),
+    )
 
     /** Clear the tail-light failure notification only
      *  (`theRadarLightFailureIsCancelledAloneLeavingTheDashcams`). */
@@ -370,6 +378,8 @@ internal class ServiceNotifications(
         return NotificationCompat.Builder(context, LIGHT_FAIL_CHANNEL_ID)
             .setContentTitle(context.getString(titleRes))
             .setContentText(text)
+            // The text is two sentences, so the collapsed line alone cuts it.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)

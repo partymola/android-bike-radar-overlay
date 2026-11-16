@@ -93,11 +93,11 @@ Anything that can wait. The in-ride audio channel is reserved for live threats,
 so non-safety equipment state is not spoken while riding; it surfaces on an
 attention surface after the ride instead. The deliberate exceptions are the two
 light-failure alerts, a notification and a short tone each, which come mid-ride
-so the rider can check the light at the next stop. The tail light's alert and
-tone wait for any cue, pause or call in the way to end
+so the rider can check the light at the next stop. Each alert and tone waits
+for any cue, pause or call in the way to end
 (`threeUnansweredTriesOnAStreamingLinkReportTheFailure`,
-`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`, and below); the front
-camera's come as soon as its switch fails and wait for nothing. The canonical
+`anAutoModeWriteTheRadarRefusesIsJournalledAsRefused`,
+`aHeldFailureIsPostedSilentlyThenAgainWithItsTone`, and below). The canonical
 example is the radar's battery being dangerously low **when the radar did not
 actually die during the ride**: the rider can charge it tonight, so a mid-ride
 beep would only add noise to the awareness channel and train the rider to tune
@@ -300,6 +300,36 @@ cue's burst, the pause or the call ends
 `aHoldEndingAsTheRadarDisconnectsPostsNothingMore`,
 `aHoldEndingAfterTheAppEndedTheLinkPostsNothingMore`,
 `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`).
+
+**The dashcam light's failure follows the same rules**, with two differences
+that come from the camera. It has no stream of frames to wait for. The queue
+reports a write the camera refused and one it never answered alike, so every
+failure is reported only once the camera has answered a read of its battery
+since, and a read left unanswered until the queue's own op timeout reports
+nothing; nor does a link flagged down or ended by the app before the post. A
+camera with no battery reading to answer never reports a light failure
+(`CameraLightLinkControllerHarnessTest.aCameraWithNoBatteryToReadNeverProvesItAnswers`,
+`unansweredWritesAreReportedOnceTheCameraAnswersARead`,
+`unansweredWritesAndAnUnansweredReadReportNothing`,
+`aRefusedSetWhoseFollowingReadGoesUnansweredReportsNothing`,
+`aSetTheLinksEndFailedReportsNothingBeforeTheTeardownReachesIt`). And a new
+ride for its alert is the camera's own link coming back after at least the
+rider's idle-radar threshold, so it holds with no radar linked
+(`aFailureOnANewRideAlertsInFullAgain`,
+`aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry`,
+`theNewRideGapIsTheRidersOwn`). The hold, the silent post, the one alert per
+fault and the landed-write rules are pinned by the camera's counterparts of
+the radar's tests
+(`aHeldFailureIsPostedSilentlyThenAgainWithItsTone`,
+`theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
+`theFailToneWaitsForACallToEnd`,
+`aHoldEndingAsTheCameraDisconnectsPostsNothingMore`,
+`aPressDuringTheHoldLeavesTheSilentPostOnly`,
+`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
+`aLandedSetTakesTheFailureOffTheShade`,
+`aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown`), and a stop takes the
+entry out of the shade
+(`DashcamLightFailureServiceTest.theDashcamLightFailureDoesNotOutliveTheService`).
 
 Audio is the primary channel, so while the service runs `AlertBeeper` must never
 fail silently. (A cue that arrives after the beeper is released at service stop

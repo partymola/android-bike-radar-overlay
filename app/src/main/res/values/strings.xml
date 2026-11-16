@@ -901,10 +901,10 @@
     <string name="svc_main_bond_lost_text">Radar pairing was removed. Re-pair in Bluetooth settings to resume.</string>
     <string name="svc_main_dashcam_light_title">Dashcam light</string>
     <string name="svc_main_radar_light_title">Tail light</string>
-    <string name="svc_main_light_fail_text">Couldn\'t switch to <xliff:g id="mode" example="Day flash">%1$s</xliff:g> - check connection.</string>
-    <!-- The radar's failure posts only on a link that is still up, at
-         connect or at the dusk/dawn switch, so it is about the light, not the
-         connection. -->
+    <!-- Both lights' failures post only on a link that has answered since the
+         failure, at connect or at the dusk/dawn switch, so each is about the
+         light, not the connection. -->
+    <string name="svc_main_light_fail_text">Couldn\'t switch the dashcam light to <xliff:g id="mode" example="Day flash">%1$s</xliff:g>. Have a look at it.</string>
     <string name="svc_main_radar_light_fail_text">Couldn\'t switch the tail light to <xliff:g id="mode" example="Day flash">%1$s</xliff:g>. Check it while you\'re stopped.</string>
     <string name="svc_main_light_fail_channel_name">Light auto-mode</string>
     <string name="svc_main_light_fail_channel_desc">Tells you when the tail light or dashcam light couldn\'t be switched to its day or night mode.</string>

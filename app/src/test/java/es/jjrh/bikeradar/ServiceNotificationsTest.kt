@@ -179,7 +179,7 @@ class ServiceNotificationsTest {
         // Distinct ids are load-bearing: a dashcam-light failure and a
         // radar-light failure must coexist, not clobber each other.
         val n = notifications()
-        n.postLightFail("Day Flash")
+        n.postLightFail("Day Flash", silent = false)
         n.postRadarLightFail("Solid", silent = false)
         assertEquals(2, nm.activeNotifications.size)
         assertEquals(
@@ -194,20 +194,33 @@ class ServiceNotificationsTest {
     private fun lightFail(title: String) = nm.activeNotifications.single { title(it) == title }.notification.extras
 
     @Test fun theRadarLightFailureSaysToCheckTheLightAndShowsInFull() {
-        // It posts only on a link that is still up, so "check connection"
-        // would be wrong for it; the text is two sentences, so the collapsed
-        // line alone cuts it.
+        // It posts only on a link that has answered, so the text is about the
+        // light; it is two sentences, so the collapsed line alone cuts it.
         val n = notifications()
         n.postRadarLightFail("Solid", silent = false)
-        n.postLightFail("Day Flash")
         val radar = lightFail("Tail light")
         val expected = "Couldn't switch the tail light to Solid. Check it while you're stopped."
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_TEXT)?.toString())
         assertEquals(expected, radar.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
-        assertEquals(
-            "Couldn't switch to Day Flash - check connection.",
-            lightFail("Dashcam light").getCharSequence(Notification.EXTRA_TEXT)?.toString(),
-        )
+    }
+
+    @Test fun theDashcamLightFailureSaysToLookAtTheLightAndShowsInFull() {
+        val n = notifications()
+        n.postLightFail("Day Flash", silent = false)
+        val dashcam = lightFail("Dashcam light")
+        val expected = "Couldn't switch the dashcam light to Day Flash. Have a look at it."
+        assertEquals(expected, dashcam.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        assertEquals(expected, dashcam.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun theDashcamLightFailureSaysToLookAtTheLightAndShowsInFullInSpanishToo() {
+        notifications().postLightFail("Fija", silent = false)
+        val dashcam = lightFail("Luz de la cámara")
+        val expected = "No se ha podido cambiar la luz de la cámara a «Fija». Échale un vistazo."
+        assertEquals(expected, dashcam.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        assertEquals(expected, dashcam.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString())
     }
 
     @Test fun theRadarLightFailureIsPostedSilentThenAlertingInPlaceAndTheDashcamsAlerts() {
@@ -227,7 +240,7 @@ class ServiceNotificationsTest {
         assertNull(alerting.group)
         assertEquals(Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
         assertEquals(0, alerting.flags and Notification.FLAG_ONLY_ALERT_ONCE)
-        n.postLightFail("Day Flash")
+        n.postLightFail("Day Flash", silent = false)
         val dashcam = posted("Dashcam light")
         assertNull(dashcam.group)
         assertEquals(Notification.GROUP_ALERT_ALL, dashcam.groupAlertBehavior)
@@ -237,9 +250,33 @@ class ServiceNotificationsTest {
     @Test fun theRadarLightFailureIsCancelledAloneLeavingTheDashcams() {
         val n = notifications()
         n.postRadarLightFail("Solid", silent = false)
-        n.postLightFail("Day Flash")
+        n.postLightFail("Day Flash", silent = false)
         n.cancelRadarLightFail()
         assertEquals(listOf("Dashcam light"), nm.activeNotifications.map { title(it) })
+    }
+
+    @Test fun theDashcamLightFailureIsPostedSilentThenAlertingInPlace() {
+        // Posted silent while its tone is held, then again in the same slot
+        // without the marking, as the tail light's is.
+        val n = notifications()
+        fun posted() = nm.activeNotifications.single { title(it) == "Dashcam light" }.notification
+        n.postLightFail("Day Flash", silent = true)
+        val silent = posted()
+        assertEquals("silent", silent.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.groupAlertBehavior)
+        n.postLightFail("Day Flash", silent = false)
+        val alerting = posted()
+        assertNull(alerting.group)
+        assertEquals(Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
+        assertEquals(0, alerting.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+    }
+
+    @Test fun theDashcamLightFailureIsCancelledAloneLeavingTheTailLights() {
+        val n = notifications()
+        n.postRadarLightFail("Solid", silent = false)
+        n.postLightFail("Day Flash", silent = false)
+        n.cancelLightFail()
+        assertEquals(listOf("Tail light"), nm.activeNotifications.map { title(it) })
     }
 
     @Test

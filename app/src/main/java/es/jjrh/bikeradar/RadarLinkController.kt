@@ -31,11 +31,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -987,7 +983,8 @@ internal class RadarLinkController(
                 if (stop() || landedSince()) return
                 journal("radar light $phase mode=$mode applied=false")
                 if (!radarLightFailAlerted) {
-                    val quiet = failToneQuiet()
+                    // What it waits on and plays: LightFailAudio.kt.
+                    val quiet = lightFailToneQuiet(context, prefs, wallClock, overlayPipeline.cueSounding)
                     if (!quiet.first()) {
                         synchronized(radarLightFailLock) {
                             if (landedSince()) return
@@ -1006,7 +1003,7 @@ internal class RadarLinkController(
                 }
                 if (alert) {
                     journal("radar light $phase mode=$mode alerted")
-                    playRadarLightFailTone()
+                    playLightFailTone(TAG, "tail-light")
                 }
             }
 
@@ -1551,46 +1548,6 @@ internal class RadarLinkController(
         radarLightWritesLanded++
         radarLightFailAlerted = false
         notifications.cancelRadarLightFail()
-    }
-
-    /** True while no cue of the ride is sounding, no pause holds and no call
-     *  is on, so the tail-light failure's alerting post and tone never start
-     *  while one does; a cue starting during the tone is not waited for. A
-     *  pause ends at its own deadline or on a resume, and a released beeper
-     *  never reads as quiet (`theFailToneWaitsForACueToEnd`,
-     *  `theFailToneWaitsForAResume`, `theFailToneWaitsForAPauseToRunOut`,
-     *  `theFailToneWaitsForACallToEnd`,
-     *  `aHeldFailToneNeverSoundsOnceTheBeeperIsReleased`). */
-    private fun failToneQuiet(): Flow<Boolean> {
-        val paused = channelFlow {
-            prefs.flow.collectLatest { s ->
-                val left = s.pausedUntilEpochMs - wallClock()
-                send(left > 0)
-                if (left > 0) {
-                    delay(left)
-                    send(false)
-                }
-            }
-        }
-        val audio = context.getSystemService(android.media.AudioManager::class.java)
-        return combine(overlayPipeline.cueSounding, paused, AlertBeeper.callInProgress(audio, context.mainExecutor)) { cue, pause, call ->
-            !cue && !pause && !call
-        }
-    }
-
-    private suspend fun playRadarLightFailTone() {
-        var tg: android.media.ToneGenerator? = null
-        try {
-            tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
-            tg.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 400)
-            kotlinx.coroutines.delay(600)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "tail-light failure tone could not play: $e")
-        } finally {
-            tg?.release()
-        }
     }
 
     /**

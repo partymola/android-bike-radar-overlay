@@ -108,8 +108,9 @@ internal class OverlayPipeline(
     @Volatile private var lastPhoneBatteryLogMs: Long = 0L
 
     /** Whether one of the ride's cues is sounding, and true for good once the
-     *  beeper is released ([AlertBeeper.cueSounding]). The tail-light failure
-     *  alert waits it out (`theFailToneWaitsForACueToEnd`). */
+     *  beeper is released ([AlertBeeper.cueSounding]). The tail-light and
+     *  dashcam-light failure alerts wait it out (`theFailToneWaitsForACueToEnd`,
+     *  `aHeldFailureIsPostedSilentlyThenAgainWithItsTone`). */
     val cueSounding: StateFlow<Boolean> get() = beeper.cueSounding
 
     /**

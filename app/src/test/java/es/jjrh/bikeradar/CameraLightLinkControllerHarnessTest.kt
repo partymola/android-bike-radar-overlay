@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
+import android.media.AudioManager
 import android.media.ToneGenerator
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.data.AndroidKeyStoreCryptor
@@ -19,6 +20,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -35,6 +38,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowLog
+import org.robolectric.shadows.ShadowNotificationManager
 import org.robolectric.shadows.ShadowToneGenerator
 import java.util.Collections
 import java.util.UUID
@@ -63,6 +71,11 @@ class CameraLightLinkControllerHarnessTest {
 
     private val app = ApplicationProvider.getApplicationContext<android.app.Application>()
     private val mac = "AA:BB:CC:DD:EE:FF"
+
+    /** The wall clock a test reads unless it sets its own: noon UTC on
+     *  midsummer's day, hours from the London fallback's sunrise and sunset, so
+     *  no switch falls inside a pumped window. */
+    private val midday = 1_782_043_200_000L
     private val journal = Collections.synchronizedList(mutableListOf<String>())
 
     /** What the controller told the walk-away alarm, in order. */
@@ -70,6 +83,9 @@ class CameraLightLinkControllerHarnessTest {
 
     /** Run as the handshake is reported, inside the controller's coroutine. */
     private var onHeard: () -> Unit = {}
+
+    /** Run inside the disconnect callback that reports a switch-off. */
+    private var onSwitchedOff: () -> Unit = {}
 
     /** Every report including each connection's end, which [reports] leaves out. */
     private val edges = Collections.synchronizedList(mutableListOf<String>())
@@ -83,6 +99,7 @@ class CameraLightLinkControllerHarnessTest {
         override fun markDashcamSwitchedOff(mac: String) {
             reports += "off $mac"
             edges += "off"
+            onSwitchedOff()
         }
 
         override fun markDashcamLinkDown() {
@@ -97,15 +114,27 @@ class CameraLightLinkControllerHarnessTest {
 
     private val adapter get() = requireNotNull(app.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter)
 
+    private lateinit var beeper: AlertBeeper
+
     @Before fun setUp() {
         HaCredentials.cryptorFactory = { InMemoryCryptor() }
         BatteryStateBus.clearForTest()
         ShadowToneGenerator.reset()
+        RecordingDashcamNotifications.posts.clear()
+        // Inline, and every play reported as sounding, so a test can hold a cue
+        // until it idles the main looper past the cue's end.
+        beeper = AlertBeeper(
+            audioManager = app.getSystemService(AudioManager::class.java),
+            executor = { it.run() },
+            playTrackOverride = { true },
+            onCue = {},
+        )
         shadowOf(adapter).setState(android.bluetooth.BluetoothAdapter.STATE_ON)
     }
 
     @After fun tearDown() {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
+        beeper.release()
         BatteryStateBus.clearForTest()
     }
 
@@ -154,7 +183,8 @@ class CameraLightLinkControllerHarnessTest {
         // Unconfigured unless a test is about the front-light mode send.
         frontModeHa: HaClient = HaClient("", ""),
         clock: () -> Long = { 0L },
-        wallClock: () -> Long = { System.currentTimeMillis() },
+        wallClock: () -> Long = { midday },
+        cueSounding: Flow<Boolean> = beeper.cueSounding,
     ): CameraLightLinkController = CameraLightLinkController(
         context = app,
         scope = scope,
@@ -167,6 +197,7 @@ class CameraLightLinkControllerHarnessTest {
         radarOffSinceMs = { null },
         journal = { journal += it },
         dashcamLink = gateway,
+        cueSounding = cueSounding,
         clock = clock,
         wallClock = wallClock,
         openGatt = { ctx, dev, _, cb ->
@@ -259,6 +290,11 @@ class CameraLightLinkControllerHarnessTest {
         cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_CONNECTED)
     }
 
+    /** Whether the driver answers the camera's battery read. A test turns it
+     *  off after the handshake, which needs the answer, to leave a read
+     *  unanswered. */
+    @Volatile private var batteryReadsAnswered = true
+
     /** Background loop completing the read/CCCD/MTU ops ShadowBluetoothGatt does
      *  not auto-fire, routed through the controller's own callback. Completers
      *  no-op unless their op is genuinely pending, so blanket-calling is safe. */
@@ -273,7 +309,7 @@ class CameraLightLinkControllerHarnessTest {
                     complete(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_ACK)
                     complete(cb, gatt, Uuids.SVC_CONTROL, Uuids.SETTINGS_14)
                     gatt.getService(Uuids.SVC_BATTERY)?.getCharacteristic(Uuids.CHAR_BATTERY)?.let {
-                        cb.onCharacteristicRead(gatt, it, byteArrayOf(0x64), BluetoothGatt.GATT_SUCCESS)
+                        if (batteryReadsAnswered) cb.onCharacteristicRead(gatt, it, byteArrayOf(0x64), BluetoothGatt.GATT_SUCCESS)
                         cb.onDescriptorWrite(gatt, it.getDescriptor(Uuids.CCCD), BluetoothGatt.GATT_SUCCESS)
                     }
                 }
@@ -565,6 +601,24 @@ class CameraLightLinkControllerHarnessTest {
             char(Uuids.SETTINGS_14, propNotify, cccd = true),
         )
         addService(gatt, Uuids.SVC_BATTERY, char(Uuids.CHAR_BATTERY, propRead or propNotify, cccd = true))
+        gatt.discoverServices()
+    }
+
+    /** The full front-camera table but for the battery service, with a mode-set
+     *  characteristic that refuses writes. */
+    private fun setUpCameraRefusingLightWritesWithNoBattery(gatt: BluetoothGatt) {
+        addService(
+            gatt,
+            Uuids.SVC_CONFIG,
+            char(Uuids.CHAR_2820, propWriteNoResp or propWrite),
+            char(Uuids.CHAR_2810, propNotify, cccd = true),
+        )
+        addService(
+            gatt,
+            Uuids.SVC_CONTROL,
+            char(Uuids.SETTINGS_ACK, propIndicate, cccd = true),
+            char(Uuids.SETTINGS_14, propNotify, cccd = true),
+        )
         gatt.discoverServices()
     }
 
@@ -969,11 +1023,19 @@ class CameraLightLinkControllerHarnessTest {
 
     /** The full front-camera table on every connection, each of which leaves
      *  its first [swallowedWrites] (given the connection's number, from 1)
-     *  mode-set writes unanswered. */
-    private fun slowLightCamera(swallowedWrites: (connection: Int) -> Int): (BluetoothGatt) -> Unit = { g ->
+     *  mode-set writes unanswered, except a connection [refusesOn] says
+     *  refuses its writes outright. */
+    private fun slowLightCamera(
+        refusesOn: (connection: Int) -> Boolean = { false },
+        swallowedWrites: (connection: Int) -> Int,
+    ): (BluetoothGatt) -> Unit = { g ->
         lightConnections++
-        shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites(lightConnections), gattOps))
-        setUpFrontCameraServices(g)
+        if (refusesOn(lightConnections)) {
+            setUpCameraRefusingLightWrites(g)
+        } else {
+            shadowOf(g).setGattCallback(SwallowingLightWrites(shadowOf(g).gattCallback, swallowedWrites(lightConnections), gattOps))
+            setUpFrontCameraServices(g)
+        }
     }
 
     /** A camera link through its handshake, whose mode-set writes are
@@ -983,10 +1045,20 @@ class CameraLightLinkControllerHarnessTest {
         prefs: Prefs = frontModePrefs(),
         ha: RecordingHaClient = RecordingHaClient(),
         clock: () -> Long = { 0L },
-        wallClock: () -> Long = { System.currentTimeMillis() },
+        wallClock: () -> Long = { midday },
+        cueSounding: Flow<Boolean> = beeper.cueSounding,
     ): Pair<Link, CameraLightLinkController> {
         val link = Link()
-        val controller = controller(link, setUp = setUp, prefs = prefs, ha = ha, frontModeHa = ha, clock = clock, wallClock = wallClock)
+        val controller = controller(
+            link,
+            setUp = setUp,
+            prefs = prefs,
+            ha = ha,
+            frontModeHa = ha,
+            clock = clock,
+            wallClock = wallClock,
+            cueSounding = cueSounding,
+        )
         startDriver(link)
         controller.start("Cam", mac)
         assertTrue(pumpUntil { link.cb != null })
@@ -1023,8 +1095,9 @@ class CameraLightLinkControllerHarnessTest {
     }
 
     /** Runs [block] in London on midsummer's day, with manual coordinates and
-     *  a wall clock reading 9 s before sunset, so the sunset switch falls due
-     *  9 s into the link. Day mode is High and night mode Low. */
+     *  a wall clock reading 9 s before sunset at virtual time 0, so the sunset
+     *  switch falls due at virtual 9 s, whenever the link came up. Day mode is
+     *  High and night mode Low. */
     private suspend fun TestScope.nineSecondsBeforeSunset(block: suspend (prefs: Prefs, wallClock: () -> Long) -> Unit) {
         val zone = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
@@ -1101,5 +1174,688 @@ class CameraLightLinkControllerHarnessTest {
         handshake(link, 3)
         assertTrue("connection 3 must set the light again; ops=$gattOps", pumpUntil { lightWrites().size == 4 })
         controller.stop()
+    }
+
+    /** Connection 1 lands LOW. Connection 2 is set to HIGH: its first try goes
+     *  unanswered, the camera reports OFF, which is neither the landed LOW nor
+     *  the HIGH being set, while that try is outstanding, and its second try
+     *  lands. Returns once the second try has. */
+    private suspend fun TestScope.aPressWhileTheSecondConnectionsSetIsInFlight(ha: RecordingHaClient): Pair<Link, CameraLightLinkController> {
+        val p = frontModePrefs()
+        val (link, controller) = lightLink(slowLightCamera { if (it == 2) 1 else 0 }, prefs = p, ha = ha)
+        assertTrue("sends=${ha.sends}", pumpUntil { ha.frontModeStates("cam") == listOf("LOW") })
+        p.cameraLightDayMode = CameraLightMode.HIGH
+        p.cameraLightNightMode = CameraLightMode.HIGH
+        disconnect(link, 147)
+        handshake(link, 2)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 2 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 20_000) { lightWrites().size == 3 })
+        pumpUntil(timeoutMs = 1_000) { false }
+        return link to controller
+    }
+
+    @Test fun aPressDuringATryDoesNotStopTheRemainingTries() = runTest {
+        // Deliberate: a press leaves the set's remaining tries to run, and the
+        // set lands over the rider's choice. A stale mode-state frame from the
+        // camera, one that reports its own state before our write reaches it,
+        // looks the same as a press, and stopping on it would leave the light
+        // in whatever mode the camera came up in. A press still holds auto-mode
+        // off from the next connection (`aPressDuringASetIsStillAPress`).
+        val ha = RecordingHaClient()
+        val (_, controller) = aPressWhileTheSecondConnectionsSetIsInFlight(ha)
+        assertEquals("sends=${ha.sends}", "HIGH", ha.frontModeStates("cam").last())
+        controller.stop()
+    }
+
+    @Test fun aPressDuringASetIsStillAPress() = runTest {
+        // A mode other than the one being written, arriving while the set is in
+        // flight, holds auto-mode off: connection 3 sets nothing. Dropping every
+        // frame during a set would miss it.
+        val (link, controller) = aPressWhileTheSecondConnectionsSetIsInFlight(RecordingHaClient())
+        disconnect(link, 147)
+        handshake(link, 3)
+        pumpUntil(timeoutMs = 5_000) { false }
+        assertEquals("connection 3 must set nothing; ops=$gattOps", 3, lightWrites().size)
+        controller.stop()
+    }
+
+    // ── the failure alert waits for the audio to be free ───────────────────────
+
+    /** Records each post of the dashcam light failure notification, as silent
+     *  or alerting, with how many failure tones had played before it. The
+     *  shadow keeps only the latest post per id, so this is what shows how
+     *  many posts a report made and whether its alerting post came before its
+     *  tone. */
+    @Implements(android.app.NotificationManager::class)
+    class RecordingDashcamNotifications : ShadowNotificationManager() {
+        @Implementation
+        override fun notify(tag: String?, id: Int, notification: android.app.Notification) {
+            if (notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Dashcam light") {
+                val kind = if (notification.group == "silent") "silent" else "alerting"
+                posts += "$kind after ${ShadowToneGenerator.getPlayedTones().count { it.type() == ToneGenerator.TONE_PROP_NACK }} tones"
+            }
+            super.notify(tag, id, notification)
+        }
+
+        companion object {
+            val posts: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        }
+    }
+
+    private fun posts() = RecordingDashcamNotifications.posts.toList()
+
+    private val silentOnly = listOf("silent after 0 tones")
+
+    private val silentThenAlerting = listOf("silent after 0 tones", "alerting after 0 tones")
+
+    private val main get() = shadowOf(android.os.Looper.getMainLooper())
+
+    /** The notification as last posted. */
+    private fun lightFail(): android.app.Notification {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        return shadowOf(nm).allNotifications.single {
+            it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() == "Dashcam light"
+        }
+    }
+
+    /** Sets that finished, as logcat records them whether or not a report follows. */
+    private fun setsLogged(applied: Boolean) = ShadowLog.getLogsForTag("BikeRadar.Light").count {
+        it.msg.endsWith(" applied=$applied")
+    }
+
+    /** The full front-camera table on every connection, with a mode-set
+     *  characteristic that refuses writes where [refusesOn] says so for the
+     *  connection (from 1). [beforeConnection] runs first. */
+    private fun lightCamera(
+        refusesOn: (connection: Int) -> Boolean = { true },
+        beforeConnection: (connection: Int) -> Unit = {},
+    ): (BluetoothGatt) -> Unit = { g ->
+        lightConnections++
+        beforeConnection(lightConnections)
+        if (refusesOn(lightConnections)) setUpCameraRefusingLightWrites(g) else setUpFrontCameraServices(g)
+    }
+
+    /** A link whose light refused all three tries of its first set. */
+    private suspend fun TestScope.aRefusedSet(
+        prefs: Prefs = frontModePrefs(),
+        clock: () -> Long = { 0L },
+        wallClock: () -> Long = { midday },
+        setUp: (BluetoothGatt) -> Unit = lightCamera(),
+    ): Pair<Link, CameraLightLinkController> {
+        ShadowLog.clear()
+        val pair = lightLink(setUp, prefs = prefs, clock = clock, wallClock = wallClock)
+        assertTrue("journal=$journal", pumpUntil { setsLogged(applied = false) == 1 })
+        return pair
+    }
+
+    /** The camera drops the link and the next connection runs to its handshake. */
+    private suspend fun TestScope.reconnect(link: Link) {
+        val next = handshakesCompleted() + 1
+        disconnect(link, 147)
+        handshake(link, next)
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aFailureWithNothingInTheWayIsPostedOnceAndSoundsOnce() = runTest {
+        val (_, controller) = aRefusedSet()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aHeldFailureIsPostedSilentlyThenAgainWithItsTone() = runTest {
+        beeper.play(1)
+        val (_, controller) = aRefusedSet()
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while the cue sounds", silentOnly, posts())
+        assertEquals(0, nackTones())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue(pumpUntil { nackTones() == 1 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("once", 1, nackTones())
+        assertEquals(silentThenAlerting, posts())
+        val alerting = lightFail()
+        assertEquals(null, alerting.group)
+        assertEquals(android.app.Notification.GROUP_ALERT_ALL, alerting.groupAlertBehavior)
+        assertEquals(0, alerting.flags and android.app.Notification.FLAG_ONLY_ALERT_ONCE)
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun theFailToneWaitsForAResume() = runTest {
+        val p = frontModePrefs().apply { pausedUntilEpochMs = Long.MAX_VALUE }
+        val (_, controller) = aRefusedSet(prefs = p)
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals("held while paused", silentOnly, posts())
+        assertEquals(0, nackTones())
+        p.pausedUntilEpochMs = 0L
+        main.idle()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        assertEquals(silentThenAlerting, posts())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun theFailToneWaitsForAPauseToRunOut() = runTest {
+        // The pause ends 8 s in, after the set's three tries have failed.
+        val base = 1_790_000_000_000L
+        val p = frontModePrefs().apply { pausedUntilEpochMs = base + 8_000L }
+        val (_, controller) = aRefusedSet(prefs = p, wallClock = { base + testScheduler.currentTime })
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        assertEquals("held while the pause lasts", silentOnly, posts())
+        assertEquals(0, nackTones())
+        assertTrue("the check below needs the clock before 7.9 s; at ${testScheduler.currentTime}", testScheduler.currentTime < 7_900L)
+        pumpUntil(timeoutMs = 7_900L - testScheduler.currentTime) { false }
+        assertEquals("nothing 100 ms before the pause ends", 0, nackTones())
+        assertTrue(pumpUntil(timeoutMs = 10_000) { nackTones() == 1 })
+        assertEquals(silentThenAlerting, posts())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun theFailToneWaitsForACallToEnd() = runTest {
+        val audio = app.getSystemService(AudioManager::class.java)
+        try {
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            main.idle()
+            val (_, controller) = aRefusedSet()
+            assertTrue(pumpUntil { posts().isNotEmpty() })
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals("held during the call", silentOnly, posts())
+            assertEquals(0, nackTones())
+            audio.mode = AudioManager.MODE_NORMAL
+            main.idle()
+            assertTrue(pumpUntil { nackTones() == 1 })
+            assertEquals(silentThenAlerting, posts())
+            controller.stop()
+        } finally {
+            audio.mode = AudioManager.MODE_NORMAL
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aHeldFailToneNeverSoundsOnceTheLinkEnds() = runTest {
+        beeper.play(1)
+        val (link, controller) = aRefusedSet()
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aHoldEndingAsTheCameraDisconnectsPostsNothingMore() = runTest {
+        // The cue ends inside the disconnect callback: the link already reads
+        // down, and the teardown has not yet cancelled the wait.
+        beeper.play(1)
+        val (link, controller) = aRefusedSet()
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        onSwitchedOff = {
+            onSwitchedOff = {}
+            main.idleFor(java.time.Duration.ofSeconds(1))
+            testScheduler.runCurrent()
+        }
+        disconnect(link, 257)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aPressDuringTheHoldLeavesTheSilentPostOnly() = runTest {
+        // Connection 1 lands LOW, so a mode other than LOW is a press.
+        ShadowLog.clear()
+        val (link, controller) = lightLink(lightCamera(refusesOn = { it == 2 }))
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        beeper.play(1)
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = false) == 1 })
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        // The loop has read it once the battery reading behind it has.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 80 })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aLinkLostDuringARepeatSetLeavesTheAlertedEntryAsItWas() = runTest {
+        // Connection 1 alerts. Connection 2's tries go unanswered and its link
+        // ends on the last, so its failure, which would only update the entry,
+        // posts nothing.
+        val (link, controller) = aRefusedSet(setUp = slowLightCamera(refusesOn = { it == 1 }) { Int.MAX_VALUE })
+        assertTrue(pumpUntil { nackTones() == 1 })
+        disconnect(link, 147)
+        handshake(link, 2)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 3 })
+        disconnect(link, 147)
+        assertTrue(pumpUntil { link.openCount >= 3 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aPressDuringTheSetLeavesTheAlertedEntryAsItWas() = runTest {
+        // Connection 1 lands LOW and connection 2 alerts. The rider presses
+        // the button while connection 3's tries run, so its failure, which
+        // would only update the entry, posts nothing.
+        ShadowLog.clear()
+        val (link, controller) = lightLink(lightCamera(refusesOn = { it >= 2 }))
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        reconnect(link)
+        assertTrue(pumpUntil { nackTones() == 1 })
+        reconnect(link)
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 80 })
+        assertTrue(pumpUntil { setsLogged(applied = false) == 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aHeldFailToneNeverSoundsOnceTheBeeperIsReleased() = runTest {
+        // The service releases the beeper before it cancels the scope the
+        // report waits in.
+        beeper.play(1)
+        val (_, controller) = aRefusedSet()
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        beeper.release()
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aFailureReportedAfterTheBeeperIsReleasedSoundsNothing() = runTest {
+        beeper.release()
+        val (_, controller) = aRefusedSet()
+        assertTrue(pumpUntil { posts().isNotEmpty() })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(silentOnly, posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    // ── a failure is reported only once the camera has answered a read ─────────
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun unansweredWritesAreReportedOnceTheCameraAnswersARead() = runTest {
+        val (_, controller) = lightLink(slowLightCamera { 3 })
+        assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 30_000) { posts().isNotEmpty() })
+        assertTrue(pumpUntil { nackTones() == 1 })
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun unansweredWritesAndAnUnansweredReadReportNothing() = runTest {
+        // A camera out of range but not yet reported disconnected answers
+        // neither the writes nor the read that follows them.
+        val (_, controller) = lightLink(slowLightCamera { 3 })
+        batteryReadsAnswered = false
+        pumpUntil(timeoutMs = 40_000) { false }
+        assertEquals("ops=$gattOps", 3, lightWrites().size)
+        assertEquals(emptyList<String>(), posts())
+        assertFalse(lightFailNotified())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aRefusedSetWhoseFollowingReadGoesUnansweredReportsNothing() = runTest {
+        // The queue cannot tell a write the camera refused from one it never
+        // answered, so every failure waits on the read.
+        ShadowLog.clear()
+        val (_, controller) = lightLink(::setUpCameraRefusingLightWrites)
+        batteryReadsAnswered = false
+        assertTrue(pumpUntil { setsLogged(applied = false) == 1 })
+        pumpUntil(timeoutMs = 10_000) { false }
+        assertEquals(emptyList<String>(), posts())
+        assertFalse(lightFailNotified())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aCameraWithNoBatteryToReadNeverProvesItAnswers() = runTest {
+        ShadowLog.clear()
+        val (_, controller) = lightLink(::setUpCameraRefusingLightWritesWithNoBattery)
+        assertTrue(pumpUntil { setsLogged(applied = false) == 1 })
+        pumpUntil(timeoutMs = 10_000) { false }
+        assertEquals(emptyList<String>(), posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aPressWhileTheProofReadIsPendingReportsNothing() = runTest {
+        // Connection 1 lands LOW, so OFF is a press. Connection 2's write is
+        // refused and its read waits; the press arrives, then the read is
+        // answered.
+        ShadowLog.clear()
+        val (link, controller) = lightLink(lightCamera(refusesOn = { it == 2 }))
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        reconnect(link)
+        batteryReadsAnswered = false
+        assertTrue(pumpUntil { setsLogged(applied = false) == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010500")
+        // The loop has read it once the battery reading behind it has.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 80 })
+        batteryReadsAnswered = true
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(emptyList<String>(), posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aReportWakingAsTheAppEndsTheLinkPostsNothing() = runTest {
+        // Connection 1 alerts. Connection 2's set is refused and its read goes
+        // unanswered. The read is then answered by hand and the app ends the
+        // link in the same step, before the report runs, so only the ended-by-app
+        // flag says the link is gone: the repeat failure, which would update the
+        // entry, posts nothing.
+        ShadowLog.clear()
+        val (link, controller) = aRefusedSet()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        reconnect(link)
+        batteryReadsAnswered = false
+        assertTrue(pumpUntil { setsLogged(applied = false) == 2 })
+        pumpUntil(timeoutMs = 100) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        val gatt = requireNotNull(link.gatt)
+        val battery = gatt.getService(Uuids.SVC_BATTERY).getCharacteristic(Uuids.CHAR_BATTERY)
+        requireNotNull(link.cb).onCharacteristicRead(gatt, battery, byteArrayOf(0x64), BluetoothGatt.GATT_SUCCESS)
+        controller.stop()
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones"), posts())
+        assertEquals(1, nackTones())
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aSetTheLinksEndFailedReportsNothingBeforeTheTeardownReachesIt() = runTest {
+        // The disconnect callback flags the link down and, before it fails the
+        // queue and ends the loop, the last unanswered try times out. The
+        // report starts on a flagged-down link that is still running, with a
+        // cue holding any post.
+        beeper.play(1)
+        ShadowLog.clear()
+        val (link, controller) = lightLink(slowLightCamera { Int.MAX_VALUE })
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 3 })
+        onSwitchedOff = {
+            onSwitchedOff = {}
+            testScheduler.advanceTimeBy(6_000)
+            testScheduler.runCurrent()
+            assertEquals("the set must have failed inside the callback", 1, setsLogged(applied = false))
+        }
+        disconnect(link, 257)
+        assertTrue("the switch-off hook must have run; reports=$reports", reports.contains("off $mac"))
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(emptyList<String>(), posts())
+        assertEquals(0, nackTones())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aWriteThatLandsWhileTheCueFlowIsStartingLeavesNoPost() = runTest {
+        // The initial set's three tries go unanswered, as does the sunset
+        // switch's first; its second lands while the report is still waiting
+        // for the cue flow's first value, which then says a cue sounds.
+        nineSecondsBeforeSunset { p, wall ->
+            val gate = CompletableDeferred<Unit>()
+            val cue = flow {
+                gate.await()
+                emit(true)
+            }
+            ShadowLog.clear()
+            val (_, controller) = lightLink(slowLightCamera { 4 }, prefs = p, wallClock = wall, cueSounding = cue)
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 40_000) { setsLogged(applied = true) == 1 })
+            assertEquals("the initial set must have failed", 1, setsLogged(applied = false))
+            gate.complete(Unit)
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals(emptyList<String>(), posts())
+            assertEquals(0, nackTones())
+            assertFalse(lightFailNotified())
+            controller.stop()
+        }
+    }
+
+    // ── one alert per fault, across reconnects ─────────────────────────────────
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry() = runTest {
+        val (link, controller) = aRefusedSet()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = false) == 2 })
+        assertTrue(pumpUntil { posts().size == 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+        assertEquals(1, nackTones())
+        assertTrue(lightFailNotified())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain() = runTest {
+        val (link, controller) = aRefusedSet()
+        assertTrue(pumpUntil { nackTones() == 1 })
+        beeper.play(1)
+        reconnect(link)
+        assertTrue(pumpUntil { posts().size == 2 })
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.stop()
+    }
+
+    @Test fun aLandedSetTakesTheFailureOffTheShade() = runTest {
+        val (link, controller) = aRefusedSet(setUp = lightCamera(refusesOn = { it != 2 }))
+        assertTrue(pumpUntil { nackTones() == 1 })
+        assertTrue(lightFailNotified())
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        assertFalse(lightFailNotified())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aFailureAfterALandedSetAlertsAgain() = runTest {
+        val (link, controller) = aRefusedSet(setUp = lightCamera(refusesOn = { it != 2 }))
+        assertTrue(pumpUntil { nackTones() == 1 })
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = false) == 2 })
+        assertTrue(pumpUntil { nackTones() == 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones", "alerting after 1 tones"), posts())
+        controller.stop()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aSwitchThatLandsDuringTheHoldStandsTheHeldReportDown() = runTest {
+        // The initial set's three tries go unanswered, as does the sunset
+        // switch's first; its second lands while a cue holds the report.
+        nineSecondsBeforeSunset { p, wall ->
+            beeper.play(1)
+            ShadowLog.clear()
+            val (_, controller) = lightLink(slowLightCamera { 4 }, prefs = p, wallClock = wall)
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 30_000) { posts().isNotEmpty() })
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 10_000) { setsLogged(applied = true) == 1 })
+            assertFalse(lightFailNotified())
+            main.idleFor(java.time.Duration.ofSeconds(1))
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals(silentOnly, posts())
+            assertEquals(0, nackTones())
+            assertFalse(lightFailNotified())
+            controller.stop()
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aSwitchTheCameraRefusesOnlyUpdatesTheEntry() = runTest {
+        // Every write refused: the initial set and the sunset switch at virtual 9 s
+        // both fail, and the switch's failure is a repeat.
+        nineSecondsBeforeSunset { p, wall ->
+            val (_, controller) = aRefusedSet(prefs = p, wallClock = wall)
+            assertTrue(pumpUntil(timeoutMs = 30_000) { posts().size == 2 })
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+            assertEquals(1, nackTones())
+            assertEquals(
+                "the entry names the switch's mode",
+                "Couldn't switch the dashcam light to Low. Have a look at it.",
+                lightFail().extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString(),
+            )
+            controller.stop()
+        }
+    }
+
+    @Test fun aSwitchOfALinkThatEndedNeverFires() = runTest {
+        // Connection 1 ends before its switch is due at virtual 9 s, and connection 2's
+        // own switch is due soon after. The old link's switch would be a
+        // second one, on a dead queue.
+        nineSecondsBeforeSunset { p, wall ->
+            ShadowLog.clear()
+            val (link, controller) = lightLink(lightCamera(refusesOn = { false }), prefs = p, wallClock = wall)
+            assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+            reconnect(link)
+            assertTrue("connection 2 must start before sunset", testScheduler.currentTime < 8_000)
+            pumpUntil(timeoutMs = 20_000) { false }
+            val switches = ShadowLog.getLogsForTag("BikeRadar.Light").count { it.msg.startsWith("sunset mode=") }
+            assertEquals("one switch, the new link's", 1, switches)
+            controller.stop()
+        }
+    }
+
+    @Test fun aFrameAfterAFailedSetIsReadAgainstTheLastLandedMode() = runTest {
+        // Connection 1 lands LOW; connection 2 is refused HIGH. The camera
+        // then reports HIGH, which is not what landed, so it is a press and
+        // connection 3 sets nothing.
+        ShadowLog.clear()
+        val p = frontModePrefs()
+        val (link, controller) = lightLink(lightCamera(refusesOn = { it == 2 }), prefs = p)
+        assertTrue(pumpUntil { setsLogged(applied = true) == 1 })
+        p.cameraLightDayMode = CameraLightMode.HIGH
+        p.cameraLightNightMode = CameraLightMode.HIGH
+        reconnect(link)
+        assertTrue(pumpUntil { setsLogged(applied = false) == 1 })
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "010000")
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "50")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["cam"]?.pct == 80 })
+        reconnect(link)
+        pumpUntil(timeoutMs = 5_000) { false }
+        assertEquals("connection 3 must set nothing", 1, setsLogged(applied = true))
+        controller.stop()
+    }
+
+    // ── one alert per fault per ride ───────────────────────────────────────────
+
+    /** A refused set alerted in full on connection 1; each later connection
+     *  refuses too, and [offMs] says how long the camera was off before it, on
+     *  the clock the controller reads. */
+    private suspend fun TestScope.failuresAfterBeingOff(p: Prefs, offMs: List<Long>): List<String> {
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+        val (link, controller) = aRefusedSet(
+            prefs = p,
+            clock = { clockMs.get() },
+            setUp = lightCamera(beforeConnection = { if (it >= 2) clockMs.addAndGet(offMs[it - 2]) }),
+        )
+        assertTrue(pumpUntil { nackTones() == 1 })
+        offMs.indices.forEach { i ->
+            reconnect(link)
+            assertTrue(pumpUntil { setsLogged(applied = false) == i + 2 })
+            assertTrue(pumpUntil { posts().size == i + 2 })
+        }
+        pumpUntil(timeoutMs = 3_000) { false }
+        controller.stop()
+        return posts()
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aFailureOnANewRideAlertsInFullAgain() = runTest {
+        // Off for exactly the default 30 min new-ride gap.
+        assertEquals(
+            listOf("alerting after 0 tones", "alerting after 1 tones"),
+            failuresAfterBeingOff(frontModePrefs(), listOf(1_800_000L)),
+        )
+        assertEquals(2, nackTones())
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun aFailureAMinuteShortOfTheNewRideGapOnlyUpdatesTheEntry() = runTest {
+        assertEquals(
+            listOf("alerting after 0 tones", "silent after 1 tones"),
+            failuresAfterBeingOff(frontModePrefs(), listOf(1_740_000L)),
+        )
+        assertEquals(1, nackTones())
+    }
+
+    @Test
+    @Config(shadows = [RecordingDashcamNotifications::class])
+    fun theNewRideGapIsTheRidersOwn() = runTest {
+        // A 7 min gap set by the rider: off 6 min is the same ride, off 7 min
+        // a new one.
+        val p = frontModePrefs().apply { radarLongOfflineThresholdMinutes = 7 }
+        assertEquals(
+            listOf("alerting after 0 tones", "silent after 1 tones", "alerting after 1 tones"),
+            failuresAfterBeingOff(p, listOf(360_000L, 420_000L)),
+        )
+        assertEquals(2, nackTones())
     }
 }

@@ -121,6 +121,15 @@ class RadarV2Decoder(
      *  (`aSparseStatusFrameBeforeAnyFullFrameLeavesTheSpeedNull`). */
     private var lastBikeSpeedMs: Float? = null
 
+    /** True once a full status frame has given a speed; read for the
+     *  connection journal (`onlyAFullStatusFrameGivesTheDecoderABikeSpeed`). */
+    val hasBikeSpeed: Boolean get() = lastBikeSpeedMs != null
+
+    /** True once a device-status frame of any length has arrived
+     *  (`aSparseStatusFrameIsSeen`, `resetForgetsTheStatusFrame`). */
+    var sawDeviceStatus = false
+        private set
+
     /**
      * Feed one notification payload. Target frames, including heartbeats with
      * no target, and device-status frames always return a snapshot, which the
@@ -138,6 +147,7 @@ class RadarV2Decoder(
             // Every device-status frame emits a snapshot, a sparse one
             // included: the all-clear is timed on published frames
             // (`aSparseStatusFrameStillReturnsASnapshotAndPrunes`).
+            sawDeviceStatus = true
             if (payload.size == DEVICE_STATUS_FULL_SIZE) {
                 lastBikeSpeedMs = (payload[BIKE_SPEED_INDEX].toInt() and 0xFF) * 0.25f
             }
@@ -356,6 +366,7 @@ class RadarV2Decoder(
     fun reset() {
         tracks.clear()
         lastBikeSpeedMs = null
+        sawDeviceStatus = false
         recentDeaths.clear()
         firstFeedAtMs = Long.MIN_VALUE
     }

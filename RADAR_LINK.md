@@ -93,6 +93,16 @@ before changing `RadarLinkController`, `RadarLinkCoordinator` or
   `RadarLinkControllerHarnessTest` (`...IsNeverMarkedUp`) and the
   coordinator's abort-loop tests pin it. Not closed: a radar that
   sends one frame and then fails, every attempt, still counts as up each time.
+- A V2 link that streamed and sent device-status frames, none of them the
+  full 6-byte one that carries the speed, journals `radar V2 stream ended
+  with no bike speed` as it ends. A link that sent no status frame or a full
+  one journals nothing, and nor does the legacy stream
+  (`aV2LinkWhoseStatusFramesAreAllSparseJournalsThatItHadNoBikeSpeed`,
+  `aV2LinkThatSentNoStatusFrameJournalsNoSuchLine`,
+  `aV2LinkThatSentAFullStatusFrameJournalsNoSuchLine`,
+  `aLegacyLinkJournalsNoBikeSpeedLine`). Read it with care: a healthy radar
+  can write it too when the link ends after a sparse frame and before the
+  first full one, which can be seconds at a stop.
 
 ## Connect-time writes and the tail-light failure report
 

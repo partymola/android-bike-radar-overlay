@@ -148,6 +148,8 @@ class JournalScopeIsDisclosedTest {
         "radar V2 stream live",
         "radar V2 stream silent \${ageMs}ms, last received \$received, loop=\${step.word}; tearing down",
         "radar link lost status=\$status \${gapMs}ms after its last frame",
+        // What the link delivered, not a speed: no device named, no cue sounded.
+        "radar V2 stream ended with no bike speed",
         "radar legacy stream subscribe ok=\$subscribed",
         "radar legacy stream silent \${ageMs}ms, last received \$received, loop=\${step.word}; tearing down",
         "radar legacy stream live",

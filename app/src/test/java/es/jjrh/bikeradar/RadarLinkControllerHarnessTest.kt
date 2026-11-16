@@ -3174,6 +3174,7 @@ class RadarLinkControllerHarnessTest {
         val gatt = requireNotNull(link.gatt)
         val cb = requireNotNull(link.cb)
         cb.onCharacteristicChanged(gatt, gatt.getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V2), v2TargetFrame.hexToBytes())
+        cb.onCharacteristicChanged(gatt, gatt.getService(Uuids.SVC_RADAR).getCharacteristic(Uuids.RADAR_V2), sparseStatusFrame.hexToBytes())
         cb.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         controller.forceReconnect()
@@ -3181,6 +3182,7 @@ class RadarLinkControllerHarnessTest {
         assertEquals("events=${gateway.events}", 0, gateway.connects)
         assertFalse("nor does the journal say it went live", journalHas("radar V2 stream live"))
         assertFalse("a frame never decoded is no stream to measure from", journalHas("radar link lost"))
+        assertFalse("nor a stream that lacked a bike speed", journalHas(noBikeSpeedLine))
     }
 
     // ── how long before the disconnect the stream stopped ───────────────────────
@@ -3333,6 +3335,78 @@ class RadarLinkControllerHarnessTest {
         requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
         assertTrue(pumpUntil { link.openCount >= 2 })
         assertFalse("journal=$journal", journalHas("radar link lost"))
+        controller.forceReconnect()
+    }
+
+    // ── a V2 link that never carried the bike speed says so ─────────────────────
+
+    private val noBikeSpeedLine = "radar V2 stream ended with no bike speed"
+
+    /** The 5-byte device-status frame, which has no speed byte. */
+    private val sparseStatusFrame = "0400010000"
+
+    /** The 6-byte device-status frame, carrying 5 m/s. */
+    private val fullStatusFrame = "040005000014"
+
+    /** A V2 link that receives [frames], then is dropped by the radar. */
+    private suspend fun TestScope.aV2LinkThatDrops(vararg frames: String) {
+        val (link, controller) = streamingLink(RecordingHaClient(), prefs())
+        frames.forEach { notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, it) }
+        // First in, first out: the battery reading is the witness that the
+        // loop has read the frames.
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        assertFalse("written when the link ends; journal=$journal", journalHas(noBikeSpeedLine))
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount >= 2 })
+        controller.forceReconnect()
+        assertTrue(pumpUntil { !controller.isActive() })
+    }
+
+    @Test fun aV2LinkWhoseStatusFramesAreAllSparseJournalsThatItHadNoBikeSpeed() = runTest {
+        aV2LinkThatDrops(v2TargetFrame, sparseStatusFrame, v2TargetFrame, sparseStatusFrame)
+        assertEquals("journal=$journal", 1, journal.count { it == noBikeSpeedLine })
+        assertEquals(noBikeSpeedLine, LogRedaction.shareable(noBikeSpeedLine))
+    }
+
+    @Test fun aV2LinkThatSentAFullStatusFrameJournalsNoSuchLine() = runTest {
+        aV2LinkThatDrops(v2TargetFrame, sparseStatusFrame, fullStatusFrame, v2TargetFrame, sparseStatusFrame)
+        assertFalse("journal=$journal", journalHas(noBikeSpeedLine))
+    }
+
+    @Test fun aV2LinkThatSentNoStatusFrameJournalsNoSuchLine() = runTest {
+        // A link that ends before the radar's first status frame says nothing
+        // about whether the radar sends a speed.
+        aV2LinkThatDrops(v2TargetFrame, v2TargetFrame)
+        assertFalse("journal=$journal", journalHas(noBikeSpeedLine))
+    }
+
+    @Test fun aV2LinkThatNeverStreamedJournalsNoSuchLine() = runTest {
+        aV2LinkThatDrops()
+        assertFalse("journal=$journal", journalHas(noBikeSpeedLine))
+    }
+
+    @Test fun aV2LinkTheAppEndsJournalsThatItHadNoBikeSpeedToo() = runTest {
+        val (link, controller) = streamingLink(RecordingHaClient(), prefs())
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, v2TargetFrame)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V2, sparseStatusFrame)
+        notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+        assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        controller.forceReconnect()
+        assertTrue("journal=$journal", pumpUntil { journalHas(noBikeSpeedLine) })
+        assertEquals("journal=$journal", 1, journal.count { it == noBikeSpeedLine })
+    }
+
+    @Test fun aLegacyLinkJournalsNoBikeSpeedLine() = runTest {
+        // Its stream has no bike speed at all, so the line would say nothing.
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val (link, controller) = legacyLinkWithOneHeartbeat(clockMs)
+        notify(link, Uuids.SVC_RADAR, Uuids.RADAR_V1, "02811800")
+        val opened = link.openCount
+        requireNotNull(link.cb).onConnectionStateChange(requireNotNull(link.gatt), 147, BluetoothProfile.STATE_DISCONNECTED)
+        assertTrue(pumpUntil { link.openCount > opened })
+        assertTrue("journal=$journal", journalHas("radar legacy stream ended"))
+        assertFalse("journal=$journal", journalHas(noBikeSpeedLine))
         controller.forceReconnect()
     }
 

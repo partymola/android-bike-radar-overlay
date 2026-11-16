@@ -571,6 +571,7 @@ internal class RadarLinkController(
         var overlayJob: Job? = null
         // The setup, light and watchdog jobs of a link past its handshake.
         var linkJobs: CoroutineScope? = null
+        var v2Decoder: RadarV2Decoder? = null
         var cacheRefreshed = false
         // Set from the binder callback thread and from this loop's finally.
         val gattClosed = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -843,7 +844,7 @@ internal class RadarLinkController(
                     " lateral_offset_cm=${prefs.radarLateralOffsetCm}",
             )
             captureLog.clog(OverlayPipeline.alertSettingsLine(prefs.snapshot()))
-            val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm)
+            val v2Dec = RadarV2Decoder(lateralOffsetCm = prefs.radarLateralOffsetCm).also { v2Decoder = it }
             // V2 frames the loop has consumed; a failed light set waits on it.
             val v2Frames = MutableStateFlow(0)
 
@@ -1254,6 +1255,14 @@ internal class RadarLinkController(
             // Fire-and-forget final flush of the ride summary so HA sees
             // the latest values before the next reconnect's backoff delay.
             scope.launch(Dispatchers.IO) { haPublisher.publishRideSummaryIfChanged() }
+            // A radar that sent status frames, none of them the full one, gave
+            // no bike speed all connection
+            // (`aV2LinkWhoseStatusFramesAreAllSparseJournalsThatItHadNoBikeSpeed`,
+            // `aV2LinkThatSentNoStatusFrameJournalsNoSuchLine`).
+            val dec = v2Decoder
+            if (streamed && dec != null && dec.sawDeviceStatus && !dec.hasBikeSpeed) {
+                journal("radar V2 stream ended with no bike speed")
+            }
             closeOnce()
             if (!setupTranscript) captureLog.close()
         }

@@ -639,6 +639,44 @@ class RadarV2DecoderTest {
         assertNull("reset() must clear bikeSpeedMs", state!!.bikeSpeedMs)
     }
 
+    @Test fun onlyAFullStatusFrameGivesTheDecoderABikeSpeed() {
+        assertFalse(decoder.hasBikeSpeed)
+        decoder.feed(packet(target(tid = 1, rangeY = 100)))
+        decoder.feed(sparseStatus())
+        decoder.feed(byteArrayOf(0x04, 0x00, 0x05, 0x00, 0x00, 0x28, 0x00))
+        assertFalse("a target, a sparse and a seven-byte frame carry no speed", decoder.hasBikeSpeed)
+        decoder.feed(fullStatus(rawSpeed = 0))
+        assertTrue("a zero speed is still a speed", decoder.hasBikeSpeed)
+    }
+
+    @Test fun noStatusFrameIsSeenBeforeOneArrives() {
+        assertFalse(decoder.sawDeviceStatus)
+        decoder.feed(packet(target(tid = 1, rangeY = 100)))
+        decoder.feed(byteArrayOf(0x01, 0x00))
+        assertFalse("a target frame and an ack are not status frames", decoder.sawDeviceStatus)
+    }
+
+    @Test fun aSparseStatusFrameIsSeen() {
+        decoder.feed(sparseStatus())
+        assertTrue(decoder.sawDeviceStatus)
+    }
+
+    @Test fun aSevenByteStatusFrameIsSeen() {
+        decoder.feed(byteArrayOf(0x04, 0x00, 0x05, 0x00, 0x00, 0x28, 0x00))
+        assertTrue(decoder.sawDeviceStatus)
+    }
+
+    @Test fun aFullStatusFrameIsSeen() {
+        decoder.feed(fullStatus(rawSpeed = 8))
+        assertTrue(decoder.sawDeviceStatus)
+    }
+
+    @Test fun resetForgetsTheStatusFrame() {
+        decoder.feed(sparseStatus())
+        decoder.reset()
+        assertFalse(decoder.sawDeviceStatus)
+    }
+
     // ── class debounce (asymmetric) ──────────────────────────────────────────
 
     @Test fun sizeUpgradeAppliesImmediately() {

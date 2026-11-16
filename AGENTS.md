@@ -363,8 +363,9 @@ must not be changed about it. Four that bite in ordinary work:
   decode loop and the tail-light failure report. One rule from it applies
   everywhere: never subscribe the CCCD of `6a4e3203` on a radar that has
   `6a4e3204`.
-- **Before changing the front camera's link, `DashcamProbe`,
-  `BatteryReader` or the dashcam walk-away alarm's probe, read
+- **Before changing the front camera's link (`CameraLightLinkController`),
+  `DashcamProbe`, `BatteryReader` or the dashcam walk-away alarm's probe, or
+  the dashcam light's set and failure report, read
   [`CAMERA_LINK.md`](CAMERA_LINK.md).** The alarm hears the camera only
   through a battery read it answered or its established light link, never
   through `BatteryStateBus`.

@@ -673,13 +673,13 @@
     <string name="settings_lights_title">Modo automático de luces</string>
     <string name="settings_lights_radar_section">Luz trasera del radar</string>
     <string name="settings_lights_auto_switch">Cambio automático día/noche</string>
-    <string name="settings_lights_radar_auto_sub">Ajusta la luz trasera del radar al conectar y al atardecer</string>
+    <string name="settings_lights_radar_auto_sub">Ajusta la luz trasera del radar al conectar, al amanecer y al atardecer</string>
     <string name="settings_lights_daytime_mode">Modo diurno</string>
     <string name="settings_lights_night_mode">Modo nocturno</string>
     <string name="settings_lights_night_sub"><xliff:g id="mode" example="Day Flash">%1$s</xliff:g> - se cambia al atardecer local</string>
     <string name="settings_lights_radar_caveat">El radar no puede confirmar que la luz ha cambiado - si tienes dudas echa un vistazo a la luz trasera.</string>
     <string name="settings_lights_dashcam_section">Luz de la cámara</string>
-    <string name="settings_lights_dashcam_auto_sub">Ajusta la luz de la cámara al conectar y al atardecer</string>
+    <string name="settings_lights_dashcam_auto_sub">Ajusta la luz de la cámara al conectar, al amanecer y al atardecer</string>
     <string name="settings_lights_dashcam_row_title">Luz de la cámara</string>
     <string name="settings_lights_dashcam_no">No tienes</string>
     <string name="settings_lights_dashcam_setup">Configura tu cámara delantera</string>

@@ -62,16 +62,18 @@ screen stays yours.
   clearances, time with traffic behind you, alerts per km and per hour, and
   the tightest pass: time, side, vehicle size, clearance, closing speed and
   distance behind).
-- Front-camera light auto-mode: picks Day Flash before sunset, Night
-  Flash after, computed from your location. Grant approximate location, or
-  enter coordinates manually if you'd rather not (London fallback if you do
-  neither). A manual button press during the session wins for the rest of
-  the ride.
+- Front-camera light auto-mode: sets the light to a day mode (default Day
+  flash) before sunset and a night mode (default Low) after, computed from
+  your location. Grant approximate location, or enter coordinates manually
+  if you'd rather not (London fallback if you do neither). Press the light's
+  own button and auto-mode won't switch it again until the camera has been
+  off for two minutes.
 - Radar tail-light auto-mode: sets the rear radar's tail light to a day
-  mode (default Day Flash) before sunset and a night mode (default Night
-  Flash) after, from the same device location. Sets the mode by type, so
-  it leaves your radar's button-cycle configuration untouched; a manual
-  button press wins for the rest of the ride. Off by default.
+  mode (default Day flash) before sunset and a night mode (default Night
+  flash) after, from the same device location. Sets the mode by type, so
+  it leaves your radar's button-cycle configuration untouched. Press the
+  light's own button and auto-mode won't switch it again until the radar
+  has been off for two minutes. Off by default.
 - Bosch eBike data (read-only), while Bosch Flow is connected to the bike:
   shows the bike's battery and connection status on the home screen. Its speed
   sets the beep timing and drives the no-radar warning, and the bike's own
@@ -410,8 +412,10 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   tiempo con tráfico detrás, avisos por km y por hora, y el adelantamiento más
   cercano: hora, lado, tamaño del vehículo, holgura, velocidad de aproximación
   y distancia por detrás).
-- Luz delantera y luz trasera del radar en modo automático según el
-  atardecer local.
+- Modo automático para la luz de la cámara y la luz trasera del radar, según
+  el amanecer y el atardecer locales. Si pulsas el botón de la propia luz, el
+  modo automático no vuelve a cambiarla hasta que el dispositivo pase 2
+  minutos apagado.
 - Datos de la eBike Bosch (solo lectura), mientras Bosch Flow está conectado a
   la bici: la pantalla de inicio muestra la batería y el estado de conexión.
   Con la velocidad, la app ajusta el ritmo de los pitidos y activa el aviso de

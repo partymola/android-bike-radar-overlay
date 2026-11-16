@@ -756,13 +756,13 @@
     <string name="settings_lights_title">Light auto-mode</string>
     <string name="settings_lights_radar_section">Radar tail light</string>
     <string name="settings_lights_auto_switch">Auto-switch day/night</string>
-    <string name="settings_lights_radar_auto_sub">Sets the radar tail light on connect and at sunset</string>
+    <string name="settings_lights_radar_auto_sub">Sets the radar tail light on connect, at sunrise and at sunset</string>
     <string name="settings_lights_daytime_mode">Daytime mode</string>
     <string name="settings_lights_night_mode">Night mode</string>
     <string name="settings_lights_night_sub"><xliff:g id="mode" example="Day Flash">%1$s</xliff:g> - switched at local sunset</string>
     <string name="settings_lights_radar_caveat">The radar can\'t confirm the switch - if in doubt, glance at the tail light.</string>
     <string name="settings_lights_dashcam_section">Dashcam light</string>
-    <string name="settings_lights_dashcam_auto_sub">Sets the dashcam light on connect and at sunset</string>
+    <string name="settings_lights_dashcam_auto_sub">Sets the dashcam light on connect, at sunrise and at sunset</string>
     <string name="settings_lights_dashcam_row_title">Dashcam light</string>
     <string name="settings_lights_dashcam_no">You don\'t have one</string>
     <string name="settings_lights_dashcam_setup">Set up your dashcam</string>

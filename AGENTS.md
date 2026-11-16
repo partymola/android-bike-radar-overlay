@@ -141,13 +141,13 @@ to its file. The notes below are the working summary.
 - The app connects to two BLE device classes: the rear radar and the front
   camera/light. Each has its own AMV UUID pair (see Gotchas).
 - HA integration is optional; the overlay works standalone.
-- Front-light mode is auto-set on every BLE connect: Day Flash before
-  sunset, Night Flash after, using `SunsetCalculator` driven by
-  `RideLocationResolver`: rider-entered manual coordinates if set, else
-  `LocationCache`'s approximate area, else a London fallback. A one-shot
-  dawn/dusk flip is scheduled for the rest of the session. Skipped when
-  `cameraLightUserOverride` is set (manual side-button press during the
-  session). See `CameraLightLinkController.kt` connect path.
+- Front-light mode is auto-set on every BLE connect: the rider's day mode
+  before sunset and night mode after (defaults Day flash and Low), using
+  `SunsetCalculator` driven by `RideLocationResolver`: rider-entered manual
+  coordinates if set, else `LocationCache`'s approximate area, else a London
+  fallback. A one-shot dawn/dusk flip is scheduled for the rest of the
+  session. Skipped when `cameraLightUserOverride` is set (manual side-button
+  press during the session). See `CameraLightLinkController.kt` connect path.
   Where the location comes from, and why the service cannot read it itself:
   "Location for light auto-mode" in `ARCHITECTURE.md`.
 - Capture log is opt-in (off by default; `Prefs.captureLoggingEnabled`, toggled

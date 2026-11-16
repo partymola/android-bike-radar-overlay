@@ -910,7 +910,14 @@ internal class RadarLinkController(
             // its last try, else the frame count and the landed-write count at
             // its failure. A press stops the retries
             // (`aPressDuringTheSecondTryEndsTheRetries`,
-            // `aPressDuringTheLastTryReportsNoFailure`).
+            // `aPressDuringTheLastTryReportsNoFailure`). A try answered after
+            // the loop read a press is not taken as landed, as it may have
+            // replaced the rider's choice
+            // (`aSetAnsweredAfterAPressIsNotJournalledAsApplied`,
+            // `aSetAnsweredAfterAPressLeavesTheFailureInTheShadeAndItsAlertSpent`);
+            // a write answered before the press is sent stays landed
+            // (`aButtonPressAndTheReconnectItHoldsAreJournalled`). No test
+            // reaches a press that has arrived but is not yet read.
             suspend fun setLight(
                 controller: RadarLightController,
                 phase: LightAutoModeDecider.Phase,
@@ -922,6 +929,11 @@ internal class RadarLinkController(
                 } catch (e: CancellationException) {
                     endedWithTheLink(phase, mode)
                     throw e
+                }
+                if (ok && radarLightUserOverride) {
+                    Log.i(TAG, "radar light $phase mode=$mode answered after a press")
+                    journal("radar light $phase mode=$mode answered after the rider changed the light")
+                    return null
                 }
                 val landedAtFailure = radarLightWritesLanded
                 val stopped = !ok && stop()
@@ -1543,7 +1555,11 @@ internal class RadarLinkController(
     /** An ACKed tail-light write, ours or a granted app's, is taken as the end
      *  of the fault: the entry leaves the shade and the next failure alerts in
      *  full (`aLandedSetTakesTheFailureOffTheShade`, `aFailureAfterALandedSetAlertsAgain`,
-     *  `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`). */
+     *  `aGrantedAppsLandedWriteTakesTheFailureOffTheShadeAndRearmsItsAlert`).
+     *  Our own write whose answer reaches the set after the loop has read a
+     *  press on the light's button is not: the phone cannot tell which mode
+     *  the radar ended in, so the entry stays and its alert stays spent
+     *  (`aSetAnsweredAfterAPressLeavesTheFailureInTheShadeAndItsAlertSpent`). */
     private fun radarLightWriteLanded() = synchronized(radarLightFailLock) {
         radarLightWritesLanded++
         radarLightFailAlerted = false

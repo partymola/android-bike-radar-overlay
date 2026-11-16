@@ -2707,8 +2707,7 @@ class RadarLinkControllerHarnessTest {
         assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
         pumpUntil(timeoutMs = 20_000) { false }
         assertEquals("ops=$gattOps", 1, lightWrites().size)
-        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
-        assertEquals("journal=$journal", emptyList<String>(), endedLines() + failedThenEndedLines())
+        assertEquals("journal=$journal", listOf("radar light slot changed on the radar: auto-mode holds off"), lightLines())
         assertFalse(radarLightFailNotified())
         assertEquals(0, nackTones())
         feeder.cancel()
@@ -2732,8 +2731,7 @@ class RadarLinkControllerHarnessTest {
     @Test fun aPressDuringTheSecondTryEndsTheRetries() = runTest {
         val controller = pressAfterLightWrites(2)
         assertEquals("ops=$gattOps", 2, lightWrites().size)
-        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
-        assertEquals("journal=$journal", emptyList<String>(), endedLines() + failedThenEndedLines())
+        assertEquals("journal=$journal", listOf("radar light slot changed on the radar: auto-mode holds off"), lightLines())
         assertEquals(0, nackTones())
         controller.forceReconnect()
     }
@@ -2741,8 +2739,7 @@ class RadarLinkControllerHarnessTest {
     @Test fun aPressDuringTheLastTryReportsNoFailure() = runTest {
         val controller = pressAfterLightWrites(3)
         assertEquals("ops=$gattOps", 3, lightWrites().size)
-        assertEquals("journal=$journal", emptyList<String>(), autoLightLines())
-        assertEquals("journal=$journal", emptyList<String>(), endedLines() + failedThenEndedLines())
+        assertEquals("journal=$journal", listOf("radar light slot changed on the radar: auto-mode holds off"), lightLines())
         assertFalse(radarLightFailNotified())
         assertEquals(0, nackTones())
         // Logcat calls it stopped, not failed.
@@ -2933,10 +2930,156 @@ class RadarLinkControllerHarnessTest {
             assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
             pumpUntil(timeoutMs = 20_000) { false }
             assertEquals("ops=$gattOps", listOf("light 06090111", "light 06090112"), lightWrites())
-            assertEquals("journal=$journal", listOf("radar light DAY mode=SOLID applied=true"), autoLightLines())
-            assertEquals("journal=$journal", emptyList<String>(), endedLines() + failedThenEndedLines())
+            assertEquals(
+                "journal=$journal",
+                listOf(
+                    "radar light DAY mode=SOLID applied=true",
+                    "radar light slot changed on the radar: auto-mode holds off",
+                ),
+                lightLines(),
+            )
             feeder.cancel()
             controller.forceReconnect()
+        }
+    }
+
+    // ── a press while a tail-light write awaits its answer ───────────────────────
+
+    /** Answers the tail-light write in flight, as the radar's write response. */
+    private fun answerTheLightWrite(link: Link) {
+        val gatt = requireNotNull(link.gatt)
+        val ack = gatt.getService(Uuids.SVC_CONTROL).getCharacteristic(Uuids.SETTINGS_ACK)
+        requireNotNull(link.cb).onCharacteristicWrite(gatt, ack, BluetoothGatt.GATT_SUCCESS)
+    }
+
+    /** 9 s before sunset, the connect-time set's first try (Solid) goes
+     *  unanswered; [beforeTheAnswer] runs with it in flight, then the radar
+     *  answers it and the test runs past the sunset switch. */
+    private suspend fun TestScope.aSetAnsweredAfter(beforeTheAnswer: suspend (Link) -> Unit, after: suspend (Link) -> Unit) {
+        nineSecondsBeforeSunset { p, wall ->
+            val gateway = FakeGateway().apply { state = RadarLinkState(radarGattActive = true) }
+            val (link, controller) = slowLightLink(swallowedWrites = 1, prefs = p, gateway = gateway, wallClock = wall)
+            val feeder = feedV2(link)
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 1_000) { lightWrites().size == 1 })
+            assertEquals("ops=$gattOps", listOf("light 06090111"), lightWrites())
+            beforeTheAnswer(link)
+            answerTheLightWrite(link)
+            pumpUntil(timeoutMs = 20_000) { false }
+            after(link)
+            feeder.cancel()
+            controller.forceReconnect()
+        }
+    }
+
+    /** The rider moves the light from slot 0 to slot 1, and the loop has read it. */
+    private suspend fun TestScope.aPressIsSeen(link: Link) {
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+        notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0101ff13") // the press
+        assertTrue("journal=$journal", pumpUntil(timeoutMs = 1_000) { journalHas("radar light slot changed on the radar: auto-mode holds off") })
+    }
+
+    private fun lightLines() = journal.toList().filter { it.startsWith("radar light ") }
+
+    @Test fun aSetAnsweredAfterAPressIsNotJournalledAsApplied() = runTest {
+        aSetAnsweredAfter(beforeTheAnswer = { aPressIsSeen(it) }) {
+            assertEquals(
+                "journal=$journal",
+                listOf(
+                    "radar light slot changed on the radar: auto-mode holds off",
+                    "radar light DAY mode=SOLID answered after the rider changed the light",
+                ),
+                lightLines(),
+            )
+        }
+    }
+
+    @Test fun aDuskSwitchAnsweredAfterAPressIsNotJournalledAsApplied() = runTest {
+        // The connect-time set lands; the sunset switch's first try goes
+        // unanswered until after the press.
+        nineSecondsBeforeSunset { p, wall ->
+            val gateway = FakeGateway().apply { state = RadarLinkState(radarGattActive = true) }
+            val (link, controller) = slowLightLink(swallowedWrites = 1, answeredFirst = 1, prefs = p, gateway = gateway, wallClock = wall)
+            val feeder = feedV2(link)
+            assertTrue("ops=$gattOps", pumpUntil(timeoutMs = 20_000) { lightWrites().size == 2 })
+            aPressIsSeen(link)
+            answerTheLightWrite(link)
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals("ops=$gattOps", listOf("light 06090111", "light 06090112"), lightWrites())
+            assertEquals(
+                "journal=$journal",
+                listOf(
+                    "radar light DAY mode=SOLID applied=true",
+                    "radar light slot changed on the radar: auto-mode holds off",
+                    "radar light NIGHT mode=PELOTON answered after the rider changed the light",
+                ),
+                lightLines(),
+            )
+            feeder.cancel()
+            controller.forceReconnect()
+        }
+    }
+
+    @Test
+    @Config(shadows = [RecordingNotifications::class])
+    fun aSetAnsweredAfterAPressLeavesTheFailureInTheShadeAndItsAlertSpent() = runTest {
+        // The first connection's set is refused and alerts; the second's is
+        // answered after a press; the third, past the press's deadband, is
+        // refused again in the same ride.
+        ShadowLog.clear()
+        val link = Link()
+        val clockMs = java.util.concurrent.atomic.AtomicLong(1_000L)
+        val slow = slowLightRadar(swallowedWrites = 1)
+        val setUp: (BluetoothGatt) -> Unit = { g -> if (link.openCount == 2) slow(g) else setUpRadarRefusingLightWrites(g) }
+        val controller = controller(link, prefs = autoLightPrefs(), setUp = setUp, clock = { clockMs.get() })
+        startDriver(link)
+        controller.start("TestRadar", mac)
+        assertTrue(pumpUntil { link.cb != null })
+        bootstrap(link)
+        feedHandshakeReplies(link)
+        assertTrue("journal=$journal", pumpUntil { lightSetLogged(applied = false) })
+        streams(link)
+        assertTrue(pumpUntil { nackTones() == 1 })
+
+        reconnect(link)
+        assertTrue("ops=$gattOps", pumpUntil { lightWrites().size == 1 })
+        aPressIsSeen(link)
+        val lines = lightLines().size
+        answerTheLightWrite(link)
+        assertTrue("journal=$journal", pumpUntil { lightLines().size == lines + 1 })
+        assertTrue("the failure entry must stay", radarLightFailNotified())
+
+        reconnect(link) { clockMs.set(201_000L) }
+        assertTrue("journal=$journal", pumpUntil { failedSetsLogged() == 2 })
+        streams(link)
+        assertTrue(pumpUntil { posts().size == 2 })
+        pumpUntil(timeoutMs = 3_000) { false }
+        assertEquals(listOf("alerting after 0 tones", "silent after 1 tones"), posts())
+        assertEquals(1, nackTones())
+        controller.forceReconnect()
+    }
+
+    @Test fun aPressWhileTheSetAwaitsItsAnswerHoldsAutoModeOff() = runTest {
+        // No sunset switch, and a reconnect inside the deadband sets nothing.
+        aSetAnsweredAfter(beforeTheAnswer = { aPressIsSeen(it) }) { link ->
+            assertEquals("ops=$gattOps", listOf("light 06090111"), lightWrites())
+            reconnect(link)
+            assertTrue("journal=$journal", pumpUntil { journal.count { it == heldLine } == 1 })
+            pumpUntil(timeoutMs = 3_000) { false }
+            assertEquals("ops=$gattOps", listOf("light 06090111"), lightWrites())
+        }
+    }
+
+    @Test fun theUnchangedLightStateDuringASetIsNotAPress() = runTest {
+        // A type-set leaves the reported slot state as it was, so that state
+        // arriving before the set's answer is not a press.
+        aSetAnsweredAfter(beforeTheAnswer = { link ->
+            notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // baseline
+            notify(link, Uuids.SVC_CONTROL, Uuids.SETTINGS_14, "0100ff14") // unchanged
+            notify(link, Uuids.SVC_BATTERY, Uuids.CHAR_BATTERY, "3c")
+            assertTrue(pumpUntil { BatteryStateBus.entries.value["testradar"]?.pct == 60 })
+        }) {
+            assertEquals("journal=$journal", listOf("radar light DAY mode=SOLID applied=true", "radar light NIGHT mode=PELOTON applied=true"), lightLines())
+            assertEquals("ops=$gattOps", listOf("light 06090111", "light 06090112"), lightWrites())
         }
     }
 

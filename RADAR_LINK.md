@@ -216,11 +216,22 @@ before changing `RadarLinkController`, `RadarLinkCoordinator` or
     `aPressDuringTheLightRetriesEndsThem`,
     `aPressDuringTheSecondTryEndsTheRetries`,
     `aPressDuringTheLastTryReportsNoFailure`,
-    `aPressDuringADuskSwitchLeavesNoLightLine`); a try sent before the press
-    that the radar then ACKs still journals `applied=true`, which no test
-    covers. A press after a failed try of the set or of a switch, or an app's
-    request after a failed connect-time set, before the frame that would
-    report it, leaves no report (`aPressAfterAFailedSetReportsNothing`,
+    `aPressDuringADuskSwitchLeavesNoLightLine`). A try whose answer reaches
+    the set after the loop has read a press journals `answered after the
+    rider changed the light`, not `applied=true`, and neither takes a failure
+    entry out of the shade nor re-arms its alert
+    (`aSetAnsweredAfterAPressIsNotJournalledAsApplied`,
+    `aDuskSwitchAnsweredAfterAPressIsNotJournalledAsApplied`,
+    `aSetAnsweredAfterAPressLeavesTheFailureInTheShadeAndItsAlertSpent`). A
+    repeat of the unchanged light state during a write is not a press
+    (`theUnchangedLightStateDuringASetIsNotAPress`).
+    When a press and a write cross, the phone cannot tell which mode the
+    radar ended in, because the radar never reports a type the app set, and
+    the app deliberately does not write the rider's mode back
+    (`aPressWhileTheSetAwaitsItsAnswerHoldsAutoModeOff`). A press after
+    a failed try of the set or of a switch, or an app's request after a failed
+    connect-time set, before the frame that would report it, leaves no report
+    (`aPressAfterAFailedSetReportsNothing`,
     `aPressAfterAFailedDuskSwitchReportsNothing`,
     `aGrantedAppsRequestAfterAFailedSetReportsNothing`). The same holds
     while a report's alert waits for a cue, a pause or a call: the press,

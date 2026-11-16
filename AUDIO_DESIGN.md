@@ -263,7 +263,8 @@ changed it) starts a new one, and so the next failure alerts in full again,
 whether or not the last ride's entry is still in the shade. After the alert,
 a repeat failure in the same ride, on the same link or after a reconnect,
 only updates the entry in the shade, at once and with no tone. A tail-light
-write that lands removes the entry, and the next failure alerts again
+write that lands, except one of ours answered after the rider's press
+(`RADAR_LINK.md`), removes the entry, and the next failure alerts again
 (`aRepeatFailureOnALaterConnectionOnlyUpdatesTheEntry`,
 `aRepeatFailureWhileACueSoundsIsPostedAtOnceAndNeverAgain`,
 `aFailureOnANewRideAlertsInFullAgain`,

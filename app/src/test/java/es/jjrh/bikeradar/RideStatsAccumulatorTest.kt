@@ -637,12 +637,44 @@ class RideStatsAccumulatorTest {
     // ── ride start ───────────────────────────────────────────────────────────
 
     @Test
-    fun rideStartedAtMsCapturedOnConstruction() {
+    fun aRideWithNoFrameYetIsDatedFromConstruction() {
         val clock = FakeClock(start = 12_345L)
         val a = acc(clock)
         clock.advance(60_000L)
-        // Ride start should not move forward.
         assertEquals(12_345L, a.snapshot().rideStartedAtMs)
+    }
+
+    @Test
+    fun theRideIsDatedFromItsFirstFrame() {
+        // The service builds the accumulator when it starts, which can be
+        // hours before the radar is switched on.
+        val clock = FakeClock(start = 12_345L)
+        val a = acc(clock)
+        clock.advance(60_000L)
+        a.observeFrame(radarState())
+        clock.advance(6_000L) // a dropout mid-ride keeps the start
+        a.observeFrame(radarState())
+        assertEquals(72_345L, a.snapshot().rideStartedAtMs)
+    }
+
+    @Test
+    fun theFirstFramesStartIsAChangeToPublish() {
+        // Home Assistant may already hold the start from before the frame.
+        val a = acc()
+        a.markPublished()
+        a.observeFrame(radarState())
+        assertEquals(true, a.changedSinceLast())
+    }
+
+    @Test
+    fun theHourlyRateCountsFromTheFirstFrame() {
+        val clock = FakeClock()
+        val a = acc(clock)
+        clock.advance(36_000_000L) // ten hours before the radar is switched on
+        a.observeFrame(radarState())
+        repeat(6) { a.observeAlertCue("beep count=3") }
+        clock.advance(1_800_000L)
+        assertEquals(12.0f, a.snapshot().alertsPerHourOfRide!!, 1e-4f)
     }
 
     // ── alarm-fatigue rates ───────────────────────────────────────────────────
@@ -682,8 +714,8 @@ class RideStatsAccumulatorTest {
         mono.advance(1_000L) // 1 s of real elapsed time
         a.observeFrame(radarState(bikeSpeedMs = 10f))
         val s = a.snapshot()
-        // rideStartedAtMs is the wall value captured at construction, immune to
-        // the later wall jump; distance is the 1 s monotonic dt at 10 m/s.
+        // rideStartedAtMs is the wall value at the first frame, immune to the
+        // later wall jump; distance is the 1 s monotonic dt at 10 m/s.
         assertEquals(1_700_000_000_000L, s.rideStartedAtMs)
         assertEquals(0.01f, s.distanceRiddenKm, 1e-4f)
     }

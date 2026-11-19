@@ -27,8 +27,14 @@ class RideStatsAccumulator(
      *  duration so a wall-clock jump can't inflate or drop the ride distance. */
     private val monoMsProvider: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
-    val rideStartedAtMs: Long = nowMsProvider()
-    private val rideStartedAtMono: Long = monoMsProvider()
+    /** The first frame, or construction until one arrives: the service can
+     *  build this hours before the radar is switched on
+     *  (`theRideIsDatedFromItsFirstFrame`, `theHourlyRateCountsFromTheFirstFrame`).
+     *  Volatile for [snapshot]'s off-thread readers. */
+    @Volatile var rideStartedAtMs: Long = nowMsProvider()
+        private set
+
+    @Volatile private var rideStartedAtMono: Long = monoMsProvider()
 
     /** (tid, bornAtMs) of each car seen in range: the radar reuses ids within
      *  a ride (`aSecondCarOnAReusedIdIsASecondOvertake`). A car re-born on its
@@ -100,6 +106,11 @@ class RideStatsAccumulator(
         val nowMs = monoMsProvider()
         val prev = lastFrameMs
         lastFrameMs = nowMs
+        if (prev == null) {
+            rideStartedAtMs = nowMsProvider()
+            rideStartedAtMono = nowMs
+            generation++
+        }
 
         // A gap wider than the link's own stall threshold means frames stopped
         // arriving: a mid-ride radar drop, a tunnel, a dead radar battery.

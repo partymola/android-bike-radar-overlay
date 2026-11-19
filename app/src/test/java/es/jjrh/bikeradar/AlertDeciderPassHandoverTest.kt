@@ -172,6 +172,218 @@ class AlertDeciderPassHandoverTest {
         assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
     }
 
+    private fun Scene.passLines() = gateLines.filter { it.startsWith("# gate pass") }
+
+    @Test
+    fun `a car drawing level twice is one pass`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        // Level with the rider, the radar reads car 1 as behind them again.
+        s.frames(3) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+        assertEquals(
+            listOf("# gate pass tid=1 via=behind d=4 floor_was=3", "# gate pass-again tid=1 via=behind d=0 floor_was=3"),
+            s.passLines(),
+        )
+    }
+
+    @Test
+    fun `a car not yet heard still beeps at its band when the passed car draws level again`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 12)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true)) }
+        // Car 1 reads as behind the rider again and is heard at 3.
+        s.frames(10) { listOf(car(1, 0), car(2, 12)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        assertEquals(listOf(beep(2, 1), beep(3, 1), beep(2, 2)), s.heard)
+    }
+
+    @Test
+    fun `a passed car seen more than 3 m back again can pass again`() {
+        fun heard(backToM: Int): List<Heard> {
+            val s = Scene()
+            s.frames(3) { listOf(car(2, 6)) }
+            s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+            s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+            s.frames(3) { listOf(car(1, backToM), car(2, 6)) }
+            s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+            return s.heard
+        }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), heard(backToM = 3))
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2), beep(3, 2)), heard(backToM = 4))
+    }
+
+    @Test
+    fun `how far back a passed car is seen is judged along the road`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        // A lane over: 3 m back along the road, 3.6 m away in a straight line.
+        s.frames(3) { listOf(car(1, 3, rangeXm = 2f), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+    }
+
+    @Test
+    fun `a passed car pulling ahead is still one pass`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+        // 5 m in front of the rider, which is not further back.
+        s.frames(10) { listOf(car(1, 5, isBehind = true), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+    }
+
+    @Test
+    fun `a car heard behind still holds the band when the passed car draws level again`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        // Car 2 is lost 6 m back: no pass, so car 3 waits for band 3.
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(3, 12)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+    }
+
+    @Test
+    fun `a band an urgent set for another car holds when the passed car draws level again`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 4)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true)) }
+        // Stopped: car 2 is heard at 2, then closes fast enough for the
+        // urgent warning, which counts as a 3.
+        s.frames(10, bikeSpeedMs = 0f) { listOf(car(1, 1, isBehind = true), car(2, 12, speedMs = -7f)) }
+        assertEquals(1, s.heard.count { it.event is AlertDecider.Event.UrgentApproach && it.tid == 2 })
+        s.frames(3, bikeSpeedMs = 0f) { listOf(car(1, 0), car(2, 12, speedMs = 0f)) }
+        s.frames(3, bikeSpeedMs = 0f) { listOf(car(1, 1, isBehind = true), car(2, 12, speedMs = 0f)) }
+        assertEquals(1, s.passLines().count { it.startsWith("# gate pass-again tid=1 ") })
+        // Moving off, car 2 is lost 12 m back and car 3 is in band 2.
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(3, 12)) }
+        assertEquals(listOf(beep(3, 1), beep(2, 2)), s.heard.filter { it.event is AlertDecider.Event.Beep })
+    }
+
+    @Test
+    fun `a passed car that is announced again passes again`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 12)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        // Car 1 reads as behind the rider again and is heard at 3.
+        s.frames(5) { listOf(car(1, 0), car(2, 12)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        assertEquals(listOf(beep(2, 1), beep(2, 2), beep(3, 1), beep(2, 2)), s.heard)
+    }
+
+    @Test
+    fun `a passed car heard again and seen further back holds the band like any car behind`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 4)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true), car(2, 1, isBehind = true)) }
+        // Car 2 reads as behind the rider again, is heard at 3 and drops back.
+        s.frames(5) { listOf(car(1, 1, isBehind = true), car(2, 2)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        // Car 2 is lost 6 m back: no pass, so car 3 waits for band 3.
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(3, 12)) }
+        assertEquals(listOf(beep(3, 1), beep(2, 2), beep(3, 2)), s.heard)
+    }
+
+    @Test
+    fun `a beep that was waiting and sounds for the passed car does not cost the car behind its own`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 12)) }
+        s.frames(7) { listOf(car(1, 6), car(2, 12)) }
+        // Car 1 passes inside the cooldown of its own beep, then flickers.
+        s.frames(1) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        s.frames(1) { listOf(car(1, 0), car(2, 12)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 12)) }
+        // The second 3 is the beep the pass armed for car 2, sounding for car
+        // 1 as the closest when the cooldown ends. That is older behaviour;
+        // this test is about car 2 still getting its own.
+        assertEquals(listOf(beep(2, 2), beep(3, 1), beep(3, 1), beep(2, 2)), s.heard)
+    }
+
+    @Test
+    fun `a passed car behind the rider for one frame is still one pass`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(20) { listOf(car(1, 4), car(2, 6)) }
+        s.frames(1) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        s.frames(1) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+    }
+
+    @Test
+    fun `a passed car that sets off the urgent warning passes again`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 4)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true)) }
+        s.frames(6, bikeSpeedMs = 0f) { listOf(car(1, 0, speedMs = -7f)) }
+        assertEquals(1, s.heard.count { it.event is AlertDecider.Event.UrgentApproach && it.tid == 1 })
+        s.frames(3, bikeSpeedMs = 0f) { listOf(car(1, 1, isBehind = true)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(3, 12)) }
+        assertEquals(
+            listOf("Beep" to 1, "UrgentApproach" to 1, "Beep" to 3),
+            s.heard.map { it.event::class.simpleName to it.tid },
+        )
+        assertEquals(beep(2, 3), s.heard.last())
+    }
+
+    @Test
+    fun `each of two cars that passed is one pass`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(1, 4), car(2, 5), car(3, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 5), car(3, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 1, isBehind = true), car(3, 6)) }
+        // Car 1, the first to pass, reads as behind the rider again.
+        s.frames(3) { listOf(car(1, 0), car(2, 1, isBehind = true), car(3, 6)) }
+        s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 1, isBehind = true), car(3, 6)) }
+        assertEquals(listOf(beep(3, 1), beep(3, 2), beep(3, 3)), s.heard)
+    }
+
+    @Test
+    fun `a passed car reading as behind again and then lost beside the rider is one pass`() {
+        val s = Scene()
+        s.frames(3) { listOf(car(2, 6)) }
+        s.frames(10) { listOf(car(1, 4), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+        s.frames(3) { listOf(car(1, 0), car(2, 6)) }
+        s.frames(10) { listOf(car(2, 6)) }
+        assertEquals(listOf(beep(3, 2), beep(3, 1), beep(3, 2)), s.heard)
+        assertEquals("# gate pass-again tid=1 via=fade d=0 floor_was=3", s.passLines().last())
+    }
+
+    @Test
+    fun `the passed car is forgotten at a reset, once it leaves the track list or a new car on its track id`() {
+        fun passes(between: Scene.() -> Unit, bornAgainAtMs: Long = 1L): Int {
+            val s = Scene()
+            s.frames(3) { listOf(car(1, 4), car(2, 6)) }
+            // Long enough for car 2's beep, which would otherwise wait and
+            // sound for car 1 below.
+            s.frames(10) { listOf(car(1, 1, isBehind = true), car(2, 6)) }
+            s.between()
+            s.frames(3) { listOf(car(1, 2, bornAtMs = bornAgainAtMs), car(2, 6)) }
+            s.frames(3) { listOf(car(1, 1, bornAtMs = bornAgainAtMs, isBehind = true), car(2, 6)) }
+            return s.passLines().count { it.startsWith("# gate pass tid=1 ") }
+        }
+        assertEquals("nothing between", 1, passes({}))
+        assertEquals("reset", 2, passes({ d.reset() }))
+        assertEquals("off the track list", 2, passes({ frames(30) { emptyList() } }))
+        assertEquals("new birth", 2, passes({}, bornAgainAtMs = 900L))
+    }
+
     @Test
     fun `another car passing while the heard car is still behind is not a pass`() {
         val s = Scene()

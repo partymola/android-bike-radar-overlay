@@ -159,6 +159,15 @@ radar frame:
   back. After a pass the next car is announced at its own tier, a 2 after a 3
   included. Otherwise a car further back stays silent until it reaches the
   highest tier heard since the last pass or all-clear, or the lapse below.
+- **A car passes once.** The radar can read a car level with the rider as
+  behind them again for a moment, then level again. While that car stays on
+  the radar, is not seen more than 3 m back and is not announced again
+  itself, by a beep or the urgent warning, its going by again is not a pass:
+  the car behind is not announced a second time and the count last heard
+  still holds (`a car drawing level twice is one pass`, `a car heard behind
+  still holds the band when the passed car draws level again`, `a passed car
+  that is announced again passes again`, `a passed car that sets off the
+  urgent warning passes again`).
 - **With no movement signal, the count can drop.** With no speed reading and
   no eBike data, as on a range-only radar without an eBike, a pass cannot be
   told from a car going quiet. Once neither a car heard at that count or above

@@ -127,7 +127,14 @@ enum class PassScoring { BIKE_ENVELOPE, RADAR_POINT }
  *    a pass, nor is a fade at a stop or with no speed reading, nor a
  *    track the ghost filter ([BornCloseGate]) is still holding back. A
  *    drawing level or fade not taken as a pass is logged as
- *    `# gate pass-refused`, with why. A beep the floor holds back is
+ *    `# gate pass-refused`, with why. A car that drew level is one pass
+ *    while it stays on the track list, is not seen more than
+ *    [PASS_FADE_MAX_M] back and sounds no cue of its own. Its going by
+ *    again in that time is logged as `# gate pass-again` and changes
+ *    nothing: the floor holds and the car behind is not announced again
+ *    (`a car drawing level twice is one pass`, `a car heard behind still
+ *    holds the band when the passed car draws level again`, `a passed car
+ *    that is announced again passes again`). A beep the floor holds back is
  *    logged as `# gate step-down` and sounds once the car reaches the
  *    floor (`AlertDeciderPassHandoverTest`).
  *  - **The floor lapses where the rider's movement is unknown.** With no
@@ -371,7 +378,7 @@ class AlertDecider(
     private val onTurnDefer: (tailMs: Long) -> Unit = {},
     /** Diagnostic hook for the gate decisions, written to the capture log so
      *  they can be audited post-ride. Covers the born-close suppress and
-     *  re-fire, a pass and a pass refused, a beep held below the
+     *  re-fire, a pass, a pass again and a pass refused, a beep held below the
      *  floor (`step-down`) or at a stop (`stationary`), the floor
      *  lapsing, the four urgent-pass verdicts, the unconfident wait's start
      *  and run-out, the fit expiry, a pending all-clear's grace restarted
@@ -392,7 +399,8 @@ class AlertDecider(
      *  per track ([passGateOkLogged], [ceilingLogged], [rxVetoLogged],
      *  [unconfidentWaits]) and an expiry can
      *  fire once per fit because the fit is removed as it is reported. A
-     *  pass or refused pass is logged once per closest car leaving, a
+     *  pass, pass again or refused pass is logged once per closest car
+     *  leaving, so a car flickering level writes one each time it does, a
      *  grace restart once per gap, on the frame that ends it
      *  (`a restart is logged once with the gap that caused it`), a
      *  floor lapse once per floor, and a step-down once per held trigger,
@@ -564,6 +572,15 @@ class AlertDecider(
     /** Whether that car was a track the ghost filter was holding back, which
      *  may be no car at all, so it cannot pass the rider. */
     private var prevClosestGhost: Boolean = false
+
+    /** The closest cars whose drawing level was taken as a pass, by (tid,
+     *  birth). One leaves once it is seen further back than
+     *  [PASS_FADE_MAX_M], sounds a beep or an urgent, or drops off the track
+     *  list. Until then its going by again is not a pass: a car level with
+     *  the rider can read as behind them and level by turns (`a car drawing
+     *  level twice is one pass`, `each of two cars that passed is one pass`,
+     *  `a passed car that is announced again passes again`). */
+    private val passedCars = HashSet<Pair<Int, Long>>()
 
     /** Highest count sounded since the last all-clear, pass, floor lapse or
      *  [reset], an urgent counting as 3. A closest-car beep below it is
@@ -929,22 +946,29 @@ class AlertDecider(
         val riderMoving: Boolean? = bikeNotDriving?.not() ?: bikeSpeedMs?.let { it > stationaryMsThreshold }
         val prevClosestFaded = prevKey != null && prevClosestNow == null
         val prevClosestLevel = prevClosestNow?.isBehind == true
-        val passed = !prevClosestGhost &&
+        for (v in vehicles) {
+            if (!v.isBehind && v.distanceM > PASS_FADE_MAX_M) passedCars.remove(v.id to v.bornAtMs)
+        }
+        val wentBy = !prevClosestGhost &&
             (
                 prevClosestLevel ||
                     (prevClosestFaded && prevClosestDistanceM <= PASS_FADE_MAX_M && riderMoving == true)
                 )
+        val passed = wentBy && prevKey !in passedCars
         val via = if (prevClosestLevel) "behind" else "fade"
-        if ((prevClosestFaded || prevClosestLevel) && !passed) {
+        if ((prevClosestFaded || prevClosestLevel) && !wentBy) {
             onGateEvent(
                 "# gate pass-refused tid=${prevKey.first} via=$via d=$prevClosestDistanceM" +
                     " moving=${riderMoving ?: "unknown"} ghost=$prevClosestGhost",
             )
         }
-        if (passed) {
-            onGateEvent("# gate pass tid=${prevKey.first} via=$via d=$prevClosestDistanceM floor_was=$stepFloor")
-            stepFloor = 0
+        if (wentBy) {
+            val kind = if (passed) "pass" else "pass-again"
+            onGateEvent("# gate $kind tid=${prevKey.first} via=$via d=$prevClosestDistanceM floor_was=$stepFloor")
+            if (passed) stepFloor = 0
+            if (prevClosestLevel) passedCars += prevKey
         }
+        passedCars.retainAll { (id, born) -> vehicles.any { it.id == id && it.bornAtMs == born } }
 
         // With no movement signal no fade can be taken as a pass, so the
         // floor lapses once no car heard at or above it, nor the urgent's
@@ -1260,6 +1284,7 @@ class AlertDecider(
                         urgentFiredThisEpisode = true
                         stepFloor = 3
                         urgentFloorCar = imminentImpactTrigger.id to imminentImpactTrigger.bornAtMs
+                        passedCars.remove(urgentFloorCar)
                         floorSeenAtMs = nowMs
                         Event.UrgentApproach(
                             viaMovingPath = urgentViaMoving,
@@ -1319,6 +1344,7 @@ class AlertDecider(
                             // the tier latch has nothing to key on if it
                             // does. The cue fires either way.
                             if (v != null) {
+                                passedCars.remove(v.id to v.bornAtMs)
                                 firedTier[v.id] = v.bornAtMs to closestUrgency
                                 floorSeenAtMs = nowMs
                             }
@@ -1350,6 +1376,7 @@ class AlertDecider(
         prevClosestDistanceM = Int.MAX_VALUE
         prevClosestGhost = false
         stepFloor = 0
+        passedCars.clear()
         urgentFloorCar = null
         floorSeenAtMs = 0L
         lastBehindDistanceM = 0
@@ -1846,7 +1873,9 @@ class AlertDecider(
          *  the rider moves counts as a pass: the radar often drops a car as it
          *  draws level instead of reporting it level. An allowance, not a
          *  measurement. A car fading further back may have turned off or
-         *  dropped out while still behind, so it is not a pass. */
+         *  dropped out while still behind, so it is not a pass. A car that
+         *  drew level can also pass again once it is seen more than this far
+         *  back ([passedCars]), so moving it moves both. */
         const val PASS_FADE_MAX_M = 3
 
         /** How long the track list must hold no car heard at or above the

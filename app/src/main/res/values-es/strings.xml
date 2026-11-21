@@ -440,7 +440,7 @@
     <string name="settings_radar_alert_volume_title">Volumen de los avisos</string>
     <string name="settings_radar_alert_volume_helper">Lo fuerte que suenan los avisos. Con 0 no suenan; la barra lateral se sigue viendo.</string>
     <string name="settings_radar_alert_distance_title">Distancia de alerta</string>
-    <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la barra lateral pero sin sonido. Se ajusta a la velocidad de la bici cuando las alertas adaptativas están activadas.</string>
+    <string name="settings_radar_alert_distance_helper">Empieza a pitar cuando un vehículo está a esta distancia. Los vehículos más lejanos aparecen en la barra lateral pero sin sonido.</string>
     <string name="settings_radar_urgent_clearance_title">Holgura del aviso urgente</string>
     <string name="settings_radar_urgent_clearance_helper">El aviso urgente no suena si parece que un vehículo va a pasar a más de esta distancia del centro de tu bici. Increméntala para incluir también adelantamientos más holgados.</string>
     <string name="settings_radar_closing_ceiling_title">Avisar hasta</string>

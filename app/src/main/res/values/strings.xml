@@ -499,7 +499,7 @@
          and both radar pulses. The walk-away alarm has its own volume. -->
     <string name="settings_radar_alert_volume_helper">How loud the alert sounds are. At 0 they are silent; the overlay still shows.</string>
     <string name="settings_radar_alert_distance_title">Alert distance</string>
-    <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent. Scaled by bike speed when adaptive alerts are on.</string>
+    <string name="settings_radar_alert_distance_helper">Start beeping when a vehicle is this close. Vehicles farther away appear on the overlay but stay silent.</string>
     <string name="settings_radar_urgent_clearance_title">Urgent warning clearance</string>
     <string name="settings_radar_urgent_clearance_helper">The urgent warning stays quiet when a vehicle looks set to clear the middle of your bike by more than this. Raise it to include wider passes too.</string>
     <!-- Closing-speed cut-off: above it a target gets no beep and no urgent

@@ -110,6 +110,33 @@ class DashcamPickerSaveTest {
         assertEquals(mac, prefs.dashcamMac)
         assertEquals("VUE-12345", prefs.dashcamDisplayName)
         assertEquals(DashcamOwnership.YES, prefs.dashcamOwnership)
-        assertFalse("only onboarding turns the warning on for the rider", prefs.dashcamWarnWhenOff)
+    }
+
+    @Test
+    fun aFirstPickFromSettingsTurnsTheWarningOn() {
+        showThePicker()
+
+        tap("VUE-12345")
+        tap("Save")
+
+        assertTrue("the home card promises the warning to a rider who picks here", prefs.dashcamWarnWhenOff)
+    }
+
+    @Test
+    fun swappingCamerasKeepsTheWarningAsTheRiderSetIt() {
+        val adapter = (app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val other = adapter.getRemoteDevice("AA:BB:CC:DD:EE:33")
+        shadowOf(other).setName("VUE-67890")
+        shadowOf(adapter).setBondedDevices(setOf(adapter.getRemoteDevice(mac), other))
+        prefs.dashcamOwnership = DashcamOwnership.YES
+        prefs.dashcamMac = mac
+        prefs.dashcamWarnWhenOff = false
+        showThePicker()
+
+        tap("VUE-67890")
+        tap("Save")
+
+        assertEquals("AA:BB:CC:DD:EE:33", prefs.dashcamMac)
+        assertFalse("the rider turned it off for the camera they had", prefs.dashcamWarnWhenOff)
     }
 }

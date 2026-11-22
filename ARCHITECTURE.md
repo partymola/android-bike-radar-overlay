@@ -280,7 +280,7 @@ protocol is documented in the sibling `bike-radar-docs` repository.
 | `app/src/main/java/es/jjrh/bikeradar/ui/SystemRowVisibility.kt` | Pure `deviceLinkState` classifier - the ONE answer to "is this device delivering", read by the home card, both Settings surfaces and each device screen |
 | `app/src/main/java/es/jjrh/bikeradar/ui/DeviceStatusLabels.kt` | The ONE word per state per device, in both languages. Gender is why radar / camera / eBike each get their own mapping; English collapses all three, so nothing in the en strings shows a mismatch |
 | `app/src/main/java/es/jjrh/bikeradar/PermissionsSummaryDeriver.kt` | Pure permissions-row summary (all-granted / partial / action-needed) |
-| `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, and `lowBatterySlugs` |
+| `app/src/main/java/es/jjrh/bikeradar/BatteryChipLevel.kt` | Pure battery derivations: `batteryIsLow` (shared by the chip and the overlay marker), the chip's colour band, `lowBatterySlugs`, and `overlayBatterySlugs` (which low devices the overlay marks: the picked camera and the radar) |
 | `app/src/main/java/es/jjrh/bikeradar/RadarV2Decoder.kt` | V2 target-struct decoder (stateful) |
 | `app/src/main/java/es/jjrh/bikeradar/EnablingSequence.kt` | AMV 04 handshake; `DeviceVariant` selects rear-radar or front-camera UUID pair |
 | `app/src/main/java/es/jjrh/bikeradar/RadarOverlayView.kt` | Canvas overlay |

@@ -279,7 +279,13 @@ internal class OverlayPipeline(
                             nowMs = now,
                             staleAfterMs = BikeRadarService.BATTERY_STALE_MS,
                         )
-                        view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
+                        val table = macToSlug()
+                        val radarSlugs = listOfNotNull(currentRadarMac(), prefs.radarMac)
+                            .mapNotNullTo(HashSet()) { table[it] ?: table[it.uppercase(Locale.ROOT)] }
+                        view.setBatteryLow(
+                            overlayBatterySlugs(lowSlugs, batteries, dashcamSlug, radarSlugs),
+                            prefs.batteryShowLabels,
+                        )
 
                         if (!prefs.isPaused) {
                             if (newFrame) fireAlertCue(state, alerts, overlayPrefs, nowMono, now, turn)
@@ -303,7 +309,6 @@ internal class OverlayPipeline(
                             closingSpeedFloorMs = closingFloorMs,
                             emitMinRangeXM = prefs.closePassEmitMinRangeXM,
                         )
-                        val table = macToSlug()
                         val radarMac = currentRadarMac()
                         val radarSlug = radarMac?.let { table[it] ?: table[it.uppercase(Locale.ROOT)] }
                         if (cpCfg.enabled && ha().isConfigured() && !closePassDiscoveryPublished && !closePassDiscoveryInFlight && radarSlug != null) {

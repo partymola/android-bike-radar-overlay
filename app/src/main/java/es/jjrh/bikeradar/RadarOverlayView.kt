@@ -197,6 +197,9 @@ class RadarOverlayView(context: Context) : View(context) {
         postInvalidate()
     }
 
+    @get:androidx.annotation.VisibleForTesting
+    internal val markedBatterySlugs: Set<String> get() = batteryLowSlugs
+
     fun setBatteryLow(lowSlugs: Set<String>, showLabels: Boolean) {
         if (lowSlugs == batteryLowSlugs && showLabels == batteryShowLabels) return
         batteryLowSlugs = lowSlugs

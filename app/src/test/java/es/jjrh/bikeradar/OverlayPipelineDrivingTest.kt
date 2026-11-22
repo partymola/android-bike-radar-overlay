@@ -839,6 +839,35 @@ class OverlayPipelineDrivingTest {
     }
 
     @Test
+    fun aCameraNoLongerPickedIsNotMarkedAsTheRadar() = runTest {
+        // The overlay draws every low device but the picked camera as the
+        // radar. A radar the name test does not know counts by its address.
+        val radarMac = "AA:BB:CC:DD:EE:01"
+        val cameraMac = "AA:BB:CC:DD:EE:02"
+        val table = mapOf(radarMac to "my_radar", cameraMac to "vue_old")
+        BatteryStateBus.update(BatteryEntry(slug = "my_radar", name = "My Radar", pct = 5))
+        BatteryStateBus.update(BatteryEntry(slug = "vue_old", name = "VUE-OLD", pct = 5))
+        suspend fun marked(): Set<String>? {
+            val job = buildPipeline(currentRadarMac = { radarMac }, macToSlug = { table }).attach(this, "TestRadar")
+            runCurrent()
+            RadarStateBus.publish(liveFrame(100L))
+            runCurrent()
+            job.cancel()
+            job.join()
+            RadarStateBus.clear()
+            return fakeHost.view?.markedBatterySlugs
+        }
+        try {
+            assertEquals("not picked", setOf("my_radar"), marked())
+            prefs.dashcamOwnership = es.jjrh.bikeradar.data.DashcamOwnership.YES
+            prefs.dashcamMac = cameraMac
+            assertEquals("picked", setOf("my_radar", "vue_old"), marked())
+        } finally {
+            prefs.clearDashcamPick()
+        }
+    }
+
+    @Test
     fun aFramePublishedWhilePausedIsNotCountedAfterTheResume() = runTest {
         val cues = timedBeeper()
         val job = buildPipeline(clockMono = virtualMono()).attach(this, "TestRadar")
@@ -1732,7 +1761,8 @@ class OverlayPipelineDrivingTest {
         var configChangedCount = 0
         var canDraw = true
         var attachResult: () -> Throwable? = { null }
-        override fun createView(): RadarOverlayView = RadarOverlayView(ctx)
+        var view: RadarOverlayView? = null
+        override fun createView(): RadarOverlayView = RadarOverlayView(ctx).also { view = it }
         override fun canDrawOverlays(): Boolean = canDraw
         override fun attach(view: RadarOverlayView): Throwable? {
             val failed = attachResult()

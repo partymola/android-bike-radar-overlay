@@ -249,7 +249,7 @@
 
     <!-- Dashcam-ownership prompt card (first-run flows). -->
     <string name="main_dashcam_prompt_title">Do you run a dashcam?</string>
-    <string name="main_dashcam_prompt_body">The overlay shows its battery and flags when it stops broadcasting.</string>
+    <string name="main_dashcam_prompt_body">The overlay warns when the dashcam\'s battery is low or your phone can\'t pick it up.</string>
     <string name="main_dashcam_prompt_yes">Set it up</string>
     <string name="main_dashcam_prompt_no">I don\'t have one</string>
 
@@ -346,7 +346,7 @@
     <string name="onboarding_pair_dashcam_picked_fallback">Picked</string>
     <string name="onboarding_pair_dashcam_picked_detail"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g></string>
     <string name="onboarding_pair_dashcam_pick_detail">Pick the dashcam you ride with to enable off-warnings.</string>
-    <string name="onboarding_pair_dashcam_unanswered_detail">Got a Bluetooth dashcam? The overlay shows its battery and flags when it stops broadcasting.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">Got a Bluetooth dashcam? The overlay warns when the dashcam\'s battery is low or your phone can\'t pick it up.</string>
     <string name="onboarding_pair_change_device">Change device</string>
     <string name="onboarding_pair_pick_device">Pick device</string>
     <string name="onboarding_pair_dont_have_one">I don\'t have one</string>

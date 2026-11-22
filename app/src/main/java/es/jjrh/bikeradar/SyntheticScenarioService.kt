@@ -35,7 +35,8 @@ import kotlinx.coroutines.launch
  *  - Phantom blip [t=56.0..56.05] single frame; AlertDecider sustain=2 must suppress it.
  *  - Silence [t=56.1..60] all-clear window.
  *
- * Dashcam status sequence (with the default dashcamWarnWhenOff on):
+ * Dashcam status sequence (with dashcamWarnWhenOff on, which the run sets
+ * when no camera is picked):
  *  - t=0..10       Searching  (cold-start grace; no battery advert yet)
  *  - t=10..20      Missing    (amber, never-seen this session)
  *  - t=20          simulated dashcam advert pushed to BatteryStateBus

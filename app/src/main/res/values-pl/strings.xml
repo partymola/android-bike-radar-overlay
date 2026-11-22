@@ -253,7 +253,7 @@
     </plurals>
     <!-- Dashcam-ownership prompt card (first-run flows). -->
     <string name="main_dashcam_prompt_title">Korzystasz z kamery?</string>
-    <string name="main_dashcam_prompt_body">Nakładka pokazuje jej baterię i ostrzega, gdy kamera przestaje nadawać.</string>
+    <string name="main_dashcam_prompt_body">Nakładka ostrzega, gdy kamera ma niski poziom baterii lub gdy telefon jej nie wykrywa.</string>
     <string name="main_dashcam_prompt_yes">Skonfiguruj</string>
     <string name="main_dashcam_prompt_no">Nie mam kamery</string>
     <!-- ════════════════════════════════════════════════════════════════
@@ -346,7 +346,7 @@
         <xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g>
     </string>
     <string name="onboarding_pair_dashcam_pick_detail">Wybierz używaną podczas jazdy kamerę, aby włączyć ostrzeżenia o jej wyłączeniu.</string>
-    <string name="onboarding_pair_dashcam_unanswered_detail">Masz kamerę Bluetooth? Nakładka pokazuje stan jej baterii i ostrzega, gdy przestaje nadawać.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">Masz kamerę Bluetooth? Nakładka ostrzega, gdy kamera ma niski poziom baterii lub gdy telefon jej nie wykrywa.</string>
     <string name="onboarding_pair_change_device">Zmień urządzenie</string>
     <string name="onboarding_pair_pick_device">Wybierz urządzenie</string>
     <string name="onboarding_pair_dont_have_one">Nie mam takiego urządzenia</string>

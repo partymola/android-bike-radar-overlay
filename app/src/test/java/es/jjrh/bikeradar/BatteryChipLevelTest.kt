@@ -65,6 +65,41 @@ class BatteryChipLevelTest {
         )
     }
 
+    @Test fun aCameraNoLongerPickedIsNotMarked() {
+        // The overlay draws every low device but the picked camera as the
+        // radar, so the old camera's leftover reading would read as the radar.
+        val entries = mapOf(
+            "vue_old" to BatteryEntry("vue_old", "VUE-OLD", 5),
+            "vue_new" to BatteryEntry("vue_new", "VUE-NEW", 5),
+        )
+        assertEquals(
+            setOf("vue_new"),
+            overlayBatterySlugs(setOf("vue_old", "vue_new"), entries, dashcamSlug = "vue_new", radarSlugs = emptySet()),
+        )
+        assertEquals(
+            "with no camera picked, no camera is marked",
+            emptySet<String>(),
+            overlayBatterySlugs(setOf("vue_old"), entries, dashcamSlug = null, radarSlugs = emptySet()),
+        )
+    }
+
+    @Test fun aRadarIsMarkedByItsNameOrItsAddress() {
+        val entries = mapOf(
+            "rearvue8" to BatteryEntry("rearvue8", "RearVue8", 5),
+            "my_radar" to BatteryEntry("my_radar", "My Radar", 5),
+        )
+        assertEquals(
+            "a radar's own name is enough",
+            setOf("rearvue8"),
+            overlayBatterySlugs(setOf("rearvue8", "my_radar"), entries, dashcamSlug = null, radarSlugs = emptySet()),
+        )
+        assertEquals(
+            "a radar the name test does not know counts through the link or the pin",
+            setOf("rearvue8", "my_radar"),
+            overlayBatterySlugs(setOf("rearvue8", "my_radar"), entries, dashcamSlug = null, radarSlugs = setOf("my_radar")),
+        )
+    }
+
     @Test fun theDefaultThresholdKeepsTheOriginalBands() {
         assertEquals(BatteryChipLevel.CRITICAL, batteryChipLevel(pct = 10, lowThresholdPct = 20))
         assertEquals(BatteryChipLevel.LOW, batteryChipLevel(pct = 11, lowThresholdPct = 20))

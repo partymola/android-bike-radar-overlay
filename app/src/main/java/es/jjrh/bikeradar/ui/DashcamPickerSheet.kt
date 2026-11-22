@@ -155,7 +155,11 @@ private fun DashcamPickerSheetBody(
                     // onboarding flip from the UNANSWERED card to the
                     // picked DeviceRow without a flicker on entry.
                     prefs.dashcamOwnership = DashcamOwnership.YES
-                    if (fromOnboarding) prefs.dashcamWarnWhenOff = true
+                    // Onboarding and a first pick turn the camera-off warning
+                    // on; a swap in Settings keeps the rider's setting
+                    // (`aFirstPickFromSettingsTurnsTheWarningOn`,
+                    // `swappingCamerasKeepsTheWarningAsTheRiderSetIt`).
+                    if (fromOnboarding || initialMac == null) prefs.dashcamWarnWhenOff = true
                 }
                 navController.popBackStack()
             },

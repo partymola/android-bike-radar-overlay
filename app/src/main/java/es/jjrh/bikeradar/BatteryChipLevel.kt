@@ -64,3 +64,22 @@ fun lowBatterySlugs(
     .filter { batteryIsLow(it.pct, lowThresholdPct) && nowMs - it.readAtMs < staleAfterMs }
     .map { it.slug }
     .toSet()
+
+/**
+ * Of the [low] devices, the ones the overlay marks: the picked camera, and a
+ * radar, known by its name ([DeviceNameMatcher.isUnambiguousRadar], the test
+ * the battery read uses) or by address ([radarSlugs]: the linked and pinned
+ * radars). The overlay draws any low device but the camera as the radar, and
+ * a camera the rider has unpicked keeps its last reading on [BatteryStateBus]
+ * (`aCameraNoLongerPickedIsNotMarked`).
+ */
+fun overlayBatterySlugs(
+    low: Set<String>,
+    entries: Map<String, BatteryEntry>,
+    dashcamSlug: String?,
+    radarSlugs: Set<String>,
+): Set<String> = low.filterTo(HashSet()) { slug ->
+    slug == dashcamSlug ||
+        slug in radarSlugs ||
+        entries[slug]?.let { DeviceNameMatcher.isUnambiguousRadar(it.name) } == true
+}

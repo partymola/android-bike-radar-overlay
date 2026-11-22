@@ -201,7 +201,7 @@
 
     <!-- Tarjeta de aviso de si tienes dashcam (flujos de primer uso). -->
     <string name="main_dashcam_prompt_title">¿Usas una cámara delantera?</string>
-    <string name="main_dashcam_prompt_body">La barra lateral muestra su batería y avisa cuando deja de emitir.</string>
+    <string name="main_dashcam_prompt_body">La barra lateral avisa si la cámara tiene poca batería o si el teléfono no la detecta.</string>
     <string name="main_dashcam_prompt_yes">Configurarla</string>
     <string name="main_dashcam_prompt_no">No tengo</string>
 
@@ -287,7 +287,7 @@
     <string name="onboarding_pair_dashcam_picked_fallback">Elegida</string>
     <string name="onboarding_pair_dashcam_picked_detail"><xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g></string>
     <string name="onboarding_pair_dashcam_pick_detail">Elige la cámara delantera que usas para activar los avisos de apagado.</string>
-    <string name="onboarding_pair_dashcam_unanswered_detail">¿Tienes una cámara delantera con Bluetooth? La barra lateral muestra su batería y avisa cuando deja de emitir.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">¿Tienes una cámara delantera con Bluetooth? La barra lateral avisa si la cámara tiene poca batería o si el teléfono no la detecta.</string>
     <string name="onboarding_pair_change_device">Cambiar dispositivo</string>
     <string name="onboarding_pair_pick_device">Elegir dispositivo</string>
     <string name="onboarding_pair_dont_have_one">No tengo</string>

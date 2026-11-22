@@ -49,11 +49,15 @@ internal object SoundDemo {
         val out = mutableListOf<Vehicle>()
         val carOneM = CAR_ONE_START_M - CAR_ONE_SPEED_MS * (t - CAR_ONE_START_S)
         if (t >= CAR_ONE_START_S && carOneM > 0.0) {
-            out += car(id = 1, distanceM = carOneM, speedMs = -CAR_ONE_SPEED_MS.toFloat())
+            out += car(id = 1, distanceM = carOneM, speedMs = -CAR_ONE_SPEED_MS.toFloat(), heardAtMs = tMs)
         }
         if (t >= 14.0) {
             val d = 45.0 - 14.0 * (t - 14.0)
-            out += if (d > 4.0) car(id = 2, distanceM = d, speedMs = -14f) else car(id = 2, distanceM = 4.0, speedMs = 0f)
+            out += if (d > 4.0) {
+                car(id = 2, distanceM = d, speedMs = -14f, heardAtMs = tMs)
+            } else {
+                car(id = 2, distanceM = 4.0, speedMs = 0f, heardAtMs = tMs)
+            }
         }
         return out
     }
@@ -95,13 +99,14 @@ internal object SoundDemo {
 
     // Slightly off-centre, so the lateral gates see a measured car rather than
     // the 0f every consumer reads as "nothing measured".
-    private fun car(id: Int, distanceM: Double, speedMs: Float) = Vehicle(
+    private fun car(id: Int, distanceM: Double, speedMs: Float, heardAtMs: Long) = Vehicle(
         id = id,
         distanceM = distanceM.toInt().coerceAtLeast(0),
         speedMs = speedMs,
         lateralPos = LATERAL_POS,
         rangeXm = LATERAL_POS * RadarV2Decoder.LATERAL_FULL_M,
         rangeXmRaw = LATERAL_POS * RadarV2Decoder.LATERAL_FULL_M,
+        heardAtMs = heardAtMs,
     )
 
     private const val LATERAL_POS = 0.1f

@@ -435,7 +435,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
 
     /**
      * Publishes the HA MQTT-Discovery config for the per-ride summary
-     * sensors. Twelve sensors share the single retained state topic
+     * sensors. Thirteen sensors share the single retained state topic
      * `<NS>/<slug>/ride_summary` and decompose its JSON via value_template,
      * so one MQTT message updates every sensor atomically. All sensors
      * sit under the same `device.identifiers` as the battery + close-pass
@@ -454,13 +454,14 @@ open class HaClient(private val baseUrl: String, private val token: String) {
     }
 
     /**
-     * Discovery payloads for the twelve per-ride summary sensors, paired with
+     * Discovery payloads for the thirteen per-ride summary sensors, paired with
      * their config topics. Extracted from [publishRideSummaryDiscovery] so
      * unit tests can assert on the JSON shape - notably the value_template's
      * no-value sentinel - without needing a live MQTT broker.
      *
-     * Fields with no data (the nullable ones, and the four close-pass figures
-     * on a ride that never counted them) are omitted from the state JSON, so the
+     * Fields with no data (the nullable ones, the passed count on a radar
+     * with no lateral channel, and the four close-pass figures on a ride that
+     * never counted them) are omitted from the state JSON, so the
      * value_template's `default('None')` renders the literal string "None".
      * That is the one sentinel HA's MQTT sensor maps to the Unknown state
      * (PAYLOAD_NONE); `default('unknown')` would instead make HA try to
@@ -515,6 +516,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
                 .put("hgv_close_pass_count", snapshot.hgvClosePassCount)
                 .put("close_pass_conversion_rate", snapshot.closePassConversionRatePct.toDouble())
         }
+        snapshot.vehiclesPassed?.let { payload.put("vehicles_passed", it) }
         snapshot.peakClosingKmh?.let { payload.put("peak_closing_kmh", it) }
         snapshot.closingSpeedP90Kmh?.let { payload.put("closing_speed_p90_kmh", it) }
         snapshot.minLateralClearanceM?.let { payload.put("min_lateral_clearance_m", it.toDouble()) }
@@ -569,7 +571,9 @@ open class HaClient(private val baseUrl: String, private val token: String) {
          * A sensor added here is published AND retired on the next rename.
          */
         private val RIDE_SUMMARY_SENSORS = listOf(
-            RideSummarySensor("overtakes_total", "Overtakes", "total_increasing", null, null, null),
+            // The key stays `overtakes_total`: it is what a rider's automations read.
+            RideSummarySensor("overtakes_total", "Vehicles detected behind", "total_increasing", null, null, null),
+            RideSummarySensor("vehicles_passed", "Vehicles passed (approx.)", "total_increasing", null, null, null),
             RideSummarySensor("close_pass_count", "Close passes", "total_increasing", null, null, null),
             RideSummarySensor("grazing_count", "Grazing passes", "total_increasing", null, null, null),
             RideSummarySensor("hgv_close_pass_count", "HGV close passes", "total_increasing", null, null, null),
@@ -578,7 +582,7 @@ open class HaClient(private val baseUrl: String, private val token: String) {
             RideSummarySensor("min_lateral_clearance_m", "Tightest clearance", "measurement", "distance", "m", 2),
             RideSummarySensor("distance_ridden_km", "Distance ridden", "total_increasing", "distance", "km", 2),
             RideSummarySensor("exposure_seconds", "Time with traffic", "total_increasing", "duration", "s", null),
-            RideSummarySensor("close_pass_conversion_rate", "Close-pass conversion rate", "measurement", null, "%", 1),
+            RideSummarySensor("close_pass_conversion_rate", "Close-pass rate (per vehicle detected)", "measurement", null, "%", 1),
             RideSummarySensor("alerts_per_km", "Alerts per km", "measurement", null, "/km", 2),
             RideSummarySensor("alerts_per_hour_of_ride", "Alerts per hour", "measurement", null, "/h", 1),
         )
@@ -656,7 +660,7 @@ object DataDisclosure {
         Flow("ride_edge", "Ride start/end events", "ride start/end"),
         Flow(
             "ride_summary",
-            "Ride summary, updated every minute during the ride (start time, distance, overtake and close-pass counts, close-pass rate, closing speeds, clearances, time with traffic, alert rates, tightest pass)",
+            "Ride summary, updated every minute during the ride (start time, distance, vehicles detected behind, approximate vehicles passed, close-pass counts, close-pass rate per vehicle detected, closing speeds, clearances, time with traffic, alert rates, tightest pass)",
             "summary",
         ),
     )

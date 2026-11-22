@@ -279,6 +279,7 @@ class RadarV2Decoder(
                 bornAtMs = prev?.firstSeen ?: now,
                 bornDistanceM = birthDistanceM,
                 bornInformative = birthInformative,
+                heardAtMs = now,
             ),
             lastSeen = now,
             firstSeen = prev?.firstSeen ?: now,

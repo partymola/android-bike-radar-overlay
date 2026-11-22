@@ -154,6 +154,7 @@ class RadarV1Decoder(
                     speedMs = NO_CLOSING_SPEED,
                     size = existing?.size ?: VehicleSize.CAR,
                     lateralUnknown = true,
+                    heardAtMs = now,
                 ),
                 lastSeen = now,
             )

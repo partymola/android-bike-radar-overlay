@@ -1020,10 +1020,10 @@ class OverlayPipelineDrivingTest {
             }
         }
         // The bus drops a snapshot equal to the one it holds, and the ledger
-        // decides on it: so the pipeline sees five fewer than the ledger here,
-        // and none of the five moves a cue.
+        // decides on it: so the pipeline sees three fewer than the ledger here,
+        // and none of the three moves a cue.
         val decoded = decodeAll()
-        assertEquals("repeated snapshots", 5, decoded.zipWithNext().count { (a, b) -> a.second == b.second })
+        assertEquals("repeated snapshots", 3, decoded.zipWithNext().count { (a, b) -> a.second == b.second })
 
         val ledger = mutableListOf<String>()
         val pipeline = buildPipeline(
@@ -1252,6 +1252,65 @@ class OverlayPipelineDrivingTest {
         val off = closeBehindWhileTurning(settingOn = false)
         assertEquals(off.toString(), 1, off.count { it.contains("event=Beep") })
         assertEquals(off.toString(), 1, off.count { it.contains("event=Beep(2)") })
+    }
+
+    @Test
+    fun theCornerSettingAlsoGovernsWhichCarsFirstSeenCloseArePassed() = runTest {
+        // A car first seen 3 m behind, closing at 3 m/s while the sensor says
+        // TURNING, then lost beside a moving rider. The ride figure's filter
+        // sees the turn as the decider's does, so with the setting on it is
+        // not a pass, and off it is.
+        assertEquals(0, passedAfterCloseBehindWhileTurning(settingOn = true))
+        assertEquals(1, passedAfterCloseBehindWhileTurning(settingOn = false))
+    }
+
+    @Test
+    fun aPauseLeavesTheTurnWithTheRideFiguresFilter() = runTest {
+        // The beeps are not decided while paused, but the ride figure is kept,
+        // and its filter still sees the turn.
+        prefs.pausedUntilEpochMs = Long.MAX_VALUE
+        try {
+            assertEquals(0, passedAfterCloseBehindWhileTurning(settingOn = true))
+            assertEquals(1, passedAfterCloseBehindWhileTurning(settingOn = false))
+        } finally {
+            prefs.pausedUntilEpochMs = 0L
+        }
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.passedAfterCloseBehindWhileTurning(settingOn: Boolean): Int? {
+        prefs.turnAwareAlertsEnabled = settingOn
+        var mono = 1_000L
+        val stats = RideStatsAccumulator(monoMsProvider = { mono })
+        val pipeline = buildPipeline(
+            clockMono = { mono },
+            turnState = { TurnStateDecider.State.TURNING },
+            rideStats = { stats },
+        )
+        val job = pipeline.attach(this, "TestRadar")
+        runCurrent()
+        repeat(5) { i ->
+            mono = 1_000L + i * 100L
+            val car = Vehicle(
+                id = 5,
+                distanceM = 3 - i % 2,
+                speedMs = -3f,
+                bornDistanceM = 3,
+                bornInformative = true,
+                bornAtMs = 1_000L,
+                heardAtMs = mono,
+            )
+            RadarStateBus.publish(
+                RadarState(source = DataSource.V2, timestamp = mono, vehicles = listOf(car), bikeSpeedMs = 5f),
+            )
+            runCurrent()
+        }
+        mono = 1_500L
+        RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = mono, vehicles = emptyList(), bikeSpeedMs = 5f))
+        runCurrent()
+        job.cancel()
+        job.join()
+        RadarStateBus.clear()
+        return stats.snapshot().vehiclesPassed
     }
 
     private suspend fun kotlinx.coroutines.test.TestScope.closeBehindWhileTurning(settingOn: Boolean): List<String> {

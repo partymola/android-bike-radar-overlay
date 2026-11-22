@@ -2,10 +2,12 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import android.content.res.Resources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,8 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -113,6 +116,43 @@ private fun RideHistoryEmpty() {
     }
 }
 
+/**
+ * A ride row's stats segments, which [rideHistoryStatsTexts] joins with
+ * bullets: the vehicles detected behind, then the approximate count that passed
+ * with the close passes nested in it, then the tightest clearance. Without a
+ * passed figure (an older ride, or a radar with no lateral channel) the close
+ * passes stand alone, and a ride that did not count close passes shows none
+ * (`RideHistoryStatsLineTest`).
+ */
+internal fun rideHistoryStatsSegments(res: Resources, locale: Locale, rec: RideHistoryRecord): List<String> {
+    val detected = res.getQuantityString(R.plurals.ride_history_detected, rec.overtakes, rec.overtakes)
+    val closeCounted = rec.closePassesCounted != false
+    val passed = rec.vehiclesPassed
+    val passSegment = when {
+        passed != null && closeCounted -> res.getQuantityString(
+            R.plurals.ride_history_passed_close,
+            passed,
+            passed,
+            res.getQuantityString(R.plurals.ride_history_close_in_passed, rec.closePasses, rec.closePasses),
+        )
+        passed != null -> res.getQuantityString(R.plurals.ride_history_passed, passed, passed)
+        closeCounted -> res.getQuantityString(R.plurals.ride_history_close_passes, rec.closePasses, rec.closePasses)
+        else -> null
+    }
+    val tightest = rec.tightestPassClearanceM?.let {
+        res.getString(R.string.ride_history_tightest, String.format(locale, "%.1f", it))
+    }
+    return listOfNotNull(detected, passSegment, tightest)
+}
+
+private const val NO_BREAK_SPACE = '\u00A0'
+
+/** What the row lays out, one text per segment: each but the last ends in a
+ *  bullet, held to it by a no-break space (`RideHistoryStatsLineTest`). */
+internal fun rideHistoryStatsTexts(segments: List<String>): List<String> = segments.mapIndexed { i, segment ->
+    if (i < segments.lastIndex) "$segment$NO_BREAK_SPACE•" else segment
+}
+
 @Composable
 private fun RideHistoryRow(rec: RideHistoryRecord) {
     val br = LocalBrColors.current
@@ -124,16 +164,9 @@ private fun RideHistoryRow(rec: RideHistoryRecord) {
     val day = dayFmt.format(Date(rec.startedAtMs))
     val timeRange = "${timeFmt.format(Date(rec.startedAtMs))}-${timeFmt.format(Date(rec.endedAtMs))}"
 
-    val overtakes = pluralStringResource(R.plurals.ride_history_overtakes, rec.overtakes, rec.overtakes)
-    val passes = if (rec.closePassesCounted == false) {
-        null
-    } else {
-        pluralStringResource(R.plurals.ride_history_close_passes, rec.closePasses, rec.closePasses)
-    }
-    val tightest = rec.tightestPassClearanceM?.let {
-        stringResource(R.string.ride_history_tightest, String.format(locale, "%.1f", it))
-    }
-    val statsLine = listOfNotNull(overtakes, passes, tightest).joinToString(" • ")
+    // Resources after the configuration read above, as Compose's own string
+    // lookups do it, so the line follows a locale change.
+    val segments = rideHistoryStatsSegments(LocalContext.current.resources, locale, rec)
 
     BrCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -157,12 +190,24 @@ private fun RideHistoryRow(rec: RideHistoryRecord) {
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = statsLine,
-                    color = if (rec.closePasses > 0) br.fgMuted else br.fgDim,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                )
+                // One Text per segment, so a line breaks between segments and
+                // inside one only where it alone is wider than the row
+                // (`RideHistorySnapshotTest.populatedSpanishLargeFont`).
+                // TalkBack reads the segments as one line without the bullets
+                // (`RideHistoryStatsRowA11yTest`).
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.clearAndSetSemantics { contentDescription = segments.joinToString(", ") },
+                ) {
+                    rideHistoryStatsTexts(segments).forEach { text ->
+                        Text(
+                            text = text,
+                            color = if (rec.closePasses > 0) br.fgMuted else br.fgDim,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                        )
+                    }
+                }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(

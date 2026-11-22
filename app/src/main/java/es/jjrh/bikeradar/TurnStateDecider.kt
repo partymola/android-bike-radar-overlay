@@ -16,7 +16,9 @@ import kotlin.math.abs
  * road, and sounding "road clear" then would be a false all-clear.
  * [BornCloseGate] also reads it, discounting closing evidence while
  * TURNING, so a TURNING that outlives the corner costs beeps as well as
- * all-clears.
+ * all-clears. The ride statistics' copy of that filter reads it too, so
+ * TURNING also shapes the ride's passed count
+ * (`theCornerSettingAlsoGovernsWhichCarsFirstSeenCloseArePassed`).
  *
  * States:
  *  - **IDLE** - not turning, no post-turn hold.

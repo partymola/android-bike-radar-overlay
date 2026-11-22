@@ -49,16 +49,19 @@ screen stays yours.
   within your alert distance.
 - **Close-pass counting and ride history, all on your phone.** Counts
   the close overtakes the radar actually measured, notifies a post-ride
-  summary, and keeps per-ride stats - distance, overtakes, close passes, how
-  close and how fast the closest came - in the app's own folder on the phone.
-  No account, no location, no route.
+  summary, and keeps per-ride stats (ride times, distance, vehicles detected
+  behind you, roughly how many passed you, close passes, closing speeds,
+  time with traffic behind you, alerts per km, how close and how fast the
+  closest came) in the app's own folder on the phone. No account, no
+  location, no route.
 
 <details><summary><b>More features</b></summary>
 
 - Home Assistant integration via MQTT discovery: radar and dashcam
   batteries, front-light mode, close-pass event entity, and a ride summary
-  updated every minute during the ride (start time, distance, overtake and
-  close-pass counts, the close-pass rate, closing speeds, lateral
+  updated every minute during the ride (start time, distance, vehicles
+  detected behind and roughly how many passed you, close-pass counts, the
+  close-pass rate per vehicle detected, closing speeds, lateral
   clearances, time with traffic behind you, alerts per km and per hour, and
   the tightest pass: time, side, vehicle size, clearance, closing speed and
   distance behind).
@@ -151,8 +154,8 @@ lateral position, closing speed and size. Garmin announced those as new on
 the RearVue 820. Earlier radars are not expected to send them at all. On
 those the app reads the older range-only stream instead. You get the
 approach beeps, the all-clear, and overlay colours that show distance
-instead of speed. You do not get the urgent warning, close-pass counting or
-the alarm for a radar left on.
+instead of speed. You do not get the urgent warning, close-pass counting, the
+count of vehicles that passed you or the alarm for a radar left on.
 With a Bosch eBike, eBike data switched on and Bosch Flow running, the sound
 when the radar drops works from the bike, as before. Otherwise it is expected
 to fire only if the radar was still seeing traffic behind you shortly before
@@ -240,8 +243,9 @@ Store-listing metadata lives under `fastlane/metadata/android/`
   Android's own Bluetooth settings; the app does not attempt
   `createBond()` itself. A radar whose service table has no V2
   characteristic at all can fall back to the legacy cleartext stream, which
-  carries range and nothing else: proximity beeps and the all-clear work,
-  the urgent warning and close-pass logging cannot. A radar that does have
+  carries range and nothing else: proximity beeps and the all-clear work;
+  the urgent warning, close-pass logging and the count of vehicles that passed
+  you cannot. A radar that does have
   the V2 characteristic never gets the legacy subscribe, whatever the
   handshake does.
 - Optional: Home Assistant for battery reporting and pushing close-pass
@@ -292,11 +296,10 @@ Bike Radar**.
 
 **The app logged a close pass at 08:14:32 - how do I get the camera
 clip?** The app never touches the camera's footage. Use the timestamp
-from the ride history (or the close-pass event in Home Assistant) to find
-the moment, then pull the clip the way your camera vendor supports - their
-app's media gallery, or the camera's USB/SD storage directly. Camera
-clocks can drift a few seconds from the phone's; scrub around the
-timestamp.
+of the close-pass event in Home Assistant to find the moment, then pull the
+clip the way your camera vendor supports - their app's media gallery,
+or the camera's USB/SD storage directly. Camera clocks can drift a few
+seconds from the phone's; scrub around the timestamp.
 
 **I hear every alert twice with Bluetooth headphones.** With a Bluetooth
 headset connected, the phone may also play each alert on its own speaker. The
@@ -404,14 +407,18 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   distinto para impacto inminente.
 - Recuento de adelantamientos cercanos e historial de rutas en el teléfono,
   sin necesidad de Home Assistant: cuenta en la pantalla de inicio los que el
-  radar llega a medir y guarda un historial por ruta (distancia,
-  adelantamientos totales y cercanos, y a qué distancia y velocidad pasaron
-  los más cercanos), sin ubicación ni recorrido.
+  radar llega a medir y guarda un historial por ruta (horas, distancia,
+  vehículos detectados detrás, cuántos te adelantaron aproximadamente,
+  adelantamientos cercanos, velocidades de aproximación, tiempo con tráfico
+  detrás, avisos por km, y a qué distancia y velocidad pasaron los más
+  cercanos), sin ubicación ni recorrido.
 - Integración opcional con Home Assistant por MQTT: batería del radar y de la
   cámara delantera, modo de la luz delantera, eventos de adelantamiento
   cercano y un resumen de la ruta que se actualiza cada minuto durante la ruta
-  (hora de inicio, distancia, número de adelantamientos totales y cercanos,
-  porcentaje de cercanos, velocidades de aproximación, holguras laterales,
+  (hora de inicio, distancia, vehículos detectados detrás y cuántos te
+  adelantaron aproximadamente, número de adelantamientos cercanos, porcentaje
+  de adelantamientos cercanos sobre los vehículos detectados, velocidades de
+  aproximación, holguras laterales,
   tiempo con tráfico detrás, avisos por km y por hora, y el adelantamiento más
   cercano: hora, lado, tamaño del vehículo, holgura, velocidad de aproximación
   y distancia por detrás).
@@ -474,7 +481,8 @@ son opcionales.
   la distancia. Tienes los pitidos de aproximación y el aviso de «Carretera
   despejada», y los colores de la barra lateral muestran la distancia en vez de
   la velocidad. No tienes el aviso urgente, el recuento de adelantamientos
-  cercanos ni la alarma si dejas el radar encendido. Nadie lo ha confirmado
+  cercanos, el de los que te adelantan ni la alarma si dejas el
+  radar encendido. Nadie lo ha confirmado
   aún con hardware real. Un radar que solo tenga ANT+ no puede conectarse.
 - **Radares de otras marcas** (Wahoo, Bryton, Magene, Trek...): no
   ([por qué](COMPATIBILITY.md), en inglés).

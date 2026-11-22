@@ -22,6 +22,7 @@ class RideSummaryUncountedPayloadTest {
         grazing: Int = 2,
         hgv: Int = 1,
         ratePct: Float = 37.5f,
+        passed: Int? = 5,
     ) = RideStatsSnapshot(
         overtakesTotal = overtakes,
         closePassCount = closePasses,
@@ -38,12 +39,15 @@ class RideSummaryUncountedPayloadTest {
         alertsPerKm = 1.5f,
         alertsPerHourOfRide = 12.5f,
         closePassesCounted = counted,
+        vehiclesPassed = passed,
     )
 
     @Test fun anUncountedRideSendsNoClosePassFiguresAndEverythingElse() {
         val payload = HaClient("", "").buildRideSummaryState(snapshot(counted = false))
         for (f in closePassKeys) assertFalse(f, payload.has(f))
         assertEquals(12, payload.getInt("overtakes_total"))
+        // Counting close passes is not what the passed count rests on.
+        assertEquals(5, payload.getInt("vehicles_passed"))
         assertEquals(7.4, payload.getDouble("distance_ridden_km"), 1e-4)
         assertEquals(300, payload.getInt("exposure_seconds"))
         assertEquals(40, payload.getInt("peak_closing_kmh"))
@@ -70,6 +74,17 @@ class RideSummaryUncountedPayloadTest {
             assertTrue(f, payload.has(f))
             assertEquals(f, 0.0, payload.getDouble(f), 0.0)
         }
+    }
+
+    @Test fun aRideWithNoPassedFigureLeavesTheKeyOutSoTheSensorReadsUnknown() {
+        val payload = HaClient("", "").buildRideSummaryState(snapshot(counted = true, passed = null))
+        assertFalse(payload.has("vehicles_passed"))
+        assertEquals(12, payload.getInt("overtakes_total"))
+    }
+
+    @Test fun aPassedCountOfZeroIsSentNotLeftOut() {
+        val payload = HaClient("", "").buildRideSummaryState(snapshot(counted = true, passed = 0))
+        assertEquals(0, payload.getInt("vehicles_passed"))
     }
 
     /** A sensor reads Unknown only because its template names a key the payload left out. */

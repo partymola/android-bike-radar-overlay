@@ -30,6 +30,18 @@ class OverlayRenderKeyTest {
     }
 
     @Test
+    fun aCarHeardAgainWithTheSameReadingsIsEquivalent() {
+        // onDraw does not read when the radar last heard a car.
+        val a = RadarState(vehicles = listOf(v1.copy(heardAtMs = 1_000L), v2.copy(heardAtMs = 1_000L)))
+        val b = RadarState(vehicles = listOf(v1.copy(heardAtMs = 1_100L), v2.copy(heardAtMs = 1_200L)))
+        assertTrue(overlayRenderEquivalent(a, b))
+        assertFalse(
+            "the reading itself still counts",
+            overlayRenderEquivalent(a, RadarState(vehicles = listOf(v1.copy(heardAtMs = 1_100L), v1.copy(heardAtMs = 1_200L)))),
+        )
+    }
+
+    @Test
     fun sourceOnlyDifferenceIsNotEquivalent() {
         // onDraw colours each box by the source's classifier (closing speed vs
         // range only), so the same vehicles from another source can change colour.

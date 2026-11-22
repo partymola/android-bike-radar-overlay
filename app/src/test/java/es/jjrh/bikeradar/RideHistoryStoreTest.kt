@@ -66,6 +66,35 @@ class RideHistoryStoreTest {
         assertEquals(rec, parsed)
     }
 
+    @Test fun roundTripPreservesThePassedCountIncludingZero() {
+        for (passed in listOf(8, 0)) {
+            val rec = fullRecord().copy(vehiclesPassed = passed)
+            val line = rec.toJsonLine()
+            assertTrue(line, line.contains("\"vehicles_passed\":$passed"))
+            assertEquals(rec, RideHistoryRecord.fromJsonLine(line))
+        }
+    }
+
+    @Test fun aRideWithNoPassedCountWritesNoKeyAndReadsBackUnknown() {
+        val line = fullRecord().toJsonLine()
+        assertTrue(line, !line.contains("vehicles_passed"))
+        assertNull(RideHistoryRecord.fromJsonLine(line)!!.vehiclesPassed)
+    }
+
+    @Test fun aRideStoredBeforeThePassedCountExistedReadsAsUnknown() {
+        val stored = """{"v":2,"start_ms":1,"end_ms":2,"overtakes":3,"close_passes":1,"distance_km":1.0,"exposure_s":0}"""
+        val rec = RideHistoryRecord.fromJsonLine(stored)!!
+        assertEquals(3, rec.overtakes)
+        assertNull(rec.vehiclesPassed)
+        assertNull(RideHistoryRecord.fromJsonLine("""${stored.removeSuffix("}")},"vehicles_passed":null}""")!!.vehiclesPassed)
+    }
+
+    @Test fun aSnapshotWithNoPassedCountStoresNone() {
+        val snap = RideStatsAccumulator().snapshot()
+        assertNull(snap.vehiclesPassed)
+        assertNull(RideHistoryRecord.fromSnapshot(snap, endedAtMs = 1L).vehiclesPassed)
+    }
+
     @Test fun fromSnapshotMapsEveryField() {
         val snap = RideStatsSnapshot(
             overtakesTotal = 48,
@@ -89,8 +118,10 @@ class RideHistoryStoreTest {
             rideStartedAtMs = 1_000L,
             alertsPerKm = 1.4f,
             alertsPerHourOfRide = 6.5f,
+            vehiclesPassed = 31,
         )
         val rec = RideHistoryRecord.fromSnapshot(snap, endedAtMs = 9_000L)
+        assertEquals(31, rec.vehiclesPassed)
         assertEquals(1_000L, rec.startedAtMs)
         assertEquals(9_000L, rec.endedAtMs)
         assertEquals(48, rec.overtakes)

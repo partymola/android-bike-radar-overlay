@@ -181,7 +181,8 @@ class SoundDemoTest {
         val held = SoundDemo.vehiclesAt(17_000L).single()
         assertEquals(4, held.distanceM)
         assertEquals(0f, held.speedMs)
-        assertEquals(held, SoundDemo.vehiclesAt(19_900L).single())
+        // Every frame of the scene hears it, so only that changes.
+        assertEquals(held.copy(heardAtMs = 19_900L), SoundDemo.vehiclesAt(19_900L).single())
     }
 
     @Test

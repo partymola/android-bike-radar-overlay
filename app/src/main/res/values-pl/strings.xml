@@ -595,7 +595,7 @@
     <string name="settings_radardev_pair_title">Sparuj radar</string>
     <string name="settings_radardev_pair_subtitle">Włącz tryb parowania radaru i sparuj go w ustawieniach Bluetooth Androida.</string>
     <string name="settings_radardev_not_selected">Nie wybrano</string>
-    <string name="settings_radardev_limited_source">Ten radar podaje wyłącznie odległość. Dostępne są sygnały zbliżania i drogi wolnej, a kolory nakładki pokazują odległość zamiast prędkości. Brak pilnych ostrzeżeń, rejestrowania bliskich wyprzedzeń i alarmu pozostawionego włączonego radaru. Przy aktywnych danych eBike i Bosch Flow alarm utraty połączenia działa jak wcześniej; bez nich zabrzmi tylko wtedy, gdy radar wykrywał ruch z tyłu tuż przed rozłączeniem.</string>
+    <string name="settings_radardev_limited_source">Ten radar podaje wyłącznie odległość. Dostępne są sygnały zbliżania i drogi wolnej, a kolory nakładki pokazują odległość zamiast prędkości. Brak pilnych ostrzeżeń, rejestrowania bliskich wyprzedzeń, zliczania pojazdów, które Cię wyprzedziły, i alarmu pozostawionego włączonego radaru. Przy aktywnych danych eBike i Bosch Flow alarm utraty połączenia działa jak wcześniej; bez nich zabrzmi tylko wtedy, gdy radar wykrywał ruch z tyłu tuż przed rozłączeniem.</string>
     <string name="settings_radardev_choose_radar">Wybierz radar tego roweru</string>
     <string name="settings_radardev_selected">Wybrano</string>
     <string name="settings_radardev_tap_to_use">Dotknij, aby używać tego radaru</string>
@@ -751,13 +751,13 @@
     <string name="settings_privacy_on_phone_approx_location">Jeśli udostępnisz przybliżoną lokalizację i używasz automatycznych świateł, aplikacja zapisuje jeden orientacyjny obszar o wysokości około 11 km z północy na południe i mniejszej szerokości ze wschodu na zachód. Dzięki temu światła odpowiadają lokalnemu zachodowi słońca nawet przy uruchamianiu jazdy z zamkniętą aplikacją. Android pozwala odczytywać lokalizację tylko przy otwartej aplikacji: podczas jej otwierania, zmiany trybu świateł, używanej kamery lub współrzędnych oraz podczas łączenia radaru lub kamery. Każdy nowy odczyt zastępuje poprzedni. Dane pozostają w prywatnej pamięci aplikacji, bez dostępu innych programów i bez przenoszenia w kopii zapasowej Androida lub między telefonami. Nie trafiają do Home Assistant, innych aplikacji, dzienników ani diagnostyki. Są usuwane po podaniu współrzędnych, wyłączeniu automatyki obu świateł lub przy następnym uruchomieniu bez uprawnienia do lokalizacji. Wyłączenie lokalizacji w ustawieniach telefonu samo w sobie ich nie usuwa.</string>
     <string name="settings_privacy_on_phone_creds">Adres URL i token Home Assistant znajdują się w tej samej prywatnej pamięci co ustawienia. Są przenoszone w kopii zapasowej Androida (szyfrowanej przy użyciu blokady ekranu) i bezpośrednio między telefonami bez udziału serwera. Nie trafiają nigdzie indziej.</string>
     <string name="settings_privacy_on_phone_files">Niektóre dane są przechowywane w plikach we własnym katalogu aplikacji: historia przejazdów, dzienniki przechwytywania, okresowe zrzuty ekranu, raporty awarii i dziennik połączeń. W przeciwieństwie do ustawień pliki te nie trafiają do kopii zapasowej Androida ani transferu między telefonami. Inne aplikacje nie mogą ich bezpośrednio otworzyć, ale można je skopiować na komputer przez USB.</string>
-    <string name="settings_privacy_on_phone_rides">Krótka historia przejazdów (czas, dystans, liczba wyprzedzeń i bliskich wyprzedzeń oraz najmniejsza odległość i prędkość przy najbliższych minięciach — bez lokalizacji i trasy) jest zapisywana we własnym katalogu aplikacji na ekranie Historia przejazdów. Po 200 przejazdach najstarsze wpisy są usuwane. Nic nie jest udostępniane.</string>
+    <string name="settings_privacy_on_phone_rides">Krótka historia przejazdów (czas, dystans, liczba pojazdów wykrytych z tyłu i przybliżona liczba tych, które Cię wyprzedziły, liczba bliskich wyprzedzeń, prędkości zbliżania, czas ruchu za rowerem, alerty na kilometr oraz najmniejsza odległość i prędkość przy najbliższych minięciach, bez lokalizacji i trasy) jest zapisywana we własnym katalogu aplikacji na ekranie Historia przejazdów. Po 200 przejazdach najstarsze wpisy są usuwane. Nic nie jest udostępniane.</string>
     <string name="settings_privacy_on_phone_capture">Rejestrowanie przechwytywanych danych jest domyślnie wyłączone. Po włączeniu w Diagnostyce aplikacja zapisuje każdy przejazd: pakiety radaru, powiadomienia BLE, dane eBike z Bosch Flow, próbki baterii telefonu, rozpoczęcie i zakończenie rozmowy telefonicznej, gdy inna aplikacja ukrywa nakładkę, a także kierunek i intensywność skrętu z czujników telefonu (jeżeli podczas łączenia radaru była aktywna funkcja „Opóźnij sygnał drogi wolnej na zakrętach”). Każdy dziennik zawiera wersję oprogramowania radaru. Przy włączonej opcji „Zapisuj przebieg nawiązywania połączenia” zapisuje także etapy łączenia oraz model i numer seryjny radaru. Lokalizacja nie jest zapisywana, ale skręty i prędkości mogą wskazywać trasę. Dzienniki pozostają na telefonie, są kompresowane gzip i udostępniane wyłącznie po wybraniu Udostępnij.</string>
     <string name="settings_privacy_on_phone_screenshots">Okresowe zrzuty ekranu są domyślnie wyłączone. Po włączeniu ich w Diagnostyce (Android każdorazowo prosi o zgodę na nagrywanie ekranu) aplikacja zapisuje obraz całego ekranu co minutę, gdy radar jest połączony, nawet jeśli inna aplikacja ukrywa nakładkę. Zrzut może pokazywać inne aplikacje i ujawniać lokalizację. W katalogu aplikacji przechowywanych jest tylko <xliff:g id="count" example="30">%1$d</xliff:g> najnowszych obrazów; aplikacja nigdy ich nie udostępnia.</string>
     <string name="settings_privacy_on_phone_crashes">Jeśli aplikacja ulegnie awarii, w jej katalogu zapisuje się raport (wersja aplikacji, wątek, stos wywołań, bez danych jazdy i lokalizacji). Raport jest udostępniany tylko po wybraniu Udostępnij w Diagnostyce lub skopiowaniu pakietu diagnostycznego, który zawiera najnowszy raport.</string>
     <string name="settings_privacy_on_phone_linklog">Krótki dziennik połączeń (połączenia, rozłączenia i błędy radaru, kamery, eBike i usługi aplikacji, a także podobne zdarzenia, takie jak alarm utraty połączenia, zmiana tylnego światła, zakończenie jazdy lub wyciszenie alarmu oddalenia się; nazwy urządzeń, czas i rodzaj zdarzenia, a w starszych radarach także liczba odczytów i wskazań pojazdów, bez lokalizacji i położeń wykrytych pojazdów) jest przechowywany w katalogu aplikacji do diagnostyki i dołączany do kopiowanego pakietu diagnostycznego.</string>
     <string name="settings_privacy_to_ha_label">Co trafia do Home Assistant</string>
-    <string name="settings_privacy_to_ha_publish">Po skonfigurowaniu HA aplikacja publikuje dane przez MQTT bezpośrednio pod podany adres HA, bez pośrednictwa twórcy ani stron trzecich:\n• nazwy Bluetooth radaru i kamery używane do tworzenia urządzeń i encji w HA\n• stan baterii radaru i kamery\n• tryb przedniego światła\n• zdarzenia rozpoczęcia i zakończenia przejazdu\n• podsumowanie jazdy aktualizowane co minutę (czas rozpoczęcia, odległość, liczba wyprzedzeń i bliskich wyprzedzeń, częstotliwość bliskich wyprzedzeń, prędkości zbliżania, odstępy, czas ruchu za rowerem, alerty na kilometr i godzinę oraz najbliższe wyprzedzenie: czas, strona, wielkość pojazdu, odstęp, prędkość zbliżania i odległość z tyłu)\n• dziennik poszczególnych bliskich wyprzedzeń, jeśli go włączysz</string>
+    <string name="settings_privacy_to_ha_publish">Po skonfigurowaniu HA aplikacja publikuje dane przez MQTT bezpośrednio pod podany adres HA, bez pośrednictwa twórcy ani stron trzecich:\n• nazwy Bluetooth radaru i kamery używane do tworzenia urządzeń i encji w HA\n• stan baterii radaru i kamery\n• tryb przedniego światła\n• zdarzenia rozpoczęcia i zakończenia przejazdu\n• podsumowanie jazdy aktualizowane co minutę (czas rozpoczęcia, odległość, liczba pojazdów wykrytych z tyłu i przybliżona liczba tych, które Cię wyprzedziły, liczba bliskich wyprzedzeń, odsetek bliskich wyprzedzeń w stosunku do wykrytych pojazdów, prędkości zbliżania, odstępy, czas ruchu za rowerem, alerty na kilometr i godzinę oraz najbliższe wyprzedzenie: czas, strona, wielkość pojazdu, odstęp, prędkość zbliżania i odległość z tyłu)\n• dziennik poszczególnych bliskich wyprzedzeń, jeśli go włączysz</string>
     <string name="settings_privacy_to_ha_stop">W każdej chwili możesz zatrzymać publikowanie, wybierając Wyczyść konfigurację HA w Ustawienia → Home Assistant. Zapisane dane uwierzytelniające zostaną od razu usunięte z telefonu.</string>
     <string name="settings_privacy_to_apps_label">Udostępnianie innym aplikacjom</string>
     <string name="settings_privacy_to_apps_body">Inna aplikacja na tym telefonie może poprosić o dostęp do tylnego radaru. Nie otrzyma niczego bez Twojej zgody na ekranie z jej nazwą. Może potem odczytywać wykryte pojazdy, ich odległość i prędkość zbliżania, położenie boczne, Twoją prędkość, typy pojazdów, stan połączenia i baterię radaru. Za dodatkową zgodą może zmieniać tryb tylnego światła i ukrywać nakładkę, także podczas korzystania z innych aplikacji, poza rozmową telefoniczną, bo wtedy alerty dźwiękowe są wyłączone. Przy przyznanym dostępie aplikacja stale otrzymuje dane podczas jazdy, więc może ustalić czas i przebieg przejazdu.\n\nPrzekazywanie danych odbywa się lokalnie między aplikacjami, bez sieci i udziału twórcy Bike Radar. To, co zrobi z nimi druga aplikacja, zależy od niej, więc zezwalaj tylko zaufanym programom.\n\nAby sprawdzić lub cofnąć uprawnienia, otwórz Ustawienia → Aplikacje uprawnione do korzystania z radaru. Lista jest w prywatnej pamięci aplikacji Androida i przenosi się w kopii zapasowej lub bezpośrednim transferze między telefonami.</string>
@@ -823,16 +823,38 @@
     <string name="ride_history_title">Historia przejazdów</string>
     <string name="ride_history_empty_title">Brak przejazdów</string>
     <string name="ride_history_empty_body">Każdy przejazd pojawia się tu kilka minut po wyłączeniu radaru. Wszystkie dane pozostają na telefonie.</string>
-    <plurals name="ride_history_overtakes">
-        <item quantity="one">
-            <xliff:g id="count" example="1">%1$d</xliff:g> wyprzedzenie</item>
-        <item quantity="other">
-            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzeń</item>
-        <item quantity="few">
-            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzenia</item>
-        <item quantity="many">
-            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzeń</item>
+    <!-- The row's stats line, "37 vehicles detected behind • about 8 passed you
+         (1 close) • tightest 0.8 m". Each segment is laid out whole, so a line
+         breaks between segments first, and inside one only if it alone is
+         wider than the row. -->
+    <plurals name="ride_history_detected">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> pojazd wykryty z tyłu</item>
+        <item quantity="other"><xliff:g id="count" example="37">%1$d</xliff:g> pojazdów wykrytych z tyłu</item>
+        <item quantity="few"><xliff:g id="count" example="3">%1$d</xliff:g> pojazdy wykryte z tyłu</item>
+        <item quantity="many"><xliff:g id="count" example="37">%1$d</xliff:g> pojazdów wykrytych z tyłu</item>
     </plurals>
+    <!-- The approximate passed count, with the close passes nested in it
+         (_close, the second argument being ride_history_close_in_passed) or,
+         on a ride that did not count close passes, alone. -->
+    <plurals name="ride_history_passed_close">
+        <item quantity="one">około <xliff:g id="count" example="1">%1$d</xliff:g> wyprzedzenia (<xliff:g id="close" example="1 bliskie">%2$s</xliff:g>)</item>
+        <item quantity="other">około <xliff:g id="count" example="8">%1$d</xliff:g> wyprzedzeń (<xliff:g id="close" example="1 bliskie">%2$s</xliff:g>)</item>
+        <item quantity="few">około <xliff:g id="count" example="3">%1$d</xliff:g> wyprzedzeń (<xliff:g id="close" example="1 bliskie">%2$s</xliff:g>)</item>
+        <item quantity="many">około <xliff:g id="count" example="8">%1$d</xliff:g> wyprzedzeń (<xliff:g id="close" example="1 bliskie">%2$s</xliff:g>)</item>
+    </plurals>
+    <plurals name="ride_history_passed">
+        <item quantity="one">około <xliff:g id="count" example="1">%1$d</xliff:g> wyprzedzenia</item>
+        <item quantity="other">około <xliff:g id="count" example="8">%1$d</xliff:g> wyprzedzeń</item>
+        <item quantity="few">około <xliff:g id="count" example="3">%1$d</xliff:g> wyprzedzeń</item>
+        <item quantity="many">około <xliff:g id="count" example="8">%1$d</xliff:g> wyprzedzeń</item>
+    </plurals>
+    <plurals name="ride_history_close_in_passed">
+        <item quantity="one"><xliff:g id="count" example="1">%1$d</xliff:g> bliskie</item>
+        <item quantity="other"><xliff:g id="count" example="5">%1$d</xliff:g> bliskich</item>
+        <item quantity="few"><xliff:g id="count" example="3">%1$d</xliff:g> bliskie</item>
+        <item quantity="many"><xliff:g id="count" example="5">%1$d</xliff:g> bliskich</item>
+    </plurals>
+    <!-- Close passes on their own, for a ride with no passed figure. -->
     <plurals name="ride_history_close_passes">
         <item quantity="one">
             <xliff:g id="count" example="1">%1$d</xliff:g> bliskie wyprzedzenie</item>
@@ -953,10 +975,16 @@
     <string name="notif_ride_summary_channel_name">Podsumowania przejazdów</string>
     <string name="notif_ride_summary_channel_desc">Ciche podsumowanie każdego przejazdu po wyłączeniu radaru.</string>
     <string name="notif_ride_summary_title">Podsumowanie przejazdu</string>
-    <string name="notif_ride_summary_text">Wyprzedzenia: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Bliskie: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km</string>
+    <!-- Close passes lead, then the distance, then the vehicles detected, so the
+         collapsed line (which cuts at its end) keeps the close passes and drops
+         the vehicles detected first. The arguments stay in the order vehicles
+         detected, close passes, km. -->
+    <string name="notif_ride_summary_text">Bliskie wyprzedzenia: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km • Pojazdy wykryte z tyłu: <xliff:g id="overtakes" example="48">%1$d</xliff:g></string>
     <!-- The same line for a ride with close-pass counting off, which has no
          close-pass figure to give. -->
-    <string name="notif_ride_summary_text_uncounted">Wyprzedzenia: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • <xliff:g id="km" example="12.4">%2$s</xliff:g> km</string>
+    <string name="notif_ride_summary_text_uncounted"><xliff:g id="km" example="12.4">%2$s</xliff:g> km • Pojazdy wykryte z tyłu: <xliff:g id="overtakes" example="48">%1$d</xliff:g></string>
+    <!-- Its own line in the expanded notification, when the ride has a figure. -->
+    <string name="notif_ride_summary_passed">Wyprzedzenia: około <xliff:g id="count" example="8">%1$d</xliff:g></string>
     <string name="notif_ride_summary_alerts">Alerty na km: <xliff:g id="rate" example="1.4">%1$s</xliff:g>
     </string>
     <string name="notif_ride_summary_tightest">Najbliższe wyprzedzenie: <xliff:g id="m" example="0.8">%1$s</xliff:g> m przy <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>

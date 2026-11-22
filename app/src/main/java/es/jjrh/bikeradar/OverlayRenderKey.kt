@@ -15,14 +15,18 @@ package es.jjrh.bikeradar
  * it compares only the fields `onDraw` actually consumes - the vehicles, the
  * scenario-time label, the rider speed that sets the threat-colour bands, and
  * the source whose classifier picks each box's colour (the a11y summary reads
- * only the vehicles). The view skips the redraw when this holds.
+ * only the vehicles). The view skips the redraw when this holds. Vehicles are
+ * compared without [Vehicle.heardAtMs], which `onDraw` does not read and which
+ * changes on every frame that hears that car; a car standing still is the case
+ * where nothing else changes (`aCarHeardAgainWithTheSameReadingsIsEquivalent`).
  *
  * Keep this in lockstep with `onDraw`: if the overlay starts reading another
  * [RadarState] field, add it here too, or the overlay will go stale (a moved
  * vehicle whose box never repaints). That is why this is a pure function with
  * its own test rather than an inline field list.
  */
-internal fun overlayRenderEquivalent(a: RadarState, b: RadarState): Boolean = a.vehicles == b.vehicles &&
+internal fun overlayRenderEquivalent(a: RadarState, b: RadarState): Boolean = a.vehicles.size == b.vehicles.size &&
+    a.vehicles.indices.all { i -> a.vehicles[i] == b.vehicles[i].copy(heardAtMs = a.vehicles[i].heardAtMs) } &&
     a.scenarioTimeMs == b.scenarioTimeMs &&
     a.bikeSpeedMs == b.bikeSpeedMs &&
     a.source == b.source

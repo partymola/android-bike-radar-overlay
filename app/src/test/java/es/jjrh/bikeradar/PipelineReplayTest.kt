@@ -67,7 +67,7 @@ class PipelineReplayTest {
 
             // The pipeline's own counting gate.
             val counting = cfg.enabled && state.source.hasLateral && state.bikeSpeedMs != null
-            stats.observeFrame(state, cfg.closingSpeedFloorMs, counting)
+            stats.observeFrame(state, cfg.closingSpeedFloorMs, counting, TurnStateDecider.State.IDLE)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,
@@ -100,7 +100,7 @@ class PipelineReplayTest {
             snap.hgvClosePassCount <= snap.closePassCount,
         )
         assertTrue(
-            "conversion-rate must be 0 when there are no overtakes",
+            "conversion-rate must be 0 when no vehicle was detected behind",
             snap.overtakesTotal > 0 || snap.closePassConversionRatePct == 0f,
         )
         if (snap.overtakesTotal > 0) {
@@ -113,14 +113,23 @@ class PipelineReplayTest {
             "passes counted while counting ran must give a rate above 0",
             snap.closePassCount == 0 || snap.closePassConversionRatePct > 0f,
         )
+        assertTrue(
+            "vehicles passed cannot exceed vehicles detected behind",
+            snap.vehiclesPassed!! <= snap.overtakesTotal,
+        )
 
         // The fixture's own counts, every car in range seen while counting ran.
         // One id is reused by a second car, so keying cars on the id alone
         // gives 19 and a rate of 31.6%.
         assertEquals(
-            "overtakes move with the (id, birth) car key or the in-range gate; cite the diff for a change",
+            "vehicles detected behind move with the (id, birth) car key or the in-range gate; cite the diff for a change",
             20,
             snap.overtakesTotal,
+        )
+        assertEquals(
+            "vehicles passed move with the pass rule (seen ahead, or last reported within 3 m of a moving rider); cite the diff for a change",
+            8,
+            snap.vehiclesPassed,
         )
         assertEquals(
             "close passes move with ClosePassDetector or the permissive config above; cite the diff for a change",
@@ -128,7 +137,7 @@ class PipelineReplayTest {
             snap.closePassCount,
         )
         assertEquals(
-            "the rate is close passes over overtakes counted while counting ran; cite the diff for a change",
+            "the rate is close passes over vehicles detected while counting ran; cite the diff for a change",
             30f,
             snap.closePassConversionRatePct,
             0.001f,
@@ -173,7 +182,7 @@ class PipelineReplayTest {
         for (frame in frames) {
             clock = frame.relMs
             val state = decoder.feed(frame.bytes) ?: continue
-            stats.observeFrame(state, 6f, counting = false)
+            stats.observeFrame(state, 6f, counting = false, turnState = TurnStateDecider.State.IDLE)
             val events = detector.decide(
                 vehicles = state.vehicles,
                 bikeSpeedMs = state.bikeSpeedMs ?: 5f,

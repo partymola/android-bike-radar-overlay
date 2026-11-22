@@ -448,6 +448,12 @@ internal class ServiceNotifications(
             }
             detailLines = buildList {
                 add(contentText)
+                // On its own line, and only when the ride has the figure: the
+                // collapsed line above stays the close passes and the
+                // vehicles detected (`theRidePassedCountHasItsOwnExpandedLine`).
+                snap.vehiclesPassed?.let {
+                    add(context.getString(R.string.notif_ride_summary_passed, it))
+                }
                 snap.alertsPerKm?.let {
                     add(
                         context.getString(

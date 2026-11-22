@@ -207,13 +207,21 @@ internal class OverlayPipeline(
                         // Read once: the ride figure and the detector below use the same floor.
                         val closingFloorMs = prefs.closePassClosingSpeedFloorMs.toFloat()
                         val countingEnabled = prefs.closePassLoggingEnabled
+                        // Read once too: the ride figure's ghost filter and the
+                        // decider's judge a car on the same turn
+                        // (`theCornerSettingAlsoGovernsWhichCarsFirstSeenCloseArePassed`).
+                        val turn = if (newFrame && overlayPrefs.turnAwareAlertsEnabled) {
+                            turnState()
+                        } else {
+                            TurnStateDecider.State.IDLE
+                        }
                         // Ride statistics run paused or not
                         // (`rideStatisticsStillRunWhilePaused`).
                         if (newFrame) {
                             // Only frames the detector can count from: none on a
                             // range-only stream (`aRangeOnlyRideIsNotCounted`).
                             val counting = countingEnabled && state.source.hasLateral && state.bikeSpeedMs != null
-                            rideStats().observeFrame(state, closingFloorMs, counting)
+                            rideStats().observeFrame(state, closingFloorMs, counting, turn)
                         }
 
                         // A granted app drawing its own map can ask for ours to
@@ -274,7 +282,7 @@ internal class OverlayPipeline(
                         view.setBatteryLow(lowSlugs, prefs.batteryShowLabels)
 
                         if (!prefs.isPaused) {
-                            if (newFrame) fireAlertCue(state, alerts, overlayPrefs, nowMono, now)
+                            if (newFrame) fireAlertCue(state, alerts, overlayPrefs, nowMono, now, turn)
                         } else {
                             alerts.reset()
                         }
@@ -401,6 +409,7 @@ internal class OverlayPipeline(
         overlayPrefs: PrefsSnapshot,
         nowMonoMs: Long,
         nowWallMs: Long,
+        turn: TurnStateDecider.State,
     ) {
         val snap = ebike.snapshot()
         val preferredBikeSpeedMs = snap?.speedRaw?.let { it / 360f } ?: state.bikeSpeedMs
@@ -413,11 +422,7 @@ internal class OverlayPipeline(
             bikeNotDriving = snap?.bikeNotDriving,
             urgentLowSpeedEnabled = overlayPrefs.urgentLowSpeedEnabled,
             urgentUnconfidentWaitEnabled = overlayPrefs.urgentUnconfidentWaitEnabled,
-            turnState = if (overlayPrefs.turnAwareAlertsEnabled) {
-                turnState()
-            } else {
-                TurnStateDecider.State.IDLE
-            },
+            turnState = turn,
             passClearanceM = overlayPrefs.urgentPassClearanceM,
             closingCeilingMs = closingCeilingMs,
         )

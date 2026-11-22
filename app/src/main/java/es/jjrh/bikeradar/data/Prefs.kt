@@ -607,7 +607,10 @@ class Prefs(context: Context) {
      *  stricter mid-turn bar in [es.jjrh.bikeradar.BornCloseGate]: a vehicle
      *  first seen close behind can then earn its beep on closing a turn
      *  produced. Pinned by
-     *  `OverlayPipelineDrivingTest.theCornerSettingAlsoGovernsTheCloseBehindFilter`. */
+     *  `OverlayPipelineDrivingTest.theCornerSettingAlsoGovernsTheCloseBehindFilter`.
+     *  The setting and TURNING also shape the ride's passed count, through the
+     *  ride statistics' own copy of that filter
+     *  (`theCornerSettingAlsoGovernsWhichCarsFirstSeenCloseArePassed`). */
     var turnAwareAlertsEnabled: Boolean
         get() = sp.getBoolean(KEY_TURN_AWARE_ALERTS, true)
         set(v) {

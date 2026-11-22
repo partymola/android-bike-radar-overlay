@@ -177,6 +177,18 @@ data class Vehicle(
      * and kills the re-anchor beep. Default false = fail open.
      */
     val bornInformative: Boolean = false,
+    /**
+     * When the radar last reported this track, on the source's clock: the
+     * frame's own time on a frame that carried the target, unchanged on a
+     * frame the decoder replays while it holds a track it no longer hears.
+     * Each frame of a scripted source is a report. [RideStatsAccumulator]
+     * judges a lost track by the last frame this, its distance or its speed
+     * changed on (`VehiclesPassedDecoderTest`), so a producer leaving it at 0L
+     * reads as a track heard only when those readings change. Not part of the
+     * cross-app contract, and
+     * [overlayRenderEquivalent] ignores it (`OverlayRenderKeyTest`).
+     */
+    val heardAtMs: Long = 0L,
 ) {
     /**
      * Closing speed in km/h: positive when the target is approaching, which is

@@ -343,7 +343,8 @@ class ServiceNotificationsTest {
         notifications().postRideSummary(blankSnapshot(), emptyList())
         val sbn = nm.activeNotifications.single()
         assertEquals(app.getString(R.string.notif_ride_summary_title), title(sbn))
-        // The stats body still leads with the overtakes/close-passes/km line.
+        // The stats body still leads with the close passes, km and vehicles
+        // detected line.
         assertTrue(bigText(sbn)!!.contains("Close passes"))
     }
 
@@ -351,7 +352,64 @@ class ServiceNotificationsTest {
         notifications().postRideSummary(blankSnapshot().copy(closePassesCounted = false), emptyList())
         val body = bigText(nm.activeNotifications.single())!!
         assertFalse(body, body.contains("Close passes"))
-        assertTrue(body, body.contains("Overtakes: 6") && body.contains("4.2 km"))
+        assertTrue(body, body.contains("Vehicles detected behind: 6") && body.contains("4.2 km"))
+    }
+
+    @Test fun theRideSummaryLeadsWithClosePassesThenKmThenTheVehiclesDetected() {
+        notifications().postRideSummary(blankSnapshot(), emptyList())
+        val extras = nm.activeNotifications.single().notification.extras
+        assertEquals(
+            "Close passes: 1 • 4.2 km • Vehicles detected behind: 6",
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+    }
+
+    @Test fun theRidePassedCountHasItsOwnExpandedLine() {
+        notifications().postRideSummary(blankSnapshot().copy(vehiclesPassed = 4), emptyList())
+        val sbn = nm.activeNotifications.single()
+        assertEquals(
+            "Close passes: 1 • 4.2 km • Vehicles detected behind: 6\nAbout 4 passed you",
+            bigText(sbn),
+        )
+        // Only the expanded view carries it, so the collapsed line is unchanged.
+        assertEquals(
+            "Close passes: 1 • 4.2 km • Vehicles detected behind: 6",
+            sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+    }
+
+    @Test fun aRideWithNoPassedFigureHasNoPassedLine() {
+        notifications().postRideSummary(blankSnapshot(), emptyList())
+        val body = bigText(nm.activeNotifications.single())!!
+        assertFalse(body, body.contains("passed you"))
+    }
+
+    @Test fun anUncountedRideStillShowsItsPassedCountOnItsOwnLine() {
+        notifications().postRideSummary(blankSnapshot().copy(closePassesCounted = false, vehiclesPassed = 1), emptyList())
+        assertEquals(
+            "4.2 km • Vehicles detected behind: 6\nAbout 1 passed you",
+            bigText(nm.activeNotifications.single()),
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun theRideSummaryIsLabelledInSpanishToo() {
+        notifications().postRideSummary(blankSnapshot().copy(vehiclesPassed = 1), emptyList())
+        assertEquals(
+            "Adelantamientos ajustados: 1 • 4,2 km • Vehículos detectados detrás: 6\nAdelantamientos: aprox. 1",
+            bigText(nm.activeNotifications.single()),
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun anUncountedRideIsLabelledInSpanishToo() {
+        notifications().postRideSummary(blankSnapshot().copy(closePassesCounted = false, vehiclesPassed = 5), emptyList())
+        assertEquals(
+            "4,2 km • Vehículos detectados detrás: 6\nAdelantamientos: aprox. 5",
+            bigText(nm.activeNotifications.single()),
+        )
     }
 
     @Test fun rideSummaryLeadsWithAttentionWhenItemsExist() {

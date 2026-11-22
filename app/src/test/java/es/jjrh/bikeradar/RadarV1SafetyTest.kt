@@ -64,6 +64,17 @@ class RadarV1SafetyTest {
         assertTrue("the lane must read clear once the track ages out", state!!.isClear)
     }
 
+    @Test
+    fun aTrackIsHeardOnTheThreatPacketThatCarriedIt() {
+        // A track the packet does not mention is held, not heard.
+        var now = 1_000L
+        val d = decoderAt { now }
+        d.feed(threat(1 to 20))
+        now = 1_500L
+        val state = d.feed(threat(2 to 30))!!
+        assertEquals(mapOf(1 to 1_000L, 2 to 1_500L), state.vehicles.associate { it.id to it.heardAtMs })
+    }
+
     // ── what it must NOT be able to drive ──────────────────────────────────
 
     @Test
@@ -387,7 +398,7 @@ class RadarV1SafetyTest {
         for (dist in 30 downTo 4) {
             now += 100L
             mono += 100L
-            d.feed(threat(1 to dist))?.let { stats.observeFrame(it, 6f, counting = false) }
+            d.feed(threat(1 to dist))?.let { stats.observeFrame(it, 6f, counting = false, turnState = TurnStateDecider.State.IDLE) }
         }
         return stats.snapshot()
     }
@@ -426,9 +437,14 @@ class RadarV1SafetyTest {
         var mono = 10_000L
         val stats = RideStatsAccumulator(nowMsProvider = { 1_700_000_000_000L }, monoMsProvider = { mono })
         val d = decoderAt { 1_000L }
-        stats.observeFrame(d.feed(threat(1 to 20))!!, 6f, counting = false)
+        stats.observeFrame(d.feed(threat(1 to 20))!!, 6f, counting = false, turnState = TurnStateDecider.State.IDLE)
         mono += 2_000L
-        stats.observeFrame(RadarState(vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true)), timestamp = 1_100L, source = DataSource.V1), 6f, counting = false)
+        stats.observeFrame(
+            RadarState(vehicles = listOf(Vehicle(id = 1, distanceM = 20, speedMs = 0f, lateralUnknown = true, heardAtMs = 1_100L)), timestamp = 1_100L, source = DataSource.V1),
+            6f,
+            counting = false,
+            turnState = TurnStateDecider.State.IDLE,
+        )
 
         assertEquals("two seconds of observed traffic", 2L, stats.snapshot().exposureSeconds)
     }

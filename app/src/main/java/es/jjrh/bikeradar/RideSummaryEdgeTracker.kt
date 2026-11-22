@@ -63,9 +63,9 @@ internal object RideSummaryEdgeTracker {
                 // already written those totals to ride history and cleared the
                 // checkpoint, so carrying the same accumulator forward makes
                 // the next off-episode append a second row that counts this
-                // segment's overtakes, passes and distance twice. The posted
-                // flag must never be cleared without resetting the accumulator
-                // that earned it.
+                // segment's vehicles detected behind, close passes and distance
+                // twice. The posted flag must never be cleared without resetting
+                // the accumulator that earned it.
                 val newRide = RideSummaryNotificationDecider.shouldStartNewRide(nowMs - wasOffSince, longOffMs)
                 if (newRide || prev.rideSummaryPosted) {
                     actions += Action.ResetRideStats

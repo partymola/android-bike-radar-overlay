@@ -323,7 +323,7 @@ class SyntheticScenarioService : Service() {
                 )
             }
         }
-        return out
+        return out.map { it.copy(heardAtMs = tMs) }
     }
 
     /** Bike speed schedule for the demo (m/s): rider is crawling through

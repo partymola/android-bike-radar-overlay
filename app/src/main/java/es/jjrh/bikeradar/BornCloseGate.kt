@@ -42,10 +42,13 @@ package es.jjrh.bikeradar
  *    delay instead of silencing them.
  *
  * Scope guarantees (the safety contract, pinned by tests):
- *  - This class only decides whether a would-be tier Beep is silenced.
- *    It never touches the all-clear presence gate, urgent evaluation,
- *    sustain counters, or the overlay - an unadmitted track stays fully
- *    visible everywhere except the tier-beep audio.
+ *  - In the decider this class only decides whether a would-be tier Beep
+ *    is silenced. It never touches the all-clear presence gate, urgent
+ *    evaluation, sustain counters, or the overlay - an unadmitted track
+ *    stays fully visible everywhere except the tier-beep audio.
+ *    [RideStatsAccumulator] keeps its own instance, fed the same frames, to
+ *    leave out of the passed count a track the beeps refuse as a pass; that
+ *    instance touches no cue (`aGhostLostBesideAMovingRiderIsNotPassed`).
  *  - It only ever engages for tracks with [Vehicle.bornInformative]
  *    true and [Vehicle.bornDistanceM] <= [bornCloseMaxM]. Reacquired
  *    followers (coverage-gap rebirths) and warm-up births are marked
@@ -63,7 +66,7 @@ package es.jjrh.bikeradar
  * (`AlertDeciderGhostGateTest`), matching the project's
  * delayed-over-false asymmetry.
  *
- * Not thread-safe; call from the decider's single coroutine.
+ * Not thread-safe; each instance is called from one coroutine.
  */
 class BornCloseGate(
     private val bornCloseMaxM: Int = BORN_CLOSE_MAX_M,

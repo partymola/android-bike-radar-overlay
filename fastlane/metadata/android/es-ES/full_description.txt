@@ -8,7 +8,7 @@ Funciones:
 
 - Barra lateral en vivo con distancia, velocidad de aproximación y posición lateral por vehículo
 - Pitidos por niveles de proximidad, aviso urgente de impacto inminente, aviso de carretera despejada
-- Notificación de resumen al terminar la ruta: adelantamientos, adelantamientos ajustados, distancia, adelantamiento más ajustado
+- Notificación de resumen al terminar la ruta: adelantamientos ajustados, distancia, vehículos detectados detrás, cuántos te adelantaron aproximadamente, adelantamiento más ajustado
 - Modo automático de la cámara/luz delantera según el atardecer local (a partir de una zona aproximada leída con la app abierta)
 - Telemetría de eBike Bosch Smart System, estrictamente de solo lectura
 - Recordatorios de alejamiento y de bici sin bloquear
@@ -19,7 +19,7 @@ Funciones:
 
 Necesita un radar trasero compatible emparejado por Bluetooth (emparéjalo una vez en los Ajustes del sistema) y Android 12 o posterior. No existe un perfil Bluetooth estándar para radares de bici, así que la compatibilidad depende del modelo; la lista de compatibilidad en la página del proyecto indica cuáles funcionan, y la lista es corta.
 
-Se espera que un radar que solo informa de la distancia mantenga los pitidos de aproximación, el aviso de carretera despejada y una barra coloreada por distancia; la velocidad y el lado de cada vehículo, el aviso urgente y el recuento de adelantamientos ajustados necesitan uno que además informe de la velocidad de aproximación y la posición lateral. Las integraciones de radar, cámara y eBike son independientes: cada una funciona sin las demás.
+Se espera que un radar que solo informa de la distancia mantenga los pitidos de aproximación, el aviso de carretera despejada y una barra coloreada por distancia; la velocidad y el lado de cada vehículo, el aviso urgente, el recuento de adelantamientos ajustados y el de los que te adelantan necesitan uno que además informe de la velocidad de aproximación y la posición lateral. Las integraciones de radar, cámara y eBike son independientes: cada una funciona sin las demás.
 
 Bike Radar es una ayuda para tus rutas, no una garantía de seguridad. Complementa tu propia atención y tus espejos; nunca los sustituye.
 

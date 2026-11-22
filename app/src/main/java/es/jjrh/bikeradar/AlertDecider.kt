@@ -321,7 +321,7 @@ class AlertDecider(
     /** Rider's bike speed (m/s) at or below this counts as "stationary".
      *  0.5 m/s catches raw bytes 0..2 inclusive (0, 0.25, 0.5 m/s),
      *  matching the prior 2 km/h gate exactly. */
-    private val stationaryMsThreshold: Float = 0.5f,
+    private val stationaryMsThreshold: Float = STATIONARY_MS_THRESHOLD,
     /** Elapsed (monotonic) milliseconds the rider's bike speed must stay at or
      *  below [stationaryMsThreshold] continuously before Beep events
      *  get mapped to None. Long enough to skip rolling stops mid-turn,
@@ -1852,6 +1852,14 @@ class AlertDecider(
     }
 
     companion object {
+        /** Rider speed (m/s) at or below which the rider counts as stationary,
+         *  and above which, strictly, as moving for a pass
+         *  (`the closest fading beside a stopped rider is not a pass`).
+         *  [RideStatsAccumulator] applies the same bar to the radar's speed
+         *  reading for the ride's passed count, while the beeps use the eBike's
+         *  stop signal when there is one. */
+        const val STATIONARY_MS_THRESHOLD = 0.5f
+
         /** Lateral-absurdity veto: a target with RAW lateral offset beyond
          *  this leaves the close set for that frame, and so both the tier
          *  beeps and urgent evaluation. On a straight road it is off the
@@ -1866,7 +1874,9 @@ class AlertDecider(
          *  physical-plausibility veto must not depend on rider configuration:
          *  the mount-offset translation is centimetres against a 10 m bar. An
          *  order looser than any lane-discrimination gate on purpose: this
-         *  never judges lane position. */
+         *  never judges lane position. [RideStatsAccumulator] reads it as the
+         *  bar for a vehicle seen ahead to count as passed
+         *  (`aVehicleSeenAheadButFarToTheSideIsNotPassed`). */
         const val RX_ABSURD_M = 10f
 
         /** Along-road distance (m) within which the closest car fading while
@@ -1875,7 +1885,9 @@ class AlertDecider(
          *  measurement. A car fading further back may have turned off or
          *  dropped out while still behind, so it is not a pass. A car that
          *  drew level can also pass again once it is seen more than this far
-         *  back ([passedCars]), so moving it moves both. */
+         *  back ([passedCars]), so moving it moves both. It also sets the
+         *  ride's passed figure in [RideStatsAccumulator]
+         *  (`aVehicleLostFurtherBackIsNotPassed`). */
         const val PASS_FADE_MAX_M = 3
 
         /** How long the track list must hold no car heard at or above the

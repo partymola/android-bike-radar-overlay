@@ -607,7 +607,7 @@ class HaClientHttpTest {
 
         // Every family the app has ever published must be retired, not just
         // battery: by the time the namespace changed it also published
-        // light mode, close-pass events and twelve ride-summary sensors, and
+        // light mode, close-pass events and the ride-summary sensors, and
         // an unretired config is what leaves a permanently unavailable
         // entity beside the new one.
         val topics = requests.map { JSONObject(it.body).getString("topic") }
@@ -616,8 +616,10 @@ class HaClientHttpTest {
         assertTrue("close pass", topics.contains("homeassistant/event/varia_rearvue8_close_pass/config"))
         assertTrue("a ride stat", topics.contains("homeassistant/sensor/varia_rearvue8_alerts_per_km/config"))
         // Two pre-namespace battery shapes, the legacy namespace's four
-        // families (12 of them ride stats), and two fixed probe topics.
-        assertEquals(19, requests.size)
+        // families (13 of them ride stats, the passed count included, which
+        // the legacy namespace never published and retiring it is harmless),
+        // and two fixed probe topics.
+        assertEquals(20, requests.size)
     }
 
     @Test
@@ -627,11 +629,38 @@ class HaClientHttpTest {
     }
 
     @Test
-    fun publishRideSummaryDiscoveryPostsTwelveRetainedSensors() = runTest {
+    fun publishRideSummaryDiscoveryPostsThirteenRetainedSensors() = runTest {
         respondAll(200)
         assertTrue(client().publishRideSummaryDiscovery("rearvue8", "RearVue8"))
-        assertEquals(12, requests.size)
+        assertEquals(13, requests.size)
         assertTrue(requests.all { JSONObject(it.body).getBoolean("retain") })
+    }
+
+    @Test
+    fun theCountOfVehiclesDetectedAndTheCloseRateAreNamedForWhatTheyCount() = runTest {
+        // The state keys are what a rider's automations read, so only the
+        // display names moved. A new install builds its entity ids from them;
+        // an existing install keeps the ids its registry already holds.
+        respondAll(200)
+        assertTrue(client().publishRideSummaryDiscovery("rearvue8", "RearVue8"))
+        val byField = requests.map { JSONObject(it.body) }.associateBy { it.getString("topic").substringAfterLast("rearvue8_").removeSuffix("/config") }
+        fun name(field: String) = JSONObject(byField.getValue(field).getString("payload")).getString("name")
+        assertEquals("Vehicles detected behind", name("overtakes_total"))
+        assertEquals("Vehicles passed (approx.)", name("vehicles_passed"))
+        assertEquals("Close-pass rate (per vehicle detected)", name("close_pass_conversion_rate"))
+    }
+
+    @Test
+    fun theVehiclesPassedSensorReadsItsOwnKeyAndIsUnknownWithoutIt() = runTest {
+        respondAll(200)
+        assertTrue(client().publishRideSummaryDiscovery("rearvue8", "RearVue8"))
+        val config = requests.map { JSONObject(it.body) }
+            .single { it.getString("topic") == "homeassistant/sensor/bikeradar_rearvue8_vehicles_passed/config" }
+        val payload = JSONObject(config.getString("payload"))
+        assertEquals("bikeradar_rearvue8_vehicles_passed", payload.getString("unique_id"))
+        assertEquals("bikeradar/rearvue8/ride_summary", payload.getString("state_topic"))
+        assertEquals("{{ value_json.vehicles_passed | default('None') }}", payload.getString("value_template"))
+        assertEquals("total_increasing", payload.getString("state_class"))
     }
 
     @Test
@@ -660,10 +689,12 @@ class HaClientHttpTest {
             alertsPerKm = 0.32f,
             alertsPerHourOfRide = 11.3f,
             closePassesCounted = true,
+            vehiclesPassed = 5,
         )
         assertTrue(client().publishRideSummaryState("rearvue8", snapshot))
         val sent = JSONObject(JSONObject(requests.single().body).getString("payload"))
         assertEquals(12, sent.getInt("overtakes_total"))
+        assertEquals(5, sent.getInt("vehicles_passed"))
         assertEquals(3, sent.getInt("close_pass_count"))
         assertEquals(2, sent.getInt("grazing_count"))
         assertEquals(1, sent.getInt("hgv_close_pass_count"))
@@ -703,6 +734,33 @@ class HaClientHttpTest {
         assertFalse(sent.has("tightest_pass"))
         assertFalse(sent.has("alerts_per_km"))
         assertFalse(sent.has("alerts_per_hour_of_ride"))
+        // No passed figure is not a zero: the sensor reads Unknown.
+        assertFalse(sent.has("vehicles_passed"))
+    }
+
+    @Test
+    fun aPassedCountOfZeroIsPublishedAsZero() = runTest {
+        respondAll(200)
+        val snapshot = RideStatsSnapshot(
+            overtakesTotal = 4,
+            closePassCount = 0,
+            grazingCount = 0,
+            hgvClosePassCount = 0,
+            peakClosingKmh = null,
+            closingSpeedP90Kmh = null,
+            minLateralClearanceM = null,
+            distanceRiddenKm = 0f,
+            exposureSeconds = 0,
+            closePassConversionRatePct = 0f,
+            tightestPass = null,
+            rideStartedAtMs = 1_716_533_000_000L,
+            alertsPerKm = null,
+            alertsPerHourOfRide = null,
+            vehiclesPassed = 0,
+        )
+        assertTrue(client().publishRideSummaryState("rearvue8", snapshot))
+        val sent = JSONObject(JSONObject(requests.single().body).getString("payload"))
+        assertEquals(0, sent.getInt("vehicles_passed"))
     }
 
     private companion object {

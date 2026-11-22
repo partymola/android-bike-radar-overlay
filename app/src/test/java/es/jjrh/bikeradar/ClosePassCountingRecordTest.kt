@@ -4,7 +4,7 @@ package es.jjrh.bikeradar
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import es.jjrh.bikeradar.ui.RideHistoryContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,7 +40,7 @@ class ClosePassCountingRecordTest {
     )
 
     /** A frame with no cars, observed with close-pass counting running or not. */
-    private fun RideStatsAccumulator.frame(counting: Boolean) = observeFrame(RadarState(vehicles = emptyList(), source = DataSource.V2), 6f, counting)
+    private fun RideStatsAccumulator.frame(counting: Boolean) = observeFrame(RadarState(vehicles = emptyList(), source = DataSource.V2), 6f, counting, TurnStateDecider.State.IDLE)
 
     @Test fun aRideStartsUncountedUntilCountingRuns() {
         val stats = RideStatsAccumulator()
@@ -102,19 +102,22 @@ class ClosePassCountingRecordTest {
         assertNull(RideHistoryRecord.fromJsonLine("""$base,"close_passes_counted":null}""")!!.closePassesCounted)
     }
 
+    // The row's stats read as one description (`RideHistoryStatsRowA11yTest`),
+    // so they are found by it rather than by their text.
+
     @Test fun anUncountedRideShowsNoClosePassFigure() {
         composeRule.setContent { RideHistoryContent(records = listOf(record(counted = false)), onBack = {}) }
-        composeRule.onAllNodesWithText("close pass", substring = true).assertCountEquals(0)
-        composeRule.onAllNodesWithText("12 overtakes", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithContentDescription("close pass", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("12 vehicles detected behind", substring = true).assertCountEquals(1)
     }
 
     @Test fun aCountedRideWithNoneSaysSo() {
         composeRule.setContent { RideHistoryContent(records = listOf(record(counted = true)), onBack = {}) }
-        composeRule.onAllNodesWithText("0 close passes", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithContentDescription("0 close passes", substring = true).assertCountEquals(1)
     }
 
     @Test fun aRideOfUnknownCountingKeepsItsFigure() {
         composeRule.setContent { RideHistoryContent(records = listOf(record(counted = null)), onBack = {}) }
-        composeRule.onAllNodesWithText("0 close passes", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithContentDescription("0 close passes", substring = true).assertCountEquals(1)
     }
 }

@@ -36,18 +36,30 @@ class RideStatsAccumulator(
 
     @Volatile private var rideStartedAtMono: Long = monoMsProvider()
 
-    /** (tid, bornAtMs) of each car seen in range: the radar reuses ids within
-     *  a ride (`aSecondCarOnAReusedIdIsASecondOvertake`). A car re-born on its
+    /** (tid, bornAtMs) of each vehicle detected behind within range, passed or
+     *  not: the radar reuses ids within a ride
+     *  (`aSecondCarOnAReusedIdIsASecondOvertake`). A car re-born on its
      *  old id after a prune or a reconnect counts again, deliberately
      *  (`aCarRebornOnItsOldIdAfterAPruneCountsAgain`); a legacy track carries
      *  bornAtMs 0 and counts once per id (`aLegacyStreamCountsOneOvertakePerId`). */
     private val seenTracks = HashSet<Pair<Int, Long>>()
 
-    /** Cars in range on a frame close-pass counting ran on, keyed as
-     *  [seenTracks]: what the conversion rate divides by, so overtakes from
+    /** Vehicles in range on a frame close-pass counting ran on, keyed as
+     *  [seenTracks]: what the conversion rate divides by, so vehicles detected
      *  before counting was switched on do not dilute it
      *  (`theRateDividesByOvertakesSeenWhileCounting`). */
     private val countedTracks = HashSet<Pair<Int, Long>>()
+
+    /** The [seenTracks] taken as having passed the rider, keyed the same way,
+     *  so a vehicle is one pass however often it is judged. Approximate by
+     *  design: see [markPassedAhead] and [markPassedFading]. */
+    private val passedTracks = HashSet<Pair<Int, Long>>()
+
+    /** Whether a frame from a source with a lateral channel has arrived. The
+     *  passed figure reads the lateral offset of a vehicle seen ahead, so a
+     *  ride with no such frame has none to give, as with the close passes
+     *  (`aRangeOnlyRideHasNoPassedFigure`). */
+    private var passedFigureKnown = false
 
     // Per-frame state. Nullable for measurement-class fields that have no
     // sensible "no data" zero value: a ride with no observed vehicles should
@@ -64,9 +76,36 @@ class RideStatsAccumulator(
      *  (`aReusedTrackIdDoesNotInheritTheLastCarsApproach`). */
     private val openTracks = HashMap<Int, OpenTrack>()
 
-    private class OpenTrack(val bornAtMs: Long) {
-        /** The fastest closing (m/s) seen behind the rider. */
+    /** A ghost filter of its own, fed the frames and the turn state the alert
+     *  decider is given, so the passed count refuses the tracks the beeps
+     *  refuse as a pass. It runs on every frame, paused or not; the decider's
+     *  gate is reset while paused. */
+    private val bornCloseGate = BornCloseGate()
+
+    private class OpenTrack(val id: Int, val bornAtMs: Long) {
+        /** The fastest closing (m/s) seen behind the rider (not
+         *  [Vehicle.isBehind], which means ahead). */
         var peakClosingMs = 0f
+
+        /** [Vehicle.heardAtMs] of the last frame on which the radar heard the
+         *  track, and the readings taken on it. The decoder keeps a track it no
+         *  longer hears for up to [RadarV2Decoder.STALE_PARKED_MS], re-judging
+         *  its dock on every frame, so the frame it leaves the list on is not
+         *  the one to judge it by (`VehiclesPassedDecoderTest`). A reading change
+         *  on a frame with the same stamp is a second report
+         *  (`aSecondReportInTheSameMillisecondIsHeard`); the dock is not a
+         *  reading (`aDockOnlyTheHoldShowsIsNotReadAtAConstantRiderSpeed`). The
+         *  latch rests on the decoder replaying a held track's distance and
+         *  speed unchanged (`aHeldTrackCarriesItsLastDistanceAndSpeedUnchanged`).
+         *  Null before the track's first frame (`aTrackHeardAtTimeZeroIsHeard`). */
+        var lastHeardAtMs: Long? = null
+        var lastDistanceM = 0
+        var lastSpeedMs = 0f
+        var riderMovingWhenHeard = false
+        var dockedWhenHeard = false
+
+        /** Whether the ghost filter held it back on its last frame. */
+        var lastGhost = false
 
         /** Clearances (m) that qualified for the ride's figure. */
         val alongside = ArrayList<Float>()
@@ -96,13 +135,20 @@ class RideStatsAccumulator(
      * Ingest a RadarState snapshot. The snapshot's `bikeSpeedMs` integrates
      * into [distanceRiddenM] over the elapsed (monotonic) interval since the
      * previous frame. Vehicles in the snapshot update the peak closing speed,
-     * the per-track readings behind the tightest clearance, and the
-     * unique-overtake set. [closingFloorMs] is the
+     * the per-track readings behind the tightest clearance, the set of
+     * vehicles detected behind and the approximate passed count.
+     * [closingFloorMs] is the
      * rider's close-pass closing floor, the value [ClosePassDetector] reads.
      * [counting] says close-pass counting runs on this frame, which puts its
-     * in-range cars in the conversion rate's denominator.
+     * in-range cars in the conversion rate's denominator. [turnState] is the
+     * one the alert decider would be given, which the ghost filter reads.
      */
-    fun observeFrame(state: RadarState, closingFloorMs: Float, counting: Boolean) {
+    fun observeFrame(
+        state: RadarState,
+        closingFloorMs: Float,
+        counting: Boolean,
+        turnState: TurnStateDecider.State,
+    ) {
         val nowMs = monoMsProvider()
         val prev = lastFrameMs
         lastFrameMs = nowMs
@@ -163,20 +209,45 @@ class RideStatsAccumulator(
         // target frames; carrying the last known value is the right approximation.
         if (state.bikeSpeedMs != null) lastBikeSpeedMs = state.bikeSpeedMs
         val riderMoving = (lastBikeSpeedMs ?: 0f) >= RIDER_MOVING_MS
+        // The decider's speed bar for a moving rider, not [RIDER_MOVING_MS]: a
+        // car fading beside a rider rolling at walking pace went by as much as
+        // one beside a rider at speed
+        // (`aVehicleLostBesideARiderAtWalkingPaceIsPassed`). Radar speed only:
+        // the eBike's stop signal is deliberately not read here (see
+        // [AlertDecider.STATIONARY_MS_THRESHOLD]).
+        val riderMovingForPass = (lastBikeSpeedMs ?: 0f) > AlertDecider.STATIONARY_MS_THRESHOLD
+        if (state.source.hasLateral && !passedFigureKnown) {
+            passedFigureKnown = true
+            generation++
+        }
+        bornCloseGate.update(state.vehicles, turnState, nowMs)
 
-        // Per-frame extrema and overtake dedup.
+        // Per-frame extrema and the vehicles-detected and passed sets.
         for (v in state.vehicles) {
             if (v.isBehind) {
-                openTracks.remove(v.id)?.let(::endTrack)
+                markPassedAhead(v)
+                // A different birth under the id is another car that has left
+                // the list; the same birth is this car, seen ahead.
+                openTracks.remove(v.id)?.let { endTrack(it, faded = it.bornAtMs != v.bornAtMs) }
                 continue
             }
             val open = openTracks[v.id]
             val track = if (open?.bornAtMs == v.bornAtMs) {
                 open
             } else {
-                open?.let(::endTrack)
-                OpenTrack(v.bornAtMs).also { openTracks[v.id] = it }
+                open?.let { endTrack(it, faded = true) }
+                OpenTrack(v.id, v.bornAtMs).also { openTracks[v.id] = it }
             }
+            if (v.heardAtMs != track.lastHeardAtMs || v.distanceM != track.lastDistanceM || v.speedMs != track.lastSpeedMs) {
+                track.lastHeardAtMs = v.heardAtMs
+                track.lastDistanceM = v.distanceM
+                track.lastSpeedMs = v.speedMs
+                track.riderMovingWhenHeard = riderMovingForPass
+                track.dockedWhenHeard = v.isAlongsideStationary
+            }
+            // On every frame, as the decider reads it
+            // (`aVehicleFirstSeenCloseIsJudgedAsAGhostOnEveryFrame`).
+            track.lastGhost = bornCloseGate.isGated(v)
             // Before the range check: an approach is often seen only far back
             // (`aFastApproachFromBeyondTrackingRangeStillCounts`). A reading
             // closing faster than the bound does not count as one
@@ -235,26 +306,74 @@ class RideStatsAccumulator(
             }
         }
         val present = state.vehicles.mapTo(HashSet()) { it.id }
-        openTracks.keys.filter { it !in present }.forEach { tid -> openTracks.remove(tid)?.let(::endTrack) }
+        openTracks.keys.filter { it !in present }.forEach { tid ->
+            openTracks.remove(tid)?.let { endTrack(it, faded = true) }
+        }
         if (counting && !closePassesCounted) {
             closePassesCounted = true
             generation++
         }
     }
 
-    /** Forget every open track without counting it. Called as each radar
-     *  connection starts, when the close-pass detector starts empty too: a car
-     *  the link dropped was last seen wherever it stopped, often still in line
-     *  behind (`aCarCutOffByARadarDropIsNotCounted`). */
+    /** Forget every open track without counting it, as a clearance or as a
+     *  pass. Called as each radar connection starts, when the close-pass
+     *  detector starts empty too: a car the link dropped was last seen
+     *  wherever it stopped, often still in line behind
+     *  (`aCarCutOffByARadarDropIsNotCounted`,
+     *  `aVehicleCutOffByARadarDropIsNotPassed`). */
     fun dropOpenTracks() {
         openTracks.clear()
+    }
+
+    /** A vehicle seen ahead of the rider has gone by. Counted when it was
+     *  detected behind first and its raw lateral offset is within
+     *  [AlertDecider.RX_ABSURD_M], the decider's own bar for off the road: a
+     *  target further out is on another street, not a vehicle that passed
+     *  (`aVehicleSeenAheadButFarToTheSideIsNotPassed`). A [Vehicle.lateralUnknown]
+     *  frame is within the bar, as in the decider, which fails open there too.
+     *  Approximate by design: a track can fall back behind after being seen
+     *  ahead, and it is still one pass (`aVehicleSeenAheadTwiceIsPassedOnce`). */
+    private fun markPassedAhead(ahead: Vehicle) {
+        val car = ahead.id to ahead.bornAtMs
+        val onTheRoad = ahead.lateralUnknown || abs(ahead.rangeXmRaw) <= AlertDecider.RX_ABSURD_M
+        if (car in seenTracks && onTheRoad && passedTracks.add(car)) generation++
+    }
+
+    /** A track that left the list went by when the radar last heard it
+     *  within [AlertDecider.PASS_FADE_MAX_M] along the road while the rider
+     *  was moving: the radar often drops a car as it draws level instead of
+     *  reporting it ahead, the allowance the beeps use
+     *  (`aVehicleLostBesideAMovingRiderIsPassed`). Further back it may have
+     *  turned off or dropped out while still behind, and at a stop it may be
+     *  a car behind going quiet, so neither counts
+     *  (`aVehicleLostFurtherBackIsNotPassed`, `aVehicleLostBesideAStoppedRiderIsNotPassed`).
+     *  Nor does one docked when last heard, queued or parked traffic the rider
+     *  crawled past (`aDockedVehicleLostBesideAMovingRiderIsNotPassed`); one
+     *  moving away when last heard, as the rider rode past it
+     *  (`aVehicleMovingAwayWhenLostIsNotPassed`); or one the ghost filter held
+     *  back on its last frame, which the beeps refuse as a pass too
+     *  (`aGhostLostBesideAMovingRiderIsNotPassed`). */
+    private fun markPassedFading(track: OpenTrack) {
+        val car = track.id to track.bornAtMs
+        if (car in seenTracks &&
+            track.riderMovingWhenHeard &&
+            track.lastDistanceM <= AlertDecider.PASS_FADE_MAX_M &&
+            !track.dockedWhenHeard &&
+            track.lastSpeedMs <= 0f &&
+            !track.lastGhost &&
+            passedTracks.add(car)
+        ) {
+            generation++
+        }
     }
 
     /** The track's clearance is its [ClosePassDetector.passPoint], as the
      *  close-pass event's is, taken when the track ends. A car still alongside
      *  when the ride ends is never counted, as the detector never emits it
-     *  (`aPassStillUnderwayIsNotYetCounted`). */
-    private fun endTrack(track: OpenTrack) {
+     *  (`aPassStillUnderwayIsNotYetCounted`). [faded] says the track left the
+     *  list rather than being seen ahead, so [markPassedFading] may judge it. */
+    private fun endTrack(track: OpenTrack, faded: Boolean) {
+        if (faded) markPassedFading(track)
         val clearanceM = ClosePassDetector.passPoint(track.alongside) { it } ?: return
         val current = minLateralM
         if (current == null || clearanceM < current) {
@@ -356,6 +475,7 @@ class RideStatsAccumulator(
             alertsPerKm = alertsPerKm,
             alertsPerHourOfRide = alertsPerHour,
             closePassesCounted = closePassesCounted,
+            vehiclesPassed = if (passedFigureKnown) passedTracks.size else null,
         )
     }
 
@@ -390,6 +510,9 @@ class RideStatsAccumulator(
 }
 
 data class RideStatsSnapshot(
+    /** Vehicles detected behind within range, passed or not. The HA key
+     *  `overtakes_total` and the history key `overtakes` keep this name, so a
+     *  rider's automations and stored rides still read it. */
     val overtakesTotal: Int,
     val closePassCount: Int,
     val grazingCount: Int,
@@ -407,8 +530,9 @@ data class RideStatsSnapshot(
     val minLateralClearanceM: Float?,
     val distanceRiddenKm: Float,
     val exposureSeconds: Long,
-    /** Close passes per hundred overtakes seen while close-pass counting ran,
-     *  which can be fewer than [overtakesTotal]. */
+    /** Close passes per hundred vehicles detected behind while close-pass
+     *  counting ran, which can be fewer than [overtakesTotal]. Per vehicle
+     *  detected, not per vehicle passed. */
     val closePassConversionRatePct: Float,
     val tightestPass: TightestPass?,
     val rideStartedAtMs: Long,
@@ -421,6 +545,16 @@ data class RideStatsSnapshot(
      *  range-only radar, or no rider speed), so [closePassCount] is not a
      *  measurement. */
     val closePassesCounted: Boolean = false,
+    /** An approximate count of the [overtakesTotal] that went by the rider:
+     *  seen ahead of the bike within [AlertDecider.RX_ABSURD_M] to the side,
+     *  or lost within [AlertDecider.PASS_FADE_MAX_M] while the rider moved
+     *  (radar speed above [AlertDecider.STATIONARY_MS_THRESHOLD]), judged on
+     *  the frame the radar last heard it. The lost path alone leaves out a
+     *  track that was docked ([Vehicle.isAlongsideStationary]) or moving away
+     *  when last heard, or a ghost ([BornCloseGate]) on its last frame. Null
+     *  when no frame had a lateral channel (a range-only radar), which is not
+     *  a zero. */
+    val vehiclesPassed: Int? = null,
 )
 
 data class TightestPass(

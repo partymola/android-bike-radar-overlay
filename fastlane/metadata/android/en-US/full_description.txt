@@ -8,7 +8,7 @@ Features:
 
 - Live overlay with per-vehicle distance, closing speed and lateral position
 - Tiered proximity beeps, urgent imminent-impact tone, all-clear chime
-- Post-ride summary notification: overtakes, close passes, distance, tightest pass
+- Post-ride summary notification: close passes, distance, vehicles detected behind, roughly how many passed you, tightest pass
 - Front camera/light auto mode by local sunset (from a rough area, read while the app is open)
 - Bosch Smart System eBike telemetry, strictly read-only
 - Walk-away and forgot-to-lock reminders
@@ -19,7 +19,7 @@ Features:
 
 Requires a supported rear radar paired over Bluetooth (pair it once in system Settings) and Android 12 or newer. There is no standard Bluetooth profile for bike radars, so support is per model; the compatibility list on the project's source page says which units work, and the list is short.
 
-A radar that reports distance only is expected to get the approach beeps, the all-clear and an overlay coloured by distance; the per-vehicle speed and side readouts, the urgent tone and close-pass counting need one that also reports closing speed and lateral position. The radar, camera and eBike integrations degrade gracefully: each works without the others.
+A radar that reports distance only is expected to get the approach beeps, the all-clear and an overlay coloured by distance; the per-vehicle speed and side readouts, the urgent tone, close-pass counting and the count of vehicles that passed you need one that also reports closing speed and lateral position. The radar, camera and eBike integrations degrade gracefully: each works without the others.
 
 Bike Radar is a riding aid, not a safety guarantee. It supplements your own attention and mirrors - it never replaces them.
 

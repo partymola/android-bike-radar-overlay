@@ -2,6 +2,10 @@
 // Copyright (C) 2026 JJ del Rio
 package es.jjrh.bikeradar.ui
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.media.AudioManager
 import android.view.View
 import android.view.ViewGroup
@@ -90,17 +94,49 @@ class SoundDemoStepTest {
 
     private fun screenKeptOn() = views().any { it.keepScreenOn }
 
-    private fun show() {
+    private fun show(alertMaxM: () -> Int = { 20 }, showAlertDistance: Boolean = false) {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 UiTheme {
                     VolumeKeysFollowCues(Prefs(composeRule.activity))
-                    SoundDemoStep(player = player, canPlay = canPlay, onContinue = { continued += 1 })
+                    SoundDemoStep(
+                        player = player,
+                        canPlay = canPlay,
+                        onContinue = { continued += 1 },
+                        alertMaxM = alertMaxM,
+                        showAlertDistance = showAlertDistance,
+                    )
                 }
             }
         }
         composeRule.mainClock.advanceTimeByFrame()
+    }
+
+    private class StripRecorder(bmp: Bitmap) : Canvas(bmp) {
+        val labels = mutableListOf<String>()
+        val boxes = mutableListOf<RectF>()
+        override fun drawText(text: String, x: Float, y: Float, paint: Paint) {
+            labels += text
+            super.drawText(text, x, y, paint)
+        }
+        override fun drawRoundRect(rect: RectF, rx: Float, ry: Float, paint: Paint) {
+            boxes += RectF(rect)
+            super.drawRoundRect(rect, rx, ry, paint)
+        }
+    }
+
+    /**
+     * What the live strip draws now: the label of its alert line, which stands
+     * for the alert distance it holds, and the boxes narrower than the strip,
+     * which leaves out the background and the danger border.
+     */
+    private fun stripDrawn(): StripRecorder {
+        val view = views().filterIsInstance<RadarOverlayView>().single()
+        val recorder = StripRecorder(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888))
+        view.draw(recorder)
+        recorder.boxes.removeAll { it.width() >= view.width - 4 * view.resources.displayMetrics.density }
+        return recorder
     }
 
     private fun tapPlay() {
@@ -159,7 +195,7 @@ class SoundDemoStepTest {
         tapPlay()
         composeRule.onNodeWithText("Playing…").assertIsNotEnabled()
         val firstBeepAfter = advanceUntil(10_000L) { player.calls.isNotEmpty() }
-        assertTrue("first beep after $firstBeepAfter ms", firstBeepAfter in 3_300L..4_000L)
+        assertTrue("first beep after $firstBeepAfter ms", firstBeepAfter in 5_500L..6_500L)
         assertEquals(listOf("play1"), player.calls)
         composeRule.onNodeWithText("A car behind you: one beep.").assertExists()
 
@@ -168,6 +204,136 @@ class SoundDemoStepTest {
         composeRule.onNodeWithText("Closing fast while you are stopped or slow: the urgent warning (only on radars that report speed).").assertExists()
         advanceUntil(5_000L) { false }
         composeRule.onNodeWithText("Play again").assertExists()
+    }
+
+    @Test
+    fun theSceneRunsAtTheAlertDistanceItIsGiven() {
+        show(alertMaxM = { 10 })
+        tapPlay()
+        // The scene's own times at 10 m are 8,400 ms and 16,600 ms; at 20 m, 6,000 ms and 15,900 ms.
+        val firstBeepAfter = advanceUntil(12_000L) { player.calls.isNotEmpty() }
+        assertTrue("first beep after $firstBeepAfter ms", firstBeepAfter in 7_900L..8_900L)
+        val urgentAfter = advanceUntil(20_000L) { player.calls.size >= 5 } + firstBeepAfter
+        assertEquals(listOf("play1", "play2", "play3", "clear", "urgent"), player.calls)
+        assertTrue("urgent after $urgentAfter ms", urgentAfter in 16_100L..17_100L)
+    }
+
+    @Test
+    fun theAlertDistanceLineNamesTheDistanceTheSceneRunsAt() {
+        show(alertMaxM = { 10 }, showAlertDistance = true)
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+        tapPlay()
+        advance(500L)
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+    }
+
+    @Test
+    fun theAlertDistanceIsReadWhenPlayIsTappedAndHeldForTheRun() {
+        var riders by mutableStateOf(20)
+        show(alertMaxM = { riders }, showAlertDistance = true)
+        composeRule.onNodeWithText("Alert distance: 20 m").assertExists()
+        riders = 10
+        advance(500L)
+        composeRule.onNodeWithText("Alert distance: 20 m").assertExists()
+        composeRule.onNodeWithText("Alert distance: 10 m").assertDoesNotExist()
+        tapPlay()
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+        advance(2_000L)
+        assertEquals(listOf("10m"), stripDrawn().labels)
+        riders = 30
+        advance(500L)
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+        composeRule.onNodeWithText("Alert distance: 30 m").assertDoesNotExist()
+        assertEquals(listOf("10m"), stripDrawn().labels)
+    }
+
+    @Test
+    fun theLiveStripFollowsTheAlertDistanceItIsGiven() {
+        var alertMaxM by mutableStateOf(10)
+        composeRule.setContent {
+            UiTheme {
+                SoundDemoStepContent(
+                    tMs = 2_000L,
+                    lastCue = null,
+                    playing = true,
+                    played = true,
+                    canPlay = true,
+                    onPlay = {},
+                    onContinue = {},
+                    alertMaxM = alertMaxM,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val atTen = stripDrawn()
+        assertEquals(listOf("10m"), atTen.labels)
+        alertMaxM = 40
+        composeRule.waitForIdle()
+        val atForty = stripDrawn()
+        assertEquals(listOf("40m"), atForty.labels)
+        // Car 1 is 36 m out at 2 s: past the strip's end at 10 m, drawn at 40 m.
+        assertTrue("boxes ${atTen.boxes.size} at 10 m, ${atForty.boxes.size} at 40 m", atForty.boxes.size > atTen.boxes.size)
+    }
+
+    @Test
+    fun aWatchedSceneAtAnotherAlertDistanceStillSaysItThroughARotation() {
+        val restore = StateRestorationTester(composeRule)
+        composeRule.mainClock.autoAdvance = false
+        restore.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                UiTheme { SoundDemoStep(player = player, canPlay = true, onContinue = {}, alertMaxM = { 10 }, showAlertDistance = true) }
+            }
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        tapPlay()
+        advance(25_000L)
+        composeRule.mainClock.autoAdvance = true
+        restore.emulateSavedInstanceStateRestore()
+        composeRule.onNodeWithText("Play again").assertExists()
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+    }
+
+    @Test
+    fun noAlertDistanceLineUnlessTheScreenAsksForIt() {
+        show(alertMaxM = { 10 })
+        tapPlay()
+        advance(500L)
+        composeRule.onNodeWithText("Alert distance:", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun theSettingsRoutePlaysTheSceneAtTheRidersAlertDistance() {
+        Prefs(composeRule.activity).alertMaxDistanceM = 10
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            SoundDemoScreen(
+                prefs = Prefs(composeRule.activity),
+                mark = R.string.alert_sounds_title,
+                onDone = {},
+                doneLabel = R.string.common_done,
+                followsAlertDistance = true,
+            )
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.onNodeWithText("Alert distance: 10 m").assertExists()
+        tapPlay()
+        advance(2_000L)
+        assertEquals(listOf("10m"), stripDrawn().labels)
+    }
+
+    @Test
+    fun onboardingPlaysTheSceneAtTheDefaultDistanceWhateverTheRiderSet() {
+        val prefs = Prefs(composeRule.activity)
+        prefs.alertMaxDistanceM = 10
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            OnboardingScreen(navController = rememberNavController(), prefs = prefs, onFinished = {})
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        tapPlay()
+        advance(2_000L)
+        assertEquals(listOf("20m"), stripDrawn().labels)
+        composeRule.onNodeWithText("Alert distance:", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -185,9 +351,24 @@ class SoundDemoStepTest {
         shadowOf(composeRule.activity.getSystemService(AccessibilityManager::class.java)).setEnabled(true)
         show()
         tapPlay()
-        advanceUntil(10_000L) { player.calls.size >= 3 }
+        advanceUntil(12_000L) { player.calls.size >= 3 }
         val strip = views().filterIsInstance<RadarOverlayView>().single()
         assertTrue("strip says ${strip.contentDescription}", strip.contentDescription.toString().contains("1 vehicle"))
+    }
+
+    @Test
+    fun atTheShortestAlertDistanceTheCarIsDrawnJustBeforeItsFirstBeep() {
+        show(alertMaxM = { 10 })
+        val empty = stripDrawn().boxes.size
+        tapPlay()
+        val drawnAfter = advanceUntil(12_000L) { stripDrawn().boxes.size > empty }
+        assertTrue("no car drawn after $drawnAfter ms", stripDrawn().boxes.size > empty)
+        assertEquals("a sound before the car was drawn", emptyList<String>(), player.calls)
+        val beepAfterDrawn = advanceUntil(12_000L) { player.calls.isNotEmpty() }
+        assertEquals(listOf("play1"), player.calls)
+        assertEquals(listOf("10m"), stripDrawn().labels)
+        // Measured at one 112 ms step on the run's clock; a scene driven at 9 m takes three.
+        assertTrue("car drawn at $drawnAfter ms, then $beepAfterDrawn ms to the beep", beepAfterDrawn <= 250L)
     }
 
     @Test
@@ -328,7 +509,7 @@ class SoundDemoStepTest {
         RadarStateBus.publish(RadarState(source = DataSource.V2, timestamp = System.currentTimeMillis()))
         try {
             composeRule.setContent {
-                SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {})
+                SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {}, followsAlertDistance = false)
             }
             composeRule.waitForIdle()
             composeRule.onNodeWithText("Play").assertIsNotEnabled()
@@ -357,7 +538,7 @@ class SoundDemoStepTest {
     @Test
     fun aRadarThatStartsStreamingWhileTheScreenIsOpenLocksItAtOnce() {
         composeRule.setContent {
-            SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {})
+            SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {}, followsAlertDistance = false)
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Play").assertIsEnabled()
@@ -393,7 +574,7 @@ class SoundDemoStepTest {
     @Test
     fun theDemoScreenPlaysWhileNoRadarStreams() {
         composeRule.setContent {
-            SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {})
+            SoundDemoScreen(prefs = Prefs(composeRule.activity), mark = R.string.sound_demo_mark, onDone = {}, followsAlertDistance = false)
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Play").assertIsEnabled()

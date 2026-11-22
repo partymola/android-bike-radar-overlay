@@ -78,6 +78,18 @@ class SettingsAlertSoundsRouteTest {
     }
 
     @Test
+    fun theReplayRunsAtTheAlertDistanceSetWhenPlayIsTapped() {
+        tap("Settings", scroll = false)
+        tap("Alerts")
+        tap("Alert sounds")
+        tap("Watch the example ride again")
+        compose.onNodeWithText("Alert distance: 20 m").assertExists()
+        Prefs(app).alertMaxDistanceM = 10
+        tap("Play", scroll = false)
+        compose.onNodeWithText("Alert distance: 10 m").assertExists()
+    }
+
+    @Test
     fun settingsReachesTheVolumeAndComesBack() {
         tap("Settings", scroll = false)
         tap("Alerts")
@@ -154,7 +166,7 @@ class SettingsAlertSoundsRouteTest {
         tap("Alert sounds")
         tap("Watch the example ride again")
         tap("Play", scroll = false)
-        compose.mainClock.advanceTimeBy(3_600L)
+        compose.mainClock.advanceTimeBy(6_600L)
         compose.waitForIdle()
         assertEquals(1, slotWritten())
     }

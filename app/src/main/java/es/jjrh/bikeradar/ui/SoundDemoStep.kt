@@ -219,7 +219,9 @@ internal fun AlarmVolumeNote() {
 /**
  * The demo as a whole screen: first in onboarding, and again from Settings.
  * [mark] is the label over the title and [doneLabel] the button that leaves,
- * both of which differ between the two.
+ * both of which differ between the two. With [followsAlertDistance], true only on
+ * the Settings route, the scene runs at the rider's alert distance and says so;
+ * in onboarding no rider has chosen one, so it runs at the default.
  */
 @Composable
 fun SoundDemoScreen(
@@ -227,6 +229,7 @@ fun SoundDemoScreen(
     @StringRes mark: Int,
     onDone: () -> Unit,
     @StringRes doneLabel: Int = R.string.common_continue,
+    followsAlertDistance: Boolean,
 ) {
     UiTheme {
         VolumeKeysFollowCues(prefs)
@@ -238,6 +241,8 @@ fun SoundDemoScreen(
                 onContinue = onDone,
                 mark = mark,
                 doneLabel = doneLabel,
+                alertMaxM = { if (followsAlertDistance) prefs.alertMaxDistanceM else Prefs.DEFAULT_ALERT_MAX_DISTANCE_M },
+                showAlertDistance = followsAlertDistance,
             )
         }
     }
@@ -246,7 +251,9 @@ fun SoundDemoScreen(
 /**
  * The sound demo: tap Play, watch a scripted example ride with its real sounds,
  * then Continue. Nothing plays until the rider taps, since alerts sound on the
- * alarm stream and ignore a muted media volume.
+ * alarm stream and ignore a muted media volume. [alertMaxM] is read when the
+ * screen first shows, again at each Play and when the screen is recreated, and
+ * the distance read runs the scene, the strip and the line under it.
  */
 @Composable
 internal fun SoundDemoStep(
@@ -255,8 +262,11 @@ internal fun SoundDemoStep(
     onContinue: () -> Unit,
     @StringRes mark: Int = R.string.sound_demo_mark,
     @StringRes doneLabel: Int = R.string.common_continue,
+    alertMaxM: () -> Int = { Prefs.DEFAULT_ALERT_MAX_DISTANCE_M },
+    showAlertDistance: Boolean = false,
 ) {
     var runs by rememberSaveable { mutableIntStateOf(0) }
+    var runAlertM by remember { mutableIntStateOf(alertMaxM()) }
     var playing by remember { mutableStateOf(false) }
     var tMs by remember { mutableLongStateOf(0L) }
     var lastCue by remember { mutableStateOf<AlertCue?>(null) }
@@ -282,7 +292,7 @@ internal fun SoundDemoStep(
             playing = false
             return@LaunchedEffect
         }
-        val playback = SoundDemo.Playback { cue -> player?.playCue(cue) }
+        val playback = SoundDemo.Playback(runAlertM) { cue -> player?.playCue(cue) }
         val start = withFrameMillis { it }
         while (true) {
             val elapsed = withFrameMillis { it } - start
@@ -301,6 +311,7 @@ internal fun SoundDemoStep(
         played = runs > 0,
         canPlay = canPlay,
         onPlay = {
+            runAlertM = alertMaxM()
             runs += 1
             playing = true
         },
@@ -310,6 +321,8 @@ internal fun SoundDemoStep(
         },
         mark = mark,
         doneLabel = doneLabel,
+        alertMaxM = runAlertM,
+        showAlertDistance = showAlertDistance,
     )
 }
 
@@ -325,6 +338,8 @@ internal fun SoundDemoStepContent(
     onContinue: () -> Unit,
     @StringRes mark: Int = R.string.sound_demo_mark,
     @StringRes doneLabel: Int = R.string.common_continue,
+    alertMaxM: Int = Prefs.DEFAULT_ALERT_MAX_DISTANCE_M,
+    showAlertDistance: Boolean = false,
 ) {
     val br = LocalBrColors.current
     Column(modifier = Modifier.fillMaxSize()) {
@@ -342,7 +357,15 @@ internal fun SoundDemoStepContent(
             )
             // No caption before the first Play or while locked: "the radar sees
             // nothing" would read as the status of the rider's own radar.
-            SoundDemoScene(tMs = tMs, lastCue = lastCue, captioned = canPlay && (played || playing))
+            SoundDemoScene(tMs = tMs, lastCue = lastCue, captioned = canPlay && (played || playing), alertMaxM = alertMaxM)
+            if (showAlertDistance) {
+                Text(
+                    text = stringResource(R.string.sound_demo_alert_distance, alertMaxM),
+                    color = br.fgDim,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            }
             if (!canPlay) {
                 Text(
                     text = stringResource(R.string.sound_demo_radar_streaming),
@@ -374,9 +397,16 @@ internal fun SoundDemoStepContent(
     }
 }
 
-/** The overlay strip as a ride draws it, beside the caption for the last sound. */
+/**
+ * The overlay strip as a ride draws it, beside the caption for the last sound.
+ * The strip draws no further than [alertMaxM], and the decider needs two
+ * 100 ms frames of a car before it can sound, so a car is drawn at most
+ * 200 ms before its first sound and the caption about silence sits beside a
+ * drawn car only until that sound
+ * (`SoundDemoTest.eachCarIsDrawnOneFrameBeforeItsFirstSoundAtEveryAlertDistance`).
+ */
 @Composable
-internal fun SoundDemoScene(tMs: Long, lastCue: AlertCue?, captioned: Boolean) {
+internal fun SoundDemoScene(tMs: Long, lastCue: AlertCue?, captioned: Boolean, alertMaxM: Int) {
     val br = LocalBrColors.current
     Row(
         modifier = Modifier
@@ -394,13 +424,10 @@ internal fun SoundDemoScene(tMs: Long, lastCue: AlertCue?, captioned: Boolean) {
                 .border(1.dp, br.hairline, RoundedCornerShape(12.dp)),
         ) {
             AndroidView(
-                factory = { context ->
-                    RadarOverlayView(context).apply {
-                        setVisualMaxM(SoundDemo.VISUAL_MAX_M)
-                        setAlertMaxM(SoundDemo.ALERT_MAX_M)
-                    }
-                },
+                factory = { context -> RadarOverlayView(context) },
                 update = { view ->
+                    view.setVisualMaxM(alertMaxM)
+                    view.setAlertMaxM(alertMaxM)
                     view.setState(
                         RadarState(
                             vehicles = SoundDemo.vehiclesAt(tMs),

@@ -20,7 +20,9 @@ import org.robolectric.annotation.GraphicsMode
  * before Play, mid-scene as the first car reaches three beeps, and mid-scene
  * at the urgent warning, plus the three-beep moment in Spanish, where the sub
  * runs longest, the urgent caption in Spanish, the longest caption, and the
- * Settings replay locked by a streaming radar, in Spanish.
+ * Settings replay locked by a streaming radar, in Spanish. The Settings replay
+ * at the shortest alert distance (in Spanish, for the longest distance line)
+ * and the longest one pin that the strip draws to the scene's distance.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -35,6 +37,8 @@ class SoundDemoStepSnapshotTest {
         canPlay: Boolean = true,
         mark: Int = R.string.sound_demo_mark,
         doneLabel: Int = R.string.common_continue,
+        alertMaxM: Int = 20,
+        showAlertDistance: Boolean = false,
     ) {
         captureRoboImage {
             UiTheme {
@@ -49,6 +53,8 @@ class SoundDemoStepSnapshotTest {
                         onContinue = {},
                         mark = mark,
                         doneLabel = doneLabel,
+                        alertMaxM = alertMaxM,
+                        showAlertDistance = showAlertDistance,
                     )
                 }
             }
@@ -59,18 +65,43 @@ class SoundDemoStepSnapshotTest {
     fun beforePlay() = capture(tMs = 0L, lastCue = null, played = false)
 
     @Test
-    fun threeBeeps() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true, playing = true)
+    fun threeBeeps() = capture(tMs = 9_500L, lastCue = AlertCue.Beep(3), played = true, playing = true)
 
     @Test
     fun urgent() = capture(tMs = 16_000L, lastCue = AlertCue.Urgent, played = true, playing = true)
 
     @Test
     @Config(qualifiers = "+es")
-    fun threeBeepsEs() = capture(tMs = 7_000L, lastCue = AlertCue.Beep(3), played = true, playing = true)
+    fun threeBeepsEs() = capture(tMs = 9_500L, lastCue = AlertCue.Beep(3), played = true, playing = true)
 
     @Test
     @Config(qualifiers = "+es")
     fun urgentEs() = capture(tMs = 16_000L, lastCue = AlertCue.Urgent, played = true, playing = true)
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun replayAtTenMetresEs() = capture(
+        tMs = 9_500L,
+        lastCue = AlertCue.Beep(2),
+        played = true,
+        playing = true,
+        mark = R.string.alert_sounds_title,
+        doneLabel = R.string.common_done,
+        alertMaxM = 10,
+        showAlertDistance = true,
+    )
+
+    @Test
+    fun replayAtFortyMetres() = capture(
+        tMs = 6_000L,
+        lastCue = AlertCue.Beep(2),
+        played = true,
+        playing = true,
+        mark = R.string.alert_sounds_title,
+        doneLabel = R.string.common_done,
+        alertMaxM = 40,
+        showAlertDistance = true,
+    )
 
     @Test
     @Config(qualifiers = "+es")
@@ -81,5 +112,6 @@ class SoundDemoStepSnapshotTest {
         canPlay = false,
         mark = R.string.alert_sounds_title,
         doneLabel = R.string.common_done,
+        showAlertDistance = true,
     )
 }

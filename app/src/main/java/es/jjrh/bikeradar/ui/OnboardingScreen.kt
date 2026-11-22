@@ -86,7 +86,7 @@ private fun OnboardingScreenBody(
     // so they are not among them. Riders already past onboarding find both in
     // Settings instead.
     if (!demoDone) {
-        SoundDemoScreen(prefs = prefs, mark = R.string.sound_demo_mark, onDone = { demoDone = true })
+        SoundDemoScreen(prefs = prefs, mark = R.string.sound_demo_mark, onDone = { demoDone = true }, followsAlertDistance = false)
         return
     }
     if (!volumeDone) {

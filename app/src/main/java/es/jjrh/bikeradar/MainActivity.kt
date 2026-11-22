@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                             mark = R.string.alert_sounds_title,
                             onDone = { navController.popBackStack() },
                             doneLabel = R.string.common_done,
+                            followsAlertDistance = true,
                         )
                     }
                     composable("settings/alert-volume") {

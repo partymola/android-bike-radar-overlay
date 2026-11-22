@@ -1244,8 +1244,7 @@ class Prefs(context: Context) {
          *  source: the getter below and the Compose default both read it. */
         const val DEFAULT_BATTERY_LOW_THRESHOLD_PCT = 20
 
-        /** The alert distance an untouched install runs at. The single source:
-         *  the getter below and the sound demo's scene both read it. */
+        /** The alert distance an untouched install runs at. */
         const val DEFAULT_ALERT_MAX_DISTANCE_M = 20
 
         /** The alert distance slider's range, and the clamp on [alertMaxDistanceM]. */

@@ -1,5 +1,54 @@
 # Changelog
 
+## v1.13.0 - 2026-11-22
+
+The app is now available in Polish, and ride history counts roughly how many vehicles passed you as well as those detected behind you. The car behind you is no longer announced twice when a passing car draws level twice. Several Settings and setup texts now match better what the app does.
+
+### While you ride
+
+- **Fewer repeated beeps**
+  - When a passing car read as level with you twice, the car behind was announced twice. Now it is announced once.
+- **A clearer battery warning**
+  - With "Show which device is low" on, the letters follow your language: R for the radar and D for the dashcam in English, C in Spanish, K in Polish. The dashcam letter used to be V.
+  - When the camera-off icon is showing, the radar's low-battery mark sits beside it, and is a dot when the letters are off.
+  - Only your radar and the dashcam you picked get a low-battery mark.
+
+### After your ride
+
+- **More from your ride history**
+  - The count once called overtakes is now called vehicles detected behind, in ride history and the end-of-ride notification, because it counts every vehicle the radar saw behind you, passed or not.
+  - Each ride now also shows roughly how many vehicles passed you. Radars that report distance only, and rides from before this version, show no passed count.
+  - The first ride after the app starts now begins when the radar connects, not when the app started, so its times in ride history and its alerts per hour in Home Assistant are right.
+
+### In Settings and setup
+
+- **Polish**
+  - The app is available in Polish.
+- **Texts that better match what the app does**
+  - The battery warning settings now describe what you see on the overlay: one amber dot, or a letter per device.
+  - The alert distance help no longer claims your speed changes the distance. It is the distance you set.
+  - With an eBike, Settings and setup explain that the beeps come back sooner when you set off after a stop.
+  - Light auto-mode's settings now mention the switch at sunrise as well as at sunset.
+  - The dashcam setup cards promise what the overlay does: a warning when the dashcam's battery is low or your phone can't pick it up.
+- **Your own alert distance**
+  - The example ride in Settings plays at your alert distance and shows it under the strip.
+- **Dashcam warning**
+  - Choosing a dashcam in Settings now turns on the camera-off warning, as setup already did. Changing to another dashcam keeps your setting.
+
+### If you report a bug
+
+- The connection log notes a connection in which the radar never sent your speed.
+- If you press the radar's light button while the app is switching the tail light, the connection log says the tail light answered after your press.
+
+### After installing this version
+
+- In Home Assistant, the ride summary's Overtakes sensor is now called Vehicles detected behind, Close-pass conversion rate is now Close-pass rate (per vehicle detected), and a Vehicles passed (approx.) sensor appears beside them. Existing sensors keep their ids, so automations that use those ids keep working. On a radar that reports distance only, the new sensor reads Unknown.
+- If your phone is set to Polish, the app now appears in Polish. On Android 13 and later you can choose the app's language in Android's settings.
+
+### For developers
+
+- Test and build tooling updated: Robolectric 4.18, Roborazzi 1.79.0, Gradle 9.9.1, and the CI's setup-java action 6.3.0.
+
 ## v1.12.2 - 2026-11-16
 
 This release tidies up traffic beeps, alert sound and the light auto-mode alerts. Most of it smooths out edge cases you are unlikely to have met. The change you are most likely to notice: if light auto-mode can't switch a light, you now hear about it once, not at every reconnect, and its sound waits for beeps and warnings to finish.

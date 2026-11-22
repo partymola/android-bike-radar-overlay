@@ -1,0 +1,1 @@
+Now in Polish. Ride history counts roughly how many vehicles passed you, and the first ride after the app starts is dated correctly. The car behind you is no longer announced twice when a passing car draws level twice. Battery warning letters follow your language, and Settings texts now match better what the app does.

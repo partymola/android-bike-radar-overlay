@@ -1,0 +1,1 @@
+Ahora en polaco. El historial de rutas cuenta aproximadamente cuántos vehículos te han adelantado, y la primera ruta tras abrir la app tiene la hora correcta. El coche que viene detrás ya no se anuncia dos veces cuando un coche que adelanta se pone a tu altura dos veces. Las letras del aviso de batería siguen tu idioma y los textos de Ajustes describen mejor lo que hace la app.

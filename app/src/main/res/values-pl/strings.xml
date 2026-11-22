@@ -1,0 +1,1139 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  User-facing string resources (Polish).
+
+  Conventions for contributors and future strings:
+  - Key names are <screen_or_area>_<element>, lower_snake_case.
+  - Wrap every format argument in <xliff:g> so translators neither reorder
+    nor translate it. A dropped or mangled %1$s crashes the app at runtime,
+    which is why MissingTranslation + the StringFormat lint checks are a
+    hard CI gate (see app/build.gradle.kts).
+  - Count-dependent text uses <plurals> + pluralStringResource, never a
+    hand-rolled if (n == 1) - plural rules differ by language.
+  - Machine / diagnostic strings (capture-log lines, hex, JSON keys, BLE
+    protocol, log tags, navigation route ids) stay hardcoded in Kotlin and
+    are never translated.
+
+  Translating the app: see CONTRIBUTING.md. Copy this file to
+  values-<lang>/strings.xml and translate only the text between the tags.
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Brand / launcher label. Not translated - the name is the same in
+         every language. -->
+    <!-- ── Common / reused ──────────────────────────────────────────── -->
+    <string name="common_settings">Ustawienia</string>
+    <string name="common_continue">Kontynuuj</string>
+    <string name="common_optional">Opcjonalne</string>
+    <string name="common_cancel">Anuluj</string>
+    <string name="common_or">lub</string>
+    <string name="common_change">Zmień</string>
+    <string name="common_clear">Wyczyść</string>
+    <string name="common_back">Wstecz</string>
+    <string name="common_done">Gotowe</string>
+    <!-- TalkBack state of a row that opens and closes a list in place. -->
+    <string name="common_expanded">Rozwinięte</string>
+    <string name="common_collapsed">Zwinięte</string>
+    <!-- UI primitives (UiPrimitives.kt) -->
+    <string name="ui_battery_pct">
+        <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
+    <string name="ui_chip_paired">SPAROWANO</string>
+    <!-- Same word in English; Spanish and other gendered languages need the
+         feminine form beside "Cámara delantera". -->
+    <string name="ui_chip_paired_cam">SPAROWANO</string>
+    <!-- OS permission specs (PermissionSpec.kt) - shown on the onboarding
+         permissions step and Settings → Permissions. -->
+    <string name="permission_nearby_title">Urządzenia w pobliżu</string>
+    <string name="permission_nearby_rationale">Wyszukiwanie i łączenie z radarem, kamerą i rowerem elektrycznym przez Bluetooth.</string>
+    <string name="permission_notifications_title">Powiadomienia</string>
+    <string name="permission_notifications_rationale">Wyświetlaj podsumowania przejazdów i ostrzeżenia oraz wstrzymuj alerty z poziomu powiadomienia. Bez tego alerty nadal będą odtwarzane, ale nie wyciszysz alarmu oddalenia się od roweru.</string>
+    <string name="permission_overlay_title">Wyświetlanie nad innymi aplikacjami</string>
+    <string name="permission_overlay_rationale">Wyświetla nakładkę radaru na aktualnym ekranie. Bez tego alerty dźwiękowe nadal działają, ale nakładka nie jest widoczna.</string>
+    <string name="permission_location_title">Przybliżona lokalizacja</string>
+    <string name="permission_location_rationale">Dostosowuje oświetlenie przednie i radar do lokalnego zachodu słońca. Lokalizacja jest odczytywana, gdy aplikacja jest otwarta, i przechowywana w telefonie jako przybliżony obszar. Bez lokalizacji lub współrzędnych zachód słońca jest szacowany dla Londynu. Ręcznie wpisane współrzędne mają pierwszeństwo.</string>
+    <string name="permission_mark_recommended">Zalecane</string>
+    <!-- The same mark on the Notifications card; gendered languages agree it
+         with that title. -->
+    <string name="permission_mark_recommended_notifications">Zalecane</string>
+    <!-- The Nearby devices card's mark; gendered languages agree it with that
+         title only, so it is not reused on another card. -->
+    <string name="permission_mark_required">Wymagane</string>
+    <!-- Shared light-mode display names (SettingsAtoms.kt) -->
+    <string name="settings_lightmode_high">Wysoki</string>
+    <string name="settings_lightmode_medium">Średni</string>
+    <string name="settings_lightmode_low">Niski</string>
+    <string name="settings_lightmode_night_flash">Miganie nocne</string>
+    <string name="settings_lightmode_day_flash">Miganie dzienne</string>
+    <string name="settings_lightmode_off">Wyłączone</string>
+    <string name="settings_lightmode_solid">Światło ciągłe</string>
+    <string name="settings_lightmode_peloton">Jazda w grupie</string>
+    <!-- Radar overlay spoken accessibility summary (RadarOverlayA11y.kt).
+         Separators between clauses are added in code, so these stay free of
+         leading/trailing whitespace. -->
+    <string name="overlay_a11y_prefix">Nakładka radaru rowerowego.</string>
+    <string name="overlay_a11y_road_clear">Droga wolna.</string>
+    <plurals name="overlay_a11y_vehicles">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> pojazd.</item>
+        <item quantity="other">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdów.</item>
+        <item quantity="few">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdy.</item>
+        <item quantity="many">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdów.</item>
+    </plurals>
+    <plurals name="overlay_a11y_vehicles_nearest">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> pojazd, najbliższy w odległości <xliff:g id="metres" example="8">%2$d</xliff:g> metrów.</item>
+        <item quantity="other">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdów, najbliższy w odległości <xliff:g id="metres" example="8">%2$d</xliff:g> metrów.</item>
+        <item quantity="few">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdy, najbliższy w odległości <xliff:g id="metres" example="8">%2$d</xliff:g> metrów.</item>
+        <item quantity="many">
+            <xliff:g id="count" example="3">%1$d</xliff:g> pojazdów, najbliższy w odległości <xliff:g id="metres" example="8">%2$d</xliff:g> metrów.</item>
+    </plurals>
+    <string name="overlay_a11y_dashcam_dropped">Utracono połączenie z kamerą.</string>
+    <string name="overlay_a11y_dashcam_missing">Nie znaleziono kamery.</string>
+    <string name="overlay_a11y_dashcam_searching">Wyszukiwanie kamery.</string>
+    <string name="overlay_a11y_low_battery">Niski poziom baterii.</string>
+    <!-- On-screen banner shown on the overlay while the rear-radar link is down
+         past the threshold (RadarLinkVisualDecider). Title shown for every
+         rider; the "unlocked" subtitle is appended only for eBike riders whose
+         bike is still unlocked - it doubles as a "you forgot to lock" hint. -->
+    <string name="overlay_radar_disconnected">Rozłączono tylny radar</string>
+    <string name="overlay_radar_disconnected_unlocked">ale rower jest odblokowany</string>
+    <!-- The same banner on a ride the radar has not joined (never connected,
+         so not "disconnected"), shown once its warning has sounded. A question:
+         the radar may be on but held by another app or device. -->
+    <string name="overlay_radar_not_on">Brak tylnego radaru</string>
+    <string name="overlay_radar_not_on_sub">Czy jest włączony?</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Home screen (MainScreen.kt, MainStatus.kt)
+         ════════════════════════════════════════════════════════════════ -->
+    <!-- Hero status card. Headline + subtitle for each derived state. -->
+    <string name="main_status_service_off_title">Skanowanie zatrzymane</string>
+    <string name="main_status_service_off_sub">Alerty będą wyłączone do czasu uruchomienia skanowania</string>
+    <!-- The subtitle names the one missing, Nearby devices first. The app does
+         not start the radar service without Nearby devices, so no alerts at
+         all; without Notifications it runs and beeps, but Pause, which only
+         the notification offers, the ride summary and the warnings that live
+         in notifications are gone, and the walk-away alarm cannot be silenced.
+         The _alarm_ form is shown only to a rider whose alarm can sound. -->
+    <string name="main_status_permissions_title">Wymagane uprawnienia</string>
+    <string name="main_status_permissions_nearby_sub">Alerty będą wyłączone, dopóki nie przyznasz uprawnienia do urządzeń w pobliżu</string>
+    <string name="main_status_permissions_notifications_sub">Bez powiadomień nie można wstrzymać alertów</string>
+    <string name="main_status_permissions_notifications_alarm_sub">Bez powiadomień nie można wstrzymać alertów ani wyciszyć alarmu oddalenia</string>
+    <string name="main_status_paused_title">Wstrzymano do <xliff:g id="time" example="14:32">%1$s</xliff:g>
+    </string>
+    <string name="main_status_paused_sub">Alerty są wyciszone</string>
+    <string name="main_status_bt_off_title">Bluetooth jest wyłączony</string>
+    <string name="main_status_bt_off_sub">Radar jest niedostępny</string>
+    <string name="main_status_not_paired_title">Radar nie jest sparowany</string>
+    <!-- Says where Pair leads: Android's Bluetooth list, or, when the radar
+         screen has a paired device to offer as the radar, that screen. -->
+    <string name="main_status_not_paired_sub">Sparuj go w ustawieniach Bluetooth systemu Android</string>
+    <string name="main_status_not_paired_pick_sub">Sparuj go lub wybierz, jeśli jest już sparowany</string>
+    <string name="main_status_dashcam_off_title">Radar działa, kamera wyłączona</string>
+    <string name="main_status_dashcam_off_sub">Włącz urządzenie <xliff:g id="dashcam_name" example="Vue-123">%1$s</xliff:g>
+    </string>
+    <string name="main_status_dashcam_off_sub_generic">Włącz kamerę</string>
+    <string name="main_status_limited_title">Radar działa, tylko odległość</string>
+    <string name="main_status_limited_sub">Ten radar nie obsługuje pilnych ostrzeżeń</string>
+    <string name="main_status_live_title">Radar działa</string>
+    <string name="main_status_live_ha_down_sub">Nie udało się wysłać danych do Home Assistant</string>
+    <string name="main_status_live_dashcam_on_sub">Kamera włączona</string>
+    <string name="main_status_waiting_title">Oczekiwanie na radar</string>
+    <string name="main_status_waiting_sub">Włącz radar</string>
+    <!-- Shown instead of the pair above once the radar has been down long
+         enough to offer the parked declaration. A question, because at that
+         point the app genuinely cannot tell a finished ride from a failed
+         radar, and telling a rider whose radar just died that their ride is
+         over would be false at the worst moment. The subtitle takes the "no"
+         branch; the button takes the "yes". -->
+    <string name="main_status_ride_over_title">Zakończono przejazd?</string>
+    <string name="main_status_ride_over_sub">Jeśli nie, ponownie włącz radar</string>
+    <!-- The app holds or is opening a link to the radar and no data has arrived.
+         Also shown while a radar connects and fails its setup over and over.
+         The subtitle appears only after 15 s of that. -->
+    <string name="main_status_connecting_title">Łączenie z radarem</string>
+    <string name="main_status_connecting_sub">Jeśli stan się nie zmieni, wyłącz radar i włącz go ponownie</string>
+    <!-- The radar is pinned to a paired device the app does not know as a
+         radar while one it does know is also paired, and nothing is arriving.
+         The pin may be a watch picked by mistake or a real radar switched off,
+         so the card asks rather than says. While the app is connecting to it
+         the _connecting_ form gives no instruction, and the _advice_ form
+         follows the connecting card's 15 s rule. -->
+    <string name="main_status_wrong_pin_title">Czy wybrano właściwy radar?</string>
+    <string name="main_status_wrong_pin_sub">Brak danych z <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. Jeśli to radar, włącz go</string>
+    <string name="main_status_wrong_pin_connecting_sub">Brak jeszcze danych z <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>
+    </string>
+    <string name="main_status_wrong_pin_advice_sub">Brak danych z <xliff:g id="device" example="Pixel Buds">%1$s</xliff:g>. Jeśli to radar, wyłącz go i włącz ponownie</string>
+    <!-- Hero status-card call-to-action buttons. -->
+    <string name="main_cta_start_scanning">Uruchom skanowanie</string>
+    <string name="main_cta_grant_permissions">Przyznaj uprawnienia</string>
+    <string name="main_cta_resume">Wznów</string>
+    <string name="main_cta_turn_on_bluetooth">Włącz Bluetooth</string>
+    <string name="main_cta_pair">Sparuj</string>
+    <string name="main_cta_choose_radar">Wybierz radar</string>
+    <!-- Not "End ride": it ends no ride. The summary and history still close
+         on their own timer. What it declares is that the radar being off is
+         expected, which is the rider-side twin of a Bosch lock. -->
+    <string name="main_cta_parked">Zaparkowałem rower</string>
+    <!-- Home-screen toasts. -->
+    <string name="main_toast_dev_enabled">Włączono opcje programistyczne</string>
+    <!-- Bluetooth-off banner (shown when the adapter is off but a state
+         other than the BT-off hero is on screen). -->
+    <string name="main_bt_banner_title">Bluetooth wyłączony</string>
+    <string name="main_bt_banner_action">Dotknij, aby włączyć</string>
+    <!-- SYSTEM card: per-device row labels. The value text is the shared
+         device-status vocabulary below. -->
+    <string name="main_section_system">System</string>
+    <string name="main_system_rear_radar">Tylny radar</string>
+    <string name="main_system_front_dashcam">Przednia kamera</string>
+    <string name="main_system_ebike">eBike</string>
+    <string name="main_system_home_assistant">Home Assistant</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Device status vocabulary (DeviceStatusLabels.kt)
+
+         ONE set of words for "is this device delivering right now",
+         read by every surface that answers it: the home System card,
+         the Settings quick-status chips and Connections subtitles, and
+         each device's own screen. The System rows navigate, so a rider
+         who taps a row saying "No signal" must land on a screen saying
+         "No signal" too. Never add a screen-local synonym.
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="device_status_not_paired">Nie sparowano</string>
+    <string name="device_status_live">Aktywny</string>
+    <string name="device_status_limited">Ograniczony</string>
+    <string name="device_status_connecting">Łączenie…</string>
+    <string name="device_status_no_signal">Brak sygnału</string>
+    <!-- Camera forms. Spanish inflects these for the feminine "Cámara";
+         the keys above serve the masculine radar. "Sin señal" and
+         "Conectando…" carry no gender, so both devices share them. -->
+    <string name="device_status_cam_not_paired">Nie sparowano</string>
+    <string name="device_status_cam_live">Aktywna</string>
+    <string name="device_status_cam_limited">Ograniczona</string>
+    <!-- eBike forms. Spanish inflects for the feminine "la eBike". -->
+    <string name="device_status_ebike_live">Aktywny</string>
+    <string name="device_status_ebike_no_permission">Wymagane uprawnienie do urządzeń w pobliżu</string>
+    <!-- No "eBike" in the value: every row that shows it is already labelled
+         "eBike", so naming it again reads as a stutter. -->
+    <string name="device_status_ebike_not_bonded">Nie sparowano</string>
+    <string name="device_status_waiting_flow">Oczekiwanie na Flow</string>
+    <string name="device_status_ha_not_configured">Nie skonfigurowano</string>
+    <string name="device_status_ha_configured">Skonfigurowano</string>
+    <string name="device_status_ha_ready">MQTT gotowy</string>
+    <string name="device_status_ha_unreachable">Wysyłanie nie powiodło się</string>
+    <!-- Settings Connections rows answer two questions at once: is this
+         device set up, and is it working right now. The second half is the
+         shared status word above. -->
+    <string name="settings_home_conn_two_part">
+        <xliff:g id="setup" example="Paired">%1$s</xliff:g> · <xliff:g id="status" example="No signal">%2$s</xliff:g>
+    </string>
+    <string name="settings_home_conn_paired">Sparowano</string>
+    <string name="settings_home_conn_paired_cam">Sparowano</string>
+    <!-- CLOSE PASSES stats card. -->
+    <string name="main_section_close_passes">Bliskie wyprzedzenia</string>
+    <string name="main_close_passes_caption">w tym przejeździe</string>
+    <string name="main_close_passes_history_link">Historia ›</string>
+    <string name="main_close_passes_empty_hint">Włącz zliczanie bliskich wyprzedzeń w Ustawienia → Alerty, aby zobaczyć je tutaj.</string>
+    <!-- On the card while a distance-only radar is connected, which
+         settings_radardev_limited_source says logs no close passes. -->
+    <string name="main_close_passes_range_only_hint">Ten radar mierzy tylko odległość, więc nie może zliczać bliskich wyprzedzeń.</string>
+    <plurals name="main_close_passes_count_desc">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> bliskie wyprzedzenie podczas przejazdu</item>
+        <item quantity="other">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskich wyprzedzeń podczas przejazdu</item>
+        <item quantity="few">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskie wyprzedzenia podczas przejazdu</item>
+        <item quantity="many">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskich wyprzedzeń podczas przejazdu</item>
+    </plurals>
+    <!-- Dashcam-ownership prompt card (first-run flows). -->
+    <string name="main_dashcam_prompt_title">Korzystasz z kamery?</string>
+    <string name="main_dashcam_prompt_body">Nakładka pokazuje jej baterię i ostrzega, gdy kamera przestaje nadawać.</string>
+    <string name="main_dashcam_prompt_yes">Skonfiguruj</string>
+    <string name="main_dashcam_prompt_no">Nie mam kamery</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Riding-aid notice (SafetyNotice.kt) - shown once before the app or
+         before another app's first access question, whichever comes first,
+         and again under Settings → About whenever the rider wants it.
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="safety_notice_title">Przed jazdą</string>
+    <string name="safety_notice_intro">Bike Radar wspomaga jazdę i ostrzega o ruchu za rowerem. Nie zastępuje samodzielnego sprawdzania sytuacji za sobą.</string>
+    <string name="safety_notice_bullet_miss">Może nie wykryć pojazdu lub ostrzec z opóźnieniem.</string>
+    <string name="safety_notice_bullet_drop">Połączenie z radarem lub dźwięk mogą zaniknąć bez ostrzeżenia.</string>
+    <string name="safety_notice_bullet_clear">„Droga wolna” oznacza tylko, że radar niczego nie wykrywa.</string>
+    <string name="safety_notice_closing">Przed zmianą toru jazdy zawsze spójrz za siebie.</string>
+    <string name="safety_notice_ack">Rozumiem</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Onboarding (OnboardingScreen.kt) - sound demo, volume step, then a 5-step pager
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="onboarding_skip_setup">Pomiń konfigurację</string>
+    <string name="onboarding_skip_for_now">Pomiń na razie</string>
+    <string name="onboarding_finish">Zakończ</string>
+    <string name="onboarding_step_1_of_5">Krok 1 z 5</string>
+    <string name="onboarding_step_2_of_5">Krok 2 z 5</string>
+    <string name="onboarding_step_3_of_5">Krok 3 z 5</string>
+    <string name="onboarding_step_4_of_5">Krok 4 z 5</string>
+    <string name="onboarding_last_step">Ostatni krok</string>
+    <string name="onboarding_privacy_full_detail">Szczegóły: Ustawienia → Prywatność</string>
+    <!-- Step 4: radar position (mount offset; slider labels reused from
+         settings_radardev_position_*) -->
+    <string name="onboarding_radarpos_title">Gdzie zamontowany jest radar?</string>
+    <string name="onboarding_radarpos_sub">Zwykle jest zamontowany centralnie. Jeśli jest przesunięty na bok, ustaw jego położenie, aby nakładka i alerty były dokładne. Możesz to później zmienić w ustawieniach.</string>
+    <!-- Step 1: permissions -->
+    <string name="onboarding_perm_title">Przyznaj uprawnienia</string>
+    <string name="onboarding_perm_sub">Uprawnienia systemowe pozwalają wyszukiwać urządzenia, wyświetlać nakładkę i powiadomienia.</string>
+    <string name="onboarding_perm_privacy_heading">Na co pozwalają te uprawnienia</string>
+    <string name="onboarding_perm_bullet_bluetooth">Urządzenia w pobliżu: wyszukiwanie i łączenie z radarem, kamerą oraz eBike</string>
+    <string name="onboarding_perm_bullet_notifications">Powiadomienia (zalecane): przycisk Wstrzymaj, podsumowanie przejazdu i ostrzeżenia</string>
+    <string name="onboarding_perm_bullet_location">Lokalizacja (przybliżona, opcjonalna): dostosowuje światła do zachodu słońca i nie śledzi trasy</string>
+    <!-- Above the held Continue while Nearby devices is not granted. "Skip
+         setup" is onboarding_skip_setup, the button at the top. -->
+    <string name="onboarding_perm_continue_hint">Przyznaj dostęp do urządzeń w pobliżu, aby kontynuować, lub wybierz Pomiń konfigurację.</string>
+    <!-- Step 2: Home Assistant -->
+    <string name="onboarding_ha_title">Połącz z Home Assistant</string>
+    <string name="onboarding_ha_sub">Wysyłaj informacje o przejazdach i bateriach do HA na potrzeby historii, pulpitów i przypomnień.</string>
+    <string name="onboarding_ha_saved_without_testing">Zapisano bez testowania</string>
+    <string name="onboarding_ha_use_title">Korzystam z Home Assistant</string>
+    <string name="onboarding_ha_use_sub">Skonfiguruj teraz adres URL i token.</string>
+    <string name="onboarding_ha_notforme_title">Nie korzystam</string>
+    <string name="onboarding_ha_notforme_sub">Pomiń ten krok. Aplikacja działa bez HA.</string>
+    <string name="onboarding_ha_change_later">Możesz to później zmienić w Ustawienia → Home Assistant.</string>
+    <string name="onboarding_ha_using_pill">Korzystasz z Home Assistant · zmień</string>
+    <string name="onboarding_ha_url_label">Podstawowy adres URL</string>
+    <!-- Also the token field's label in Settings → Home Assistant. -->
+    <string name="onboarding_ha_token_label">Długoterminowy token dostępu</string>
+    <string name="onboarding_ha_hide_token">Ukryj token</string>
+    <string name="onboarding_ha_show_token">Pokaż token</string>
+    <string name="onboarding_ha_token_hint">W HA: Profil → Bezpieczeństwo → Długoterminowe tokeny dostępu.</string>
+    <string name="onboarding_ha_testing">Testowanie…</string>
+    <string name="onboarding_ha_test_connection">Sprawdź połączenie</string>
+    <string name="onboarding_ha_enter_to_continue">Wpisz adres URL i token, aby kontynuować.</string>
+    <string name="onboarding_ha_skipped_title">Pominięto</string>
+    <string name="onboarding_ha_skipped_body">Home Assistant możesz dodać później w Ustawienia → Home Assistant.</string>
+    <string name="onboarding_ha_use_ha_button">Używaj Home Assistant</string>
+    <string name="onboarding_ha_privacy_heading">Co jest wysyłane</string>
+    <string name="onboarding_ha_bullet_sends">Wysyła do HA nazwy radaru i kamery, poziom baterii, tryb świateł, czasy przejazdów i statystyki (w tym bliskie wyprzedzenia)</string>
+    <string name="onboarding_ha_bullet_only_ha">Dane trafiają wyłącznie do Twojego Home Assistant, nigdy do twórcy aplikacji</string>
+    <string name="onboarding_ha_bullet_private">Adres i token HA są przechowywane w prywatnej pamięci aplikacji. Są przenoszone wraz z ustawieniami podczas transferu między telefonami i w szyfrowanej kopii Androida</string>
+    <!-- Step 3: pairing -->
+    <string name="onboarding_pair_title">Sparuj urządzenia</string>
+    <string name="onboarding_pair_sub">Parowanie odbywa się w ustawieniach Bluetooth Androida, a nie tutaj. Włącz tryb parowania radaru, a następnie wybierz Otwórz ustawienia Bluetooth.</string>
+    <!-- In place of the sub above while Nearby devices is denied. "Permissions
+         needed" is main_status_permissions_title, on the card below it. -->
+    <string name="onboarding_pair_sub_no_permission">Przyznaj dostęp do urządzeń w pobliżu, aby aplikacja widziała sparowane urządzenia. Wybierz Wymagane uprawnienia, a potem wróć tutaj.</string>
+    <string name="onboarding_pair_radar_title">Tylny radar</string>
+    <string name="onboarding_pair_radar_detail_unpaired">Jeszcze nie sparowano. Ekran parowania znajdziesz w ustawieniach Bluetooth Androida.</string>
+    <string name="onboarding_pair_radar_hint">Po sparowaniu wróć tutaj przyciskiem Wstecz.</string>
+    <string name="onboarding_pair_open_bt_settings">Otwórz ustawienia Bluetooth</string>
+    <string name="onboarding_pair_radar_other_title">Masz już sparowany radar?</string>
+    <string name="onboarding_pair_radar_other_sub">Jeśli jest widoczny pod inną nazwą, wybierz go z listy sparowanych urządzeń.</string>
+    <!-- Under settings_radardev_choose_radar, in place of the pair above once
+         the card above already reads PAIRED: after a pick, with two radars
+         paired, or with a radar the app knows only by a wider name. -->
+    <string name="onboarding_pair_radar_choose_sub">Wybierz go z listy sparowanych urządzeń.</string>
+    <string name="onboarding_pair_dashcam_title">Przednia kamera</string>
+    <string name="onboarding_pair_dashcam_no_subtitle">Wybrano, że nie masz kamery</string>
+    <string name="onboarding_pair_dashcam_no_detail">Możesz to zmienić w Ustawienia → Kamera.</string>
+    <string name="onboarding_pair_dashcam_have_one">Mam kamerę</string>
+    <string name="onboarding_pair_dashcam_yes_subtitle">Ostrzega, gdy jest wyłączona</string>
+    <string name="onboarding_pair_dashcam_picked_fallback">Wybrano</string>
+    <string name="onboarding_pair_dashcam_picked_detail">
+        <xliff:g id="name" example="Vue-123">%1$s</xliff:g> · <xliff:g id="mac" example="AB:CD:EF">%2$s</xliff:g>
+    </string>
+    <string name="onboarding_pair_dashcam_pick_detail">Wybierz używaną podczas jazdy kamerę, aby włączyć ostrzeżenia o jej wyłączeniu.</string>
+    <string name="onboarding_pair_dashcam_unanswered_detail">Masz kamerę Bluetooth? Nakładka pokazuje stan jej baterii i ostrzega, gdy przestaje nadawać.</string>
+    <string name="onboarding_pair_change_device">Zmień urządzenie</string>
+    <string name="onboarding_pair_pick_device">Wybierz urządzenie</string>
+    <string name="onboarding_pair_dont_have_one">Nie mam takiego urządzenia</string>
+    <string name="onboarding_pair_settings_dashcam">Ustawienia → Kamera</string>
+    <string name="onboarding_pair_comeback">Możesz do tego wrócić później w <xliff:g id="location" example="Settings → Dashcam">%1$s</xliff:g>.</string>
+    <string name="onboarding_pair_privacy_heading">Do jakich danych uzyskuje dostęp</string>
+    <string name="onboarding_pair_bullet_devices">Odczytuje listę sparowanych urządzeń, aby znaleźć radar i kamerę</string>
+    <string name="onboarding_pair_bullet_saves">Zapamiętuje wybrany radar i kamerę. Ustawienia są przenoszone w kopii zapasowej Androida lub bezpośrednio między telefonami</string>
+    <string name="onboarding_pair_bullet_nothing_sent">Aplikacja nie wysyła tych danych twórcy. Jeśli skonfigurujesz Home Assistant, otrzyma on nazwy radaru i kamery</string>
+    <string name="onboarding_pair_more_features">Dodatkowe funkcje znajdziesz po konfiguracji w Ustawienia → Eksperymentalne.</string>
+    <string name="onboarding_pair_radar_later">Radar możesz sparować później w ustawieniach Bluetooth.</string>
+    <string name="onboarding_device_paired_with">Sparowano z <xliff:g id="device" example="RearVue8">%1$s</xliff:g>
+    </string>
+    <!-- Step 4: eBike -->
+    <string name="onboarding_ebike_title">Stan roweru eBike</string>
+    <string name="onboarding_ebike_sub">Wyświetlaj poziom baterii i stan połączenia eBike podczas jazdy. Działa równolegle z aplikacją Bosch Flow.</string>
+    <string name="onboarding_ebike_bullet_status">Bateria i stan eBike na ekranie głównym</string>
+    <string name="onboarding_ebike_bullet_timing">Częstotliwość sygnałów zależy od prędkości koła</string>
+    <string name="onboarding_ebike_bullet_no_radar">Ostrzeżenie podczas jazdy z wyłączonym radarem</string>
+    <string name="onboarding_ebike_have_title">Mam eBike</string>
+    <string name="onboarding_ebike_have_sub">Włącz go.</string>
+    <string name="onboarding_ebike_donthave_title">Nie mam eBike</string>
+    <string name="onboarding_ebike_donthave_sub">Pomiń ten krok. Aplikacja działa bez roweru elektrycznego.</string>
+    <string name="onboarding_ebike_change_later">Możesz to zmienić później w Ustawienia → eBike.</string>
+    <string name="onboarding_ebike_allset">Wszystko gotowe</string>
+    <string name="onboarding_ebike_almost">Już prawie gotowe</string>
+    <string name="onboarding_ebike_sub_receiving">Odczytujemy dane eBike — nie musisz nic robić.</string>
+    <string name="onboarding_ebike_sub_open">Otwórz Bosch Flow i pozostaw aplikację uruchomioną podczas jazdy.</string>
+    <string name="onboarding_ebike_sub_install">Zainstaluj Bosch Flow, aby otrzymywać bieżące dane eBike.</string>
+    <string name="onboarding_ebike_open_flow">Otwórz Bosch Flow</string>
+    <string name="onboarding_ebike_install_flow">Zainstaluj Bosch Flow</string>
+    <string name="onboarding_ebike_finish_later">Możesz zakończyć teraz i skonfigurować to później.</string>
+    <string name="onboarding_ebike_go_back">Nie masz eBike Bosch? Wróć</string>
+    <string name="onboarding_ebike_flow_open_failed">Nie udało się otworzyć Flow. Zainstaluj aplikację ze Sklepu Play i spróbuj ponownie.</string>
+    <string name="onboarding_ebike_privacy_heading">Jakie dane są zbierane</string>
+    <string name="onboarding_ebike_bullet_reads">Odczytuje poziom baterii, prędkość, pedałowanie i blokadę roweru. Dostęp tylko do odczytu; nie wysyła poleceń do roweru</string>
+    <string name="onboarding_ebike_bullet_phone">Dane pozostają w telefonie. Pełne odczyty trafiają wyłącznie do dzienników przechwytywania, domyślnie wyłączonych</string>
+    <string name="onboarding_ebike_bullet_ha">Jeśli skonfigurujesz Home Assistant, informacje o przejazdach będą do niego wysyłane</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Settings (SettingsScreen.kt + per-section screens)
+         ════════════════════════════════════════════════════════════════ -->
+    <!-- Settings home (SettingsScreen.kt) -->
+    <string name="settings_home_quick_status">Szybki stan</string>
+    <string name="settings_home_chip_radar">Radar</string>
+    <string name="settings_home_chip_cam">Kamera</string>
+    <string name="settings_home_section_ride">Jazda</string>
+    <string name="settings_home_section_connections">Połączenia</string>
+    <string name="settings_home_section_system">System</string>
+    <string name="settings_home_alerts_title">Alerty</string>
+    <string name="settings_home_alerts_subtitle">Głośność <xliff:g id="volume" example="80">%1$d</xliff:g>%% · alert przy <xliff:g id="distance" example="140">%2$d</xliff:g> m</string>
+    <string name="settings_home_lights_title">Automatyczny tryb świateł</string>
+    <string name="settings_home_radar_title">Radar</string>
+    <string name="settings_home_dashcam_title">Kamera</string>
+    <string name="settings_home_ebike_title">eBike</string>
+    <string name="settings_home_ha_title">Home Assistant</string>
+    <string name="settings_home_permissions_title">Uprawnienia</string>
+    <plurals name="settings_home_permissions_subtitle_action">
+        <item quantity="one">
+            <xliff:g id="missing" example="1">%1$d</xliff:g> uprawnienie wymaga działania</item>
+        <item quantity="other">
+            <xliff:g id="missing" example="2">%1$d</xliff:g> uprawnień wymaga działania</item>
+        <item quantity="few">
+            <xliff:g id="missing" example="2">%1$d</xliff:g> uprawnienia wymagają działania</item>
+        <item quantity="many">
+            <xliff:g id="missing" example="2">%1$d</xliff:g> uprawnień wymaga działania</item>
+    </plurals>
+    <string name="settings_home_permissions_subtitle_granted">Przyznano wszystkie (<xliff:g id="granted" example="7">%1$d</xliff:g> z <xliff:g id="total" example="7">%2$d</xliff:g>)</string>
+    <plurals name="settings_home_permissions_subtitle_partial">
+        <item quantity="one">Przyznano <xliff:g id="granted" example="1">%1$d</xliff:g> z <xliff:g id="total" example="3">%2$d</xliff:g>
+        </item>
+        <item quantity="other">Przyznano <xliff:g id="granted" example="2">%1$d</xliff:g> z <xliff:g id="total" example="4">%2$d</xliff:g>
+        </item>
+        <item quantity="few">Przyznano <xliff:g id="granted" example="2">%1$d</xliff:g> z <xliff:g id="total" example="4">%2$d</xliff:g>
+        </item>
+        <item quantity="many">Przyznano <xliff:g id="granted" example="2">%1$d</xliff:g> z <xliff:g id="total" example="4">%2$d</xliff:g>
+        </item>
+    </plurals>
+    <string name="settings_home_experimental_title">Eksperymentalne</string>
+    <string name="settings_home_debug_title">Diagnostyka</string>
+    <string name="settings_home_debug_subtitle">Tryb programisty odblokowany</string>
+    <string name="settings_home_about_title">Informacje</string>
+    <string name="settings_home_about_subtitle">Wersja <xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g>
+    </string>
+    <!-- Settings-home row subtitles (derived in SettingsScreen.kt helpers) -->
+    <string name="settings_home_lights_on">włączone</string>
+    <string name="settings_home_lights_off">wyłączone</string>
+    <string name="settings_home_lights_rear_only">Tył: <xliff:g id="state" example="on">%1$s</xliff:g>
+    </string>
+    <string name="settings_home_lights_summary">Tył: <xliff:g id="rear" example="on">%1$s</xliff:g> · Przód: <xliff:g id="front" example="off">%2$s</xliff:g>
+    </string>
+    <string name="settings_home_lights_all_off">Wyłączone</string>
+    <!-- Setup prompts. These stay screen-local because they are instructions
+         for a device that is not configured yet, not a link state. -->
+    <string name="settings_home_ebike_setup">Skonfiguruj eBike</string>
+    <string name="settings_home_dont_have_one">Nie mam</string>
+    <string name="settings_home_ebike_off">Wyłączone</string>
+    <string name="settings_home_ebike_on">Dane włączone</string>
+    <string name="settings_home_dashcam_setup">Skonfiguruj kamerę</string>
+    <string name="settings_home_dashcam_pick">Wybierz urządzenie</string>
+    <string name="settings_home_exp_count">Włączone (<xliff:g id="on" example="1">%1$d</xliff:g> z <xliff:g id="total" example="2">%2$d</xliff:g>)</string>
+    <string name="settings_home_exp_all_off">Wszystkie wyłączone</string>
+    <!-- Settings → Permissions chrome (SettingsPermissions.kt) -->
+    <string name="settings_perm_title">Uprawnienia</string>
+    <string name="settings_perm_open_app_info">Otwórz informacje o aplikacji</string>
+    <string name="settings_perm_open_notification_settings">Otwórz ustawienia powiadomień</string>
+    <string name="settings_perm_grant">Przyznaj</string>
+    <string name="settings_perm_enable">Włącz</string>
+    <!-- What TalkBack says for a button on a permission card: the button's
+         own label first, as Voice Access users say it, then what it acts on
+         (the permission, or the manual location). -->
+    <string name="settings_perm_action_cd">
+        <xliff:g id="action" example="Grant">%1$s</xliff:g>: <xliff:g id="subject" example="Nearby devices">%2$s</xliff:g>
+    </string>
+    <string name="settings_perm_granted_cd">Przyznano</string>
+    <!-- Settings → About (SettingsAbout.kt) -->
+    <string name="settings_about_title">Informacje</string>
+    <string name="settings_about_app_name">Bike Radar</string>
+    <string name="settings_about_version_line">v<xliff:g id="version" example="0.9.0-alpha">%1$s</xliff:g>
+    </string>
+    <string name="settings_about_tagline">Wizualne i dźwiękowe alerty z tylnego radaru.</string>
+    <string name="settings_about_section_legal">Informacje prawne</string>
+    <string name="settings_about_licences_title">Licencje open source</string>
+    <string name="settings_about_licences_subtitle">Bezpośrednie zależności aplikacji</string>
+    <string name="settings_about_privacy_title">Prywatność</string>
+    <string name="settings_about_privacy_subtitle">Co pozostaje w telefonie, a co nie</string>
+    <string name="settings_about_section_release">Wydania</string>
+    <string name="settings_about_licence_title">Licencja aplikacji</string>
+    <string name="settings_about_licence_subtitle">GPL-3.0-or-later</string>
+    <string name="settings_about_changelog_title">Co nowego</string>
+    <string name="settings_about_changelog_subtitle">Zmiany w poszczególnych wersjach</string>
+    <string name="settings_about_safety_title">Przed jazdą</string>
+    <string name="settings_about_safety_subtitle">Możliwości i ograniczenia radaru</string>
+    <string name="settings_about_unaffiliated_title">Brak powiązania z Garmin ani Bosch</string>
+    <string name="settings_about_unaffiliated_subtitle">To niezależne narzędzie</string>
+    <string name="permission_radar_ipc_label">Korzystaj z radaru rowerowego</string>
+    <string name="permission_radar_ipc_description">Umożliwia innej aplikacji odczyt radaru, zmianę tylnego światła i ukrywanie nakładki. Dostęp zostanie przyznany dopiero po Twojej zgodzie na ekranie z nazwą aplikacji.</string>
+    <string name="link_no_browser">Żadna aplikacja w telefonie nie może otwierać odnośników internetowych.</string>
+    <!-- Settings → Experimental (SettingsExperimental.kt) -->
+    <string name="settings_exp_title">Eksperymentalne</string>
+    <string name="settings_exp_intro">Funkcje w trakcie testów. Mogą działać niestabilnie lub zmienić się bez uprzedzenia.</string>
+    <string name="settings_exp_urgent_hold_title">Opóźnij pilne ostrzeżenie dla pojazdów z boku</string>
+    <string name="settings_exp_urgent_hold_subtitle">Jeśli szybko zbliżający się pojazd znajduje się z boku, pilne ostrzeżenie zostanie chwilowo wstrzymane i nie zabrzmi, jeśli przewidywany odstęp będzie większy od ustawionego progu. Ogranicza to fałszywe alarmy z sąsiedniego pasa, ale ostrzeżenie o bliskim pojeździe może być opóźnione lub nie pojawić się wcale.</string>
+    <string name="settings_exp_precog_title">Przewiduj tory wyprzedzania (1 s naprzód)</string>
+    <string name="settings_exp_precog_subtitle">Pokazuje przewidywane położenie pojazdów za 1 sekundę — widzisz, dokąd zmierzają wyprzedzające auta, a nie tylko ich aktualne położenie. Przy dużym ruchu obraz może drgać.</string>
+    <string name="settings_exp_drop_fallback_title">Alarm utraty połączenia bez odczytu prędkości</string>
+    <string name="settings_exp_drop_fallback_subtitle">Uruchamia alarm utraty połączenia, gdy radar nie podaje prędkości i nie połączono eBike. Ruch wykryty tuż przed zerwaniem połączenia zastępuje odczyt prędkości. Alarm może zabrzmieć po zaparkowaniu przy ruchliwej drodze.</string>
+    <string name="settings_exp_drop_window_title">Ostatnio wykryty ruch</string>
+    <string name="settings_exp_drop_window_helper">Określa, jak daleko wstecz sprawdzać ruch na potrzeby alarmu bez odczytu prędkości. Na spokojnej drodze ostatni pojazd mógł przejechać kilka minut wcześniej, dlatego dłuższy okres pozwala zachować działanie alarmu, ale może on też zabrzmieć po zaparkowaniu w ruchliwym miejscu. Wybierz „Zaparkowałem rower” na ekranie głównym, aby go wyłączyć.</string>
+    <!-- Settings → Alerts/Radar (SettingsRadar.kt) -->
+    <string name="settings_radar_header">Alerty</string>
+    <string name="settings_radar_section_alerts">Alerty</string>
+    <string name="settings_radar_section_overlay">Nakładka</string>
+    <string name="settings_radar_section_adaptive">Adaptacyjne</string>
+    <string name="settings_radar_section_connection">Połączenie</string>
+    <string name="settings_radar_section_battery">Ostrzeżenia o baterii</string>
+    <string name="settings_radar_section_close_pass">Rejestrowanie bliskich wyprzedzeń</string>
+    <string name="settings_radar_section_danger">Strefa zagrożenia</string>
+    <string name="settings_radar_percent_value">
+        <xliff:g id="pct" example="80">%1$d</xliff:g>%%</string>
+    <string name="settings_radar_meters_value">
+        <xliff:g id="m" example="20">%1$d</xliff:g> m</string>
+    <string name="settings_radar_minutes_value">
+        <xliff:g id="min" example="15">%1$d</xliff:g> min</string>
+    <string name="settings_radar_seconds_value">
+        <xliff:g id="s" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_radar_kmh_value">
+        <xliff:g id="kmh" example="10">%1$d</xliff:g> km/h</string>
+    <string name="settings_radar_ms_value">
+        <xliff:g id="ms" example="6">%1$d</xliff:g> m/s</string>
+    <string name="settings_radar_meters_decimal_value">
+        <xliff:g id="m" example="1.0">%1$s</xliff:g> m</string>
+    <string name="settings_radar_alert_volume_title">Głośność alertów</string>
+    <!-- The gain applies to every AlertBeeper cue: beeps, urgent, all-clear
+         and both radar pulses. The walk-away alarm has its own volume. -->
+    <string name="settings_radar_alert_volume_helper">Głośność sygnałów ostrzegawczych. Przy wartości 0 dźwięki są wyciszone, ale nakładka nadal się wyświetla.</string>
+    <string name="settings_radar_alert_distance_title">Odległość ostrzegania</string>
+    <string name="settings_radar_alert_distance_helper">Sygnał włącza się, gdy pojazd zbliży się na tę odległość. Dalsze pojazdy są widoczne na nakładce, ale sygnał im nie towarzyszy.</string>
+    <string name="settings_radar_urgent_clearance_title">Odstęp dla pilnego ostrzeżenia</string>
+    <string name="settings_radar_urgent_clearance_helper">Pilne ostrzeżenie nie zabrzmi, gdy przewidywany odstęp pojazdu od środka roweru przekracza tę wartość. Zwiększ ją, aby uwzględnić także dalsze wyprzedzenia.</string>
+    <!-- Closing-speed cut-off: above it a target gets no beep and no urgent
+         warning but stays on the overlay. The value reads after the title
+         ("Warn up to 126 km/h"); "No limit" is the slider's last stop. -->
+    <string name="settings_radar_closing_ceiling_title">Ostrzegaj do prędkości</string>
+    <string name="settings_radar_closing_ceiling_none">Bez limitu</string>
+    <string name="settings_radar_closing_ceiling_helper">Nie wydaje zwykłych ani pilnych ostrzeżeń o obiektach zbliżających się szybciej niż ustawiony próg, niezależnie od rzeczywistej prędkości. Ogranicza fałszywe alarmy przy błędnych odczytach radaru. Szybsze pojazdy nadal widać na nakładce.</string>
+    <string name="settings_radar_urgent_low_speed_title">Pilne ostrzeżenie przy małej prędkości</string>
+    <string name="settings_radar_urgent_low_speed_subtitle">Odtwarzaj pilne ostrzeżenie, gdy pojazd szybko zbliża się podczas wolnej jazdy, a nie tylko na postoju.</string>
+    <string name="settings_radar_turn_title">Opóźnij sygnał drogi wolnej na zakrętach</string>
+    <string name="settings_radar_turn_subtitle">Opóźnij sygnał drogi wolnej podczas skrętu, na wypadek gdyby auto wciąż było za Tobą. Opóźnij również sygnały dla samochodu wykrytego blisko w trakcie skrętu, chyba że szybko się zbliża.</string>
+    <string name="settings_radar_visual_distance_title">Zasięg wizualizacji</string>
+    <string name="settings_radar_visual_distance_helper">Maksymalna odległość pojazdu pokazywanego na nakładce. Ruch poza tym zasięgiem jest pomijany na ekranie.</string>
+    <string name="settings_radar_overlay_dimmer_title">Przyciemnianie nakładki</string>
+    <string name="settings_radar_overlay_dimmer_helper">Zmniejsz widoczność nakładki, aby aplikacja pod nią pozostała czytelna. „Wyłączone” oznacza pełną widoczność nakładki.</string>
+    <string name="settings_radar_overlay_dim_off">Wyłączone</string>
+    <string name="settings_radar_overlay_dim_light">Lekkie</string>
+    <string name="settings_radar_overlay_dim_medium">Średnie</string>
+    <string name="settings_radar_overlay_dim_strong">Mocne</string>
+    <string name="settings_radar_adaptive_title">Adaptacyjne kolory alertów</string>
+    <string name="settings_radar_adaptive_subtitle">Dostosowuj progi koloru żółtego i czerwonego do prędkości roweru: większa czułość na postoju, mniejsza podczas jazdy.</string>
+    <!-- The radar-left-on alarm (RadarLeftOnDecider). The 3 is
+         CALIBRATION_SWITCH_OFFS, the 30 s is
+         RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS and the 10% is
+         BATTERY_FLOOR_PCT. A lock read after the riding lifts that 30 s,
+         which the eBike bullet says. -->
+    <string name="settings_radar_section_walkaway">Alarm oddalenia się</string>
+    <string name="settings_radar_left_on_title">Ostrzegaj, jeśli radar nadal jest włączony</string>
+    <string name="settings_radar_left_on_subtitle">Alarm zabrzmi raz, jeśli oddalisz się od roweru z włączonym radarem.\n• Odtwarza dźwięk alarmu telefonu z pełną głośnością i wibracjami\n• Może zabrzmieć dopiero po trzykrotnym wykryciu wyłączenia radaru i po trzech kolejnych wyłączeniach po aktualizacji systemu lub zmianie radaru\n• Nie uruchamia się, gdy radar rozłączy się podczas jazdy, w ciągu 30 s od zatrzymania lub gdy bateria ma mniej niż 10%\n• Przy włączonych danych eBike i działającym Bosch Flow wykrywa również odejście zaraz po zablokowaniu roweru; nie włącza się, jeśli rower był odblokowany podczas rozłączenia\n• Niedostępny dla radarów mierzących tylko odległość</string>
+    <!-- One notification channel carries both walk-away alarms, so this row
+         shows on Settings → Dashcam too. The alarm's sound plays on the alarm
+         stream whatever this says; the setting decides whether the
+         notification shows. -->
+    <string name="settings_walkaway_dnd_title">Pokaż w trybie Nie przeszkadzać</string>
+    <string name="settings_walkaway_dnd_allowed">Dozwolone. Powiadomienie o alarmie pojawia się nawet w trybie Nie przeszkadzać.</string>
+    <string name="settings_walkaway_dnd_tap">Dotknij, aby zezwolić na powiadomienie o alarmie w trybie Nie przeszkadzać. Dźwięk zawsze korzysta z ustawień alarmów telefonu.</string>
+    <string name="settings_radar_idle_after_title">Przejdź w spoczynek po</string>
+    <string name="settings_radar_idle_after_helper">Gdy radar przez tyle czasu pozostaje poza zasięgiem, kolejne próby połączenia odbywają się w odstępach podanych poniżej, aby oszczędzać Bluetooth na postoju.</string>
+    <string name="settings_radar_idle_interval_title">Odstęp ponawiania połączenia w spoczynku</string>
+    <string name="settings_radar_idle_interval_helper">Jak często ponawiać połączenie z nieaktywnym radarem. Dłuższe odstępy oszczędzają baterię nocą, krótsze pozwalają szybciej wykryć radar po powrocie.</string>
+    <string name="settings_radar_banner_persistent_title">Pozostaw ostrzeżenie o utracie połączenia na ekranie</string>
+    <string name="settings_radar_banner_persistent_subtitle">Bez eBike Bosch lub gdy aplikacja nie zna stanu blokady roweru: ostrzeżenie pozostaje widoczne do ponownego połączenia radaru, zamiast znikać po 40 sekundach.</string>
+    <string name="settings_radar_no_radar_warning_title">Ostrzegaj podczas jazdy bez radaru</string>
+    <!-- The seconds follow the idle reconnect interval above: 90 up to a 50 s
+         interval, longer beyond it (RadarLinkCoordinator.noRadarGraceMs). -->
+    <string name="settings_radar_no_radar_warning_subtitle">Przy włączonych danych eBike i działającym Bosch Flow: po <xliff:g id="seconds" example="90">%1$d</xliff:g> sekundach jazdy bez połączonego radaru usłyszysz trzy niskie impulsy (maksymalnie trzykrotnie) i zobaczysz ostrzeżenie na nakładce.</string>
+    <string name="settings_radar_low_battery_title">Próg niskiego poziomu baterii</string>
+    <string name="settings_radar_low_battery_helper">Pokaż żółte ostrzeżenie obok rowerzysty, gdy poziom baterii sparowanego urządzenia spadnie poniżej tej wartości.</string>
+    <string name="settings_radar_show_labels_title">Pokaż nazwy urządzeń</string>
+    <string name="settings_radar_show_labels_subtitle">Pokazuj na ekranie „RADAR 12 proc.” lub „KAMERA 8 proc.” zamiast samego kolorowego ostrzeżenia.</string>
+    <string name="settings_radar_close_pass_title">Zliczaj bliskie wyprzedzenia</string>
+    <string name="settings_radar_close_pass_subtitle">Zliczaj pojazdy wyprzedzające zbyt blisko, pokazując je na ekranie głównym i w historii przejazdów.</string>
+    <string name="settings_radar_close_pass_subtitle_ha">Zliczaj pojazdy wyprzedzające zbyt blisko, pokazując je na ekranie głównym, w historii przejazdów i wysyłając do Home Assistant.</string>
+    <string name="settings_radar_lateral_clearance_title">Próg odległości bocznej</string>
+    <string name="settings_radar_lateral_clearance_helper">Zlicza wyprzedzenia bliższe niż ta odległość od środka roweru.</string>
+    <string name="settings_radar_min_rider_speed_title">Minimalna prędkość rowerzysty</string>
+    <string name="settings_radar_min_rider_speed_helper">Zlicza wyprzedzenie tylko wtedy, gdy podczas zbliżania się pojazdu jechałeś co najmniej z tą prędkością.</string>
+    <string name="settings_radar_min_closing_speed_title">Minimalna prędkość zbliżania</string>
+    <string name="settings_radar_min_closing_speed_helper">Około <xliff:g id="kmh" example="22">%1$d</xliff:g> km/h względnej prędkości zbliżania.</string>
+    <string name="settings_radar_stop_scanning">Zatrzymaj skanowanie</string>
+    <string name="settings_radar_stop_scanning_helper">Wyłącza radar, nakładkę i aktualizacje HA do ponownego uruchomienia. Nie uruchamia automatycznie po restarcie telefonu. Do chwilowego wyciszenia użyj Wstrzymaj.</string>
+    <string name="settings_radar_scanning_stopped_title">Skanowanie zatrzymane</string>
+    <string name="settings_radar_scanning_stopped_subtitle">Uruchom je ponownie z ekranu głównego.</string>
+    <string name="settings_radar_stop_dialog_title">Zatrzymać skanowanie?</string>
+    <string name="settings_radar_stop_dialog_body">Radar, nakładka i aktualizacje Home Assistant pozostaną wyłączone do ręcznego uruchomienia z ekranu głównego, także po restarcie telefonu. Do chwilowego wyciszenia użyj Wstrzymaj.</string>
+    <string name="settings_radar_cancel">Anuluj</string>
+    <!-- Settings → Radar device (SettingsRadarDevice.kt) -->
+    <string name="settings_radardev_header">Radar</string>
+    <string name="settings_radardev_intro">Tylny radar to najważniejsza część aplikacji.</string>
+    <string name="settings_radardev_pair_title">Sparuj radar</string>
+    <string name="settings_radardev_pair_subtitle">Włącz tryb parowania radaru i sparuj go w ustawieniach Bluetooth Androida.</string>
+    <string name="settings_radardev_not_selected">Nie wybrano</string>
+    <string name="settings_radardev_limited_source">Ten radar podaje wyłącznie odległość. Dostępne są sygnały zbliżania i drogi wolnej, a kolory nakładki pokazują odległość zamiast prędkości. Brak pilnych ostrzeżeń, rejestrowania bliskich wyprzedzeń i alarmu pozostawionego włączonego radaru. Przy aktywnych danych eBike i Bosch Flow alarm utraty połączenia działa jak wcześniej; bez nich zabrzmi tylko wtedy, gdy radar wykrywał ruch z tyłu tuż przed rozłączeniem.</string>
+    <string name="settings_radardev_choose_radar">Wybierz radar tego roweru</string>
+    <string name="settings_radardev_selected">Wybrano</string>
+    <string name="settings_radardev_tap_to_use">Dotknij, aby używać tego radaru</string>
+    <string name="settings_radardev_not_listed_title">Mojego radaru nie ma na liście</string>
+    <string name="settings_radardev_not_listed_subtitle">Wybierz dowolne sparowane urządzenie jako radar tego roweru.</string>
+    <!-- Under a paired device offered as the radar: in Settings one the app
+         does not know as a radar, such as a watch; in setup any device but a
+         front camera, the saved dashcam and the eBike. -->
+    <string name="settings_radardev_tap_to_use_as_radar">Dotknij, aby używać jako radaru</string>
+    <string name="settings_radardev_show_devices">Pokaż sparowane urządzenia</string>
+    <string name="settings_radardev_hide_devices">Ukryj sparowane urządzenia</string>
+    <string name="settings_radardev_section_actions">Działania</string>
+    <string name="settings_radardev_pair_different_title">Sparuj inny radar</string>
+    <string name="settings_radardev_open">Otwórz</string>
+    <string name="settings_radardev_pair_different_subtitle">Otwiera ustawienia Bluetooth. Zmieniasz radar? Najpierw usuń parowanie starego.</string>
+    <string name="settings_radardev_section_position">Położenie radaru</string>
+    <string name="settings_radardev_position_title">Przesunięcie montażu</string>
+    <string name="settings_radardev_position_helper">Przesuń suwak w stronę, po której zamontowano radar.</string>
+    <!-- In place of the helper above on a range-only radar, whose stream has no
+         lateral position for the offset to move. -->
+    <string name="settings_radardev_position_no_effect">Bez wpływu na ten radar: podaje tylko odległość.</string>
+    <string name="settings_radardev_position_centred">Centralnie</string>
+    <string name="settings_radardev_position_left">%1$d cm w lewo</string>
+    <string name="settings_radardev_position_right">%1$d cm w prawo</string>
+    <string name="settings_radardev_firmware">Oprogramowanie radaru %1$s</string>
+    <!-- Settings → Home Assistant (SettingsHa.kt) -->
+    <string name="settings_ha_title">Home Assistant</string>
+    <string name="settings_ha_base_url_label">Podstawowy adres URL</string>
+    <string name="settings_ha_show_token">Pokaż token</string>
+    <string name="settings_ha_hide_token">Ukryj token</string>
+    <string name="settings_ha_testing">Testowanie…</string>
+    <string name="settings_ha_test_and_save">Sprawdź i zapisz</string>
+    <string name="settings_ha_save_without_testing">Zapisz bez testowania</string>
+    <string name="settings_ha_clear_config">Wyczyść konfigurację HA</string>
+    <!-- A passing test, on this screen and on setup's step: both save it. -->
+    <string name="settings_ha_chip_ha_saved">HA: zapisano</string>
+    <string name="settings_ha_chip_mqtt_ready">MQTT: gotowe</string>
+    <string name="settings_ha_published_entities">Twoje encje</string>
+    <string name="settings_ha_entities_look_up_in_ha">Identyfikatory encji znajdziesz w HA: Ustawienia → Urządzenia i usługi → Encje.</string>
+    <string name="settings_ha_entities_after_publishing">Pojawią się w HA po opublikowaniu przez aplikację: Ustawienia → Urządzenia i usługi → Encje.</string>
+    <string name="settings_ha_nothing_published_yet">Zapisano. Jeszcze nic nie opublikowano.</string>
+    <string name="settings_ha_add_url_token">Wpisz poniżej adres URL i token.</string>
+    <string name="settings_ha_last_error">Ostatni błąd: <xliff:g id="message" example="timeout">%1$s</xliff:g>
+    </string>
+    <string name="settings_ha_mqtt_discovery_active">Publikowanie do Home Assistant przez MQTT</string>
+    <string name="settings_ha_saved_without_testing_toast">Zapisano bez testowania</string>
+    <string name="settings_ha_config_cleared_toast">Wyczyszczono konfigurację HA</string>
+    <!-- A failed test on setup's Home Assistant step and on this screen: the
+         chip says what failed (30 characters at most, prefix included, as
+         chips sit side by side), the line under it what to do. The Last
+         error line on this screen reuses the chips. -->
+    <string name="settings_ha_chip_url_invalid">URL: nieprawidłowy</string>
+    <string name="settings_ha_fix_url_invalid">Nie zapisano. Adres musi zaczynać się od https:// lub http:// i mieć prawidłową postać, np. https://homeassistant.local:8123.</string>
+    <string name="settings_ha_chip_url_https">URL: wymagany HTTPS</string>
+    <string name="settings_ha_fix_url_https">Nie zapisano i nie wysłano danych. http:// działa tylko z adresem sieci domowej, np. 192.168.1.10, homeassistant.local lub homeassistant. Dla innych adresów aplikacja wymaga https:// i nie przesyła tokenu jawnym tekstem.</string>
+    <string name="settings_ha_chip_ha_unreachable">HA: nieosiągalny</string>
+    <string name="settings_ha_fix_unreachable">Brak odpowiedzi spod tego adresu. Sprawdź adres, port oraz dostępność Home Assistant w tej sieci.</string>
+    <string name="settings_ha_chip_ha_tls">HA: błąd bezpiecznego połączenia</string>
+    <string name="settings_ha_fix_tls">Android nie ufa certyfikatowi serwera lub port nie obsługuje HTTPS. W sieci domowej możesz użyć http:// z lokalnym adresem, np. http://192.168.1.10:8123.</string>
+    <string name="settings_ha_chip_ha_token">HA: odrzucono token</string>
+    <string name="settings_ha_fix_token">Home Assistant odrzucił token. Sprawdź go lub utwórz nowy długoterminowy token dostępu.</string>
+    <string name="settings_ha_chip_ha_not_found">HA: nie znaleziono pod adresem</string>
+    <string name="settings_ha_fix_not_found">Serwer odpowiedział, ale nie jest to Home Assistant (kod <xliff:g id="code" example="404">%1$s</xliff:g>). Sprawdź adres i port, zwykle 8123.</string>
+    <string name="settings_ha_chip_ha_server_error">HA: błąd serwera</string>
+    <string name="settings_ha_fix_server_error">Serwer zwrócił błąd (kod <xliff:g id="code" example="503">%1$s</xliff:g>). Sprawdź działanie Home Assistant i spróbuj ponownie.</string>
+    <string name="settings_ha_chip_ha_failed">HA: nieoczekiwany błąd</string>
+    <string name="settings_ha_fix_failed">Test nie powiódł się z nieznanej przyczyny (<xliff:g id="code" example="IOException">%1$s</xliff:g>). Sprawdź URL i token, a następnie spróbuj ponownie.</string>
+    <string name="settings_ha_chip_mqtt_missing">MQTT: nie znaleziono w HA</string>
+    <string name="settings_ha_fix_mqtt_missing">Home Assistant odpowiada, ale MQTT może nie być skonfigurowane. Sprawdź integrację MQTT w HA: Ustawienia → Urządzenia i usługi.</string>
+    <string name="settings_ha_chip_mqtt_token">MQTT: token bez uprawnień</string>
+    <string name="settings_ha_fix_mqtt_token">Home Assistant odpowiada, ale nie pozwala temu tokenowi publikować. Utwórz nowy długoterminowy token dostępu i wklej go tutaj.</string>
+    <string name="settings_ha_chip_mqtt_failed">MQTT: test nieudany</string>
+    <string name="settings_ha_fix_mqtt_failed">Home Assistant odpowiada, ale test MQTT nie powiódł się (<xliff:g id="code" example="503">%1$s</xliff:g>). Spróbuj ponownie.</string>
+    <!-- What TalkBack reads for the test result, which it announces as it
+         changes: the chips, then the line under them. -->
+    <string name="settings_ha_result_cd">Test Home Assistant: <xliff:g id="result" example="HA: token rejected. Home Assistant rejected the token.">%1$s</xliff:g>
+    </string>
+    <!-- Settings → eBike (SettingsEBike.kt) -->
+    <string name="settings_ebike_title">eBike</string>
+    <string name="settings_ebike_data_on_toast">Włączono bieżące dane eBike. Pozostaw Bosch Flow uruchomioną w tle podczas jazdy.</string>
+    <string name="settings_ebike_data_off_toast">Wyłączono bieżące dane eBike.</string>
+    <string name="settings_ebike_intro">Pokazuje baterię i stan połączenia eBike na ekranie głównym, gdy Bosch Flow działa w tle telefonu.</string>
+    <string name="settings_ebike_requirements">Wymaga roweru eBike Bosch Smart System i aplikacji Bosch Flow.</string>
+    <string name="settings_ebike_intent_title">Mam rower eBike Bosch Smart System</string>
+    <string name="settings_ebike_intent_subtitle">Dotknij, aby włączyć dane na żywo.</string>
+    <string name="settings_ebike_use_data">Korzystaj z danych eBike</string>
+    <string name="settings_ebike_use_data_subtitle_off">Włącz, aby wyświetlać baterię i stan eBike na ekranie głównym.</string>
+    <string name="settings_ebike_use_data_subtitle_on">Bateria i stan są wyświetlane, gdy Bosch Flow działa w tle.</string>
+    <string name="settings_ebike_status_label">Stan</string>
+    <!-- Titles come from the shared device-status vocabulary; these say what
+         to do about each state. -->
+    <string name="settings_ebike_receiving_subtitle">Poziom baterii i stan jazdy odczytane z roweru.</string>
+    <string name="settings_ebike_waiting_subtitle">Otwórz Flow i jedź — dane pojawią się automatycznie.</string>
+    <string name="settings_ebike_no_permission_subtitle">Przyznaj uprawnienie do urządzeń w pobliżu w Ustawienia → Uprawnienia.</string>
+    <string name="settings_ebike_not_bonded_subtitle">Najpierw sparuj eBike w ustawieniach Bluetooth Androida.</string>
+    <string name="settings_ebike_alerts_label">Alerty</string>
+    <string name="settings_ebike_forgot_lock_title">Przypomnienie o zablokowaniu roweru</string>
+    <string name="settings_ebike_forgot_lock_subtitle">Uruchom wibrację zegarka, jeśli odejdziesz od niezablokowanego roweru.</string>
+    <string name="settings_ebike_override_dnd">Zignoruj tryb Nie przeszkadzać</string>
+    <string name="settings_ebike_override_dnd_subtitle_allowed">Dozwolone. Przypomnienie uruchomi wibrację zegarka również w trybie Nie przeszkadzać.</string>
+    <string name="settings_ebike_override_dnd_subtitle_tap">Dotknij, aby umożliwić wibrację zegarka mimo trybu Nie przeszkadzać.</string>
+    <string name="settings_ebike_actions_label">Działania</string>
+    <string name="settings_ebike_open_flow">Otwórz Bosch Flow</string>
+    <string name="settings_ebike_open_flow_subtitle">Do działania danych na żywo aplikacja Flow musi być uruchomiona w tle podczas jazdy.</string>
+    <string name="settings_ebike_open">Otwórz</string>
+    <string name="settings_ebike_what_it_does_label">Co robi ta funkcja</string>
+    <string name="settings_ebike_does_item_battery">Pokazuje baterię i stan połączenia eBike na ekranie głównym</string>
+    <string name="settings_ebike_does_item_timing">Dostosowuje częstotliwość sygnałów do prędkości koła</string>
+    <string name="settings_ebike_does_item_no_radar">Ostrzega, jeśli jedziesz bez włączonego radaru</string>
+    <string name="settings_ebike_whats_collected_label">Jakie dane są zbierane</string>
+    <string name="settings_ebike_collected_item_reads">Odczytuje baterię, prędkość, pedałowanie i blokadę roweru. Nie wysyła żadnych poleceń do roweru</string>
+    <string name="settings_ebike_collected_item_phone">Dane pozostają na telefonie. Pełne odczyty trafiają wyłącznie do dzienników przechwytywania, domyślnie wyłączonych</string>
+    <string name="settings_ebike_collected_item_ha">Informacje o przejazdach trafiają do Home Assistant tylko wtedy, gdy go skonfigurujesz</string>
+    <string name="settings_ebike_privacy_detail">Szczegóły na ekranie Prywatność.</string>
+    <string name="settings_ebike_open_flow_failed_toast">Nie udało się otworzyć Flow. Zainstaluj ze Sklepu Play i spróbuj ponownie.</string>
+    <!-- Settings → Dashcam (SettingsDashcam.kt) -->
+    <string name="settings_dashcam_title">Kamera</string>
+    <string name="settings_dashcam_have_dashcam">Mam przednią kamerę</string>
+    <string name="settings_dashcam_have_dashcam_subtitle_on">Skonfiguruj kamerę poniżej.</string>
+    <string name="settings_dashcam_have_dashcam_subtitle_off">Włącz, jeśli chcesz śledzić kamerę Bluetooth wraz z radarem.</string>
+    <!-- The row shown while the switch above is off and a camera is still
+         remembered. "Clear", never "Forget": settings_radardev_pair_different_subtitle
+         uses Forget for unpairing in Android's Bluetooth settings, which this
+         does not do. -->
+    <string name="settings_dashcam_saved_label">Zapisana kamera</string>
+    <string name="settings_dashcam_clear">Wyczyść</string>
+    <string name="settings_dashcam_cleared_toast">Wyczyszczono zapisaną kamerę</string>
+    <string name="settings_dashcam_not_selected">Nie wybrano</string>
+    <string name="settings_dashcam_pick">Wybierz</string>
+    <string name="settings_dashcam_change">Zmień</string>
+    <string name="settings_dashcam_behaviour_label">Działanie</string>
+    <string name="settings_dashcam_warn_off">Ostrzegaj na nakładce, gdy kamera jest wyłączona</string>
+    <string name="settings_dashcam_warn_off_subtitle">Pokaż ikonę wyłączonej kamery obok rowerzysty, gdy telefon nie wykrywa jej sygnału.</string>
+    <string name="settings_dashcam_walkaway_label">Alarm oddalenia się</string>
+    <string name="settings_dashcam_walkaway_alert">Ostrzegaj, jeśli kamera pozostaje włączona</string>
+    <!-- The 15 min is IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS, after which
+         only the Dashcam light's link still hears the camera, bar a repeat due
+         within 35 s and its minute of sound, or a reminder the rider snoozed
+         (DashcamProbe.shouldLaunch), so "about"; the 30 s is
+         RadarLinkCoordinator.RADAR_DROP_ACTIVITY_FRESH_MS, the radar-left-on
+         alarm's rule, which a lock read after the riding lifts. -->
+    <string name="settings_dashcam_walkaway_alert_subtitle">Alarm uruchamia się, gdy radar jest wyłączony przez określony czas (domyślnie 30 s), a telefon nadal wykrywa kamerę.\n• Odtwarza dźwięk alarmu telefonu z pełną głośnością i wibracjami\n• Powtarza się co 5 min do odrzucenia. Zatrzymuje się po ponownym połączeniu radaru lub utracie sygnału kamery\n• Bez automatycznego trybu świateł kamery (Ustawienia → Automatyczny tryb świateł) kończy się po około 15 min od wyłączenia radaru\n• Nie uruchamia się podczas jazdy ani w ciągu 30 s po zatrzymaniu. W przypadku radaru mierzącego tylko odległość może uruchomić się w trakcie jazdy\n• Przy aktywnych danych eBike i Bosch Flow działa również po zablokowaniu roweru i natychmiastowym odejściu, ale nie uruchamia się, jeśli rower był odblokowany\n• Jeśli zabrzmi alarm pozostawionego włączonego radaru (Ustawienia → Alerty), ten alarm zostanie wyciszony, a alarm radaru wymieni także kamerę, jeśli była wykrywana</string>
+    <string name="settings_dashcam_threshold_title">Radar wyłączony przez</string>
+    <string name="settings_dashcam_threshold_value">
+        <xliff:g id="seconds" example="30">%1$d</xliff:g> s</string>
+    <string name="settings_dashcam_threshold_helper">Jak długo radar musi być wyłączony, zanim zabrzmi alarm.</string>
+    <!-- Settings → Privacy (SettingsPrivacy.kt) -->
+    <string name="settings_privacy_title">Prywatność</string>
+    <string name="settings_privacy_intro">Bike Radar nie zbiera telemetrii ani nie prowadzi analityki. Dane trafiają wyłącznie do skonfigurowanego Home Assistant, do aplikacji w telefonie, którym zezwolisz na dostęp, oraz do Twojego radaru, który otrzymuje markę i model telefonu.</string>
+    <string name="settings_privacy_on_phone_label">Co pozostaje w telefonie</string>
+    <string name="settings_privacy_on_phone_settings">Ustawienia (głośność i odległość alertów, stan sparowania radaru, preferencje kamery itp.) są przechowywane w prywatnej pamięci aplikacji Androida, niedostępnej dla innych aplikacji. Jeśli włączysz kopię zapasową Androida lub transfer między telefonami, ustawienia zostaną przeniesione na nowe urządzenie. Obejmują adres i nazwę Bluetooth urządzeń wykrytych lub wybranych jako radar albo kamera. Wyjątkiem są dane, których uczy się alarm pozostawienia radaru: liczba wykrytych wyłączeń radaru (do 3), przechowywana wraz z adresem radaru i wersją systemu telefonu. Licznik zeruje się po zmianie radaru lub aktualizacji systemu. Jest zachowywany nawet przy wyłączonym alarmie, aby działał natychmiast po jego aktywowaniu. Nie jest przenoszony w kopii zapasowej ani między telefonami, więc nowy telefon uczy się go ponownie.</string>
+    <string name="settings_privacy_on_phone_location">Jeśli wpiszesz ręczną lokalizację automatycznego sterowania światłami zamiast zezwolić na dostęp do lokalizacji, współrzędne zostaną zapisane w prywatnej pamięci Androida. Służą tylko do obliczania lokalnych wschodów i zachodów słońca; nie są przekazywane do Home Assistant ani umieszczane w dziennikach czy pakietach diagnostycznych. Tak jak inne ustawienia mogą być przeniesione w kopii zapasowej Androida i bezpośrednio między telefonami.</string>
+    <string name="settings_privacy_on_phone_approx_location">Jeśli udostępnisz przybliżoną lokalizację i używasz automatycznych świateł, aplikacja zapisuje jeden orientacyjny obszar o wysokości około 11 km z północy na południe i mniejszej szerokości ze wschodu na zachód. Dzięki temu światła odpowiadają lokalnemu zachodowi słońca nawet przy uruchamianiu jazdy z zamkniętą aplikacją. Android pozwala odczytywać lokalizację tylko przy otwartej aplikacji: podczas jej otwierania, zmiany trybu świateł, używanej kamery lub współrzędnych oraz podczas łączenia radaru lub kamery. Każdy nowy odczyt zastępuje poprzedni. Dane pozostają w prywatnej pamięci aplikacji, bez dostępu innych programów i bez przenoszenia w kopii zapasowej Androida lub między telefonami. Nie trafiają do HA, innych aplikacji, dzienników ani diagnostyki. Są usuwane po podaniu współrzędnych, wyłączeniu automatyki obu świateł lub przy następnym uruchomieniu bez uprawnienia do lokalizacji. Wyłączenie lokalizacji w ustawieniach telefonu samo w sobie ich nie usuwa.</string>
+    <string name="settings_privacy_on_phone_creds">Adres URL i token Home Assistant znajdują się w tej samej prywatnej pamięci co ustawienia. Są przenoszone w kopii zapasowej Androida (szyfrowanej przy użyciu blokady ekranu) i bezpośrednio między telefonami bez udziału serwera. Nie trafiają nigdzie indziej.</string>
+    <string name="settings_privacy_on_phone_files">Niektóre dane są przechowywane w plikach we własnym katalogu aplikacji: historia przejazdów, dzienniki przechwytywania, okresowe zrzuty ekranu, raporty awarii i dziennik połączeń. W przeciwieństwie do ustawień pliki te nie trafiają do kopii zapasowej Androida ani transferu między telefonami. Inne aplikacje nie mogą ich bezpośrednio otworzyć, ale można je skopiować na komputer przez USB.</string>
+    <string name="settings_privacy_on_phone_rides">Krótka historia przejazdów (czas, dystans, liczba wyprzedzeń i bliskich wyprzedzeń oraz najmniejsza odległość i prędkość przy najbliższych minięciach — bez lokalizacji i trasy) jest zapisywana we własnym katalogu aplikacji na ekranie Historia przejazdów. Po 200 przejazdach najstarsze wpisy są usuwane. Nic nie jest udostępniane.</string>
+    <string name="settings_privacy_on_phone_capture">Rejestrowanie przechwytywanych danych jest domyślnie wyłączone. Po włączeniu w Diagnostyce aplikacja zapisuje każdy przejazd: pakiety radaru, powiadomienia BLE, dane eBike z Bosch Flow, próbki baterii telefonu, rozpoczęcie i zakończenie połączenia, gdy inna aplikacja ukrywa nakładkę, a także kierunek i intensywność skrętu z czujników telefonu (jeżeli podczas łączenia radaru była aktywna funkcja „Opóźnij sygnał drogi wolnej na zakrętach”). Każdy dziennik zawiera wersję oprogramowania radaru. Przy włączonym zapisie konfiguracji połączenia zapisuje także etapy łączenia oraz model i numer seryjny radaru. Lokalizacja nie jest zapisywana, ale skręty i prędkości mogą wskazywać trasę. Dzienniki pozostają na telefonie, są kompresowane gzip i udostępniane wyłącznie po wybraniu Udostępnij.</string>
+    <string name="settings_privacy_on_phone_screenshots">Okresowe zrzuty ekranu są domyślnie wyłączone. Po włączeniu ich w Diagnostyce (Android każdorazowo prosi o zgodę na nagrywanie ekranu) aplikacja zapisuje obraz całego ekranu co minutę, gdy radar jest połączony, nawet jeśli inna aplikacja ukrywa nakładkę. Zrzut może pokazywać inne aplikacje i ujawniać lokalizację. W katalogu aplikacji przechowywanych jest tylko <xliff:g id="count" example="30">%1$d</xliff:g> najnowszych obrazów; nie są automatycznie udostępniane.</string>
+    <string name="settings_privacy_on_phone_crashes">Jeśli aplikacja ulegnie awarii, w jej katalogu zapisuje się raport (wersja aplikacji, wątek, stos wywołań — bez danych jazdy i lokalizacji). Raport jest udostępniany tylko po wybraniu Udostępnij w Diagnostyce lub skopiowaniu pakietu diagnostycznego, który zawiera najnowszy raport.</string>
+    <string name="settings_privacy_on_phone_linklog">Krótki dziennik połączeń (połączenia, rozłączenia i błędy radaru, kamery, eBike i usługi aplikacji, a także podobne zdarzenia, takie jak alarm utraty połączenia, zmiana tylnego światła, zakończenie jazdy lub wyciszenie alarmu oddalenia; nazwy urządzeń, czas i rodzaj zdarzenia, a w starszych radarach także liczba odczytów i wskazań pojazdów, bez lokalizacji i położeń wykrytych pojazdów) jest przechowywany w katalogu aplikacji do diagnostyki i dołączany do kopiowanego pakietu diagnostycznego.</string>
+    <string name="settings_privacy_to_ha_label">Co trafia do Home Assistant</string>
+    <string name="settings_privacy_to_ha_publish">Po skonfigurowaniu HA aplikacja publikuje dane przez MQTT bezpośrednio pod podany adres HA, bez pośrednictwa twórcy ani stron trzecich:\n• nazwy Bluetooth radaru i kamery używane do tworzenia urządzeń i encji w HA\n• stan baterii radaru i kamery\n• tryb przedniego światła\n• zdarzenia rozpoczęcia i zakończenia przejazdu\n• podsumowanie jazdy aktualizowane co minutę (czas rozpoczęcia, odległość, liczba wyprzedzeń i bliskich wyprzedzeń, częstotliwość bliskich wyprzedzeń, prędkości zbliżania, odstępy, czas ruchu za rowerem, alerty na kilometr i godzinę oraz najbliższe wyprzedzenie: czas, strona, wielkość pojazdu, odstęp, prędkość zbliżania i odległość z tyłu)\n• dziennik poszczególnych bliskich wyprzedzeń, jeśli go włączysz</string>
+    <string name="settings_privacy_to_ha_stop">W każdej chwili możesz zatrzymać publikowanie, wybierając Wyczyść konfigurację HA w Ustawienia → Home Assistant. Zapisane dane uwierzytelniające zostaną od razu usunięte z telefonu.</string>
+    <string name="settings_privacy_to_apps_label">Udostępnianie innym aplikacjom</string>
+    <string name="settings_privacy_to_apps_body">Inna aplikacja na tym telefonie może poprosić o dostęp do tylnego radaru. Nie otrzyma niczego bez Twojej zgody na ekranie z jej nazwą. Może potem odczytywać wykryte pojazdy, ich odległość i prędkość zbliżania, położenie boczne, Twoją prędkość, typy pojazdów, stan połączenia i baterię radaru. Za dodatkową zgodą może zmieniać tryb tylnego światła i ukrywać nakładkę, także podczas korzystania z innych aplikacji, poza rozmową telefoniczną, gdy alerty dźwiękowe są wyłączone. Przy przyznanym dostępie aplikacja stale otrzymuje dane podczas jazdy, więc może ustalić czas i przebieg przejazdu.\n\nPrzekazywanie danych odbywa się lokalnie między aplikacjami, bez sieci i udziału twórcy Bike Radar. To, co zrobi z nimi druga aplikacja, zależy od niej — zezwalaj tylko zaufanym programom.\n\nAby sprawdzić lub cofnąć uprawnienia, otwórz Ustawienia → Aplikacje uprawnione do korzystania z radaru. Lista jest w prywatnej pamięci Androida i przenosi się w kopii zapasowej lub bezpośrednim transferze między telefonami.</string>
+    <string name="settings_privacy_bluetooth_label">Bluetooth</string>
+    <string name="settings_privacy_bluetooth_body">Parowanie odbywa się w systemowych ustawieniach Bluetooth Androida. Aplikacja odczytuje listę sparowanych urządzeń, aby rozpoznać radar, kamerę i eBike Bosch. Podczas łączenia z radarem przesyła do niego markę i model telefonu (np. Google Pixel 10) oraz stałą nazwę aplikacji. Uprawnienia Bluetooth są zadeklarowane z `usesPermissionFlags=\"neverForLocation\"`, więc skanowanie Bluetooth nie służy do ustalania lokalizacji.</string>
+    <string name="settings_privacy_networking_label">Połączenia sieciowe</string>
+    <string name="settings_privacy_networking_destination">Jedynym adresem sieciowym jest podany przez Ciebie adres HA. Aplikacja nie używa serwerów analitycznych, systemów zgłaszania awarii, sieci reklamowych ani bibliotek przesyłających dane na zewnątrz.</string>
+    <string name="settings_privacy_networking_https">Nieszyfrowany HTTP jest dozwolony wyłącznie dla adresów sieci domowej: prywatnych adresów IPv4 (10.x, 172.16-31.x, 192.168.x), pętli zwrotnej telefonu, lokalnych adresów IPv6 oraz nazw kończących się na `.local` lub `.lan` albo bez kropki, np. `homeassistant`. Nazwy krótsze niż trzy znaki, np. `pi`, i zaczynające się od `xn--` są odrzucane, ponieważ mogą być domenami internetowymi krajów. Wszystkie inne adresy wymagają HTTPS; aplikacja nie wysyła tokenu otwartym tekstem. Poza własnym telefonem nie potrafi ustalić, czy wskazany adres należy do Ciebie. W innej sieci ten sam adres mógłby prowadzić do obcego urządzenia, które otrzymałoby token przez HTTP. HTTPS zapobiega temu zagrożeniu.</string>
+    <string name="settings_privacy_permissions_label">Uprawnienia</string>
+    <string name="settings_privacy_permissions_body">Aplikacja używa następujących uprawnień Androida:\n• BLUETOOTH_SCAN, BLUETOOTH_CONNECT: wyszukiwanie i łączenie z radarem, kamerą i eBike\n• POST_NOTIFICATIONS: stan usługi, przyciski Odrzuć i Przypomnij alarmu oddalenia, Wstrzymaj na 1 h i Wznów, ostrzeżenia i podsumowanie jazdy\n• SYSTEM_ALERT_WINDOW: wyświetlanie nakładki na innych aplikacjach\n• FOREGROUND_SERVICE: działanie w czasie jazdy\n• WAKE_LOCK: terminowe ostrzeżenia o utracie połączenia, alarmie oddalenia i podsumowaniu jazdy przy wyłączonym ekranie, a także kontrole kamery po wyłączeniu radaru do uruchomienia alarmu (najwyżej ustawiony czas „Radar wyłączony przez” plus 15 s)\n• ACCESS_COARSE_LOCATION: odczyt lokalizacji przy otwartej aplikacji do ustawiania świateł względem zachodu słońca; bez śledzenia i wysyłania poza telefon\n\nBike Radar definiuje też własne uprawnienie `es.jjrh.bikeradar.permission.RADAR`, którego inne aplikacje używają do połączenia. Uprawnienie jest przyznawane przy instalacji, ale samo nie udostępnia danych — wymagane jest potwierdzenie na ekranie z nazwą aplikacji, a dostęp można cofnąć w ustawieniach.\n\nPrzechwytywanie ekranu jest domyślnie wyłączone. Przy każdym włączeniu wymaga zgody MediaProjection i zapisuje cały ekran, także zawartość pod nakładką.</string>
+    <string name="settings_privacy_source_label">Kod źródłowy</string>
+    <string name="settings_privacy_source_body">Aplikacja jest otwartoźródłowa na licencji GPL-3.0-or-later. Pełny kod jest dostępny pod adresem github.com/partymola/android-bike-radar-overlay. Możesz zweryfikować powyższe informacje w kodzie.</string>
+    <!-- Settings → Light auto-mode (SettingsLights.kt) -->
+    <string name="settings_lights_loc_rationale">Automatycznie przełącza światła w tryb dzienny lub nocny. Ręcznie wpisane współrzędne mają pierwszeństwo.</string>
+    <string name="settings_lights_title">Automatyczny tryb świateł</string>
+    <string name="settings_lights_radar_section">Tylne światło radaru</string>
+    <string name="settings_lights_auto_switch">Automatyczne przełączanie dzień/noc</string>
+    <string name="settings_lights_radar_auto_sub">Ustawia tylne światło radaru po połączeniu oraz o wschodzie i zachodzie słońca</string>
+    <string name="settings_lights_daytime_mode">Tryb dzienny</string>
+    <string name="settings_lights_night_mode">Tryb nocny</string>
+    <string name="settings_lights_night_sub">
+        <xliff:g id="mode" example="Day Flash">%1$s</xliff:g> — przełączane o lokalnym zachodzie słońca</string>
+    <string name="settings_lights_radar_caveat">Radar nie potwierdza zmiany trybu — w razie wątpliwości sprawdź tylne światło.</string>
+    <string name="settings_lights_dashcam_section">Światło kamery</string>
+    <string name="settings_lights_dashcam_auto_sub">Ustawia światło kamery po połączeniu oraz o wschodzie i zachodzie słońca</string>
+    <string name="settings_lights_dashcam_row_title">Światło kamery</string>
+    <string name="settings_lights_dashcam_no">Nie masz kamery</string>
+    <string name="settings_lights_dashcam_setup">Skonfiguruj kamerę</string>
+    <string name="settings_lights_loc_section">Lokalizacja do wyznaczania wschodu i zachodu słońca</string>
+    <string name="settings_lights_loc_enter_coords">Wprowadź współrzędne</string>
+    <string name="settings_lights_loc_manual_set_title">Lokalizacja ręczna</string>
+    <string name="settings_coord_title">Wprowadź współrzędne</string>
+    <string name="settings_coord_lat_label">Szerokość geograficzna</string>
+    <string name="settings_coord_lon_label">Długość geograficzna</string>
+    <string name="settings_coord_lat_error">Szerokość musi mieścić się w zakresie od -90 do 90</string>
+    <string name="settings_coord_lon_error">Długość musi mieścić się w zakresie od -180 do 180</string>
+    <string name="settings_coord_hint">Dotknij ±, aby wybrać południe lub zachód. Przytrzymaj punkt na mapie, aby skopiować współrzędne.</string>
+    <string name="settings_coord_sign_toggle">Znak minus (południe lub zachód)</string>
+    <string name="settings_coord_save">Zapisz</string>
+    <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
+         authors and SPDX licence names stay hardcoded as legal attribution. -->
+    <string name="settings_licenses_title">Licencje open source</string>
+    <string name="settings_licenses_open_action">Otwórz licencję</string>
+    <string name="settings_licenses_intro">Bike Radar jest objęty licencją GPL-3.0-or-later. Poniżej wymieniono wszystkie bezpośrednio wykorzystywane biblioteki zewnętrzne i ich licencje, zgodne z GPL-3.0.</string>
+    <string name="settings_licenses_section_language_runtime">Język i środowisko uruchomieniowe</string>
+    <string name="settings_licenses_section_android_platform">Platforma Android</string>
+    <string name="settings_licenses_section_ui">Interfejs użytkownika</string>
+    <!-- Dashcam picker bottom sheet (DashcamPickerSheet.kt) -->
+    <string name="dashcam_picker_title">Wybierz kamerę</string>
+    <string name="dashcam_picker_none">Brak — nie mam kamery</string>
+    <string name="dashcam_picker_likely_matches">Prawdopodobne urządzenia</string>
+    <string name="dashcam_picker_other_paired_devices">Inne sparowane urządzenia</string>
+    <string name="dashcam_picker_pair_new_device">Sparuj nowe urządzenie w ustawieniach Androida</string>
+    <string name="dashcam_picker_info_badge">i</string>
+    <string name="dashcam_picker_explainer">Prawdopodobne urządzenia to te, których nazwy przypominają kamerę rowerową lub które w tej sesji zgłaszały stan baterii.</string>
+    <string name="dashcam_picker_refreshing">ODŚWIEŻANIE CO 2 S</string>
+    <string name="dashcam_picker_no_permission_sub">Przyznaj dostęp do urządzeń w pobliżu, aby wybrać kamerę</string>
+    <string name="dashcam_picker_cancel">Anuluj</string>
+    <string name="dashcam_picker_save">Zapisz</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Ride history (RideHistoryScreen.kt)
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="ride_history_title">Historia przejazdów</string>
+    <string name="ride_history_empty_title">Brak przejazdów</string>
+    <string name="ride_history_empty_body">Każdy przejazd pojawia się tu kilka minut po wyłączeniu radaru. Wszystkie dane pozostają na telefonie.</string>
+    <plurals name="ride_history_overtakes">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> wyprzedzenie</item>
+        <item quantity="other">
+            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzeń</item>
+        <item quantity="few">
+            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzenia</item>
+        <item quantity="many">
+            <xliff:g id="count" example="48">%1$d</xliff:g> wyprzedzeń</item>
+    </plurals>
+    <plurals name="ride_history_close_passes">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> bliskie wyprzedzenie</item>
+        <item quantity="other">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskich wyprzedzeń</item>
+        <item quantity="few">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskie wyprzedzenia</item>
+        <item quantity="many">
+            <xliff:g id="count" example="3">%1$d</xliff:g> bliskich wyprzedzeń</item>
+    </plurals>
+    <string name="ride_history_tightest">najbliższe: <xliff:g id="m" example="0.8">%1$s</xliff:g> m</string>
+    <string name="ride_history_km_value">
+        <xliff:g id="km" example="12.4">%1$s</xliff:g> km</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Debug screen (DebugScreen.kt) - dev-unlock-gated diagnostics
+         ════════════════════════════════════════════════════════════════ -->
+    <string name="debug_title">Diagnostyka</string>
+    <string name="debug_section_scenarios">Scenariusze</string>
+    <string name="debug_replay">Odtwórz</string>
+    <string name="debug_stop_replay">Zatrzymaj odtwarzanie</string>
+    <string name="debug_synthetic">Symulacja</string>
+    <string name="debug_stop_synthetic">Zatrzymaj symulację</string>
+    <string name="debug_section_service_control">Sterowanie usługą</string>
+    <string name="debug_force_radar_reconnect">Wymuś ponowne połączenie z radarem</string>
+    <string name="debug_section_cue_preview">Podgląd sygnałów</string>
+    <string name="debug_cue_beep1">Bliskie wyprzedzenie (1 sygnał)</string>
+    <string name="debug_cue_beep2">Bliskie wyprzedzenie (2 sygnały)</string>
+    <string name="debug_cue_beep3">Bliskie wyprzedzenie (3 sygnały)</string>
+    <string name="debug_cue_clear">Droga wolna</string>
+    <string name="debug_cue_urgent">Pilne zagrożenie</string>
+    <string name="debug_cue_dropped">Utrata połączenia z radarem</string>
+    <string name="debug_cue_reconnected">Ponowne połączenie z radarem</string>
+    <string name="debug_cue_preview_hint">Sygnał jest odtwarzany przez działającą usługę. Jeśli nic nie słychać, najpierw uruchom usługę.</string>
+    <string name="debug_section_capture_logging">Dzienniki przechwytywania</string>
+    <string name="debug_write_capture_logs_title">Zapisuj dzienniki przechwytywania</string>
+    <string name="debug_write_capture_logs_subtitle">Domyślnie wyłączone. Zapisuje na telefonie każdy pakiet radaru, powiadomienia BLE i odczyty z roweru elektrycznego z dokładnym czasem, a także poziom baterii telefonu i kierunek skrętu. Dane pomagają zgłaszać błędy i pozwalają odtworzyć przebieg jazdy. Zmiana obowiązuje od następnego połączenia z radarem. Zapis bieżącego przejazdu dobiegnie końca.</string>
+    <string name="debug_setup_transcript_title">Zapisuj przebieg nawiązywania połączenia</string>
+    <string name="debug_setup_transcript_subtitle">Pomaga ustalić, dlaczego radar nie może się połączyć.\n• Wymaga włączenia zapisu dzienników przechwytywania\n• Rozpoczyna zapis po wykryciu radaru i obejmuje wszystkie etapy łączenia\n• Może zawierać model, wersję oprogramowania i numer seryjny radaru\n• Jeden plik obejmuje wszystkie próby, także podczas kolejnych przejazdów\n• Można go udostępnić z listy poniżej także w trakcie zapisu\n• Wyłącz tę opcję po zakończeniu diagnostyki, ponieważ zapis trwa także podczas kolejnych przejazdów</string>
+    <string name="debug_section_capture_logs">Dzienniki przechwytywania</string>
+    <string name="debug_no_capture_logs">Brak dzienników przechwytywania.</string>
+    <string name="debug_section_crashes">Awarie</string>
+    <string name="debug_no_crashes">Nie zarejestrowano awarii.</string>
+    <string name="debug_dirty_restart_count">nieprawidłowe restarty usługi: <xliff:g id="count" example="0">%1$d</xliff:g>
+    </string>
+    <string name="debug_capture_logs_header">DZIENNIKI PRZECHWYTYWANIA</string>
+    <string name="debug_delete_all">Usuń wszystkie</string>
+    <string name="debug_share">Udostępnij</string>
+    <string name="debug_capture_log_recording">Trwa nagrywanie. Możesz teraz udostępnić dziennik.</string>
+    <string name="debug_capture_log_meta">
+        <xliff:g id="size_kb" example="12">%1$d</xliff:g> KB · <xliff:g id="modified">%2$s</xliff:g>
+    </string>
+    <string name="debug_delete_log_cd">Usuń <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g>
+    </string>
+    <string name="debug_section_screenshot_capture">Przechwytywanie ekranu</string>
+    <string name="debug_periodic_screenshots_title">Okresowe zrzuty ekranu</string>
+    <string name="debug_periodic_screenshots_subtitle">Zapisuj ekran co minutę, gdy radar jest połączony, nawet jeśli inna aplikacja ukrywa nakładkę. Przechowuje <xliff:g id="count" example="30">%1$d</xliff:g> najnowszych obrazów we własnym folderze screenshots/.</string>
+    <string name="debug_section_manual_ha_push">Ręczne wysyłanie do HA</string>
+    <string name="debug_send_discovery">Wyślij wykrywanie</string>
+    <string name="debug_send_battery_50">Wyślij poziom baterii 50%</string>
+    <string name="debug_section_diagnostics">Diagnostyka</string>
+    <string name="debug_log_unknown_ebike_ids_title">Rejestruj nieznane identyfikatory obiektów eBike</string>
+    <string name="debug_log_unknown_ebike_ids_subtitle">Zapisuje wiersze ebike_unk dla nierozpoznanych rekordów. Podczas przechwytywania zmieniaj po kolei stany roweru, aby rozpoznać identyfikatory blokady, świateł i ładowarki, a następnie wyłącz funkcję.</string>
+    <string name="debug_probe_radar_settings_title">Sprawdzaj kanał ustawień radaru</string>
+    <string name="debug_probe_radar_settings_subtitle">Zapisuje wiersze radar_2f14 / radar_2f12 z usługi sterowania radarem. Przełączaj tryby tylnego światła (przyciskiem lub aplikacją producenta), aby ustalić kodowanie dnia i nocy, a następnie wyłącz funkcję.</string>
+    <string name="debug_send">Wyślij</string>
+    <string name="debug_copy_diagnostic_bundle">Kopiuj pakiet diagnostyczny</string>
+    <string name="debug_radar_state_log">DZIENNIK STANU RADARU (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_link_journal">DZIENNIK POŁĄCZEŃ (<xliff:g id="count" example="42">%1$d</xliff:g>)</string>
+    <string name="debug_no_link_events">Brak zdarzeń połączeń.</string>
+    <string name="debug_no_states_received">Nie otrzymano jeszcze stanów.</string>
+    <string name="debug_lock_developer_mode">Zablokuj tryb programisty</string>
+    <string name="debug_share_log_dialog_title">Udostępnić ten dziennik przechwytywania?</string>
+    <string name="debug_share_log_dialog_body">Dziennik zapisuje dokładny czas każdego pakietu radaru i wersję jego oprogramowania. Jeśli włączono rejestrowanie połączenia, zawiera także model i numer seryjny radaru. Każdy, komu go udostępnisz, może ustalić, kiedy i gdzie jechałeś oraz jak często pojazdy mijały Cię blisko. Udostępniaj go tylko zaufanym osobom.</string>
+    <string name="debug_share_anyway">Udostępnij mimo to</string>
+    <string name="debug_delete_all_dialog_title">Usunąć wszystkie dzienniki przechwytywania?</string>
+    <string name="debug_delete_all_dialog_body">Spowoduje to trwałe usunięcie <xliff:g id="count" example="3">%1$d</xliff:g> dzienników z telefonu. Nie można tego cofnąć. Aktualnie nagrywany dziennik zostanie zachowany.</string>
+    <string name="debug_toast_screenshot_armed">Przygotowano przechwytywanie ekranu</string>
+    <string name="debug_toast_screen_capture_denied">Odmówiono uprawnienia do przechwytywania ekranu</string>
+    <string name="debug_toast_force_reconnect_sent">Wysłano polecenie ponownego połączenia</string>
+    <string name="debug_toast_discovery_sent">Wysłano dane wykrywania</string>
+    <string name="debug_toast_state_sent">Wysłano stan baterii 50%</string>
+    <string name="debug_toast_log_missing_or_empty">Brak pliku dziennika lub plik jest pusty</string>
+    <string name="debug_toast_cannot_share_file">Nie można udostępnić pliku: <xliff:g id="reason" example="not found">%1$s</xliff:g>
+    </string>
+    <string name="debug_share_chooser_title">Udostępnij <xliff:g id="filename" example="bike-radar-capture-001.log">%1$s</xliff:g>
+    </string>
+    <string name="debug_toast_diagnostic_copied">Skopiowano pakiet diagnostyczny do schowka</string>
+    <!-- ════════════════════════════════════════════════════════════════
+         Foreground-service notifications (channel names + notification text)
+         ════════════════════════════════════════════════════════════════ -->
+    <!-- BikeRadarService.kt -->
+    <string name="svc_main_channel_name">Bike Radar</string>
+    <string name="svc_main_notif_title">Bike Radar</string>
+    <string name="svc_main_notif_active">Aktywny</string>
+    <string name="svc_main_notif_overlay_hidden_by">Ukryto nakładkę: <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>
+    </string>
+    <string name="svc_main_notif_overlay_hidden_more">
+        <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> +<xliff:g id="others" example="1">%2$d</xliff:g>
+    </string>
+    <string name="svc_main_notif_paused_until">Wstrzymano do <xliff:g id="time" example="14:30">%1$s</xliff:g>
+    </string>
+    <string name="svc_main_notif_action_resume">Wznów</string>
+    <string name="svc_main_notif_action_pause">Wstrzymaj na 1 h</string>
+    <string name="svc_main_bond_lost_text">Usunięto parowanie radaru. Sparuj ponownie w ustawieniach Bluetooth, aby wznowić działanie.</string>
+    <string name="svc_main_dashcam_light_title">Światło kamery</string>
+    <string name="svc_main_radar_light_title">Tylne światło</string>
+    <!-- Both lights' failures post only on a link that has answered since the
+         failure, at connect or at the dusk/dawn switch, so each is about the
+         light, not the connection. -->
+    <string name="svc_main_light_fail_text">Nie udało się przełączyć światła kamery na <xliff:g id="mode" example="Day flash">%1$s</xliff:g>. Sprawdź je.</string>
+    <string name="svc_main_radar_light_fail_text">Nie udało się przełączyć tylnego światła na <xliff:g id="mode" example="Day flash">%1$s</xliff:g>. Sprawdź je po zatrzymaniu.</string>
+    <string name="svc_main_light_fail_channel_name">Automatyczny tryb świateł</string>
+    <string name="svc_main_light_fail_channel_desc">Informuje o nieudanej zmianie trybu dziennego lub nocnego świateł radaru albo kamery.</string>
+    <string name="svc_main_forgot_lock_channel_name">Zapomniano zablokować rower</string>
+    <string name="svc_main_forgot_lock_channel_desc">Przypomina o zablokowaniu eBike przy odchodzeniu od niego.</string>
+    <string name="svc_main_forgot_lock_title">Rower odblokowany</string>
+    <string name="svc_main_forgot_lock_text">Odchodzisz bez zablokowania roweru</string>
+    <string name="notif_ride_summary_channel_name">Podsumowania przejazdów</string>
+    <string name="notif_ride_summary_channel_desc">Ciche podsumowanie każdego przejazdu po wyłączeniu radaru.</string>
+    <string name="notif_ride_summary_title">Podsumowanie przejazdu</string>
+    <string name="notif_ride_summary_text">Wyprzedzenia: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • Bliskie: <xliff:g id="passes" example="2">%2$d</xliff:g> • <xliff:g id="km" example="12.4">%3$s</xliff:g> km</string>
+    <!-- The same line for a ride with close-pass counting off, which has no
+         close-pass figure to give. -->
+    <string name="notif_ride_summary_text_uncounted">Wyprzedzenia: <xliff:g id="overtakes" example="48">%1$d</xliff:g> • <xliff:g id="km" example="12.4">%2$s</xliff:g> km</string>
+    <string name="notif_ride_summary_alerts">Alerty na km: <xliff:g id="rate" example="1.4">%1$s</xliff:g>
+    </string>
+    <string name="notif_ride_summary_tightest">Najbliższe wyprzedzenie: <xliff:g id="m" example="0.8">%1$s</xliff:g> m przy <xliff:g id="kmh" example="32">%2$d</xliff:g> km/h</string>
+    <!-- Needs-attention feed (end-of-trip): shared by the summary notification and the home-screen card. -->
+    <string name="attention_title">Wymaga uwagi</string>
+    <string name="attention_radar_battery">Naładuj radar — <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_dashcam_battery">Naładuj kamerę — <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_ebike_battery">Naładuj eBike — <xliff:g id="pct" example="12">%1$d</xliff:g>%%</string>
+    <string name="attention_unclean_restart">Aplikacja uruchomiła się ponownie podczas jazdy — część statystyk może być niepełna</string>
+    <plurals name="attention_audio_failures">
+        <item quantity="one">Nie odtworzono dźwięku ostrzeżenia — uruchom ponownie telefon, jeśli się to powtórzy</item>
+        <item quantity="other">Nie odtworzono <xliff:g id="count" example="3">%1$d</xliff:g> dźwięków ostrzeżeń — uruchom ponownie telefon, jeśli się to powtórzy</item>
+        <item quantity="few">Nie odtworzono <xliff:g id="count" example="3">%1$d</xliff:g> dźwięków ostrzeżeń — uruchom ponownie telefon, jeśli się to powtórzy</item>
+        <item quantity="many">Nie odtworzono <xliff:g id="count" example="3">%1$d</xliff:g> dźwięków ostrzeżeń — uruchom ponownie telefon, jeśli się to powtórzy</item>
+    </plurals>
+    <string name="attention_dismiss_cd">Odrzuć: <xliff:g id="item" example="Charge radar - 12%">%1$s</xliff:g>
+    </string>
+    <string name="svc_main_walkaway_channel_name">Alarm oddalenia się</string>
+    <string name="svc_main_walkaway_channel_desc">Uruchamia się, gdy telefon nadal wykrywa kamerę po wyłączeniu radaru lub gdy odchodzisz z włączonym radarem.</string>
+    <string name="svc_main_walkaway_notif_title">Kamera nadal włączona</string>
+    <string name="svc_main_walkaway_notif_text">Radar się rozłączył, ale kamera nadal działa. Wyłącz ją, aby oszczędzać baterię.</string>
+    <string name="svc_main_walkaway_action_dismiss">Odrzuć</string>
+    <string name="svc_main_walkaway_action_snooze">Przypomnij za 2 min</string>
+    <!-- The radar-left-on alarm. Questions and "Looks like": the app infers
+         the radar was left on from how its link ended, so it never states it.
+         The _both_ form is also posted when the dashcam was carried, switched
+         on, so it must not say the dashcam was left behind. -->
+    <string name="svc_main_walkaway_radar_notif_title">Radar nadal włączony?</string>
+    <string name="svc_main_walkaway_radar_notif_text">Wygląda na to, że oddalił się poza zasięg, pozostając włączony. Wróć i wyłącz go.</string>
+    <string name="svc_main_walkaway_both_notif_title">Radar i kamera nadal włączone?</string>
+    <string name="svc_main_walkaway_both_notif_text">Radar prawdopodobnie wyszedł poza zasięg, pozostając włączony. Kamera również była włączona. Wyłącz oba urządzenia.</string>
+    <!-- ReplayService.kt -->
+    <string name="svc_replay_channel_name">Odtwarzanie</string>
+    <string name="svc_replay_notif_title">Odtwarzanie Bike Radar</string>
+    <string name="svc_replay_notif_starting">Rozpoczynanie odtwarzania…</string>
+    <string name="svc_replay_notif_frame">Odtwarzanie klatki <xliff:g id="index" example="12">%1$d</xliff:g>/<xliff:g id="total" example="340">%2$d</xliff:g>
+    </string>
+    <!-- ScreenshotCaptureService.kt -->
+    <string name="svc_screenshot_channel_name">Przechwytywanie ekranu</string>
+    <string name="svc_screenshot_notif_title">Bike Radar</string>
+    <string name="svc_screenshot_notif_text">Zapisywanie zrzutów ekranu podczas połączenia z radarem</string>
+    <string name="svc_screenshot_action_stop">Zatrzymaj</string>
+    <!-- DebugOverlayService.kt -->
+    <string name="svc_debugoverlay_channel_name">Nakładka diagnostyczna radaru</string>
+    <string name="svc_debugoverlay_notif_title">Bike Radar</string>
+    <string name="svc_debugoverlay_notif_text">Nakładka diagnostyczna</string>
+    <!-- SyntheticScenarioService.kt -->
+    <string name="svc_synthetic_channel_name">Scenariusz symulowany</string>
+    <string name="svc_synthetic_notif_title">Scenariusz symulowany Bike Radar</string>
+    <!-- RadarConsentActivity.kt -->
+    <string name="radar_consent_title">Udostępnić radar?</string>
+    <string name="radar_consent_body">Aplikacja <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> prosi o dostęp do tylnego radaru.</string>
+    <!-- The same screen opened by an app that already has access. The title
+         holds for any mix of the two switches, and names no app because the
+         app chooses its own name. -->
+    <string name="radar_consent_title_again">Zmienić udostępniane dane?</string>
+    <string name="radar_consent_body_again">Aplikacja <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g> ma już dostęp do tylnego radaru.</string>
+    <string name="radar_consent_save_change">Zapisz</string>
+    <!-- Shown only while onboarding is unfinished. -->
+    <string name="radar_consent_not_set_up">Bike Radar nie jest jeszcze skonfigurowany. Otwórz go później, aby dokończyć konfigurację.</string>
+    <string name="radar_consent_read">Odczytuj dane widziane przez radar</string>
+    <string name="radar_consent_read_detail">Pojazdy za Tobą, ich odległość i prędkość zbliżania, pozycję boczną, typ pojazdu, Twoją prędkość oraz stan połączenia i baterii radaru.</string>
+    <string name="radar_consent_control">Zmieniaj tylne światło i nakładkę</string>
+    <string name="radar_consent_control_detail">Zmiana trybu tylnego światła radaru. Jeśli zezwolisz także na odczyt radaru, aplikacja może ukryć nakładkę. Nie wyłącza to dźwięków ostrzegawczych. Nakładka pozostaje ukryta także w innych aplikacjach. Pojawi się ponownie, gdy aplikacja ją przywróci, zakończy działanie lub cofniesz udostępnianie. Podczas rozmowy nakładka jest widoczna, ponieważ wtedy alerty dźwiękowe są wyłączone, a po rozmowie znów zostaje ukryta.</string>
+    <string name="radar_consent_choose_something">Wybierz co najmniej jedno uprawnienie.</string>
+    <string name="radar_consent_how_to_stop">Wyłącz oba, aby zatrzymać udostępnianie.</string>
+    <!-- Shown once both switches are off over a grant, when the primary
+         button has become Stop sharing. The argument is that button's label
+         (settings_radar_access_revoke). -->
+    <string name="radar_consent_will_stop">„<xliff:g id="button" example="Stop sharing">%1$s</xliff:g>” odbiera tej aplikacji dostęp.</string>
+    <string name="radar_consent_save">Zezwól</string>
+    <string name="radar_consent_cancel">Nie zezwalaj</string>
+    <string name="radar_consent_backup_note">Twój wybór jest zapisywany w telefonie i przenoszony w kopii zapasowej Androida, dzięki czemu na nowym telefonie te same aplikacje mają dostęp. Możesz go cofnąć w Ustawienia → Aplikacje uprawnione do korzystania z radaru.</string>
+    <!-- Settings -> apps allowed to use the radar -->
+    <string name="settings_home_radar_access_title">Aplikacje uprawnione do korzystania z radaru</string>
+    <string name="settings_radar_access_none">Żadna inna aplikacja nie korzysta z radaru</string>
+    <plurals name="settings_radar_access_reading">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> aplikacja może odczytywać dane radaru</item>
+        <item quantity="other">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może odczytywać dane radaru</item>
+        <item quantity="few">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacje mogą odczytywać dane radaru</item>
+        <item quantity="many">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może odczytywać dane radaru</item>
+    </plurals>
+    <plurals name="settings_radar_access_controlling">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> aplikacja może zmieniać tylne światło i nakładkę</item>
+        <item quantity="other">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może zmieniać tylne światło i nakładkę</item>
+        <item quantity="few">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacje mogą zmieniać tylne światło i nakładkę</item>
+        <item quantity="many">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może zmieniać tylne światło i nakładkę</item>
+    </plurals>
+    <plurals name="settings_radar_access_controlling_light_only">
+        <item quantity="one">
+            <xliff:g id="count" example="1">%1$d</xliff:g> aplikacja może zmieniać tylne światło</item>
+        <item quantity="other">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może zmieniać tylne światło</item>
+        <item quantity="few">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacje mogą zmieniać tylne światło</item>
+        <item quantity="many">
+            <xliff:g id="count" example="2">%1$d</xliff:g> aplikacji może zmieniać tylne światło</item>
+    </plurals>
+    <string name="settings_radar_access_empty">Jeśli inna aplikacja poprosi o dostęp do radaru, pojawi się tutaj.</string>
+    <string name="settings_radar_access_can_read">Odczytuje radar</string>
+    <string name="settings_radar_access_can_control">Zmienia tylne światło i nakładkę</string>
+    <string name="settings_radar_access_can_control_light_only">Zmienia tylne światło</string>
+    <string name="settings_radar_access_last_used">Ostatnie użycie: <xliff:g id="when" example="3 days ago">%1$s</xliff:g>
+    </string>
+    <string name="settings_radar_access_never_used">Jeszcze nie używano</string>
+    <!-- Shown in place of what the app may do, for a grant whose app could not
+         prove the key the rider approved the last time it asked. Past tense on
+         purpose: it is what was seen then, not a check made now. Never say the
+         app is a different one: an unconfirmed key is also what some key
+         changes look like. -->
+    <string name="settings_radar_access_refused">Ostatnio zablokowano: nie udało się potwierdzić tożsamości uprawnionej aplikacji</string>
+    <string name="settings_radar_access_revoke">Zatrzymaj udostępnianie</string>
+    <string name="settings_radar_access_revoke_title">Zatrzymać udostępnianie aplikacji <xliff:g id="app" example="Trail Buddy">%1$s</xliff:g>?</string>
+    <string name="settings_radar_access_revoke_body">Nie będzie już widzieć radaru, zmieniać tylnego światła ani ukrywać nakładki. Dane już przez nią otrzymane pozostaną w jej posiadaniu. Możesz ponownie zezwolić na dostęp z poziomu tej aplikacji.</string>
+    <string name="settings_radar_access_revoke_body_refused">Bike Radar zablokował ostatnią próbę dostępu tej aplikacji. Jeśli jej ufasz, otwórz ją i zezwól na dostęp, gdy poprosi. „<xliff:g id="button" example="Stop sharing">%1$s</xliff:g>” usuwa zapisaną zgodę.</string>
+    <string name="settings_radar_access_backup_note">Lista jest przechowywana w telefonie i przenoszona w kopii zapasowej Androida, dlatego nowy telefon zachowuje te same uprawnienia aplikacji.</string>
+    <!-- Sound demo (SoundDemoStep.kt): an example ride with the real alert
+         sounds, first thing in onboarding. Captions say what the last sound
+         meant; bands ("mid distance", "close to you") rather than metres,
+         since the bands follow each rider's alert distance. The all-clear
+         and the silence keep both halves: "the radar sees nothing", as in
+         the riding-aid notice, and "within your alert distance", since cars
+         further back can still be on the overlay. -->
+    <string name="sound_demo_mark">Przed pierwszą jazdą</string>
+    <string name="sound_demo_title">Jakie dźwięki usłyszysz</string>
+    <string name="sound_demo_sub">Przykładowy 20-sekundowy przejazd: mija Cię samochód, a kolejny szybko zbliża się, gdy stoisz.</string>
+    <string name="sound_demo_play">Odtwórz</string>
+    <string name="sound_demo_play_again">Odtwórz ponownie</string>
+    <string name="sound_demo_playing">Odtwarzanie…</string>
+    <string name="sound_demo_radar_streaming">Odtwarza się tylko przy wyłączonym radarze.</string>
+    <string name="sound_demo_caption_nothing">Radar nie widzi pojazdów w zasięgu ostrzegania: cisza.</string>
+    <string name="sound_demo_caption_one">Samochód za Tobą: jeden sygnał.</string>
+    <string name="sound_demo_caption_two">Średnia odległość: dwa sygnały.</string>
+    <string name="sound_demo_caption_three">Blisko Ciebie: trzy sygnały.</string>
+    <string name="sound_demo_caption_clear">Radar nie widzi już pojazdów w zasięgu ostrzegania: droga wolna.</string>
+    <string name="sound_demo_caption_urgent">Szybkie zbliżanie przy postoju lub wolnej jeździe: pilne ostrzeżenie (tylko radary podające prędkość).</string>
+    <string name="alert_volume_title">Ustaw głośność alertów</string>
+    <string name="alert_volume_sub">Odtwórz dźwięk testowy podczas ustawiania głośności.</string>
+    <!-- Shown on every screen that hands the volume buttons to the alerts
+         (VolumeKeysFollowCues): the demo, the volume step, Alert sounds. -->
+    <string name="alert_alarm_volume_note">Możesz też zmieniać głośność alertów przyciskami telefonu. Uwaga: alerty używają głośności alarmu telefonu, aby były słyszalne. Budzik również korzysta z tej głośności.</string>
+    <string name="alert_volume_play">Odtwórz dźwięk testowy</string>
+    <string name="alert_volume_radar_streaming">Dźwięk testowy jest odtwarzany tylko przy wyłączonym radarze. Głośność nadal można zmieniać.</string>
+    <!-- The same words as alert_volume_title in English; Spanish uses the
+         infinitive for a list row and the imperative for a screen title. -->
+    <string name="alert_volume_row">Ustaw głośność alertów</string>
+    <string name="alert_sounds_title">Dźwięki ostrzeżeń</string>
+    <string name="alert_sounds_row_subtitle">Posłuchaj każdego sygnału i poznaj jego znaczenie</string>
+    <string name="alert_sounds_while_riding">Dźwięki odtwarzają się tylko przy wyłączonym radarze.</string>
+    <string name="alert_sounds_section_traffic">Ruch drogowy</string>
+    <string name="alert_sounds_section_radar">Radar</string>
+    <string name="alert_sounds_watch_demo">Obejrzyj ponownie przykładowy przejazd</string>
+    <string name="alert_sound_one_title">Jeden sygnał</string>
+    <string name="alert_sound_one_meaning">Pojazd za Tobą</string>
+    <string name="alert_sound_two_title">Dwa sygnały</string>
+    <!-- Each meaning names a band, not a change: once the closer vehicle has
+         passed (or, with no speed reading, once the radar has lost the
+         vehicles heard at three for a few seconds), three beeps can be
+         followed by two about the one behind it. -->
+    <string name="alert_sound_two_meaning">Pojazd w średniej odległości</string>
+    <string name="alert_sound_three_title">Trzy sygnały</string>
+    <string name="alert_sound_three_meaning">Pojazd blisko Ciebie</string>
+    <string name="alert_sound_clear_title">Droga wolna</string>
+    <string name="alert_sound_clear_meaning">Radar nie widzi już pojazdów w zasięgu ostrzegania</string>
+    <string name="alert_sound_urgent_title">Pilne ostrzeżenie</string>
+    <string name="alert_sound_urgent_meaning">Pojazd szybko się zbliża podczas postoju lub wolnej jazdy (tylko radary podające prędkość)</string>
+    <string name="alert_sound_lost_title">Trzy niskie impulsy</string>
+    <string name="alert_sound_lost_meaning">Utracono połączenie z radarem lub jedziesz bez niego</string>
+    <string name="alert_sound_back_title">Jeden niski impuls</string>
+    <string name="alert_sound_back_meaning">Radar ponownie połączony</string>
+    <string name="sound_demo_alert_distance">Odległość alertu: <xliff:g id="metres" example="20">%1$d</xliff:g> m</string>
+</resources>
